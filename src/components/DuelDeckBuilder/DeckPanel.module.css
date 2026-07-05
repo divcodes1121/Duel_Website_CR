@@ -1,0 +1,401 @@
+.panel {
+  position: relative;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  padding: 1.15rem 1.4rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+
+.panel:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--glass-border));
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-2px);
+}
+
+/* soft top edge reflection */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
+  pointer-events: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.name {
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-size: 1.3rem;
+  letter-spacing: 0.03em;
+  font-weight: 400;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  text-shadow: 0 2px 12px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.fillCount {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  margin-left: 0.6rem;
+  vertical-align: middle;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.fillCountFull {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.nameInput {
+  font-size: 1.05rem;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  background: var(--slot-bg);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  color: inherit;
+  padding: 0.25rem 0.6rem;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.headerActions {
+  display: flex;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.iconButton {
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.32rem 0.8rem;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.4),
+    box-shadow 0.18s ease;
+}
+
+.iconButton:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--slot-border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--slot-bg));
+  transform: translateY(-1.5px);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 4px 14px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.iconButton:active {
+  transform: translateY(0) scale(0.95);
+}
+
+/* --- Slot grid -------------------------------------------------------- */
+
+.slotGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.6rem;
+}
+
+.slot {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  border-radius: 12px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  transition:
+    transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.3),
+    border-color 0.16s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.slot:hover {
+  transform: translateY(-3px) rotate(-0.6deg) scale(1.02);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 8px 20px rgba(0, 0, 0, 0.25),
+    0 0 18px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* Empty slots read as dashed drop-targets */
+.slotEmpty {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--text-muted) 40%, transparent);
+  background: color-mix(in srgb, var(--slot-bg) 70%, transparent);
+}
+
+.slotEmpty:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--slot-bg));
+}
+
+/* Rarity glow when occupied */
+.slot[data-rarity='Common'] {
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 3px 12px color-mix(in srgb, var(--rarity-common) 22%, transparent);
+}
+
+.slot[data-rarity='Rare'] {
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 3px 14px color-mix(in srgb, var(--rarity-rare) 32%, transparent);
+}
+
+.slot[data-rarity='Epic'] {
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 3px 16px color-mix(in srgb, var(--rarity-epic) 38%, transparent);
+}
+
+.slot[data-rarity='Legendary'] {
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 3px 18px color-mix(in srgb, var(--rarity-legendary) 42%, transparent);
+}
+
+.slot[data-rarity='Champion'] {
+  animation: champion-shimmer 3.2s linear infinite;
+}
+
+@keyframes champion-shimmer {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 3px 18px color-mix(in srgb, var(--rarity-legendary) 45%, transparent);
+  }
+  33% {
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 3px 18px color-mix(in srgb, var(--rarity-epic) 50%, transparent);
+  }
+  66% {
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 3px 18px color-mix(in srgb, var(--accent-cyan) 45%, transparent);
+  }
+}
+
+.slotIcon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.slotElixir {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border-radius: 999px;
+  width: 1.2rem;
+  height: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  z-index: 2;
+}
+
+.slotClear {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(10, 8, 24, 0.65);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 1;
+  border-radius: 999px;
+  width: 1.2rem;
+  height: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  z-index: 2;
+}
+
+.slotClear:hover {
+  transform: scale(1.15);
+  background: rgba(220, 60, 90, 0.85);
+}
+
+.slot:hover .slotClear {
+  opacity: 1;
+}
+
+.slotPlaceholder {
+  color: var(--text-muted);
+  font-size: 1.35rem;
+  font-weight: 300;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, color 0.15s ease, text-shadow 0.15s ease;
+}
+
+.slotEmpty:hover .slotPlaceholder {
+  opacity: 1;
+  color: var(--accent-light);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.slotSelected .slotPlaceholder {
+  color: var(--accent-light);
+  opacity: 1;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 80%, transparent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.35);
+  }
+}
+
+.slotRoleBadge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  right: 4px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  border-radius: 5px;
+  padding: 0.08rem 0;
+  color: #1a1420;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 2;
+}
+
+.slotRoleBadge-evolution {
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  color: #fff;
+}
+
+.slotRoleBadge-hero {
+  background: linear-gradient(135deg, #ffe9a8, var(--accent-gold));
+}
+
+/* Positional slot roles (fixed, not user-assigned): 1st slot = Evolution (purple),
+   2nd slot = Hero (gold), 3rd slot = Wild (half purple / half gold). */
+.slotRoleEvolution {
+  border-width: 2px;
+  border-color: var(--accent);
+}
+
+.slotRoleHero {
+  border-width: 2px;
+  border-color: var(--accent-gold);
+}
+
+.slotRoleWild {
+  border-width: 2px;
+  border-color: transparent;
+}
+
+/* Masked gradient ring: draws only a 2px band just inside the slot edge, so
+   the slot's own translucent background stays visible in the middle. */
+.slotRoleWild::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  padding: 2px;
+  background: linear-gradient(135deg, var(--accent) 50%, var(--accent-gold) 50%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Role slots keep their solid identity outline even when empty */
+.slotRoleEvolution.slotEmpty,
+.slotRoleHero.slotEmpty,
+.slotRoleWild.slotEmpty {
+  border-style: solid;
+}
+
+/* Defined after the role classes so the selection ring wins over the positional role border while active. */
+.slotSelected {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 22px color-mix(in srgb, var(--accent) 60%, transparent),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+/* --- Stats ------------------------------------------------------------ */
+
+.stats {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.statBadge {
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  border-radius: 999px;
+  padding: 0.28rem 0.85rem;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}

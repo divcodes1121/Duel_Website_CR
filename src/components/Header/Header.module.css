@@ -1,0 +1,266 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.5rem;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--glass-bg) 55%, transparent);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+/* --- Brand ---------------------------------------------------------- */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.brand:hover .logoMark {
+  box-shadow:
+    0 4px 18px color-mix(in srgb, var(--accent) 75%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.logoMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, #4a2fd0);
+  box-shadow:
+    0 4px 14px color-mix(in srgb, var(--accent) 55%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.title {
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-size: 1.45rem;
+  letter-spacing: 0.04em;
+  margin: 0;
+  background: linear-gradient(120deg, var(--accent-light) 0%, var(--accent) 40%, var(--accent-gold) 80%, var(--accent-light) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: title-sheen 7s ease-in-out infinite;
+}
+
+@keyframes title-sheen {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.subtitle {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  animation: subtitle-in 0.8s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes subtitle-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* --- Right-side actions --------------------------------------------- */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.counter {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  white-space: nowrap;
+}
+
+.counterValue {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.counterMax {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.counterFull {
+  border-color: transparent;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, transparent), color-mix(in srgb, var(--accent-gold) 25%, transparent));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.glassButton {
+  padding: 0.45rem 1.05rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.4),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.glassButton:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--glass-border));
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 6px 18px rgba(0, 0, 0, 0.2),
+    0 0 22px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.glassButton:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.danger:hover {
+  border-color: color-mix(in srgb, #f4506d 65%, var(--glass-border));
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 6px 18px rgba(0, 0, 0, 0.2),
+    0 0 22px rgba(244, 80, 109, 0.35);
+}
+
+/* --- Theme toggle ---------------------------------------------------- */
+
+.themeToggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 3.4rem;
+  height: 1.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  padding: 0 0.32rem;
+  justify-content: space-between;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  transition: box-shadow 0.18s ease;
+}
+
+.themeToggle:hover {
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.themeIcon {
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0.35;
+  transition: opacity 0.2s ease;
+  z-index: 1;
+}
+
+.themeIcon[data-active='true'] {
+  opacity: 1;
+}
+
+.themeToggle::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.85rem - 4px);
+  height: calc(1.85rem - 4px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: transform 0.22s cubic-bezier(0.3, 1.2, 0.4, 1);
+  transform: translateX(calc(var(--toggle-x, 0) * 1.55rem));
+}
+
+:root[data-theme='light'] .themeToggle {
+  --toggle-x: 0;
+}
+
+:root[data-theme='dark'] .themeToggle {
+  --toggle-x: 1;
+}
+
+/* --- Avatar placeholder ---------------------------------------------- */
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  cursor: default;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+
+.avatar:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--slot-border));
+}
+
+@media (max-width: 720px) {
+  .counterMax,
+  .subtitle {
+    display: none;
+  }
+}

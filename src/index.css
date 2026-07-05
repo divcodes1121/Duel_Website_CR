@@ -1,0 +1,213 @@
+@font-face {
+  font-family: 'Subscribe';
+  src: url('/assets/fonts/Subscribe.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Subscribe';
+  src: url('/assets/fonts/Subscribe-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root[data-theme='dark'] {
+  --bg-1: #0a0918;
+  --bg-2: #141033;
+  --bg-3: #1d0f38;
+
+  --aurora-1: rgba(59, 92, 246, 0.5); /* royal blue */
+  --aurora-2: rgba(139, 92, 246, 0.45); /* purple */
+  --aurora-3: rgba(34, 211, 238, 0.28); /* cyan */
+  --aurora-4: rgba(251, 191, 36, 0.22); /* gold */
+
+  --glass-bg: rgba(32, 26, 68, 0.42);
+  --glass-bg-strong: rgba(36, 29, 76, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.13);
+  --glass-highlight: rgba(255, 255, 255, 0.14);
+  --slot-bg: rgba(255, 255, 255, 0.05);
+  --slot-border: rgba(255, 255, 255, 0.12);
+
+  --text: #f4f1ff;
+  --text-muted: #a99fc9;
+
+  --accent: #8a5cf6;
+  --accent-light: #b78cff;
+  --accent-cyan: #38e0f5;
+  --accent-gold: #ffcb57;
+
+  --shadow:
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 16px 40px rgba(10, 5, 40, 0.5),
+    0 32px 96px rgba(90, 60, 220, 0.14),
+    inset 0 1px 0 var(--glass-highlight);
+  --shadow-hover:
+    0 4px 12px rgba(0, 0, 0, 0.35),
+    0 24px 56px rgba(10, 5, 40, 0.55),
+    0 0 48px rgba(138, 92, 246, 0.22),
+    inset 0 1px 0 var(--glass-highlight);
+
+  --rarity-common: #aab2c0;
+  --rarity-rare: #4db8ff;
+  --rarity-epic: #b45cf6;
+  --rarity-legendary: #ffc531;
+
+  --blob-strength: 40%;
+}
+
+:root[data-theme='light'] {
+  --bg-1: #dfe4ff;
+  --bg-2: #cfd3fd;
+  --bg-3: #f0d8ff;
+
+  --aurora-1: rgba(80, 110, 255, 0.4);
+  --aurora-2: rgba(160, 110, 255, 0.35);
+  --aurora-3: rgba(40, 200, 235, 0.22);
+  --aurora-4: rgba(250, 185, 40, 0.2);
+
+  --glass-bg: rgba(255, 255, 255, 0.52);
+  --glass-bg-strong: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(70, 45, 130, 0.2);
+  --glass-highlight: rgba(255, 255, 255, 0.85);
+  --slot-bg: rgba(70, 45, 130, 0.06);
+  --slot-border: rgba(70, 45, 130, 0.16);
+
+  --text: #231a3f;
+  --text-muted: #5c5378;
+
+  --accent: #7a4de0;
+  --accent-light: #9a6ff2;
+  --accent-cyan: #0aa9c4;
+  --accent-gold: #c9891a;
+
+  --shadow:
+    0 2px 6px rgba(80, 60, 160, 0.1),
+    0 14px 36px rgba(80, 60, 160, 0.18),
+    0 28px 80px rgba(110, 70, 230, 0.12),
+    inset 0 1px 0 var(--glass-highlight);
+  --shadow-hover:
+    0 4px 10px rgba(80, 60, 160, 0.14),
+    0 22px 48px rgba(80, 60, 160, 0.24),
+    0 0 42px rgba(122, 77, 224, 0.2),
+    inset 0 1px 0 var(--glass-highlight);
+
+  --rarity-common: #8b93a3;
+  --rarity-rare: #1d9bf0;
+  --rarity-epic: #9333ea;
+  --rarity-legendary: #e8a512;
+
+  --blob-strength: 55%;
+}
+
+:root {
+  font-family: Inter, 'Segoe UI Variable', 'Segoe UI', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: var(--text);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: linear-gradient(160deg, var(--bg-1), var(--bg-2) 55%, var(--bg-3));
+  background-attachment: fixed;
+  overflow: hidden;
+  position: relative;
+}
+
+/* --- Animated aurora background ------------------------------------ */
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: -30%;
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(60px) saturate(130%);
+}
+
+body::before {
+  background:
+    radial-gradient(38% 42% at 22% 26%, var(--aurora-1), transparent 70%),
+    radial-gradient(34% 38% at 78% 18%, var(--aurora-4), transparent 70%),
+    radial-gradient(42% 46% at 68% 82%, var(--aurora-2), transparent 70%);
+  animation: aurora-a 26s ease-in-out infinite alternate;
+}
+
+body::after {
+  background:
+    radial-gradient(30% 34% at 40% 70%, var(--aurora-3), transparent 70%),
+    radial-gradient(26% 30% at 88% 55%, var(--aurora-2), transparent 70%);
+  animation: aurora-b 34s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-a {
+  0% {
+    transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate3d(3%, 3%, 0) rotate(4deg) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-2%, 2%, 0) rotate(-3deg) scale(1.02);
+  }
+}
+
+@keyframes aurora-b {
+  0% {
+    transform: translate3d(2%, 3%, 0) rotate(2deg) scale(1.04);
+  }
+  100% {
+    transform: translate3d(-3%, -3%, 0) rotate(-4deg) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after {
+    animation: none;
+  }
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Slim, unobtrusive scrollbars that fit the glass look */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
