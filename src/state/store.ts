@@ -18,8 +18,10 @@ import {
   clearSlot as clearSlotUtil,
   createEmptyDeck,
   createEmptyDuelDeckSet,
+  getUsedCardKeys,
   moveCard as moveCardUtil,
   renameDeck as renameDeckUtil,
+  validateImportedDeck,
   type SlotRef,
   type UniquenessScope,
 } from './deckUtils';
@@ -59,6 +61,12 @@ interface BuilderState extends PersistedSlice {
   moveCard: (owner: DeckOwner, from: SlotRef, to: SlotRef) => void;
   clearSlot: (owner: DeckOwner, deckIndex: number, slotIndex: number) => void;
   clearDeck: (owner: DeckOwner, deckIndex: number) => void;
+  /**
+   * Replace a deck with 8 imported card keys (from a pasted CR deck link).
+   * Duplicates across the collection are allowed (shown desaturated in the UI).
+   * Returns null on success or a human-readable error message.
+   */
+  importDeck: (owner: DeckOwner, deckIndex: number, keys: string[]) => string | null;
   renameDeck: (owner: DeckOwner, deckIndex: number, name: string) => void;
   setFilterType: (filter: CardTypeFilter) => void;
   setSort: (key: SortKey) => void;
@@ -209,6 +217,33 @@ export const useBuilderStore = create<BuilderState>()(
             [owner]: clearDeckUtil(state.sets[owner], deckIndex),
           },
         })),
+
+      importDeck: (owner, deckIndex, keys) => {
+        const state = get();
+        const current = state.sets[owner];
+        const result = validateImportedDeck(keys, CARDS_BY_KEY);
+        if ('error' in result) return result.error;
+        // Cards other decks already own: only this freshly-pasted deck shows
+        // them black & white; the original copies keep their color.
+        const usedElsewhere = getUsedCardKeys(current, deckIndex);
+        const importedDuplicates =
+          owner === 'home' ? [] : result.slots.filter((k) => usedElsewhere.has(k));
+        set({
+          sets: {
+            ...state.sets,
+            [owner]: {
+              ...current,
+              decks: current.decks.map((d, i) =>
+                i === deckIndex ? { ...d, slots: [...result.slots], importedDuplicates } : d,
+              ),
+              updatedAt: new Date().toISOString(),
+            },
+          },
+          selectedSlot: null,
+          selectionPinned: false,
+        });
+        return null;
+      },
 
       renameDeck: (owner, deckIndex, name) =>
         set((state) => ({

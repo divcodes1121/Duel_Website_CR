@@ -1,4 +1,4 @@
-.page {
+﻿.page {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -173,4 +173,5 @@
   border-radius: 999px;
   padding: 0.12rem 0.6rem;
 }
+
 

@@ -57,6 +57,7 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
   const clearSlot = useBuilderStore((s) => s.clearSlot);
   const assignCardAt = useBuilderStore((s) => s.assignCardAt);
   const moveCard = useBuilderStore((s) => s.moveCard);
+  const ownerSet = useBuilderStore((s) => s.sets[owner]);
   const launchFlight = useFlightStore((s) => s.launch);
   const [dropHover, setDropHover] = useState(false);
 
@@ -65,6 +66,14 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
     selectedSlot?.deckIndex === deckIndex &&
     selectedSlot?.slotIndex === slotIndex;
   const card = cardKey ? CARDS_BY_KEY.get(cardKey) : undefined;
+  // An imported deck may repeat a card another duel deck already owned — only
+  // the pasted copy renders black & white, and only while the clash persists
+  // (removing either copy restores the color live).
+  const isDuplicate =
+    !!card &&
+    owner !== 'home' &&
+    !!deck.importedDuplicates?.includes(card.key) &&
+    ownerSet.decks.some((d, i) => i !== deckIndex && d.slots.includes(card.key));
   const variant = getSlotVisualVariant(deck, slotIndex, CARDS_BY_KEY);
   // Champions occupy the Hero/Wild slot but aren't Heroes — they get their own
   // "CHAMPION" label there instead of the misleading "HERO" one.
@@ -80,7 +89,13 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
   const role = getSlotRoleByPosition(slotIndex);
   const roleClass = ROLE_CLASS[role] ? styles[ROLE_CLASS[role]] : '';
 
-  const title = card ? card.name : role === 'normal' ? 'Empty slot' : `Empty slot — ${ROLE_LABEL[role]}`;
+  const title = card
+    ? isDuplicate
+      ? `${card.name} — already used in another deck`
+      : card.name
+    : role === 'normal'
+      ? 'Empty slot'
+      : `Empty slot — ${ROLE_LABEL[role]}`;
 
   function handleRemove(e: React.MouseEvent) {
     e.stopPropagation();
@@ -149,7 +164,7 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
       type="button"
       className={`${styles.slot} ${roleClass} ${card ? '' : styles.slotEmpty} ${
         isSelected ? styles.slotSelected : ''
-      } ${dropHover ? styles.slotDropHover : ''}`}
+      } ${dropHover ? styles.slotDropHover : ''} ${isDuplicate ? styles.slotDuplicate : ''}`}
       data-rarity={card?.rarity}
       data-slot={`${owner}-${deckIndex}-${slotIndex}`}
       onClick={() => selectSlot(owner, deckIndex, slotIndex)}

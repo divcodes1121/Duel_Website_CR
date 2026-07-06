@@ -14,6 +14,12 @@ export interface Deck {
   id: string;
   name: string;
   slots: DeckSlot[];
+  /**
+   * Cards this deck imported even though another deck in the collection
+   * already used them — rendered black & white until the clash is resolved.
+   * Only the pasted deck carries the flag, never the original copies.
+   */
+  importedDuplicates?: string[];
 }
 
 export interface DuelDeckSet {

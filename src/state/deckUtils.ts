@@ -57,6 +57,37 @@ export function isCardAvailable(
   return !usedElsewhere.has(cardKey) && !usedInThisDeck.has(cardKey);
 }
 
+/**
+ * Validates 8 imported card keys and arranges them into legal slots (a
+ * champion is moved into the Hero slot, index 1). Cards already used in other
+ * decks of the collection are allowed — the UI renders them desaturated so
+ * the player can spot and swap the duplicates.
+ */
+export function validateImportedDeck(
+  keys: string[],
+  cardsByKey: Map<string, Card>,
+): { slots: string[] } | { error: string } {
+  if (keys.length !== DECK_SIZE) return { error: 'Invalid deck link' };
+  if (new Set(keys).size !== keys.length) return { error: 'Link repeats a card' };
+
+  const cards = keys.map((k) => cardsByKey.get(k));
+  if (cards.some((c) => !c)) return { error: 'Invalid deck link' };
+
+  const champions = keys.filter((k) => cardsByKey.get(k)!.isChampion);
+  if (champions.length > 1) return { error: 'A deck can only hold one champion' };
+
+  // Champions are only legal in the Hero (1) or Wild (2) slot.
+  const ordered = [...keys];
+  if (champions.length === 1) {
+    const ci = ordered.indexOf(champions[0]);
+    if (ci !== 1 && ci !== 2) {
+      [ordered[1], ordered[ci]] = [ordered[ci], ordered[1]];
+    }
+  }
+
+  return { slots: ordered };
+}
+
 export function assignCard(
   duelSet: DuelDeckSet,
   deckIndex: number,

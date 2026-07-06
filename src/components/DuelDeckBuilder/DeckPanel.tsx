@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { Deck, DeckOwner } from '../../types/deck';
 import { useBuilderStore } from '../../state/store';
-import { getClashRoyaleDeckLink } from '../../utils/deckLink';
+import { getClashRoyaleDeckLink, parseClashRoyaleDeckLink } from '../../utils/deckLink';
 import { DeckSlotGrid } from './DeckSlotGrid';
 import { DeckStats } from './DeckStats';
 import styles from './DeckPanel.module.css';
@@ -17,8 +18,13 @@ interface DeckPanelProps {
 export function DeckPanel({ owner, deckIndex, deck, onDelete }: DeckPanelProps) {
   const renameDeck = useBuilderStore((s) => s.renameDeck);
   const clearDeck = useBuilderStore((s) => s.clearDeck);
+  const importDeck = useBuilderStore((s) => s.importDeck);
   const [isEditing, setIsEditing] = useState(false);
   const [draftName, setDraftName] = useState(deck.name);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importValue, setImportValue] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importOk, setImportOk] = useState(false);
 
   const filledCount = deck.slots.filter((s) => s !== null).length;
   const deckLink = getClashRoyaleDeckLink(deck);
@@ -37,6 +43,39 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete }: DeckPanelProps) 
     setLinkCopied(true);
     window.setTimeout(() => setLinkCopied(false), 1800);
     window.open(deckLink, '_blank', 'noopener');
+  }
+
+  function tryImport(text: string) {
+    const keys = parseClashRoyaleDeckLink(text);
+    if (!keys) {
+      setImportError('Invalid deck link');
+      return;
+    }
+    const error = importDeck(owner, deckIndex, keys);
+    if (error) {
+      setImportError(error);
+      return;
+    }
+    setImportError(null);
+    setImportOk(true);
+    window.setTimeout(() => {
+      setImportOk(false);
+      setImportOpen(false);
+      setImportValue('');
+    }, 1400);
+  }
+
+  function handleImportChange(value: string) {
+    setImportValue(value);
+    setImportError(null);
+    // A deck link is pasted, not typed — import the moment one shows up.
+    if (/deck=/i.test(value)) tryImport(value);
+  }
+
+  function closeImport() {
+    setImportOpen(false);
+    setImportValue('');
+    setImportError(null);
   }
 
   return (
@@ -85,6 +124,21 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete }: DeckPanelProps) 
           <button
             type="button"
             className={styles.iconButton}
+            title="Paste a Clash Royale deck link to build this deck"
+            aria-expanded={importOpen}
+            onClick={() => {
+              if (importOpen) {
+                closeImport();
+              } else {
+                setImportOpen(true);
+              }
+            }}
+          >
+            Import
+          </button>
+          <button
+            type="button"
+            className={styles.iconButton}
             title="Rename deck"
             onClick={() => {
               setDraftName(deck.name);
@@ -113,6 +167,42 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete }: DeckPanelProps) 
           )}
         </div>
       </header>
+
+      <div className={styles.importWrap}>
+        <AnimatePresence initial={false}>
+          {importOpen && (
+            <motion.div
+              key="import-row"
+              className={styles.importRow}
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            >
+              <div className={styles.importInner}>
+                <input
+                  className={`${styles.importInput} ${importError ? styles.importInputError : ''}`}
+                  value={importValue}
+                  autoFocus
+                  placeholder="Paste a Clash Royale deck link — the deck builds itself"
+                  spellCheck={false}
+                  onChange={(e) => handleImportChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') tryImport(importValue);
+                    if (e.key === 'Escape') closeImport();
+                  }}
+                />
+                {importOk ? (
+                  <span className={styles.importOk}>Deck imported ✓</span>
+                ) : importError ? (
+                  <span className={styles.importErrorText}>{importError}</span>
+                ) : null}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       <DeckSlotGrid owner={owner} deckIndex={deckIndex} deck={deck} />
       <DeckStats deck={deck} />
     </section>
