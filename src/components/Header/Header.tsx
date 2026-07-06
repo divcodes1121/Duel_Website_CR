@@ -1,27 +1,31 @@
 import { useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { useThemeStore } from '../../state/themeStore';
 import { useBuilderStore } from '../../state/store';
 import { getTotalCardsUsed } from '../../state/deckUtils';
+import { SaveDialog } from '../Library/SaveDialog';
+import { LibraryModal } from '../Library/LibraryModal';
+import { ProfileMenu } from '../Profile/ProfileMenu';
 import styles from './Header.module.css';
 
 export function Header() {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
-  const duelDeckSet = useBuilderStore((s) => s.duelDeckSet);
+  const sets = useBuilderStore((s) => s.sets);
+  const mode = useBuilderStore((s) => s.mode);
   const resetAll = useBuilderStore((s) => s.resetAll);
   const [justSaved, setJustSaved] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
-  const totalUsed = getTotalCardsUsed(duelDeckSet);
-
-  // Decks persist to localStorage automatically on every change; the Save
-  // button exists as an explicit reassurance and simply confirms that state.
-  function handleSave() {
+  function flashSaved() {
     setJustSaved(true);
     window.setTimeout(() => setJustSaved(false), 1600);
   }
 
   function handleReset() {
-    if (window.confirm('Reset all 4 decks? This clears every card.')) {
+    const what = mode === 'solo' ? 'all 4 decks' : "both players' decks";
+    if (window.confirm(`Reset ${what}? This clears every card.`)) {
       resetAll();
     }
   }
@@ -48,16 +52,45 @@ export function Header() {
       </button>
 
       <div className={styles.actions}>
-        <span
-          className={`${styles.counter} ${totalUsed === 32 ? styles.counterFull : ''}`}
-          title="Unique cards used across all 4 decks"
-        >
-          <span className={styles.counterValue}>{totalUsed}</span>
-          <span className={styles.counterMax}>/ 32 cards</span>
-        </span>
+        {mode === 'solo' ? (
+          <span
+            className={`${styles.counter} ${
+              getTotalCardsUsed(sets.solo) === 32 ? styles.counterFull : ''
+            }`}
+            title="Unique cards used across all 4 decks"
+          >
+            <span className={styles.counterValue}>{getTotalCardsUsed(sets.solo)}</span>
+            <span className={styles.counterMax}>/ 32 cards</span>
+          </span>
+        ) : (
+          <>
+            <span
+              className={`${styles.counter} ${styles.counterBlue}`}
+              title="Unique cards used across Blue's 4 decks"
+            >
+              <span className={styles.counterValue}>{getTotalCardsUsed(sets.blue)}</span>
+              <span className={styles.counterMax}>/ 32</span>
+            </span>
+            <span
+              className={`${styles.counter} ${styles.counterRed}`}
+              title="Unique cards used across Red's 4 decks"
+            >
+              <span className={styles.counterValue}>{getTotalCardsUsed(sets.red)}</span>
+              <span className={styles.counterMax}>/ 32</span>
+            </span>
+          </>
+        )}
 
-        <button type="button" className={styles.glassButton} onClick={handleSave}>
+        <button type="button" className={styles.glassButton} onClick={() => setSaveOpen(true)}>
           {justSaved ? 'Saved ✓' : 'Save'}
+        </button>
+
+        <button
+          type="button"
+          className={styles.glassButton}
+          onClick={() => setLibraryOpen(true)}
+        >
+          My Decks
         </button>
 
         <button
@@ -83,12 +116,13 @@ export function Header() {
           </span>
         </button>
 
-        <span className={styles.avatar} title="Profile" aria-label="Profile placeholder">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.5 4.5 0 0 0 12 12zm0 2c-3.7 0-8 1.9-8 5v1h16v-1c0-3.1-4.3-5-8-5z" />
-          </svg>
-        </span>
+        <ProfileMenu triggerClassName={styles.avatar} />
       </div>
+
+      <AnimatePresence>
+        {saveOpen && <SaveDialog onClose={() => setSaveOpen(false)} onSaved={flashSaved} />}
+        {libraryOpen && <LibraryModal onClose={() => setLibraryOpen(false)} />}
+      </AnimatePresence>
     </header>
   );
 }

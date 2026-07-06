@@ -12,6 +12,16 @@ dist
 dist-ssr
 *.local
 
+# Private — test account passwords, never publish (repo is public)
+TEST_ACCOUNTS.md
+
+# Local tooling state
+.claude/
+
+# Heavy unused media
+video/
+*.mp4
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

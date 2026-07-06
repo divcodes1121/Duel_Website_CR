@@ -19,12 +19,42 @@ export interface Deck {
 export interface DuelDeckSet {
   id: string;
   name: string;
-  decks: [Deck, Deck, Deck, Deck];
+  /** Duel collections always hold exactly 4; Deck's Home holds any number. */
+  decks: Deck[];
   createdAt: string;
   updatedAt: string;
 }
 
+export type PlayerId = 'blue' | 'red';
+/**
+ * Which deck collection a slot belongs to: the solo builder's, one of the two
+ * Versus players', or the Deck's Home single-deck workshop (which uses only
+ * deck index 0 of its collection, so duel-wide uniqueness never bites there).
+ */
+export type DeckOwner = 'solo' | PlayerId | 'home';
+export type BuilderMode = 'solo' | 'versus';
+
 export interface SelectedSlot {
+  owner: DeckOwner;
   deckIndex: number;
   slotIndex: number;
+}
+
+/** A single 8-card deck saved in Deck's Home. */
+export interface SavedSingleDeck {
+  id: string;
+  name: string;
+  deck: Deck;
+  savedAt: string;
+}
+
+/** A named snapshot in the saved-decks library. Solo entries hold `solo`; Versus entries hold `blue` + `red`. */
+export interface SavedDeckSet {
+  id: string;
+  name: string;
+  mode: BuilderMode;
+  solo?: DuelDeckSet;
+  blue?: DuelDeckSet;
+  red?: DuelDeckSet;
+  savedAt: string;
 }

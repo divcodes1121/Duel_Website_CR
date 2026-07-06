@@ -125,6 +125,47 @@
   transform: translateY(0) scale(0.95);
 }
 
+/* "Open in Clash Royale" — violet-white gradient tying into the aurora background */
+.crButton {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--accent-light) 55%, var(--slot-border));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-light) 55%, transparent),
+    color-mix(in srgb, var(--accent) 65%, transparent) 70%
+  );
+  text-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.crButton:hover {
+  color: #fff;
+  border-color: color-mix(in srgb, #ffffff 45%, var(--accent-light));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-light) 80%, #ffffff),
+    var(--accent) 75%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 4px 16px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.crButton[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.crButton[aria-disabled='true']:hover {
+  transform: none;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-light) 55%, transparent),
+    color-mix(in srgb, var(--accent) 65%, transparent) 70%
+  );
+  border-color: color-mix(in srgb, var(--accent-light) 55%, var(--slot-border));
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
 /* --- Slot grid -------------------------------------------------------- */
 
 .slotGrid {
@@ -135,8 +176,8 @@
 
 .slot {
   position: relative;
-  aspect-ratio: 3 / 4;
-  background: var(--slot-bg);
+  aspect-ratio: 302 / 363; /* matches the card art exactly — no letterboxing */
+  background: transparent;
   border: 1px solid var(--slot-border);
   border-radius: 12px;
   padding: 0;
@@ -164,9 +205,9 @@
 
 /* Empty slots read as dashed drop-targets */
 .slotEmpty {
+  background: color-mix(in srgb, var(--slot-bg) 70%, transparent);
   border-style: dashed;
   border-color: color-mix(in srgb, var(--text-muted) 40%, transparent);
-  background: color-mix(in srgb, var(--slot-bg) 70%, transparent);
 }
 
 .slotEmpty:hover {
@@ -174,76 +215,43 @@
   background: color-mix(in srgb, var(--accent) 8%, var(--slot-bg));
 }
 
-/* Rarity glow when occupied */
+/* --- Static rarity tints when occupied (no animations — cheap to paint) --- */
+
 .slot[data-rarity='Common'] {
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
-    0 3px 12px color-mix(in srgb, var(--rarity-common) 22%, transparent);
+    0 3px 12px color-mix(in srgb, var(--rarity-common) 28%, transparent);
 }
 
 .slot[data-rarity='Rare'] {
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
-    0 3px 14px color-mix(in srgb, var(--rarity-rare) 32%, transparent);
+    0 3px 12px color-mix(in srgb, var(--rarity-rare) 40%, transparent);
 }
 
 .slot[data-rarity='Epic'] {
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
-    0 3px 16px color-mix(in srgb, var(--rarity-epic) 38%, transparent);
+    0 3px 14px color-mix(in srgb, var(--rarity-epic) 45%, transparent);
 }
 
 .slot[data-rarity='Legendary'] {
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
-    0 3px 18px color-mix(in srgb, var(--rarity-legendary) 42%, transparent);
+    0 3px 16px color-mix(in srgb, var(--rarity-legendary) 50%, transparent);
 }
 
 .slot[data-rarity='Champion'] {
-  animation: champion-shimmer 3.2s linear infinite;
-}
-
-@keyframes champion-shimmer {
-  0%,
-  100% {
-    box-shadow:
-      inset 0 1px 0 var(--glass-highlight),
-      0 3px 18px color-mix(in srgb, var(--rarity-legendary) 45%, transparent);
-  }
-  33% {
-    box-shadow:
-      inset 0 1px 0 var(--glass-highlight),
-      0 3px 18px color-mix(in srgb, var(--rarity-epic) 50%, transparent);
-  }
-  66% {
-    box-shadow:
-      inset 0 1px 0 var(--glass-highlight),
-      0 3px 18px color-mix(in srgb, var(--accent-cyan) 45%, transparent);
-  }
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 3px 16px color-mix(in srgb, var(--accent-gold) 45%, transparent),
+    0 3px 20px color-mix(in srgb, var(--accent-light) 30%, transparent);
 }
 
 .slotIcon {
   width: 100%;
   height: 100%;
   object-fit: contain;
-}
-
-.slotElixir {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  background: linear-gradient(135deg, var(--accent-light), var(--accent));
-  color: #fff;
-  font-size: 0.65rem;
-  font-weight: 700;
-  border-radius: 999px;
-  width: 1.2rem;
-  height: 1.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  z-index: 2;
 }
 
 .slotClear {
@@ -275,37 +283,6 @@
   opacity: 1;
 }
 
-.slotPlaceholder {
-  color: var(--text-muted);
-  font-size: 1.35rem;
-  font-weight: 300;
-  opacity: 0.55;
-  transition: opacity 0.15s ease, color 0.15s ease, text-shadow 0.15s ease;
-}
-
-.slotEmpty:hover .slotPlaceholder {
-  opacity: 1;
-  color: var(--accent-light);
-  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
-}
-
-.slotSelected .slotPlaceholder {
-  color: var(--accent-light);
-  opacity: 1;
-  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 80%, transparent);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.35);
-  }
-}
-
 .slotRoleBadge {
   position: absolute;
   bottom: 4px;
@@ -322,17 +299,40 @@
   z-index: 2;
 }
 
+/* EVO — purple with a white light-band sweeping through, pulsing purple glow */
 .slotRoleBadge-evolution {
-  background: linear-gradient(135deg, var(--accent-light), var(--accent));
   color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
 }
 
+/* HERO — molten gold sweep, pulsing golden glow */
 .slotRoleBadge-hero {
+  color: #3a2900;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.35);
   background: linear-gradient(135deg, #ffe9a8, var(--accent-gold));
 }
 
+/* CHAMPION — rainbow sheen with an alternating gold/cyan glow */
+.slotRoleBadge-champion {
+  color: #1a1420;
+  font-size: 0.48rem;
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
+  background: linear-gradient(
+    120deg,
+    #ffe9a8,
+    var(--accent-gold) 30%,
+    var(--accent-light) 55%,
+    var(--accent-cyan) 80%,
+    #ffe9a8 100%
+  );
+}
+
 /* Positional slot roles (fixed, not user-assigned): 1st slot = Evolution (purple),
-   2nd slot = Hero (gold), 3rd slot = Wild (half purple / half gold). */
+   2nd slot = Hero (gold), 3rd slot = Wild (half purple / half gold).
+   Their solid 2px borders visually swallow the standard rarity glow, so these
+   slots get extra glow spread to keep the pulse as visible as normal slots. */
 .slotRoleEvolution {
   border-width: 2px;
   border-color: var(--accent);
@@ -372,13 +372,62 @@
   border-style: solid;
 }
 
-/* Defined after the role classes so the selection ring wins over the positional role border while active. */
-.slotSelected {
-  border-color: var(--accent);
+/* Per-owner selection accent: solo keeps the purple accent; Versus players get
+   their side's colour so it's always obvious which player is being edited. */
+.panel {
+  --selection-accent: var(--accent);
+}
+
+.panel[data-owner='blue'] {
+  --selection-accent: var(--player-blue);
+}
+
+.panel[data-owner='red'] {
+  --selection-accent: var(--player-red);
+}
+
+/* Occupied slots can be picked up and dragged */
+.slot:not(.slotEmpty) {
+  cursor: grab;
+}
+
+.slot:not(.slotEmpty):active {
+  cursor: grabbing;
+}
+
+/* Defined after the role/rarity rules (and with matching specificity) so the
+   selection ring always wins over the positional border and rarity glows. */
+.slot.slotSelected {
+  border-color: var(--selection-accent);
+  animation: selection-breathe 1.6s ease-in-out infinite;
+}
+
+/* Valid drop target under an in-progress drag — wins over everything. */
+.slot.slotDropHover {
+  border-color: var(--accent-cyan);
+  border-style: solid;
+  transform: scale(1.07);
+  animation: none;
   box-shadow:
-    0 0 0 2px var(--accent),
-    0 0 22px color-mix(in srgb, var(--accent) 60%, transparent),
+    0 0 0 2px var(--accent-cyan),
+    0 0 26px color-mix(in srgb, var(--accent-cyan) 75%, transparent),
     inset 0 1px 0 var(--glass-highlight);
+}
+
+@keyframes selection-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--selection-accent),
+      0 0 16px color-mix(in srgb, var(--selection-accent) 45%, transparent),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--selection-accent),
+      0 0 30px color-mix(in srgb, var(--selection-accent) 80%, transparent),
+      inset 0 1px 0 var(--glass-highlight);
+  }
 }
 
 /* --- Stats ------------------------------------------------------------ */

@@ -1,0 +1,259 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 5, 20, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 1.25rem;
+}
+
+.dialog,
+.modal {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  box-shadow: var(--shadow);
+  padding: 1.4rem 1.5rem;
+}
+
+.dialog {
+  width: min(400px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.modal {
+  width: min(560px, 94vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialogTitle {
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-size: 1.35rem;
+  letter-spacing: 0.03em;
+  font-weight: 400;
+  margin: 0;
+  color: var(--text);
+}
+
+.dialogHint {
+  margin: -0.4rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.closeButton {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--slot-border);
+  background: var(--slot-bg);
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.closeButton:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
+  transform: scale(1.08);
+}
+
+.nameInput {
+  font-size: 0.95rem;
+  font-weight: 600;
+  background: var(--slot-bg);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.55rem 0.8rem;
+  outline: none;
+  width: 100%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.primaryButton {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  border: none;
+  border-radius: 999px;
+  padding: 0.45rem 1.15rem;
+  cursor: pointer;
+  box-shadow:
+    0 4px 16px color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.4), box-shadow 0.16s ease;
+}
+
+.primaryButton:hover {
+  transform: translateY(-1.5px);
+  box-shadow:
+    0 7px 22px color-mix(in srgb, var(--accent) 60%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.primaryButton:active {
+  transform: scale(0.95);
+}
+
+.ghostButton {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+.ghostButton:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
+  transform: translateY(-1.5px);
+}
+
+.dangerButton:hover {
+  color: #ff8298;
+  border-color: color-mix(in srgb, #f4506d 60%, var(--slot-border));
+}
+
+/* --- Library list ------------------------------------------------------ */
+
+.empty {
+  margin: 0.4rem 0 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 1.2rem 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 14px;
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.row:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--slot-border));
+  transform: translateY(-1.5px);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 6px 18px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.rowInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.rowName {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.modeChip {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--slot-border);
+  color: var(--text-muted);
+}
+
+.modeChip[data-mode='versus'] {
+  border-color: transparent;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--player-blue) 30%, transparent),
+    color-mix(in srgb, var(--player-red) 30%, transparent)
+  );
+  color: var(--text);
+}
+
+.rowActions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: center;
+  padding-top: 0.2rem;
+  border-top: 1px solid var(--glass-border);
+}
+
+@media (max-width: 560px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rowActions {
+    justify-content: flex-end;
+  }
+}

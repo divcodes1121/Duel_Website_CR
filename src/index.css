@@ -50,10 +50,13 @@
     0 0 48px rgba(138, 92, 246, 0.22),
     inset 0 1px 0 var(--glass-highlight);
 
-  --rarity-common: #aab2c0;
-  --rarity-rare: #4db8ff;
+  --rarity-common: #e6e9ef;
+  --rarity-rare: #ff9d45;
   --rarity-epic: #b45cf6;
   --rarity-legendary: #ffc531;
+
+  --player-blue: #4da3ff;
+  --player-red: #ff5c7a;
 
   --blob-strength: 40%;
 }
@@ -94,10 +97,13 @@
     0 0 42px rgba(122, 77, 224, 0.2),
     inset 0 1px 0 var(--glass-highlight);
 
-  --rarity-common: #8b93a3;
-  --rarity-rare: #1d9bf0;
+  --rarity-common: #6d7686;
+  --rarity-rare: #e8752a;
   --rarity-epic: #9333ea;
   --rarity-legendary: #e8a512;
+
+  --player-blue: #2f7fe0;
+  --player-red: #e0405e;
 
   --blob-strength: 55%;
 }

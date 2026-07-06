@@ -5,10 +5,70 @@
   min-height: 0;
 }
 
+/* --- Mode tabs (Solo / Versus) ---------------------------------------- */
+
+.modeBar {
+  display: flex;
+  justify-content: center;
+  padding: 0.85rem 1.5rem 0;
+  flex-shrink: 0;
+}
+
+.modeTabs {
+  display: flex;
+  gap: 0.15rem;
+  padding: 0.22rem;
+  border-radius: 999px;
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.modeTab {
+  position: relative;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.38rem 1.35rem;
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+
+.modeTab:hover {
+  color: var(--text);
+}
+
+.modeTabActive {
+  color: #fff;
+}
+
+.modeIndicator {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  box-shadow:
+    0 2px 10px color-mix(in srgb, var(--accent) 55%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.modeLabel {
+  position: relative;
+  z-index: 1;
+}
+
+/* --- Deck area ---------------------------------------------------------- */
+
 .scrollArea {
   flex: 1;
   overflow-y: auto;
-  padding: 1.25rem 1.5rem 0.75rem;
+  padding: 1rem 1.5rem 0.75rem;
   scroll-behavior: smooth;
 }
 
@@ -19,4 +79,78 @@
   max-width: 940px;
   margin: 0 auto;
   padding-bottom: 0.5rem;
+}
+
+/* --- Versus layout -------------------------------------------------------- */
+
+.versusColumns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding-bottom: 0.5rem;
+  align-items: start;
+}
+
+.playerColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.playerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  padding: 0.6rem 1rem;
+  border-radius: 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: var(--shadow);
+}
+
+.playerHeader[data-owner='blue'] {
+  border-color: color-mix(in srgb, var(--player-blue) 45%, var(--glass-border));
+  box-shadow:
+    0 4px 24px color-mix(in srgb, var(--player-blue) 22%, transparent),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+.playerHeader[data-owner='red'] {
+  border-color: color-mix(in srgb, var(--player-red) 45%, var(--glass-border));
+  box-shadow:
+    0 4px 24px color-mix(in srgb, var(--player-red) 22%, transparent),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+.playerDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.playerDot[data-owner='blue'] {
+  background: var(--player-blue);
+  box-shadow: 0 0 12px var(--player-blue);
+}
+
+.playerDot[data-owner='red'] {
+  background: var(--player-red);
+  box-shadow: 0 0 12px var(--player-red);
+}
+
+@media (max-width: 1100px) {
+  .versusColumns {
+    grid-template-columns: 1fr;
+    max-width: 940px;
+  }
 }

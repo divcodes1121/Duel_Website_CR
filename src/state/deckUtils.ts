@@ -36,8 +36,21 @@ export function getUsedCardKeys(duelSet: DuelDeckSet, excludeDeckIndex?: number)
   return used;
 }
 
-export function isCardAvailable(duelSet: DuelDeckSet, deckIndex: number, cardKey: string): boolean {
-  const usedElsewhere = getUsedCardKeys(duelSet, deckIndex);
+/**
+ * How far card-uniqueness reaches: duel collections forbid a card anywhere in
+ * the 4 decks ('collection'); Deck's Home decks are independent, so a card is
+ * only blocked within the deck being edited ('deck').
+ */
+export type UniquenessScope = 'collection' | 'deck';
+
+export function isCardAvailable(
+  duelSet: DuelDeckSet,
+  deckIndex: number,
+  cardKey: string,
+  scope: UniquenessScope = 'collection',
+): boolean {
+  const usedElsewhere =
+    scope === 'collection' ? getUsedCardKeys(duelSet, deckIndex) : new Set<string>();
   const usedInThisDeck = new Set(
     duelSet.decks[deckIndex].slots.filter((k): k is string => k !== null),
   );
@@ -49,8 +62,9 @@ export function assignCard(
   deckIndex: number,
   slotIndex: number,
   cardKey: string,
+  scope: UniquenessScope = 'collection',
 ): DuelDeckSet {
-  if (!isCardAvailable(duelSet, deckIndex, cardKey)) return duelSet;
+  if (!isCardAvailable(duelSet, deckIndex, cardKey, scope)) return duelSet;
   const decks = duelSet.decks.map((deck, i) =>
     i !== deckIndex
       ? deck
@@ -142,6 +156,101 @@ export function getSlotVisualVariant(
 
 export function countChampionsInDeck(deck: Deck, cardsByKey: Map<string, Card>): number {
   return deck.slots.filter((k) => k !== null && cardsByKey.get(k)?.isChampion).length;
+}
+
+/** Champions may only occupy the Hero (2nd) or Wild (3rd) slot; other cards go anywhere. */
+export function canPlaceCardInSlot(card: Card, slotIndex: number): boolean {
+  if (!card.isChampion) return true;
+  const role = getSlotRoleByPosition(slotIndex);
+  return role === 'hero' || role === 'wild';
+}
+
+/**
+ * Full validation for putting `card` into a specific slot (click or drag):
+ * positional champion rule, per-collection uniqueness, and the 1-champion cap
+ * (ignoring whatever currently occupies the target slot, since it's replaced).
+ */
+export function canAssignCardToSlot(
+  duelSet: DuelDeckSet,
+  deckIndex: number,
+  slotIndex: number,
+  card: Card,
+  cardsByKey: Map<string, Card>,
+  scope: UniquenessScope = 'collection',
+): boolean {
+  if (!canPlaceCardInSlot(card, slotIndex)) return false;
+  if (!isCardAvailable(duelSet, deckIndex, card.key, scope)) return false;
+  if (card.isChampion) {
+    const deck = duelSet.decks[deckIndex];
+    const otherChampions = deck.slots.filter(
+      (k, i) => i !== slotIndex && k !== null && cardsByKey.get(k)?.isChampion,
+    ).length;
+    if (otherChampions >= 1) return false;
+  }
+  return true;
+}
+
+export interface SlotRef {
+  deckIndex: number;
+  slotIndex: number;
+}
+
+/**
+ * Whether the card in `from` can move to `to` (swapping with `to`'s occupant,
+ * if any) within the same collection. Both cards must be legal in their
+ * destination positions and no deck may end up with more than one Champion.
+ */
+export function canMoveCard(
+  duelSet: DuelDeckSet,
+  from: SlotRef,
+  to: SlotRef,
+  cardsByKey: Map<string, Card>,
+): boolean {
+  if (from.deckIndex === to.deckIndex && from.slotIndex === to.slotIndex) return false;
+  const fromKey = duelSet.decks[from.deckIndex]?.slots[from.slotIndex];
+  if (!fromKey) return false;
+  const fromCard = cardsByKey.get(fromKey);
+  if (!fromCard) return false;
+  const toKey = duelSet.decks[to.deckIndex]?.slots[to.slotIndex] ?? null;
+  const toCard = toKey ? cardsByKey.get(toKey) : undefined;
+
+  if (!canPlaceCardInSlot(fromCard, to.slotIndex)) return false;
+  if (toCard && !canPlaceCardInSlot(toCard, from.slotIndex)) return false;
+
+  if (from.deckIndex !== to.deckIndex) {
+    const hypothetical = duelSet.decks.map((d) => [...d.slots]);
+    hypothetical[from.deckIndex][from.slotIndex] = toKey;
+    hypothetical[to.deckIndex][to.slotIndex] = fromKey;
+    for (const di of [from.deckIndex, to.deckIndex]) {
+      const champions = hypothetical[di].filter(
+        (k) => k !== null && cardsByKey.get(k)?.isChampion,
+      ).length;
+      if (champions > 1) return false;
+    }
+  }
+  return true;
+}
+
+/** Move/swap the cards between two slots of the same collection (no-op if invalid). */
+export function moveCard(
+  duelSet: DuelDeckSet,
+  from: SlotRef,
+  to: SlotRef,
+  cardsByKey: Map<string, Card>,
+): DuelDeckSet {
+  if (!canMoveCard(duelSet, from, to, cardsByKey)) return duelSet;
+  const fromKey = duelSet.decks[from.deckIndex].slots[from.slotIndex];
+  const toKey = duelSet.decks[to.deckIndex].slots[to.slotIndex];
+  const decks = duelSet.decks.map((deck, di) => {
+    if (di !== from.deckIndex && di !== to.deckIndex) return deck;
+    const slots = deck.slots.map((k, si) => {
+      if (di === from.deckIndex && si === from.slotIndex) return toKey;
+      if (di === to.deckIndex && si === to.slotIndex) return fromKey;
+      return k;
+    });
+    return { ...deck, slots };
+  }) as DuelDeckSet['decks'];
+  return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }
 
 // ---------------------------------------------------------------------------

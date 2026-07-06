@@ -13,6 +13,10 @@ import {
   getSlotRoleByPosition,
   getSlotVisualVariant,
   countChampionsInDeck,
+  canPlaceCardInSlot,
+  canAssignCardToSlot,
+  canMoveCard,
+  moveCard,
 } from '../src/state/deckUtils';
 import type { Card } from '../src/types/card';
 
@@ -241,6 +245,122 @@ describe('getSlotVisualVariant (automatic, by position)', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = assignCard(set, 0, 3, 'knight'); // eligible for everything, but normal slot
     expect(getSlotVisualVariant(set.decks[0], 3, cardsByKey)).toBe('base');
+  });
+});
+
+describe('canPlaceCardInSlot', () => {
+  it('restricts champions to the Hero (2nd) and Wild (3rd) slots', () => {
+    const champion = cardsByKey.get('skeleton-king')!;
+    expect(canPlaceCardInSlot(champion, 0)).toBe(false);
+    expect(canPlaceCardInSlot(champion, 1)).toBe(true);
+    expect(canPlaceCardInSlot(champion, 2)).toBe(true);
+    for (let i = 3; i < 8; i++) {
+      expect(canPlaceCardInSlot(champion, i)).toBe(false);
+    }
+  });
+
+  it('places non-champions anywhere', () => {
+    const knight = cardsByKey.get('knight')!;
+    for (let i = 0; i < 8; i++) {
+      expect(canPlaceCardInSlot(knight, i)).toBe(true);
+    }
+  });
+});
+
+describe('deck-scoped uniqueness (Deck\'s Home)', () => {
+  it('allows the same card in another deck when scope is "deck"', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 0, 'knight');
+    expect(isCardAvailable(set, 1, 'knight', 'deck')).toBe(true);
+    expect(isCardAvailable(set, 1, 'knight', 'collection')).toBe(false);
+  });
+
+  it('still blocks duplicates within the same deck under "deck" scope', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 0, 'knight');
+    expect(isCardAvailable(set, 0, 'knight', 'deck')).toBe(false);
+  });
+});
+
+describe('canAssignCardToSlot', () => {
+  it('allows replacing the deck champion with another champion in the same slot', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 1, 'skeleton-king');
+    const queen = cardsByKey.get('archer-queen')!;
+    expect(canAssignCardToSlot(set, 0, 1, queen, cardsByKey)).toBe(true);
+  });
+
+  it('blocks a second champion in a different slot of the same deck', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 1, 'skeleton-king');
+    const queen = cardsByKey.get('archer-queen')!;
+    expect(canAssignCardToSlot(set, 0, 2, queen, cardsByKey)).toBe(false);
+  });
+
+  it('blocks cards already used elsewhere in the collection', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 0, 'knight');
+    const knight = cardsByKey.get('knight')!;
+    expect(canAssignCardToSlot(set, 1, 0, knight, cardsByKey)).toBe(false);
+  });
+});
+
+describe('canMoveCard / moveCard', () => {
+  it('moves a card into an empty slot', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 3, 'fireball');
+    expect(canMoveCard(set, { deckIndex: 0, slotIndex: 3 }, { deckIndex: 0, slotIndex: 5 }, cardsByKey)).toBe(true);
+    set = moveCard(set, { deckIndex: 0, slotIndex: 3 }, { deckIndex: 0, slotIndex: 5 }, cardsByKey);
+    expect(set.decks[0].slots[3]).toBeNull();
+    expect(set.decks[0].slots[5]).toBe('fireball');
+  });
+
+  it('swaps two occupied slots', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 3, 'fireball');
+    set = assignCard(set, 0, 4, 'zap');
+    set = moveCard(set, { deckIndex: 0, slotIndex: 3 }, { deckIndex: 0, slotIndex: 4 }, cardsByKey);
+    expect(set.decks[0].slots[3]).toBe('zap');
+    expect(set.decks[0].slots[4]).toBe('fireball');
+  });
+
+  it('moves across decks of the same collection', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 3, 'fireball');
+    set = moveCard(set, { deckIndex: 0, slotIndex: 3 }, { deckIndex: 2, slotIndex: 6 }, cardsByKey);
+    expect(set.decks[0].slots[3]).toBeNull();
+    expect(set.decks[2].slots[6]).toBe('fireball');
+  });
+
+  it('rejects moving a champion into a normal slot', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 1, 'skeleton-king');
+    expect(canMoveCard(set, { deckIndex: 0, slotIndex: 1 }, { deckIndex: 0, slotIndex: 4 }, cardsByKey)).toBe(false);
+    const before = set;
+    set = moveCard(set, { deckIndex: 0, slotIndex: 1 }, { deckIndex: 0, slotIndex: 4 }, cardsByKey);
+    expect(set).toBe(before);
+  });
+
+  it('rejects a swap that would push a champion into an illegal slot', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 1, 'skeleton-king');
+    set = assignCard(set, 0, 4, 'fireball');
+    // Fireball (slot 5) -> hero slot is fine, but Skeleton King -> slot 5 is not.
+    expect(canMoveCard(set, { deckIndex: 0, slotIndex: 4 }, { deckIndex: 0, slotIndex: 1 }, cardsByKey)).toBe(false);
+  });
+
+  it('allows swapping a champion between hero and wild slots', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 1, 'skeleton-king');
+    expect(canMoveCard(set, { deckIndex: 0, slotIndex: 1 }, { deckIndex: 0, slotIndex: 2 }, cardsByKey)).toBe(true);
+  });
+
+  it('rejects a cross-deck move that gives a deck two champions', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 1, 'skeleton-king');
+    set = assignCard(set, 1, 1, 'archer-queen');
+    // Move Skeleton King into deck 2's wild slot -> deck 2 would hold 2 champions.
+    expect(canMoveCard(set, { deckIndex: 0, slotIndex: 1 }, { deckIndex: 1, slotIndex: 2 }, cardsByKey)).toBe(false);
   });
 });
 
