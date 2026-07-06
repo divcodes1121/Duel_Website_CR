@@ -26,6 +26,75 @@
   pointer-events: none;
 }
 
+.drawerCollapsed {
+  padding: 0.35rem 1.25rem 0.45rem;
+}
+
+/* --- collapse toggle (pill tab riding the drawer's top edge) ---------- */
+
+.drawerToggle {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.6rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  color: var(--text-muted);
+  cursor: pointer;
+  z-index: 5;
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 var(--glass-highlight);
+  transition: color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.drawerToggle:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--glass-border));
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.3),
+    0 0 18px color-mix(in srgb, var(--accent) 30%, transparent),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+.drawerToggleChevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drawerContent {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.collapsedRow {
+  border: none;
+  background: none;
+  padding: 0.2rem 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.collapsedRow:hover {
+  color: var(--text);
+}
+
 .toolbar {
   display: flex;
   align-items: center;
