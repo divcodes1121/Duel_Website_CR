@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { DUEL_DECK_COUNT } from '../types/deck';
 import type {
   BuilderMode,
   Deck,
@@ -27,6 +28,12 @@ import {
 } from './deckUtils';
 import { CARDS_BY_KEY } from '../data/cards';
 
+/** Duel collections (Deck's Home excluded — it manages its own deck list). */
+export type DuelOwner = 'solo' | 'blue' | 'red';
+
+/** Decks 1-3 are always shown; 4 and 5 unlock via the "Add deck slot" button. */
+export const MIN_DECK_SLOTS = 3;
+
 interface PersistedSlice {
   /**
    * Independent duel deck collections. `solo` backs the classic single-player
@@ -37,6 +44,8 @@ interface PersistedSlice {
   mode: BuilderMode;
   /** Named snapshots saved by the user, most recent first. */
   library: SavedDeckSet[];
+  /** How many deck slots are revealed per duel collection (3..DUEL_DECK_COUNT). */
+  deckSlotCount: Record<DuelOwner, number>;
 }
 
 interface BuilderState extends PersistedSlice {
@@ -77,6 +86,10 @@ interface BuilderState extends PersistedSlice {
   loadSaved: (id: string) => void;
   renameSaved: (id: string, name: string) => void;
   deleteSaved: (id: string) => void;
+  /** Reveal the next hidden duel deck slot (up to DUEL_DECK_COUNT). */
+  addDeckSlot: (owner: DuelOwner) => void;
+  /** Hide the last revealed duel deck slot (down to MIN_DECK_SLOTS), clearing its cards. */
+  removeDeckSlot: (owner: DuelOwner) => void;
   /** Deck's Home: append another empty deck slot. */
   addHomeDeck: () => void;
   /** Deck's Home: remove a deck slot entirely. */
@@ -103,6 +116,54 @@ function scopeFor(owner: DeckOwner): UniquenessScope {
   return owner === 'home' ? 'deck' : 'collection';
 }
 
+/** Older versions stored 4-deck duel collections; pad them to the new count. */
+function padDuelSet<T extends DuelDeckSet | undefined>(set: T): T {
+  if (!set || set.decks.length >= DUEL_DECK_COUNT) return set;
+  const decks = [...set.decks];
+  while (decks.length < DUEL_DECK_COUNT) {
+    decks.push(createEmptyDeck(`Deck ${decks.length + 1}`));
+  }
+  return { ...set, decks };
+}
+
+function padToCurrentDeckCount(slice: Omit<PersistedSlice, 'deckSlotCount'>): PersistedSlice {
+  const padded = {
+    ...slice,
+    sets: {
+      ...slice.sets,
+      solo: padDuelSet(slice.sets.solo),
+      blue: padDuelSet(slice.sets.blue),
+      red: padDuelSet(slice.sets.red),
+      // Deck's Home is an open-ended list — never padded.
+    },
+    library: slice.library.map((entry) => ({
+      ...entry,
+      solo: padDuelSet(entry.solo),
+      blue: padDuelSet(entry.blue),
+      red: padDuelSet(entry.red),
+    })),
+  };
+  return { ...padded, deckSlotCount: deriveDeckSlotCounts(padded.sets) };
+}
+
+/** Reveal enough slots to show every deck that already holds cards. */
+function deriveDeckSlotCount(set: DuelDeckSet | undefined): number {
+  if (!set) return MIN_DECK_SLOTS;
+  let lastUsed = -1;
+  set.decks.forEach((deck, i) => {
+    if (deck.slots.some((k) => k !== null)) lastUsed = i;
+  });
+  return Math.min(DUEL_DECK_COUNT, Math.max(MIN_DECK_SLOTS, lastUsed + 1));
+}
+
+function deriveDeckSlotCounts(sets: Record<DeckOwner, DuelDeckSet>): Record<DuelOwner, number> {
+  return {
+    solo: deriveDeckSlotCount(sets.solo),
+    blue: deriveDeckSlotCount(sets.blue),
+    red: deriveDeckSlotCount(sets.red),
+  };
+}
+
 interface PersistedSliceV1 {
   duelDeckSet: DuelDeckSet;
 }
@@ -117,6 +178,7 @@ export const useBuilderStore = create<BuilderState>()(
       sets: createDefaultSets(),
       mode: 'solo',
       library: [],
+      deckSlotCount: { solo: MIN_DECK_SLOTS, blue: MIN_DECK_SLOTS, red: MIN_DECK_SLOTS },
       selectedSlot: null,
       selectionPinned: false,
       filterType: 'All',
@@ -273,6 +335,10 @@ export const useBuilderStore = create<BuilderState>()(
                   blue: createEmptyDuelDeckSet('Blue Player'),
                   red: createEmptyDuelDeckSet('Red Player'),
                 },
+          deckSlotCount:
+            state.mode === 'solo'
+              ? { ...state.deckSlotCount, solo: MIN_DECK_SLOTS }
+              : { ...state.deckSlotCount, blue: MIN_DECK_SLOTS, red: MIN_DECK_SLOTS },
           selectedSlot: null,
           selectionPinned: false,
         })),
@@ -299,15 +365,19 @@ export const useBuilderStore = create<BuilderState>()(
           const entry = state.library.find((e) => e.id === id);
           if (!entry) return state;
           const sets = { ...state.sets };
+          const deckSlotCount = { ...state.deckSlotCount };
           if (entry.mode === 'solo' && entry.solo) {
-            sets.solo = structuredClone(entry.solo);
+            sets.solo = padDuelSet(structuredClone(entry.solo));
+            deckSlotCount.solo = deriveDeckSlotCount(sets.solo);
           } else if (entry.mode === 'versus' && entry.blue && entry.red) {
-            sets.blue = structuredClone(entry.blue);
-            sets.red = structuredClone(entry.red);
+            sets.blue = padDuelSet(structuredClone(entry.blue));
+            sets.red = padDuelSet(structuredClone(entry.red));
+            deckSlotCount.blue = deriveDeckSlotCount(sets.blue);
+            deckSlotCount.red = deriveDeckSlotCount(sets.red);
           } else {
             return state; // malformed entry — don't touch anything
           }
-          return { sets, mode: entry.mode, selectedSlot: null, selectionPinned: false };
+          return { sets, deckSlotCount, mode: entry.mode, selectedSlot: null, selectionPinned: false };
         }),
 
       renameSaved: (id, name) =>
@@ -319,6 +389,34 @@ export const useBuilderStore = create<BuilderState>()(
 
       deleteSaved: (id) =>
         set((state) => ({ library: state.library.filter((e) => e.id !== id) })),
+
+      addDeckSlot: (owner) =>
+        set((state) => ({
+          deckSlotCount: {
+            ...state.deckSlotCount,
+            [owner]: Math.min(DUEL_DECK_COUNT, state.deckSlotCount[owner] + 1),
+          },
+        })),
+
+      removeDeckSlot: (owner) =>
+        set((state) => {
+          const count = state.deckSlotCount[owner];
+          if (count <= MIN_DECK_SLOTS) return state;
+          const lastIndex = count - 1;
+          return {
+            // The hidden deck must not keep holding cards (they'd still block
+            // uniqueness invisibly) — clear it on the way out.
+            sets: {
+              ...state.sets,
+              [owner]: clearDeckUtil(state.sets[owner], lastIndex),
+            },
+            deckSlotCount: { ...state.deckSlotCount, [owner]: lastIndex },
+            selectedSlot:
+              state.selectedSlot?.owner === owner && state.selectedSlot.deckIndex === lastIndex
+                ? null
+                : state.selectedSlot,
+          };
+        }),
 
       addHomeDeck: () =>
         set((state) => {
@@ -349,14 +447,25 @@ export const useBuilderStore = create<BuilderState>()(
     }),
     {
       name: 'royal-duels-builder',
-      version: 6,
+      version: 8,
       partialize: (state) => ({
         sets: state.sets,
         mode: state.mode,
         library: state.library,
+        deckSlotCount: state.deckSlotCount,
       }),
       migrate: (persisted, version) => {
-        if (version === 6) return persisted as PersistedSlice;
+        // v7: duel collections grew from 4 to 5 decks; v8 added per-collection
+        // revealed-slot counts. Older payloads funnel through their original
+        // migration, then get padded + counted.
+        if (version === 8) return persisted as PersistedSlice;
+        if (version === 7) {
+          const v7 = persisted as Omit<PersistedSlice, 'deckSlotCount'>;
+          return { ...v7, deckSlotCount: deriveDeckSlotCounts(v7.sets) };
+        }
+        if (version === 6) {
+          return padToCurrentDeckCount(persisted as Omit<PersistedSlice, 'deckSlotCount'>);
+        }
         // v5: home was a 4-deck set (index 0 = workshop) + a separate homeLibrary.
         // Fold the working deck and every saved deck into the new open-ended list.
         if (version === 5) {
@@ -368,40 +477,39 @@ export const useBuilderStore = create<BuilderState>()(
             decks.push({ ...structuredClone(entry.deck), name: entry.name });
           }
           if (decks.length === 0) decks.push(createEmptyDeck('My Deck'));
-          return {
+          return padToCurrentDeckCount({
             sets: { ...v5.sets, home: { ...v5.sets.home, decks } },
             mode: v5.mode,
             library: v5.library,
-          };
+          });
         }
         // v4 had solo/blue/red sets + duel library, but no home slice.
         if (version === 4) {
           const v4 = persisted as PersistedSlice;
-          return { ...v4, sets: { ...v4.sets, home: createHomeSet() } };
+          return padToCurrentDeckCount({ ...v4, sets: { ...v4.sets, home: createHomeSet() } });
         }
         // v3 had solo/blue/red sets + mode, but no libraries.
         if (version === 3) {
-          const v3 = persisted as Omit<PersistedSlice, 'library' | 'homeLibrary'>;
-          return {
+          const v3 = persisted as Omit<PersistedSlice, 'library'>;
+          return padToCurrentDeckCount({
             ...v3,
             sets: { ...v3.sets, home: createEmptyDuelDeckSet("Deck's Home") },
             library: [],
-            homeLibrary: [],
-          };
+          });
         }
         // v1 stored a single duelDeckSet — it becomes the solo collection.
         const v1 = persisted as Partial<PersistedSliceV1> | undefined;
         if (v1?.duelDeckSet) {
-          return {
+          return padToCurrentDeckCount({
             sets: { ...createDefaultSets(), solo: { ...v1.duelDeckSet, name: 'My Duel Deck' } },
             mode: 'solo' as BuilderMode,
             library: [],
-          };
+          });
         }
         // v2 (short-lived dev shape) stored blue/red only; blue held the old solo decks.
         const v2 = persisted as Partial<PersistedSliceV2> | undefined;
         if (v2?.players) {
-          return {
+          return padToCurrentDeckCount({
             sets: {
               ...createDefaultSets(),
               solo: { ...v2.players.blue, name: 'My Duel Deck' },
@@ -409,12 +517,13 @@ export const useBuilderStore = create<BuilderState>()(
             },
             mode: 'solo' as BuilderMode,
             library: [],
-          };
+          });
         }
         return {
           sets: createDefaultSets(),
           mode: 'solo' as BuilderMode,
           library: [],
+          deckSlotCount: { solo: MIN_DECK_SLOTS, blue: MIN_DECK_SLOTS, red: MIN_DECK_SLOTS },
         };
       },
     },

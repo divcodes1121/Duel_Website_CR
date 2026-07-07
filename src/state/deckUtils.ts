@@ -14,12 +14,7 @@ export function createEmptyDuelDeckSet(name: string): DuelDeckSet {
   return {
     id: crypto.randomUUID(),
     name,
-    decks: [
-      createEmptyDeck('Deck 1'),
-      createEmptyDeck('Deck 2'),
-      createEmptyDeck('Deck 3'),
-      createEmptyDeck('Deck 4'),
-    ],
+    decks: Array.from({ length: DUEL_DECK_COUNT }, (_, i) => createEmptyDeck(`Deck ${i + 1}`)),
     createdAt: now,
     updatedAt: now,
   };

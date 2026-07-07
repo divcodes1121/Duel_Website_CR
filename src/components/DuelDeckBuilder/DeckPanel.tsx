@@ -29,6 +29,14 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete }: DeckPanelProps) 
   const filledCount = deck.slots.filter((s) => s !== null).length;
   const deckLink = getClashRoyaleDeckLink(deck);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [linkOnlyCopied, setLinkOnlyCopied] = useState(false);
+
+  function copyDeckLink() {
+    if (!deckLink) return;
+    navigator.clipboard?.writeText(deckLink).catch(() => {});
+    setLinkOnlyCopied(true);
+    window.setTimeout(() => setLinkOnlyCopied(false), 1800);
+  }
 
   function commitRename() {
     const trimmed = draftName.trim();
@@ -120,6 +128,19 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete }: DeckPanelProps) 
             onClick={openInClashRoyale}
           >
             {linkCopied ? 'Link copied ✓' : 'Open in Game'}
+          </button>
+          <button
+            type="button"
+            className={styles.iconButton}
+            title={
+              deckLink
+                ? "Copy this deck's Clash Royale share link"
+                : 'Fill all 8 slots to copy the deck link'
+            }
+            aria-disabled={!deckLink}
+            onClick={copyDeckLink}
+          >
+            {linkOnlyCopied ? 'Copied ✓' : 'Copy Link'}
           </button>
           <button
             type="button"

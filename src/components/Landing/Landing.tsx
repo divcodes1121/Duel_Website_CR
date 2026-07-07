@@ -467,7 +467,7 @@ function Hero({
           animate={introDone ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.8, delay: 0.85, ease: [0.16, 1, 0.3, 1] }}
         >
-          Four decks. Thirty-two unique cards. One arena.
+          Up to five decks. Forty unique cards. One arena.
           <br />
           Craft the perfect duel lineup before your opponent does.
         </motion.p>
@@ -546,8 +546,8 @@ const DUELS_CRYSTAL: CrystalContent = {
   kickerIcon: '⚔',
   kicker: 'Royal Duels',
   title: 'The duel deck forge',
-  desc: 'Build all four battle decks side by side. Evolution, Hero and Wild slots enforced by position — an illegal lineup is impossible.',
-  chips: ['4 decks · 32 cards', 'Evo · Hero · Wild', 'Live elixir stats'],
+  desc: 'Build all five battle decks side by side. Evolution, Hero and Wild slots enforced by position — an illegal lineup is impossible.',
+  chips: ['Up to 5 decks · 40 cards', 'Evo · Hero · Wild', 'Live elixir stats'],
   ctaIcon: '⚔',
   ctaLabel: 'Enter Royal Duels',
   artKeys: ['knight', 'archer-queen', 'golden-knight'],

@@ -55,9 +55,9 @@ const cardsByKey = new Map<string, Card>([
 ]);
 
 describe('createEmptyDuelDeckSet', () => {
-  it('creates 4 decks of 8 empty slots each', () => {
+  it('creates 5 decks of 8 empty slots each', () => {
     const set = createEmptyDuelDeckSet('Test');
-    expect(set.decks).toHaveLength(4);
+    expect(set.decks).toHaveLength(5);
     set.decks.forEach((deck) => {
       expect(deck.slots).toHaveLength(8);
       expect(deck.slots.every((s) => s === null)).toBe(true);
@@ -168,10 +168,10 @@ describe('validateDuelDeckSet', () => {
     const set = createEmptyDuelDeckSet('Test');
     const result = validateDuelDeckSet(set);
     expect(result.valid).toBe(false);
-    expect(result.errors.length).toBe(4);
+    expect(result.errors.length).toBe(5);
   });
 
-  it('passes for 4 full decks with no cross-deck duplicates', () => {
+  it('passes for 5 full decks with no cross-deck duplicates', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = {
       ...set,

@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useThemeStore } from '../../state/themeStore';
 import { useBuilderStore } from '../../state/store';
 import { getTotalCardsUsed } from '../../state/deckUtils';
+import { DECK_SIZE } from '../../types/deck';
 import { SaveDialog } from '../Library/SaveDialog';
 import { LibraryModal } from '../Library/LibraryModal';
 import { ProfileMenu } from '../Profile/ProfileMenu';
@@ -13,7 +14,9 @@ export function Header() {
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const sets = useBuilderStore((s) => s.sets);
   const mode = useBuilderStore((s) => s.mode);
+  const deckSlotCount = useBuilderStore((s) => s.deckSlotCount);
   const resetAll = useBuilderStore((s) => s.resetAll);
+  const maxFor = (owner: 'solo' | 'blue' | 'red') => deckSlotCount[owner] * DECK_SIZE;
   const [justSaved, setJustSaved] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -24,7 +27,7 @@ export function Header() {
   }
 
   function handleReset() {
-    const what = mode === 'solo' ? 'all 4 decks' : "both players' decks";
+    const what = mode === 'solo' ? 'all solo decks' : "both players' decks";
     if (window.confirm(`Reset ${what}? This clears every card.`)) {
       resetAll();
     }
@@ -55,28 +58,28 @@ export function Header() {
         {mode === 'solo' ? (
           <span
             className={`${styles.counter} ${
-              getTotalCardsUsed(sets.solo) === 32 ? styles.counterFull : ''
+              getTotalCardsUsed(sets.solo) === maxFor('solo') ? styles.counterFull : ''
             }`}
-            title="Unique cards used across all 4 decks"
+            title={`Unique cards used across your ${deckSlotCount.solo} decks`}
           >
             <span className={styles.counterValue}>{getTotalCardsUsed(sets.solo)}</span>
-            <span className={styles.counterMax}>/ 32 cards</span>
+            <span className={styles.counterMax}>/ {maxFor('solo')} cards</span>
           </span>
         ) : (
           <>
             <span
               className={`${styles.counter} ${styles.counterBlue}`}
-              title="Unique cards used across Blue's 4 decks"
+              title={`Unique cards used across Blue's ${deckSlotCount.blue} decks`}
             >
               <span className={styles.counterValue}>{getTotalCardsUsed(sets.blue)}</span>
-              <span className={styles.counterMax}>/ 32</span>
+              <span className={styles.counterMax}>/ {maxFor('blue')}</span>
             </span>
             <span
               className={`${styles.counter} ${styles.counterRed}`}
-              title="Unique cards used across Red's 4 decks"
+              title={`Unique cards used across Red's ${deckSlotCount.red} decks`}
             >
               <span className={styles.counterValue}>{getTotalCardsUsed(sets.red)}</span>
-              <span className={styles.counterMax}>/ 32</span>
+              <span className={styles.counterMax}>/ {maxFor('red')}</span>
             </span>
           </>
         )}

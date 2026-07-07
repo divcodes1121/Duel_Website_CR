@@ -1,5 +1,5 @@
 export const DECK_SIZE = 8;
-export const DUEL_DECK_COUNT = 4;
+export const DUEL_DECK_COUNT = 5;
 
 export type DeckSlot = string | null;
 
