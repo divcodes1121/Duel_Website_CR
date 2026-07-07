@@ -1,131 +1,734 @@
 {
-  "goblin-machine": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "rune-giant": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "void": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "goblin-curse": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "berserker": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "boss-bandit": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "goblin-demolisher": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "goblinstein": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "little-prince": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "spirit-empress": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "suspicious-bush": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "vines": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "knight": { "can_evolve": true, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "archers": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "goblins": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "giant": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": true },
-  "pekka": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "minions": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "balloon": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": true },
-  "witch": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "barbarians": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "golem": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "skeletons": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "valkyrie": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "skeleton-army": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "bomber": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "musketeer": { "can_evolve": true, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "baby-dragon": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "prince": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "wizard": { "can_evolve": true, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "mini-pekka": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "spear-goblins": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "giant-skeleton": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "hog-rider": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "minion-horde": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "ice-wizard": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "royal-giant": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "guards": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "princess": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "dark-prince": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "three-musketeers": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "lava-hound": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "ice-spirit": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "fire-spirit": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "miner": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "sparky": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "bowler": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "lumberjack": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "battle-ram": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "inferno-dragon": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "ice-golem": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "mega-minion": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "dart-goblin": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "goblin-gang": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "electro-wizard": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "elite-barbarians": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "hunter": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "executioner": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "bandit": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "royal-recruits": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "night-witch": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "bats": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "royal-ghost": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "ram-rider": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "zappies": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "rascals": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "cannon-cart": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "mega-knight": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "skeleton-barrel": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "flying-machine": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "wall-breakers": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "royal-hogs": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "goblin-giant": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "fisherman": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "magic-archer": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "electro-dragon": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "firecracker": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "mighty-miner": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "elixir-golem": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "battle-healer": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "skeleton-king": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "archer-queen": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "golden-knight": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "monk": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "little-prince": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "goblinstein": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "boss-bandit": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "spirit-empress": { "can_evolve": false, "can_be_hero": false, "is_champion": true, "is_win_condition": false },
-  "mother-witch": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "electro-spirit": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "electro-giant": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "phoenix": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "skeleton-dragons": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "berserker": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "goblin-demolisher": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "suspicious-bush": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "vines": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "cannon": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "goblin-hut": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "mortar": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "inferno-tower": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "bomb-tower": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "barbarian-hut": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "tesla": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "elixir-collector": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "x-bow": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "tombstone": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "furnace": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "goblin-cage": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "goblin-drill": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "fireball": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "arrows": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "rage": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "rocket": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "goblin-barrel": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "freeze": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "mirror": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "lightning": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "zap": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "poison": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "graveyard": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": true },
-  "the-log": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "tornado": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "clone": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "earthquake": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "barbarian-barrel": { "can_evolve": false, "can_be_hero": true, "is_champion": false, "is_win_condition": false },
-  "heal-spirit": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "giant-snowball": { "can_evolve": true, "can_be_hero": false, "is_champion": false, "is_win_condition": false },
-  "royal-delivery": { "can_evolve": false, "can_be_hero": false, "is_champion": false, "is_win_condition": false }
+  "goblin-machine": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "rune-giant": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "void": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "goblin-curse": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "berserker": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "boss-bandit": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": true,
+    "is_win_condition": false
+  },
+  "goblin-demolisher": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "goblinstein": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": true,
+    "is_win_condition": false
+  },
+  "little-prince": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": true,
+    "is_win_condition": false
+  },
+  "spirit-empress": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": true,
+    "is_win_condition": false
+  },
+  "suspicious-bush": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "vines": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "knight": {
+    "can_evolve": true,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "archers": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "goblins": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "giant": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "pekka": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "minions": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "balloon": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "witch": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "barbarians": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "golem": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "skeletons": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "valkyrie": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "skeleton-army": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "bomber": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "musketeer": {
+    "can_evolve": true,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "baby-dragon": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "prince": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "wizard": {
+    "can_evolve": true,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "mini-pekka": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "spear-goblins": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "giant-skeleton": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "hog-rider": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "minion-horde": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "ice-wizard": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "royal-giant": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "guards": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "princess": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "dark-prince": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "three-musketeers": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "lava-hound": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "ice-spirit": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "fire-spirit": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "miner": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "sparky": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "bowler": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "lumberjack": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "battle-ram": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "inferno-dragon": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "ice-golem": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "mega-minion": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "dart-goblin": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "goblin-gang": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "electro-wizard": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "elite-barbarians": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "hunter": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "executioner": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "bandit": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "royal-recruits": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "night-witch": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "bats": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "royal-ghost": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "ram-rider": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "zappies": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "rascals": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "cannon-cart": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "mega-knight": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "skeleton-barrel": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "flying-machine": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "wall-breakers": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "royal-hogs": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "goblin-giant": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "fisherman": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "magic-archer": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "electro-dragon": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "firecracker": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "mighty-miner": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": true,
+    "is_win_condition": false
+  },
+  "elixir-golem": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "battle-healer": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "skeleton-king": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": true,
+    "is_win_condition": false
+  },
+  "archer-queen": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": true,
+    "is_win_condition": false
+  },
+  "golden-knight": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": true,
+    "is_win_condition": false
+  },
+  "monk": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": true,
+    "is_win_condition": false
+  },
+  "mother-witch": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "electro-spirit": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "electro-giant": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "phoenix": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "skeleton-dragons": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "cannon": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "goblin-hut": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "mortar": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "inferno-tower": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "bomb-tower": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "barbarian-hut": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "tesla": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "elixir-collector": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "x-bow": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "tombstone": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "furnace": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "goblin-cage": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "goblin-drill": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "fireball": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "arrows": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "rage": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "rocket": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "goblin-barrel": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "freeze": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "mirror": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "lightning": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "zap": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "poison": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "graveyard": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": true
+  },
+  "the-log": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "tornado": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "clone": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "earthquake": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "barbarian-barrel": {
+    "can_evolve": false,
+    "can_be_hero": true,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "heal-spirit": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "giant-snowball": {
+    "can_evolve": true,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "royal-delivery": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  },
+  "ronin": {
+    "can_evolve": false,
+    "can_be_hero": false,
+    "is_champion": false,
+    "is_win_condition": false
+  }
 }

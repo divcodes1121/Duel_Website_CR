@@ -1584,5 +1584,18 @@
     "id": 28000028,
     "evolved_spells_sc_key": "",
     "is_evolved": false
+  },
+  {
+    "key": "ronin",
+    "name": "Ronin",
+    "sc_key": "Ronin",
+    "elixir": 5,
+    "type": "Troop",
+    "rarity": "Legendary",
+    "arena": 14,
+    "description": "A wandering swordsman who parries one melee attack every few seconds, reflecting even more damage than he blocked.",
+    "id": 26000106,
+    "evolved_spells_sc_key": "",
+    "is_evolved": false
   }
 ]
