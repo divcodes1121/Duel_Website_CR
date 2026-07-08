@@ -56,7 +56,7 @@
   "spirit-empress": {
     "can_evolve": false,
     "can_be_hero": false,
-    "is_champion": true,
+    "is_champion": false,
     "is_win_condition": false
   },
   "suspicious-bush": {
