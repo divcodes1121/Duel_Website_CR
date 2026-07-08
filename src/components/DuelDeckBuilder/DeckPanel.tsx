@@ -166,7 +166,7 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete }: DeckPanelProps) 
               setIsEditing(true);
             }}
           >
-            Edit
+            Rename
           </button>
           <button
             type="button"
