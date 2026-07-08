@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useBuilderStore } from '../../state/store';
 import { getCardIconUrl } from '../../data/cards';
@@ -29,7 +30,10 @@ function DeckRow({ deck }: { deck: Deck }) {
 
 function GroupCard({ entry, index }: { entry: SavedDeckSet; index: number }) {
   const loadSaved = useBuilderStore((s) => s.loadSaved);
+  const renameSaved = useBuilderStore((s) => s.renameSaved);
   const deleteSaved = useBuilderStore((s) => s.deleteSaved);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [draftName, setDraftName] = useState(entry.name);
 
   const savedDate = new Date(entry.savedAt).toLocaleDateString(undefined, {
     day: 'numeric',
@@ -42,6 +46,16 @@ function GroupCard({ entry, index }: { entry: SavedDeckSet; index: number }) {
       loadSaved(entry.id);
       window.scrollTo({ top: 0 });
     }
+  }
+
+  function startRename() {
+    setDraftName(entry.name);
+    setIsRenaming(true);
+  }
+
+  function commitRename() {
+    renameSaved(entry.id, draftName);
+    setIsRenaming(false);
   }
 
   function handleDelete() {
@@ -58,12 +72,29 @@ function GroupCard({ entry, index }: { entry: SavedDeckSet; index: number }) {
     >
       <header className={styles.groupHeader}>
         <div className={styles.groupTitleWrap}>
-          <h3 className={styles.groupName}>{entry.name}</h3>
+          {isRenaming ? (
+            <input
+              className={styles.groupNameInput}
+              value={draftName}
+              autoFocus
+              onChange={(e) => setDraftName(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') setIsRenaming(false);
+              }}
+            />
+          ) : (
+            <h3 className={styles.groupName}>{entry.name}</h3>
+          )}
           <span className={styles.groupMeta}>Saved {savedDate}</span>
         </div>
         <div className={styles.groupActions}>
           <button type="button" className={styles.groupButton} onClick={handleLoad}>
             Load
+          </button>
+          <button type="button" className={styles.groupButton} onClick={startRename}>
+            Rename
           </button>
           <button
             type="button"
