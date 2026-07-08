@@ -27,6 +27,8 @@ import {
   type UniquenessScope,
 } from './deckUtils';
 import { CARDS_BY_KEY } from '../data/cards';
+import { useAuthStore } from './authStore';
+import { pullRemoteDecks, pushRemoteDecks, type SyncPayload } from './syncClient';
 
 /** Duel collections (Deck's Home excluded — it manages its own deck list). */
 export type DuelOwner = 'solo' | 'blue' | 'red';
@@ -529,3 +531,73 @@ export const useBuilderStore = create<BuilderState>()(
     },
   ),
 );
+
+/* ============================================================ cross-device sync
+ * The same account (username + password) shows the same decks everywhere.
+ * `credential` (sha256 of the login, see authStore.ts) doubles as the sync
+ * key: on login, remote data replaces local state; on every subsequent
+ * change, local state is debounced-pushed back up. Best-effort — sync
+ * failures (offline, or /api unavailable in plain `vite dev`) never block
+ * or corrupt the local experience, which keeps working exactly as before.
+ * ========================================================================= */
+
+function currentSyncPayload(): SyncPayload {
+  const { sets, library, deckSlotCount } = useBuilderStore.getState();
+  return { sets, library, deckSlotCount };
+}
+
+let pushTimer: ReturnType<typeof setTimeout> | null = null;
+let suppressNextPush = false;
+
+function schedulePush() {
+  if (suppressNextPush) {
+    suppressNextPush = false;
+    return;
+  }
+  const { credential } = useAuthStore.getState();
+  if (!credential) return;
+  if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    pushTimer = null;
+    void pushRemoteDecks(credential, currentSyncPayload());
+  }, 1500);
+}
+
+async function hydrateFromRemote(credential: string) {
+  const remote = await pullRemoteDecks(credential);
+  if (remote) {
+    // A pull-driven update shouldn't immediately bounce back up as a push.
+    suppressNextPush = true;
+    useBuilderStore.setState({
+      sets: remote.sets,
+      library: remote.library,
+      deckSlotCount: remote.deckSlotCount ?? deriveDeckSlotCounts(remote.sets),
+    });
+  } else {
+    // First sync ever for this account — seed remote storage from local state.
+    void pushRemoteDecks(credential, currentSyncPayload());
+  }
+}
+
+// Pull whenever a login completes.
+useAuthStore.subscribe((state, prevState) => {
+  if (state.credential && state.credential !== prevState.credential) {
+    void hydrateFromRemote(state.credential);
+  }
+});
+
+// A session can already be active when this module loads (persisted login) —
+// the subscribe above only sees *future* transitions, so pull once up front too.
+const activeCredentialOnLoad = useAuthStore.getState().credential;
+if (activeCredentialOnLoad) void hydrateFromRemote(activeCredentialOnLoad);
+
+// Push whenever the synced slices change while signed in.
+useBuilderStore.subscribe((state, prevState) => {
+  if (
+    state.sets !== prevState.sets ||
+    state.library !== prevState.library ||
+    state.deckSlotCount !== prevState.deckSlotCount
+  ) {
+    schedulePush();
+  }
+});
