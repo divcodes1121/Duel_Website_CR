@@ -15,6 +15,9 @@ dist-ssr
 # Private — test account passwords, never publish (repo is public)
 TEST_ACCOUNTS.md
 
+# Local-only project notes for Claude, not for the public repo
+CLAUDE.md
+
 # Local tooling state
 .claude/
 
