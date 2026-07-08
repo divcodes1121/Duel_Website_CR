@@ -5,9 +5,13 @@ import users from '../src/data/users.json';
 const MAX_BODY_BYTES = 250_000;
 const KNOWN_HASHES = new Set((users as { hash: string }[]).map((u) => u.hash));
 
-// Reads KV_REST_API_URL/TOKEN (Vercel Marketplace Upstash integration) with
-// automatic fallback to UPSTASH_REDIS_REST_URL/TOKEN.
-const redis = Redis.fromEnv();
+// The Vercel Marketplace Upstash integration injects KV_REST_API_URL/TOKEN.
+// @upstash/redis's Redis.fromEnv() instead looks for UPSTASH_REDIS_REST_*,
+// which the integration does NOT create — so wire the client up explicitly.
+// (UPSTASH_* fallbacks are supported for anyone who set those names instead.)
+const redisUrl = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+const redisToken = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+const redis = new Redis({ url: redisUrl!, token: redisToken! });
 
 /**
  * The credential is sha256(username:password), already computed client-side
@@ -25,6 +29,11 @@ function credentialFrom(req: VercelRequest): string | null {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!redisUrl || !redisToken) {
+    res.status(500).json({ error: 'Sync storage is not configured' });
+    return;
+  }
+
   const credential = credentialFrom(req);
   if (!credential) {
     res.status(401).json({ error: 'Invalid credential' });
