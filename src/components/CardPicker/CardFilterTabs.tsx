@@ -11,6 +11,7 @@ const TABS: { id: CardTypeFilter; label: string }[] = [
   { id: 'Evo', label: 'Evos' },
   { id: 'Hero', label: 'Heroes' },
   { id: 'Champion', label: 'Champions' },
+  { id: 'WinCondition', label: 'Win Cons' },
 ];
 
 export function CardFilterTabs() {
