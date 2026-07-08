@@ -1,9 +1,24 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useBuilderStore } from '../../state/store';
-import { getCardIconUrl } from '../../data/cards';
+import {
+  CARDS_BY_KEY,
+  getCardIconUrl,
+  getEvolutionIconUrl,
+  getHeroIconUrl,
+} from '../../data/cards';
+import { getSlotVisualVariant } from '../../state/deckUtils';
 import type { BuilderMode, Deck, SavedDeckSet } from '../../types/deck';
 import styles from './SavedGroups.module.css';
+
+/** Same evo/hero art selection the live deck slots use, so previews match. */
+function previewIconFor(deck: Deck, slotIndex: number, key: string): string {
+  const card = CARDS_BY_KEY.get(key);
+  const variant = getSlotVisualVariant(deck, slotIndex, CARDS_BY_KEY);
+  if (variant === 'evolution') return getEvolutionIconUrl(key);
+  if (variant === 'hero' && card && !card.isChampion) return getHeroIconUrl(key);
+  return getCardIconUrl(key);
+}
 
 /** Hidden/unused deck slots stay out of the preview; empty groups show deck 1. */
 function withCards(decks: Deck[]): Deck[] {
@@ -18,7 +33,20 @@ function DeckRow({ deck }: { deck: Deck }) {
       <div className={styles.deckRowCards}>
         {deck.slots.map((key, i) =>
           key ? (
-            <img key={i} src={getCardIconUrl(key)} alt="" title={key} draggable={false} />
+            <img
+              key={i}
+              src={previewIconFor(deck, i, key)}
+              alt=""
+              title={key}
+              draggable={false}
+              onError={(e) => {
+                // A few cards lack special-form art (e.g. Bowler hero) — fall back to base.
+                const base = getCardIconUrl(key);
+                if (e.currentTarget.src !== new URL(base, window.location.href).href) {
+                  e.currentTarget.src = base;
+                }
+              }}
+            />
           ) : (
             <span key={i} className={styles.emptyMini} />
           ),
