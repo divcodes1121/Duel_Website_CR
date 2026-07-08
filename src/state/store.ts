@@ -287,6 +287,18 @@ export const useBuilderStore = create<BuilderState>()(
         const current = state.sets[owner];
         const result = validateImportedDeck(keys, CARDS_BY_KEY);
         if ('error' in result) return result.error;
+        // Deck's Home holds a personal collection — the same 8-card deck
+        // shouldn't be saved twice. Reject a paste that matches any other
+        // deck already there (card set, ignoring slot order).
+        if (owner === 'home') {
+          const importedKey = [...result.slots].sort().join(',');
+          const alreadyExists = current.decks.some((d, i) => {
+            if (i === deckIndex) return false;
+            const filled = d.slots.filter((k): k is string => k !== null);
+            return filled.length === result.slots.length && [...filled].sort().join(',') === importedKey;
+          });
+          if (alreadyExists) return 'This deck is already in Deck’s Home';
+        }
         // Cards other decks already own: only this freshly-pasted deck shows
         // them black & white; the original copies keep their color.
         const usedElsewhere = getUsedCardKeys(current, deckIndex);

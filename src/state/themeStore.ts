@@ -10,8 +10,17 @@ function getInitialTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+// Browser-chrome colors per theme (match --bg-1 so the mobile status bar blends
+// into the page top).
+const THEME_COLOR: Record<Theme, string> = { dark: '#0a0918', light: '#dfe4ff' };
+
 function applyTheme(theme: Theme) {
-  document.documentElement.dataset.theme = theme;
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  // Drives native controls, form fields, and scrollbars to match (esp. iOS Safari).
+  root.style.colorScheme = theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_COLOR[theme]);
   localStorage.setItem(STORAGE_KEY, theme);
 }
 
