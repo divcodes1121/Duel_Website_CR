@@ -61,6 +61,12 @@ interface BuilderState extends PersistedSlice {
   filterType: CardTypeFilter;
   sortKey: SortKey;
   sortDirection: SortDirection;
+  /**
+   * The saved-library entry currently loaded into the builder (or just saved),
+   * so Save can offer "update the existing set" vs "save as new". Runtime-only
+   * (not persisted): a page reload starts a fresh, unattached session.
+   */
+  activeSavedId: string | null;
 
   setMode: (mode: BuilderMode) => void;
   selectSlot: (owner: DeckOwner, deckIndex: number, slotIndex: number) => void;
@@ -82,9 +88,11 @@ interface BuilderState extends PersistedSlice {
   setFilterType: (filter: CardTypeFilter) => void;
   setSort: (key: SortKey) => void;
   resetAll: () => void;
-  /** Snapshot the current tab's decks into the library under the given name. */
+  /** Snapshot the current tab's decks into the library as a NEW entry; becomes active. */
   saveCurrent: (name: string) => void;
-  /** Restore a library entry into its tab (switching tabs if needed). */
+  /** Overwrite the active loaded entry with the current decks (in-place update). */
+  updateSaved: () => void;
+  /** Restore a library entry into its tab (switching tabs if needed); becomes active. */
   loadSaved: (id: string) => void;
   renameSaved: (id: string, name: string) => void;
   deleteSaved: (id: string) => void;
@@ -186,8 +194,10 @@ export const useBuilderStore = create<BuilderState>()(
       filterType: 'All',
       sortKey: 'elixir',
       sortDirection: 'asc',
+      activeSavedId: null,
 
-      setMode: (mode) => set({ mode, selectedSlot: null, selectionPinned: false }),
+      // Switching tabs detaches from the loaded set (it belongs to the other mode).
+      setMode: (mode) => set({ mode, selectedSlot: null, selectionPinned: false, activeSavedId: null }),
 
       selectSlot: (owner, deckIndex, slotIndex) =>
         set({ selectedSlot: { owner, deckIndex, slotIndex }, selectionPinned: false }),
@@ -355,12 +365,14 @@ export const useBuilderStore = create<BuilderState>()(
               : { ...state.deckSlotCount, blue: MIN_DECK_SLOTS, red: MIN_DECK_SLOTS },
           selectedSlot: null,
           selectionPinned: false,
+          activeSavedId: null,
         })),
 
       saveCurrent: (name) =>
         set((state) => {
+          const id = crypto.randomUUID();
           const entry: SavedDeckSet = {
-            id: crypto.randomUUID(),
+            id,
             name: name.trim() || `Saved Duel Deck ${state.library.length + 1}`,
             mode: state.mode,
             savedAt: new Date().toISOString(),
@@ -371,7 +383,26 @@ export const useBuilderStore = create<BuilderState>()(
                   red: structuredClone(state.sets.red),
                 }),
           };
-          return { library: [entry, ...state.library] };
+          // The freshly saved set becomes the active one, so later saves can update it.
+          return { library: [entry, ...state.library], activeSavedId: id };
+        }),
+
+      updateSaved: () =>
+        set((state) => {
+          const id = state.activeSavedId;
+          if (!id) return state;
+          const idx = state.library.findIndex((e) => e.id === id);
+          if (idx === -1 || state.library[idx].mode !== state.mode) return state;
+          const updated: SavedDeckSet = {
+            ...state.library[idx],
+            savedAt: new Date().toISOString(),
+            solo: state.mode === 'solo' ? structuredClone(state.sets.solo) : undefined,
+            blue: state.mode === 'versus' ? structuredClone(state.sets.blue) : undefined,
+            red: state.mode === 'versus' ? structuredClone(state.sets.red) : undefined,
+          };
+          const library = [...state.library];
+          library[idx] = updated;
+          return { library };
         }),
 
       loadSaved: (id) =>
@@ -391,7 +422,14 @@ export const useBuilderStore = create<BuilderState>()(
           } else {
             return state; // malformed entry — don't touch anything
           }
-          return { sets, deckSlotCount, mode: entry.mode, selectedSlot: null, selectionPinned: false };
+          return {
+            sets,
+            deckSlotCount,
+            mode: entry.mode,
+            selectedSlot: null,
+            selectionPinned: false,
+            activeSavedId: entry.id,
+          };
         }),
 
       renameSaved: (id, name) =>
@@ -402,7 +440,10 @@ export const useBuilderStore = create<BuilderState>()(
         })),
 
       deleteSaved: (id) =>
-        set((state) => ({ library: state.library.filter((e) => e.id !== id) })),
+        set((state) => ({
+          library: state.library.filter((e) => e.id !== id),
+          activeSavedId: state.activeSavedId === id ? null : state.activeSavedId,
+        })),
 
       addDeckSlot: (owner) =>
         set((state) => ({
