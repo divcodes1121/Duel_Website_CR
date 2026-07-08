@@ -8,18 +8,22 @@ const KNOWN_HASHES = new Set((users as { hash: string }[]).map((u) => u.hash));
 // The Vercel Marketplace Upstash integration injects KV_REST_API_URL/TOKEN.
 // @upstash/redis's Redis.fromEnv() instead looks for UPSTASH_REDIS_REST_*,
 // which the integration does NOT create — so wire the client up explicitly.
-// (UPSTASH_* fallbacks are supported for anyone who set those names instead.)
 const redisUrl = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
 const redisToken = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
-const redis = new Redis({ url: redisUrl!, token: redisToken! });
+
+// Lazily constructed inside the handler so a config/init problem surfaces as a
+// readable JSON error instead of crashing the whole function at module load.
+let redis: Redis | null = null;
+function getRedis(): Redis {
+  if (!redis) redis = new Redis({ url: redisUrl!, token: redisToken! });
+  return redis;
+}
 
 /**
  * The credential is sha256(username:password), already computed client-side
  * for login (see state/authStore.ts). Requiring it here — and checking it
  * against the same bundled hash list — means only someone who knows a real
- * account's password can read or write that account's deck data, without a
- * separate session/token system. Consistent with this project's existing
- * "test gate, not real security" model.
+ * account's password can read or write that account's deck data.
  */
 function credentialFrom(req: VercelRequest): string | null {
   const header = req.headers.authorization;
@@ -29,35 +33,43 @@ function credentialFrom(req: VercelRequest): string | null {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!redisUrl || !redisToken) {
-    res.status(500).json({ error: 'Sync storage is not configured' });
-    return;
-  }
-
-  const credential = credentialFrom(req);
-  if (!credential) {
-    res.status(401).json({ error: 'Invalid credential' });
-    return;
-  }
-  const key = `deck-data:${credential}`;
-
-  if (req.method === 'GET') {
-    const data = await redis.get(key);
-    res.status(200).json({ found: data != null, data: data ?? null });
-    return;
-  }
-
-  if (req.method === 'PUT') {
-    const payload = req.body ?? {};
-    if (JSON.stringify(payload).length > MAX_BODY_BYTES) {
-      res.status(413).json({ error: 'Payload too large' });
+  try {
+    if (!redisUrl || !redisToken) {
+      res.status(500).json({
+        error: 'Sync storage is not configured',
+        sawKvUrl: !!process.env.KV_REST_API_URL,
+        sawKvToken: !!process.env.KV_REST_API_TOKEN,
+      });
       return;
     }
-    await redis.set(key, payload);
-    res.status(200).json({ ok: true });
-    return;
-  }
 
-  res.setHeader('Allow', 'GET, PUT');
-  res.status(405).json({ error: 'Method not allowed' });
+    const credential = credentialFrom(req);
+    if (!credential) {
+      res.status(401).json({ error: 'Invalid credential' });
+      return;
+    }
+    const key = `deck-data:${credential}`;
+
+    if (req.method === 'GET') {
+      const data = await getRedis().get(key);
+      res.status(200).json({ found: data != null, data: data ?? null });
+      return;
+    }
+
+    if (req.method === 'PUT') {
+      const payload = req.body ?? {};
+      if (JSON.stringify(payload).length > MAX_BODY_BYTES) {
+        res.status(413).json({ error: 'Payload too large' });
+        return;
+      }
+      await getRedis().set(key, payload);
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    res.setHeader('Allow', 'GET, PUT');
+    res.status(405).json({ error: 'Method not allowed' });
+  } catch (err) {
+    res.status(500).json({ error: 'Sync failed', detail: err instanceof Error ? err.message : String(err) });
+  }
 }
