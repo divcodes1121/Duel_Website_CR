@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DUEL_DECK_COUNT } from '../types/deck';
+import { DUEL_DECK_COUNT, MAX_CROWNS } from '../types/deck';
 import type {
   BuilderMode,
   Deck,
@@ -86,6 +86,8 @@ interface BuilderState extends PersistedSlice {
    */
   importDeck: (owner: DeckOwner, deckIndex: number, keys: string[]) => string | null;
   renameDeck: (owner: DeckOwner, deckIndex: number, name: string) => void;
+  /** Crowns this deck won in the duel (clamped to 0..MAX_CROWNS). */
+  setDeckCrowns: (owner: DeckOwner, deckIndex: number, crowns: number) => void;
   setFilterType: (filter: CardTypeFilter) => void;
   setSort: (key: SortKey) => void;
   resetAll: () => void;
@@ -339,6 +341,22 @@ export const useBuilderStore = create<BuilderState>()(
             [owner]: renameDeckUtil(state.sets[owner], deckIndex, name),
           },
         })),
+
+      setDeckCrowns: (owner, deckIndex, crowns) =>
+        set((state) => {
+          const clamped = Math.max(0, Math.min(MAX_CROWNS, Math.round(crowns)));
+          const current = state.sets[owner];
+          return {
+            sets: {
+              ...state.sets,
+              [owner]: {
+                ...current,
+                decks: current.decks.map((d, i) => (i === deckIndex ? { ...d, crowns: clamped } : d)),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
 
       setFilterType: (filter) => set({ filterType: filter }),
 

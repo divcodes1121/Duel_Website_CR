@@ -120,7 +120,7 @@ export function clearSlot(duelSet: DuelDeckSet, deckIndex: number, slotIndex: nu
 
 export function clearDeck(duelSet: DuelDeckSet, deckIndex: number): DuelDeckSet {
   const decks = duelSet.decks.map((deck, i) =>
-    i !== deckIndex ? deck : { ...deck, slots: Array(DECK_SIZE).fill(null) },
+    i !== deckIndex ? deck : { ...deck, slots: Array(DECK_SIZE).fill(null), crowns: 0 },
   ) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }

@@ -225,3 +225,18 @@
 .deckRow img {
   transition: filter 0.25s ease;
 }
+
+/* Crowns a saved versus deck won. */
+.crownBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+  padding: 0.14rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: var(--accent-gold);
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 45%, var(--slot-border));
+  background: color-mix(in srgb, var(--accent-gold) 12%, var(--slot-bg));
+}

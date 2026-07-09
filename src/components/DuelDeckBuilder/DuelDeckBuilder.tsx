@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useBuilderStore, type DuelOwner } from '../../state/store';
 import { DUEL_DECK_COUNT, type BuilderMode, type Deck, type PlayerId } from '../../types/deck';
 import { DeckPanel } from './DeckPanel';
+import { CrownCounter } from './CrownCounter';
 import { SavedGroups } from './SavedGroups';
 import { CardPickerDrawer } from '../CardPicker/CardPickerDrawer';
 import { FlightLayer } from '../FlightLayer/FlightLayer';
@@ -84,6 +85,7 @@ export function DuelDeckBuilder() {
   const setMode = useBuilderStore((s) => s.setMode);
   const deckSlotCount = useBuilderStore((s) => s.deckSlotCount);
   const clearSelection = useBuilderStore((s) => s.clearSelection);
+  const setDeckCrowns = useBuilderStore((s) => s.setDeckCrowns);
   const [winFilter, setWinFilter] = useState<string[]>([]);
 
   useEffect(() => {
@@ -179,10 +181,18 @@ export function DuelDeckBuilder() {
                 </motion.div>
                 {sets[player.id].decks.slice(0, deckSlotCount[player.id]).map((deck, i) => {
                   const match = matches(deck);
+                  const crowns = (
+                    <CrownCounter
+                      value={deck.crowns ?? 0}
+                      onChange={(c) => setDeckCrowns(player.id, i, c)}
+                      side={player.id}
+                      deckName={deck.name}
+                    />
+                  );
                   return (
                     <motion.div
                       key={deck.id}
-                      className={filtering && match ? styles.deckMatch : undefined}
+                      className={styles.duelRow}
                       initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
                       animate={{ opacity: filtering && !match ? 0.35 : 1, y: 0, filter: 'blur(0px)' }}
                       transition={{
@@ -192,13 +202,24 @@ export function DuelDeckBuilder() {
                         delay: 0.08 + Math.min(i, 3) * 0.06 + colIndex * 0.05,
                       }}
                     >
-                      <DeckPanel owner={player.id} deckIndex={i} deck={deck} />
+                      {/* Crowns sit on the inner edge of each column, flanking the VS divider. */}
+                      {player.id === 'red' && crowns}
+                      <div className={`${styles.duelPanel} ${filtering && match ? styles.deckMatch : ''}`}>
+                        <DeckPanel owner={player.id} deckIndex={i} deck={deck} />
+                      </div>
+                      {player.id === 'blue' && crowns}
                     </motion.div>
                   );
                 })}
                 <DeckSlotControls owner={player.id} />
               </div>
             ))}
+
+            <div className={styles.vsDivider}>
+              {/* Sticky so it stays between the players while scrolling a tall column. */}
+              <span className={styles.vsBadge}>VS</span>
+              <span className={styles.vsLine} aria-hidden="true" />
+            </div>
           </div>
         )}
 

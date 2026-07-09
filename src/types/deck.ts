@@ -1,5 +1,7 @@
 export const DECK_SIZE = 8;
 export const DUEL_DECK_COUNT = 5;
+/** A duel deck wins at most 3 crowns. */
+export const MAX_CROWNS = 3;
 
 export type DeckSlot = string | null;
 
@@ -20,6 +22,11 @@ export interface Deck {
    * Only the pasted deck carries the flag, never the original copies.
    */
   importedDuplicates?: string[];
+  /**
+   * Crowns this deck won in the duel (0–MAX_CROWNS). Tracked per deck in
+   * Versus mode; absent means 0. Lives on the Deck so it travels with saves.
+   */
+  crowns?: number;
 }
 
 export interface DuelDeckSet {

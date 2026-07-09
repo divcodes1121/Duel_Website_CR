@@ -9,7 +9,7 @@ import {
 } from '../../data/cards';
 import { getSlotVisualVariant } from '../../state/deckUtils';
 import { deckMatchesFilter } from '../WinConFilter/WinConFilter';
-import type { BuilderMode, Deck, SavedDeckSet } from '../../types/deck';
+import type { BuilderMode, Deck, PlayerId, SavedDeckSet } from '../../types/deck';
 import styles from './SavedGroups.module.css';
 
 /** Same evo/hero art selection the live deck slots use, so previews match. */
@@ -27,10 +27,19 @@ function withCards(decks: Deck[]): Deck[] {
   return filled.length > 0 ? filled : decks.slice(0, 1);
 }
 
-function DeckRow({ deck, dim }: { deck: Deck; dim?: boolean }) {
+function DeckRow({ deck, dim, side }: { deck: Deck; dim?: boolean; side?: PlayerId }) {
+  const crowns = deck.crowns ?? 0;
   return (
     <div className={`${styles.deckRow} ${dim ? styles.deckRowDim : ''}`}>
       <span className={styles.deckRowName}>{deck.name}</span>
+      {side && crowns > 0 && (
+        <span className={styles.crownBadge} data-side={side} title={`${crowns} crowns won`}>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
+            <path d="M3 8l4 4 5-7 5 7 4-4v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z" />
+          </svg>
+          {crowns}
+        </span>
+      )}
       <div className={styles.deckRowCards}>
         {deck.slots.map((key, i) =>
           key ? (
@@ -164,7 +173,7 @@ function GroupCard({
                     {side === 'blue' ? 'Blue Player' : 'Red Player'}
                   </span>
                   {withCards(entry[side]!.decks).map((deck) => (
-                    <DeckRow key={deck.id} deck={deck} dim={dimmed(deck)} />
+                    <DeckRow key={deck.id} deck={deck} dim={dimmed(deck)} side={side} />
                   ))}
                 </div>
               ),
