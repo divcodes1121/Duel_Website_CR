@@ -6,7 +6,7 @@ import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
 import { CardPickerDrawer } from '../CardPicker/CardPickerDrawer';
 import { FlightLayer } from '../FlightLayer/FlightLayer';
 import { ProfileMenu } from '../Profile/ProfileMenu';
-import { WinConFilter, WIN_CONDITIONS } from '../WinConFilter/WinConFilter';
+import { WinConFilter, deckMatchesFilter, filterCardName } from '../WinConFilter/WinConFilter';
 import libStyles from '../Library/Library.module.css';
 import styles from './DecksHome.module.css';
 
@@ -33,10 +33,10 @@ export function DecksHome() {
     );
   }
 
-  // Multi-select is an AND: a deck must hold every selected win condition.
+  // Multi-select is an AND: a deck must hold every selected card.
   const visibleDecks = homeDecks
     .map((deck, index) => ({ deck, index }))
-    .filter(({ deck }) => winFilter.every((k) => deck.slots.includes(k)));
+    .filter(({ deck }) => deckMatchesFilter(deck.slots, winFilter));
 
   // Selections made on other pages must not leak into this picker context.
   useEffect(() => {
@@ -137,11 +137,7 @@ export function DecksHome() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              No decks with{' '}
-              {winFilter
-                .map((k) => WIN_CONDITIONS.find((c) => c.key === k)?.name ?? k)
-                .join(' + ')}{' '}
-              yet.
+              No decks with {winFilter.map(filterCardName).join(' + ')} yet.
             </motion.p>
           )}
 

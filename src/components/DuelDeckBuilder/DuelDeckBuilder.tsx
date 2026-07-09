@@ -6,7 +6,7 @@ import { DeckPanel } from './DeckPanel';
 import { SavedGroups } from './SavedGroups';
 import { CardPickerDrawer } from '../CardPicker/CardPickerDrawer';
 import { FlightLayer } from '../FlightLayer/FlightLayer';
-import { WinConFilter, deckMatchesWinCons } from '../WinConFilter/WinConFilter';
+import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import styles from './DuelDeckBuilder.module.css';
 
 /** Reveal / hide extra deck slots for a duel collection (3 up to 5, serially). */
@@ -100,7 +100,7 @@ export function DuelDeckBuilder() {
 
   const filtering = winFilter.length > 0;
   /** Decks keep their slot positions — matches glow, the rest just fade back. */
-  const matches = (deck: Deck) => deckMatchesWinCons(deck.slots, winFilter);
+  const matches = (deck: Deck) => deckMatchesFilter(deck.slots, winFilter);
 
   const visibleDecks = (owner: DuelOwner) => sets[owner].decks.slice(0, deckSlotCount[owner]);
   const matchCount = mode === 'solo'

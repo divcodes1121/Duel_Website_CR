@@ -8,7 +8,7 @@ import {
   getHeroIconUrl,
 } from '../../data/cards';
 import { getSlotVisualVariant } from '../../state/deckUtils';
-import { deckMatchesWinCons } from '../WinConFilter/WinConFilter';
+import { deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import type { BuilderMode, Deck, SavedDeckSet } from '../../types/deck';
 import styles from './SavedGroups.module.css';
 
@@ -75,7 +75,7 @@ function GroupCard({
   // While filtering, a saved deck without the selected win condition(s) is
   // rendered black & white so the matching ones stand out.
   const dimmed = (deck: Deck) =>
-    winFilter.length > 0 && !deckMatchesWinCons(deck.slots, winFilter);
+    winFilter.length > 0 && !deckMatchesFilter(deck.slots, winFilter);
 
   const savedDate = new Date(entry.savedAt).toLocaleDateString(undefined, {
     day: 'numeric',
