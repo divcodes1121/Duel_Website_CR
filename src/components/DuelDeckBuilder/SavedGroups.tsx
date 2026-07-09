@@ -29,17 +29,28 @@ function withCards(decks: Deck[]): Deck[] {
 
 function DeckRow({ deck, dim, side }: { deck: Deck; dim?: boolean; side?: PlayerId }) {
   const crowns = deck.crowns ?? 0;
+
+  // Mirror the builder: Blue's crowns sit to the right of its cards, Red's to
+  // the left, so the two players' counts face each other across the group.
+  // Crownless decks keep an empty slot of the same width, so every card strip
+  // in a column stays aligned.
+  const badge =
+    side &&
+    (crowns > 0 ? (
+      <span className={styles.crownBadge} data-side={side} title={`${crowns} crowns won`}>
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
+          <path d="M3 8l4 4 5-7 5 7 4-4v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z" />
+        </svg>
+        {crowns}
+      </span>
+    ) : (
+      <span className={styles.crownBadgeSpacer} aria-hidden="true" />
+    ));
+
   return (
     <div className={`${styles.deckRow} ${dim ? styles.deckRowDim : ''}`}>
       <span className={styles.deckRowName}>{deck.name}</span>
-      {side && crowns > 0 && (
-        <span className={styles.crownBadge} data-side={side} title={`${crowns} crowns won`}>
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
-            <path d="M3 8l4 4 5-7 5 7 4-4v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z" />
-          </svg>
-          {crowns}
-        </span>
-      )}
+      {side === 'red' && badge}
       <div className={styles.deckRowCards}>
         {deck.slots.map((key, i) =>
           key ? (
@@ -62,6 +73,7 @@ function DeckRow({ deck, dim, side }: { deck: Deck; dim?: boolean; side?: Player
           ),
         )}
       </div>
+      {side === 'blue' && badge}
     </div>
   );
 }

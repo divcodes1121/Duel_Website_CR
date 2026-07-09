@@ -226,17 +226,26 @@
   transition: filter 0.25s ease;
 }
 
-/* Crowns a saved versus deck won. */
+/* Crowns a saved versus deck won. Blue's badge sits right of its cards, Red's
+   left of them, so the two players' counts face each other. */
 .crownBadge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.2rem;
   flex-shrink: 0;
-  padding: 0.14rem 0.45rem;
+  width: 2.5rem;
+  padding: 0.14rem 0.35rem;
   border-radius: 999px;
   font-size: 0.66rem;
   font-weight: 800;
   color: var(--accent-gold);
   border: 1px solid color-mix(in srgb, var(--accent-gold) 45%, var(--slot-border));
   background: color-mix(in srgb, var(--accent-gold) 12%, var(--slot-bg));
+}
+
+/* Keeps crownless rows' card strips aligned with the crowned ones. */
+.crownBadgeSpacer {
+  width: 2.5rem;
+  flex-shrink: 0;
 }
