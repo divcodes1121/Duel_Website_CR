@@ -8,6 +8,7 @@ import {
   getHeroIconUrl,
 } from '../../data/cards';
 import { getSlotVisualVariant } from '../../state/deckUtils';
+import { deckMatchesWinCons } from '../WinConFilter/WinConFilter';
 import type { BuilderMode, Deck, SavedDeckSet } from '../../types/deck';
 import styles from './SavedGroups.module.css';
 
@@ -26,9 +27,9 @@ function withCards(decks: Deck[]): Deck[] {
   return filled.length > 0 ? filled : decks.slice(0, 1);
 }
 
-function DeckRow({ deck }: { deck: Deck }) {
+function DeckRow({ deck, dim }: { deck: Deck; dim?: boolean }) {
   return (
-    <div className={styles.deckRow}>
+    <div className={`${styles.deckRow} ${dim ? styles.deckRowDim : ''}`}>
       <span className={styles.deckRowName}>{deck.name}</span>
       <div className={styles.deckRowCards}>
         {deck.slots.map((key, i) =>
@@ -56,12 +57,25 @@ function DeckRow({ deck }: { deck: Deck }) {
   );
 }
 
-function GroupCard({ entry, index }: { entry: SavedDeckSet; index: number }) {
+function GroupCard({
+  entry,
+  index,
+  winFilter,
+}: {
+  entry: SavedDeckSet;
+  index: number;
+  winFilter: string[];
+}) {
   const loadSaved = useBuilderStore((s) => s.loadSaved);
   const renameSaved = useBuilderStore((s) => s.renameSaved);
   const deleteSaved = useBuilderStore((s) => s.deleteSaved);
   const [isRenaming, setIsRenaming] = useState(false);
   const [draftName, setDraftName] = useState(entry.name);
+
+  // While filtering, a saved deck without the selected win condition(s) is
+  // rendered black & white so the matching ones stand out.
+  const dimmed = (deck: Deck) =>
+    winFilter.length > 0 && !deckMatchesWinCons(deck.slots, winFilter);
 
   const savedDate = new Date(entry.savedAt).toLocaleDateString(undefined, {
     day: 'numeric',
@@ -137,7 +151,7 @@ function GroupCard({ entry, index }: { entry: SavedDeckSet; index: number }) {
       {entry.mode === 'solo' && entry.solo ? (
         <div className={styles.groupDecks}>
           {withCards(entry.solo.decks).map((deck) => (
-            <DeckRow key={deck.id} deck={deck} />
+            <DeckRow key={deck.id} deck={deck} dim={dimmed(deck)} />
           ))}
         </div>
       ) : (
@@ -150,7 +164,7 @@ function GroupCard({ entry, index }: { entry: SavedDeckSet; index: number }) {
                     {side === 'blue' ? 'Blue Player' : 'Red Player'}
                   </span>
                   {withCards(entry[side]!.decks).map((deck) => (
-                    <DeckRow key={deck.id} deck={deck} />
+                    <DeckRow key={deck.id} deck={deck} dim={dimmed(deck)} />
                   ))}
                 </div>
               ),
@@ -162,7 +176,7 @@ function GroupCard({ entry, index }: { entry: SavedDeckSet; index: number }) {
 }
 
 /** Saved duel groups for the active tab, shown right below the deck builder. */
-export function SavedGroups({ mode }: { mode: BuilderMode }) {
+export function SavedGroups({ mode, winFilter = [] }: { mode: BuilderMode; winFilter?: string[] }) {
   const library = useBuilderStore((s) => s.library);
   const entries = library.filter((e) => e.mode === mode);
 
@@ -175,7 +189,7 @@ export function SavedGroups({ mode }: { mode: BuilderMode }) {
         <span className={styles.sectionCount}>{entries.length}</span>
       </h2>
       {entries.map((entry, i) => (
-        <GroupCard key={entry.id} entry={entry} index={i} />
+        <GroupCard key={entry.id} entry={entry} index={i} winFilter={winFilter} />
       ))}
     </section>
   );

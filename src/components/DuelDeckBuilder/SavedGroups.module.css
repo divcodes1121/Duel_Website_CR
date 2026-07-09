@@ -211,3 +211,17 @@
     width: 24px;
   }
 }
+
+/* A saved deck without the selected win condition(s): black & white, so the
+   matching decks in each group stand out. */
+.deckRowDim img {
+  filter: grayscale(1) brightness(0.85);
+}
+
+.deckRowDim .deckRowName {
+  opacity: 0.6;
+}
+
+.deckRow img {
+  transition: filter 0.25s ease;
+}

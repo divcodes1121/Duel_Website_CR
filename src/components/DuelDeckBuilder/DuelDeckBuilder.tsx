@@ -202,7 +202,7 @@ export function DuelDeckBuilder() {
           </div>
         )}
 
-        <SavedGroups mode={mode} />
+        <SavedGroups mode={mode} winFilter={winFilter} />
       </div>
       <CardPickerDrawer />
       <FlightLayer />
