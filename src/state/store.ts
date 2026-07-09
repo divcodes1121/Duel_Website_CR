@@ -62,9 +62,10 @@ interface BuilderState extends PersistedSlice {
   sortKey: SortKey;
   sortDirection: SortDirection;
   /**
-   * The saved-library entry currently loaded into the builder (or just saved),
-   * so Save can offer "update the existing set" vs "save as new". Runtime-only
-   * (not persisted): a page reload starts a fresh, unattached session.
+   * The saved-library entry currently loaded into the builder, so Save can offer
+   * "update the existing set" vs "save as new". Only loadSaved attaches — a set
+   * you just created stays unattached. Runtime-only (not persisted): a page
+   * reload starts a fresh, unattached session.
    */
   activeSavedId: string | null;
 
@@ -88,7 +89,7 @@ interface BuilderState extends PersistedSlice {
   setFilterType: (filter: CardTypeFilter) => void;
   setSort: (key: SortKey) => void;
   resetAll: () => void;
-  /** Snapshot the current tab's decks into the library as a NEW entry; becomes active. */
+  /** Snapshot the current tab's decks into the library as a NEW entry (stays unattached). */
   saveCurrent: (name: string) => void;
   /** Overwrite the active loaded entry with the current decks (in-place update). */
   updateSaved: () => void;
@@ -370,9 +371,8 @@ export const useBuilderStore = create<BuilderState>()(
 
       saveCurrent: (name) =>
         set((state) => {
-          const id = crypto.randomUUID();
           const entry: SavedDeckSet = {
-            id,
+            id: crypto.randomUUID(),
             name: name.trim() || `Saved Duel Deck ${state.library.length + 1}`,
             mode: state.mode,
             savedAt: new Date().toISOString(),
@@ -383,8 +383,10 @@ export const useBuilderStore = create<BuilderState>()(
                   red: structuredClone(state.sets.red),
                 }),
           };
-          // The freshly saved set becomes the active one, so later saves can update it.
-          return { library: [entry, ...state.library], activeSavedId: id };
+          // A brand-new set is never "loaded": clearing activeSavedId means the
+          // update-vs-new prompt only ever appears after loading a saved set
+          // (including after "Save as new", which detaches from the original).
+          return { library: [entry, ...state.library], activeSavedId: null };
         }),
 
       updateSaved: () =>
