@@ -1,11 +1,12 @@
-﻿import { useEffect } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useBuilderStore, type DuelOwner } from '../../state/store';
-import { DUEL_DECK_COUNT, type BuilderMode, type PlayerId } from '../../types/deck';
+import { DUEL_DECK_COUNT, type BuilderMode, type Deck, type PlayerId } from '../../types/deck';
 import { DeckPanel } from './DeckPanel';
 import { SavedGroups } from './SavedGroups';
 import { CardPickerDrawer } from '../CardPicker/CardPickerDrawer';
 import { FlightLayer } from '../FlightLayer/FlightLayer';
+import { WinConFilter, deckMatchesWinCons } from '../WinConFilter/WinConFilter';
 import styles from './DuelDeckBuilder.module.css';
 
 /** Reveal / hide extra deck slots for a duel collection (3 up to 5, serially). */
@@ -83,6 +84,7 @@ export function DuelDeckBuilder() {
   const setMode = useBuilderStore((s) => s.setMode);
   const deckSlotCount = useBuilderStore((s) => s.deckSlotCount);
   const clearSelection = useBuilderStore((s) => s.clearSelection);
+  const [winFilter, setWinFilter] = useState<string[]>([]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -91,6 +93,22 @@ export function DuelDeckBuilder() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [clearSelection]);
+
+  function toggleWinCon(key: string) {
+    setWinFilter((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
+
+  const filtering = winFilter.length > 0;
+  /** Decks keep their slot positions — matches glow, the rest just fade back. */
+  const matches = (deck: Deck) => deckMatchesWinCons(deck.slots, winFilter);
+
+  const visibleDecks = (owner: DuelOwner) => sets[owner].decks.slice(0, deckSlotCount[owner]);
+  const matchCount = mode === 'solo'
+    ? visibleDecks('solo').filter(matches).length
+    : visibleDecks('blue').filter(matches).length + visibleDecks('red').filter(matches).length;
+  const totalDecks = mode === 'solo'
+    ? deckSlotCount.solo
+    : deckSlotCount.blue + deckSlotCount.red;
 
   return (
     <div className={styles.builder}>
@@ -117,18 +135,32 @@ export function DuelDeckBuilder() {
       </div>
 
       <div className={styles.scrollArea}>
+        <div className={styles.winconWrap}>
+          <WinConFilter selected={winFilter} onToggle={toggleWinCon} onClear={() => setWinFilter([])}>
+            {filtering && (
+              <span className={styles.winconCount}>
+                {matchCount} of {totalDecks} decks
+              </span>
+            )}
+          </WinConFilter>
+        </div>
+
         {mode === 'solo' ? (
           <div className={styles.panels}>
-            {sets.solo.decks.slice(0, deckSlotCount.solo).map((deck, i) => (
-              <motion.div
-                key={deck.id}
-                initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                transition={{ type: 'spring', stiffness: 240, damping: 26, delay: Math.min(i, 3) * 0.07 }}
-              >
-                <DeckPanel owner="solo" deckIndex={i} deck={deck} />
-              </motion.div>
-            ))}
+            {sets.solo.decks.slice(0, deckSlotCount.solo).map((deck, i) => {
+              const match = matches(deck);
+              return (
+                <motion.div
+                  key={deck.id}
+                  className={filtering && match ? styles.deckMatch : undefined}
+                  initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
+                  animate={{ opacity: filtering && !match ? 0.35 : 1, y: 0, filter: 'blur(0px)' }}
+                  transition={{ type: 'spring', stiffness: 240, damping: 26, delay: Math.min(i, 3) * 0.07 }}
+                >
+                  <DeckPanel owner="solo" deckIndex={i} deck={deck} />
+                </motion.div>
+              );
+            })}
             <DeckSlotControls owner="solo" />
           </div>
         ) : (
@@ -145,21 +177,25 @@ export function DuelDeckBuilder() {
                   <span className={styles.playerDot} data-owner={player.id} />
                   {player.label}
                 </motion.div>
-                {sets[player.id].decks.slice(0, deckSlotCount[player.id]).map((deck, i) => (
-                  <motion.div
-                    key={deck.id}
-                    initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
-                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                    transition={{
-                      type: 'spring',
-                      stiffness: 240,
-                      damping: 26,
-                      delay: 0.08 + Math.min(i, 3) * 0.06 + colIndex * 0.05,
-                    }}
-                  >
-                    <DeckPanel owner={player.id} deckIndex={i} deck={deck} />
-                  </motion.div>
-                ))}
+                {sets[player.id].decks.slice(0, deckSlotCount[player.id]).map((deck, i) => {
+                  const match = matches(deck);
+                  return (
+                    <motion.div
+                      key={deck.id}
+                      className={filtering && match ? styles.deckMatch : undefined}
+                      initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
+                      animate={{ opacity: filtering && !match ? 0.35 : 1, y: 0, filter: 'blur(0px)' }}
+                      transition={{
+                        type: 'spring',
+                        stiffness: 240,
+                        damping: 26,
+                        delay: 0.08 + Math.min(i, 3) * 0.06 + colIndex * 0.05,
+                      }}
+                    >
+                      <DeckPanel owner={player.id} deckIndex={i} deck={deck} />
+                    </motion.div>
+                  );
+                })}
                 <DeckSlotControls owner={player.id} />
               </div>
             ))}

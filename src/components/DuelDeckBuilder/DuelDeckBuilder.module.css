@@ -200,3 +200,33 @@
   border-color: #f4506d;
   background: color-mix(in srgb, #f4506d 8%, var(--slot-bg));
 }
+
+/* --- win-condition filter (highlight matching decks, dim the rest) ------ */
+
+.winconWrap {
+  max-width: 940px;
+  margin: 0 auto 0.4rem;
+}
+
+.winconCount {
+  margin-left: auto;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Opacity for the dimmed decks is driven by framer (inline style would win over
+   CSS), so this class only carries the match highlight. */
+.deckMatch {
+  border-radius: 22px;
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 8px 30px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: box-shadow 0.25s ease;
+}

@@ -1,19 +1,14 @@
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useBuilderStore } from '../../state/store';
 import { useThemeStore } from '../../state/themeStore';
-import { CARDS, getCardIconUrl } from '../../data/cards';
 import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
 import { CardPickerDrawer } from '../CardPicker/CardPickerDrawer';
 import { FlightLayer } from '../FlightLayer/FlightLayer';
 import { ProfileMenu } from '../Profile/ProfileMenu';
+import { WinConFilter, WIN_CONDITIONS } from '../WinConFilter/WinConFilter';
 import libStyles from '../Library/Library.module.css';
 import styles from './DecksHome.module.css';
-
-/** Every win-condition card, cheap to expensive — the deck filter chips. */
-const WIN_CONDITIONS = CARDS.filter((c) => c.isWinCondition).sort(
-  (a, b) => a.elixir - b.elixir || a.name.localeCompare(b.name),
-);
 
 function CrownIcon() {
   return (
@@ -114,41 +109,11 @@ export function DecksHome() {
             </span>
           </h2>
 
-          <div className={styles.winconBar} role="group" aria-label="Filter decks by win condition">
-            {WIN_CONDITIONS.map((card) => {
-              const active = winFilter.includes(card.key);
-              return (
-                <motion.button
-                  key={card.key}
-                  type="button"
-                  className={`${styles.winconChip} ${active ? styles.winconChipActive : ''}`}
-                  title={`${card.name} decks`}
-                  aria-pressed={active}
-                  onClick={() => toggleWinCon(card.key)}
-                  whileHover={{ y: -3, scale: 1.06 }}
-                  whileTap={{ scale: 0.92 }}
-                  transition={{ type: 'spring', stiffness: 420, damping: 20 }}
-                >
-                  <img src={getCardIconUrl(card.key)} alt={card.name} draggable={false} />
-                </motion.button>
-              );
-            })}
-            <AnimatePresence>
-              {winFilter.length > 0 && (
-                <motion.button
-                  type="button"
-                  className={styles.winconClear}
-                  onClick={() => setWinFilter([])}
-                  initial={{ opacity: 0, scale: 0.85 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.85 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  Clear ×
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
+          <WinConFilter
+            selected={winFilter}
+            onToggle={toggleWinCon}
+            onClear={() => setWinFilter([])}
+          />
 
           {visibleDecks.map(({ deck, index }, i) => (
             <motion.div
