@@ -130,7 +130,7 @@
   height: 3.1rem;
   border-radius: 15px;
   color: #fff;
-  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, #4a2fd0);
+  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
   box-shadow:
     0 6px 20px color-mix(in srgb, var(--accent) 55%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
@@ -211,7 +211,7 @@
   margin: -0.2rem 0 0;
   font-size: 0.78rem;
   font-weight: 600;
-  color: #ff8298;
+  color: var(--error-soft);
 }
 
 .submit {

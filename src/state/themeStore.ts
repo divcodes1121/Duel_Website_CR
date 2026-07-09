@@ -12,7 +12,7 @@ function getInitialTheme(): Theme {
 
 // Browser-chrome colors per theme (match --bg-1 so the mobile status bar blends
 // into the page top).
-const THEME_COLOR: Record<Theme, string> = { dark: '#0a0918', light: '#dfe4ff' };
+const THEME_COLOR: Record<Theme, string> = { dark: '#07111f', light: '#f8fafc' };
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement;

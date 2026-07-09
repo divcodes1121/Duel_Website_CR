@@ -188,15 +188,15 @@
 }
 
 .targetRemove {
-  --target-accent: #f4506d;
+  --target-accent: var(--error);
 }
 
 /* Drawer highlighted as a "remove" drop zone while dragging a deck card over it */
 .drawerRemoveHover {
-  border-color: color-mix(in srgb, #f4506d 60%, var(--glass-border));
+  border-color: color-mix(in srgb, var(--error) 60%, var(--glass-border));
   box-shadow:
-    0 0 0 1px color-mix(in srgb, #f4506d 45%, transparent),
-    0 0 34px color-mix(in srgb, #f4506d 30%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--error) 45%, transparent),
+    0 0 34px color-mix(in srgb, var(--error) 30%, transparent),
     inset 0 1px 0 var(--glass-highlight);
 }
 

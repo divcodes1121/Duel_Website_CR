@@ -123,9 +123,9 @@
 }
 
 .groupButtonDanger:hover {
-  color: #ff8298;
-  border-color: color-mix(in srgb, #f4506d 60%, var(--slot-border));
-  background: color-mix(in srgb, #f4506d 10%, var(--slot-bg));
+  color: var(--error-soft);
+  border-color: color-mix(in srgb, var(--error) 60%, var(--slot-border));
+  background: color-mix(in srgb, var(--error) 10%, var(--slot-bg));
 }
 
 /* --- deck rows ---------------------------------------------------------- */

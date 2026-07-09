@@ -142,8 +142,8 @@
 }
 
 .dangerButton:hover {
-  color: #ff8298;
-  border-color: color-mix(in srgb, #f4506d 60%, var(--slot-border));
+  color: var(--error-soft);
+  border-color: color-mix(in srgb, var(--error) 60%, var(--slot-border));
 }
 
 /* --- Library list ------------------------------------------------------ */

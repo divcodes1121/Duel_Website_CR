@@ -63,12 +63,12 @@
 }
 
 .pip:hover {
-  color: var(--accent-gold);
+  color: var(--accent-gold-bright);
   border-color: color-mix(in srgb, var(--accent-gold) 45%, var(--slot-border));
 }
 
 .pipLit {
-  color: var(--accent-gold);
+  color: var(--accent-gold-bright);
   border-color: color-mix(in srgb, var(--accent-gold) 60%, var(--slot-border));
   background: color-mix(in srgb, var(--accent-gold) 14%, var(--slot-bg));
   box-shadow:
@@ -83,8 +83,8 @@
 }
 
 .pipZero:hover {
-  color: #ff8298;
-  border-color: color-mix(in srgb, #f4506d 50%, var(--slot-border));
+  color: var(--error-soft);
+  border-color: color-mix(in srgb, var(--error) 50%, var(--slot-border));
 }
 
 .pipZeroActive {

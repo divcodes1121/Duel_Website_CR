@@ -305,9 +305,9 @@
 }
 
 .removeSlot:hover {
-  color: #ff8298;
-  border-color: #f4506d;
-  background: color-mix(in srgb, #f4506d 8%, var(--slot-bg));
+  color: var(--error-soft);
+  border-color: var(--error);
+  background: color-mix(in srgb, var(--error) 8%, var(--slot-bg));
 }
 
 /* --- win-condition filter (highlight matching decks, dim the rest) ------ */

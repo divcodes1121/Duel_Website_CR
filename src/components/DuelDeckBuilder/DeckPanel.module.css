@@ -225,28 +225,28 @@
 }
 
 .importInputError {
-  border-color: #f4506d;
+  border-color: var(--error);
 }
 
 .importInputError:focus {
-  border-color: #f4506d;
+  border-color: var(--error);
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
-    0 0 0 3px rgba(244, 80, 109, 0.18);
+    0 0 0 3px color-mix(in srgb, var(--error) 18%, transparent);
 }
 
 .importErrorText {
   flex-shrink: 0;
   font-size: 0.72rem;
   font-weight: 700;
-  color: #ff8298;
+  color: var(--error-soft);
 }
 
 .importOk {
   flex-shrink: 0;
   font-size: 0.72rem;
   font-weight: 700;
-  color: #3ddc84;
+  color: var(--success);
 }
 
 /* --- Slot grid -------------------------------------------------------- */
@@ -377,7 +377,7 @@
   text-align: center;
   border-radius: 5px;
   padding: 0.08rem 0;
-  color: #1a1420;
+  color: #0f172a;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   z-index: 2;
 }
@@ -386,29 +386,29 @@
 .slotRoleBadge-evolution {
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  background: linear-gradient(135deg, #a78bfa, var(--accent-purple));
 }
 
 /* HERO — molten gold sweep, pulsing golden glow */
 .slotRoleBadge-hero {
   color: #3a2900;
   text-shadow: 0 1px 1px rgba(255, 255, 255, 0.35);
-  background: linear-gradient(135deg, #ffe9a8, var(--accent-gold));
+  background: linear-gradient(135deg, #fcd34d, var(--accent-gold-bright));
 }
 
 /* CHAMPION — rainbow sheen with an alternating gold/cyan glow */
 .slotRoleBadge-champion {
-  color: #1a1420;
+  color: #0f172a;
   font-size: 0.48rem;
   letter-spacing: 0.05em;
   text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
   background: linear-gradient(
     120deg,
-    #ffe9a8,
+    #fcd34d,
     var(--accent-gold) 30%,
     var(--accent-light) 55%,
     var(--accent-cyan) 80%,
-    #ffe9a8 100%
+    #fcd34d 100%
   );
 }
 
@@ -418,12 +418,12 @@
    slots get extra glow spread to keep the pulse as visible as normal slots. */
 .slotRoleEvolution {
   border-width: 2px;
-  border-color: var(--accent);
+  border-color: var(--accent-purple);
 }
 
 .slotRoleHero {
   border-width: 2px;
-  border-color: var(--accent-gold);
+  border-color: var(--accent-gold-bright);
 }
 
 .slotRoleWild {
@@ -439,7 +439,7 @@
   inset: 0;
   border-radius: 10px;
   padding: 2px;
-  background: linear-gradient(135deg, var(--accent) 50%, var(--accent-gold) 50%);
+  background: linear-gradient(135deg, var(--accent-purple) 50%, var(--accent-gold-bright) 50%);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);

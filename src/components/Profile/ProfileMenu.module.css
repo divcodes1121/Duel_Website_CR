@@ -32,7 +32,7 @@
   border-radius: 999px;
   flex-shrink: 0;
   color: #fff;
-  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, #4a2fd0);
+  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
   box-shadow:
     0 4px 14px color-mix(in srgb, var(--accent) 50%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
@@ -149,18 +149,18 @@
 }
 
 .itemDanger {
-  color: #ff8298;
+  color: var(--error-soft);
 }
 
 .itemDanger:hover {
-  background: rgba(244, 80, 109, 0.14);
+  background: color-mix(in srgb, var(--error) 14%, transparent);
 }
 
 .itemDanger .itemIcon {
-  color: #ff8298;
+  color: var(--error-soft);
 }
 
 .itemDanger:hover .itemIcon {
-  color: #ff8298;
-  border-color: rgba(244, 80, 109, 0.5);
+  color: var(--error-soft);
+  border-color: color-mix(in srgb, var(--error) 50%, transparent);
 }

@@ -29,7 +29,7 @@
   align-items: center;
   justify-content: center;
   gap: 1.4rem;
-  background: #060512;
+  background: #050d18;
 }
 
 .introMark {
@@ -49,7 +49,7 @@
   height: 64px;
   border-radius: 20px;
   color: #fff;
-  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, #4a2fd0);
+  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
   box-shadow:
     0 10px 40px color-mix(in srgb, var(--accent) 60%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
@@ -74,7 +74,7 @@
 .introWord {
   font-family: 'Subscribe', Inter, system-ui, sans-serif;
   font-size: 1.05rem;
-  color: #efeaff;
+  color: #f8fafc;
   text-shadow: 0 0 24px color-mix(in srgb, var(--accent-light) 60%, transparent);
 }
 
@@ -307,11 +307,11 @@
 .envCastle {
   width: 100%;
   height: 100%;
-  fill: color-mix(in srgb, var(--bg-3) 60%, #0c0620);
+  fill: color-mix(in srgb, var(--bg-3) 60%, #050d18);
 }
 
 :global([data-theme='light']) .envCastle {
-  fill: color-mix(in srgb, var(--accent) 18%, #d9d2f2);
+  fill: color-mix(in srgb, var(--accent) 18%, #cbd5e1);
 }
 
 /* --- film grain --- */
@@ -396,7 +396,7 @@
   height: 1.9rem;
   border-radius: 10px;
   color: #fff;
-  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, #4a2fd0);
+  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
   box-shadow:
     0 4px 16px color-mix(in srgb, var(--accent) 55%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
@@ -552,7 +552,7 @@
 }
 
 :global([data-theme='light']) .titleLinePlain {
-  color: #33245f;
+  color: #0f172a;
   text-shadow:
     0 2px 16px rgba(255, 255, 255, 0.7),
     0 8px 34px color-mix(in srgb, var(--accent) 30%, transparent);
@@ -570,9 +570,9 @@
 .titleLineGradient .titleLetter {
   background: linear-gradient(
     180deg,
-    #ffedbc 0%,
+    #fcd34d 0%,
     var(--accent-gold) 48%,
-    #e08a2e 78%,
+    #d97706 78%,
     var(--accent-light) 120%
   );
   -webkit-background-clip: text;
@@ -1164,16 +1164,16 @@
 }
 
 .statusLive {
-  border-color: color-mix(in srgb, #3ddc84 45%, var(--slot-border));
-  color: #3ddc84;
+  border-color: color-mix(in srgb, var(--success) 45%, var(--slot-border));
+  color: var(--success);
 }
 
 .statusDot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #3ddc84;
-  box-shadow: 0 0 8px #3ddc84;
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
   animation: eyebrow-pulse 2.4s ease-in-out infinite;
 }
 
