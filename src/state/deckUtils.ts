@@ -53,10 +53,10 @@ export function isCardAvailable(
 }
 
 /**
- * Validates 8 imported card keys and arranges them into legal slots (a
- * champion is moved into the Hero slot, index 1). Cards already used in other
- * decks of the collection are allowed — the UI renders them desaturated so
- * the player can spot and swap the duplicates.
+ * Validates 8 imported card keys and arranges them into legal slots (champions
+ * are moved into the Hero slot 1 and, for a second one, the Wild slot 2).
+ * Cards already used in other decks of the collection are allowed — the UI
+ * renders them desaturated so the player can spot and swap the duplicates.
  */
 export function validateImportedDeck(
   keys: string[],
@@ -69,16 +69,26 @@ export function validateImportedDeck(
   if (cards.some((c) => !c)) return { error: 'Invalid deck link' };
 
   const champions = keys.filter((k) => cardsByKey.get(k)!.isChampion);
-  if (champions.length > 1) return { error: 'A deck can only hold one champion' };
-
-  // Champions are only legal in the Hero (1) or Wild (2) slot.
-  const ordered = [...keys];
-  if (champions.length === 1) {
-    const ci = ordered.indexOf(champions[0]);
-    if (ci !== 1 && ci !== 2) {
-      [ordered[1], ordered[ci]] = [ordered[ci], ordered[1]];
-    }
+  if (champions.length > MAX_CHAMPIONS_PER_DECK) {
+    return { error: `A deck can only hold ${MAX_CHAMPIONS_PER_DECK} champions` };
   }
+
+  // Champions are only legal in the Hero (1) and Wild (2) slots. Any champion
+  // already sitting in one stays put; the rest swap into the remaining free
+  // champion slot(s). Indices are captured up front, and each swap only touches
+  // a champion slot and one misplaced slot, so they never interfere.
+  const ordered = [...keys];
+  const CHAMPION_SLOTS = [1, 2];
+  const isChampion = (k: string) => cardsByKey.get(k)!.isChampion;
+  const freeChampionSlots = CHAMPION_SLOTS.filter((i) => !isChampion(ordered[i]));
+  const misplaced = ordered
+    .map((_, i) => i)
+    .filter((i) => isChampion(ordered[i]) && !CHAMPION_SLOTS.includes(i));
+
+  misplaced.forEach((from, n) => {
+    const target = freeChampionSlots[n];
+    [ordered[target], ordered[from]] = [ordered[from], ordered[target]];
+  });
 
   return { slots: ordered };
 }
@@ -180,6 +190,12 @@ export function getSlotVisualVariant(
   return 'base';
 }
 
+/**
+ * Champions live only in the Hero (2nd) and Wild (3rd) slots, so a deck can
+ * field at most one in each — two in total.
+ */
+export const MAX_CHAMPIONS_PER_DECK = 2;
+
 export function countChampionsInDeck(deck: Deck, cardsByKey: Map<string, Card>): number {
   return deck.slots.filter((k) => k !== null && cardsByKey.get(k)?.isChampion).length;
 }
@@ -193,7 +209,7 @@ export function canPlaceCardInSlot(card: Card, slotIndex: number): boolean {
 
 /**
  * Full validation for putting `card` into a specific slot (click or drag):
- * positional champion rule, per-collection uniqueness, and the 1-champion cap
+ * positional champion rule, per-collection uniqueness, and the champion cap
  * (ignoring whatever currently occupies the target slot, since it's replaced).
  */
 export function canAssignCardToSlot(
@@ -211,7 +227,7 @@ export function canAssignCardToSlot(
     const otherChampions = deck.slots.filter(
       (k, i) => i !== slotIndex && k !== null && cardsByKey.get(k)?.isChampion,
     ).length;
-    if (otherChampions >= 1) return false;
+    if (otherChampions >= MAX_CHAMPIONS_PER_DECK) return false;
   }
   return true;
 }
@@ -224,7 +240,7 @@ export interface SlotRef {
 /**
  * Whether the card in `from` can move to `to` (swapping with `to`'s occupant,
  * if any) within the same collection. Both cards must be legal in their
- * destination positions and no deck may end up with more than one Champion.
+ * destination positions and no deck may exceed the Champion cap.
  */
 export function canMoveCard(
   duelSet: DuelDeckSet,
@@ -251,7 +267,7 @@ export function canMoveCard(
       const champions = hypothetical[di].filter(
         (k) => k !== null && cardsByKey.get(k)?.isChampion,
       ).length;
-      if (champions > 1) return false;
+      if (champions > MAX_CHAMPIONS_PER_DECK) return false;
     }
   }
   return true;
@@ -316,8 +332,10 @@ export function validateDuelDeckSet(
     duelSet.decks.forEach((deck, i) => {
       const deckLabel = deck.name || `Deck ${i + 1}`;
       const championCount = countChampionsInDeck(deck, cardsByKey);
-      if (championCount > 1) {
-        errors.push(`${deckLabel} has ${championCount} Champions; only 1 is allowed per deck.`);
+      if (championCount > MAX_CHAMPIONS_PER_DECK) {
+        errors.push(
+          `${deckLabel} has ${championCount} Champions; only ${MAX_CHAMPIONS_PER_DECK} are allowed per deck.`,
+        );
       }
       deck.slots.forEach((k, slotIndex) => {
         if (!k) return;

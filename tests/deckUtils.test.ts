@@ -52,6 +52,7 @@ const cardsByKey = new Map<string, Card>([
   ['minions', makeCard('minions', 3)],
   ['skeleton-king', makeCard('skeleton-king', 4, { isChampion: true, rarity: 'Champion' })],
   ['archer-queen', makeCard('archer-queen', 5, { isChampion: true, rarity: 'Champion' })],
+  ['golden-knight', makeCard('golden-knight', 4, { isChampion: true, rarity: 'Champion' })],
 ]);
 
 describe('createEmptyDuelDeckSet', () => {
@@ -185,15 +186,28 @@ describe('validateDuelDeckSet', () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it('flags more than 1 Champion in a deck and a Champion outside the Hero/Wild slot', () => {
+  it('flags a Champion outside the Hero/Wild slot', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = assignCard(set, 0, 3, 'skeleton-king'); // slot 4 = normal, not Hero/Wild
     set = assignCard(set, 0, 1, 'archer-queen'); // slot 2 = Hero, OK
     const result = validateDuelDeckSet(set, cardsByKey);
-    expect(result.errors.some((e) => e.includes('only 1 is allowed'))).toBe(true);
     expect(result.errors.some((e) => e.includes('must be in the 2nd (Hero) or 3rd (Wild) slot'))).toBe(
       true,
     );
+  });
+
+  it('accepts two Champions (Hero + Wild) but flags a third', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 1, 'archer-queen'); // Hero
+    set = assignCard(set, 0, 2, 'skeleton-king'); // Wild
+    expect(
+      validateDuelDeckSet(set, cardsByKey).errors.some((e) => e.includes('allowed per deck')),
+    ).toBe(false);
+
+    set = assignCard(set, 0, 3, 'golden-knight'); // a third champion
+    expect(
+      validateDuelDeckSet(set, cardsByKey).errors.some((e) => e.includes('only 2 are allowed')),
+    ).toBe(true);
   });
 });
 
@@ -290,11 +304,22 @@ describe('canAssignCardToSlot', () => {
     expect(canAssignCardToSlot(set, 0, 1, queen, cardsByKey)).toBe(true);
   });
 
-  it('blocks a second champion in a different slot of the same deck', () => {
+  it('allows a second champion in the Wild slot alongside a Hero-slot champion', () => {
     let set = createEmptyDuelDeckSet('Test');
-    set = assignCard(set, 0, 1, 'skeleton-king');
+    set = assignCard(set, 0, 1, 'skeleton-king'); // Hero
     const queen = cardsByKey.get('archer-queen')!;
-    expect(canAssignCardToSlot(set, 0, 2, queen, cardsByKey)).toBe(false);
+    expect(canAssignCardToSlot(set, 0, 2, queen, cardsByKey)).toBe(true); // Wild
+  });
+
+  it('blocks a third champion once Hero and Wild both hold one', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 1, 'skeleton-king'); // Hero
+    set = assignCard(set, 0, 2, 'archer-queen'); // Wild
+    const third = cardsByKey.get('golden-knight')!;
+    // Only Hero/Wild are legal for champions, and both are taken by other champions.
+    expect(canAssignCardToSlot(set, 0, 3, third, cardsByKey)).toBe(false); // normal slot
+    // Replacing the Hero-slot champion is still fine (that slot doesn't count).
+    expect(canAssignCardToSlot(set, 0, 1, third, cardsByKey)).toBe(true);
   });
 
   it('blocks cards already used elsewhere in the collection', () => {
@@ -355,12 +380,21 @@ describe('canMoveCard / moveCard', () => {
     expect(canMoveCard(set, { deckIndex: 0, slotIndex: 1 }, { deckIndex: 0, slotIndex: 2 }, cardsByKey)).toBe(true);
   });
 
-  it('rejects a cross-deck move that gives a deck two champions', () => {
+  it('allows a cross-deck move that gives a deck two champions (Hero + Wild)', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = assignCard(set, 0, 1, 'skeleton-king');
     set = assignCard(set, 1, 1, 'archer-queen');
-    // Move Skeleton King into deck 2's wild slot -> deck 2 would hold 2 champions.
-    expect(canMoveCard(set, { deckIndex: 0, slotIndex: 1 }, { deckIndex: 1, slotIndex: 2 }, cardsByKey)).toBe(false);
+    // Move Skeleton King into deck 2's wild slot -> deck 2 holds 2 champions, which is legal.
+    expect(canMoveCard(set, { deckIndex: 0, slotIndex: 1 }, { deckIndex: 1, slotIndex: 2 }, cardsByKey)).toBe(true);
+  });
+
+  it('rejects a cross-deck move that would give a deck three champions', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 1, 'skeleton-king');
+    set = assignCard(set, 1, 1, 'archer-queen');
+    set = assignCard(set, 1, 2, 'golden-knight');
+    // Deck 2 already has Hero+Wild champions; swapping in a third is illegal.
+    expect(canMoveCard(set, { deckIndex: 0, slotIndex: 1 }, { deckIndex: 1, slotIndex: 3 }, cardsByKey)).toBe(false);
   });
 });
 

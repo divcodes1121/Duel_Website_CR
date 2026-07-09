@@ -92,13 +92,24 @@ describe('validateImportedDeck', () => {
     expect(new Set(result.slots).size).toBe(8);
   });
 
-  it('rejects in-deck duplicates and multi-champion decks', () => {
+  it('rejects in-deck duplicates', () => {
     const dup = [...keys8.slice(0, 7), keys8[0]];
     expect('error' in validateImportedDeck(dup, CARDS_BY_KEY)).toBe(true);
+  });
 
+  it('accepts two champions and seats them in the Hero and Wild slots', () => {
     const champs = CARDS.filter((c) => c.isChampion).slice(0, 2).map((c) => c.key);
-    const twoChamps = [...keys8.slice(0, 6), ...champs];
-    expect('error' in validateImportedDeck(twoChamps, CARDS_BY_KEY)).toBe(true);
+    const twoChamps = [...keys8.slice(0, 6), ...champs]; // both champions at the end
+    const result = validateImportedDeck(twoChamps, CARDS_BY_KEY);
+    if (!('slots' in result)) throw new Error(result.error);
+    expect([result.slots[1], result.slots[2]].sort()).toEqual([...champs].sort());
+    expect(new Set(result.slots).size).toBe(8);
+  });
+
+  it('rejects a deck with three champions', () => {
+    const champs = CARDS.filter((c) => c.isChampion).slice(0, 3).map((c) => c.key);
+    const threeChamps = [...keys8.slice(0, 5), ...champs];
+    expect('error' in validateImportedDeck(threeChamps, CARDS_BY_KEY)).toBe(true);
   });
 
   it('allows cards already used in other decks (shown as duplicates in the UI)', () => {

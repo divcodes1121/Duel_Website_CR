@@ -9,7 +9,7 @@ import { filterCardsByType } from '../../utils/filter';
 import { sortCards } from '../../utils/sort';
 import { useBuilderStore } from '../../state/store';
 import { useFlightStore, rectOf } from '../../state/flightStore';
-import { canPlaceCardInSlot, countChampionsInDeck, getUsedCardKeys } from '../../state/deckUtils';
+import { canPlaceCardInSlot, getUsedCardKeys, MAX_CHAMPIONS_PER_DECK } from '../../state/deckUtils';
 import { CardTile } from './CardTile';
 import styles from './CardPicker.module.css';
 
@@ -66,9 +66,17 @@ export function CardGrid() {
                 selectedSlot.owner === 'home'
                   ? 'Already in this deck'
                   : `Already used in ${searchDecks[ownerIndex].name}`;
-            } else if (card.isChampion && countChampionsInDeck(currentDeck, CARDS_BY_KEY) > 0) {
-              state = 'used';
-              disabledReason = 'Only 1 Champion allowed per deck';
+            } else if (card.isChampion) {
+              // The selected slot is about to be replaced, so it doesn't count
+              // toward the cap (mirrors canAssignCardToSlot).
+              const otherChampions = currentDeck.slots.filter(
+                (k, i) =>
+                  i !== selectedSlot.slotIndex && k !== null && CARDS_BY_KEY.get(k)?.isChampion,
+              ).length;
+              if (otherChampions >= MAX_CHAMPIONS_PER_DECK) {
+                state = 'used';
+                disabledReason = `Only ${MAX_CHAMPIONS_PER_DECK} Champions allowed per deck`;
+              }
             }
           }
         }
