@@ -32,20 +32,37 @@ function DeckRow({ deck, dim, side }: { deck: Deck; dim?: boolean; side?: Player
 
   // Mirror the builder: Blue's crowns sit to the right of its cards, Red's to
   // the left, so the two players' counts face each other across the group.
-  // Crownless decks keep an empty slot of the same width, so every card strip
-  // in a column stays aligned.
-  const badge =
-    side &&
-    (crowns > 0 ? (
-      <span className={styles.crownBadge} data-side={side} title={`${crowns} crowns won`}>
+  // A crownless deck shows a red struck-through crown with 0 rather than a gap,
+  // which also keeps every card strip in a column aligned.
+  const badge = side && (
+    <span
+      className={`${styles.crownBadge} ${crowns === 0 ? styles.crownBadgeZero : ''}`}
+      data-side={side}
+      title={crowns === 0 ? 'No crowns won' : `${crowns} crowns won`}
+    >
+      {crowns === 0 ? (
+        <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true">
+          <path
+            d="M3 8l4 4 5-7 5 7 4-4v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z"
+            fill="currentColor"
+            opacity="0.5"
+          />
+          <path
+            d="M4.5 4.5 L19.5 19.5"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </svg>
+      ) : (
         <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
           <path d="M3 8l4 4 5-7 5 7 4-4v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z" />
         </svg>
-        {crowns}
-      </span>
-    ) : (
-      <span className={styles.crownBadgeSpacer} aria-hidden="true" />
-    ));
+      )}
+      {crowns}
+    </span>
+  );
 
   return (
     <div className={`${styles.deckRow} ${dim ? styles.deckRowDim : ''}`}>
