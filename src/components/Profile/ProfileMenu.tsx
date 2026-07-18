@@ -159,6 +159,19 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                 type="button"
                 className={styles.item}
                 role="menuitem"
+                onClick={() => go('#/palette')}
+              >
+                <span className={styles.itemIcon}>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+                    <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" />
+                  </svg>
+                </span>
+                Counter Palette
+              </button>
+              <button
+                type="button"
+                className={styles.item}
+                role="menuitem"
                 onClick={() => {
                   toggleTheme();
                 }}

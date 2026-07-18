@@ -41,10 +41,12 @@ export interface DuelDeckSet {
 export type PlayerId = 'blue' | 'red';
 /**
  * Which deck collection a slot belongs to: the solo builder's, one of the two
- * Versus players', or the Deck's Home single-deck workshop (which uses only
- * deck index 0 of its collection, so duel-wide uniqueness never bites there).
+ * Versus players', the Deck's Home single-deck workshop (which uses only
+ * deck index 0 of its collection, so duel-wide uniqueness never bites there),
+ * or the Counter Palette workshop (a live view of the open archetype folder —
+ * see `paletteFolders` in the store).
  */
-export type DeckOwner = 'solo' | PlayerId | 'home';
+export type DeckOwner = 'solo' | PlayerId | 'home' | 'palette';
 export type BuilderMode = 'solo' | 'versus';
 
 export interface SelectedSlot {

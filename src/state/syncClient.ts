@@ -4,6 +4,8 @@ export interface SyncPayload {
   sets: Record<DeckOwner, DuelDeckSet>;
   library: SavedDeckSet[];
   deckSlotCount: Record<'solo' | 'blue' | 'red', number>;
+  /** Counter Palette archetype folders — absent in pre-palette remote blobs. */
+  paletteFolders?: DuelDeckSet[];
 }
 
 async function safeFetch(input: string, init?: RequestInit): Promise<Response | null> {

@@ -40,7 +40,9 @@ interface PersistedSlice {
   /**
    * Independent duel deck collections. `solo` backs the classic single-player
    * builder tab; `blue`/`red` back the Versus tab. Card-uniqueness rules apply
-   * within one collection and never across collections.
+   * within one collection and never across collections. `palette` is a live
+   * view of the currently open Counter Palette folder (a placeholder when none
+   * is open) — every edit to it writes through to `paletteFolders`.
    */
   sets: Record<DeckOwner, DuelDeckSet>;
   mode: BuilderMode;
@@ -48,10 +50,22 @@ interface PersistedSlice {
   library: SavedDeckSet[];
   /** How many deck slots are revealed per duel collection (3..DUEL_DECK_COUNT). */
   deckSlotCount: Record<DuelOwner, number>;
+  /**
+   * Counter Palette: user-created archetype folders, each an open-ended list
+   * of independent decks (same shape as a duel collection, reusing
+   * DuelDeckSet). Decks auto-save like Deck's Home.
+   */
+  paletteFolders: DuelDeckSet[];
 }
 
 interface BuilderState extends PersistedSlice {
   selectedSlot: SelectedSlot | null;
+  /**
+   * The Counter Palette folder currently open for editing (its decks are
+   * mirrored into `sets.palette`). Runtime-only: a reload lands back on the
+   * folder gallery.
+   */
+  activePaletteFolderId: string | null;
   /**
    * Set when the user removes the card from the currently-selected slot: the
    * next assignment refills that same slot without auto-advancing, preserving
@@ -107,6 +121,19 @@ interface BuilderState extends PersistedSlice {
   addHomeDeck: () => void;
   /** Deck's Home: remove a deck slot entirely. */
   removeHomeDeck: (deckIndex: number) => void;
+  /** Counter Palette: create a new archetype folder and open it. */
+  addPaletteFolder: () => void;
+  renamePaletteFolder: (id: string, name: string) => void;
+  /** Counter Palette: delete a folder and every deck inside it. */
+  deletePaletteFolder: (id: string) => void;
+  /** Counter Palette: open a folder for editing (its decks load into `sets.palette`). */
+  openPaletteFolder: (id: string) => void;
+  /** Counter Palette: back to the folder gallery. */
+  closePaletteFolder: () => void;
+  /** Counter Palette: append another empty deck to the open folder. */
+  addPaletteDeck: () => void;
+  /** Counter Palette: remove a deck from the open folder. */
+  removePaletteDeck: (deckIndex: number) => void;
 }
 
 /** Deck's Home is a growing list of independent decks; it starts with one. */
@@ -115,18 +142,44 @@ function createHomeSet(): DuelDeckSet {
   return { ...set, decks: [createEmptyDeck('My Deck')] };
 }
 
+/** Placeholder shown in `sets.palette` while no Counter Palette folder is open. */
+function createPaletteWorkshop(): DuelDeckSet {
+  return { ...createEmptyDuelDeckSet('Counter Palette'), decks: [] };
+}
+
 function createDefaultSets(): Record<DeckOwner, DuelDeckSet> {
   return {
     solo: createEmptyDuelDeckSet('My Duel Deck'),
     blue: createEmptyDuelDeckSet('Blue Player'),
     red: createEmptyDuelDeckSet('Red Player'),
     home: createHomeSet(),
+    palette: createPaletteWorkshop(),
   };
 }
 
-/** Deck's Home decks are independent; duel collections share uniqueness. */
+/** Deck's Home / Counter Palette decks are independent; duel collections share uniqueness. */
 function scopeFor(owner: DeckOwner): UniquenessScope {
-  return owner === 'home' ? 'deck' : 'collection';
+  return owner === 'home' || owner === 'palette' ? 'deck' : 'collection';
+}
+
+/**
+ * Write an updated collection back into state. `sets.palette` is a live view
+ * of the open Counter Palette folder, so edits there also write through to
+ * `paletteFolders` — that's what makes palette decks auto-save.
+ */
+function commitSet(
+  state: Pick<BuilderState, 'sets' | 'paletteFolders' | 'activePaletteFolderId'>,
+  owner: DeckOwner,
+  updated: DuelDeckSet,
+): Pick<BuilderState, 'sets'> & Partial<Pick<BuilderState, 'paletteFolders'>> {
+  const sets = { ...state.sets, [owner]: updated };
+  if (owner !== 'palette' || !state.activePaletteFolderId) return { sets };
+  return {
+    sets,
+    paletteFolders: state.paletteFolders.map((f) =>
+      f.id === state.activePaletteFolderId ? updated : f,
+    ),
+  };
 }
 
 /** Older versions stored 4-deck duel collections; pad them to the new count. */
@@ -139,7 +192,19 @@ function padDuelSet<T extends DuelDeckSet | undefined>(set: T): T {
   return { ...set, decks };
 }
 
-function padToCurrentDeckCount(slice: Omit<PersistedSlice, 'deckSlotCount'>): PersistedSlice {
+/** v8 and earlier had no Counter Palette slice. */
+type PersistedSliceV8 = Omit<PersistedSlice, 'paletteFolders'>;
+
+/** v9 added Counter Palette: the workshop entry in `sets` plus `paletteFolders`. */
+function withPalette(slice: PersistedSliceV8): PersistedSlice {
+  return {
+    ...slice,
+    sets: { ...slice.sets, palette: slice.sets.palette ?? createPaletteWorkshop() },
+    paletteFolders: [],
+  };
+}
+
+function padToCurrentDeckCount(slice: Omit<PersistedSliceV8, 'deckSlotCount'>): PersistedSliceV8 {
   const padded = {
     ...slice,
     sets: {
@@ -192,6 +257,8 @@ export const useBuilderStore = create<BuilderState>()(
       mode: 'solo',
       library: [],
       deckSlotCount: { solo: MIN_DECK_SLOTS, blue: MIN_DECK_SLOTS, red: MIN_DECK_SLOTS },
+      paletteFolders: [],
+      activePaletteFolderId: null,
       selectedSlot: null,
       selectionPinned: false,
       filterType: 'All',
@@ -208,7 +275,8 @@ export const useBuilderStore = create<BuilderState>()(
       clearSelection: () => set({ selectedSlot: null, selectionPinned: false }),
 
       assignCard: (cardKey) => {
-        const { selectedSlot, sets, selectionPinned } = get();
+        const state = get();
+        const { selectedSlot, sets, selectionPinned } = state;
         if (!selectedSlot) return;
         const { owner, deckIndex, slotIndex } = selectedSlot;
         const card = CARDS_BY_KEY.get(cardKey);
@@ -240,7 +308,7 @@ export const useBuilderStore = create<BuilderState>()(
         }
 
         set({
-          sets: { ...sets, [owner]: updated },
+          ...commitSet(state, owner, updated),
           selectedSlot: nextSelected,
           selectionPinned: false,
         });
@@ -254,21 +322,11 @@ export const useBuilderStore = create<BuilderState>()(
           if (!card || !canAssignCardToSlot(current, deckIndex, slotIndex, card, CARDS_BY_KEY, scope)) {
             return state;
           }
-          return {
-            sets: {
-              ...state.sets,
-              [owner]: assignCardUtil(current, deckIndex, slotIndex, cardKey, scope),
-            },
-          };
+          return commitSet(state, owner, assignCardUtil(current, deckIndex, slotIndex, cardKey, scope));
         }),
 
       moveCard: (owner, from, to) =>
-        set((state) => ({
-          sets: {
-            ...state.sets,
-            [owner]: moveCardUtil(state.sets[owner], from, to, CARDS_BY_KEY),
-          },
-        })),
+        set((state) => commitSet(state, owner, moveCardUtil(state.sets[owner], from, to, CARDS_BY_KEY))),
 
       clearSlot: (owner, deckIndex, slotIndex) =>
         set((state) => {
@@ -277,10 +335,7 @@ export const useBuilderStore = create<BuilderState>()(
             state.selectedSlot?.deckIndex === deckIndex &&
             state.selectedSlot?.slotIndex === slotIndex;
           return {
-            sets: {
-              ...state.sets,
-              [owner]: clearSlotUtil(state.sets[owner], deckIndex, slotIndex),
-            },
+            ...commitSet(state, owner, clearSlotUtil(state.sets[owner], deckIndex, slotIndex)),
             // Removing the selected slot's card pins the selection there so the
             // next pick refills it instead of advancing.
             selectionPinned: isSelectedSlot ? true : state.selectionPinned,
@@ -288,46 +343,43 @@ export const useBuilderStore = create<BuilderState>()(
         }),
 
       clearDeck: (owner, deckIndex) =>
-        set((state) => ({
-          sets: {
-            ...state.sets,
-            [owner]: clearDeckUtil(state.sets[owner], deckIndex),
-          },
-        })),
+        set((state) => commitSet(state, owner, clearDeckUtil(state.sets[owner], deckIndex))),
 
       importDeck: (owner, deckIndex, keys) => {
         const state = get();
         const current = state.sets[owner];
         const result = validateImportedDeck(keys, CARDS_BY_KEY);
         if ('error' in result) return result.error;
-        // Deck's Home holds a personal collection — the same 8-card deck
-        // shouldn't be saved twice. Reject a paste that matches any other
-        // deck already there (card set, ignoring slot order).
-        if (owner === 'home') {
+        // Deck's Home and Counter Palette folders hold personal collections —
+        // the same 8-card deck shouldn't be saved twice. Reject a paste that
+        // matches any other deck already there (card set, ignoring slot order).
+        const independentDecks = scopeFor(owner) === 'deck';
+        if (independentDecks) {
           const importedKey = [...result.slots].sort().join(',');
           const alreadyExists = current.decks.some((d, i) => {
             if (i === deckIndex) return false;
             const filled = d.slots.filter((k): k is string => k !== null);
             return filled.length === result.slots.length && [...filled].sort().join(',') === importedKey;
           });
-          if (alreadyExists) return 'This deck is already in Deck’s Home';
+          if (alreadyExists) {
+            return owner === 'home'
+              ? 'This deck is already in Deck’s Home'
+              : 'This deck is already in this folder';
+          }
         }
         // Cards other decks already own: only this freshly-pasted deck shows
         // them black & white; the original copies keep their color.
         const usedElsewhere = getUsedCardKeys(current, deckIndex);
         const importedDuplicates =
-          owner === 'home' ? [] : result.slots.filter((k) => usedElsewhere.has(k));
+          independentDecks ? [] : result.slots.filter((k) => usedElsewhere.has(k));
         set({
-          sets: {
-            ...state.sets,
-            [owner]: {
-              ...current,
-              decks: current.decks.map((d, i) =>
-                i === deckIndex ? { ...d, slots: [...result.slots], importedDuplicates } : d,
-              ),
-              updatedAt: new Date().toISOString(),
-            },
-          },
+          ...commitSet(state, owner, {
+            ...current,
+            decks: current.decks.map((d, i) =>
+              i === deckIndex ? { ...d, slots: [...result.slots], importedDuplicates } : d,
+            ),
+            updatedAt: new Date().toISOString(),
+          }),
           selectedSlot: null,
           selectionPinned: false,
         });
@@ -335,27 +387,17 @@ export const useBuilderStore = create<BuilderState>()(
       },
 
       renameDeck: (owner, deckIndex, name) =>
-        set((state) => ({
-          sets: {
-            ...state.sets,
-            [owner]: renameDeckUtil(state.sets[owner], deckIndex, name),
-          },
-        })),
+        set((state) => commitSet(state, owner, renameDeckUtil(state.sets[owner], deckIndex, name))),
 
       setDeckCrowns: (owner, deckIndex, crowns) =>
         set((state) => {
           const clamped = Math.max(0, Math.min(MAX_CROWNS, Math.round(crowns)));
           const current = state.sets[owner];
-          return {
-            sets: {
-              ...state.sets,
-              [owner]: {
-                ...current,
-                decks: current.decks.map((d, i) => (i === deckIndex ? { ...d, crowns: clamped } : d)),
-                updatedAt: new Date().toISOString(),
-              },
-            },
-          };
+          return commitSet(state, owner, {
+            ...current,
+            decks: current.decks.map((d, i) => (i === deckIndex ? { ...d, crowns: clamped } : d)),
+            updatedAt: new Date().toISOString(),
+          });
         }),
 
       setFilterType: (filter) => set({ filterType: filter }),
@@ -519,32 +561,130 @@ export const useBuilderStore = create<BuilderState>()(
             selectionPinned: false,
           };
         }),
+
+      addPaletteFolder: () =>
+        set((state) => {
+          const folder: DuelDeckSet = {
+            ...createEmptyDuelDeckSet(`Folder ${state.paletteFolders.length + 1}`),
+            decks: [createEmptyDeck('Deck 1')],
+          };
+          // The new folder opens immediately so it can be named and filled.
+          return {
+            paletteFolders: [...state.paletteFolders, folder],
+            activePaletteFolderId: folder.id,
+            sets: { ...state.sets, palette: folder },
+            selectedSlot: null,
+            selectionPinned: false,
+          };
+        }),
+
+      renamePaletteFolder: (id, name) =>
+        set((state) => {
+          const trimmed = name.trim();
+          if (!trimmed) return state;
+          const paletteFolders = state.paletteFolders.map((f) =>
+            f.id === id ? { ...f, name: trimmed, updatedAt: new Date().toISOString() } : f,
+          );
+          return {
+            paletteFolders,
+            // Keep the open workshop's copy in sync with its folder.
+            sets:
+              state.activePaletteFolderId === id
+                ? { ...state.sets, palette: paletteFolders.find((f) => f.id === id)! }
+                : state.sets,
+          };
+        }),
+
+      deletePaletteFolder: (id) =>
+        set((state) => {
+          const closing = state.activePaletteFolderId === id;
+          return {
+            paletteFolders: state.paletteFolders.filter((f) => f.id !== id),
+            activePaletteFolderId: closing ? null : state.activePaletteFolderId,
+            sets: closing ? { ...state.sets, palette: createPaletteWorkshop() } : state.sets,
+            selectedSlot:
+              closing && state.selectedSlot?.owner === 'palette' ? null : state.selectedSlot,
+          };
+        }),
+
+      openPaletteFolder: (id) =>
+        set((state) => {
+          const folder = state.paletteFolders.find((f) => f.id === id);
+          if (!folder) return state;
+          return {
+            activePaletteFolderId: id,
+            sets: { ...state.sets, palette: folder },
+            selectedSlot: null,
+            selectionPinned: false,
+          };
+        }),
+
+      closePaletteFolder: () =>
+        set((state) => ({
+          activePaletteFolderId: null,
+          sets: { ...state.sets, palette: createPaletteWorkshop() },
+          selectedSlot: state.selectedSlot?.owner === 'palette' ? null : state.selectedSlot,
+          selectionPinned: false,
+        })),
+
+      addPaletteDeck: () =>
+        set((state) => {
+          if (!state.activePaletteFolderId) return state;
+          const palette = state.sets.palette;
+          return commitSet(state, 'palette', {
+            ...palette,
+            decks: [...palette.decks, createEmptyDeck(`Deck ${palette.decks.length + 1}`)],
+            updatedAt: new Date().toISOString(),
+          });
+        }),
+
+      removePaletteDeck: (deckIndex) =>
+        set((state) => {
+          if (!state.activePaletteFolderId) return state;
+          const palette = state.sets.palette;
+          return {
+            ...commitSet(state, 'palette', {
+              ...palette,
+              decks: palette.decks.filter((_, i) => i !== deckIndex),
+              updatedAt: new Date().toISOString(),
+            }),
+            // Indices shift after removal — drop any palette selection.
+            selectedSlot: state.selectedSlot?.owner === 'palette' ? null : state.selectedSlot,
+            selectionPinned: false,
+          };
+        }),
     }),
     {
       name: 'royal-duels-builder',
-      version: 8,
+      version: 9,
       partialize: (state) => ({
         sets: state.sets,
         mode: state.mode,
         library: state.library,
         deckSlotCount: state.deckSlotCount,
+        paletteFolders: state.paletteFolders,
       }),
       migrate: (persisted, version) => {
+        // v9 added Counter Palette. Older payloads funnel through their
+        // original migration chain to the v8 shape, then gain the (empty)
+        // palette slice via withPalette below.
+        if (version === 9) return persisted as PersistedSlice;
+        const v8Slice = ((): PersistedSliceV8 => {
         // v7: duel collections grew from 4 to 5 decks; v8 added per-collection
         // revealed-slot counts. Older payloads funnel through their original
         // migration, then get padded + counted.
-        if (version === 8) return persisted as PersistedSlice;
+        if (version === 8) return persisted as PersistedSliceV8;
         if (version === 7) {
-          const v7 = persisted as Omit<PersistedSlice, 'deckSlotCount'>;
+          const v7 = persisted as Omit<PersistedSliceV8, 'deckSlotCount'>;
           return { ...v7, deckSlotCount: deriveDeckSlotCounts(v7.sets) };
         }
         if (version === 6) {
-          return padToCurrentDeckCount(persisted as Omit<PersistedSlice, 'deckSlotCount'>);
+          return padToCurrentDeckCount(persisted as Omit<PersistedSliceV8, 'deckSlotCount'>);
         }
         // v5: home was a 4-deck set (index 0 = workshop) + a separate homeLibrary.
         // Fold the working deck and every saved deck into the new open-ended list.
         if (version === 5) {
-          const v5 = persisted as PersistedSlice & { homeLibrary?: SavedSingleDeck[] };
+          const v5 = persisted as PersistedSliceV8 & { homeLibrary?: SavedSingleDeck[] };
           const working = v5.sets.home?.decks?.[0];
           const decks: Deck[] = [];
           if (working && working.slots.some((k) => k !== null)) decks.push(working);
@@ -560,12 +700,12 @@ export const useBuilderStore = create<BuilderState>()(
         }
         // v4 had solo/blue/red sets + duel library, but no home slice.
         if (version === 4) {
-          const v4 = persisted as PersistedSlice;
+          const v4 = persisted as PersistedSliceV8;
           return padToCurrentDeckCount({ ...v4, sets: { ...v4.sets, home: createHomeSet() } });
         }
         // v3 had solo/blue/red sets + mode, but no libraries.
         if (version === 3) {
-          const v3 = persisted as Omit<PersistedSlice, 'library'>;
+          const v3 = persisted as Omit<PersistedSliceV8, 'library'>;
           return padToCurrentDeckCount({
             ...v3,
             sets: { ...v3.sets, home: createEmptyDuelDeckSet("Deck's Home") },
@@ -600,6 +740,8 @@ export const useBuilderStore = create<BuilderState>()(
           library: [],
           deckSlotCount: { solo: MIN_DECK_SLOTS, blue: MIN_DECK_SLOTS, red: MIN_DECK_SLOTS },
         };
+        })();
+        return withPalette(v8Slice);
       },
     },
   ),
@@ -615,8 +757,8 @@ export const useBuilderStore = create<BuilderState>()(
  * ========================================================================= */
 
 function currentSyncPayload(): SyncPayload {
-  const { sets, library, deckSlotCount } = useBuilderStore.getState();
-  return { sets, library, deckSlotCount };
+  const { sets, library, deckSlotCount, paletteFolders } = useBuilderStore.getState();
+  return { sets, library, deckSlotCount, paletteFolders };
 }
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -641,10 +783,18 @@ async function hydrateFromRemote(credential: string) {
   if (remote) {
     // A pull-driven update shouldn't immediately bounce back up as a push.
     suppressNextPush = true;
+    const paletteFolders = remote.paletteFolders ?? [];
+    // Keep the currently-open palette folder open only if the remote data
+    // still has it; the workshop entry is rebuilt from the folder either way
+    // (pre-palette remote blobs have no `sets.palette` at all).
+    const activeId = useBuilderStore.getState().activePaletteFolderId;
+    const activeFolder = activeId ? paletteFolders.find((f) => f.id === activeId) : undefined;
     useBuilderStore.setState({
-      sets: remote.sets,
+      sets: { ...remote.sets, palette: activeFolder ?? createPaletteWorkshop() },
       library: remote.library,
       deckSlotCount: remote.deckSlotCount ?? deriveDeckSlotCounts(remote.sets),
+      paletteFolders,
+      activePaletteFolderId: activeFolder ? activeId : null,
     });
   } else {
     // First sync ever for this account — seed remote storage from local state.
@@ -669,7 +819,8 @@ useBuilderStore.subscribe((state, prevState) => {
   if (
     state.sets !== prevState.sets ||
     state.library !== prevState.library ||
-    state.deckSlotCount !== prevState.deckSlotCount
+    state.deckSlotCount !== prevState.deckSlotCount ||
+    state.paletteFolders !== prevState.paletteFolders
   ) {
     schedulePush();
   }

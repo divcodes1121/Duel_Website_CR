@@ -14,6 +14,7 @@ const OWNER_LABEL = {
   blue: 'Blue ',
   red: 'Red ',
   home: '',
+  palette: '',
 } as const;
 
 export function CardPickerDrawer() {

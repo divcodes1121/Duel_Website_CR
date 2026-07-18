@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Header } from './components/Header/Header';
 import { DuelDeckBuilder } from './components/DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from './components/DecksHome/DecksHome';
+import { CounterPalette } from './components/CounterPalette/CounterPalette';
 import { Landing } from './components/Landing/Landing';
 import { Login } from './components/Login/Login';
 import { useAuthStore } from './state/authStore';
@@ -28,7 +29,13 @@ const pageMotion = {
 function App() {
   const route = useHashRoute();
   const user = useAuthStore((s) => s.user);
-  const page = route.startsWith('#/builder') ? 'builder' : route.startsWith('#/decks') ? 'decks' : 'landing';
+  const page = route.startsWith('#/builder')
+    ? 'builder'
+    : route.startsWith('#/decks')
+      ? 'decks'
+      : route.startsWith('#/palette')
+        ? 'palette'
+        : 'landing';
 
   return (
     <AnimatePresence mode="wait">
@@ -44,6 +51,10 @@ function App() {
       ) : page === 'decks' ? (
         <motion.div key="decks" className={styles.app} {...pageMotion}>
           <DecksHome />
+        </motion.div>
+      ) : page === 'palette' ? (
+        <motion.div key="palette" className={styles.app} {...pageMotion}>
+          <CounterPalette />
         </motion.div>
       ) : (
         <motion.div key="landing" className={styles.app} {...pageMotion}>

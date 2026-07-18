@@ -89,6 +89,15 @@ export function DecksHome() {
           </button>
           <button
             type="button"
+            className={libStyles.ghostButton}
+            onClick={() => {
+              window.location.hash = '#/palette';
+            }}
+          >
+            Counter Palette →
+          </button>
+          <button
+            type="button"
             className={styles.themeButton}
             onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
