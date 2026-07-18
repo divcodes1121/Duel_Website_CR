@@ -565,6 +565,17 @@ const HOME_CRYSTAL: CrystalContent = {
   flip: true,
 };
 
+const PALETTE_CRYSTAL: CrystalContent = {
+  kickerIcon: '🗂',
+  kicker: 'Counter Palette',
+  title: 'The archetype armory',
+  desc: 'Sort your arsenal into folders — one per archetype you face. Keep every counter deck filed, filterable and ready to deploy.',
+  chips: ['Unlimited folders', 'Decks by archetype', 'Auto-saving'],
+  ctaIcon: '🗂',
+  ctaLabel: 'Open Counter Palette',
+  artKeys: ['pekka', 'inferno-tower', 'skeleton-army'],
+};
+
 function CrystalCard({ content, onEnter }: { content: CrystalContent; onEnter: () => void }) {
   const tilt = useCardTilt<HTMLDivElement>(10, 0.2);
   const artX = useTransform(tilt.rotateY, (v) => v * 2.2);
@@ -664,6 +675,15 @@ function CastleIcon() {
   );
 }
 
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+      <path d="M3 11h18" />
+    </svg>
+  );
+}
+
 const FEATURES = [
   {
     icon: SwordsIcon,
@@ -680,6 +700,14 @@ const FEATURES = [
     status: 'Live',
     live: true,
     target: '#/decks',
+  },
+  {
+    icon: FolderIcon,
+    title: 'Counter Palette',
+    body: 'Archetype folders that keep your counter decks segregated, filterable and always saved.',
+    status: 'Live',
+    live: true,
+    target: '#/palette',
   },
 ] as const;
 
@@ -833,6 +861,7 @@ export function Landing() {
 
         <CrystalCard content={DUELS_CRYSTAL} onEnter={() => launch('#/builder')} />
         <CrystalCard content={HOME_CRYSTAL} onEnter={() => launch('#/decks')} />
+        <CrystalCard content={PALETTE_CRYSTAL} onEnter={() => launch('#/palette')} />
 
         <section id="features" className={styles.featuresSection}>
           <motion.h2

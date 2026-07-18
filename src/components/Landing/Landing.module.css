@@ -1071,6 +1071,13 @@
   gap: 1.4rem;
 }
 
+/* A lone card on the last row (3rd, 5th, …) centers instead of hugging the left column. */
+.featureGrid > .featurePerspective:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(400px, 100%);
+}
+
 .featurePerspective {
   perspective: 1000px;
 }
