@@ -1459,7 +1459,7 @@
     "key": "goblin-demolisher",
     "name": "Goblin Demolisher",
     "sc_key": "GoblinDemolisher",
-    "elixir": 2,
+    "elixir": 4,
     "type": "Troop",
     "rarity": "Rare",
     "arena": 0,
