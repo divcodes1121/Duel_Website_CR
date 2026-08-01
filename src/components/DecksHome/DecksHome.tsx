@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useBuilderStore } from '../../state/store';
 import { useThemeStore } from '../../state/themeStore';
+import { useAuthStore } from '../../state/authStore';
 import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
 import { CardPickerDrawer } from '../CardPicker/CardPickerDrawer';
 import { FlightLayer } from '../FlightLayer/FlightLayer';
 import { ProfileMenu } from '../Profile/ProfileMenu';
+import { ExportDialog } from '../Export/ExportDialog';
 import { WinConFilter, deckMatchesFilter, filterCardName } from '../WinConFilter/WinConFilter';
+import { canExportDecks } from '../../utils/deckExport';
 import libStyles from '../Library/Library.module.css';
 import styles from './DecksHome.module.css';
 
@@ -25,7 +28,10 @@ export function DecksHome() {
   const addHomeDeck = useBuilderStore((s) => s.addHomeDeck);
   const removeHomeDeck = useBuilderStore((s) => s.removeHomeDeck);
   const clearSelection = useBuilderStore((s) => s.clearSelection);
+  const authUser = useAuthStore((s) => s.user);
   const [winFilter, setWinFilter] = useState<string[]>([]);
+  const [exportOpen, setExportOpen] = useState(false);
+  const canExport = canExportDecks(authUser);
 
   function toggleWinCon(key: string) {
     setWinFilter((prev) =>
@@ -78,6 +84,16 @@ export function DecksHome() {
         </button>
         <div className={styles.navActions}>
           <span className={styles.autoSaveHint}>Decks save automatically</span>
+          {canExport && (
+            <button
+              type="button"
+              className={libStyles.ghostButton}
+              title="Download a PDF report of every deck here"
+              onClick={() => setExportOpen(true)}
+            >
+              Export PDF
+            </button>
+          )}
           <button
             type="button"
             className={libStyles.ghostButton}
@@ -168,6 +184,7 @@ export function DecksHome() {
 
       <CardPickerDrawer />
       <FlightLayer />
+      {exportOpen && <ExportDialog source="home" onClose={() => setExportOpen(false)} />}
     </div>
   );
 }

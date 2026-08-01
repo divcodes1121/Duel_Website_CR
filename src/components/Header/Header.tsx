@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useThemeStore } from '../../state/themeStore';
 import { useBuilderStore } from '../../state/store';
+import { useAuthStore } from '../../state/authStore';
 import { getTotalCardsUsed } from '../../state/deckUtils';
 import { DECK_SIZE } from '../../types/deck';
 import { SaveDialog } from '../Library/SaveDialog';
 import { LibraryModal } from '../Library/LibraryModal';
+import { ExportDialog } from '../Export/ExportDialog';
 import { ProfileMenu } from '../Profile/ProfileMenu';
+import { canExportDecks } from '../../utils/deckExport';
 import styles from './Header.module.css';
 
 export function Header() {
@@ -16,10 +19,13 @@ export function Header() {
   const mode = useBuilderStore((s) => s.mode);
   const deckSlotCount = useBuilderStore((s) => s.deckSlotCount);
   const resetAll = useBuilderStore((s) => s.resetAll);
+  const authUser = useAuthStore((s) => s.user);
   const maxFor = (owner: 'solo' | 'blue' | 'red') => deckSlotCount[owner] * DECK_SIZE;
   const [justSaved, setJustSaved] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const canExport = canExportDecks(authUser);
 
   function flashSaved() {
     setJustSaved(true);
@@ -96,6 +102,17 @@ export function Header() {
           My Decks
         </button>
 
+        {canExport && (
+          <button
+            type="button"
+            className={styles.glassButton}
+            title={`Download a PDF report of your ${mode === 'solo' ? 'Solo decks' : 'Blue vs Red duels'}`}
+            onClick={() => setExportOpen(true)}
+          >
+            Export PDF
+          </button>
+        )}
+
         <button
           type="button"
           className={`${styles.glassButton} ${styles.danger}`}
@@ -125,6 +142,7 @@ export function Header() {
       <AnimatePresence>
         {saveOpen && <SaveDialog onClose={() => setSaveOpen(false)} onSaved={flashSaved} />}
         {libraryOpen && <LibraryModal onClose={() => setLibraryOpen(false)} />}
+        {exportOpen && <ExportDialog source="duels" onClose={() => setExportOpen(false)} />}
       </AnimatePresence>
     </header>
   );
