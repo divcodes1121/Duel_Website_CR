@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DECKS_PER_PAGE,
   countDecks,
+  sectionRows,
   limitSetCount,
-  buildContents,
   buildHomeSections,
   buildSoloSections,
   buildVersusSections,
@@ -70,18 +70,66 @@ describe('buildSoloSections', () => {
     expect(buildSoloSections(solo, 2, [])).toEqual([]);
   });
 
-  it('appends saved solo groups as their own sections', () => {
+  it('numbers the live set and each saved solo group in report order', () => {
     const solo = setOf('Solo', [filledDeck('A')]);
     const saved: SavedDeckSet[] = [
       { id: '1', name: 'Ladder', mode: 'solo', solo: setOf('Ladder', [filledDeck('L', 24)]), savedAt: '' },
       { id: '2', name: 'Duels', mode: 'versus', blue: setOf('b', []), red: setOf('r', []), savedAt: '' },
     ];
     const sections = buildSoloSections(solo, 1, saved);
-    expect(sections.map((s) => s.heading)).toEqual(['Solo Duel Decks', 'Ladder']);
+    expect(sections.map((s) => s.heading)).toEqual(['Deck Set 1', 'Deck Set 2']);
+  });
+
+  it('takes saved groups oldest first — the bottom of the library list', () => {
+    const solo = setOf('Solo', []);
+    const group = (id: string, deck: string, offset: number): SavedDeckSet => ({
+      id,
+      name: id,
+      mode: 'solo',
+      solo: setOf(id, [filledDeck(deck, offset)]),
+      savedAt: '',
+    });
+    // The library is newest first, so the last entry is the oldest set.
+    const sections = buildSoloSections(solo, 0, [group('new', 'N', 0), group('mid', 'M', 8), group('old', 'O', 16)]);
+    expect(sections.map((s) => s.entries[0].deck.name)).toEqual(['O', 'M', 'N']);
+    expect(sections.map((s) => s.heading)).toEqual(['Deck Set 1', 'Deck Set 2', 'Deck Set 3']);
   });
 });
 
 describe('buildVersusSections', () => {
+  it('titles every set "Duel Deck N" in report order, ignoring the saved name', () => {
+    const blue = setOf('Blue', [filledDeck('B1')]);
+    const red = setOf('Red', [filledDeck('R1', 8)]);
+    const saved: SavedDeckSet[] = [
+      { id: '1', name: 'Duel Deck 58', mode: 'versus', blue: setOf('b', [filledDeck('X', 16)]), red: setOf('r', [filledDeck('Y', 24)]), savedAt: '' },
+    ];
+    const sections = buildVersusSections(blue, red, 1, 1, saved);
+    expect(sections.map((s) => s.heading)).toEqual(['Duel Deck 1', 'Duel Deck 2']);
+  });
+
+  it('walks saved versus groups oldest first, so "first N" takes the earliest sets', () => {
+    const empty = setOf('Live', []);
+    const group = (name: string, deck: string, offset: number): SavedDeckSet => ({
+      id: name,
+      name,
+      mode: 'versus',
+      blue: setOf(name, [filledDeck(deck, offset)]),
+      red: setOf(name, [filledDeck(`${deck}r`, offset + 8)]),
+      savedAt: '',
+    });
+    // Library order is newest first: "Duel Deck 3" was saved most recently.
+    const sections = buildVersusSections(empty, empty, 0, 0, [
+      group('Duel Deck 3', 'C', 0),
+      group('Duel Deck 2', 'B', 16),
+      group('Duel Deck 1', 'A', 32),
+    ]);
+    expect(sections.map((s) => s.heading)).toEqual(['Duel Deck 1', 'Duel Deck 2', 'Duel Deck 3']);
+    const firstDeckOf = (s: ExportSection) => sectionRows(s)[0].deck.name;
+    expect(sections.map(firstDeckOf)).toEqual(['A', 'B', 'C']);
+    // Picking two sets yields the two oldest, not the two most recent.
+    expect(limitSetCount(sections, 2).map(firstDeckOf)).toEqual(['A', 'B']);
+  });
+
   it('pairs blue against red slot for slot', () => {
     const blue = setOf('Blue', [filledDeck('B1'), filledDeck('B2', 8)]);
     const red = setOf('Red', [filledDeck('R1', 16), filledDeck('R2', 24)]);
@@ -184,21 +232,6 @@ describe('paginate', () => {
     expect(paginate([])).toEqual([]);
   });
 
-  describe('buildContents', () => {
-    it('points each section at its first page, counting the cover as page 1', () => {
-      // Solo's 5 decks span two sheets, so the duel set opens on page 4.
-      const sections = [deckSection('Solo', 5), pairSection('Duels', 4)];
-      expect(buildContents(sections)).toEqual([
-        { heading: 'Solo', page: 2, count: 5 },
-        { heading: 'Duels', page: 4, count: 8 },
-      ]);
-    });
-
-    it('gives same-named sections their own rows', () => {
-      const rows = buildContents([deckSection('Ladder', 1), deckSection('Ladder', 1)]);
-      expect(rows.map((r) => r.page)).toEqual([2, 3]);
-    });
-  });
 });
 
 describe('limitSetCount', () => {

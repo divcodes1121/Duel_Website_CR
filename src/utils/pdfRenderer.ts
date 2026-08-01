@@ -8,7 +8,7 @@ import {
 import { getCycleCost, getElixirAverage, getSlotVisualVariant } from '../state/deckUtils';
 import { DECK_SIZE, type Deck } from '../types/deck';
 import { getClashRoyaleDeckLink } from './deckLink';
-import { buildContents, paginate, summarize, type ContentPage, type ExportRequest } from './deckExport';
+import { paginate, summarize, type ContentPage, type ExportRequest } from './deckExport';
 
 /* ------------------------------------------------------------------ theme */
 
@@ -596,7 +596,7 @@ function drawCover(
   doc: JsPdfType,
   req: ExportRequest,
   stats: ReturnType<typeof summarize>,
-  contents: ReturnType<typeof buildContents>,
+  setCount: number,
   tiles: Map<string, string | null>,
   totalPages: number,
 ) {
@@ -641,7 +641,7 @@ function drawCover(
     { value: String(stats.decks), label: 'Decks' },
     { value: String(stats.cards), label: 'Cards' },
     { value: stats.avgElixir, label: 'Avg Elixir' },
-    { value: String(contents.length), label: contents.length === 1 ? 'Section' : 'Sections' },
+    { value: String(setCount), label: setCount === 1 ? 'Set' : 'Sets' },
   ];
   const step = 62;
   const startX = PAGE_W / 2 - ((cells.length - 1) * step) / 2;
@@ -670,12 +670,20 @@ function drawCover(
     });
   });
 
-  // Signature art: the three cards this collection leans on most.
+  // Signature art: the three cards this collection leans on most. Sized to fill
+  // the sheet now that the contents listing is gone.
   if (stats.topCards.length > 0) {
-    const w = 22;
+    const w = 30;
     const h = w / CARD_RATIO;
-    const gap = 5;
-    const top = 127;
+    const gap = 7;
+    const top = 133;
+    label(doc, 'MOST PLAYED', PAGE_W / 2, 128, {
+      size: 6.6,
+      bold: true,
+      color: INK.muted,
+      align: 'center',
+      spacing: 1.2,
+    });
     const totalW = stats.topCards.length * w + (stats.topCards.length - 1) * gap;
     let x = PAGE_W / 2 - totalW / 2;
     stats.topCards.forEach((key, i) => {
@@ -692,34 +700,6 @@ function drawCover(
       alpha(doc, i === 0 ? 0.8 : 0.5, () => doc.roundedRect(x, top, w, h, 1.2, 1.2, 'D'));
       x += w + gap;
     });
-  }
-
-  if (contents.length > 0) {
-    label(doc, 'CONTENTS', PAGE_W / 2, 163, {
-      size: 6.6,
-      bold: true,
-      color: INK.muted,
-      align: 'center',
-      spacing: 1.2,
-    });
-    const rows = contents.slice(0, 6);
-    rows.forEach((row, i) => {
-      const y = 170 + i * 5;
-      label(doc, `${row.heading}  —  ${row.count} ${row.count === 1 ? 'deck' : 'decks'}`, PAGE_W / 2 - 4, y, {
-        size: 7.4,
-        color: INK.text,
-        align: 'right',
-        maxWidth: 100,
-      });
-      label(doc, `p.${row.page}`, PAGE_W / 2 + 4, y, { size: 7.4, bold: true, color: INK.accent });
-    });
-    if (contents.length > rows.length) {
-      label(doc, `+${contents.length - rows.length} more`, PAGE_W / 2, 170 + rows.length * 5, {
-        size: 6.6,
-        color: INK.muted,
-        align: 'center',
-      });
-    }
   }
 
   const generated = new Date()
@@ -847,7 +827,6 @@ export async function renderDeckReport(req: ExportRequest, opts: RenderOptions =
   if (pages.length === 0) throw new Error('Nothing to export — add some cards first.');
 
   const stats = summarize(req.sections);
-  const contents = buildContents(req.sections);
 
   const urls = collectIconUrls(pages, stats.topCards);
   const tiles = new Map<string, string | null>();
@@ -865,7 +844,7 @@ export async function renderDeckReport(req: ExportRequest, opts: RenderOptions =
   const totalPages = pages.length + 1;
 
   pageBackground(doc, req.handle);
-  drawCover(doc, req, stats, contents, tiles, totalPages);
+  drawCover(doc, req, stats, req.sections.length, tiles, totalPages);
 
   pages.forEach((page, i) => {
     doc.addPage();

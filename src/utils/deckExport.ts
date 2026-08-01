@@ -177,30 +177,6 @@ export function limitSections(sections: ExportSection[], limit: number | null): 
   return out;
 }
 
-/** Cover is page 1, so content pages start at 2. */
-export interface ContentsRow {
-  heading: string;
-  page: number;
-  count: number;
-}
-
-/**
- * Where each section starts in the finished PDF. Derived from the section
- * sizes rather than by matching page headings, so two saved groups sharing a
- * name still get their own row.
- */
-export function buildContents(sections: ExportSection[]): ContentsRow[] {
-  const rows: ContentsRow[] = [];
-  let page = 2; // page 1 is the cover
-  for (const section of sections) {
-    if (section.entries.length === 0) continue;
-    const decks = sectionRows(section).length;
-    rows.push({ heading: section.heading, page, count: decks });
-    page += Math.ceil(decks / DECKS_PER_PAGE);
-  }
-  return rows;
-}
-
 /* ---------------------------------------------------------------- builders */
 
 /** Drops empty decks and stamps a fallback name on anything left unnamed. */
@@ -229,6 +205,23 @@ function nonEmpty(sections: ExportSection[]): ExportSection[] {
   return sections.filter((s) => s.entries.length > 0);
 }
 
+/**
+ * The library lists saved groups newest first, but "the first N sets" means the
+ * ones built earliest — the bottom of that list. Oldest first it is.
+ */
+function oldestFirst(savedGroups: SavedDeckSet[]): SavedDeckSet[] {
+  return [...savedGroups].reverse();
+}
+
+/**
+ * Sets are titled by their position in the report, not by the name they carry
+ * in the library: the report reads "Duel Deck 1 … 30" however the groups happen
+ * to be named. Numbered after empties are dropped so the run has no gaps.
+ */
+function numbered(sections: ExportSection[], noun: string): ExportSection[] {
+  return nonEmpty(sections).map((section, i) => ({ ...section, heading: `${noun} ${i + 1}` }));
+}
+
 /** Royal Duels, Solo tab: the revealed solo decks plus any saved solo groups. */
 export function buildSoloSections(
   solo: DuelDeckSet,
@@ -238,7 +231,7 @@ export function buildSoloSections(
   const sections: ExportSection[] = [
     { kind: 'decks', heading: 'Solo Duel Decks', entries: toDeckEntries(solo.decks.slice(0, visibleCount)) },
   ];
-  for (const group of savedGroups) {
+  for (const group of oldestFirst(savedGroups)) {
     if (group.mode !== 'solo' || !group.solo) continue;
     sections.push({
       kind: 'decks',
@@ -246,7 +239,7 @@ export function buildSoloSections(
       entries: toDeckEntries(group.solo.decks, 'Saved group'),
     });
   }
-  return nonEmpty(sections);
+  return numbered(sections, 'Deck Set');
 }
 
 /** Royal Duels, Versus tab: blue-vs-red pairs, live set first then saved groups. */
@@ -264,7 +257,7 @@ export function buildVersusSections(
       entries: toPairEntries(blue.decks.slice(0, blueCount), red.decks.slice(0, redCount)),
     },
   ];
-  for (const group of savedGroups) {
+  for (const group of oldestFirst(savedGroups)) {
     if (group.mode !== 'versus' || !group.blue || !group.red) continue;
     sections.push({
       kind: 'pairs',
@@ -272,7 +265,7 @@ export function buildVersusSections(
       entries: toPairEntries(group.blue.decks, group.red.decks, 'Saved group'),
     });
   }
-  return nonEmpty(sections);
+  return numbered(sections, 'Duel Deck');
 }
 
 /** Deck's Home: one flat section of every saved single deck. */
