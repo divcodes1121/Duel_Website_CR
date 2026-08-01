@@ -91,6 +91,68 @@
   color: var(--text-muted);
 }
 
+.limitRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.limitChip {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.32rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--slot-border);
+  background: var(--slot-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.limitChip:hover:not(:disabled) {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
+}
+
+.limitChip[data-active='true'] {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  border-color: transparent;
+}
+
+.limitChip:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.limitInput {
+  width: 4.2rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+  background: var(--slot-bg);
+  border: 1px solid var(--slot-border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.3rem 0.4rem;
+  outline: none;
+}
+
+.limitInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.limitInput:disabled {
+  opacity: 0.45;
+}
+
+.limitSuffix {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
 .progressWrap {
   display: flex;
   flex-direction: column;

@@ -121,6 +121,35 @@ export function paginate(sections: ExportSection[]): ContentPage[] {
   return pages;
 }
 
+/** Total rows across every section — decks in Solo/Home, duel pairs in Versus. */
+export function countEntries(sections: ExportSection[]): number {
+  return sections.reduce((n, s) => n + s.entries.length, 0);
+}
+
+/**
+ * Keep only the first `limit` rows overall, walking sections in order: a
+ * section is truncated when the budget runs out mid-way and dropped once it
+ * is exhausted. `null` (or a limit at/above the total) exports everything.
+ */
+export function limitSections(sections: ExportSection[], limit: number | null): ExportSection[] {
+  if (limit === null) return sections;
+  let left = Math.max(0, Math.floor(limit));
+  if (left >= countEntries(sections)) return sections;
+
+  const out: ExportSection[] = [];
+  for (const section of sections) {
+    if (left <= 0) break;
+    const take = Math.min(left, section.entries.length);
+    out.push(
+      section.kind === 'decks'
+        ? { kind: 'decks', heading: section.heading, entries: section.entries.slice(0, take) }
+        : { kind: 'pairs', heading: section.heading, entries: section.entries.slice(0, take) },
+    );
+    left -= take;
+  }
+  return out;
+}
+
 /** Cover is page 1, so content pages start at 2. */
 export interface ContentsRow {
   heading: string;

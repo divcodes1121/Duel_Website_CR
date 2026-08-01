@@ -7,8 +7,10 @@ import {
   buildSoloSections,
   buildVersusSections,
   canExportDecks,
+  countEntries,
   exportFileName,
   hasCards,
+  limitSections,
   paginate,
   summarize,
   type ExportSection,
@@ -176,6 +178,60 @@ describe('paginate', () => {
       const rows = buildContents([deckSection('Ladder', 1), deckSection('Ladder', 1)]);
       expect(rows.map((r) => r.page)).toEqual([2, 3]);
     });
+  });
+});
+
+describe('countEntries / limitSections', () => {
+  const decks = (heading: string, n: number): ExportSection => ({
+    kind: 'decks',
+    heading,
+    entries: Array.from({ length: n }, (_, i) => ({ deck: filledDeck(`${heading}${i}`, i) })),
+  });
+  const pairs = (heading: string, n: number): ExportSection => ({
+    kind: 'pairs',
+    heading,
+    entries: Array.from({ length: n }, (_, i) => ({ blue: filledDeck(`B${i}`, i), red: null })),
+  });
+
+  it('counts every row across sections', () => {
+    expect(countEntries([decks('A', 3), pairs('B', 2)])).toBe(5);
+    expect(countEntries([])).toBe(0);
+  });
+
+  it('takes the first N rows, truncating the section the budget runs out in', () => {
+    const limited = limitSections([decks('A', 3), decks('B', 4)], 5);
+    expect(limited.map((s) => s.entries.length)).toEqual([3, 2]);
+    expect(countEntries(limited)).toBe(5);
+  });
+
+  it('drops sections entirely once the budget is spent', () => {
+    const limited = limitSections([decks('A', 4), decks('B', 4)], 2);
+    expect(limited.map((s) => s.heading)).toEqual(['A']);
+    expect(limited[0].entries.length).toBe(2);
+  });
+
+  it('preserves the section kind when truncating pairs', () => {
+    const limited = limitSections([pairs('Duels', 5)], 2);
+    expect(limited[0].kind).toBe('pairs');
+    expect(limited[0].entries).toHaveLength(2);
+  });
+
+  it('returns everything for null, or a limit at or above the total', () => {
+    const all = [decks('A', 3), decks('B', 2)];
+    expect(limitSections(all, null)).toBe(all);
+    expect(limitSections(all, 5)).toBe(all);
+    expect(limitSections(all, 99)).toBe(all);
+  });
+
+  it('yields nothing at all for a zero or negative limit', () => {
+    expect(limitSections([decks('A', 3)], 0)).toEqual([]);
+    expect(limitSections([decks('A', 3)], -4)).toEqual([]);
+  });
+
+  it('shrinks the page count as the limit tightens', () => {
+    const all = [decks('A', 9)];
+    expect(paginate(all)).toHaveLength(3);
+    expect(paginate(limitSections(all, 4))).toHaveLength(1);
   });
 });
 

@@ -21,9 +21,6 @@ import {
 
 type RGB = readonly [number, number, number];
 
-const SITE = 'royal-duels.vercel.app';
-const SITE_URL = 'https://royal-duels.vercel.app';
-
 const INK = {
   page: [9, 12, 20] as RGB,
   frame: [38, 68, 122] as RGB,
@@ -37,6 +34,7 @@ const INK = {
   gold: [245, 197, 66] as RGB,
   blue: [86, 154, 255] as RGB,
   red: [248, 113, 113] as RGB,
+  shadow: [0, 0, 0] as RGB,
 } as const;
 
 /** Canvas fill for the card tiles — must match INK.tile so JPEG edges blend in. */
@@ -143,6 +141,141 @@ function collectIconUrls(pages: ContentPage[], topCards: string[]): string[] {
   return [...urls];
 }
 
+/* --------------------------------------------------------------- typography */
+
+/**
+ * The site's display face — the same font the builder, Deck's Home and the
+ * landing headings use. Embedding it makes the report read as the product
+ * rather than a generic Helvetica PDF. Fetched at export time (no bundle cost)
+ * and jsPDF subsets it, so it costs a few KB in the file. Small copy stays on
+ * Helvetica: the face has a single weight and gets mushy below ~8 pt.
+ */
+const DISPLAY = 'Subscribe';
+const DISPLAY_URL = `${import.meta.env.BASE_URL}assets/fonts/Subscribe.ttf`;
+
+let displayFontData: string | null | undefined;
+/** True once the active doc can render `DISPLAY`; false → fall back to Helvetica. */
+let displayReady = false;
+
+function toBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  // Chunked — spreading 57 KB into one fromCharCode call blows the arg limit.
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  return btoa(binary);
+}
+
+async function loadDisplayFont(): Promise<string | null> {
+  if (displayFontData !== undefined) return displayFontData;
+  try {
+    const res = await fetch(DISPLAY_URL);
+    displayFontData = res.ok ? toBase64(await res.arrayBuffer()) : null;
+  } catch {
+    displayFontData = null;
+  }
+  return displayFontData;
+}
+
+function registerDisplayFont(doc: JsPdfType, data: string | null) {
+  displayReady = false;
+  if (!data) return;
+  try {
+    doc.addFileToVFS('Subscribe.ttf', data);
+    // One cut only — register it under both styles so setFont(…, 'bold') resolves
+    // instead of throwing, and fake the weight with a stroke where it matters.
+    doc.addFont('Subscribe.ttf', DISPLAY, 'normal');
+    doc.addFont('Subscribe.ttf', DISPLAY, 'bold');
+    displayReady = true;
+  } catch {
+    displayReady = false;
+  }
+}
+
+/* ------------------------------------------------------------------ effects */
+
+let GStateCtor: typeof import('jspdf').GState | null = null;
+
+/**
+ * Runs `draw` at reduced opacity, then restores it. Both alphas are set —
+ * `opacity` alone is the PDF `ca` (fill) key, so strokes would come out solid.
+ */
+function alpha(doc: JsPdfType, value: number, draw: () => void) {
+  if (!GStateCtor) {
+    draw();
+    return;
+  }
+  doc.setGState(new GStateCtor({ opacity: value, 'stroke-opacity': value }));
+  draw();
+  doc.setGState(new GStateCtor({ opacity: 1, 'stroke-opacity': 1 }));
+}
+
+/**
+ * PDF has no blur filter, so depth is faked the way it was before CSS had
+ * shadows: concentric rounded rects fading outward. It stays vector, so it
+ * survives zooming and costs nothing in file size.
+ */
+function softShadow(
+  doc: JsPdfType,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  opts: { spread?: number; layers?: number; opacity?: number; color?: RGB; offsetY?: number } = {},
+) {
+  const { spread = 1.8, layers = 5, opacity = 0.55, color = INK.shadow, offsetY = 0.9 } = opts;
+  setFill(doc, color);
+  for (let i = layers; i >= 1; i--) {
+    const grow = (spread * i) / layers;
+    // Falls off faster than linear so the inner ring carries the weight.
+    const step = opacity * (1 - (i - 1) / layers) ** 1.7;
+    alpha(doc, step / layers + 0.01, () => {
+      doc.roundedRect(x - grow, y - grow + offsetY, w + grow * 2, h + grow * 2, r + grow, r + grow, 'F');
+    });
+  }
+}
+
+/** The same trick in reverse — a coloured halo that reads as emissive on dark. */
+function glowRect(
+  doc: JsPdfType,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  color: RGB,
+  opts: { spread?: number; layers?: number; opacity?: number } = {},
+) {
+  const { spread = 2.2, layers = 4, opacity = 0.3 } = opts;
+  setFill(doc, color);
+  for (let i = layers; i >= 1; i--) {
+    const grow = (spread * i) / layers;
+    alpha(doc, (opacity / layers) * (1 - (i - 1) / layers) ** 1.2 + 0.008, () => {
+      doc.roundedRect(x - grow, y - grow, w + grow * 2, h + grow * 2, r + grow, r + grow, 'F');
+    });
+  }
+}
+
+function glowCircle(
+  doc: JsPdfType,
+  cx: number,
+  cy: number,
+  radius: number,
+  color: RGB,
+  opts: { spread?: number; layers?: number; opacity?: number } = {},
+) {
+  const { spread = 3, layers = 5, opacity = 0.34 } = opts;
+  setFill(doc, color);
+  for (let i = layers; i >= 1; i--) {
+    const grow = (spread * i) / layers;
+    alpha(doc, (opacity / layers) * (1 - (i - 1) / layers) ** 1.3 + 0.006, () => {
+      doc.circle(cx, cy, radius + grow, 'F');
+    });
+  }
+}
+
 /* ------------------------------------------------------------- draw helpers */
 
 function setFill(doc: JsPdfType, c: RGB) {
@@ -162,6 +295,21 @@ interface TextOpts {
   align?: 'left' | 'center' | 'right';
   spacing?: number;
   maxWidth?: number;
+  /** `display` uses the site's heading face when it loaded, Helvetica otherwise. */
+  font?: 'sans' | 'display';
+  /** Coloured halo behind the glyphs — for the few hero moments only. */
+  glow?: RGB;
+}
+
+/** Selects the face for a text run and reports whether a faux-bold stroke is due. */
+function useFont(doc: JsPdfType, font: 'sans' | 'display', bold: boolean): boolean {
+  if (font === 'display' && displayReady) {
+    doc.setFont(DISPLAY, 'normal');
+    // The face ships one weight, so bold is drawn as fill + hairline stroke.
+    return bold;
+  }
+  doc.setFont('helvetica', bold ? 'bold' : 'normal');
+  return false;
 }
 
 /** Trims to an ellipsis at the current font settings. */
@@ -173,13 +321,44 @@ function fit(doc: JsPdfType, text: string, maxWidth: number): string {
 }
 
 function label(doc: JsPdfType, text: string, x: number, y: number, opts: TextOpts = {}) {
-  const { size = 9, bold = false, color = INK.text, align = 'left', spacing = 0, maxWidth } = opts;
-  doc.setFont('helvetica', bold ? 'bold' : 'normal');
+  const {
+    size = 9,
+    bold = false,
+    color = INK.text,
+    align = 'left',
+    spacing = 0,
+    maxWidth,
+    font = 'sans',
+    glow,
+  } = opts;
+  const faux = useFont(doc, font, bold);
   doc.setFontSize(size);
   setText(doc, color);
   doc.setCharSpace(spacing);
   const body = maxWidth ? fit(doc, text, maxWidth) : text;
-  doc.text(body, x, y, { align });
+
+  if (glow) {
+    // Concentric stroked copies behind the fill — the type equivalent of the
+    // text-shadow the headings carry on the site.
+    setStroke(doc, glow);
+    setText(doc, glow);
+    for (const [width, op] of [
+      [size * 0.09, 0.3],
+      [size * 0.05, 0.42],
+    ] as const) {
+      doc.setLineWidth(width);
+      alpha(doc, op, () => doc.text(body, x, y, { align, renderingMode: 'fillThenStroke' }));
+    }
+    setText(doc, color);
+  }
+
+  if (faux) {
+    setStroke(doc, color);
+    doc.setLineWidth(size * 0.014);
+    doc.text(body, x, y, { align, renderingMode: 'fillThenStroke' });
+  } else {
+    doc.text(body, x, y, { align });
+  }
   doc.setCharSpace(0);
 }
 
@@ -239,6 +418,7 @@ function linkButton(
   const live = !!url;
   const size = h <= 6 ? 5.6 : 6.6;
   if (tone === 'primary') {
+    if (live) glowRect(doc, x, y, w, h, 1.4, INK.accent, { spread: 1.8, opacity: 0.32 });
     setFill(doc, live ? INK.accent : INK.panelEdge);
     doc.roundedRect(x, y, w, h, 1.4, 1.4, 'F');
     setText(doc, live ? INK.page : INK.muted);
@@ -274,6 +454,11 @@ function cardTile(
   if (data && url) {
     // The alias makes jsPDF store each distinct icon once, however many decks use it.
     doc.addImage(data, 'JPEG', x, y, w, h, url, 'FAST');
+    // A rim keeps the art from bleeding into the panel behind it. One stroke per
+    // tile — anything heavier multiplies across every deck on the sheet.
+    setStroke(doc, INK.panelEdge);
+    doc.setLineWidth(0.25);
+    alpha(doc, 0.75, () => doc.roundedRect(x, y, w, h, 1.1, 1.1, 'D'));
   } else if (url) {
     // Art missing (offline export) — fall back to the card's name.
     const key = deck.slots[slotIndex];
@@ -288,44 +473,64 @@ function cardTile(
 
 /* ------------------------------------------------------------------ chrome */
 
-function pageBackground(doc: JsPdfType, GState: typeof import('jspdf').GState, handle: string) {
+function pageBackground(doc: JsPdfType, handle: string) {
   setFill(doc, INK.page);
   doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
 
-  // Ambassador watermark: tiled diagonal handle + site, faint enough to read
-  // straight through but present on every screenshot of the report.
-  doc.setGState(new GState({ opacity: 0.035 }));
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  setText(doc, INK.accent);
-  const mark = `${handle}  ${SITE}`;
-  for (let row = -1; row < 6; row++) {
-    for (let col = -1; col < 4; col++) {
-      doc.text(mark, col * 95 - 20, row * 42 + 26, { angle: 20 });
+  // Aurora bloom — the landing page's glow, flattened into stacked ellipses so
+  // the sheet isn't a flat black rectangle.
+  for (const [cx, cy, rx, ry, color, op] of [
+    [PAGE_W / 2, -18, 150, 78, INK.accent, 0.05],
+    [PAGE_W / 2, -18, 96, 52, INK.accent, 0.05],
+    [24, PAGE_H + 22, 110, 62, INK.frame, 0.05],
+    [PAGE_W - 24, PAGE_H + 26, 100, 56, INK.accent, 0.035],
+  ] as const) {
+    setFill(doc, color);
+    for (let i = 3; i >= 1; i--) {
+      alpha(doc, op / 3, () => doc.ellipse(cx, cy, (rx * i) / 3, (ry * i) / 3, 'F'));
     }
   }
-  doc.setGState(new GState({ opacity: 1 }));
+
+  // Ambassador watermark: the tiled diagonal handle, faint enough to read
+  // straight through but present on every screenshot of the report.
+  alpha(doc, 0.04, () => {
+    useFont(doc, 'display', false);
+    doc.setFontSize(17);
+    setText(doc, INK.accent);
+    for (let row = -1; row < 6; row++) {
+      for (let col = -1; col < 5; col++) {
+        doc.text(handle, col * 68 - 20, row * 42 + 26, { angle: 20 });
+      }
+    }
+  });
 
   setStroke(doc, INK.frame);
   doc.setLineWidth(0.5);
   doc.roundedRect(FRAME, FRAME, PAGE_W - FRAME * 2, PAGE_H - FRAME * 2, 3, 3, 'D');
 
   // Corner brackets, the detail that makes the sheet read as a report card.
-  setStroke(doc, INK.bracket);
-  doc.setLineWidth(1);
   const b = 12;
   const [l, t, r, bo] = [FRAME + 3, FRAME + 3, PAGE_W - FRAME - 3, PAGE_H - FRAME - 3];
-  doc.line(l, t, l + b, t);
-  doc.line(l, t, l, t + b);
-  doc.line(r - b, t, r, t);
-  doc.line(r, t, r, t + b);
-  doc.line(l, bo - b, l, bo);
-  doc.line(l, bo, l + b, bo);
-  doc.line(r - b, bo, r, bo);
-  doc.line(r, bo - b, r, bo);
+  const brackets = () => {
+    doc.line(l, t, l + b, t);
+    doc.line(l, t, l, t + b);
+    doc.line(r - b, t, r, t);
+    doc.line(r, t, r, t + b);
+    doc.line(l, bo - b, l, bo);
+    doc.line(l, bo, l + b, bo);
+    doc.line(r - b, bo, r, bo);
+    doc.line(r, bo - b, r, bo);
+  };
+  setStroke(doc, INK.bracket);
+  // Wide faint pass under the crisp one — the corners pick up a neon halo.
+  doc.setLineWidth(2.6);
+  alpha(doc, 0.24, brackets);
+  doc.setLineWidth(1);
+  brackets();
 }
 
 function footer(doc: JsPdfType, handle: string, page: number, total: number) {
+  alpha(doc, 0.5, () => crown(doc, CONTENT_X, FOOTER_Y - 3.9, 5.6, INK.gold));
   crown(doc, CONTENT_X, FOOTER_Y - 3.4, 5, INK.gold);
   label(doc, `ROYAL DUELS  ·  ${handle}`, CONTENT_X + 7, FOOTER_Y, {
     size: 6.4,
@@ -334,11 +539,10 @@ function footer(doc: JsPdfType, handle: string, page: number, total: number) {
     spacing: 0.4,
   });
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.4);
-  const siteW = doc.getTextWidth(SITE);
-  label(doc, SITE, PAGE_W / 2, FOOTER_Y, { size: 6.4, bold: true, color: INK.accent, align: 'center', spacing: 0.4 });
-  doc.link(PAGE_W / 2 - siteW / 2 - 2, FOOTER_Y - 4, siteW + 6, 6, { url: SITE_URL });
+  // Hairline rule bridging the two ends of the footer.
+  setStroke(doc, INK.frame);
+  doc.setLineWidth(0.3);
+  alpha(doc, 0.6, () => doc.line(CONTENT_X + 58, FOOTER_Y - 1.4, PAGE_W - CONTENT_X - 26, FOOTER_Y - 1.4));
 
   label(doc, `PAGE ${page} / ${total}`, PAGE_W - CONTENT_X, FOOTER_Y, {
     size: 6.4,
@@ -353,7 +557,7 @@ function footer(doc: JsPdfType, handle: string, page: number, total: number) {
 function banner(doc: JsPdfType, heading: string, sub: string) {
   const y = 14;
   const h = 12;
-  doc.setFont('helvetica', 'bold');
+  useFont(doc, 'display', true);
   doc.setFontSize(15);
   doc.setCharSpace(0.9);
   const textW = doc.getTextWidth(heading.toUpperCase());
@@ -361,15 +565,26 @@ function banner(doc: JsPdfType, heading: string, sub: string) {
   const w = Math.min(CONTENT_W, textW + 46);
   const x = (PAGE_W - w) / 2;
 
+  softShadow(doc, x, y, w, h, 1.5, { spread: 2.4, opacity: 0.6 });
+  glowRect(doc, x, y, w, h, 1.5, INK.accent, { spread: 2, opacity: 0.16 });
   setFill(doc, INK.panel);
   setStroke(doc, INK.frame);
   doc.setLineWidth(0.5);
   doc.roundedRect(x, y, w, h, 1.5, 1.5, 'FD');
+  // Inner top highlight — the glass edge the app's panels carry.
+  setStroke(doc, INK.bracket);
+  doc.setLineWidth(0.3);
+  alpha(doc, 0.5, () => doc.line(x + 2, y + 0.5, x + w - 2, y + 0.5));
   // Angled shoulders flanking the plate.
   setStroke(doc, INK.frame);
   doc.setLineWidth(0.5);
   doc.line(CONTENT_X, y + h / 2, x - 4, y + h / 2);
   doc.line(x + w + 4, y + h / 2, PAGE_W - CONTENT_X, y + h / 2);
+  setFill(doc, INK.bracket);
+  alpha(doc, 0.7, () => {
+    doc.circle(x - 6, y + h / 2, 0.9, 'F');
+    doc.circle(x + w + 6, y + h / 2, 0.9, 'F');
+  });
 
   label(doc, heading.toUpperCase(), PAGE_W / 2, y + 8.4, {
     size: 15,
@@ -378,6 +593,8 @@ function banner(doc: JsPdfType, heading: string, sub: string) {
     align: 'center',
     spacing: 0.9,
     maxWidth: w - 8,
+    font: 'display',
+    glow: INK.accent,
   });
   label(doc, sub.toUpperCase(), PAGE_W / 2, y + h + 6.5, {
     size: 6.6,
@@ -397,6 +614,7 @@ function drawCover(
   tiles: Map<string, string | null>,
   totalPages: number,
 ) {
+  glowCircle(doc, PAGE_W / 2, 31, 11, INK.gold, { spread: 9, opacity: 0.22 });
   crown(doc, PAGE_W / 2 - 9, 24, 18, INK.gold);
 
   label(doc, req.title.toUpperCase(), PAGE_W / 2, 58, {
@@ -405,6 +623,8 @@ function drawCover(
     color: INK.text,
     align: 'center',
     spacing: 1.4,
+    font: 'display',
+    glow: INK.accent,
   });
   label(doc, req.handle, PAGE_W / 2, 70, {
     size: 15,
@@ -412,11 +632,16 @@ function drawCover(
     color: INK.accent,
     align: 'center',
     spacing: 1.2,
+    font: 'display',
   });
 
+  // Rule with a lit centre rather than a flat hairline.
   setStroke(doc, INK.frame);
   doc.setLineWidth(0.5);
   doc.line(PAGE_W / 2 - 62, 77, PAGE_W / 2 + 62, 77);
+  setStroke(doc, INK.bracket);
+  doc.setLineWidth(0.7);
+  alpha(doc, 0.55, () => doc.line(PAGE_W / 2 - 18, 77, PAGE_W / 2 + 18, 77));
 
   label(doc, req.subtitle.toUpperCase(), PAGE_W / 2, 87, {
     size: 11,
@@ -436,7 +661,20 @@ function drawCover(
   const startX = PAGE_W / 2 - ((cells.length - 1) * step) / 2;
   cells.forEach((cell, i) => {
     const cx = startX + i * step;
-    label(doc, cell.value, cx, 108, { size: 24, bold: true, color: INK.accent, align: 'center' });
+    // Each figure sits on its own softly lit plate.
+    softShadow(doc, cx - 24, 96, 48, 24, 2.5, { spread: 2.4, opacity: 0.5 });
+    setFill(doc, INK.panel);
+    setStroke(doc, INK.panelEdge);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(cx - 24, 96, 48, 24, 2.5, 2.5, 'FD');
+    label(doc, cell.value, cx, 108, {
+      size: 24,
+      bold: true,
+      color: INK.accent,
+      align: 'center',
+      font: 'display',
+      glow: INK.accent,
+    });
     label(doc, cell.label.toUpperCase(), cx, 115, {
       size: 6.6,
       bold: true,
@@ -451,16 +689,23 @@ function drawCover(
     const w = 22;
     const h = w / CARD_RATIO;
     const gap = 5;
+    const top = 127;
     const totalW = stats.topCards.length * w + (stats.topCards.length - 1) * gap;
     let x = PAGE_W / 2 - totalW / 2;
-    for (const key of stats.topCards) {
+    stats.topCards.forEach((key, i) => {
       const url = getCardIconUrl(key);
       const data = tiles.get(url);
+      // The most-used card wears a gold halo; the rest sit on plain shadow.
+      if (i === 0) glowRect(doc, x, top, w, h, 1.2, INK.gold, { spread: 3, opacity: 0.3 });
+      softShadow(doc, x, top, w, h, 1.2, { spread: 2, opacity: 0.6 });
       setFill(doc, INK.tile);
-      doc.roundedRect(x, 124, w, h, 1.2, 1.2, 'F');
-      if (data) doc.addImage(data, 'JPEG', x, 124, w, h, url, 'FAST');
+      doc.roundedRect(x, top, w, h, 1.2, 1.2, 'F');
+      if (data) doc.addImage(data, 'JPEG', x, top, w, h, url, 'FAST');
+      setStroke(doc, i === 0 ? INK.gold : INK.panelEdge);
+      doc.setLineWidth(0.4);
+      alpha(doc, i === 0 ? 0.8 : 0.5, () => doc.roundedRect(x, top, w, h, 1.2, 1.2, 'D'));
       x += w + gap;
-    }
+    });
   }
 
   if (contents.length > 0) {
@@ -527,18 +772,29 @@ function drawDeckRow(
   const { filled, avg, cycle, link } = deckMeta(deck);
   const h = DECK_ROW_H;
 
+  softShadow(doc, CONTENT_X, y, CONTENT_W, h, 2, { spread: 2.6, opacity: 0.65 });
   setFill(doc, INK.panel);
   setStroke(doc, INK.panelEdge);
   doc.setLineWidth(0.4);
   doc.roundedRect(CONTENT_X, y, CONTENT_W, h, 2, 2, 'FD');
+  setStroke(doc, INK.bracket);
+  doc.setLineWidth(0.3);
+  alpha(doc, 0.34, () => doc.line(CONTENT_X + 14, y + 0.4, CONTENT_X + CONTENT_W - 14, y + 0.4));
 
   // Index chip
   const infoX = CONTENT_X + 5;
+  glowCircle(doc, infoX + 3, y + 7.5, 3, INK.accent, { spread: 2.6, opacity: 0.34 });
   setFill(doc, INK.accent);
   doc.circle(infoX + 3, y + 7.5, 3, 'F');
   label(doc, String(index), infoX + 3, y + 9.4, { size: 7, bold: true, color: INK.page, align: 'center' });
 
-  label(doc, deck.name, infoX + 8.5, y + 9.6, { size: 10, bold: true, color: INK.text, maxWidth: 47 });
+  label(doc, deck.name, infoX + 8.5, y + 9.6, {
+    size: 10,
+    bold: true,
+    color: INK.text,
+    maxWidth: 47,
+    font: 'display',
+  });
 
   let px = infoX;
   px += pill(doc, `AVG ${avg ?? '–'}`, px, y + 14, 5.4, { border: INK.panelEdge, color: INK.muted }) + 2;
@@ -563,10 +819,11 @@ function drawDeckRow(
   const cardH = cardW / CARD_RATIO;
   const gap = 1.4;
   const cardY = y + (h - cardH) / 2;
+  const stripW = DECK_SIZE * cardW + (DECK_SIZE - 1) * gap;
+  softShadow(doc, stripX, cardY, stripW, cardH, 1.1, { spread: 1.5, opacity: 0.5, offsetY: 0.6 });
   for (let i = 0; i < DECK_SIZE; i++) {
     cardTile(doc, deck, i, stripX + i * (cardW + gap), cardY, cardW, cardH, tiles);
   }
-  const stripW = DECK_SIZE * cardW + (DECK_SIZE - 1) * gap;
   // The whole strip is a shortcut to the same deep link as the button.
   if (link) doc.link(stripX, cardY, stripW, cardH, { url: link });
 
@@ -618,14 +875,17 @@ function drawPairSide(
   const nameX = side === 'blue' ? x : x + crownW + 2;
   const nameW = w - crownW - 2;
 
+  const dotX = side === 'blue' ? x + 1.4 : x + w - 1.4;
+  glowCircle(doc, dotX, nameY - 1.2, 1.2, tone, { spread: 2, opacity: 0.42 });
   setFill(doc, tone);
-  doc.circle(side === 'blue' ? x + 1.4 : x + w - 1.4, nameY - 1.2, 1.2, 'F');
+  doc.circle(dotX, nameY - 1.2, 1.2, 'F');
   label(doc, deck.name, side === 'blue' ? nameX + 4 : nameX, nameY, {
     size: 8.6,
     bold: true,
     color: INK.text,
-    align: side === 'blue' ? 'left' : 'left',
+    align: 'left',
     maxWidth: nameW - 24,
+    font: 'display',
   });
   label(doc, `AVG ${avg ?? '–'} · ${filled}/${DECK_SIZE}`, side === 'blue' ? nameX + nameW - 2 : x + w - 5, nameY, {
     size: 6.4,
@@ -634,17 +894,20 @@ function drawPairSide(
     align: 'right',
   });
 
+  if (crowns > 0) glowCircle(doc, crownX + 2.3, nameY - 2.3, 2.4, INK.gold, { spread: 2.4, opacity: 0.3 });
   crown(doc, crownX, nameY - 4.6, 4.6, crowns > 0 ? INK.gold : INK.panelEdge);
   label(doc, String(crowns), crownX + 6, nameY, {
     size: 7,
     bold: true,
     color: crowns > 0 ? INK.gold : INK.muted,
+    font: 'display',
   });
 
   const cardsY = y + 8;
   const gap = 1.2;
   const cardW = (w - (DECK_SIZE - 1) * gap) / DECK_SIZE;
   const cardH = cardW / CARD_RATIO;
+  softShadow(doc, x, cardsY, w, cardH, 1.1, { spread: 1.5, opacity: 0.5, offsetY: 0.6 });
   for (let i = 0; i < DECK_SIZE; i++) {
     cardTile(doc, deck, i, x + i * (cardW + gap), cardsY, cardW, cardH, tiles);
   }
@@ -658,10 +921,14 @@ function drawPairSide(
 
 function drawPairRow(doc: JsPdfType, pair: PairEntry, index: number, y: number, tiles: Map<string, string | null>) {
   const h = PAIR_ROW_H;
+  softShadow(doc, CONTENT_X, y, CONTENT_W, h, 2, { spread: 2.6, opacity: 0.65 });
   setFill(doc, INK.panel);
   setStroke(doc, INK.panelEdge);
   doc.setLineWidth(0.4);
   doc.roundedRect(CONTENT_X, y, CONTENT_W, h, 2, 2, 'FD');
+  setStroke(doc, INK.bracket);
+  doc.setLineWidth(0.3);
+  alpha(doc, 0.34, () => doc.line(CONTENT_X + 14, y + 0.4, CONTENT_X + CONTENT_W - 14, y + 0.4));
 
   const gutter = 26;
   const sideW = (CONTENT_W - 10 - gutter) / 2;
@@ -679,11 +946,20 @@ function drawPairRow(doc: JsPdfType, pair: PairEntry, index: number, y: number, 
   doc.setLineWidth(0.4);
   doc.line(cx, y + 4, cx, y + h / 2 - 6);
   doc.line(cx, y + h / 2 + 6, cx, y + h - 4);
+  glowCircle(doc, cx, y + h / 2, 5.6, INK.accent, { spread: 3.2, opacity: 0.28 });
   setFill(doc, INK.page);
   setStroke(doc, INK.frame);
   doc.setLineWidth(0.5);
   doc.circle(cx, y + h / 2, 5.6, 'FD');
-  label(doc, 'VS', cx, y + h / 2 + 1.6, { size: 8, bold: true, color: INK.accent, align: 'center', spacing: 0.4 });
+  label(doc, 'VS', cx, y + h / 2 + 1.6, {
+    size: 8,
+    bold: true,
+    color: INK.accent,
+    align: 'center',
+    spacing: 0.4,
+    font: 'display',
+    glow: INK.accent,
+  });
   label(doc, `DUEL ${index}`, cx, y + h / 2 + 11, {
     size: 5.4,
     bold: true,
@@ -721,6 +997,7 @@ export async function renderDeckReport(req: ExportRequest, opts: RenderOptions =
 
   const urls = collectIconUrls(pages, stats.topCards);
   const tiles = new Map<string, string | null>();
+  const fontData = await loadDisplayFont();
   let loaded = 0;
   for (const url of urls) {
     tiles.set(url, await buildTile(url));
@@ -729,14 +1006,16 @@ export async function renderDeckReport(req: ExportRequest, opts: RenderOptions =
   }
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  GStateCtor = GState;
+  registerDisplayFont(doc, fontData);
   const totalPages = pages.length + 1;
 
-  pageBackground(doc, GState, req.handle);
+  pageBackground(doc, req.handle);
   drawCover(doc, req, stats, contents, tiles, totalPages);
 
   pages.forEach((page, i) => {
     doc.addPage();
-    pageBackground(doc, GState, req.handle);
+    pageBackground(doc, req.handle);
     const total = page.sectionTotal;
     const unit = page.kind === 'decks' ? 'deck' : 'duel';
     const sub =

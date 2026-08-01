@@ -7,7 +7,9 @@ import {
   buildHomeSections,
   buildSoloSections,
   buildVersusSections,
+  countEntries,
   exportFileName,
+  limitSections,
   paginate,
   summarize,
   type ExportRequest,
@@ -37,6 +39,9 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
 
   const [handle, setHandle] = useState(`@${authUser ?? 'royal'}`);
   const [includeSaved, setIncludeSaved] = useState(true);
+  const [exportAll, setExportAll] = useState(true);
+  /** Kept as text so the field can be cleared mid-typing without snapping back. */
+  const [limitText, setLimitText] = useState('');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +53,26 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
 
   const isVersus = source === 'duels' && mode === 'versus';
 
-  const sections = useMemo<ExportSection[]>(() => {
+  const allSections = useMemo<ExportSection[]>(() => {
     const saved = includeSaved ? savedForMode : [];
     if (source === 'home') return buildHomeSections(sets.home.decks);
     if (mode === 'solo') return buildSoloSections(sets.solo, deckSlotCount.solo, saved);
     return buildVersusSections(sets.blue, sets.red, deckSlotCount.blue, deckSlotCount.red, saved);
   }, [source, mode, sets, deckSlotCount, savedForMode, includeSaved]);
+
+  const available = countEntries(allSections);
+  const unit = isVersus ? 'duels' : 'decks';
+  // An empty or out-of-range box falls back to everything, so the preview and
+  // the download always agree with what the number actually means.
+  const parsedLimit = Number.parseInt(limitText, 10);
+  const limit = Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(parsedLimit, 1), Math.max(available, 1))
+    : available;
+
+  const sections = useMemo(
+    () => (exportAll ? allSections : limitSections(allSections, limit)),
+    [allSections, exportAll, limit],
+  );
 
   const stats = useMemo(() => summarize(sections), [sections]);
   const pageCount = useMemo(() => paginate(sections).length + 1, [sections]);
@@ -107,36 +126,19 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
             : 'A printable PDF of your decks, each one linked straight into Clash Royale.'}
         </p>
 
-        {empty ? (
-          <p className={styles.emptyNote}>
-            Nothing to export yet — place some cards first.
-          </p>
+        {available === 0 ? (
+          <p className={styles.emptyNote}>Nothing to export yet — place some cards first.</p>
         ) : (
-          <>
-            <ul className={styles.sectionList}>
-              {sections.map((section, i) => (
-                <li key={`${section.heading}-${i}`} className={styles.sectionRow}>
-                  <span className={styles.sectionName}>{section.heading}</span>
-                  <span className={styles.sectionCount}>
-                    {sectionCount(section)} {section.kind === 'pairs' ? 'duels' : 'decks'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-
-            <div className={styles.statRow}>
-              <span>
-                <strong>{stats.decks}</strong> decks
-              </span>
-              <span>
-                <strong>{stats.cards}</strong> cards
-              </span>
-              <span>
-                <strong>{pageCount}</strong> pages
-              </span>
-              <span className={styles.statMuted}>A4 landscape</span>
-            </div>
-          </>
+          <ul className={styles.sectionList}>
+            {sections.map((section, i) => (
+              <li key={`${section.heading}-${i}`} className={styles.sectionRow}>
+                <span className={styles.sectionName}>{section.heading}</span>
+                <span className={styles.sectionCount}>
+                  {sectionCount(section)} {section.kind === 'pairs' ? 'duels' : 'decks'}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
 
         {source === 'duels' && savedForMode.length > 0 && (
@@ -151,6 +153,63 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
               Include saved groups <em>({savedForMode.length})</em>
             </span>
           </label>
+        )}
+
+        {available > 0 && (
+          <div className={styles.field}>
+            <span className={styles.fieldLabel}>
+              How many {unit} — {available} available
+            </span>
+            <div className={styles.limitRow}>
+              <button
+                type="button"
+                className={styles.limitChip}
+                data-active={exportAll}
+                disabled={busy}
+                onClick={() => setExportAll(true)}
+              >
+                All {available}
+              </button>
+              <button
+                type="button"
+                className={styles.limitChip}
+                data-active={!exportAll}
+                disabled={busy}
+                onClick={() => setExportAll(false)}
+              >
+                First
+              </button>
+              <input
+                className={styles.limitInput}
+                type="number"
+                min={1}
+                max={available}
+                inputMode="numeric"
+                value={exportAll ? '' : limitText}
+                placeholder={String(available)}
+                disabled={busy || exportAll}
+                onChange={(e) => setLimitText(e.target.value)}
+                // Typing a number is the intent — switch off "All" for them.
+                onFocus={() => setExportAll(false)}
+              />
+              <span className={styles.limitSuffix}>of {available}</span>
+            </div>
+          </div>
+        )}
+
+        {!empty && (
+          <div className={styles.statRow}>
+            <span>
+              <strong>{stats.decks}</strong> decks
+            </span>
+            <span>
+              <strong>{stats.cards}</strong> cards
+            </span>
+            <span>
+              <strong>{pageCount}</strong> pages
+            </span>
+            <span className={styles.statMuted}>A4 landscape</span>
+          </div>
         )}
 
         <label className={styles.field}>
