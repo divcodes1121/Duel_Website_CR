@@ -46,8 +46,12 @@ const CARD_RATIO = 302 / 363;
 /** Downscaled tile width in pixels — keeps a 40-deck report near 1 MB. */
 const TILE_PX = 150;
 
-const DECK_ROW_H = 32;
-const DECK_ROW_GAP = 5;
+/**
+ * Three rows fill the sheet between the banner and the footer: 40 + 3*44 + 2*9
+ * lands at 190, clear of the footer rule at 198.
+ */
+const DECK_ROW_H = 44;
+const DECK_ROW_GAP = 9;
 
 /* ------------------------------------------------------------- card images */
 
@@ -754,66 +758,69 @@ function drawDeckRow(
   const { filled, avg, cycle, link } = deckMeta(deck);
   const h = DECK_ROW_H;
 
-  softShadow(doc, CONTENT_X, y, CONTENT_W, h, 2, { spread: 2.6, opacity: 0.65 });
+  softShadow(doc, CONTENT_X, y, CONTENT_W, h, 2.4, { spread: 3, opacity: 0.65 });
   setFill(doc, INK.panel);
   setStroke(doc, INK.panelEdge);
   doc.setLineWidth(0.4);
-  doc.roundedRect(CONTENT_X, y, CONTENT_W, h, 2, 2, 'FD');
+  doc.roundedRect(CONTENT_X, y, CONTENT_W, h, 2.4, 2.4, 'FD');
   setStroke(doc, INK.bracket);
   doc.setLineWidth(0.3);
   alpha(doc, 0.34, () => doc.line(CONTENT_X + 14, y + 0.4, CONTENT_X + CONTENT_W - 14, y + 0.4));
 
-  // Index chip
-  const infoX = CONTENT_X + 5;
-  glowCircle(doc, infoX + 3, y + 7.5, 3, INK.accent, { spread: 2.6, opacity: 0.34 });
+  // Identity column, centred against the taller row.
+  const infoX = CONTENT_X + 6;
+  glowCircle(doc, infoX + 3.4, y + 13.6, 3.4, INK.accent, { spread: 2.8, opacity: 0.34 });
   setFill(doc, INK.accent);
-  doc.circle(infoX + 3, y + 7.5, 3, 'F');
-  label(doc, String(index), infoX + 3, y + 9.4, { size: 7, bold: true, color: INK.page, align: 'center' });
+  doc.circle(infoX + 3.4, y + 13.6, 3.4, 'F');
+  label(doc, String(index), infoX + 3.4, y + 15.8, { size: 7.6, bold: true, color: INK.page, align: 'center' });
 
-  label(doc, deck.name, infoX + 8.5, y + 9.6, {
-    size: 10,
+  label(doc, deck.name, infoX + 9.6, y + 16, {
+    size: 11,
     bold: true,
     color: INK.text,
-    maxWidth: 47,
+    maxWidth: 44,
     font: 'display',
   });
 
   let px = infoX;
-  px += pill(doc, `AVG ${avg ?? '–'}`, px, y + 14, 5.4, { border: INK.panelEdge, color: INK.muted }) + 2;
-  px += pill(doc, `CYCLE ${cycle ?? '–'}`, px, y + 14, 5.4, { border: INK.panelEdge, color: INK.muted }) + 2;
-  pill(doc, `${filled}/${DECK_SIZE}`, px, y + 14, 5.4, {
+  px += pill(doc, `AVG ${avg ?? '–'}`, px, y + 21, 5.8, { border: INK.panelEdge, color: INK.muted }) + 2;
+  pill(doc, `CYCLE ${cycle ?? '–'}`, px, y + 21, 5.8, { border: INK.panelEdge, color: INK.muted });
+  pill(doc, `${filled}/${DECK_SIZE} CARDS`, infoX, y + 29, 5.8, {
     border: filled === DECK_SIZE ? INK.accent : INK.panelEdge,
     color: filled === DECK_SIZE ? INK.accent : INK.muted,
   });
 
   if (typeof deck.crowns === 'number' && deck.crowns > 0) {
-    crown(doc, infoX, y + 21.5, 4.6, INK.gold);
-    label(doc, `${deck.crowns} ${deck.crowns === 1 ? 'crown' : 'crowns'}`, infoX + 6, y + 25, {
-      size: 6.4,
+    // Clear of the pill above it, which ends at y + 34.8.
+    crown(doc, infoX, y + 36, 4.8, INK.gold);
+    label(doc, `${deck.crowns} ${deck.crowns === 1 ? 'crown' : 'crowns'}`, infoX + 6.4, y + 39.6, {
+      size: 6.6,
       bold: true,
       color: INK.gold,
     });
   }
 
-  // Card strip
-  const stripX = CONTENT_X + 60;
-  const cardW = 17.6;
+  // Card strip — sized to the space the taller row frees up.
+  const stripX = CONTENT_X + 62;
+  const stripW = CONTENT_X + CONTENT_W - 6 - stripX;
+  const gap = 1.6;
+  const cardW = (stripW - (DECK_SIZE - 1) * gap) / DECK_SIZE;
   const cardH = cardW / CARD_RATIO;
-  const gap = 1.4;
-  const cardY = y + (h - cardH) / 2;
-  const stripW = DECK_SIZE * cardW + (DECK_SIZE - 1) * gap;
+  const cardY = y + 4.4;
   softShadow(doc, stripX, cardY, stripW, cardH, 1.1, { spread: 1.5, opacity: 0.5, offsetY: 0.6 });
   for (let i = 0; i < DECK_SIZE; i++) {
     cardTile(doc, deck, i, stripX + i * (cardW + gap), cardY, cardW, cardH, tiles);
   }
-  // The whole strip is a shortcut to the same deep link as the button.
+  // The whole strip is a shortcut to the same deep link as the buttons.
   if (link) doc.link(stripX, cardY, stripW, cardH, { url: link });
 
-  // Actions
-  const btnX = stripX + stripW + 4;
-  const btnW = CONTENT_X + CONTENT_W - 5 - btnX;
-  linkButton(doc, 'OPEN IN GAME', link, btnX, y + 6, btnW, 8, 'primary');
-  linkButton(doc, 'COPY LINK', link, btnX, y + 17, btnW, 8, 'ghost');
+  // Actions sit under the strip, side by side, spanning its full width.
+  const btnY = cardY + cardH + 3.2;
+  const btnH = Math.min(7.6, y + h - 3.4 - btnY);
+  const btnGap = 4;
+  const btnW = (stripW - btnGap) / 2;
+  linkButton(doc, 'OPEN IN GAME', link, stripX, btnY, btnW, btnH, 'primary');
+  linkButton(doc, 'COPY LINK', link, stripX + btnW + btnGap, btnY, btnW, btnH, 'ghost');
 }
 
 function drawDecksPage(doc: JsPdfType, page: ContentPage, tiles: Map<string, string | null>) {

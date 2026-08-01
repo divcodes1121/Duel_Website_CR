@@ -67,8 +67,12 @@ export function hasCards(deck: Deck | null | undefined): boolean {
 
 /* -------------------------------------------------------------- pagination */
 
-/** Every row is a full-width single deck, so four fit a landscape page. */
-export const DECKS_PER_PAGE = 4;
+/**
+ * Three deck rows per sheet — a set is three decks, so a set gets a page of its
+ * own and the rows are tall enough to fill it rather than leaving a dead band
+ * at the bottom.
+ */
+export const DECKS_PER_PAGE = 3;
 
 export interface ContentPage {
   /** What the section counts in — the banner says "5 duels" vs "5 decks". */

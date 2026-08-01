@@ -134,21 +134,21 @@ describe('paginate', () => {
     entries: Array.from({ length: n }, (_, i) => ({ blue: filledDeck(`B${i}`, i), red: filledDeck(`R${i}`, i + 40) })),
   });
 
-  it('fits four decks per page', () => {
+  it('fits three decks per page, so a three-deck set owns a sheet', () => {
     const pages = paginate([deckSection('Solo', 9)]);
-    expect(DECKS_PER_PAGE).toBe(4);
+    expect(DECKS_PER_PAGE).toBe(3);
     expect(pages).toHaveLength(3);
-    expect(pages.map((p) => p.deckEntries.length)).toEqual([4, 4, 1]);
-    expect(pages.map((p) => p.startIndex)).toEqual([1, 5, 9]);
+    expect(pages.map((p) => p.deckEntries.length)).toEqual([3, 3, 3]);
+    expect(pages.map((p) => p.startIndex)).toEqual([1, 4, 7]);
   });
 
   it('lays a duel set out as stacked deck rows, blue then red', () => {
-    // A set of 3 duels prints as 6 rows — four on the first sheet, two on the next.
+    // A set of 3 duels prints as 6 rows, three to a sheet.
     const pages = paginate([pairSection('Blue vs Red', 3)]);
     expect(pages).toHaveLength(2);
-    expect(pages.map((p) => p.deckEntries.length)).toEqual([4, 2]);
-    expect(pages[0].deckEntries.map((e) => e.deck.name)).toEqual(['B0', 'R0', 'B1', 'R1']);
-    expect(pages[1].deckEntries.map((e) => e.deck.name)).toEqual(['B2', 'R2']);
+    expect(pages.map((p) => p.deckEntries.length)).toEqual([3, 3]);
+    expect(pages[0].deckEntries.map((e) => e.deck.name)).toEqual(['B0', 'R0', 'B1']);
+    expect(pages[1].deckEntries.map((e) => e.deck.name)).toEqual(['R1', 'B2', 'R2']);
   });
 
   it('quotes the duel count in the banner even though rows are decks', () => {
@@ -177,7 +177,7 @@ describe('paginate', () => {
     // The page banner quotes the section size, not how many rows this sheet holds.
     const pages = paginate([deckSection('Solo', 5)]);
     expect(pages.map((p) => p.sectionTotal)).toEqual([5, 5]);
-    expect(pages.map((p) => p.deckEntries.length)).toEqual([4, 1]);
+    expect(pages.map((p) => p.deckEntries.length)).toEqual([3, 2]);
   });
 
   it('returns no pages for no sections', () => {
@@ -186,7 +186,7 @@ describe('paginate', () => {
 
   describe('buildContents', () => {
     it('points each section at its first page, counting the cover as page 1', () => {
-      // The duel set contributes 8 deck rows, so it spans two sheets.
+      // Solo's 5 decks span two sheets, so the duel set opens on page 4.
       const sections = [deckSection('Solo', 5), pairSection('Duels', 4)];
       expect(buildContents(sections)).toEqual([
         { heading: 'Solo', page: 2, count: 5 },
@@ -286,7 +286,7 @@ describe('countEntries / limitSections', () => {
   it('shrinks the page count as the limit tightens', () => {
     const all = [decks('A', 9)];
     expect(paginate(all)).toHaveLength(3);
-    expect(paginate(limitSections(all, 4))).toHaveLength(1);
+    expect(paginate(limitSections(all, 3))).toHaveLength(1);
   });
 });
 

@@ -61,10 +61,12 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
     return buildVersusSections(sets.blue, sets.red, deckSlotCount.blue, deckSlotCount.red, saved);
   }, [source, mode, sets, deckSlotCount, savedForMode, includeSaved]);
 
-  // Versus is picked in whole duel sets (one saved matchup = 1, however many
-  // duels it holds); everywhere else the unit is a single deck.
-  const available = isVersus ? allSections.length : countEntries(allSections);
-  const unit = isVersus ? 'duel sets' : 'decks';
+  // Royal Duels is picked in whole sets — one live set or saved group counts as
+  // 1 however many decks it holds, and a set is never split. Deck's Home has no
+  // sets to speak of, so there the unit stays a single deck.
+  const bySet = source === 'duels';
+  const available = bySet ? allSections.length : countEntries(allSections);
+  const unit = bySet ? (isVersus ? 'duel sets' : 'deck sets') : 'decks';
   // An empty or out-of-range box falls back to everything, so the preview and
   // the download always agree with what the number actually means.
   const parsedLimit = Number.parseInt(limitText, 10);
@@ -74,8 +76,8 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
 
   const sections = useMemo(() => {
     if (exportAll) return allSections;
-    return isVersus ? limitSetCount(allSections, limit) : limitSections(allSections, limit);
-  }, [allSections, exportAll, isVersus, limit]);
+    return bySet ? limitSetCount(allSections, limit) : limitSections(allSections, limit);
+  }, [allSections, bySet, exportAll, limit]);
 
   const empty = sections.length === 0;
 
@@ -124,7 +126,7 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
         <p className={libStyles.dialogHint}>
           {isVersus
             ? 'A printable PDF of your Blue vs Red duel sets — every deck on its own row, linked straight into Clash Royale.'
-            : 'A printable PDF of your decks, each one linked straight into Clash Royale.'}
+            : 'A printable PDF of your decks — one set per page, each deck linked straight into Clash Royale.'}
         </p>
 
         {available === 0 ? (
