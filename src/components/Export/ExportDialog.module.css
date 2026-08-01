@@ -39,23 +39,6 @@
   flex: none;
 }
 
-.statRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.15rem 0.9rem;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.statRow strong {
-  color: var(--accent);
-  font-size: 0.85rem;
-}
-
-.statMuted {
-  opacity: 0.7;
-}
-
 .toggle {
   display: flex;
   align-items: center;

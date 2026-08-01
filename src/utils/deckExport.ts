@@ -67,15 +67,11 @@ export function hasCards(deck: Deck | null | undefined): boolean {
 
 /* -------------------------------------------------------------- pagination */
 
-/** Single-deck rows are full width, so four fit a landscape page. */
+/** Every row is a full-width single deck, so four fit a landscape page. */
 export const DECKS_PER_PAGE = 4;
-/**
- * Versus rows print blue-vs-red facing each other and are much taller —
- * three pairs per page, as the duel report layout expects.
- */
-export const PAIRS_PER_PAGE = 3;
 
 export interface ContentPage {
+  /** What the section counts in — the banner says "5 duels" vs "5 decks". */
   kind: 'decks' | 'pairs';
   heading: string;
   /** 1-based page number within this section, and the section's page count. */
@@ -83,10 +79,24 @@ export interface ContentPage {
   sectionPages: number;
   /** How many entries the whole section holds — the banner quotes this, not the page's share. */
   sectionTotal: number;
-  /** 1-based index of this page's first entry within its section. */
+  /** 1-based index of this page's first deck row within its section. */
   startIndex: number;
   deckEntries: DeckEntry[];
-  pairEntries: PairEntry[];
+}
+
+/**
+ * The deck rows a section prints. Versus sets are laid out exactly like Solo —
+ * one deck per row, blue then red for each duel — rather than facing each other,
+ * so a three-duel set prints as six rows.
+ */
+export function sectionRows(section: ExportSection): DeckEntry[] {
+  if (section.kind === 'decks') return section.entries;
+  const rows: DeckEntry[] = [];
+  for (const pair of section.entries) {
+    if (pair.blue) rows.push({ deck: pair.blue, note: pair.note });
+    if (pair.red) rows.push({ deck: pair.red, note: pair.note });
+  }
+  return rows;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -103,8 +113,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 export function paginate(sections: ExportSection[]): ContentPage[] {
   const pages: ContentPage[] = [];
   for (const section of sections) {
-    const perPage = section.kind === 'decks' ? DECKS_PER_PAGE : PAIRS_PER_PAGE;
-    const groups = chunk(section.entries as unknown[], perPage);
+    const groups = chunk(sectionRows(section), DECKS_PER_PAGE);
     groups.forEach((group, i) => {
       pages.push({
         kind: section.kind,
@@ -112,9 +121,8 @@ export function paginate(sections: ExportSection[]): ContentPage[] {
         pageInSection: i + 1,
         sectionPages: groups.length,
         sectionTotal: section.entries.length,
-        startIndex: i * perPage + 1,
-        deckEntries: section.kind === 'decks' ? (group as DeckEntry[]) : [],
-        pairEntries: section.kind === 'pairs' ? (group as PairEntry[]) : [],
+        startIndex: i * DECKS_PER_PAGE + 1,
+        deckEntries: group,
       });
     });
   }
@@ -124,6 +132,21 @@ export function paginate(sections: ExportSection[]): ContentPage[] {
 /** Total rows across every section — decks in Solo/Home, duel pairs in Versus. */
 export function countEntries(sections: ExportSection[]): number {
   return sections.reduce((n, s) => n + s.entries.length, 0);
+}
+
+/** Total printed deck rows — what the page count is actually driven by. */
+export function countDecks(sections: ExportSection[]): number {
+  return sections.reduce((n, s) => n + sectionRows(s).length, 0);
+}
+
+/**
+ * Versus counts in whole duel sets: a set of three duels is one unit, not three
+ * rows and not six decks. Keeps the first `limit` sets whole — a set is never
+ * cut in half, which is the point of picking in sets.
+ */
+export function limitSetCount(sections: ExportSection[], limit: number | null): ExportSection[] {
+  if (limit === null) return sections;
+  return sections.slice(0, Math.max(0, Math.floor(limit)));
 }
 
 /**
@@ -167,9 +190,9 @@ export function buildContents(sections: ExportSection[]): ContentsRow[] {
   let page = 2; // page 1 is the cover
   for (const section of sections) {
     if (section.entries.length === 0) continue;
-    const perPage = section.kind === 'decks' ? DECKS_PER_PAGE : PAIRS_PER_PAGE;
-    rows.push({ heading: section.heading, page, count: section.entries.length });
-    page += Math.ceil(section.entries.length / perPage);
+    const decks = sectionRows(section).length;
+    rows.push({ heading: section.heading, page, count: decks });
+    page += Math.ceil(decks / DECKS_PER_PAGE);
   }
   return rows;
 }
@@ -264,18 +287,7 @@ export interface ExportStats {
 }
 
 function everyDeck(sections: ExportSection[]): Deck[] {
-  const decks: Deck[] = [];
-  for (const section of sections) {
-    if (section.kind === 'decks') {
-      decks.push(...section.entries.map((e) => e.deck));
-    } else {
-      for (const pair of section.entries) {
-        if (pair.blue) decks.push(pair.blue);
-        if (pair.red) decks.push(pair.red);
-      }
-    }
-  }
-  return decks;
+  return sections.flatMap((section) => sectionRows(section).map((e) => e.deck));
 }
 
 export function summarize(sections: ExportSection[]): ExportStats {

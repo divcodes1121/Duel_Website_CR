@@ -8,14 +8,7 @@ import {
 import { getCycleCost, getElixirAverage, getSlotVisualVariant } from '../state/deckUtils';
 import { DECK_SIZE, type Deck } from '../types/deck';
 import { getClashRoyaleDeckLink } from './deckLink';
-import {
-  buildContents,
-  paginate,
-  summarize,
-  type ContentPage,
-  type ExportRequest,
-  type PairEntry,
-} from './deckExport';
+import { buildContents, paginate, summarize, type ContentPage, type ExportRequest } from './deckExport';
 
 /* ------------------------------------------------------------------ theme */
 
@@ -32,8 +25,6 @@ const INK = {
   muted: [124, 138, 165] as RGB,
   accent: [77, 163, 255] as RGB,
   gold: [245, 197, 66] as RGB,
-  blue: [86, 154, 255] as RGB,
-  red: [248, 113, 113] as RGB,
   shadow: [0, 0, 0] as RGB,
 } as const;
 
@@ -57,9 +48,6 @@ const TILE_PX = 150;
 
 const DECK_ROW_H = 32;
 const DECK_ROW_GAP = 5;
-/** Three duels per page, spread to fill the sheet rather than bunching up top. */
-const PAIR_ROW_H = 42;
-const PAIR_ROW_GAP = 13;
 
 /* ------------------------------------------------------------- card images */
 
@@ -130,13 +118,7 @@ function collectIconUrls(pages: ContentPage[], topCards: string[]): string[] {
       if (url) urls.add(url);
     }
   };
-  for (const page of pages) {
-    page.deckEntries.forEach((e) => addDeck(e.deck));
-    page.pairEntries.forEach((p) => {
-      addDeck(p.blue);
-      addDeck(p.red);
-    });
-  }
+  for (const page of pages) page.deckEntries.forEach((e) => addDeck(e.deck));
   topCards.forEach((key) => urls.add(getCardIconUrl(key)));
   return [...urls];
 }
@@ -840,141 +822,6 @@ function drawDecksPage(doc: JsPdfType, page: ContentPage, tiles: Map<string, str
   });
 }
 
-/* -------------------------------------------------------------- pair rows */
-
-function drawPairSide(
-  doc: JsPdfType,
-  deck: Deck | null,
-  side: 'blue' | 'red',
-  x: number,
-  y: number,
-  w: number,
-  tiles: Map<string, string | null>,
-) {
-  const tone = side === 'blue' ? INK.blue : INK.red;
-  const nameY = y + 5.4;
-
-  if (!deck) {
-    label(doc, side === 'blue' ? 'NO BLUE DECK' : 'NO RED DECK', x + w / 2, y + 18, {
-      size: 8,
-      bold: true,
-      color: INK.muted,
-      align: 'center',
-      spacing: 0.6,
-    });
-    return;
-  }
-
-  const { filled, avg, link } = deckMeta(deck);
-  const crowns = deck.crowns ?? 0;
-
-  // Crown badges hug the VS gutter so the two players' counts face each other,
-  // exactly like the saved-group previews in the app.
-  const crownW = 12;
-  const crownX = side === 'blue' ? x + w - crownW : x;
-  const nameX = side === 'blue' ? x : x + crownW + 2;
-  const nameW = w - crownW - 2;
-
-  const dotX = side === 'blue' ? x + 1.4 : x + w - 1.4;
-  glowCircle(doc, dotX, nameY - 1.2, 1.2, tone, { spread: 2, opacity: 0.42 });
-  setFill(doc, tone);
-  doc.circle(dotX, nameY - 1.2, 1.2, 'F');
-  label(doc, deck.name, side === 'blue' ? nameX + 4 : nameX, nameY, {
-    size: 8.6,
-    bold: true,
-    color: INK.text,
-    align: 'left',
-    maxWidth: nameW - 24,
-    font: 'display',
-  });
-  label(doc, `AVG ${avg ?? '–'} · ${filled}/${DECK_SIZE}`, side === 'blue' ? nameX + nameW - 2 : x + w - 5, nameY, {
-    size: 6.4,
-    bold: true,
-    color: INK.muted,
-    align: 'right',
-  });
-
-  if (crowns > 0) glowCircle(doc, crownX + 2.3, nameY - 2.3, 2.4, INK.gold, { spread: 2.4, opacity: 0.3 });
-  crown(doc, crownX, nameY - 4.6, 4.6, crowns > 0 ? INK.gold : INK.panelEdge);
-  label(doc, String(crowns), crownX + 6, nameY, {
-    size: 7,
-    bold: true,
-    color: crowns > 0 ? INK.gold : INK.muted,
-    font: 'display',
-  });
-
-  const cardsY = y + 8;
-  const gap = 1.2;
-  const cardW = (w - (DECK_SIZE - 1) * gap) / DECK_SIZE;
-  const cardH = cardW / CARD_RATIO;
-  softShadow(doc, x, cardsY, w, cardH, 1.1, { spread: 1.5, opacity: 0.5, offsetY: 0.6 });
-  for (let i = 0; i < DECK_SIZE; i++) {
-    cardTile(doc, deck, i, x + i * (cardW + gap), cardsY, cardW, cardH, tiles);
-  }
-  if (link) doc.link(x, cardsY, w, cardH, { url: link });
-
-  const btnY = cardsY + cardH + 2;
-  const btnW = (w - 3) / 2;
-  linkButton(doc, 'OPEN IN GAME', link, x, btnY, btnW, 6, 'primary');
-  linkButton(doc, 'COPY LINK', link, x + btnW + 3, btnY, btnW, 6, 'ghost');
-}
-
-function drawPairRow(doc: JsPdfType, pair: PairEntry, index: number, y: number, tiles: Map<string, string | null>) {
-  const h = PAIR_ROW_H;
-  softShadow(doc, CONTENT_X, y, CONTENT_W, h, 2, { spread: 2.6, opacity: 0.65 });
-  setFill(doc, INK.panel);
-  setStroke(doc, INK.panelEdge);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(CONTENT_X, y, CONTENT_W, h, 2, 2, 'FD');
-  setStroke(doc, INK.bracket);
-  doc.setLineWidth(0.3);
-  alpha(doc, 0.34, () => doc.line(CONTENT_X + 14, y + 0.4, CONTENT_X + CONTENT_W - 14, y + 0.4));
-
-  const gutter = 26;
-  const sideW = (CONTENT_W - 10 - gutter) / 2;
-  const blueX = CONTENT_X + 5;
-  const redX = blueX + sideW + gutter;
-
-  // A side's content is ~33mm tall; centre it so the row's padding is even.
-  const sideY = y + (h - 33) / 2;
-  drawPairSide(doc, pair.blue, 'blue', blueX, sideY, sideW, tiles);
-  drawPairSide(doc, pair.red, 'red', redX, sideY, sideW, tiles);
-
-  // VS divider
-  const cx = PAGE_W / 2;
-  setStroke(doc, INK.panelEdge);
-  doc.setLineWidth(0.4);
-  doc.line(cx, y + 4, cx, y + h / 2 - 6);
-  doc.line(cx, y + h / 2 + 6, cx, y + h - 4);
-  glowCircle(doc, cx, y + h / 2, 5.6, INK.accent, { spread: 3.2, opacity: 0.28 });
-  setFill(doc, INK.page);
-  setStroke(doc, INK.frame);
-  doc.setLineWidth(0.5);
-  doc.circle(cx, y + h / 2, 5.6, 'FD');
-  label(doc, 'VS', cx, y + h / 2 + 1.6, {
-    size: 8,
-    bold: true,
-    color: INK.accent,
-    align: 'center',
-    spacing: 0.4,
-    font: 'display',
-    glow: INK.accent,
-  });
-  label(doc, `DUEL ${index}`, cx, y + h / 2 + 11, {
-    size: 5.4,
-    bold: true,
-    color: INK.muted,
-    align: 'center',
-    spacing: 0.4,
-  });
-}
-
-function drawPairsPage(doc: JsPdfType, page: ContentPage, tiles: Map<string, string | null>) {
-  page.pairEntries.forEach((pair, i) => {
-    drawPairRow(doc, pair, page.startIndex + i, BODY_TOP + i * (PAIR_ROW_H + PAIR_ROW_GAP), tiles);
-  });
-}
-
 /* -------------------------------------------------------------------- main */
 
 export interface RenderOptions {
@@ -1023,8 +870,7 @@ export async function renderDeckReport(req: ExportRequest, opts: RenderOptions =
         ? `${total} ${unit}${total === 1 ? '' : 's'} · part ${page.pageInSection} of ${page.sectionPages}`
         : `${total} ${unit}${total === 1 ? '' : 's'}`;
     banner(doc, page.heading, sub);
-    if (page.kind === 'decks') drawDecksPage(doc, page, tiles);
-    else drawPairsPage(doc, page, tiles);
+    drawDecksPage(doc, page, tiles);
     footer(doc, req.handle, i + 2, totalPages);
     opts.onProgress?.(0.85 + ((i + 1) / pages.length) * 0.15);
   });

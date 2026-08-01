@@ -10,8 +10,8 @@ import {
   countEntries,
   exportFileName,
   limitSections,
-  paginate,
-  summarize,
+  limitSetCount,
+  sectionRows,
   type ExportRequest,
   type ExportSection,
 } from '../../utils/deckExport';
@@ -26,8 +26,9 @@ interface ExportDialogProps {
   onClose: () => void;
 }
 
+/** Rows a section prints — a three-duel set is six decks. */
 function sectionCount(section: ExportSection): number {
-  return section.entries.length;
+  return sectionRows(section).length;
 }
 
 export function ExportDialog({ source, onClose }: ExportDialogProps) {
@@ -60,8 +61,10 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
     return buildVersusSections(sets.blue, sets.red, deckSlotCount.blue, deckSlotCount.red, saved);
   }, [source, mode, sets, deckSlotCount, savedForMode, includeSaved]);
 
-  const available = countEntries(allSections);
-  const unit = isVersus ? 'duels' : 'decks';
+  // Versus is picked in whole duel sets (one saved matchup = 1, however many
+  // duels it holds); everywhere else the unit is a single deck.
+  const available = isVersus ? allSections.length : countEntries(allSections);
+  const unit = isVersus ? 'duel sets' : 'decks';
   // An empty or out-of-range box falls back to everything, so the preview and
   // the download always agree with what the number actually means.
   const parsedLimit = Number.parseInt(limitText, 10);
@@ -69,13 +72,11 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
     ? Math.min(Math.max(parsedLimit, 1), Math.max(available, 1))
     : available;
 
-  const sections = useMemo(
-    () => (exportAll ? allSections : limitSections(allSections, limit)),
-    [allSections, exportAll, limit],
-  );
+  const sections = useMemo(() => {
+    if (exportAll) return allSections;
+    return isVersus ? limitSetCount(allSections, limit) : limitSections(allSections, limit);
+  }, [allSections, exportAll, isVersus, limit]);
 
-  const stats = useMemo(() => summarize(sections), [sections]);
-  const pageCount = useMemo(() => paginate(sections).length + 1, [sections]);
   const empty = sections.length === 0;
 
   const title = source === 'home' ? "Deck's Home" : 'Royal Duels';
@@ -122,7 +123,7 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
         <h2 className={libStyles.dialogTitle}>Export deck report</h2>
         <p className={libStyles.dialogHint}>
           {isVersus
-            ? 'A printable PDF of your Blue vs Red duels — three matchups per page, each deck linked straight into Clash Royale.'
+            ? 'A printable PDF of your Blue vs Red duel sets — every deck on its own row, linked straight into Clash Royale.'
             : 'A printable PDF of your decks, each one linked straight into Clash Royale.'}
         </p>
 
@@ -133,9 +134,7 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
             {sections.map((section, i) => (
               <li key={`${section.heading}-${i}`} className={styles.sectionRow}>
                 <span className={styles.sectionName}>{section.heading}</span>
-                <span className={styles.sectionCount}>
-                  {sectionCount(section)} {section.kind === 'pairs' ? 'duels' : 'decks'}
-                </span>
+                <span className={styles.sectionCount}>{sectionCount(section)} decks</span>
               </li>
             ))}
           </ul>
@@ -194,21 +193,6 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
               />
               <span className={styles.limitSuffix}>of {available}</span>
             </div>
-          </div>
-        )}
-
-        {!empty && (
-          <div className={styles.statRow}>
-            <span>
-              <strong>{stats.decks}</strong> decks
-            </span>
-            <span>
-              <strong>{stats.cards}</strong> cards
-            </span>
-            <span>
-              <strong>{pageCount}</strong> pages
-            </span>
-            <span className={styles.statMuted}>A4 landscape</span>
           </div>
         )}
 

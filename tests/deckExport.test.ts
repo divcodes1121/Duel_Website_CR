@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DECKS_PER_PAGE,
-  PAIRS_PER_PAGE,
+  countDecks,
+  limitSetCount,
   buildContents,
   buildHomeSections,
   buildSoloSections,
@@ -141,11 +142,29 @@ describe('paginate', () => {
     expect(pages.map((p) => p.startIndex)).toEqual([1, 5, 9]);
   });
 
-  it('fits three duel pairs per page', () => {
-    const pages = paginate([pairSection('Blue vs Red', 5)]);
-    expect(PAIRS_PER_PAGE).toBe(3);
+  it('lays a duel set out as stacked deck rows, blue then red', () => {
+    // A set of 3 duels prints as 6 rows — four on the first sheet, two on the next.
+    const pages = paginate([pairSection('Blue vs Red', 3)]);
     expect(pages).toHaveLength(2);
-    expect(pages.map((p) => p.pairEntries.length)).toEqual([3, 2]);
+    expect(pages.map((p) => p.deckEntries.length)).toEqual([4, 2]);
+    expect(pages[0].deckEntries.map((e) => e.deck.name)).toEqual(['B0', 'R0', 'B1', 'R1']);
+    expect(pages[1].deckEntries.map((e) => e.deck.name)).toEqual(['B2', 'R2']);
+  });
+
+  it('quotes the duel count in the banner even though rows are decks', () => {
+    const [page] = paginate([pairSection('Blue vs Red', 3)]);
+    expect(page.kind).toBe('pairs');
+    expect(page.sectionTotal).toBe(3);
+  });
+
+  it('skips the missing side of a half-filled duel', () => {
+    const section: ExportSection = {
+      kind: 'pairs',
+      heading: 'Blue vs Red',
+      entries: [{ blue: filledDeck('B0', 0), red: null }, { blue: null, red: filledDeck('R1', 8) }],
+    };
+    const [page] = paginate([section]);
+    expect(page.deckEntries.map((e) => e.deck.name)).toEqual(['B0', 'R1']);
   });
 
   it('never lets two sections share a page and numbers each section separately', () => {
@@ -167,10 +186,11 @@ describe('paginate', () => {
 
   describe('buildContents', () => {
     it('points each section at its first page, counting the cover as page 1', () => {
+      // The duel set contributes 8 deck rows, so it spans two sheets.
       const sections = [deckSection('Solo', 5), pairSection('Duels', 4)];
       expect(buildContents(sections)).toEqual([
         { heading: 'Solo', page: 2, count: 5 },
-        { heading: 'Duels', page: 4, count: 4 },
+        { heading: 'Duels', page: 4, count: 8 },
       ]);
     });
 
@@ -178,6 +198,30 @@ describe('paginate', () => {
       const rows = buildContents([deckSection('Ladder', 1), deckSection('Ladder', 1)]);
       expect(rows.map((r) => r.page)).toEqual([2, 3]);
     });
+  });
+});
+
+describe('limitSetCount', () => {
+  const pairSet = (heading: string, n: number): ExportSection => ({
+    kind: 'pairs',
+    heading,
+    entries: Array.from({ length: n }, (_, i) => ({ blue: filledDeck(`B${i}`, i), red: filledDeck(`R${i}`, i + 40) })),
+  });
+
+  it('keeps whole duel sets — three duels in a set count as one', () => {
+    const all = [pairSet('Set A', 3), pairSet('Set B', 3), pairSet('Set C', 3)];
+    const limited = limitSetCount(all, 2);
+    expect(limited.map((s) => s.heading)).toEqual(['Set A', 'Set B']);
+    // Two sets of three duels print as twelve deck rows, none of them cut short.
+    expect(limited.every((s) => s.entries.length === 3)).toBe(true);
+    expect(countDecks(limited)).toBe(12);
+  });
+
+  it('returns everything for null or an over-large count, nothing for zero', () => {
+    const all = [pairSet('A', 2), pairSet('B', 2)];
+    expect(limitSetCount(all, null)).toBe(all);
+    expect(limitSetCount(all, 9)).toHaveLength(2);
+    expect(limitSetCount(all, 0)).toEqual([]);
   });
 });
 
@@ -191,6 +235,11 @@ describe('countEntries / limitSections', () => {
     kind: 'pairs',
     heading,
     entries: Array.from({ length: n }, (_, i) => ({ blue: filledDeck(`B${i}`, i), red: null })),
+  });
+  const pairSection2 = (heading: string, n: number): ExportSection => ({
+    kind: 'pairs',
+    heading,
+    entries: Array.from({ length: n }, (_, i) => ({ blue: filledDeck(`B${i}`, i), red: filledDeck(`R${i}`, i + 40) })),
   });
 
   it('counts every row across sections', () => {
@@ -214,6 +263,12 @@ describe('countEntries / limitSections', () => {
     const limited = limitSections([pairs('Duels', 5)], 2);
     expect(limited[0].kind).toBe('pairs');
     expect(limited[0].entries).toHaveLength(2);
+  });
+
+  it('counts printed decks separately from rows — a duel is two decks', () => {
+    const both = [decks('A', 3), pairSection2('Duels', 2)];
+    expect(countEntries(both)).toBe(5);
+    expect(countDecks(both)).toBe(7);
   });
 
   it('returns everything for null, or a limit at or above the total', () => {
