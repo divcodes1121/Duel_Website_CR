@@ -9,6 +9,7 @@ import type {
   SavedDeckSet,
   SavedSingleDeck,
   SelectedSlot,
+  WildVariant,
 } from '../types/deck';
 import type { SortDirection, SortKey } from '../utils/sort';
 import type { CardTypeFilter } from '../utils/filter';
@@ -22,7 +23,7 @@ import {
   getUsedCardKeys,
   moveCard as moveCardUtil,
   renameDeck as renameDeckUtil,
-  toggleWildVariant as toggleWildVariantUtil,
+  setWildVariant as setWildVariantUtil,
   validateImportedDeck,
   type SlotRef,
   type UniquenessScope,
@@ -102,10 +103,10 @@ interface BuilderState extends PersistedSlice {
   importDeck: (owner: DeckOwner, deckIndex: number, keys: string[]) => string | null;
   renameDeck: (owner: DeckOwner, deckIndex: number, name: string) => void;
   /**
-   * Flip the Wild slot between Evolution and Hero art for a card that has both
-   * forms (Knight, Valkyrie, Musketeer, Wizard). No-op otherwise.
+   * Field a specific form in the Wild slot — for a card that has both
+   * (Knight, Valkyrie, Musketeer, Wizard). No-op otherwise.
    */
-  toggleWildVariant: (owner: DeckOwner, deckIndex: number) => void;
+  setWildVariant: (owner: DeckOwner, deckIndex: number, variant: WildVariant) => void;
   /** Crowns this deck won in the duel (clamped to 0..MAX_CROWNS). */
   setDeckCrowns: (owner: DeckOwner, deckIndex: number, crowns: number) => void;
   setFilterType: (filter: CardTypeFilter) => void;
@@ -399,9 +400,13 @@ export const useBuilderStore = create<BuilderState>()(
       renameDeck: (owner, deckIndex, name) =>
         set((state) => commitSet(state, owner, renameDeckUtil(state.sets[owner], deckIndex, name))),
 
-      toggleWildVariant: (owner, deckIndex) =>
+      setWildVariant: (owner, deckIndex, variant) =>
         set((state) =>
-          commitSet(state, owner, toggleWildVariantUtil(state.sets[owner], deckIndex, CARDS_BY_KEY)),
+          commitSet(
+            state,
+            owner,
+            setWildVariantUtil(state.sets[owner], deckIndex, variant, CARDS_BY_KEY),
+          ),
         ),
 
       setDeckCrowns: (owner, deckIndex, crowns) =>

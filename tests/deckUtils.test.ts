@@ -14,7 +14,7 @@ import {
   getSlotVisualVariant,
   canSwitchWildVariant,
   getWildVariant,
-  toggleWildVariant,
+  setWildVariant,
   countChampionsInDeck,
   canPlaceCardInSlot,
   canAssignCardToSlot,
@@ -283,24 +283,31 @@ describe('wild slot form switch', () => {
     expect(canSwitchWildVariant(set.decks[0], cardsByKey)).toBe(true);
   });
 
-  it('flips the Wild slot between Evolution and Hero art', () => {
+  it('fields whichever form is picked in the Wild slot', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = assignCard(set, 0, 2, 'knight');
     expect(getWildVariant(set.decks[0])).toBe('evolution');
 
-    set = toggleWildVariant(set, 0, cardsByKey);
+    set = setWildVariant(set, 0, 'hero', cardsByKey);
     expect(getWildVariant(set.decks[0])).toBe('hero');
     expect(getSlotVisualVariant(set.decks[0], 2, cardsByKey)).toBe('hero');
 
-    set = toggleWildVariant(set, 0, cardsByKey);
+    set = setWildVariant(set, 0, 'evolution', cardsByKey);
     expect(getSlotVisualVariant(set.decks[0], 2, cardsByKey)).toBe('evolution');
+  });
+
+  it('picking the form already in play changes nothing', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 2, 'knight');
+    const before = set;
+    expect(setWildVariant(set, 0, 'evolution', cardsByKey)).toBe(before);
   });
 
   it('leaves single-form Wild cards alone', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = assignCard(set, 0, 2, 'archers'); // Evolution only
     const before = set;
-    set = toggleWildVariant(set, 0, cardsByKey);
+    set = setWildVariant(set, 0, 'hero', cardsByKey);
     expect(set).toBe(before);
     expect(getSlotVisualVariant(set.decks[0], 2, cardsByKey)).toBe('evolution');
   });
@@ -308,7 +315,7 @@ describe('wild slot form switch', () => {
   it('drops the choice when the Wild slot card changes', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = assignCard(set, 0, 2, 'knight');
-    set = toggleWildVariant(set, 0, cardsByKey);
+    set = setWildVariant(set, 0, 'hero', cardsByKey);
     expect(getWildVariant(set.decks[0])).toBe('hero');
 
     // Replacing the card resets the deck to the default form...
@@ -317,7 +324,7 @@ describe('wild slot form switch', () => {
 
     // ...and so does dragging a switched card out of the Wild slot.
     set = assignCard(set, 0, 2, 'knight');
-    set = toggleWildVariant(set, 0, cardsByKey);
+    set = setWildVariant(set, 0, 'hero', cardsByKey);
     set = moveCard(set, { deckIndex: 0, slotIndex: 2 }, { deckIndex: 0, slotIndex: 5 }, cardsByKey);
     expect(set.decks[0].wildVariant).toBeUndefined();
   });
@@ -326,7 +333,7 @@ describe('wild slot form switch', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = assignCard(set, 0, 2, 'knight');
     set = assignCard(set, 1, 2, 'musketeer');
-    set = toggleWildVariant(set, 1, cardsByKey);
+    set = setWildVariant(set, 1, 'hero', cardsByKey);
     expect(getSlotVisualVariant(set.decks[0], 2, cardsByKey)).toBe('evolution');
     expect(getSlotVisualVariant(set.decks[1], 2, cardsByKey)).toBe('hero');
   });

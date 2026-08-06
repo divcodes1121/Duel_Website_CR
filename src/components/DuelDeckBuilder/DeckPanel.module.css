@@ -366,70 +366,50 @@
   opacity: 1;
 }
 
-/* Wild-slot form switch — only appears for cards that have BOTH an Evolution
-   and a Hero form (Knight, Valkyrie, Musketeer, Wizard). Sits opposite the
-   remove button and is tinted with the form it switches TO, like in-game. */
-.slotVariantSwitch {
+/* Wild-slot form gems — shown only for cards that have BOTH an Evolution and a
+   Hero form (Knight, Valkyrie, Musketeer, Wizard), mirroring the in-game card
+   frame: the fielded form is lit, the other dimmed. Purely an indicator; the
+   actual switching happens in the menu that drops under the slot on click. */
+.slotFormGems {
   position: absolute;
-  top: 4px;
+  top: 3px;
   left: 4px;
   display: flex;
-  align-items: center;
-  gap: 0.12rem;
-  padding: 0.1rem 0.28rem;
-  border-radius: 999px;
-  font-size: 0.6rem;
+  gap: 0.1rem;
   line-height: 1;
-  font-weight: 800;
-  color: #fff;
-  background: rgba(10, 8, 24, 0.72);
-  backdrop-filter: blur(4px);
-  border: 1px solid transparent;
-  cursor: pointer;
-  opacity: 0.85;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.slotFormGem {
+  font-size: 0.6rem;
+  opacity: 0.35;
+  filter: grayscale(0.6);
   transition:
-    opacity 0.14s ease,
-    transform 0.14s ease,
-    box-shadow 0.14s ease;
-  z-index: 3;
+    opacity 0.16s ease,
+    filter 0.16s ease,
+    text-shadow 0.16s ease;
 }
 
-.slot:hover .slotVariantSwitch {
+.slotFormGemOn {
   opacity: 1;
+  filter: none;
 }
 
-.slotVariantSwitch:hover {
-  transform: scale(1.12);
-}
-
-.slotVariantGem {
-  font-size: 0.55rem;
-}
-
-/* Switching TO the Evolution form */
-.slotVariantSwitch-evolution {
-  border-color: color-mix(in srgb, var(--accent-purple) 70%, transparent);
-}
-
-.slotVariantSwitch-evolution .slotVariantGem {
+.slotFormGem-evolution {
   color: #c4b5fd;
 }
 
-.slotVariantSwitch-evolution:hover {
-  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-purple) 70%, transparent);
+.slotFormGemOn.slotFormGem-evolution {
+  text-shadow: 0 0 6px var(--accent-purple);
 }
 
-/* Switching TO the Hero form */
-.slotVariantSwitch-hero {
-  border-color: color-mix(in srgb, var(--accent-gold-bright) 70%, transparent);
-}
-
-.slotVariantSwitch-hero .slotVariantGem {
+.slotFormGem-hero {
   color: var(--accent-gold-bright);
 }
 
-.slotVariantSwitch-hero:hover {
-  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-gold-bright) 70%, transparent);
+.slotFormGemOn.slotFormGem-hero {
+  text-shadow: 0 0 6px var(--accent-gold-bright);
 }
 
 .slotRoleBadge {

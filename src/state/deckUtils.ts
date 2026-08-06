@@ -197,8 +197,9 @@ export const DEFAULT_WILD_VARIANT: WildVariant = 'evolution';
  */
 function withWildChoiceReset(deck: Deck, slotIndex: number): Deck {
   if (slotIndex !== WILD_SLOT_INDEX || deck.wildVariant === undefined) return deck;
-  const { wildVariant: _dropped, ...rest } = deck;
-  return rest;
+  const next = { ...deck };
+  delete next.wildVariant;
+  return next;
 }
 
 /**
@@ -217,17 +218,18 @@ export function getWildVariant(deck: Deck): WildVariant {
   return deck.wildVariant ?? DEFAULT_WILD_VARIANT;
 }
 
-/** Flip the Wild slot between its Evolution and Hero forms (no-op if it has only one). */
-export function toggleWildVariant(
+/** Field a specific form in the Wild slot (no-op if its card has only one). */
+export function setWildVariant(
   duelSet: DuelDeckSet,
   deckIndex: number,
+  variant: WildVariant,
   cardsByKey: Map<string, Card>,
 ): DuelDeckSet {
   const deck = duelSet.decks[deckIndex];
   if (!deck || !canSwitchWildVariant(deck, cardsByKey)) return duelSet;
-  const next: WildVariant = getWildVariant(deck) === 'evolution' ? 'hero' : 'evolution';
+  if (getWildVariant(deck) === variant) return duelSet;
   const decks = duelSet.decks.map((d, i) =>
-    i !== deckIndex ? d : { ...d, wildVariant: next },
+    i !== deckIndex ? d : { ...d, wildVariant: variant },
   ) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }
