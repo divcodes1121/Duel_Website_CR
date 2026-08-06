@@ -366,6 +366,72 @@
   opacity: 1;
 }
 
+/* Wild-slot form switch — only appears for cards that have BOTH an Evolution
+   and a Hero form (Knight, Valkyrie, Musketeer, Wizard). Sits opposite the
+   remove button and is tinted with the form it switches TO, like in-game. */
+.slotVariantSwitch {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.12rem;
+  padding: 0.1rem 0.28rem;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  line-height: 1;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(10, 8, 24, 0.72);
+  backdrop-filter: blur(4px);
+  border: 1px solid transparent;
+  cursor: pointer;
+  opacity: 0.85;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
+  z-index: 3;
+}
+
+.slot:hover .slotVariantSwitch {
+  opacity: 1;
+}
+
+.slotVariantSwitch:hover {
+  transform: scale(1.12);
+}
+
+.slotVariantGem {
+  font-size: 0.55rem;
+}
+
+/* Switching TO the Evolution form */
+.slotVariantSwitch-evolution {
+  border-color: color-mix(in srgb, var(--accent-purple) 70%, transparent);
+}
+
+.slotVariantSwitch-evolution .slotVariantGem {
+  color: #c4b5fd;
+}
+
+.slotVariantSwitch-evolution:hover {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-purple) 70%, transparent);
+}
+
+/* Switching TO the Hero form */
+.slotVariantSwitch-hero {
+  border-color: color-mix(in srgb, var(--accent-gold-bright) 70%, transparent);
+}
+
+.slotVariantSwitch-hero .slotVariantGem {
+  color: var(--accent-gold-bright);
+}
+
+.slotVariantSwitch-hero:hover {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-gold-bright) 70%, transparent);
+}
+
 .slotRoleBadge {
   position: absolute;
   bottom: 4px;

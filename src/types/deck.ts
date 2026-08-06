@@ -12,10 +12,20 @@ export type DeckSlot = string | null;
  */
 export type SlotRole = 'evolution' | 'hero' | 'wild' | 'normal';
 
+/** The two forms the Wild slot can field. */
+export type WildVariant = 'evolution' | 'hero';
+
 export interface Deck {
   id: string;
   name: string;
   slots: DeckSlot[];
+  /**
+   * Which form the Wild slot fields when its card has BOTH an Evolution and a
+   * Hero form (Knight, Valkyrie, Musketeer, Wizard) — the player toggles it
+   * with the switch on the slot. Absent means the default, 'evolution'. Reset
+   * whenever the Wild slot's card changes.
+   */
+  wildVariant?: WildVariant;
   /**
    * Cards this deck imported even though another deck in the collection
    * already used them — rendered black & white until the clash is resolved.

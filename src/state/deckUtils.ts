@@ -1,5 +1,12 @@
 import type { Card } from '../types/card';
-import { DECK_SIZE, DUEL_DECK_COUNT, type Deck, type DuelDeckSet, type SlotRole } from '../types/deck';
+import {
+  DECK_SIZE,
+  DUEL_DECK_COUNT,
+  type Deck,
+  type DuelDeckSet,
+  type SlotRole,
+  type WildVariant,
+} from '../types/deck';
 
 export function createEmptyDeck(name: string): Deck {
   return {
@@ -104,7 +111,10 @@ export function assignCard(
   const decks = duelSet.decks.map((deck, i) =>
     i !== deckIndex
       ? deck
-      : { ...deck, slots: deck.slots.map((s, si) => (si === slotIndex ? cardKey : s)) },
+      : withWildChoiceReset(
+          { ...deck, slots: deck.slots.map((s, si) => (si === slotIndex ? cardKey : s)) },
+          slotIndex,
+        ),
   ) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }
@@ -113,14 +123,22 @@ export function clearSlot(duelSet: DuelDeckSet, deckIndex: number, slotIndex: nu
   const decks = duelSet.decks.map((deck, i) =>
     i !== deckIndex
       ? deck
-      : { ...deck, slots: deck.slots.map((s, si) => (si === slotIndex ? null : s)) },
+      : withWildChoiceReset(
+          { ...deck, slots: deck.slots.map((s, si) => (si === slotIndex ? null : s)) },
+          slotIndex,
+        ),
   ) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }
 
 export function clearDeck(duelSet: DuelDeckSet, deckIndex: number): DuelDeckSet {
   const decks = duelSet.decks.map((deck, i) =>
-    i !== deckIndex ? deck : { ...deck, slots: Array(DECK_SIZE).fill(null), crowns: 0 },
+    i !== deckIndex
+      ? deck
+      : withWildChoiceReset(
+          { ...deck, slots: Array(DECK_SIZE).fill(null), crowns: 0 },
+          WILD_SLOT_INDEX,
+        ),
   ) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }
@@ -167,6 +185,53 @@ export function getSlotRoleByPosition(slotIndex: number): SlotRole {
 
 export type SlotVisualVariant = 'base' | 'evolution' | 'hero';
 
+/** The Wild slot's fixed position — the only slot that can field either form. */
+export const WILD_SLOT_INDEX = 2;
+
+/** The form the Wild slot fields when the player hasn't switched it. */
+export const DEFAULT_WILD_VARIANT: WildVariant = 'evolution';
+
+/**
+ * The Wild slot's form choice belongs to the card sitting in it — replacing,
+ * clearing or dragging that card away drops the deck back to the default form.
+ */
+function withWildChoiceReset(deck: Deck, slotIndex: number): Deck {
+  if (slotIndex !== WILD_SLOT_INDEX || deck.wildVariant === undefined) return deck;
+  const { wildVariant: _dropped, ...rest } = deck;
+  return rest;
+}
+
+/**
+ * Whether the Wild slot's card has both an Evolution and a Hero form (Knight,
+ * Valkyrie, Musketeer, Wizard) — only then is there anything to switch between.
+ */
+export function canSwitchWildVariant(deck: Deck, cardsByKey: Map<string, Card>): boolean {
+  const cardKey = deck.slots[WILD_SLOT_INDEX];
+  const card = cardKey ? cardsByKey.get(cardKey) : undefined;
+  if (!card) return false;
+  return card.canEvolve && (card.canBeHero || card.isChampion);
+}
+
+/** The form the Wild slot is currently fielding (default when never switched). */
+export function getWildVariant(deck: Deck): WildVariant {
+  return deck.wildVariant ?? DEFAULT_WILD_VARIANT;
+}
+
+/** Flip the Wild slot between its Evolution and Hero forms (no-op if it has only one). */
+export function toggleWildVariant(
+  duelSet: DuelDeckSet,
+  deckIndex: number,
+  cardsByKey: Map<string, Card>,
+): DuelDeckSet {
+  const deck = duelSet.decks[deckIndex];
+  if (!deck || !canSwitchWildVariant(deck, cardsByKey)) return duelSet;
+  const next: WildVariant = getWildVariant(deck) === 'evolution' ? 'hero' : 'evolution';
+  const decks = duelSet.decks.map((d, i) =>
+    i !== deckIndex ? d : { ...d, wildVariant: next },
+  ) as DuelDeckSet['decks'];
+  return { ...duelSet, decks, updatedAt: new Date().toISOString() };
+}
+
 /** Which art variant a slot renders, given the card in it and the slot's positional role. */
 export function getSlotVisualVariant(
   deck: Deck,
@@ -183,6 +248,9 @@ export function getSlotVisualVariant(
   if (role === 'evolution') return card.canEvolve ? 'evolution' : 'base';
   if (role === 'hero') return isHeroForm ? 'hero' : 'base';
   if (role === 'wild') {
+    // Cards with both forms field whichever the player switched to; the rest
+    // simply show the one form they have.
+    if (card.canEvolve && isHeroForm) return getWildVariant(deck);
     if (card.canEvolve) return 'evolution';
     if (isHeroForm) return 'hero';
     return 'base';
@@ -290,7 +358,11 @@ export function moveCard(
       if (di === to.deckIndex && si === to.slotIndex) return fromKey;
       return k;
     });
-    return { ...deck, slots };
+    // A move touching this deck's Wild slot swaps out the card the form choice belonged to.
+    const touchesWild =
+      (di === from.deckIndex && from.slotIndex === WILD_SLOT_INDEX) ||
+      (di === to.deckIndex && to.slotIndex === WILD_SLOT_INDEX);
+    return withWildChoiceReset({ ...deck, slots }, touchesWild ? WILD_SLOT_INDEX : -1);
   }) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }

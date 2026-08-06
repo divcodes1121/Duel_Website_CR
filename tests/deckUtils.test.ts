@@ -12,6 +12,9 @@ import {
   validateDuelDeckSet,
   getSlotRoleByPosition,
   getSlotVisualVariant,
+  canSwitchWildVariant,
+  getWildVariant,
+  toggleWildVariant,
   countChampionsInDeck,
   canPlaceCardInSlot,
   canAssignCardToSlot,
@@ -43,6 +46,7 @@ function makeCard(key: string, elixir: number, overrides: Partial<Card> = {}): C
 
 const cardsByKey = new Map<string, Card>([
   ['knight', makeCard('knight', 3, { canEvolve: true, canBeHero: true })],
+  ['musketeer', makeCard('musketeer', 4, { canEvolve: true, canBeHero: true })],
   ['archers', makeCard('archers', 3, { canEvolve: true })],
   ['fireball', makeCard('fireball', 4)],
   ['skeletons', makeCard('skeletons', 1)],
@@ -243,7 +247,7 @@ describe('getSlotVisualVariant (automatic, by position)', () => {
     expect(getSlotVisualVariant(set.decks[0], 1, cardsByKey)).toBe('base');
   });
 
-  it('slot 3 (wild) prefers Evolution over Hero when a card supports both', () => {
+  it('slot 3 (wild) defaults to Evolution when a card supports both', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = assignCard(set, 0, 2, 'knight'); // canEvolve + canBeHero
     expect(getSlotVisualVariant(set.decks[0], 2, cardsByKey)).toBe('evolution');
@@ -259,6 +263,72 @@ describe('getSlotVisualVariant (automatic, by position)', () => {
     let set = createEmptyDuelDeckSet('Test');
     set = assignCard(set, 0, 3, 'knight'); // eligible for everything, but normal slot
     expect(getSlotVisualVariant(set.decks[0], 3, cardsByKey)).toBe('base');
+  });
+});
+
+describe('wild slot form switch', () => {
+  it('offers the switch only for a Wild card that has both forms', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    expect(canSwitchWildVariant(set.decks[0], cardsByKey)).toBe(false); // empty
+
+    set = assignCard(set, 0, 2, 'archers'); // canEvolve only
+    expect(canSwitchWildVariant(set.decks[0], cardsByKey)).toBe(false);
+
+    set = clearSlot(set, 0, 2);
+    set = assignCard(set, 0, 2, 'giant'); // canBeHero only
+    expect(canSwitchWildVariant(set.decks[0], cardsByKey)).toBe(false);
+
+    set = clearSlot(set, 0, 2);
+    set = assignCard(set, 0, 2, 'knight'); // both
+    expect(canSwitchWildVariant(set.decks[0], cardsByKey)).toBe(true);
+  });
+
+  it('flips the Wild slot between Evolution and Hero art', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 2, 'knight');
+    expect(getWildVariant(set.decks[0])).toBe('evolution');
+
+    set = toggleWildVariant(set, 0, cardsByKey);
+    expect(getWildVariant(set.decks[0])).toBe('hero');
+    expect(getSlotVisualVariant(set.decks[0], 2, cardsByKey)).toBe('hero');
+
+    set = toggleWildVariant(set, 0, cardsByKey);
+    expect(getSlotVisualVariant(set.decks[0], 2, cardsByKey)).toBe('evolution');
+  });
+
+  it('leaves single-form Wild cards alone', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 2, 'archers'); // Evolution only
+    const before = set;
+    set = toggleWildVariant(set, 0, cardsByKey);
+    expect(set).toBe(before);
+    expect(getSlotVisualVariant(set.decks[0], 2, cardsByKey)).toBe('evolution');
+  });
+
+  it('drops the choice when the Wild slot card changes', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 2, 'knight');
+    set = toggleWildVariant(set, 0, cardsByKey);
+    expect(getWildVariant(set.decks[0])).toBe('hero');
+
+    // Replacing the card resets the deck to the default form...
+    set = clearSlot(set, 0, 2);
+    expect(set.decks[0].wildVariant).toBeUndefined();
+
+    // ...and so does dragging a switched card out of the Wild slot.
+    set = assignCard(set, 0, 2, 'knight');
+    set = toggleWildVariant(set, 0, cardsByKey);
+    set = moveCard(set, { deckIndex: 0, slotIndex: 2 }, { deckIndex: 0, slotIndex: 5 }, cardsByKey);
+    expect(set.decks[0].wildVariant).toBeUndefined();
+  });
+
+  it('keeps each deck of a collection on its own form', () => {
+    let set = createEmptyDuelDeckSet('Test');
+    set = assignCard(set, 0, 2, 'knight');
+    set = assignCard(set, 1, 2, 'musketeer');
+    set = toggleWildVariant(set, 1, cardsByKey);
+    expect(getSlotVisualVariant(set.decks[0], 2, cardsByKey)).toBe('evolution');
+    expect(getSlotVisualVariant(set.decks[1], 2, cardsByKey)).toBe('hero');
   });
 });
 

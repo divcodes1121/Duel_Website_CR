@@ -7,6 +7,7 @@ import { startDrag, getDrag, endDrag } from '../../state/dragContext';
 import {
   canAssignCardToSlot,
   canMoveCard,
+  canSwitchWildVariant,
   getSlotRoleByPosition,
   getSlotVisualVariant,
   type SlotVisualVariant,
@@ -55,6 +56,7 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
   const selectedSlot = useBuilderStore((s) => s.selectedSlot);
   const selectSlot = useBuilderStore((s) => s.selectSlot);
   const clearSlot = useBuilderStore((s) => s.clearSlot);
+  const toggleWildVariant = useBuilderStore((s) => s.toggleWildVariant);
   const assignCardAt = useBuilderStore((s) => s.assignCardAt);
   const moveCard = useBuilderStore((s) => s.moveCard);
   const ownerSet = useBuilderStore((s) => s.sets[owner]);
@@ -88,6 +90,10 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
     : styles[`slotRoleBadge-${variant}`];
   const role = getSlotRoleByPosition(slotIndex);
   const roleClass = ROLE_CLASS[role] ? styles[ROLE_CLASS[role]] : '';
+  // Knight, Valkyrie, Musketeer and Wizard have both forms — in the Wild slot
+  // the player picks which one is fielded, exactly like in-game.
+  const canSwitchVariant = role === 'wild' && canSwitchWildVariant(deck, CARDS_BY_KEY);
+  const otherVariant: SlotVisualVariant = variant === 'evolution' ? 'hero' : 'evolution';
 
   const title = card
     ? isDuplicate
@@ -110,6 +116,11 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
       launchFlight(getCardIconUrl(card.key), rectOf(slotEl), rectOf(targetEl));
     }
     clearSlot(owner, deckIndex, slotIndex);
+  }
+
+  function handleSwitchVariant(e: React.MouseEvent) {
+    e.stopPropagation(); // the switch must not also select the slot
+    toggleWildVariant(owner, deckIndex);
   }
 
   /** Whether the drag currently in progress may drop on this slot. */
@@ -215,6 +226,22 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
           />
           {badgeLabel && (
             <span className={`${styles.slotRoleBadge} ${badgeClass}`}>{badgeLabel}</span>
+          )}
+          {canSwitchVariant && (
+            <span
+              className={`${styles.slotVariantSwitch} ${styles[`slotVariantSwitch-${otherVariant}`]}`}
+              role="button"
+              aria-label={`Switch ${card.name} to ${
+                otherVariant === 'hero' ? 'Hero' : 'Evolution'
+              } form`}
+              title={`Switch to ${otherVariant === 'hero' ? 'Hero' : 'Evolution'} form`}
+              onClick={handleSwitchVariant}
+            >
+              <span aria-hidden="true">⇄</span>
+              <span className={styles.slotVariantGem} aria-hidden="true">
+                ◆
+              </span>
+            </span>
           )}
           <span
             className={styles.slotClear}

@@ -22,6 +22,7 @@ import {
   getUsedCardKeys,
   moveCard as moveCardUtil,
   renameDeck as renameDeckUtil,
+  toggleWildVariant as toggleWildVariantUtil,
   validateImportedDeck,
   type SlotRef,
   type UniquenessScope,
@@ -100,6 +101,11 @@ interface BuilderState extends PersistedSlice {
    */
   importDeck: (owner: DeckOwner, deckIndex: number, keys: string[]) => string | null;
   renameDeck: (owner: DeckOwner, deckIndex: number, name: string) => void;
+  /**
+   * Flip the Wild slot between Evolution and Hero art for a card that has both
+   * forms (Knight, Valkyrie, Musketeer, Wizard). No-op otherwise.
+   */
+  toggleWildVariant: (owner: DeckOwner, deckIndex: number) => void;
   /** Crowns this deck won in the duel (clamped to 0..MAX_CROWNS). */
   setDeckCrowns: (owner: DeckOwner, deckIndex: number, crowns: number) => void;
   setFilterType: (filter: CardTypeFilter) => void;
@@ -376,7 +382,11 @@ export const useBuilderStore = create<BuilderState>()(
           ...commitSet(state, owner, {
             ...current,
             decks: current.decks.map((d, i) =>
-              i === deckIndex ? { ...d, slots: [...result.slots], importedDuplicates } : d,
+              i === deckIndex
+                ? // A fresh 8 cards land in every slot, so any Wild-form choice
+                  // the old card carried is meaningless now.
+                  { ...d, slots: [...result.slots], importedDuplicates, wildVariant: undefined }
+                : d,
             ),
             updatedAt: new Date().toISOString(),
           }),
@@ -388,6 +398,11 @@ export const useBuilderStore = create<BuilderState>()(
 
       renameDeck: (owner, deckIndex, name) =>
         set((state) => commitSet(state, owner, renameDeckUtil(state.sets[owner], deckIndex, name))),
+
+      toggleWildVariant: (owner, deckIndex) =>
+        set((state) =>
+          commitSet(state, owner, toggleWildVariantUtil(state.sets[owner], deckIndex, CARDS_BY_KEY)),
+        ),
 
       setDeckCrowns: (owner, deckIndex, crowns) =>
         set((state) => {
