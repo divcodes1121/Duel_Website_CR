@@ -1529,7 +1529,7 @@
     "rarity": "Legendary",
     "arena": 0,
     "description": "",
-    "id": 26000104,
+    "id": 26000096,
     "evolved_spells_sc_key": "",
     "is_evolved": false
   },
@@ -1542,7 +1542,7 @@
     "rarity": "Epic",
     "arena": 0,
     "description": "",
-    "id": 26000105,
+    "id": 26000101,
     "evolved_spells_sc_key": "",
     "is_evolved": false
   },
@@ -1555,7 +1555,7 @@
     "rarity": "Epic",
     "arena": 0,
     "description": "",
-    "id": 28000027,
+    "id": 28000023,
     "evolved_spells_sc_key": "",
     "is_evolved": false
   },
@@ -1568,7 +1568,7 @@
     "rarity": "Epic",
     "arena": 0,
     "description": "",
-    "id": 28000028,
+    "id": 28000024,
     "evolved_spells_sc_key": "",
     "is_evolved": false
   },
