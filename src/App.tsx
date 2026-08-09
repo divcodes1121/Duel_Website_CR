@@ -1,20 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Header } from './components/Header/Header';
-import { DuelDeckBuilder } from './components/DuelDeckBuilder/DuelDeckBuilder';
-import { DecksHome } from './components/DecksHome/DecksHome';
-import { CounterPalette } from './components/CounterPalette/CounterPalette';
-import { Dashboard } from './components/Dashboard/Dashboard';
+import { Dashboard, type DashboardView } from './components/Dashboard/Dashboard';
 import { Login } from './components/Login/Login';
 import { useAuthStore } from './state/authStore';
 import styles from './App.module.css';
 
-/* The post-login home is the dashboard: top bar, analytics sidebar, hero panel.
- * It replaces the old cinematic landing, which is gone along with the animation
- * library it existed to show off. */
+/* One shell for every signed-in route. The builder, Deck's Home and Counter
+ * Palette used to be separate full pages, each with its own nav bar; they now
+ * open inside the dashboard as scrolling panels, so the top bar and sidebar
+ * stay put while the content changes. The hash still drives which one is open,
+ * so links and refreshes keep working. */
 
-type Page = 'builder' | 'decks' | 'palette' | 'home';
-
-function pageFor(hash: string): Page {
+function viewFor(hash: string): DashboardView {
   if (hash.startsWith('#/builder')) return 'builder';
   if (hash.startsWith('#/decks')) return 'decks';
   if (hash.startsWith('#/palette')) return 'palette';
@@ -34,7 +30,6 @@ function useHashRoute(): string {
 function App() {
   const route = useHashRoute();
   const user = useAuthStore((s) => s.user);
-  const page = pageFor(route);
 
   if (!user) {
     return (
@@ -44,22 +39,9 @@ function App() {
     );
   }
 
-  // Keyed so a route change remounts cleanly rather than reconciling one page's
-  // tree into another's.
   return (
-    <div key={page} className={styles.app}>
-      {page === 'builder' ? (
-        <>
-          <Header />
-          <DuelDeckBuilder />
-        </>
-      ) : page === 'decks' ? (
-        <DecksHome />
-      ) : page === 'palette' ? (
-        <CounterPalette />
-      ) : (
-        <Dashboard />
-      )}
+    <div className={styles.app}>
+      <Dashboard view={viewFor(route)} />
     </div>
   );
 }

@@ -2,6 +2,10 @@ import { useState } from 'react';
 import { useThemeStore } from '../../state/themeStore';
 import { getCardIconUrl } from '../../data/cards';
 import { ProfileMenu } from '../Profile/ProfileMenu';
+import { Header } from '../Header/Header';
+import { DuelDeckBuilder } from '../DuelDeckBuilder/DuelDeckBuilder';
+import { DecksHome } from '../DecksHome/DecksHome';
+import { CounterPalette } from '../CounterPalette/CounterPalette';
 import {
   AnalyticsIcon,
   ArrowRightIcon,
@@ -25,10 +29,15 @@ import {
 } from './icons';
 import styles from './Dashboard.module.css';
 
-/* The post-login home: top bar, a sidebar of analytics sections, and a panel
- * that swaps with the selected section. Only Search Player is built out; the
- * rest render a scrollable placeholder so the shell behaves like the finished
- * thing while the data work is still ahead. */
+/* The post-login shell: top bar, a sidebar of analytics sections, and a panel
+ * that swaps with whatever is open.
+ *
+ * The three built tools open inside this panel rather than navigating away to
+ * their own pages, so the chrome stays put and only the content scrolls. Each
+ * is rendered `embedded`, which drops the page nav it used to carry — the top
+ * bar already provides the brand, theme toggle and profile menu. */
+
+export type DashboardView = 'home' | 'builder' | 'decks' | 'palette';
 
 const TOP_NAV = [
   { label: 'Home', icon: HomeIcon, hash: null },
@@ -93,12 +102,22 @@ function go(hash: string) {
   window.location.hash = hash;
 }
 
-export function Dashboard() {
+export function Dashboard({ view = 'home' }: { view?: DashboardView }) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const [section, setSection] = useState<string>(SIDE_NAV[0].label);
-  const [topNav, setTopNav] = useState<string>('Analytics');
   const [tag, setTag] = useState('');
+
+  // The open tool decides which top-bar item is lit; on the home view it is
+  // whichever analytics area the sidebar has selected.
+  const topNav =
+    view === 'builder'
+      ? 'Duel Builder'
+      : view === 'decks'
+        ? 'Deck Builder'
+        : view === 'palette'
+          ? 'Counter Palette'
+          : 'Analytics';
 
   return (
     <div className={styles.shell}>
@@ -119,10 +138,7 @@ export function Dashboard() {
                 key={item.label}
                 type="button"
                 className={`${styles.topNavItem} ${active ? styles.topNavItemActive : ''}`}
-                onClick={() => {
-                  setTopNav(item.label);
-                  if (item.hash) go(item.hash);
-                }}
+                onClick={() => go(item.hash ?? '')}
               >
                 <Icon />
                 {item.label}
@@ -189,7 +205,21 @@ export function Dashboard() {
         </aside>
 
         <main className={styles.main}>
-          {section === 'Search Player' ? (
+          {view !== 'home' ? (
+            /* A built tool, hosted in the panel. `.tool` gives it the same
+               raised surface as everything else and clips its own scrolling
+               region to the rounded corners. */
+            <section className={styles.tool}>
+              {view === 'builder' && (
+                <>
+                  <Header embedded />
+                  <DuelDeckBuilder />
+                </>
+              )}
+              {view === 'decks' && <DecksHome embedded />}
+              {view === 'palette' && <CounterPalette embedded />}
+            </section>
+          ) : section === 'Search Player' ? (
             <section className={styles.hero}>
               {/* Wrapper so the corner cards are positioned against the search
                   area only — against the whole panel the bottom two were being

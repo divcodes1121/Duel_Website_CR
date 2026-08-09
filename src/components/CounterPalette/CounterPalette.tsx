@@ -242,7 +242,8 @@ function FolderView({ folder }: { folder: DuelDeckSet }) {
   );
 }
 
-export function CounterPalette() {
+/** `embedded` renders without the page nav — the dashboard shell provides it. */
+export function CounterPalette({ embedded = false }: { embedded?: boolean } = {}) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const folders = useBuilderStore((s) => s.paletteFolders);
@@ -262,6 +263,7 @@ export function CounterPalette() {
 
   return (
     <div className={homeStyles.page}>
+      {!embedded && (
       <header className={homeStyles.nav}>
         <button
           type="button"
@@ -311,6 +313,7 @@ export function CounterPalette() {
           <ProfileMenu triggerClassName={homeStyles.themeButton} />
         </div>
       </header>
+      )}
 
       <div className={homeStyles.scrollArea}>
         {activeFolder ? <FolderView key={activeFolder.id} folder={activeFolder} /> : <FolderGallery />}

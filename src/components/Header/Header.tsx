@@ -11,7 +11,12 @@ import { ProfileMenu } from '../Profile/ProfileMenu';
 import { canExportDecks } from '../../utils/deckExport';
 import styles from './Header.module.css';
 
-export function Header() {
+/**
+ * `embedded` drops the brand, theme toggle and profile menu — the dashboard
+ * top bar already carries those — and keeps what is specific to the builder:
+ * the unique-card counters, Save, My Decks, Export PDF and Reset.
+ */
+export function Header({ embedded = false }: { embedded?: boolean } = {}) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const sets = useBuilderStore((s) => s.sets);
@@ -39,7 +44,8 @@ export function Header() {
   }
 
   return (
-    <header className={styles.header}>
+    <header className={styles.header} data-embedded={embedded || undefined}>
+      {!embedded && (
       <button
         type="button"
         className={styles.brand}
@@ -58,6 +64,7 @@ export function Header() {
           <span className={styles.subtitle}>Duel Deck Builder</span>
         </div>
       </button>
+      )}
 
       <div className={styles.actions}>
         {mode === 'solo' ? (
@@ -120,22 +127,26 @@ export function Header() {
           Reset
         </button>
 
-        <button
-          type="button"
-          className={styles.themeToggle}
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          aria-label="Toggle theme"
-        >
-          <span className={styles.themeIcon} data-active={theme === 'light'}>
-            ☀
-          </span>
-          <span className={styles.themeIcon} data-active={theme === 'dark'}>
-            ☾
-          </span>
-        </button>
+        {!embedded && (
+          <>
+            <button
+              type="button"
+              className={styles.themeToggle}
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label="Toggle theme"
+            >
+              <span className={styles.themeIcon} data-active={theme === 'light'}>
+                ☀
+              </span>
+              <span className={styles.themeIcon} data-active={theme === 'dark'}>
+                ☾
+              </span>
+            </button>
 
-        <ProfileMenu triggerClassName={styles.avatar} />
+            <ProfileMenu triggerClassName={styles.avatar} />
+          </>
+        )}
       </div>
 
       {saveOpen && <SaveDialog onClose={() => setSaveOpen(false)} onSaved={flashSaved} />}

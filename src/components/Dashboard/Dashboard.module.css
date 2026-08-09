@@ -250,6 +250,23 @@
   flex-direction: column;
 }
 
+/* --------------------------------------------------------- hosted tool panel */
+
+/* The builder, Deck's Home and Counter Palette render in here. Same raised
+   surface as the other panels; `overflow: hidden` keeps their internal scroll
+   areas and the docked card picker inside the rounded corners. */
+.tool {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
 /* ---------------------------------------------------------------- hero panel */
 
 .hero {

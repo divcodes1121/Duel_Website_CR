@@ -20,7 +20,8 @@ function CrownIcon() {
   );
 }
 
-export function DecksHome() {
+/** `embedded` renders without the page nav — the dashboard shell provides it. */
+export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const homeDecks = useBuilderStore((s) => s.sets.home.decks);
@@ -64,6 +65,7 @@ export function DecksHome() {
 
   return (
     <div className={styles.page}>
+      {!embedded && (
       <header className={styles.nav}>
         <button
           type="button"
@@ -123,6 +125,23 @@ export function DecksHome() {
           <ProfileMenu triggerClassName={styles.themeButton} />
         </div>
       </header>
+      )}
+
+      {/* Hiding the nav would otherwise take Export PDF with it — it is the one
+          action in there that is not duplicated by the dashboard top bar. */}
+      {embedded && canExport && (
+        <div className={styles.embeddedActions}>
+          <span className={styles.autoSaveHint}>Decks save automatically</span>
+          <button
+            type="button"
+            className={libStyles.ghostButton}
+            title="Download a PDF report of every deck here"
+            onClick={() => setExportOpen(true)}
+          >
+            Export PDF
+          </button>
+        </div>
+      )}
 
       <div className={styles.scrollArea}>
         <section className={styles.deckList}>

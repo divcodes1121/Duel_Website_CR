@@ -181,3 +181,13 @@
   border-radius: 18px;
   background: var(--slot-bg);
 }
+/* Slim action row shown only when Deck's Home is hosted inside the dashboard,
+   carrying the one nav action the shell does not already provide. */
+.embeddedActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  padding: 0.7rem 1.5rem 0;
+}
