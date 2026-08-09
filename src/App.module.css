@@ -4,31 +4,5 @@
   height: 100%;
 }
 
-/* Route transition. Was a framer-motion crossfade that also animated `scale`
-   and `filter: blur(8px)` — a full-page blur on every navigation, which forces
-   the whole document into a re-rasterised layer. Opacity alone composites on
-   the GPU and reads the same at this duration. */
-.enter {
-  animation: app-enter 0.18s ease-out;
-}
-
-@keyframes app-enter {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .enter {
-    animation: none;
-  }
-}
-
-/* Shown while the lazily-loaded landing chunk arrives. Deliberately bare — a
-   spinner that flashes for 80ms is worse than nothing. */
-.routeFallback {
-  height: 100%;
-}
+/* Routes swap with no transition at all — the crossfade that used to live here
+   is gone along with everything else that moved. */

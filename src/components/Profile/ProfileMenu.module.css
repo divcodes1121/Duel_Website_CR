@@ -6,9 +6,7 @@
   border-radius: 18px;
   background: color-mix(in srgb, var(--bg-2) 92%, var(--glass-bg-strong));
   border: 1px solid var(--glass-border);
-  box-shadow:
-    var(--shadow),
-    inset 0 1px 0 var(--glass-highlight);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
   transform-origin: top right;
   animation: profile-menu-in 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
@@ -49,9 +47,7 @@
   flex-shrink: 0;
   color: var(--accent-contrast);
   background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
-  box-shadow:
-    0 4px 14px color-mix(in srgb, var(--accent) 50%, transparent),
-    inset 0 1px 0 var(--highlight);
+  box-shadow: inset 0 1px 0 var(--highlight);
 }
 
 .identityText {
@@ -141,10 +137,6 @@
   transition: background 0.14s ease, color 0.14s ease;
 }
 
-.item:hover {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
 .itemIcon {
   display: flex;
   align-items: center;
@@ -159,24 +151,10 @@
   border: 1px solid var(--slot-border);
 }
 
-.item:hover .itemIcon {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--slot-border));
-}
-
 .itemDanger {
   color: var(--error-soft);
 }
 
-.itemDanger:hover {
-  background: color-mix(in srgb, var(--error) 14%, transparent);
-}
-
 .itemDanger .itemIcon {
   color: var(--error-soft);
-}
-
-.itemDanger:hover .itemIcon {
-  color: var(--error-soft);
-  border-color: color-mix(in srgb, var(--error) 50%, transparent);
 }

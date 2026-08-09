@@ -20,13 +20,17 @@ interface FlightState {
   remove: (id: number) => void;
 }
 
-let nextId = 1;
-
-/** Transient overlay animations of card art flying between the browser and deck slots. */
+/**
+ * Card art flying between the picker and a deck slot.
+ *
+ * Disabled: `launch` is a no-op, so nothing is ever queued and FlightLayer has
+ * nothing to draw. The call sites in DeckSlot, CardGrid and CardPickerDrawer are
+ * left in place — restoring the effect is re-enabling this one function rather
+ * than re-threading it through three components.
+ */
 export const useFlightStore = create<FlightState>((set) => ({
   flights: [],
-  launch: (src, from, to) =>
-    set((state) => ({ flights: [...state.flights, { id: nextId++, src, from, to }] })),
+  launch: () => {},
   remove: (id) => set((state) => ({ flights: state.flights.filter((f) => f.id !== id) })),
 }));
 

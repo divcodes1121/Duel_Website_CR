@@ -18,339 +18,6 @@
   transform-origin: 50% 40%;
 }
 
-/* ============================================================= intro */
-
-.intro {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1.4rem;
-  background: var(--text-muted);
-}
-
-.introMark {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 96px;
-  height: 96px;
-}
-
-.introCrown {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  border-radius: 20px;
-  color: var(--accent-contrast);
-  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
-  box-shadow:
-    0 10px 40px color-mix(in srgb, var(--accent) 60%, transparent),
-    inset 0 1px 0 var(--highlight);
-}
-
-.introRing {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  border-top-color: var(--accent-light);
-  border-right-color: color-mix(in srgb, var(--accent-gold) 70%, transparent);
-  animation: intro-spin 1.1s linear infinite;
-}
-
-@keyframes intro-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.introWord {
-  font-family: 'Subscribe', Inter, system-ui, sans-serif;
-  font-size: 1.05rem;
-  color: var(--text-muted);
-  text-shadow: 0 0 24px color-mix(in srgb, var(--accent-light) 60%, transparent);
-}
-
-.introBar {
-  width: 180px;
-  height: 2px;
-  border-radius: 999px;
-  transform-origin: left center;
-  background: linear-gradient(90deg, var(--accent), var(--accent-gold));
-  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 70%, transparent);
-}
-
-/* ====================================================== environment */
-
-.env {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.envLayer {
-  position: absolute;
-  inset: 0;
-}
-
-/* --- animated mesh gradient blobs --- */
-.envBlob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.55;
-  will-change: transform;
-}
-
-.envBlobA {
-  width: 55vmax;
-  height: 55vmax;
-  top: -18%;
-  left: -12%;
-  background: radial-gradient(circle, var(--aurora-2) 0%, transparent 65%);
-  animation: blob-drift-a 46s ease-in-out infinite;
-}
-
-.envBlobB {
-  width: 48vmax;
-  height: 48vmax;
-  top: 22%;
-  right: -16%;
-  background: radial-gradient(circle, var(--aurora-1) 0%, transparent 65%);
-  animation: blob-drift-b 58s ease-in-out infinite;
-}
-
-.envBlobC {
-  width: 42vmax;
-  height: 42vmax;
-  bottom: -22%;
-  left: 24%;
-  background: radial-gradient(circle, var(--aurora-4) 0%, transparent 62%);
-  opacity: 0.4;
-  animation: blob-drift-c 64s ease-in-out infinite;
-}
-
-@keyframes blob-drift-a {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(6vw, 5vh) scale(1.12); }
-  66% { transform: translate(-3vw, 8vh) scale(0.95); }
-}
-
-@keyframes blob-drift-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  40% { transform: translate(-7vw, -6vh) scale(1.08); }
-  70% { transform: translate(-2vw, 5vh) scale(0.92); }
-}
-
-@keyframes blob-drift-c {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(5vw, -7vh) scale(1.15); }
-}
-
-/* --- aurora band --- */
-.envAurora {
-  position: absolute;
-  top: -12%;
-  left: -25%;
-  width: 150%;
-  height: 55%;
-  background: linear-gradient(
-    100deg,
-    transparent 12%,
-    var(--aurora-3) 32%,
-    var(--aurora-2) 50%,
-    var(--aurora-1) 66%,
-    transparent 88%
-  );
-  filter: blur(60px);
-  opacity: 0.35;
-  transform-origin: 50% 0;
-  animation: aurora-sway 34s ease-in-out infinite;
-  will-change: transform;
-}
-
-@keyframes aurora-sway {
-  0%, 100% { transform: translateX(-4%) skewX(-6deg); }
-  50% { transform: translateX(4%) skewX(5deg); }
-}
-
-/* --- sweeping light rays --- */
-.envRay {
-  position: absolute;
-  top: -30%;
-  width: 22vw;
-  height: 160%;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    color-mix(in srgb, var(--accent-gold) 9%, transparent) 35%,
-    color-mix(in srgb, var(--accent-light) 8%, transparent) 60%,
-    transparent
-  );
-  filter: blur(24px);
-  transform: rotate(18deg);
-  will-change: transform;
-}
-
-.envRayA {
-  left: 6%;
-  animation: ray-sweep 42s ease-in-out infinite;
-}
-
-.envRayB {
-  right: 4%;
-  width: 14vw;
-  animation: ray-sweep 55s ease-in-out -18s infinite reverse;
-}
-
-@keyframes ray-sweep {
-  0%, 100% { transform: rotate(18deg) translateX(-9vw); opacity: 0.5; }
-  50% { transform: rotate(22deg) translateX(9vw); opacity: 1; }
-}
-
-/* --- fog --- */
-.envFog {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  will-change: transform;
-}
-
-.envFogA {
-  width: 70vw;
-  height: 26vh;
-  bottom: 4%;
-  left: -18%;
-  animation: fog-drift 48s ease-in-out infinite;
-}
-
-.envFogB {
-  width: 55vw;
-  height: 20vh;
-  bottom: 18%;
-  right: -14%;
-  animation: fog-drift 62s ease-in-out -24s infinite reverse;
-}
-
-@keyframes fog-drift {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(9vw); }
-}
-
-/* --- glowing dust / bokeh --- */
-.envBokeh {
-  position: absolute;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent-light) 22%, transparent) 0%, transparent 70%);
-  filter: blur(6px);
-  animation: bokeh-float ease-in-out infinite;
-  will-change: transform, opacity;
-}
-
-@keyframes bokeh-float {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.5; }
-  50% { transform: translate(24px, -34px) scale(1.25); opacity: 0.9; }
-}
-
-/* --- rising particles --- */
-.envParticle {
-  position: absolute;
-  bottom: -3vh;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--accent-light) 75%, var(--text));
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-light) 60%, transparent);
-  opacity: 0;
-  animation: particle-rise linear infinite;
-  will-change: transform, opacity;
-}
-
-@keyframes particle-rise {
-  0% { transform: translate(0, 0); opacity: 0; }
-  8% { opacity: 0.75; }
-  85% { opacity: 0.4; }
-  100% { transform: translate(var(--drift, 0px), -108vh); opacity: 0; }
-}
-
-/* --- drifting crowns --- */
-.envCrown {
-  position: absolute;
-  color: color-mix(in srgb, var(--accent-gold) 34%, transparent);
-  animation: crown-drift ease-in-out infinite;
-  will-change: transform;
-}
-
-@keyframes crown-drift {
-  0%, 100% { transform: translate(0, 0) rotate(-8deg); }
-  50% { transform: translate(20px, -44px) rotate(10deg); }
-}
-
-/* --- castle silhouette --- */
-.envCastleWrap {
-  position: absolute;
-  left: -4%;
-  right: -4%;
-  bottom: 0;
-  height: 34vh;
-  opacity: 0.5;
-}
-
-.envCastle {
-  width: 100%;
-  height: 100%;
-  fill: color-mix(in srgb, var(--bg-3) 60%, var(--text-muted));
-}
-
-:global([data-theme='light']) .envCastle {
-  fill: color-mix(in srgb, var(--accent) 18%, var(--text-muted));
-}
-
-/* --- film grain --- */
-.envNoise {
-  position: absolute;
-  inset: 0;
-  opacity: 0.05;
-  background-image: radial-gradient(circle at 25% 35%, var(--text-muted) 0.5px, transparent 0.6px),
-    radial-gradient(circle at 75% 65%, var(--text-muted) 0.5px, transparent 0.6px),
-    radial-gradient(circle at 45% 85%, var(--text-muted) 0.4px, transparent 0.5px);
-  background-size: 7px 7px, 11px 11px, 13px 13px;
-}
-
-/* ====================================================== mouse spotlight */
-
-.spotlight {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 1;
-  width: 680px;
-  height: 680px;
-  border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--accent-light) 10%, transparent) 0%,
-    color-mix(in srgb, var(--accent-gold) 4%, transparent) 40%,
-    transparent 70%
-  );
-  will-change: transform;
-}
-
-@media (hover: none) {
-  .spotlight {
-    display: none;
-  }
-}
-
 /* ============================================================ navigation */
 
 .nav {
@@ -367,9 +34,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--glass-bg) 80%, transparent);
   border: 1px solid var(--glass-border);
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 12px 40px transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .navBrand {
@@ -395,9 +60,7 @@
   border-radius: 10px;
   color: var(--accent-contrast);
   background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
-  box-shadow:
-    0 4px 16px color-mix(in srgb, var(--accent) 55%, transparent),
-    inset 0 1px 0 var(--highlight);
+  box-shadow: inset 0 1px 0 var(--highlight);
 }
 
 .navLinks {
@@ -417,27 +80,6 @@
   letter-spacing: 0.02em;
   cursor: pointer;
   transition: color 0.18s ease;
-}
-
-.navLink:hover {
-  color: var(--text);
-}
-
-.navLinkGlow {
-  position: absolute;
-  left: 50%;
-  bottom: 3px;
-  width: 55%;
-  height: 2px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent-light), var(--accent-gold));
-  transform: translateX(-50%) scaleX(0);
-  transform-origin: center;
-  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3);
-}
-
-.navLink:hover .navLinkGlow {
-  transform: translateX(-50%) scaleX(1);
 }
 
 .navActions {
@@ -460,14 +102,6 @@
   cursor: pointer;
   box-shadow: inset 0 1px 0 var(--glass-highlight);
   transition: color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
-}
-
-.navIcon:hover {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 0 16px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* ================================================================== hero */
@@ -508,20 +142,6 @@
   margin-bottom: 1.6rem;
 }
 
-.eyebrowDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent-gold);
-  box-shadow: 0 0 10px var(--accent-gold);
-  animation: eyebrow-pulse 2.6s ease-in-out infinite;
-}
-
-@keyframes eyebrow-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.55; transform: scale(0.8); }
-}
-
 .heroTitle {
   display: flex;
   flex-direction: column;
@@ -542,22 +162,15 @@
 .titleLinePlain {
   font-size: clamp(2.9rem, 8.5vw, 6.4rem);
   color: var(--accent-contrast);
-  text-shadow:
-    0 0 22px var(--highlight),
-    0 8px 44px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 :global([data-theme='light']) .titleLinePlain {
   color: var(--text-muted);
-  text-shadow:
-    0 2px 16px var(--highlight),
-    0 8px 34px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .titleLineGradient {
   font-size: clamp(2.1rem, 6.4vw, 4.9rem);
   letter-spacing: 0.06em;
-  filter: drop-shadow(0 6px 26px color-mix(in srgb, var(--accent-gold) 30%, transparent));
 }
 
 /* Gradient must live on each letter: transformed child spans break
@@ -576,28 +189,15 @@
   color: transparent;
 }
 
-.titleLetter {
-  display: inline-block;
-  cursor: default;
-  will-change: transform;
-}
-
-.titleSpace {
-  display: inline-block;
-  width: 0.45em;
-}
-
 .heroSub {
   margin: 1.5rem 0 0;
   font-size: clamp(0.92rem, 1.9vw, 1.08rem);
   font-weight: 550;
   line-height: 1.65;
   color: var(--text-muted);
-  text-shadow: 0 2px 18px transparent;
 }
 
 :global([data-theme='light']) .heroSub {
-  text-shadow: 0 2px 18px var(--highlight);
 }
 
 .heroCtas {
@@ -627,62 +227,9 @@
   text-transform: uppercase;
   color: var(--accent-contrast);
   background: linear-gradient(135deg, var(--accent-light), var(--accent) 60%, var(--text-muted));
-  box-shadow:
-    0 10px 36px color-mix(in srgb, var(--accent) 60%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--accent-light) 40%, transparent),
-    inset 0 1px 0 var(--highlight);
+  box-shadow: inset 0 1px 0 var(--highlight);
   transition: box-shadow 0.25s ease;
   will-change: transform;
-}
-
-.primaryCta:hover {
-  box-shadow:
-    0 16px 52px color-mix(in srgb, var(--accent) 75%, transparent),
-    0 0 34px color-mix(in srgb, var(--accent-light) 45%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--accent-light) 60%, transparent),
-    inset 0 1px 0 var(--highlight);
-}
-
-.ctaSword {
-  font-size: 1.05rem;
-  line-height: 1;
-  filter: drop-shadow(0 0 8px var(--highlight));
-}
-
-.buttonShine {
-  position: absolute;
-  top: -20%;
-  bottom: -20%;
-  left: -45%;
-  width: 34%;
-  background: linear-gradient(105deg, transparent, var(--highlight), transparent);
-  transform: skewX(-18deg) translateX(0);
-  pointer-events: none;
-}
-
-.primaryCta:hover .buttonShine,
-.ghostCta:hover .buttonShine {
-  animation: shine-sweep 0.85s ease;
-}
-
-@keyframes shine-sweep {
-  from { transform: skewX(-18deg) translateX(0); }
-  to { transform: skewX(-18deg) translateX(520%); }
-}
-
-.ripple {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--highlight) 0%, transparent 70%);
-  transform: translate(-50%, -50%) scale(0);
-  animation: ripple-expand 0.7s ease-out forwards;
-  pointer-events: none;
-}
-
-@keyframes ripple-expand {
-  to { transform: translate(-50%, -50%) scale(26); opacity: 0; }
 }
 
 /* --- ghost CTA --- */
@@ -706,97 +253,6 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.ghostCta:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 8px 28px transparent,
-    0 0 22px color-mix(in srgb, var(--accent) 25%, transparent);
-}
-
-/* --- floating hero cards --- */
-
-.heroCards {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.heroCard {
-  position: absolute;
-  border-radius: 10px;
-  filter: drop-shadow(0 18px 38px transparent);
-  animation: hero-card-bob 7s ease-in-out infinite;
-  will-change: transform;
-}
-
-.heroCardA {
-  width: clamp(84px, 10vw, 148px);
-  left: 8%;
-  top: 42%;
-  rotate: -9deg;
-}
-
-.heroCardB {
-  width: clamp(72px, 8.5vw, 126px);
-  right: 9%;
-  top: 36%;
-  rotate: 9deg;
-  animation-delay: 1.4s;
-}
-
-.heroCardC {
-  width: clamp(56px, 6.5vw, 94px);
-  left: 20%;
-  top: 72%;
-  rotate: 7deg;
-  animation-delay: 2.6s;
-}
-
-.heroCardD {
-  width: clamp(60px, 7vw, 102px);
-  right: 19%;
-  top: 70%;
-  rotate: -7deg;
-  animation-delay: 0.8s;
-}
-
-@keyframes hero-card-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-18px); }
-}
-
-/* --- scroll hint --- */
-
-.scrollHint {
-  position: absolute;
-  bottom: 3.5%;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.1rem;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  z-index: 3;
-}
-
-.scrollChevron {
-  font-size: 1.25rem;
-  line-height: 0.6;
-  animation: chevron-bounce 1.8s ease-in-out infinite;
-}
-
-@keyframes chevron-bounce {
-  0%, 100% { transform: translateY(0); opacity: 0.5; }
-  50% { transform: translateY(6px); opacity: 1; }
-}
-
 /* ================================================= crystal centerpiece */
 
 .crystalSection {
@@ -807,110 +263,16 @@
   perspective: 1400px;
 }
 
-.crystalGlow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(900px, 90vw);
-  height: 70%;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(
-    ellipse,
-    color-mix(in srgb, var(--accent) 22%, transparent) 0%,
-    transparent 65%
-  );
-  filter: blur(40px);
-  animation: crystal-breathe 7s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes crystal-breathe {
-  0%, 100% { opacity: 0.65; transform: translate(-50%, -50%) scale(1); }
-  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
-}
-
-.crystalFloat {
-  width: min(920px, 100%);
-  will-change: transform;
-}
-
 .crystal {
   position: relative;
   overflow: hidden;
   border-radius: 30px;
   border: 1px solid transparent;
   background: var(--glass-bg-strong);
-  box-shadow:
-    var(--shadow),
-    inset 0 1px 0 var(--glass-highlight);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
   transform-style: preserve-3d;
   cursor: default;
   will-change: transform;
-}
-
-/* animated conic border */
-.crystalBorder {
-  position: absolute;
-  inset: 0;
-  border-radius: 30px;
-  padding: 1.5px;
-  background: conic-gradient(
-    from var(--crystal-angle, 0deg),
-    color-mix(in srgb, var(--accent) 75%, transparent),
-    color-mix(in srgb, var(--accent-cyan) 50%, transparent),
-    color-mix(in srgb, var(--accent-gold) 70%, transparent),
-    color-mix(in srgb, var(--accent) 75%, transparent)
-  );
-  -webkit-mask: linear-gradient(var(--text-muted) 0 0) content-box, linear-gradient(var(--text-muted) 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(var(--text-muted) 0 0) content-box, linear-gradient(var(--text-muted) 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-  animation: crystal-border-spin 9s linear infinite;
-  z-index: 3;
-}
-
-@property --crystal-angle {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
-}
-
-@keyframes crystal-border-spin {
-  to { --crystal-angle: 360deg; }
-}
-
-.crystalSpot {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-}
-
-/* moving glass reflection */
-.crystalReflection {
-  position: absolute;
-  top: -40%;
-  bottom: -40%;
-  left: -30%;
-  width: 36%;
-  background: linear-gradient(
-    100deg,
-    transparent,
-    var(--highlight) 40%,
-    var(--highlight) 50%,
-    var(--highlight) 60%,
-    transparent
-  );
-  transform: skewX(-16deg);
-  animation: reflection-sweep 9s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 2;
-}
-
-@keyframes reflection-sweep {
-  0%, 100% { transform: skewX(-16deg) translateX(0); }
-  50% { transform: skewX(-16deg) translateX(420%); }
 }
 
 .crystalInner {
@@ -965,7 +327,6 @@
   font-weight: 400;
   line-height: 1.05;
   color: var(--text);
-  text-shadow: 0 4px 30px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .crystalDesc {
@@ -998,11 +359,6 @@
   transition: color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
 
-.crystal:hover .crystalChips li {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--slot-border));
-}
-
 .crystalArt {
   position: relative;
   height: 300px;
@@ -1012,7 +368,6 @@
 .crystalArt img {
   position: absolute;
   border-radius: 10px;
-  filter: drop-shadow(0 16px 34px transparent);
   will-change: transform;
 }
 
@@ -1053,7 +408,6 @@
   font-size: clamp(1.7rem, 4vw, 2.7rem);
   font-weight: 400;
   color: var(--text);
-  text-shadow: 0 4px 30px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .featureGrid {
@@ -1085,45 +439,13 @@
   border-radius: 22px;
   border: 1px solid transparent;
   background: var(--glass-bg);
-  box-shadow:
-    var(--shadow),
-    inset 0 1px 0 var(--glass-highlight);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
   transform-style: preserve-3d;
   will-change: transform;
 }
 
 .featureLive {
   cursor: pointer;
-}
-
-.featureBorder {
-  position: absolute;
-  inset: 0;
-  border-radius: 22px;
-  padding: 1px;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent) 45%, transparent),
-    transparent 45%,
-    color-mix(in srgb, var(--accent-gold) 40%, transparent)
-  );
-  -webkit-mask: linear-gradient(var(--text-muted) 0 0) content-box, linear-gradient(var(--text-muted) 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(var(--text-muted) 0 0) content-box, linear-gradient(var(--text-muted) 0 0);
-  mask-composite: exclude;
-  opacity: 0.5;
-  transition: opacity 0.25s ease;
-  pointer-events: none;
-}
-
-.featureCard:hover .featureBorder {
-  opacity: 1;
-}
-
-.featureSpot {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
 }
 
 .featureHead {
@@ -1165,15 +487,6 @@
   color: var(--success);
 }
 
-.statusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 8px var(--success);
-  animation: eyebrow-pulse 2.4s ease-in-out infinite;
-}
-
 .featureTitle {
   margin: 0.2rem 0 0;
   font-size: 1.18rem;
@@ -1198,14 +511,6 @@
   font-weight: 800;
   letter-spacing: 0.06em;
   color: var(--accent-light);
-}
-
-.featureGoArrow {
-  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.4);
-}
-
-.featureCard:hover .featureGoArrow {
-  transform: translateX(5px);
 }
 
 /* ================================================================= about */
@@ -1279,32 +584,6 @@
   text-align: center;
   max-width: 60ch;
   opacity: 0.8;
-}
-
-/* ================================================================ launch */
-
-.launch {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.launchFlash {
-  width: 60vmax;
-  height: 60vmax;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    var(--highlight) 0%,
-    color-mix(in srgb, var(--accent-gold) 65%, var(--text-muted)) 22%,
-    color-mix(in srgb, var(--accent) 80%, transparent) 48%,
-    transparent 70%
-  );
-  filter: blur(6px);
 }
 
 /* ============================================================ responsive */

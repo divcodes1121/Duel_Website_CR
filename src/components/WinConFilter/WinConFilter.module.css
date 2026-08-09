@@ -33,19 +33,9 @@
   display: block;
 }
 
-/* Was a motion spring per chip. The dropdown grid renders a chip for all 122
-   cards, so that was 122 more motion components on top of the picker's. */
-.winconChip:hover {
-  opacity: 1;
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
-}
-
 .winconChipActive {
   opacity: 1;
   border-color: var(--accent);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent),
-    0 4px 16px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .winconClear {
@@ -60,11 +50,6 @@
   cursor: pointer;
   box-shadow: inset 0 1px 0 var(--glass-highlight);
   transition: background 0.16s ease, border-color 0.16s ease;
-}
-
-.winconClear:hover {
-  background: color-mix(in srgb, var(--accent) 22%, var(--slot-bg));
-  border-color: var(--accent);
 }
 
 /* --- "All cards" dropdown ---------------------------------------------- */
@@ -88,14 +73,6 @@
   cursor: pointer;
   box-shadow: inset 0 1px 0 var(--glass-highlight);
   transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
-}
-
-.moreButton:hover,
-.moreButtonOpen {
-  color: var(--text);
-  border-style: solid;
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--slot-bg));
 }
 
 .moreChevron {
@@ -140,7 +117,7 @@
   border-radius: 18px;
   background: color-mix(in srgb, var(--bg-2) 88%, var(--glass-bg));
   border: 1px solid var(--glass-border);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), 0 10px 30px transparent;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -170,9 +147,7 @@
 
 .search:focus {
   border-color: var(--accent);
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .panelGrid {

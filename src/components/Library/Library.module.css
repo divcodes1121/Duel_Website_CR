@@ -17,7 +17,7 @@
   background: color-mix(in srgb, var(--bg-2) 92%, var(--glass-bg-strong));
   border: 1px solid var(--glass-border);
   border-radius: 22px;
-  box-shadow: var(--shadow);
+
   padding: 1.4rem 1.5rem;
   /* Entrance for all three dialogs (save, library, export). Replaces a
      framer spring per dialog; there is no exit pass any more. */
@@ -101,11 +101,6 @@
   transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
-.closeButton:hover {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
-}
-
 .nameInput {
   font-size: 0.95rem;
   font-weight: 600;
@@ -116,7 +111,6 @@
   padding: 0.55rem 0.8rem;
   outline: none;
   width: 100%;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .dialogActions {
@@ -134,16 +128,8 @@
   border-radius: 999px;
   padding: 0.45rem 1.15rem;
   cursor: pointer;
-  box-shadow:
-    0 4px 16px color-mix(in srgb, var(--accent) 45%, transparent),
-    inset 0 1px 0 var(--highlight);
+  box-shadow: inset 0 1px 0 var(--highlight);
   transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.4), box-shadow 0.16s ease;
-}
-
-.primaryButton:hover {
-  box-shadow:
-    0 7px 22px color-mix(in srgb, var(--accent) 60%, transparent),
-    inset 0 1px 0 var(--highlight);
 }
 
 .ghostButton {
@@ -157,16 +143,6 @@
   cursor: pointer;
   box-shadow: inset 0 1px 0 var(--glass-highlight);
   transition: color 0.15s ease, border-color 0.15s ease, transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.4);
-}
-
-.ghostButton:hover {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
-}
-
-.dangerButton:hover {
-  color: var(--error-soft);
-  border-color: color-mix(in srgb, var(--error) 60%, var(--slot-border));
 }
 
 /* --- Library list ------------------------------------------------------ */
@@ -201,13 +177,6 @@
   border: 1px solid var(--slot-border);
   box-shadow: inset 0 1px 0 var(--glass-highlight);
   transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.row:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--slot-border));
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 6px 18px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .rowInfo {

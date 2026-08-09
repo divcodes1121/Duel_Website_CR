@@ -93,11 +93,6 @@
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
-.limitChip:hover:not(:disabled) {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
-}
-
 .limitChip[data-active='true'] {
   color: var(--accent-contrast);
   background: linear-gradient(135deg, var(--accent-light), var(--accent));
@@ -124,7 +119,6 @@
 
 .limitInput:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .limitInput:disabled {

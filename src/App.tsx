@@ -1,21 +1,16 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Header } from './components/Header/Header';
 import { DuelDeckBuilder } from './components/DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from './components/DecksHome/DecksHome';
 import { CounterPalette } from './components/CounterPalette/CounterPalette';
+import { Landing } from './components/Landing/Landing';
 import { Login } from './components/Login/Login';
 import { useAuthStore } from './state/authStore';
 import styles from './App.module.css';
 
-/**
- * The landing page is the app's one remaining framer-motion consumer (it and
- * the `useCardTilt` hook only it uses). Loading it lazily keeps the animation
- * library — ~66 kB gzip, roughly half the JS budget — out of the main bundle
- * entirely, so the builder, Deck's Home and Counter Palette never pay for it.
- */
-const Landing = lazy(() =>
-  import('./components/Landing/Landing').then((m) => ({ default: m.Landing })),
-);
+/* The landing used to be lazily imported purely to keep framer-motion, its only
+ * consumer, out of the main bundle. The library is gone from the project, so
+ * the split bought nothing but a blank frame on first paint. */
 
 type Page = 'builder' | 'decks' | 'palette' | 'landing';
 
@@ -43,16 +38,16 @@ function App() {
 
   if (!user) {
     return (
-      <div className={`${styles.app} ${styles.enter}`}>
+      <div className={styles.app}>
         <Login />
       </div>
     );
   }
 
-  // Keyed so a route change restarts the enter animation, which is what the old
-  // AnimatePresence `mode="wait"` bought — minus the exit pass and its blur.
+  // Keyed so a route change remounts cleanly rather than reconciling one page's
+  // tree into another's.
   return (
-    <div key={page} className={`${styles.app} ${styles.enter}`}>
+    <div key={page} className={styles.app}>
       {page === 'builder' ? (
         <>
           <Header />
@@ -63,9 +58,7 @@ function App() {
       ) : page === 'palette' ? (
         <CounterPalette />
       ) : (
-        <Suspense fallback={<div className={styles.routeFallback} />}>
-          <Landing />
-        </Suspense>
+        <Landing />
       )}
     </div>
   );

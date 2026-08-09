@@ -28,11 +28,6 @@
   z-index: 2;
 }
 
-.themeToggle:hover {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
-}
-
 .scene {
   position: relative;
 }
@@ -43,7 +38,6 @@
   width: clamp(56px, 7vw, 92px);
   border-radius: 8px;
   opacity: 0.85;
-  filter: drop-shadow(0 12px 26px transparent);
   pointer-events: none;
   z-index: 1;
 }
@@ -77,7 +71,7 @@
   border-radius: 26px;
   background: var(--glass-bg-strong);
   border: 1px solid transparent;
-  box-shadow: var(--shadow);
+
 }
 
 /* Gradient border ring. The angle used to be an @property custom prop spun by
@@ -165,9 +159,7 @@
   border-radius: 15px;
   color: var(--accent-contrast);
   background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
-  box-shadow:
-    0 6px 20px color-mix(in srgb, var(--accent) 55%, transparent),
-    inset 0 1px 0 var(--highlight);
+  box-shadow: inset 0 1px 0 var(--highlight);
   margin-bottom: 1rem;
 }
 
@@ -236,9 +228,7 @@
 
 .input:focus {
   border-color: var(--accent);
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .error {
@@ -260,18 +250,8 @@
   border-radius: 999px;
   padding: 0.8rem 1.5rem;
   cursor: pointer;
-  box-shadow:
-    0 6px 24px color-mix(in srgb, var(--accent) 55%, transparent),
-    inset 0 1px 0 var(--highlight);
+  box-shadow: inset 0 1px 0 var(--highlight);
   transition: box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
-}
-
-/* Was a framer-motion whileHover/whileTap spring; transform + box-shadow on a
-   CSS transition is the same effect with no JS in the loop. */
-.submit:hover {
-  box-shadow:
-    0 10px 32px color-mix(in srgb, var(--accent) 70%, transparent),
-    inset 0 1px 0 var(--highlight);
 }
 
 .submit:disabled {

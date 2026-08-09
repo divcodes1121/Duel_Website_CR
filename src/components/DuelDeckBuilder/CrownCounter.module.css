@@ -9,9 +9,7 @@
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--crown-accent) 35%, var(--slot-border));
   background: color-mix(in srgb, var(--crown-accent) 8%, var(--slot-bg));
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 4px 18px color-mix(in srgb, var(--crown-accent) 22%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
@@ -36,7 +34,6 @@
 
 .counter[data-empty='true'] .value {
   color: var(--text-muted);
-  text-shadow: none;
 }
 
 .pips {
@@ -66,13 +63,6 @@
     transform 0.14s ease;
 }
 
-/* Replaces the per-pip framer whileHover/whileTap springs — 4 motion components
-   per deck, in a Versus view that renders up to 10 decks. */
-.pip:hover {
-  color: var(--accent-gold-bright);
-  border-color: color-mix(in srgb, var(--accent-gold) 45%, var(--slot-border));
-}
-
 .pip:active {
 }
 
@@ -80,20 +70,13 @@
   color: var(--accent-gold-bright);
   border-color: color-mix(in srgb, var(--accent-gold) 60%, var(--slot-border));
   background: color-mix(in srgb, var(--accent-gold) 14%, var(--slot-bg));
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 0 12px color-mix(in srgb, var(--accent-gold) 40%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 /* "No crowns" — a struck-through crown, separated from the counting crowns. */
 .pipZero {
   margin-top: 0.28rem;
   border-style: dashed;
-}
-
-.pipZero:hover {
-  color: var(--error-soft);
-  border-color: color-mix(in srgb, var(--error) 50%, var(--slot-border));
 }
 
 .pipZeroActive {
