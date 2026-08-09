@@ -246,15 +246,14 @@
 
 .main {
   min-height: 0;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
 }
 
-/* Fills the column so the panel reaches the bottom of the viewport, as in the
-   reference, rather than sitting as a short card with dead space beneath it. */
+/* ---------------------------------------------------------------- hero panel */
+
 .hero {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -266,70 +265,127 @@
   overflow: hidden;
 }
 
-.heroInner {
+/* The search area only — the features strip sits below this, outside it. */
+.heroBody {
+  position: relative;
   flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  gap: 1.5rem;
-  align-items: center;
-  padding: 2.4rem 2.2rem 2rem;
+  min-height: 0;
+  display: flex;
 }
 
-.heroText {
+/* One card per corner, behind the content. They were stacked on the right,
+   which squeezed the text into a narrow column and left the panel lopsided. */
+.corners {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cornerCard {
+  position: absolute;
+  width: clamp(88px, 9vw, 132px);
+  border-radius: 10px;
+  opacity: 0.55;
+}
+
+.corner1 {
+  top: 7%;
+  left: 3.5%;
+  rotate: -13deg;
+}
+
+.corner2 {
+  top: 5%;
+  right: 4%;
+  rotate: 11deg;
+}
+
+.corner3 {
+  bottom: 8%;
+  left: 5.5%;
+  rotate: 9deg;
+}
+
+.corner4 {
+  bottom: 6%;
+  right: 3.5%;
+  rotate: -10deg;
+}
+
+/* Scrolls if the viewport is short; the content itself stays centred. */
+.heroScroll {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.5rem;
+}
+
+.heroInner {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+  max-width: 720px;
 }
 
 .heroBadge {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.4rem 0.85rem;
+  gap: 0.5rem;
+  padding: 0.45rem 1rem;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface-sunken);
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: 0.7rem;
   font-weight: 750;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
+/* One line, centred, and considerably larger — this is the page's anchor. */
 .heroTitle {
-  margin: 1.1rem 0 0;
+  margin: 1.4rem 0 0;
   font-family: 'Subscribe', Inter, system-ui, sans-serif;
   font-weight: 400;
-  font-size: clamp(2rem, 3.6vw, 2.9rem);
-  line-height: 1.12;
+  font-size: clamp(2.2rem, 4.4vw, 3.9rem);
+  line-height: 1.1;
   letter-spacing: 0.01em;
   color: var(--text);
+  white-space: nowrap;
 }
 
-/* The one emphasised line, as in the reference. */
 .heroTitleAccent {
   color: var(--text-muted);
 }
 
 .heroSub {
-  margin: 0.9rem 0 0;
-  font-size: 0.92rem;
-  line-height: 1.65;
+  margin: 1.1rem 0 0;
+  font-size: clamp(0.95rem, 1.2vw, 1.1rem);
+  line-height: 1.7;
   color: var(--text-muted);
 }
 
 /* --- search --- */
 
+/* Narrower than the panel: a full-width field across a wide screen reads as an
+   empty gutter rather than an input. */
 .searchRow {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.7rem;
   width: 100%;
-  max-width: 560px;
-  margin-top: 1.6rem;
-  padding: 0.4rem 0.4rem 0.4rem 0.9rem;
-  border-radius: 14px;
+  max-width: 540px;
+  margin-top: 2rem;
+  padding: 0.45rem 0.45rem 0.45rem 1.1rem;
+  border-radius: 16px;
   border: 1px solid var(--border-strong);
   background: var(--surface-sunken);
 }
@@ -347,9 +403,9 @@
   border: none;
   outline: none;
   background: none;
-  padding: 0.6rem 0;
+  padding: 0.75rem 0;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 550;
   color: var(--text);
 }
@@ -361,14 +417,14 @@
 .analyzeButton {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
   flex-shrink: 0;
-  padding: 0.65rem 1.25rem;
-  border-radius: 11px;
+  padding: 0.8rem 1.5rem;
+  border-radius: 12px;
   border: none;
   background: var(--accent);
   color: var(--accent-contrast);
-  font-size: 0.85rem;
+  font-size: 0.92rem;
   font-weight: 750;
   cursor: pointer;
 }
@@ -377,16 +433,15 @@
 
 .popular {
   width: 100%;
-  max-width: 560px;
-  margin-top: 1.5rem;
+  max-width: 660px;
+  margin-top: 1.8rem;
 }
 
-/* Centred label on a rule, the way the reference divides this strip. */
 .popularLabel {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-  font-size: 0.64rem;
+  gap: 0.85rem;
+  font-size: 0.66rem;
   font-weight: 750;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -405,124 +460,221 @@
 .popularTags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.9rem;
+  justify-content: center;
+  gap: 0.55rem;
+  margin-top: 1rem;
 }
 
 .tagChip {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 0.85rem;
+  gap: 0.45rem;
+  padding: 0.5rem 0.95rem;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface-sunken);
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
-/* --- card art cluster --- */
+/* --- the three built pages, reachable from here as well as the top bar --- */
 
-.heroArt {
+.features {
   position: relative;
-  height: 250px;
-  min-width: 0;
-}
-
-.heroCard {
-  position: absolute;
-  width: 118px;
-  border-radius: 10px;
-}
-
-.heroCard1 {
-  top: 46px;
-  left: 4%;
-  rotate: -9deg;
-}
-
-.heroCard2 {
-  top: 6px;
-  left: 34%;
-  width: 138px;
-  rotate: 5deg;
-}
-
-.heroCard3 {
-  top: 104px;
-  left: 62%;
-  rotate: 12deg;
-}
-
-/* --- highlight strip --- */
-
-.highlights {
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1.4rem;
-  padding: 1.3rem 2.2rem;
+  gap: 1rem;
+  padding: 1.25rem 1.6rem;
   border-top: 1px solid var(--border);
   background: var(--surface-sunken);
 }
 
-.highlight {
+.feature {
   display: flex;
   align-items: flex-start;
-  gap: 0.8rem;
+  gap: 0.85rem;
   min-width: 0;
+  padding: 0.7rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
 
-.highlightIcon {
+.featureIcon {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 11px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
 }
 
-.highlightText {
+.featureText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.featureTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.featureBody {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------- section placeholder */
+
+.panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-shrink: 0;
+  padding: 1.4rem 1.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.panelHeadText {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
 }
 
-.highlightTitle {
-  font-size: 0.86rem;
-  font-weight: 750;
+.panelTitle {
+  margin: 0;
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 1.5rem;
+  letter-spacing: 0.03em;
   color: var(--text);
 }
 
-.highlightBody {
+.panelBlurb {
   margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.5;
+  font-size: 0.84rem;
   color: var(--text-muted);
 }
 
+/* The point of the placeholder: the body scrolls under a header that stays. */
+.panelScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.2rem 1.8rem 1.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
 
-/* ------------------------------------------------------------- responsive */
+.placeholderRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
 
-@media (max-width: 1080px) {
-  .heroInner {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.placeholderRank {
+  flex-shrink: 0;
+  width: 1.6rem;
+  font-size: 0.8rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
 
-  .heroArt {
+.placeholderBar {
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.placeholderBar[data-w='0'] {
+  width: 62%;
+}
+
+.placeholderBar[data-w='1'] {
+  width: 44%;
+}
+
+.placeholderBar[data-w='2'] {
+  width: 71%;
+}
+
+.placeholderBar[data-w='3'] {
+  width: 53%;
+}
+
+.panelNote {
+  margin: 0.6rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* --------------------------------------------------------------- responsive */
+
+@media (max-width: 1180px) {
+  .corners {
     display: none;
   }
+}
 
-  .highlights {
+@media (max-width: 900px) {
+  .heroTitle {
+    white-space: normal;
+  }
+
+  .features {
     grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
+    gap: 0.4rem;
   }
 }
 
@@ -531,11 +683,9 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .sidebar {
-    display: none;
-  }
-
+  .sidebar,
   .topNav {
     display: none;
   }
 }
+
