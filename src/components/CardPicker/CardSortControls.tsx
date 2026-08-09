@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import { useBuilderStore } from '../../state/store';
 import type { SortKey } from '../../utils/sort';
 import styles from './CardPicker.module.css';
@@ -22,13 +21,6 @@ export function CardSortControls() {
           className={`${styles.segment} ${sortKey === key ? styles.segmentActive : ''}`}
           onClick={() => setSort(key)}
         >
-          {sortKey === key && (
-            <motion.span
-              layoutId="sort-indicator"
-              className={styles.segmentIndicator}
-              transition={{ type: 'spring', stiffness: 480, damping: 34 }}
-            />
-          )}
           <span className={styles.segmentLabel}>
             {SORT_LABELS[key]} {sortKey === key ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
           </span>

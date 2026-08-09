@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import { MAX_CROWNS, type PlayerId } from '../../types/deck';
 import styles from './CrownCounter.module.css';
 
@@ -59,34 +58,28 @@ export function CrownCounter({ value, onChange, side, deckName }: CrownCounterPr
           const n = i + 1;
           const lit = n <= crowns;
           return (
-            <motion.button
+            <button
               key={n}
               type="button"
               className={`${styles.pip} ${lit ? styles.pipLit : ''}`}
               aria-pressed={lit}
               title={`${n} crown${n === 1 ? '' : 's'}`}
               onClick={() => onChange(n)}
-              whileHover={{ scale: 1.15 }}
-              whileTap={{ scale: 0.88 }}
-              transition={{ type: 'spring', stiffness: 460, damping: 18 }}
             >
               <CrownIcon />
-            </motion.button>
+            </button>
           );
         })}
 
-        <motion.button
+        <button
           type="button"
           className={`${styles.pip} ${styles.pipZero} ${crowns === 0 ? styles.pipZeroActive : ''}`}
           aria-pressed={crowns === 0}
           title="No crowns"
           onClick={() => onChange(0)}
-          whileHover={{ scale: 1.15 }}
-          whileTap={{ scale: 0.88 }}
-          transition={{ type: 'spring', stiffness: 460, damping: 18 }}
         >
           <CrownOffIcon />
-        </motion.button>
+        </button>
       </div>
     </div>
   );

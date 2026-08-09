@@ -1,13 +1,30 @@
-import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Header } from './components/Header/Header';
 import { DuelDeckBuilder } from './components/DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from './components/DecksHome/DecksHome';
 import { CounterPalette } from './components/CounterPalette/CounterPalette';
-import { Landing } from './components/Landing/Landing';
 import { Login } from './components/Login/Login';
 import { useAuthStore } from './state/authStore';
 import styles from './App.module.css';
+
+/**
+ * The landing page is the app's one remaining framer-motion consumer (it and
+ * the `useCardTilt` hook only it uses). Loading it lazily keeps the animation
+ * library — ~66 kB gzip, roughly half the JS budget — out of the main bundle
+ * entirely, so the builder, Deck's Home and Counter Palette never pay for it.
+ */
+const Landing = lazy(() =>
+  import('./components/Landing/Landing').then((m) => ({ default: m.Landing })),
+);
+
+type Page = 'builder' | 'decks' | 'palette' | 'landing';
+
+function pageFor(hash: string): Page {
+  if (hash.startsWith('#/builder')) return 'builder';
+  if (hash.startsWith('#/decks')) return 'decks';
+  if (hash.startsWith('#/palette')) return 'palette';
+  return 'landing';
+}
 
 function useHashRoute(): string {
   const [route, setRoute] = useState(window.location.hash);
@@ -19,49 +36,38 @@ function useHashRoute(): string {
   return route;
 }
 
-const pageMotion = {
-  initial: { opacity: 0, scale: 0.985, filter: 'blur(8px)' },
-  animate: { opacity: 1, scale: 1, filter: 'blur(0px)' },
-  exit: { opacity: 0, scale: 1.015, filter: 'blur(8px)' },
-  transition: { duration: 0.4, ease: [0.2, 0.8, 0.3, 1] as const },
-};
-
 function App() {
   const route = useHashRoute();
   const user = useAuthStore((s) => s.user);
-  const page = route.startsWith('#/builder')
-    ? 'builder'
-    : route.startsWith('#/decks')
-      ? 'decks'
-      : route.startsWith('#/palette')
-        ? 'palette'
-        : 'landing';
+  const page = pageFor(route);
 
+  if (!user) {
+    return (
+      <div className={`${styles.app} ${styles.enter}`}>
+        <Login />
+      </div>
+    );
+  }
+
+  // Keyed so a route change restarts the enter animation, which is what the old
+  // AnimatePresence `mode="wait"` bought — minus the exit pass and its blur.
   return (
-    <AnimatePresence mode="wait">
-      {!user ? (
-        <motion.div key="login" className={styles.app} {...pageMotion}>
-          <Login />
-        </motion.div>
-      ) : page === 'builder' ? (
-        <motion.div key="builder" className={styles.app} {...pageMotion}>
+    <div key={page} className={`${styles.app} ${styles.enter}`}>
+      {page === 'builder' ? (
+        <>
           <Header />
           <DuelDeckBuilder />
-        </motion.div>
+        </>
       ) : page === 'decks' ? (
-        <motion.div key="decks" className={styles.app} {...pageMotion}>
-          <DecksHome />
-        </motion.div>
+        <DecksHome />
       ) : page === 'palette' ? (
-        <motion.div key="palette" className={styles.app} {...pageMotion}>
-          <CounterPalette />
-        </motion.div>
+        <CounterPalette />
       ) : (
-        <motion.div key="landing" className={styles.app} {...pageMotion}>
+        <Suspense fallback={<div className={styles.routeFallback} />}>
           <Landing />
-        </motion.div>
+        </Suspense>
       )}
-    </AnimatePresence>
+    </div>
   );
 }
 

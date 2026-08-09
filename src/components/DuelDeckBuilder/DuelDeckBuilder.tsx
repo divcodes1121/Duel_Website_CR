@@ -1,5 +1,4 @@
 ﻿import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { useBuilderStore, type DuelOwner } from '../../state/store';
 import { DUEL_DECK_COUNT, type BuilderMode, type Deck, type PlayerId } from '../../types/deck';
 import { DeckPanel } from './DeckPanel';
@@ -36,34 +35,24 @@ function DeckSlotControls({ owner }: { owner: DuelOwner }) {
   return (
     <div className={styles.slotControls}>
       {canAdd && (
-        <motion.button
-          type="button"
-          className={styles.addSlot}
-          onClick={() => addDeckSlot(owner)}
-          whileHover={{ scale: 1.01, y: -2 }}
-          whileTap={{ scale: 0.98 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-        >
+        <button type="button" className={styles.addSlot} onClick={() => addDeckSlot(owner)}>
           <span className={styles.addSlotPlus} aria-hidden="true">
             +
           </span>
           Add deck slot ({count}/{DUEL_DECK_COUNT})
-        </motion.button>
+        </button>
       )}
       {canRemove && (
-        <motion.button
+        <button
           type="button"
           className={`${styles.addSlot} ${styles.removeSlot}`}
           onClick={handleRemove}
-          whileHover={{ scale: 1.01, y: -2 }}
-          whileTap={{ scale: 0.98 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 22 }}
         >
           <span className={styles.addSlotPlus} aria-hidden="true">
             –
           </span>
           Remove deck slot
-        </motion.button>
+        </button>
       )}
     </div>
   );
@@ -123,13 +112,6 @@ export function DuelDeckBuilder() {
               className={`${styles.modeTab} ${mode === m.id ? styles.modeTabActive : ''}`}
               onClick={() => setMode(m.id)}
             >
-              {mode === m.id && (
-                <motion.span
-                  layoutId="mode-indicator"
-                  className={styles.modeIndicator}
-                  transition={{ type: 'spring', stiffness: 480, damping: 34 }}
-                />
-              )}
               <span className={styles.modeLabel}>{m.label}</span>
             </button>
           ))}
@@ -152,33 +134,26 @@ export function DuelDeckBuilder() {
             {sets.solo.decks.slice(0, deckSlotCount.solo).map((deck, i) => {
               const match = matches(deck);
               return (
-                <motion.div
+                <div
                   key={deck.id}
-                  className={filtering && match ? styles.deckMatch : undefined}
-                  initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
-                  animate={{ opacity: filtering && !match ? 0.35 : 1, y: 0, filter: 'blur(0px)' }}
-                  transition={{ type: 'spring', stiffness: 240, damping: 26, delay: Math.min(i, 3) * 0.07 }}
+                  className={`${styles.deckWrap} ${filtering && match ? styles.deckMatch : ''} ${
+                    filtering && !match ? styles.deckDim : ''
+                  }`}
                 >
                   <DeckPanel owner="solo" deckIndex={i} deck={deck} />
-                </motion.div>
+                </div>
               );
             })}
             <DeckSlotControls owner="solo" />
           </div>
         ) : (
           <div className={styles.versusColumns}>
-            {PLAYERS.map((player, colIndex) => (
+            {PLAYERS.map((player) => (
               <div key={player.id} className={styles.playerColumn} data-owner={player.id}>
-                <motion.div
-                  className={styles.playerHeader}
-                  data-owner={player.id}
-                  initial={{ opacity: 0, y: -12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ type: 'spring', stiffness: 240, damping: 26, delay: colIndex * 0.08 }}
-                >
+                <div className={styles.playerHeader} data-owner={player.id}>
                   <span className={styles.playerDot} data-owner={player.id} />
                   {player.label}
-                </motion.div>
+                </div>
                 {sets[player.id].decks.slice(0, deckSlotCount[player.id]).map((deck, i) => {
                   const match = matches(deck);
                   const crowns = (
@@ -190,17 +165,11 @@ export function DuelDeckBuilder() {
                     />
                   );
                   return (
-                    <motion.div
+                    <div
                       key={deck.id}
-                      className={styles.duelRow}
-                      initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
-                      animate={{ opacity: filtering && !match ? 0.35 : 1, y: 0, filter: 'blur(0px)' }}
-                      transition={{
-                        type: 'spring',
-                        stiffness: 240,
-                        damping: 26,
-                        delay: 0.08 + Math.min(i, 3) * 0.06 + colIndex * 0.05,
-                      }}
+                      className={`${styles.duelRow} ${styles.deckWrap} ${
+                        filtering && !match ? styles.deckDim : ''
+                      }`}
                     >
                       {/* Crowns sit on the inner edge of each column, flanking the VS divider. */}
                       {player.id === 'red' && crowns}
@@ -208,7 +177,7 @@ export function DuelDeckBuilder() {
                         <DeckPanel owner={player.id} deckIndex={i} deck={deck} />
                       </div>
                       {player.id === 'blue' && crowns}
-                    </motion.div>
+                    </div>
                   );
                 })}
                 <DeckSlotControls owner={player.id} />

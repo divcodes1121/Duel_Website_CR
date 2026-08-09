@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { motion, useAnimationControls } from 'framer-motion';
 import { useAuthStore } from '../../state/authStore';
 import { useThemeStore } from '../../state/themeStore';
 import { getCardIconUrl } from '../../data/cards';
@@ -21,7 +20,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const shake = useAnimationControls();
+  const [shaking, setShaking] = useState(false);
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -35,10 +34,10 @@ export function Login() {
     setBusy(false);
     if (!ok) {
       setError('Invalid username or password.');
-      shake.start({
-        x: [0, -12, 12, -8, 8, -4, 4, 0],
-        transition: { duration: 0.45, ease: 'easeInOut' },
-      });
+      // Re-arm first: without dropping the class the animation would not replay
+      // on a second failed attempt.
+      setShaking(false);
+      requestAnimationFrame(() => setShaking(true));
     }
   }
 
@@ -54,26 +53,21 @@ export function Login() {
         {theme === 'dark' ? '☾' : '☀'}
       </button>
 
-      <motion.div
-        className={styles.scene}
-        initial={{ opacity: 0, y: 32, filter: 'blur(10px)' }}
-        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-        transition={{ type: 'spring', stiffness: 160, damping: 24 }}
-      >
+      <div className={styles.scene}>
         <img src={getCardIconUrl('archer-queen')} alt="" aria-hidden="true" className={`${styles.floatCard} ${styles.floatA}`} />
         <img src={getCardIconUrl('golden-knight')} alt="" aria-hidden="true" className={`${styles.floatCard} ${styles.floatB}`} />
 
-        <motion.div className={styles.card} animate={shake}>
+        <div
+          className={`${styles.card} ${shaking ? styles.shake : styles.cardEnter}`}
+          onAnimationEnd={(e) => {
+            if (e.target === e.currentTarget) setShaking(false);
+          }}
+        >
           <span className={styles.cardBorder} aria-hidden="true" />
 
-          <motion.span
-            className={styles.logoMark}
-            animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-            aria-hidden="true"
-          >
+          <span className={styles.logoMark} aria-hidden="true">
             <CrownIcon />
-          </motion.span>
+          </span>
 
           <h1 className={styles.title}>Royal Arena</h1>
           <p className={styles.subtitle}>Sign in to enter the arena</p>
@@ -110,31 +104,16 @@ export function Login() {
               />
             </label>
 
-            {error && (
-              <motion.p
-                className={styles.error}
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                {error}
-              </motion.p>
-            )}
+            {error && <p className={styles.error}>{error}</p>}
 
-            <motion.button
-              type="submit"
-              className={styles.submit}
-              disabled={busy}
-              whileHover={{ scale: 1.03, y: -2 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-            >
+            <button type="submit" className={styles.submit} disabled={busy}>
               {busy ? 'Checking…' : 'Sign In'}
-            </motion.button>
+            </button>
           </form>
 
           <p className={styles.hint}>Test access — use the account you were given.</p>
-        </motion.div>
-      </motion.div>
+        </div>
+      </div>
     </div>
   );
 }

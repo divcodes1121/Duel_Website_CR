@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { useBuilderStore } from '../../state/store';
 import {
   CARDS_BY_KEY,
@@ -97,11 +96,9 @@ function DeckRow({ deck, dim, side }: { deck: Deck; dim?: boolean; side?: Player
 
 function GroupCard({
   entry,
-  index,
   winFilter,
 }: {
   entry: SavedDeckSet;
-  index: number;
   winFilter: string[];
 }) {
   const loadSaved = useBuilderStore((s) => s.loadSaved);
@@ -143,13 +140,7 @@ function GroupCard({
   }
 
   return (
-    <motion.article
-      className={styles.group}
-      initial={{ opacity: 0, y: 26, filter: 'blur(6px)' }}
-      whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-      viewport={{ once: true, margin: '-40px' }}
-      transition={{ type: 'spring', stiffness: 220, damping: 26, delay: Math.min(index, 3) * 0.06 }}
-    >
+    <article className={styles.group}>
       <header className={styles.groupHeader}>
         <div className={styles.groupTitleWrap}>
           {isRenaming ? (
@@ -209,7 +200,7 @@ function GroupCard({
           )}
         </div>
       )}
-    </motion.article>
+    </article>
   );
 }
 
@@ -226,8 +217,8 @@ export function SavedGroups({ mode, winFilter = [] }: { mode: BuilderMode; winFi
         Saved Groups
         <span className={styles.sectionCount}>{entries.length}</span>
       </h2>
-      {entries.map((entry, i) => (
-        <GroupCard key={entry.id} entry={entry} index={i} winFilter={winFilter} />
+      {entries.map((entry) => (
+        <GroupCard key={entry.id} entry={entry} winFilter={winFilter} />
       ))}
     </section>
   );

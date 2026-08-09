@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import { getCardIconUrl, getEvolutionIconUrl, getHeroIconUrl } from '../../data/cards';
 import type { Card } from '../../types/card';
 import type { WildVariant } from '../../types/deck';
@@ -54,18 +53,13 @@ export function WildVariantMenu({ anchor, card, current, onPick, onClose }: Wild
   }, [onClose]);
 
   return createPortal(
-    <AnimatePresence>
-      <motion.div
-        className={styles.menu}
-        style={{ top: anchor.bottom + 10, left, width: MENU_WIDTH }}
-        initial={{ opacity: 0, y: -8, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -6, scale: 0.97 }}
-        transition={{ type: 'spring', stiffness: 440, damping: 32 }}
-        role="menu"
-        aria-label={`${card.name} form`}
-      >
-        <div ref={menuRef}>
+    <div
+      className={styles.menu}
+      style={{ top: anchor.bottom + 10, left, width: MENU_WIDTH }}
+      role="menu"
+      aria-label={`${card.name} form`}
+    >
+      <div ref={menuRef}>
           <span className={styles.arrow} aria-hidden="true" />
           <div className={styles.header}>
             <span className={styles.cardName}>{card.name}</span>
@@ -97,9 +91,8 @@ export function WildVariantMenu({ anchor, card, current, onPick, onClose }: Wild
               )}
             </button>
           ))}
-        </div>
-      </motion.div>
-    </AnimatePresence>,
+      </div>
+    </div>,
     document.body,
   );
 }

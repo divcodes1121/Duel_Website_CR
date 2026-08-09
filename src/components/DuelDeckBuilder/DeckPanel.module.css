@@ -175,8 +175,41 @@
   margin-block: -0.45rem;
 }
 
+/* Open animation for the paste-a-link row.
+ *
+ * framer-motion used to animate height 0 -> auto here. In CSS that is the
+ * `grid-template-rows: 0fr -> 1fr` trick: the row is a grid whose single track
+ * grows from nothing to its content height, which is animatable where a bare
+ * `height: auto` is not. It runs as a keyframe (not a transition) because the
+ * element is mounted only while open, and a transition has no from-state on
+ * first paint. Closing is now instant — the exit pass is exactly the kind of
+ * thing that required keeping an animation runtime on the page. */
 .importRow {
+  display: grid;
+  grid-template-rows: 1fr;
   overflow: hidden;
+  animation: import-row-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.importRow > * {
+  min-height: 0;
+}
+
+@keyframes import-row-in {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .importRow {
+    animation: none;
+  }
 }
 
 /* A card that another duel deck already uses: black & white until the player
@@ -526,9 +559,15 @@
 
 /* Defined after the role/rarity rules (and with matching specificity) so the
    selection ring always wins over the positional border and rarity glows. */
+/* Static ring. This used to run `selection-breathe` infinitely — an animated
+   box-shadow, which cannot be composited, so every frame repainted the slot for
+   as long as one was selected (i.e. the whole time the user is picking cards). */
 .slot.slotSelected {
   border-color: var(--selection-accent);
-  animation: selection-breathe 1.6s ease-in-out infinite;
+  box-shadow:
+    0 0 0 2px var(--selection-accent),
+    0 0 22px color-mix(in srgb, var(--selection-accent) 60%, transparent),
+    inset 0 1px 0 var(--glass-highlight);
 }
 
 /* Valid drop target under an in-progress drag — wins over everything. */
@@ -543,19 +582,26 @@
     inset 0 1px 0 var(--glass-highlight);
 }
 
-@keyframes selection-breathe {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 2px var(--selection-accent),
-      0 0 16px color-mix(in srgb, var(--selection-accent) 45%, transparent),
-      inset 0 1px 0 var(--glass-highlight);
+/* Card landing in a slot. Replaces a framer-motion spring on the <img>; keyed on
+   the card so React remounts the node and the animation replays per swap. */
+.slotIconEnter {
+  animation: slot-icon-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes slot-icon-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5) translateY(8px);
   }
-  50% {
-    box-shadow:
-      0 0 0 2px var(--selection-accent),
-      0 0 30px color-mix(in srgb, var(--selection-accent) 80%, transparent),
-      inset 0 1px 0 var(--glass-highlight);
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slotIconEnter {
+    animation: none;
   }
 }
 

@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import type { Card } from '../../types/card';
 import { getCardIconUrl } from '../../data/cards';
 import { startDrag, endDrag } from '../../state/dragContext';
@@ -37,7 +36,7 @@ export function CardTile({
   const title = state === 'used' && disabledReason ? disabledReason : `${card.name}${ownership}`;
 
   return (
-    <motion.button
+    <button
       type="button"
       className={`${styles.tile} ${state === 'selected' ? styles.tileSelected : ''} ${
         disabled ? styles.tileDisabled : ''
@@ -53,17 +52,15 @@ export function CardTile({
         onClick(e);
       }}
       draggable
-      // Capture-phase handlers: framer-motion reserves onDragStart/onDragEnd
-      // for its own gesture system on motion components.
-      onDragStartCapture={(e: React.DragEvent<HTMLButtonElement>) => {
+      // Plain drag handlers now that this is a real <button> — the capture-phase
+      // variants were only needed because framer's motion components claim
+      // onDragStart/onDragEnd for their own gesture system.
+      onDragStart={(e: React.DragEvent<HTMLButtonElement>) => {
         e.dataTransfer.effectAllowed = 'copy';
         e.dataTransfer.setData('text/plain', card.key);
         startDrag({ type: 'picker', cardKey: card.key, sourceRect: rectOf(e.currentTarget) });
       }}
-      onDragEndCapture={endDrag}
-      whileHover={disabled ? undefined : { y: -5, rotate: -1.5, scale: 1.08 }}
-      whileTap={disabled ? undefined : { scale: 0.92 }}
-      transition={{ type: 'spring', stiffness: 420, damping: 20 }}
+      onDragEnd={endDrag}
     >
       <img
         src={iconSrc ?? getCardIconUrl(card.key)}
@@ -84,6 +81,6 @@ export function CardTile({
           {ownedByRed && <span className={`${styles.ribbon} ${styles.ribbonRed}`} />}
         </span>
       )}
-    </motion.button>
+    </button>
   );
 }

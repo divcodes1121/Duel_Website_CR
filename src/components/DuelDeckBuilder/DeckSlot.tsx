@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { CARDS_BY_KEY, getCardIconUrl, getEvolutionIconUrl, getHeroIconUrl } from '../../data/cards';
 import { useBuilderStore } from '../../state/store';
 import { useFlightStore, rectOf } from '../../state/flightStore';
@@ -223,11 +222,13 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
       >
         {card ? (
           <>
-            <motion.img
+            {/* Keyed on the card so a swap remounts the node and replays the
+                CSS landing animation, which is what the old motion spring did. */}
+            <img
               key={card.key}
               src={getSlotIconUrl(variant, card)}
               alt={card.name}
-              className={styles.slotIcon}
+              className={`${styles.slotIcon} ${styles.slotIconEnter}`}
               draggable={false}
               onError={(e) => {
                 // A few cards lack special-form art (e.g. Bowler's hero art) — fall back to base art.
@@ -236,9 +237,6 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
                   e.currentTarget.src = base;
                 }
               }}
-              initial={{ scale: 0.5, opacity: 0, y: 8 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 24 }}
             />
             {badgeLabel && (
               <span className={`${styles.slotRoleBadge} ${badgeClass}`}>{badgeLabel}</span>

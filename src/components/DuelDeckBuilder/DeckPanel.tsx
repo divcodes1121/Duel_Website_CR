@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import type { Deck, DeckOwner } from '../../types/deck';
 import { useBuilderStore } from '../../state/store';
 import { getClashRoyaleDeckLink, parseClashRoyaleDeckLink } from '../../utils/deckLink';
@@ -190,38 +189,29 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete }: DeckPanelProps) 
       </header>
 
       <div className={styles.importWrap}>
-        <AnimatePresence initial={false}>
-          {importOpen && (
-            <motion.div
-              key="import-row"
-              className={styles.importRow}
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-            >
-              <div className={styles.importInner}>
-                <input
-                  className={`${styles.importInput} ${importError ? styles.importInputError : ''}`}
-                  value={importValue}
-                  autoFocus
-                  placeholder="Paste a Clash Royale deck link — the deck builds itself"
-                  spellCheck={false}
-                  onChange={(e) => handleImportChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') tryImport(importValue);
-                    if (e.key === 'Escape') closeImport();
-                  }}
-                />
-                {importOk ? (
-                  <span className={styles.importOk}>Deck imported ✓</span>
-                ) : importError ? (
-                  <span className={styles.importErrorText}>{importError}</span>
-                ) : null}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {importOpen && (
+          <div className={styles.importRow}>
+            <div className={styles.importInner}>
+              <input
+                className={`${styles.importInput} ${importError ? styles.importInputError : ''}`}
+                value={importValue}
+                autoFocus
+                placeholder="Paste a Clash Royale deck link — the deck builds itself"
+                spellCheck={false}
+                onChange={(e) => handleImportChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') tryImport(importValue);
+                  if (e.key === 'Escape') closeImport();
+                }}
+              />
+              {importOk ? (
+                <span className={styles.importOk}>Deck imported ✓</span>
+              ) : importError ? (
+                <span className={styles.importErrorText}>{importError}</span>
+              ) : null}
+            </div>
+          </div>
+        )}
       </div>
 
       <DeckSlotGrid owner={owner} deckIndex={deckIndex} deck={deck} />

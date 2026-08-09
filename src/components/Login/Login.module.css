@@ -48,32 +48,25 @@
   z-index: 1;
 }
 
+/* Static. These carried infinite float animations; the login screen is the very
+   first paint of the app and does not need two elements animating forever. */
 .floatA {
   top: -9%;
   left: -14%;
   rotate: -9deg;
-  animation: login-float 8s ease-in-out infinite;
 }
 
 .floatB {
   bottom: -7%;
   right: -13%;
   rotate: 8deg;
-  animation: login-float 10s ease-in-out 1.5s infinite reverse;
-}
-
-@keyframes login-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-14px);
-  }
 }
 
 /* --- The glass panel ----------------------------------------------------- */
 
+/* The blurred backdrop is gone: this panel is opaque enough that blurring the
+   body gradient behind it changed almost nothing, and backdrop-filter forces a
+   separate compositing pass over everything underneath. */
 .card {
   position: relative;
   width: min(400px, 92vw);
@@ -84,19 +77,20 @@
   border-radius: 26px;
   background: var(--glass-bg-strong);
   border: 1px solid transparent;
-  backdrop-filter: blur(26px) saturate(150%);
-  -webkit-backdrop-filter: blur(26px) saturate(150%);
   box-shadow: var(--shadow);
 }
 
-/* animated gradient border ring (same treatment as the landing feature card) */
+/* Gradient border ring. The angle used to be an @property custom prop spun by
+   an infinite keyframe — every frame re-rasterised the whole conic gradient and
+   its mask, which is one of the most expensive things CSS can be asked to do.
+   A fixed angle keeps the look and costs one paint. */
 .cardBorder {
   position: absolute;
   inset: 0;
   border-radius: 26px;
   padding: 1px;
   background: conic-gradient(
-    from var(--login-angle, 0deg),
+    from 210deg,
     color-mix(in srgb, var(--accent) 70%, transparent),
     color-mix(in srgb, var(--accent-cyan) 55%, transparent),
     color-mix(in srgb, var(--accent-gold) 65%, transparent),
@@ -107,18 +101,58 @@
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
   pointer-events: none;
-  animation: login-border-spin 8s linear infinite;
 }
 
-@property --login-angle {
-  syntax: '<angle>';
-  initial-value: 0deg;
-  inherits: false;
+/* Panel entrance + the wrong-password shake, both one-shot and both driven by a
+   class rather than a JS animation runtime. */
+.cardEnter {
+  animation: login-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes login-border-spin {
+@keyframes login-in {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
   to {
-    --login-angle: 360deg;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.shake {
+  animation: login-shake 0.45s ease-in-out;
+}
+
+@keyframes login-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-12px);
+  }
+  30% {
+    transform: translateX(12px);
+  }
+  45% {
+    transform: translateX(-8px);
+  }
+  60% {
+    transform: translateX(8px);
+  }
+  75% {
+    transform: translateX(-4px);
+  }
+  90% {
+    transform: translateX(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardEnter,
+  .shake {
+    animation: none;
   }
 }
 
@@ -229,14 +263,20 @@
   box-shadow:
     0 6px 24px color-mix(in srgb, var(--accent) 55%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  transition: box-shadow 0.2s ease, opacity 0.2s ease;
+  transition: box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
 }
 
+/* Was a framer-motion whileHover/whileTap spring; transform + box-shadow on a
+   CSS transition is the same effect with no JS in the loop. */
 .submit:hover {
+  transform: translateY(-2px) scale(1.03);
   box-shadow:
     0 10px 32px color-mix(in srgb, var(--accent) 70%, transparent),
-    0 0 28px color-mix(in srgb, var(--accent-light) 40%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.submit:active {
+  transform: scale(0.95);
 }
 
 .submit:disabled {
