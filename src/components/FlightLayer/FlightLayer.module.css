@@ -1,0 +1,34 @@
+.layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* A card in flight between the picker and a deck slot.
+ *
+ * The element is laid out at its source rect and then transformed to the
+ * destination, rather than animating width/height/x/y as the framer springs
+ * used to. Transform and opacity are the only two properties the compositor can
+ * animate without touching layout or paint, so the flight costs nothing beyond
+ * the one element itself.
+ *
+ * `transform-origin: top left` makes the scale factors line up with the
+ * `left`/`top` the element is positioned at — scaling from the centre would
+ * drift the card away from its target corner. */
+.flight {
+  position: absolute;
+  border-radius: 8px;
+  object-fit: contain;
+  transform-origin: top left;
+  will-change: transform, opacity;
+  transition:
+    transform 0.34s cubic-bezier(0.2, 0.8, 0.3, 1),
+    opacity 0.34s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flight {
+    transition: none;
+  }
+}

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
 import { useBuilderStore } from '../../state/store';
 import { getTotalCardsUsed } from '../../state/deckUtils';
 import type { SavedDeckSet } from '../../types/deck';
@@ -78,13 +77,7 @@ export function LibraryModal({ onClose }: LibraryModalProps) {
   // Portal to <body>: escapes the header's backdrop-filter stacking context.
   return createPortal(
     <div className={styles.overlay} onClick={onClose}>
-      <motion.div
-        className={styles.modal}
-        onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: 0.92, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-      >
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h2 className={styles.dialogTitle}>My Decks</h2>
           <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Close">
@@ -97,13 +90,7 @@ export function LibraryModal({ onClose }: LibraryModalProps) {
         ) : (
           <ul className={styles.list}>
             {library.map((entry) => (
-              <motion.li
-                key={entry.id}
-                className={styles.row}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-              >
+              <li key={entry.id} className={styles.row}>
                 <div className={styles.rowInfo}>
                   {renamingId === entry.id ? (
                     <input
@@ -155,7 +142,7 @@ export function LibraryModal({ onClose }: LibraryModalProps) {
                     Delete
                   </button>
                 </div>
-              </motion.li>
+              </li>
             ))}
           </ul>
         )}
@@ -165,7 +152,7 @@ export function LibraryModal({ onClose }: LibraryModalProps) {
             + New blank set
           </button>
         </div>
-      </motion.div>
+      </div>
     </div>,
     document.body,
   );

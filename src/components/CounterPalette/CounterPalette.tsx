@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import type { DuelDeckSet } from '../../types/deck';
 import { useBuilderStore } from '../../state/store';
 import { useThemeStore } from '../../state/themeStore';
@@ -73,14 +72,8 @@ function FolderGallery() {
       )}
 
       <div className={styles.folderGrid}>
-        {folders.map((folder, i) => (
-          <motion.div
-            key={folder.id}
-            className={styles.folderCard}
-            initial={{ opacity: 0, y: 20, filter: 'blur(6px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            transition={{ type: 'spring', stiffness: 240, damping: 26, delay: Math.min(i, 6) * 0.04 }}
-          >
+        {folders.map((folder) => (
+          <div key={folder.id} className={styles.folderCard}>
             <button
               type="button"
               className={styles.folderBody}
@@ -129,20 +122,13 @@ function FolderGallery() {
                 Delete
               </button>
             </div>
-          </motion.div>
+          </div>
         ))}
 
-        <motion.button
-          type="button"
-          className={styles.addFolder}
-          onClick={addPaletteFolder}
-          whileHover={{ scale: 1.02, y: -2 }}
-          whileTap={{ scale: 0.98 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-        >
+        <button type="button" className={styles.addFolder} onClick={addPaletteFolder}>
           <span className={homeStyles.addDeckPlus}>+</span>
           New folder
-        </motion.button>
+        </button>
       </div>
     </section>
   );
@@ -230,44 +216,27 @@ function FolderView({ folder }: { folder: DuelDeckSet }) {
 
       <WinConFilter selected={winFilter} onToggle={toggleWinCon} onClear={() => setWinFilter([])} />
 
-      {visibleDecks.map(({ deck, index }, i) => (
-        <motion.div
+      {visibleDecks.map(({ deck, index }) => (
+        <DeckPanel
           key={deck.id}
-          initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ type: 'spring', stiffness: 240, damping: 26, delay: Math.min(i, 4) * 0.05 }}
-        >
-          <DeckPanel
-            owner="palette"
-            deckIndex={index}
-            deck={deck}
-            onDelete={() => handleDeleteDeck(index)}
-          />
-        </motion.div>
+          owner="palette"
+          deckIndex={index}
+          deck={deck}
+          onDelete={() => handleDeleteDeck(index)}
+        />
       ))}
 
       {winFilter.length > 0 && visibleDecks.length === 0 && (
-        <motion.p
-          className={homeStyles.noMatches}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
+        <p className={homeStyles.noMatches}>
           No decks with {winFilter.map(filterCardName).join(' + ')} yet.
-        </motion.p>
+        </p>
       )}
 
       {winFilter.length === 0 && (
-        <motion.button
-          type="button"
-          className={homeStyles.addDeck}
-          onClick={addPaletteDeck}
-          whileHover={{ scale: 1.01, y: -2 }}
-          whileTap={{ scale: 0.98 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-        >
+        <button type="button" className={homeStyles.addDeck} onClick={addPaletteDeck}>
           <span className={homeStyles.addDeckPlus}>+</span>
           Add deck
-        </motion.button>
+        </button>
       )}
     </section>
   );

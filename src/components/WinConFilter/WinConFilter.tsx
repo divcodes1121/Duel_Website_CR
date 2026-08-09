@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { CARDS, CARDS_BY_KEY, getCardIconUrl } from '../../data/cards';
 import type { Card } from '../../types/card';
 import styles from './WinConFilter.module.css';
@@ -33,18 +32,15 @@ function CardChip({
   onToggle: (key: string) => void;
 }) {
   return (
-    <motion.button
+    <button
       type="button"
       className={`${styles.winconChip} ${active ? styles.winconChipActive : ''}`}
       title={`${card.name} decks`}
       aria-pressed={active}
       onClick={() => onToggle(card.key)}
-      whileHover={{ y: -3, scale: 1.06 }}
-      whileTap={{ scale: 0.92 }}
-      transition={{ type: 'spring', stiffness: 420, damping: 20 }}
     >
       <img src={getCardIconUrl(card.key)} alt={card.name} draggable={false} />
-    </motion.button>
+    </button>
   );
 }
 
@@ -112,73 +108,53 @@ export function WinConFilter({ selected, onToggle, onClear, children }: WinConFi
           title="Filter by any card"
         >
           All cards
-          <motion.span
-            className={styles.moreChevron}
-            animate={{ rotate: open ? 180 : 0 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+          <span
+            className={`${styles.moreChevron} ${open ? styles.moreChevronOpen : ''}`}
             aria-hidden="true"
           >
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 9l6 6 6-6" />
             </svg>
-          </motion.span>
+          </span>
         </button>
 
-        <AnimatePresence>
-          {selected.length > 0 && (
-            <motion.button
-              type="button"
-              className={styles.winconClear}
-              onClick={onClear}
-              initial={{ opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.85 }}
-              transition={{ duration: 0.15 }}
-            >
-              Clear ×
-            </motion.button>
-          )}
-        </AnimatePresence>
+        {selected.length > 0 && (
+          <button type="button" className={styles.winconClear} onClick={onClear}>
+            Clear ×
+          </button>
+        )}
 
         {children}
       </div>
 
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            className={styles.panel}
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-          >
-            <div className={styles.panelInner}>
-              <input
-                className={styles.search}
-                value={query}
-                autoFocus
-                spellCheck={false}
-                placeholder={`Search ${ALL_CARDS.length} cards…`}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              {results.length === 0 ? (
-                <p className={styles.noResults}>No cards match “{query}”.</p>
-              ) : (
-                <div className={styles.panelGrid}>
-                  {results.map((card) => (
-                    <CardChip
-                      key={card.key}
-                      card={card}
-                      active={selected.includes(card.key)}
-                      onToggle={onToggle}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {open && (
+        <div className={styles.panel}>
+          <div className={styles.panelInner}>
+            <input
+              className={styles.search}
+              value={query}
+              autoFocus
+              spellCheck={false}
+              placeholder={`Search ${ALL_CARDS.length} cards…`}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {results.length === 0 ? (
+              <p className={styles.noResults}>No cards match “{query}”.</p>
+            ) : (
+              <div className={styles.panelGrid}>
+                {results.map((card) => (
+                  <CardChip
+                    key={card.key}
+                    card={card}
+                    active={selected.includes(card.key)}
+                    onToggle={onToggle}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

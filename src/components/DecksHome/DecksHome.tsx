@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { useBuilderStore } from '../../state/store';
 import { useThemeStore } from '../../state/themeStore';
 import { useAuthStore } from '../../state/authStore';
@@ -140,44 +139,27 @@ export function DecksHome() {
             onClear={() => setWinFilter([])}
           />
 
-          {visibleDecks.map(({ deck, index }, i) => (
-            <motion.div
+          {visibleDecks.map(({ deck, index }) => (
+            <DeckPanel
               key={deck.id}
-              initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              transition={{ type: 'spring', stiffness: 240, damping: 26, delay: Math.min(i, 4) * 0.05 }}
-            >
-              <DeckPanel
-                owner="home"
-                deckIndex={index}
-                deck={deck}
-                onDelete={() => handleDelete(index)}
-              />
-            </motion.div>
+              owner="home"
+              deckIndex={index}
+              deck={deck}
+              onDelete={() => handleDelete(index)}
+            />
           ))}
 
           {winFilter.length > 0 && visibleDecks.length === 0 && (
-            <motion.p
-              className={styles.noMatches}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
+            <p className={styles.noMatches}>
               No decks with {winFilter.map(filterCardName).join(' + ')} yet.
-            </motion.p>
+            </p>
           )}
 
           {winFilter.length === 0 && (
-            <motion.button
-              type="button"
-              className={styles.addDeck}
-              onClick={addHomeDeck}
-              whileHover={{ scale: 1.01, y: -2 }}
-              whileTap={{ scale: 0.98 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-            >
+            <button type="button" className={styles.addDeck} onClick={addHomeDeck}>
               <span className={styles.addDeckPlus}>+</span>
               Add deck
-            </motion.button>
+            </button>
           )}
         </section>
       </div>

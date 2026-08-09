@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
 import { useAuthStore } from '../../state/authStore';
 import { useBuilderStore } from '../../state/store';
 import {
@@ -115,12 +114,9 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
 
   return createPortal(
     <div className={libStyles.overlay} onClick={busy ? undefined : onClose}>
-      <motion.div
+      <div
         className={`${libStyles.dialog} ${styles.dialog}`}
         onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: 0.9, y: 14 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 26 }}
       >
         <h2 className={libStyles.dialogTitle}>Export deck report</h2>
         <p className={libStyles.dialogHint}>
@@ -236,7 +232,7 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
             {busy ? 'Building…' : 'Download PDF'}
           </button>
         </div>
-      </motion.div>
+      </div>
     </div>,
     document.body,
   );

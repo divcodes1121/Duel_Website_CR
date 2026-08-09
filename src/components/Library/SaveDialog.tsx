@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
 import { useBuilderStore } from '../../state/store';
 import styles from './Library.module.css';
 
@@ -44,13 +43,7 @@ export function SaveDialog({ onClose, onSaved }: SaveDialogProps) {
   // that would otherwise trap the overlay beneath the builder content.
   return createPortal(
     <div className={styles.overlay} onClick={onClose}>
-      <motion.div
-        className={styles.dialog}
-        onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: 0.9, y: 14 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-      >
+      <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
         {activeEntry && !savingAsNew ? (
           <>
             <h2 className={styles.dialogTitle}>Save changes</h2>
@@ -99,7 +92,7 @@ export function SaveDialog({ onClose, onSaved }: SaveDialogProps) {
             </div>
           </>
         )}
-      </motion.div>
+      </div>
     </div>,
     document.body,
   );

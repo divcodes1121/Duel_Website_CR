@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
 import { useThemeStore } from '../../state/themeStore';
 import { useBuilderStore } from '../../state/store';
 import { useAuthStore } from '../../state/authStore';
@@ -139,11 +138,9 @@ export function Header() {
         <ProfileMenu triggerClassName={styles.avatar} />
       </div>
 
-      <AnimatePresence>
-        {saveOpen && <SaveDialog onClose={() => setSaveOpen(false)} onSaved={flashSaved} />}
-        {libraryOpen && <LibraryModal onClose={() => setLibraryOpen(false)} />}
-        {exportOpen && <ExportDialog source="duels" onClose={() => setExportOpen(false)} />}
-      </AnimatePresence>
+      {saveOpen && <SaveDialog onClose={() => setSaveOpen(false)} onSaved={flashSaved} />}
+      {libraryOpen && <LibraryModal onClose={() => setLibraryOpen(false)} />}
+      {exportOpen && <ExportDialog source="duels" onClose={() => setExportOpen(false)} />}
     </header>
   );
 }

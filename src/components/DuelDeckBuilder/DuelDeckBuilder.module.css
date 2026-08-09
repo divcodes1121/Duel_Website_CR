@@ -22,8 +22,6 @@
   background: var(--slot-bg);
   border: 1px solid var(--slot-border);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
 .modeTab {
@@ -187,10 +185,8 @@
   color: var(--text);
   padding: 0.6rem 1rem;
   border-radius: 16px;
-  background: var(--glass-bg);
+  background: color-mix(in srgb, var(--bg-2) 86%, var(--glass-bg));
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
   box-shadow: var(--shadow);
 }
 

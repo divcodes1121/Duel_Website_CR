@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useAuthStore } from '../../state/authStore';
 import { useThemeStore } from '../../state/themeStore';
 import { useBuilderStore } from '../../state/store';
@@ -86,15 +85,10 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
       </button>
 
       {createPortal(
-        <AnimatePresence>
-          {open && pos && (
-            <motion.div
+        open && pos ? (
+            <div
               className={styles.menu}
               style={{ top: pos.top, right: pos.right }}
-              initial={{ opacity: 0, y: -8, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
               role="menu"
             >
               <div ref={menuRef}>
@@ -199,9 +193,8 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                 Log out
               </button>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
+            </div>
+        ) : null,
         document.body,
       )}
     </>
