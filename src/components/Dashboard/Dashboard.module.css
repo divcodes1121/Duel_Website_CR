@@ -1,0 +1,541 @@
+/* Dashboard shell: a fixed top bar, a fixed-width sidebar, and a scrolling
+   main column. Everything draws from the palette tokens in index.css. */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ top bar */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-shrink: 0;
+  padding: 0.7rem 1.15rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-size: 1.15rem;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.brandMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.topNav {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.topNav::-webkit-scrollbar {
+  display: none;
+}
+
+.topNavItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+  padding: 0.5rem 0.85rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Underline, the way the reference marks the current top-level section. */
+.topNavItemActive {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.iconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------- layout */
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1rem;
+}
+
+/* ------------------------------------------------------------------ sidebar */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem 0.85rem;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.sideLabel {
+  padding: 0 0.5rem;
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sideNav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sideItem {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.62rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Filled pill for the open section — step 5 of the ramp, its stated job. */
+.sideItemActive {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.sideIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* --- upsell card --- */
+
+.proCard {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.95rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.proTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.proMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.proBody {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.proButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.15rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 0.79rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------- main */
+
+.main {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+/* Fills the column so the panel reaches the bottom of the viewport, as in the
+   reference, rather than sitting as a short card with dead space beneath it. */
+.hero {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.heroInner {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 1.5rem;
+  align-items: center;
+  padding: 2.4rem 2.2rem 2rem;
+}
+
+.heroText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.heroBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.heroTitle {
+  margin: 1.1rem 0 0;
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-weight: 400;
+  font-size: clamp(2rem, 3.6vw, 2.9rem);
+  line-height: 1.12;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+/* The one emphasised line, as in the reference. */
+.heroTitleAccent {
+  color: var(--text-muted);
+}
+
+.heroSub {
+  margin: 0.9rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+/* --- search --- */
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  max-width: 560px;
+  margin-top: 1.6rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+}
+
+.searchIcon {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  padding: 0.6rem 0;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 550;
+  color: var(--text);
+}
+
+.searchInput::placeholder {
+  color: var(--text-muted);
+}
+
+.analyzeButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  padding: 0.65rem 1.25rem;
+  border-radius: 11px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 0.85rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+/* --- popular players --- */
+
+.popular {
+  width: 100%;
+  max-width: 560px;
+  margin-top: 1.5rem;
+}
+
+/* Centred label on a rule, the way the reference divides this strip. */
+.popularLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  font-size: 0.64rem;
+  font-weight: 750;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.popularLabel::before,
+.popularLabel::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.popularTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* --- card art cluster --- */
+
+.heroArt {
+  position: relative;
+  height: 250px;
+  min-width: 0;
+}
+
+.heroCard {
+  position: absolute;
+  width: 118px;
+  border-radius: 10px;
+}
+
+.heroCard1 {
+  top: 46px;
+  left: 4%;
+  rotate: -9deg;
+}
+
+.heroCard2 {
+  top: 6px;
+  left: 34%;
+  width: 138px;
+  rotate: 5deg;
+}
+
+.heroCard3 {
+  top: 104px;
+  left: 62%;
+  rotate: 12deg;
+}
+
+/* --- highlight strip --- */
+
+.highlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.4rem;
+  padding: 1.3rem 2.2rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.highlight {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.highlightIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.highlightText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.highlightTitle {
+  font-size: 0.86rem;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.highlightBody {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+
+/* ------------------------------------------------------------- responsive */
+
+@media (max-width: 1080px) {
+  .heroInner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .heroArt {
+    display: none;
+  }
+
+  .highlights {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 860px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .topNav {
+    display: none;
+  }
+}

@@ -3,22 +3,22 @@ import { Header } from './components/Header/Header';
 import { DuelDeckBuilder } from './components/DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from './components/DecksHome/DecksHome';
 import { CounterPalette } from './components/CounterPalette/CounterPalette';
-import { Landing } from './components/Landing/Landing';
+import { Dashboard } from './components/Dashboard/Dashboard';
 import { Login } from './components/Login/Login';
 import { useAuthStore } from './state/authStore';
 import styles from './App.module.css';
 
-/* The landing used to be lazily imported purely to keep framer-motion, its only
- * consumer, out of the main bundle. The library is gone from the project, so
- * the split bought nothing but a blank frame on first paint. */
+/* The post-login home is the dashboard: top bar, analytics sidebar, hero panel.
+ * It replaces the old cinematic landing, which is gone along with the animation
+ * library it existed to show off. */
 
-type Page = 'builder' | 'decks' | 'palette' | 'landing';
+type Page = 'builder' | 'decks' | 'palette' | 'home';
 
 function pageFor(hash: string): Page {
   if (hash.startsWith('#/builder')) return 'builder';
   if (hash.startsWith('#/decks')) return 'decks';
   if (hash.startsWith('#/palette')) return 'palette';
-  return 'landing';
+  return 'home';
 }
 
 function useHashRoute(): string {
@@ -58,7 +58,7 @@ function App() {
       ) : page === 'palette' ? (
         <CounterPalette />
       ) : (
-        <Landing />
+        <Dashboard />
       )}
     </div>
   );
