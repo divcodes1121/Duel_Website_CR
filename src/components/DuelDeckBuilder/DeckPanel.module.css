@@ -3,7 +3,7 @@
   /* Opaque. This is the single most-repeated surface in the app — Versus shows
      up to ten of these at once, and each backdrop-filter is its own compositing
      pass over whatever is behind it. */
-  background: color-mix(in srgb, var(--bg-2) 86%, var(--glass-bg));
+  background: var(--surface);
   border: 1px solid var(--glass-border);
   border-radius: 22px;
   padding: 1.15rem 1.4rem 1.25rem;
@@ -12,6 +12,7 @@
   gap: 0.9rem;
 
   transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+  box-shadow: var(--shadow);
 }
 
 .header {

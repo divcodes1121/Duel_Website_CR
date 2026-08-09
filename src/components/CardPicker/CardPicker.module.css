@@ -7,13 +7,14 @@
      width, sitting over the scrolling deck area) is one of the most expensive
      things on the page — the compositor has to re-blur everything behind it on
      every scroll frame. */
-  background: color-mix(in srgb, var(--bg-2) 90%, var(--glass-bg-strong));
+  background: var(--surface-strong);
   padding: 0.85rem 1.25rem 1rem;
   flex-shrink: 0;
   max-height: 42vh;
   display: flex;
   flex-direction: column;
 
+  box-shadow: var(--shadow-float);
 }
 
 .drawerCollapsed {
@@ -34,7 +35,7 @@
   height: 1.7rem;
   border-radius: 999px;
   border: 1px solid var(--glass-border);
-  background: color-mix(in srgb, var(--bg-2) 90%, var(--glass-bg-strong));
+  background: var(--surface-strong);
   color: var(--text-muted);
   cursor: pointer;
   z-index: 5;

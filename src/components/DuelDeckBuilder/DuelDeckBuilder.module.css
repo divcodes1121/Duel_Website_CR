@@ -176,9 +176,10 @@
   color: var(--text);
   padding: 0.6rem 1rem;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-2) 86%, var(--glass-bg));
+  background: var(--surface);
   border: 1px solid var(--glass-border);
 
+  box-shadow: var(--shadow);
 }
 
 .playerHeader[data-owner='blue'] {

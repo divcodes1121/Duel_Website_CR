@@ -49,20 +49,29 @@
 :root[data-theme='dark'] {
   /* 1–2 backgrounds */
   --bg-1: #0b0b0b;
-  --bg-2: #111111;
-  --bg-3: #1a1a1a;
+  --bg-2: #161616;
+  --bg-3: #1f1f1f;
 
-  /* 3–5 component backgrounds */
-  --surface: #141414;
-  --surface-strong: #1c1c1c;
-  --surface-sunken: #090909;
+  /* 3–5 component backgrounds. Elevation on dark is carried by lightness, not
+     shadow — a shadow against a near-black page is invisible. Each step up is
+     a step lighter, which is why a card reads as sitting above the page. */
+  --surface: #181818;
+  --surface-strong: #212121;
+  --surface-sunken: #070707;
 
   /* 6–8 borders. Two jobs, two contrast bars: --border is a decorative
      separator (WCAG exempts those), --border-strong outlines interactive
      controls like inputs and is held to the 3:1 non-text contrast floor. */
-  --border: #2a2a2a;
-  --border-strong: #606060;
+  --border: #262626;
+  --border-strong: #666666;
   --highlight: rgba(255, 255, 255, 0.045);
+
+  /* Elevation. Nothing on dark: a cast shadow against #0b0b0b cannot be seen,
+     so raising a surface is done with --surface above and its border. Floating
+     layers (menus, dialogs) still get one, to separate them from the content
+     they cover. */
+  --shadow: none;
+  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.55);
 
   /* 11–12 text */
   --text: #ededed;
@@ -88,7 +97,7 @@
   --player-blue: #e0e0e0;
   --player-red: #8a8a8a;
 
-  --rarity-common: #626262;
+  --rarity-common: #6a6a6a;
   --rarity-rare: #808080;
   --rarity-epic: #a1a1a1;
   --rarity-legendary: #c9c9c9;
@@ -110,21 +119,30 @@
 }
 
 :root[data-theme='light'] {
-  /* 1–2 backgrounds. White is correct for the light app background; it is the
-     dark end that needs pulling off the extreme, not this one. */
-  --bg-1: #ffffff;
-  --bg-2: #f7f7f7;
-  --bg-3: #efefef;
+  /* 1–2 backgrounds. The page is the grey step and cards are pure white —
+     that way round, not the reverse. A white card on a white page cannot read
+     as raised no matter what border it carries, which is exactly how this
+     looked before. Grey ground, white card is what every minimal light theme
+     does for the same reason. */
+  --bg-1: #f4f4f5;
+  --bg-2: #ffffff;
+  --bg-3: #ebebec;
 
   /* 3–5 component backgrounds */
-  --surface: #fbfbfb;
+  --surface: #ffffff;
   --surface-strong: #ffffff;
-  --surface-sunken: #f2f2f2;
+  --surface-sunken: #efeff0;
 
   /* 6–8 borders — see the dark block for why these two differ. */
-  --border: #e2e2e2;
-  --border-strong: #949494;
+  --border: #e4e4e7;
+  --border-strong: #8f8f94;
   --highlight: rgba(255, 255, 255, 0.9);
+
+  /* Elevation. On light a shadow does read, so it does the lifting together
+     with the white fill. Kept to two tight layers — a contact shadow and a
+     short ambient one. Anything larger stops looking minimal. */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
 
   /* 11–12 text */
   --text: #1a1a1a;
@@ -181,9 +199,9 @@
   --accent-orange: var(--text-muted);
   --info: var(--accent);
 
-  /* Flat by design: depth is carried by borders, not shadow. */
-  --shadow: none;
-  --shadow-hover: none;
+  /* --shadow / --shadow-float are per-theme; see the blocks above. Hover
+     elevation stays off — nothing on the page reacts to the cursor. */
+  --shadow-hover: var(--shadow);
 }
 
 :root {

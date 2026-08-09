@@ -9,11 +9,11 @@
   /* Opaque instead of blurred: this floats over the deck grid, so a
      backdrop-filter here forced the whole area beneath it through an extra
      compositing pass every time the menu opened. */
-  background: color-mix(in srgb, var(--bg-2) 88%, var(--glass-bg-strong));
+  background: var(--surface-strong);
   border: 1px solid var(--glass-border);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
   transform-origin: top center;
   animation: wild-menu-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
+  box-shadow: var(--shadow-float);
 }
 
 @keyframes wild-menu-in {

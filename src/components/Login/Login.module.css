@@ -72,6 +72,7 @@
   background: var(--glass-bg-strong);
   border: 1px solid transparent;
 
+  box-shadow: var(--shadow);
 }
 
 /* Gradient border ring. The angle used to be an @property custom prop spun by
