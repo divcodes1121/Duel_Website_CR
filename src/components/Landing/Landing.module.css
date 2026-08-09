@@ -159,34 +159,21 @@
   white-space: nowrap;
 }
 
+/* The outer lines carried `color: #fff`, which a bulk conversion turned into
+   --accent-contrast — the same colour as the dark ground, so MASTER and DUELS
+   went invisible on dark. They are plain body text; only the middle line is
+   the highlight. */
 .titleLinePlain {
   font-size: clamp(2.9rem, 8.5vw, 6.4rem);
-  color: var(--accent-contrast);
+  color: var(--text);
 }
 
-:global([data-theme='light']) .titleLinePlain {
-  color: var(--text-muted);
-}
-
+/* The one cream word in the headline, the way the reference highlights a single
+   word in an otherwise white sentence. */
 .titleLineGradient {
   font-size: clamp(2.1rem, 6.4vw, 4.9rem);
   letter-spacing: 0.06em;
-}
-
-/* Gradient must live on each letter: transformed child spans break
-   background-clip:text on the parent line. A vertical gradient per letter
-   reads as one continuous metallic finish. */
-.titleLineGradient .titleLetter {
-  background: linear-gradient(
-    180deg,
-    var(--text-muted) 0%,
-    var(--accent-gold) 48%,
-    var(--text-muted) 78%,
-    var(--accent-light) 120%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
 }
 
 .heroSub {

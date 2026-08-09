@@ -15,19 +15,28 @@
 }
 
 /* ==========================================================================
-   Palette — neutral greyscale base
+   Palette — moonlit indigo
    ==========================================================================
 
-   Deliberately colourless: dark is black through grey to white, light is the
-   same scale inverted. This is scaffolding, not a design. Every colour in the
-   app resolves from the tokens below, so dropping a real palette in means
-   editing this block and nothing else — component stylesheets carry no colour
-   literals of their own.
+   Six colours, read as a single night scene:
 
-   Token roles, so a replacement palette maps cleanly:
+     #28293D  deepest indigo — the sky at the horizon
+     #2E3061  royal indigo   — raised surfaces
+     #555184  slate violet   — structure, borders
+     #9997BC  periwinkle     — secondary type
+     #B2A6BE  mauve          — the warm neutral
+     #FEE9CE  cream          — the moon, and the one accent
 
+   Dark uses the scale as given: indigo ground, cream ink, cream accent.
+   Light inverts the ends — cream becomes the page, indigo becomes the ink —
+   so both themes are the same palette rather than two unrelated ones.
+
+   Every colour in the app resolves from here; component stylesheets carry no
+   colour literals of their own.
+
+   Token roles:
      --bg-1/2/3        page, raised surface, highest surface
-     --surface*        panel fills (was "glass"; no longer translucent)
+     --surface*        panel fills
      --border*         hairlines that separate surfaces
      --text/-muted     primary and secondary type
      --accent*         the one emphasis colour: active tabs, selection, focus
@@ -40,91 +49,109 @@
    render exactly what a desktop sRGB monitor shows. */
 
 :root[data-theme='dark'] {
-  --bg-1: #000000;
-  --bg-2: #0d0d0d;
-  --bg-3: #161616;
+  --bg-1: #28293d;
+  --bg-2: #2e3061;
+  --bg-3: #3a3c72;
 
-  --surface: #131313;
-  --surface-strong: #1c1c1c;
-  --surface-sunken: #0a0a0a;
+  --surface: #2e3061;
+  --surface-strong: #383a6d;
+  --surface-sunken: #22233a;
 
-  --border: #2b2b2b;
-  --border-strong: #3d3d3d;
-  --highlight: rgba(255, 255, 255, 0.06);
+  --border: #555184;
+  --border-strong: #6b68a0;
+  /* Cream, not white — a white hairline reads cold against indigo. */
+  --highlight: rgba(254, 233, 206, 0.1);
 
-  --text: #f2f2f2;
-  --text-muted: #8f8f8f;
+  /* Body text is a near-white lifted out of the periwinkle, NOT the cream.
+     Setting every word in #fee9ce flattens the page into one warm tone and
+     leaves the accent nothing to contrast against. Keeping type cool and
+     bright is what lets the cream read as a highlight wherever it appears. */
+  --text: #ece9f7;
+  --text-muted: #9997bc;
 
-  /* Emphasis reads as "brighter than its surroundings" on dark. */
-  --accent: #ffffff;
-  --accent-light: #ffffff;
-  --accent-deep: #c4c4c4;
-  --accent-contrast: #000000;
+  /* The moon is the accent, and it is spent sparingly — primary buttons, the
+     active tab, selection, links. It is the lightest thing in the palette, so
+     on an indigo ground it carries emphasis without needing a second hue. */
+  --accent: #fee9ce;
+  --accent-light: #fff5e6;
+  --accent-deep: #e6cfae;
+  --accent-contrast: #28293d;
 
-  /* The duel sides differ by lightness rather than hue while monochrome. */
-  --player-blue: #e0e0e0;
-  --player-red: #7a7a7a;
+  /* Warm highlights (crowns). Already the accent on dark. */
+  --accent-gold: #fee9ce;
+  --accent-gold-bright: #fff5e6;
 
-  --rarity-common: #6e6e6e;
-  --rarity-rare: #909090;
-  --rarity-epic: #b0b0b0;
-  --rarity-legendary: #d4d4d4;
-  --rarity-champion: #ffffff;
+  /* Separated by warmth rather than hue: periwinkle is the cool side, rose
+     mauve the warm one. The palette has no red, so red is the warmer of the
+     two neutrals pushed further that way. */
+  --player-blue: #9997bc;
+  --player-red: #c9a4b2;
 
-  --success: #d0d0d0;
-  --warning: #a8a8a8;
-  --error: #ffffff;
-  --error-soft: #d8d8d8;
+  --rarity-common: #6b68a0;
+  --rarity-rare: #9997bc;
+  --rarity-epic: #b2a6be;
+  --rarity-legendary: #e3cfb4;
+  --rarity-champion: #fee9ce;
 
-  /* Dim behind modals, and the chip that sits on top of card art. */
-  --scrim: rgba(0, 0, 0, 0.72);
-  --overlay-chip: rgba(0, 0, 0, 0.78);
-  --overlay-chip-on: rgba(255, 255, 255, 0.92);
-  --overlay-chip-text: #ffffff;
-  --overlay-chip-on-text: #000000;
+  /* Derived, not from the palette: it contains no alert colours, and
+     destructive actions (Delete, Reset) have to be distinguishable from an
+     ordinary one. Kept in the same pastel register so they do not shout. */
+  --success: #a9c3a2;
+  --warning: #e3c89a;
+  --error: #d99b9b;
+  --error-soft: #e8b3b3;
+
+  --scrim: rgba(20, 21, 33, 0.78);
+  --overlay-chip: rgba(34, 35, 58, 0.85);
+  --overlay-chip-on: rgba(254, 233, 206, 0.94);
+  --overlay-chip-text: #fee9ce;
+  --overlay-chip-on-text: #28293d;
 }
 
 :root[data-theme='light'] {
-  --bg-1: #ffffff;
-  --bg-2: #f4f4f4;
-  --bg-3: #e9e9e9;
+  --bg-1: #fee9ce;
+  --bg-2: #fff3e1;
+  --bg-3: #f7e1c4;
 
-  --surface: #fbfbfb;
-  --surface-strong: #ffffff;
-  --surface-sunken: #f0f0f0;
+  --surface: #fff6e9;
+  --surface-strong: #fffbf4;
+  --surface-sunken: #f8e5cb;
 
-  --border: #d6d6d6;
-  --border-strong: #b4b4b4;
-  --highlight: rgba(0, 0, 0, 0.04);
+  --border: #b2a6be;
+  --border-strong: #9997bc;
+  --highlight: rgba(255, 255, 255, 0.55);
 
-  --text: #0a0a0a;
-  --text-muted: #6b6b6b;
+  --text: #28293d;
+  --text-muted: #555184;
 
-  /* Inverted: emphasis reads as "darker than its surroundings" on light. */
-  --accent: #000000;
-  --accent-light: #1f1f1f;
-  --accent-deep: #000000;
-  --accent-contrast: #ffffff;
+  /* Inverted: the deep indigo is now the emphasis, cream the thing it sits on. */
+  --accent: #2e3061;
+  --accent-light: #3f4176;
+  --accent-deep: #22233f;
+  --accent-contrast: #fee9ce;
 
-  --player-blue: #2e2e2e;
-  --player-red: #8a8a8a;
+  --accent-gold: #7a5a22;
+  --accent-gold-bright: #5c4317;
 
-  --rarity-common: #9a9a9a;
-  --rarity-rare: #7a7a7a;
-  --rarity-epic: #5a5a5a;
-  --rarity-legendary: #3a3a3a;
-  --rarity-champion: #000000;
+  --player-blue: #2e3061;
+  --player-red: #7e5f79;
 
-  --success: #3a3a3a;
-  --warning: #6b6b6b;
-  --error: #000000;
-  --error-soft: #2e2e2e;
+  --rarity-common: #b2a6be;
+  --rarity-rare: #9997bc;
+  --rarity-epic: #6b68a0;
+  --rarity-legendary: #555184;
+  --rarity-champion: #2e3061;
 
-  --scrim: rgba(0, 0, 0, 0.45);
-  --overlay-chip: rgba(0, 0, 0, 0.72);
-  --overlay-chip-on: rgba(0, 0, 0, 0.92);
-  --overlay-chip-text: #ffffff;
-  --overlay-chip-on-text: #ffffff;
+  --success: #46683f;
+  --warning: #8a6a2e;
+  --error: #93454a;
+  --error-soft: #7d3a3f;
+
+  --scrim: rgba(40, 41, 61, 0.45);
+  --overlay-chip: rgba(40, 41, 61, 0.8);
+  --overlay-chip-on: rgba(46, 48, 97, 0.94);
+  --overlay-chip-text: #fee9ce;
+  --overlay-chip-on-text: #fee9ce;
 }
 
 /* Legacy aliases. Component stylesheets still reference the older "glass"
@@ -139,8 +166,6 @@
   --slot-border: var(--border);
   --accent-purple: var(--accent);
   --accent-cyan: var(--accent);
-  --accent-gold: var(--text-muted);
-  --accent-gold-bright: var(--text);
   --accent-orange: var(--text-muted);
   --info: var(--accent);
 
@@ -172,10 +197,15 @@ body,
   height: 100%;
 }
 
+/* A single static radial wash behind everything — the moon low over the
+   horizon that the palette is drawn from. One paint, no animation, no blur
+   filter; a radial gradient is soft by construction. */
 body {
   margin: 0;
   min-width: 320px;
-  background: var(--bg-1);
+  background:
+    radial-gradient(120% 78% at 50% -12%, var(--bg-2), transparent 68%),
+    var(--bg-1);
   overflow: hidden;
   position: relative;
 }
