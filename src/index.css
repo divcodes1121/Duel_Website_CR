@@ -15,144 +15,156 @@
 }
 
 /* ==========================================================================
-   Palette — moonlit indigo
+   Palette — neutral, built on a 12-step ramp
    ==========================================================================
 
-   Six colours, read as a single night scene:
+   Pure neutrals: black through grey to white on dark, inverted on light. No
+   hue tint at all, so nothing competes with the card art, which is the only
+   colour on the page.
 
-     #28293D  deepest indigo — the sky at the horizon
-     #2E3061  royal indigo   — raised surfaces
-     #555184  slate violet   — structure, borders
-     #9997BC  periwinkle     — secondary type
-     #B2A6BE  mauve          — the warm neutral
-     #FEE9CE  cream          — the moon, and the one accent
+   Structured after the Radix 12-step model, which is what most well-built
+   light/dark systems use. Every step has one job, which is why the ramp is
+   written out in full below rather than invented per component:
 
-   Dark uses the scale as given: indigo ground, cream ink, cream accent.
-   Light inverts the ends — cream becomes the page, indigo becomes the ink —
-   so both themes are the same palette rather than two unrelated ones.
+     1–2    page and subtle backgrounds
+     3–5    UI element background: normal, hover, active/selected
+     6–8    borders: subtle separator, element border, hovered border
+     9–10   solid fills and their hover
+     11     low-contrast text (secondary)
+     12     high-contrast text (primary)
 
-   Every colour in the app resolves from here; component stylesheets carry no
-   colour literals of their own.
+   Two rules taken from how GitHub, Linear and Vercel actually do this, both of
+   which the earlier attempts got wrong:
 
-   Token roles:
-     --bg-1/2/3        page, raised surface, highest surface
-     --surface*        panel fills
-     --border*         hairlines that separate surfaces
-     --text/-muted     primary and secondary type
-     --accent*         the one emphasis colour: active tabs, selection, focus
-     --player-blue/red the two duel sides, which must stay distinguishable
-     --rarity-*        card rarity accents
-     --success/etc     status colours
+   - The dark ground is #0B0B0B, not #000. Pure black leaves nowhere darker to
+     go for sunken surfaces, and pure-white-on-pure-black haloes badly at small
+     sizes. GitHub's dark canvas is #0D1117 for the same reason.
+   - Dark-mode body text is #EDEDED, not #FFF, for the same halation reason.
+     GitHub uses #E6EDF3.
 
-   Everything is plain sRGB hex or rgba(), and every blend uses
-   `color-mix(in srgb, ...)`. No oklch/display-p3, so wide-gamut phone screens
-   render exactly what a desktop sRGB monitor shows. */
+   Contrast is verified, not eyeballed — body text lands ~17:1 and secondary
+   text ~7:1 against their backgrounds, comfortably past the WCAG AA 4.5:1
+   floor for body copy and 3:1 for UI. */
 
 :root[data-theme='dark'] {
-  --bg-1: #28293d;
-  --bg-2: #2e3061;
-  --bg-3: #3a3c72;
+  /* 1–2 backgrounds */
+  --bg-1: #0b0b0b;
+  --bg-2: #111111;
+  --bg-3: #1a1a1a;
 
-  --surface: #2e3061;
-  --surface-strong: #383a6d;
-  --surface-sunken: #22233a;
+  /* 3–5 component backgrounds */
+  --surface: #141414;
+  --surface-strong: #1c1c1c;
+  --surface-sunken: #090909;
 
-  --border: #555184;
-  --border-strong: #6b68a0;
-  /* Cream, not white — a white hairline reads cold against indigo. */
-  --highlight: rgba(254, 233, 206, 0.1);
+  /* 6–8 borders. Two jobs, two contrast bars: --border is a decorative
+     separator (WCAG exempts those), --border-strong outlines interactive
+     controls like inputs and is held to the 3:1 non-text contrast floor. */
+  --border: #2a2a2a;
+  --border-strong: #606060;
+  --highlight: rgba(255, 255, 255, 0.045);
 
-  /* Body text is a near-white lifted out of the periwinkle, NOT the cream.
-     Setting every word in #fee9ce flattens the page into one warm tone and
-     leaves the accent nothing to contrast against. Keeping type cool and
-     bright is what lets the cream read as a highlight wherever it appears. */
-  --text: #ece9f7;
-  --text-muted: #9997bc;
+  /* 11–12 text */
+  --text: #ededed;
+  --text-muted: #a1a1a1;
 
-  /* The moon is the accent, and it is spent sparingly — primary buttons, the
-     active tab, selection, links. It is the lightest thing in the palette, so
-     on an indigo ground it carries emphasis without needing a second hue. */
-  --accent: #fee9ce;
-  --accent-light: #fff5e6;
-  --accent-deep: #e6cfae;
-  --accent-contrast: #28293d;
+  /* 9–10 solid. On a neutral system the emphasis fill is simply the inverse of
+     the page — a white button on black, the way Vercel and Linear do it. */
+  --accent: #ededed;
+  --accent-light: #ffffff;
+  --accent-deep: #cfcfcf;
+  --accent-contrast: #0b0b0b;
 
-  /* Warm highlights (crowns). Already the accent on dark. */
-  --accent-gold: #fee9ce;
-  --accent-gold-bright: #fff5e6;
+  --accent-gold: #ededed;
+  --accent-gold-bright: #ffffff;
 
-  /* Separated by warmth rather than hue: periwinkle is the cool side, rose
-     mauve the warm one. The palette has no red, so red is the warmer of the
-     two neutrals pushed further that way. */
-  --player-blue: #9997bc;
-  --player-red: #c9a4b2;
+  /* Alternating page bands for the landing. */
+  --band-deep: #0b0b0b;
+  --band-lift: #141414;
+  --band-mid: #1c1c1c;
 
-  --rarity-common: #6b68a0;
-  --rarity-rare: #9997bc;
-  --rarity-epic: #b2a6be;
-  --rarity-legendary: #e3cfb4;
-  --rarity-champion: #fee9ce;
+  /* No hue available, so the duel sides separate by lightness. Blue is the
+     bright side, red the recessed one. */
+  --player-blue: #e0e0e0;
+  --player-red: #8a8a8a;
 
-  /* Derived, not from the palette: it contains no alert colours, and
-     destructive actions (Delete, Reset) have to be distinguishable from an
-     ordinary one. Kept in the same pastel register so they do not shout. */
-  --success: #a9c3a2;
-  --warning: #e3c89a;
-  --error: #d99b9b;
-  --error-soft: #e8b3b3;
+  --rarity-common: #626262;
+  --rarity-rare: #808080;
+  --rarity-epic: #a1a1a1;
+  --rarity-legendary: #c9c9c9;
+  --rarity-champion: #ededed;
 
-  --scrim: rgba(20, 21, 33, 0.78);
-  --overlay-chip: rgba(34, 35, 58, 0.85);
-  --overlay-chip-on: rgba(254, 233, 206, 0.94);
-  --overlay-chip-text: #fee9ce;
-  --overlay-chip-on-text: #28293d;
+  /* Kept neutral on purpose. Destructive actions are distinguished by weight
+     and by their confirm dialogs rather than by colour; say the word and error
+     becomes a real red. */
+  --success: #c9c9c9;
+  --warning: #a1a1a1;
+  --error: #ededed;
+  --error-soft: #d4d4d4;
+
+  --scrim: rgba(0, 0, 0, 0.7);
+  --overlay-chip: rgba(0, 0, 0, 0.78);
+  --overlay-chip-on: rgba(237, 237, 237, 0.94);
+  --overlay-chip-text: #ededed;
+  --overlay-chip-on-text: #0b0b0b;
 }
 
 :root[data-theme='light'] {
-  --bg-1: #fee9ce;
-  --bg-2: #fff3e1;
-  --bg-3: #f7e1c4;
+  /* 1–2 backgrounds. White is correct for the light app background; it is the
+     dark end that needs pulling off the extreme, not this one. */
+  --bg-1: #ffffff;
+  --bg-2: #f7f7f7;
+  --bg-3: #efefef;
 
-  --surface: #fff6e9;
-  --surface-strong: #fffbf4;
-  --surface-sunken: #f8e5cb;
+  /* 3–5 component backgrounds */
+  --surface: #fbfbfb;
+  --surface-strong: #ffffff;
+  --surface-sunken: #f2f2f2;
 
-  --border: #b2a6be;
-  --border-strong: #9997bc;
-  --highlight: rgba(255, 255, 255, 0.55);
+  /* 6–8 borders — see the dark block for why these two differ. */
+  --border: #e2e2e2;
+  --border-strong: #949494;
+  --highlight: rgba(255, 255, 255, 0.9);
 
-  --text: #28293d;
-  --text-muted: #555184;
+  /* 11–12 text */
+  --text: #1a1a1a;
+  --text-muted: #646464;
 
-  /* Inverted: the deep indigo is now the emphasis, cream the thing it sits on. */
-  --accent: #2e3061;
-  --accent-light: #3f4176;
-  --accent-deep: #22233f;
-  --accent-contrast: #fee9ce;
+  /* 9–10 solid: inverted again — a black button on white. */
+  --accent: #1a1a1a;
+  --accent-light: #2e2e2e;
+  --accent-deep: #000000;
+  --accent-contrast: #ffffff;
 
-  --accent-gold: #7a5a22;
-  --accent-gold-bright: #5c4317;
+  --accent-gold: #1a1a1a;
+  --accent-gold-bright: #000000;
 
-  --player-blue: #2e3061;
-  --player-red: #7e5f79;
+  --band-deep: #0b0b0b;
+  --band-lift: #f7f7f7;
+  --band-mid: #efefef;
 
-  --rarity-common: #b2a6be;
-  --rarity-rare: #9997bc;
-  --rarity-epic: #6b68a0;
-  --rarity-legendary: #555184;
-  --rarity-champion: #2e3061;
+  --player-blue: #1a1a1a;
+  --player-red: #8a8a8a;
 
-  --success: #46683f;
-  --warning: #8a6a2e;
-  --error: #93454a;
-  --error-soft: #7d3a3f;
+  --rarity-common: #949494;
+  --rarity-rare: #767676;
+  --rarity-epic: #5e5e5e;
+  --rarity-legendary: #3d3d3d;
+  --rarity-champion: #1a1a1a;
 
-  --scrim: rgba(40, 41, 61, 0.45);
-  --overlay-chip: rgba(40, 41, 61, 0.8);
-  --overlay-chip-on: rgba(46, 48, 97, 0.94);
-  --overlay-chip-text: #fee9ce;
-  --overlay-chip-on-text: #fee9ce;
+  --success: #454545;
+  --warning: #646464;
+  --error: #1a1a1a;
+  --error-soft: #333333;
+
+  --scrim: rgba(0, 0, 0, 0.4);
+  --overlay-chip: rgba(0, 0, 0, 0.72);
+  --overlay-chip-on: rgba(26, 26, 26, 0.94);
+  --overlay-chip-text: #ffffff;
+  --overlay-chip-on-text: #ffffff;
 }
+
+
 
 /* Legacy aliases. Component stylesheets still reference the older "glass"
    naming in places; mapping them here keeps one source of truth rather than
@@ -197,15 +209,13 @@ body,
   height: 100%;
 }
 
-/* A single static radial wash behind everything — the moon low over the
-   horizon that the palette is drawn from. One paint, no animation, no blur
-   filter; a radial gradient is soft by construction. */
+/* Flat. A neutral system wants an even ground — any gradient across a grey
+   page reads as a smudge rather than as depth, and depth here is carried by
+   the surface steps and borders instead. */
 body {
   margin: 0;
   min-width: 320px;
-  background:
-    radial-gradient(120% 78% at 50% -12%, var(--bg-2), transparent 68%),
-    var(--bg-1);
+  background: var(--bg-1);
   overflow: hidden;
   position: relative;
 }
