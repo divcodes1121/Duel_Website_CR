@@ -32,7 +32,6 @@
   line-height: 1;
   color: var(--crown-accent);
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 2px 12px color-mix(in srgb, var(--crown-accent) 45%, transparent);
 }
 
 .counter[data-empty='true'] .value {
@@ -72,11 +71,9 @@
 .pip:hover {
   color: var(--accent-gold-bright);
   border-color: color-mix(in srgb, var(--accent-gold) 45%, var(--slot-border));
-  transform: scale(1.15);
 }
 
 .pip:active {
-  transform: scale(0.88);
 }
 
 .pipLit {

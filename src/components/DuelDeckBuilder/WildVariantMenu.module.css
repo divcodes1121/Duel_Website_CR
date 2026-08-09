@@ -97,10 +97,6 @@
   margin-top: 0.25rem;
 }
 
-.option:hover {
-  transform: translateX(2px);
-}
-
 .thumb {
   width: 2rem;
   height: 2.4rem;

@@ -38,11 +38,11 @@
   width: 2.4rem;
   height: 2.4rem;
   border-radius: 12px;
-  color: #fff;
+  color: var(--accent-contrast);
   background: linear-gradient(140deg, var(--accent-gold), var(--accent) 70%);
   box-shadow:
     0 4px 14px color-mix(in srgb, var(--accent-gold) 45%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    inset 0 1px 0 var(--highlight);
 }
 
 .brandText {
@@ -147,11 +147,9 @@
   color: var(--accent-light);
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, var(--slot-bg));
-  transform: translateY(-2px) scale(1.01);
 }
 
 .addDeck:active {
-  transform: scale(0.98);
 }
 
 .addDeckPlus {

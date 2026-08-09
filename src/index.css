@@ -14,123 +14,139 @@
   font-display: swap;
 }
 
-/* Clash Royale palette — Royal Blue primary, Gold highlights, Epic Purple /
-   Ice Cyan / Victory Orange accents.
+/* ==========================================================================
+   Palette — neutral greyscale base
+   ==========================================================================
 
-   Every colour is plain sRGB hex or rgba(), and every blend uses
-   `color-mix(in srgb, ...)`. No oklch/display-p3: wide-gamut phone screens
-   then render exactly what a desktop sRGB monitor shows. */
+   Deliberately colourless: dark is black through grey to white, light is the
+   same scale inverted. This is scaffolding, not a design. Every colour in the
+   app resolves from the tokens below, so dropping a real palette in means
+   editing this block and nothing else — component stylesheets carry no colour
+   literals of their own.
+
+   Token roles, so a replacement palette maps cleanly:
+
+     --bg-1/2/3        page, raised surface, highest surface
+     --surface*        panel fills (was "glass"; no longer translucent)
+     --border*         hairlines that separate surfaces
+     --text/-muted     primary and secondary type
+     --accent*         the one emphasis colour: active tabs, selection, focus
+     --player-blue/red the two duel sides, which must stay distinguishable
+     --rarity-*        card rarity accents
+     --success/etc     status colours
+
+   Everything is plain sRGB hex or rgba(), and every blend uses
+   `color-mix(in srgb, ...)`. No oklch/display-p3, so wide-gamut phone screens
+   render exactly what a desktop sRGB monitor shows. */
 
 :root[data-theme='dark'] {
-  --bg-1: #07111f;
-  --bg-2: #0b172a;
-  --bg-3: #12233b;
+  --bg-1: #000000;
+  --bg-2: #0d0d0d;
+  --bg-3: #161616;
 
-  --aurora-1: rgba(37, 99, 235, 0.5); /* royal blue  #2563eb */
-  --aurora-2: rgba(139, 92, 246, 0.42); /* epic purple #8b5cf6 */
-  --aurora-3: rgba(34, 211, 238, 0.28); /* ice cyan    #22d3ee */
-  --aurora-4: rgba(251, 191, 36, 0.14); /* royal gold  #fbbf24 */
+  --surface: #131313;
+  --surface-strong: #1c1c1c;
+  --surface-sunken: #0a0a0a;
 
-  /* surface / card: #12233b, #182d4d */
-  --glass-bg: rgba(18, 35, 59, 0.5);
-  --glass-bg-strong: rgba(24, 45, 77, 0.66);
-  --glass-border: rgba(255, 255, 255, 0.13);
-  --glass-highlight: rgba(255, 255, 255, 0.14);
-  --slot-bg: rgba(255, 255, 255, 0.05);
-  --slot-border: rgba(255, 255, 255, 0.12);
+  --border: #2b2b2b;
+  --border-strong: #3d3d3d;
+  --highlight: rgba(255, 255, 255, 0.06);
 
-  --text: #f8fafc;
-  --text-muted: #94a3b8;
+  --text: #f2f2f2;
+  --text-muted: #8f8f8f;
 
-  --accent: #2563eb;
-  --accent-light: #60a5fa;
-  --accent-deep: #1d4ed8;
-  --accent-purple: #8b5cf6;
-  --accent-cyan: #22d3ee;
-  --accent-gold: #fbbf24;
-  /* Decorative fills/borders — brighter than the text-safe gold above. */
-  --accent-gold-bright: #fcd34d;
-  --accent-orange: #fb923c;
+  /* Emphasis reads as "brighter than its surroundings" on dark. */
+  --accent: #ffffff;
+  --accent-light: #ffffff;
+  --accent-deep: #c4c4c4;
+  --accent-contrast: #000000;
 
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --error-soft: #f87171;
-  --info: #3b82f6;
+  /* The duel sides differ by lightness rather than hue while monochrome. */
+  --player-blue: #e0e0e0;
+  --player-red: #7a7a7a;
 
-  /* One cast shadow + the glass edge highlight. Was four layers (including a
-     96px blue bloom); at 136 call sites across the app that is a lot of paint
-     for a difference you cannot see once the element is on screen. */
-  --shadow:
-    0 8px 24px rgba(3, 10, 20, 0.5),
-    inset 0 1px 0 var(--glass-highlight);
-  --shadow-hover:
-    0 12px 32px rgba(3, 10, 20, 0.62),
-    inset 0 1px 0 var(--glass-highlight);
+  --rarity-common: #6e6e6e;
+  --rarity-rare: #909090;
+  --rarity-epic: #b0b0b0;
+  --rarity-legendary: #d4d4d4;
+  --rarity-champion: #ffffff;
 
-  --rarity-common: #cbd5e1;
-  --rarity-rare: #fb923c;
-  --rarity-epic: #8b5cf6;
-  --rarity-legendary: #fbbf24;
+  --success: #d0d0d0;
+  --warning: #a8a8a8;
+  --error: #ffffff;
+  --error-soft: #d8d8d8;
 
-  --player-blue: #3b82f6;
-  --player-red: #ef4444;
-
-  --blob-strength: 40%;
+  /* Dim behind modals, and the chip that sits on top of card art. */
+  --scrim: rgba(0, 0, 0, 0.72);
+  --overlay-chip: rgba(0, 0, 0, 0.78);
+  --overlay-chip-on: rgba(255, 255, 255, 0.92);
+  --overlay-chip-text: #ffffff;
+  --overlay-chip-on-text: #000000;
 }
 
 :root[data-theme='light'] {
-  --bg-1: #f8fafc;
-  --bg-2: #f1f5f9;
-  --bg-3: #e2e8f0;
+  --bg-1: #ffffff;
+  --bg-2: #f4f4f4;
+  --bg-3: #e9e9e9;
 
-  --aurora-1: rgba(37, 99, 235, 0.3);
-  --aurora-2: rgba(139, 92, 246, 0.24);
-  --aurora-3: rgba(6, 182, 212, 0.18);
-  --aurora-4: rgba(245, 158, 11, 0.12);
+  --surface: #fbfbfb;
+  --surface-strong: #ffffff;
+  --surface-sunken: #f0f0f0;
 
-  --glass-bg: rgba(255, 255, 255, 0.62);
-  --glass-bg-strong: rgba(255, 255, 255, 0.82);
-  --glass-border: rgba(15, 23, 42, 0.12);
-  --glass-highlight: rgba(255, 255, 255, 0.9);
-  --slot-bg: rgba(15, 23, 42, 0.05);
-  --slot-border: rgba(15, 23, 42, 0.14);
+  --border: #d6d6d6;
+  --border-strong: #b4b4b4;
+  --highlight: rgba(0, 0, 0, 0.04);
 
-  --text: #0f172a;
-  --text-muted: #64748b;
+  --text: #0a0a0a;
+  --text-muted: #6b6b6b;
 
-  /* Deeper tints of the same hues so text/icons stay readable on white. */
-  --accent: #2563eb;
-  --accent-light: #3b82f6;
-  --accent-deep: #1e40af;
-  --accent-purple: #6d28d9;
-  --accent-cyan: #06b6d4;
-  --accent-gold: #b45309;
-  --accent-gold-bright: #f59e0b;
-  --accent-orange: #ea580c;
+  /* Inverted: emphasis reads as "darker than its surroundings" on light. */
+  --accent: #000000;
+  --accent-light: #1f1f1f;
+  --accent-deep: #000000;
+  --accent-contrast: #ffffff;
 
-  --success: #16a34a;
-  --warning: #d97706;
-  --error: #dc2626;
-  --error-soft: #dc2626;
-  --info: #2563eb;
+  --player-blue: #2e2e2e;
+  --player-red: #8a8a8a;
 
-  --shadow:
-    0 6px 20px rgba(15, 23, 42, 0.11),
-    inset 0 1px 0 var(--glass-highlight);
-  --shadow-hover:
-    0 10px 28px rgba(15, 23, 42, 0.17),
-    inset 0 1px 0 var(--glass-highlight);
+  --rarity-common: #9a9a9a;
+  --rarity-rare: #7a7a7a;
+  --rarity-epic: #5a5a5a;
+  --rarity-legendary: #3a3a3a;
+  --rarity-champion: #000000;
 
-  --rarity-common: #64748b;
-  --rarity-rare: #ea580c;
-  --rarity-epic: #6d28d9;
-  --rarity-legendary: #d97706;
+  --success: #3a3a3a;
+  --warning: #6b6b6b;
+  --error: #000000;
+  --error-soft: #2e2e2e;
 
-  --player-blue: #2563eb;
-  --player-red: #dc2626;
+  --scrim: rgba(0, 0, 0, 0.45);
+  --overlay-chip: rgba(0, 0, 0, 0.72);
+  --overlay-chip-on: rgba(0, 0, 0, 0.92);
+  --overlay-chip-text: #ffffff;
+  --overlay-chip-on-text: #ffffff;
+}
 
-  --blob-strength: 55%;
+/* Legacy aliases. Component stylesheets still reference the older "glass"
+   naming in places; mapping them here keeps one source of truth rather than
+   two parallel palettes. */
+:root {
+  --glass-bg: var(--surface);
+  --glass-bg-strong: var(--surface-strong);
+  --glass-border: var(--border);
+  --glass-highlight: var(--highlight);
+  --slot-bg: var(--surface-sunken);
+  --slot-border: var(--border);
+  --accent-purple: var(--accent);
+  --accent-cyan: var(--accent);
+  --accent-gold: var(--text-muted);
+  --accent-gold-bright: var(--text);
+  --accent-orange: var(--text-muted);
+  --info: var(--accent);
+
+  /* Flat by design: depth is carried by borders, not shadow. */
+  --shadow: none;
+  --shadow-hover: none;
 }
 
 :root {
@@ -156,42 +172,33 @@ body,
   height: 100%;
 }
 
-/* Aurora background, baked straight into the body fill.
- *
- * This used to be two `position: fixed` pseudo-element layers sized to 160% of
- * the viewport, carrying `filter: blur(60px) saturate(130%)` and each running an
- * infinite transform animation — on every page, not just the landing. That is a
- * continuously re-composited blur over ~2.5 viewports of surface and was the
- * single largest idle GPU cost in the app.
- *
- * Radial gradients are already soft, so the blur bought very little: folding the
- * five stops into one static `background` reproduces the look for free. The
- * percentages below are the originals remapped from the old oversized box onto
- * the viewport (a point at p% of a -30%..130% layer sits at -30 + 1.6p percent),
- * with the radii scaled by the same 1.6 to stand in for the lost blur spread.
- *
- * body is exactly viewport-height and never scrolls (see `overflow: hidden`), so
- * the gradient needs no `background-attachment: fixed` to stay put.
- */
 body {
   margin: 0;
   min-width: 320px;
-  background:
-    radial-gradient(61% 67% at 5% 12%, var(--aurora-1), transparent 70%),
-    radial-gradient(54% 61% at 95% 16%, var(--aurora-4), transparent 70%),
-    radial-gradient(67% 74% at 79% 101%, var(--aurora-2), transparent 70%),
-    radial-gradient(48% 54% at 34% 82%, var(--aurora-3), transparent 70%),
-    radial-gradient(42% 48% at 111% 58%, var(--aurora-2), transparent 70%),
-    linear-gradient(160deg, var(--bg-1), var(--bg-2) 55%, var(--bg-3));
+  background: var(--bg-1);
   overflow: hidden;
   position: relative;
+}
+
+/* ==========================================================================
+   No motion
+   ==========================================================================
+   Every transition and animation in the app is switched off from one place.
+   Kept as a single deliberate switch rather than by deleting the underlying
+   declarations, so reinstating specific motion later is a decision made here
+   instead of an archaeology exercise across fifteen stylesheets. */
+
+*,
+*::before,
+*::after {
+  animation: none !important;
+  transition: none !important;
 }
 
 button {
   font-family: inherit;
 }
 
-/* Slim, unobtrusive scrollbars that fit the glass look */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -202,10 +209,10 @@ button {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--border-strong);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--text-muted);
 }

@@ -17,7 +17,6 @@
 .panel:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--glass-border));
   box-shadow: var(--shadow-hover);
-  transform: translateY(-2px);
 }
 
 /* soft top edge reflection */
@@ -49,7 +48,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
-  text-shadow: 0 2px 12px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .fillCount {
@@ -68,7 +66,7 @@
 }
 
 .fillCountFull {
-  color: #fff;
+  color: var(--accent-contrast);
   border-color: transparent;
   background: linear-gradient(135deg, var(--accent-light), var(--accent));
   box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
@@ -116,39 +114,28 @@
   color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 60%, var(--slot-border));
   background: color-mix(in srgb, var(--accent) 12%, var(--slot-bg));
-  transform: translateY(-1.5px);
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
     0 4px 14px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .iconButton:active {
-  transform: translateY(0) scale(0.95);
 }
 
-/* "Open in Clash Royale" — violet-white gradient tying into the aurora background */
+/* "Open in Clash Royale" — the primary action on a deck, so it is the one solid
+   accent fill in the header row. It used to be a part-transparent gradient,
+   which on a neutral palette left near-white text on a mid grey. Solid accent
+   against --accent-contrast keeps it legible in both themes. */
 .crButton {
-  color: #fff;
-  border-color: color-mix(in srgb, var(--accent-light) 55%, var(--slot-border));
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent-light) 55%, transparent),
-    color-mix(in srgb, var(--accent) 65%, transparent) 70%
-  );
-  text-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 60%, transparent);
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
 .crButton:hover {
-  color: #fff;
-  border-color: color-mix(in srgb, #ffffff 45%, var(--accent-light));
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent-light) 80%, #ffffff),
-    var(--accent) 75%
-  );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    0 4px 16px color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent-contrast);
+  border-color: var(--accent-deep);
+  background: var(--accent-deep);
 }
 
 .crButton[aria-disabled='true'] {
@@ -157,14 +144,8 @@
 }
 
 .crButton[aria-disabled='true']:hover {
-  transform: none;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent-light) 55%, transparent),
-    color-mix(in srgb, var(--accent) 65%, transparent) 70%
-  );
-  border-color: color-mix(in srgb, var(--accent-light) 55%, var(--slot-border));
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 /* --- Deck link import -------------------------------------------------- */
@@ -312,11 +293,10 @@
 }
 
 .slot:hover {
-  transform: translateY(-3px) rotate(-0.6deg) scale(1.02);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
-    0 8px 20px rgba(0, 0, 0, 0.25),
+    0 8px 20px transparent,
     0 0 18px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
@@ -375,9 +355,10 @@
   position: absolute;
   top: 4px;
   right: 4px;
-  /* One of these per filled slot — up to 80 on a full Versus board. */
-  background: rgba(10, 8, 24, 0.82);
-  color: #fff;
+  /* One of these per filled slot — up to 80 on a full Versus board. Sits on top
+     of card art, so it carries its own overlay tokens rather than surface ones. */
+  background: var(--overlay-chip);
+  color: var(--overlay-chip-text);
   font-size: 0.75rem;
   line-height: 1;
   border-radius: 999px;
@@ -392,8 +373,8 @@
 }
 
 .slotClear:hover {
-  transform: scale(1.15);
-  background: rgba(220, 60, 90, 0.85);
+  background: var(--overlay-chip-on);
+  color: var(--overlay-chip-on-text);
 }
 
 .slot:hover .slotClear {
@@ -415,35 +396,23 @@
   z-index: 2;
 }
 
+/* Lit vs unlit is carried by opacity alone while the palette is monochrome —
+   the two gems can no longer be told apart by hue. */
 .slotFormGem {
   font-size: 0.6rem;
-  opacity: 0.35;
-  filter: grayscale(0.6);
-  transition:
-    opacity 0.16s ease,
-    filter 0.16s ease,
-    text-shadow 0.16s ease;
+  opacity: 0.3;
 }
 
 .slotFormGemOn {
   opacity: 1;
-  filter: none;
 }
 
 .slotFormGem-evolution {
-  color: #c4b5fd;
-}
-
-.slotFormGemOn.slotFormGem-evolution {
-  text-shadow: 0 0 6px var(--accent-purple);
+  color: var(--rarity-epic);
 }
 
 .slotFormGem-hero {
-  color: var(--accent-gold-bright);
-}
-
-.slotFormGemOn.slotFormGem-hero {
-  text-shadow: 0 0 6px var(--accent-gold-bright);
+  color: var(--rarity-legendary);
 }
 
 .slotRoleBadge {
@@ -457,39 +426,25 @@
   text-align: center;
   border-radius: 5px;
   padding: 0.08rem 0;
-  color: #0f172a;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  color: var(--accent-contrast);
   z-index: 2;
 }
 
-/* EVO — purple with a white light-band sweeping through, pulsing purple glow */
+/* EVO / HERO / CHAMPION were purple, gold and a rainbow sheen. With no hue to
+   separate them they are told apart by lightness instead, climbing the rarity
+   scale — champion is the brightest on dark and the darkest on light. */
 .slotRoleBadge-evolution {
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-  background: linear-gradient(135deg, #a78bfa, var(--accent-purple));
+  background: var(--rarity-epic);
 }
 
-/* HERO — molten gold sweep, pulsing golden glow */
 .slotRoleBadge-hero {
-  color: #3a2900;
-  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.35);
-  background: linear-gradient(135deg, #fcd34d, var(--accent-gold-bright));
+  background: var(--rarity-legendary);
 }
 
-/* CHAMPION — rainbow sheen with an alternating gold/cyan glow */
 .slotRoleBadge-champion {
-  color: #0f172a;
   font-size: 0.48rem;
   letter-spacing: 0.05em;
-  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
-  background: linear-gradient(
-    120deg,
-    #fcd34d,
-    var(--accent-gold) 30%,
-    var(--accent-light) 55%,
-    var(--accent-cyan) 80%,
-    #fcd34d 100%
-  );
+  background: var(--rarity-champion);
 }
 
 /* Positional slot roles (fixed, not user-assigned): 1st slot = Evolution (purple),

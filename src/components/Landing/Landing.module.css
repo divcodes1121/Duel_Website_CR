@@ -29,7 +29,7 @@
   align-items: center;
   justify-content: center;
   gap: 1.4rem;
-  background: #050d18;
+  background: var(--text-muted);
 }
 
 .introMark {
@@ -48,11 +48,11 @@
   width: 64px;
   height: 64px;
   border-radius: 20px;
-  color: #fff;
+  color: var(--accent-contrast);
   background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
   box-shadow:
     0 10px 40px color-mix(in srgb, var(--accent) 60%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    inset 0 1px 0 var(--highlight);
 }
 
 .introRing {
@@ -74,7 +74,7 @@
 .introWord {
   font-family: 'Subscribe', Inter, system-ui, sans-serif;
   font-size: 1.05rem;
-  color: #f8fafc;
+  color: var(--text-muted);
   text-shadow: 0 0 24px color-mix(in srgb, var(--accent-light) 60%, transparent);
 }
 
@@ -267,7 +267,7 @@
   position: absolute;
   bottom: -3vh;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent-light) 75%, #ffffff);
+  background: color-mix(in srgb, var(--accent-light) 75%, var(--text));
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent-light) 60%, transparent);
   opacity: 0;
   animation: particle-rise linear infinite;
@@ -307,11 +307,11 @@
 .envCastle {
   width: 100%;
   height: 100%;
-  fill: color-mix(in srgb, var(--bg-3) 60%, #050d18);
+  fill: color-mix(in srgb, var(--bg-3) 60%, var(--text-muted));
 }
 
 :global([data-theme='light']) .envCastle {
-  fill: color-mix(in srgb, var(--accent) 18%, #cbd5e1);
+  fill: color-mix(in srgb, var(--accent) 18%, var(--text-muted));
 }
 
 /* --- film grain --- */
@@ -319,9 +319,9 @@
   position: absolute;
   inset: 0;
   opacity: 0.05;
-  background-image: radial-gradient(circle at 25% 35%, #fff 0.5px, transparent 0.6px),
-    radial-gradient(circle at 75% 65%, #fff 0.5px, transparent 0.6px),
-    radial-gradient(circle at 45% 85%, #fff 0.4px, transparent 0.5px);
+  background-image: radial-gradient(circle at 25% 35%, var(--text-muted) 0.5px, transparent 0.6px),
+    radial-gradient(circle at 75% 65%, var(--text-muted) 0.5px, transparent 0.6px),
+    radial-gradient(circle at 45% 85%, var(--text-muted) 0.4px, transparent 0.5px);
   background-size: 7px 7px, 11px 11px, 13px 13px;
 }
 
@@ -367,11 +367,9 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--glass-bg) 80%, transparent);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(22px) saturate(160%);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
-    0 12px 40px rgba(0, 0, 0, 0.22);
+    0 12px 40px transparent;
 }
 
 .navBrand {
@@ -395,11 +393,11 @@
   width: 1.9rem;
   height: 1.9rem;
   border-radius: 10px;
-  color: #fff;
+  color: var(--accent-contrast);
   background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
   box-shadow:
     0 4px 16px color-mix(in srgb, var(--accent) 55%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    inset 0 1px 0 var(--highlight);
 }
 
 .navLinks {
@@ -501,8 +499,6 @@
   border-radius: 999px;
   border: 1px solid var(--glass-border);
   background: color-mix(in srgb, var(--glass-bg) 70%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -545,16 +541,16 @@
 
 .titleLinePlain {
   font-size: clamp(2.9rem, 8.5vw, 6.4rem);
-  color: #ffffff;
+  color: var(--accent-contrast);
   text-shadow:
-    0 0 22px rgba(255, 255, 255, 0.28),
+    0 0 22px var(--highlight),
     0 8px 44px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 :global([data-theme='light']) .titleLinePlain {
-  color: #0f172a;
+  color: var(--text-muted);
   text-shadow:
-    0 2px 16px rgba(255, 255, 255, 0.7),
+    0 2px 16px var(--highlight),
     0 8px 34px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
@@ -570,9 +566,9 @@
 .titleLineGradient .titleLetter {
   background: linear-gradient(
     180deg,
-    #fcd34d 0%,
+    var(--text-muted) 0%,
     var(--accent-gold) 48%,
-    #d97706 78%,
+    var(--text-muted) 78%,
     var(--accent-light) 120%
   );
   -webkit-background-clip: text;
@@ -597,11 +593,11 @@
   font-weight: 550;
   line-height: 1.65;
   color: var(--text-muted);
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 2px 18px transparent;
 }
 
 :global([data-theme='light']) .heroSub {
-  text-shadow: 0 2px 18px rgba(255, 255, 255, 0.6);
+  text-shadow: 0 2px 18px var(--highlight);
 }
 
 .heroCtas {
@@ -629,12 +625,12 @@
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent-light), var(--accent) 60%, #5b34e0);
+  color: var(--accent-contrast);
+  background: linear-gradient(135deg, var(--accent-light), var(--accent) 60%, var(--text-muted));
   box-shadow:
     0 10px 36px color-mix(in srgb, var(--accent) 60%, transparent),
     0 0 0 1px color-mix(in srgb, var(--accent-light) 40%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    inset 0 1px 0 var(--highlight);
   transition: box-shadow 0.25s ease;
   will-change: transform;
 }
@@ -644,13 +640,13 @@
     0 16px 52px color-mix(in srgb, var(--accent) 75%, transparent),
     0 0 34px color-mix(in srgb, var(--accent-light) 45%, transparent),
     0 0 0 1px color-mix(in srgb, var(--accent-light) 60%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    inset 0 1px 0 var(--highlight);
 }
 
 .ctaSword {
   font-size: 1.05rem;
   line-height: 1;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
+  filter: drop-shadow(0 0 8px var(--highlight));
 }
 
 .buttonShine {
@@ -659,7 +655,7 @@
   bottom: -20%;
   left: -45%;
   width: 34%;
-  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.38), transparent);
+  background: linear-gradient(105deg, transparent, var(--highlight), transparent);
   transform: skewX(-18deg) translateX(0);
   pointer-events: none;
 }
@@ -679,7 +675,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 0%, transparent 70%);
+  background: radial-gradient(circle, var(--highlight) 0%, transparent 70%);
   transform: translate(-50%, -50%) scale(0);
   animation: ripple-expand 0.7s ease-out forwards;
   pointer-events: none;
@@ -701,8 +697,6 @@
   border-radius: 999px;
   border: 1px solid var(--glass-border);
   background: color-mix(in srgb, var(--glass-bg) 75%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   color: var(--text);
   font-size: 0.82rem;
   font-weight: 700;
@@ -716,7 +710,7 @@
   border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
-    0 8px 28px rgba(0, 0, 0, 0.2),
+    0 8px 28px transparent,
     0 0 22px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
@@ -732,7 +726,7 @@
 .heroCard {
   position: absolute;
   border-radius: 10px;
-  filter: drop-shadow(0 18px 38px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 18px 38px transparent);
   animation: hero-card-bob 7s ease-in-out infinite;
   will-change: transform;
 }
@@ -846,8 +840,6 @@
   border-radius: 30px;
   border: 1px solid transparent;
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
   box-shadow:
     var(--shadow),
     inset 0 1px 0 var(--glass-highlight);
@@ -869,9 +861,9 @@
     color-mix(in srgb, var(--accent-gold) 70%, transparent),
     color-mix(in srgb, var(--accent) 75%, transparent)
   );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask: linear-gradient(var(--text-muted) 0 0) content-box, linear-gradient(var(--text-muted) 0 0);
   -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(var(--text-muted) 0 0) content-box, linear-gradient(var(--text-muted) 0 0);
   mask-composite: exclude;
   pointer-events: none;
   animation: crystal-border-spin 9s linear infinite;
@@ -905,9 +897,9 @@
   background: linear-gradient(
     100deg,
     transparent,
-    rgba(255, 255, 255, 0.07) 40%,
-    rgba(255, 255, 255, 0.14) 50%,
-    rgba(255, 255, 255, 0.07) 60%,
+    var(--highlight) 40%,
+    var(--highlight) 50%,
+    var(--highlight) 60%,
     transparent
   );
   transform: skewX(-16deg);
@@ -1020,7 +1012,7 @@
 .crystalArt img {
   position: absolute;
   border-radius: 10px;
-  filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.45));
+  filter: drop-shadow(0 16px 34px transparent);
   will-change: transform;
 }
 
@@ -1093,8 +1085,6 @@
   border-radius: 22px;
   border: 1px solid transparent;
   background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
   box-shadow:
     var(--shadow),
     inset 0 1px 0 var(--glass-highlight);
@@ -1117,9 +1107,9 @@
     transparent 45%,
     color-mix(in srgb, var(--accent-gold) 40%, transparent)
   );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask: linear-gradient(var(--text-muted) 0 0) content-box, linear-gradient(var(--text-muted) 0 0);
   -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(var(--text-muted) 0 0) content-box, linear-gradient(var(--text-muted) 0 0);
   mask-composite: exclude;
   opacity: 0.5;
   transition: opacity 0.25s ease;
@@ -1268,8 +1258,6 @@
   padding: 2rem 1.25rem 2.6rem;
   border-top: 1px solid var(--glass-border);
   background: color-mix(in srgb, var(--glass-bg) 45%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
 .footerBrand {
@@ -1311,8 +1299,8 @@
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(255, 255, 255, 0.95) 0%,
-    color-mix(in srgb, var(--accent-gold) 65%, #fff) 22%,
+    var(--highlight) 0%,
+    color-mix(in srgb, var(--accent-gold) 65%, var(--text-muted)) 22%,
     color-mix(in srgb, var(--accent) 80%, transparent) 48%,
     transparent 70%
   );

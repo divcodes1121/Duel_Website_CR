@@ -7,7 +7,7 @@
   justify-content: center;
   /* Darker scrim in place of the blurred one: this covers the entire viewport,
      so blurring it meant re-rasterising the whole page behind every dialog. */
-  background: rgba(8, 5, 20, 0.62);
+  background: var(--scrim);
   padding: 1.25rem;
   animation: dialog-scrim-in 0.16s ease-out;
 }
@@ -104,7 +104,6 @@
 .closeButton:hover {
   color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
-  transform: scale(1.08);
 }
 
 .nameInput {
@@ -129,7 +128,7 @@
 .primaryButton {
   font-size: 0.8rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--accent-contrast);
   background: linear-gradient(135deg, var(--accent-light), var(--accent));
   border: none;
   border-radius: 999px;
@@ -137,19 +136,14 @@
   cursor: pointer;
   box-shadow:
     0 4px 16px color-mix(in srgb, var(--accent) 45%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    inset 0 1px 0 var(--highlight);
   transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.4), box-shadow 0.16s ease;
 }
 
 .primaryButton:hover {
-  transform: translateY(-1.5px);
   box-shadow:
     0 7px 22px color-mix(in srgb, var(--accent) 60%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
-}
-
-.primaryButton:active {
-  transform: scale(0.95);
+    inset 0 1px 0 var(--highlight);
 }
 
 .ghostButton {
@@ -168,7 +162,6 @@
 .ghostButton:hover {
   color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--slot-border));
-  transform: translateY(-1.5px);
 }
 
 .dangerButton:hover {
@@ -212,7 +205,6 @@
 
 .row:hover {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--slot-border));
-  transform: translateY(-1.5px);
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
     0 6px 18px color-mix(in srgb, var(--accent) 15%, transparent);
