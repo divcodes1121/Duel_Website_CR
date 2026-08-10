@@ -26,6 +26,7 @@ bot's SQLite files read-only.
 8. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
 9. [Testing and verification](#testing-and-verification)
 10. [Project layout](#project-layout)
+11. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -312,27 +313,91 @@ unchanged, applied **independently** per tab. A pair may appear under two tabs.
 
 ## Colour: how it was chosen
 
-### The app palette
+All colour lives in `src/index.css` as tokens — it is the single source of
+truth, and no component defines a colour of its own.
+
+### The neutral ground
 
 Dark is black/grey/white, light is white/black, both derived from published
 practice (Radix Colors' 12-step semantics, GitHub Primer, Linear, Vercel) rather
-than picked by eye. Two rules from that research drive the specific values:
+than picked by eye. Two rules from that research drive the values:
 
 - **Never a pure black ground and never pure white text** — the halation makes
-  body copy vibrate. Dark uses `#0b0b0b` under `#ededed`.
+  body copy vibrate.
 - **Light mode elevates by making the page grey and the card white.** The first
   attempt had a `#FFFFFF` page with `#FBFBFB` cards, i.e. cards *darker* than
   the page they sat on, which is why they read as sunken.
 
-Every pair was checked numerically: 20 contrast checks, all passing, after
-nudging `border-strong` and `rarity-common` which had fallen to 2.88:1 and
-2.97:1.
+The ladder is shallow and evenly spaced so page, sidebar, card and input are all
+separable without any of them being pure black or white:
 
-All colour lives in `src/index.css` as tokens. When 12 stylesheets were found
-carrying `color-mix(var(--bg-2) 86%, …)` leftovers that bypassed the surface
-tokens entirely, they were converted — a token nothing reads is not a token.
+| | page | card | raised | sunken |
+|---|---|---|---|---|
+| dark | `#111111` | `#1A1A1A` | `#202020` | `#0D0D0D` |
+| light | `#FBFBFC` | `#FFFFFF` | `#FFFFFF` | `#F5F5F6` |
 
-### The chart and data colours
+### The five hues
+
+The interface is **primarily neutral**; these are accents distributed across it,
+not a theme. One hue means one thing, everywhere:
+
+| Hue | Means | Dark | Light |
+|---|---|---|---|
+| **violet** | you are here / selected | `#A78BFA` | `#6D28D9` |
+| **pink** | the primary thing to click | `#F472B6` | `#C81E69` |
+| **blue** | neutral information | `#5B8DEF` | `#1D4ED8` |
+| **green** | positive outcome | `#34D399` | `#047857` |
+| **red** | negative or destructive | `#F87171` | `#C02618` |
+
+All ten clear **4.5:1 against every surface they sit on**, and both CTA hues
+carry white text at 4.5:1+, so a filled button needs no per-theme text colour.
+The dark column is re-stepped for the dark ground, never a dimmed light value.
+
+**Three intensity levels**, defined once in `index.css` and mixed against the
+card surface so both themes derive from the same ladder:
+
+| Level | Strength | Used for |
+|---|---|---|
+| 1 — wash | ~8% | hover, icon-tile backgrounds |
+| 2 — fill | ~14% | the selected state's background |
+| 3 — raw hue | 100% | icons, borders, numbers, meters, buttons |
+
+**The raw hue only ever lands on small things.** That single rule is what keeps
+a neutral interface neutral while still reading as coloured — a large surface
+never goes past level 2.
+
+Components opt into a **role**, never a colour: `--accent-select`,
+`--accent-action`, `--accent-info`, `--success`, `--error`. `--accent` stays
+neutral, because a hue that sometimes means "selected" and sometimes means "bad"
+teaches the reader to ignore it.
+
+Identity is a separate axis from selection: sidebar sections and tool panels
+wear a hue on their **icon tile** so an area is recognisable at a glance, while
+the *selected* row is always violet regardless of its identity hue.
+
+### Contrast and focus
+
+Every pair was checked numerically. The earlier neutral pass needed
+`border-strong` and `rarity-common` nudged after they fell to 2.88:1 and 2.97:1.
+
+There was **no `:focus-visible` rule anywhere** in the codebase and a dozen
+`outline: none` declarations removing the browser default, so keyboard users
+could not see where they were. `index.css` now carries one global 2px violet
+ring at 2px offset. Selected states also carry a leading edge, a border and a
+text-colour change, so meaning never rests on hue alone.
+
+### The chart and data colours — a deliberately separate system
+
+**The UI accent system and the data-visualisation palette have different jobs
+and must not be merged.** UI colour communicates interface meaning; chart colour
+communicates data, and only the latter has to survive being compared without a
+label attached. Re-encoding the charts to match the UI hues would trade a real
+property for a cosmetic one.
+
+Concretely: the reference dashboard's own blue and violet fail CVD separation —
+ΔE **4.5** under deuteranopia and **14.5** even with normal vision, below the 15
+floor. Its two middle progress bars are genuinely hard to tell apart. Copying
+that would be copying a defect.
 
 Computed with the palette validator, not eyeballed:
 
@@ -396,7 +461,7 @@ Also removed: the global aurora/particle layers, 29 `backdrop-filter` passes
 outside the (now deleted) landing, and multi-layer box-shadows. Motion removal
 was verified with `document.getAnimations()` returning empty, not by looking.
 
-### 2. Get the colour right
+### 2. Get the neutral ground right
 
 Three palettes were tried and two were wrong. An indigo set, then a warm
 espresso set, were both applied against Noguchi Design references before the
@@ -428,6 +493,27 @@ live trophies, then `#/player/<tag>/duels`.
 Sidebar sections live in the **URL**, not component state, so an analytics
 screen is linkable and survives a refresh. The sidebar is navigation, not a
 toggle.
+
+### 6. The five-hue accent system
+
+Target: a premium analytics dashboard with Clash Royale identity — colour
+communicating meaning, over a ground that stays neutral.
+
+The root cause of the flatness was narrower than it looked. Every selected state
+in the app routed through **one token**, `--accent`, which was `#EDEDED` dark /
+`#1A1A1A` light. So a selected sidebar item was literally a solid white slab
+with black text, and a selected tab, a selected chip and a primary button were
+all the same monochrome block. Fixing it was mostly a token-layer change, not a
+thirty-file rewrite.
+
+Worth noting about the reference dashboard this was modelled on: **its selection
+states are not coloured either.** Its active sidebar item and active time tab
+are subtle grey fills. Its richness comes from colour marking *identity* — one
+hue per metric card, per series, per progress bar. Selection here does take a
+hue, by choice, but as a level-2 tint rather than the solid slab it replaced.
+
+Then a visual pass, because tokens compiling is not the same as a page looking
+right — two things only showed up on screen and are recorded below.
 
 ---
 
@@ -463,6 +549,26 @@ reader sees.
 **The invisible hero title.** A bulk token conversion turned `color: #fff` into
 `--accent-contrast`, which in dark mode *equals the ground* — so the headline
 rendered in exactly the background colour and vanished.
+
+**Violet meant two things at once.** Remapping the legacy `--accent-purple`
+alias to the new violet made the Evolution *role* slot permanently violet — so
+it was indistinguishable from the *selected* slot, because violet is what
+selection means. Role identity went back to neutral; `--accent-cyan` and
+`--accent-orange` reverted for the same reason, with a separate `--drop-valid`
+(green) for a legal drop target. Only caught by looking at the builder.
+
+**Level 2 is too strong for a large surface.** The duel-analysis tabs are a
+third of the page wide, and a 14% fill on something that size reads as a colour
+panel rather than an accent. They dropped to level 1 and lean on the border and
+text instead. The rule "large surfaces never go past level 2" needs the corollary
+"and the wider the surface, the lower the level".
+
+**Three identical CTAs read as one colour.** The home page's three "Open …"
+panel buttons were all `--accent-action`, so the page looked entirely pink and
+the buttons said nothing about which tool each opened. Each tool panel now wears
+its own identity hue. This deliberately bends "pink alone means primary action"
+— on those panels the hue reads as identity, and Analyze stays pink as the one
+genuine primary action on the page.
 
 **`better-sqlite3` could not be built** (no prebuild for Node 21, node-gyp
 fails) and `node:sqlite` needs Node 22. Hence Python for the data layer, which
@@ -510,6 +616,22 @@ reliable on this machine; WebKit is flaky.
 Verify scripts assert on *values*, not just on elements existing — the point is
 to catch a bar that renders at the wrong colour or a filter that changes nothing.
 
+### Verifying colour specifically
+
+Reading `getComputedStyle()` is the whole point: "the CSS compiles" says nothing
+about whether a selected item is still a white slab. For any colour change,
+assert in **both** `data-theme` values:
+
+- the computed `backgroundColor` / `color` / `borderColor` of a selected sidebar
+  item, an active tab, a chosen chip and a primary button — each should be the
+  intended hue, not white or black;
+- that hover **changes colour** while `document.getAnimations()` stays at `0`,
+  which is the no-motion guarantee;
+- that tabbing produces a visible focus ring;
+- then **screenshot both themes and actually look at them**. Both colour bugs
+  above compiled cleanly, passed every test, and were only visible on screen.
+  If a panel reads as a rainbow, reduce the colour.
+
 ---
 
 ## Project layout
@@ -517,7 +639,10 @@ to catch a bar that renders at the wrong colour or a filter that changes nothing
 ```
 src/
   App.tsx                     hash routing -> one Dashboard shell
-  index.css                   ALL colour tokens; the single source of truth
+  index.css                   ALL colour: neutral ladder, 5 hues, the three
+                              intensity levels, semantic roles, focus ring.
+                              The single source of truth — no component
+                              defines a colour of its own.
   components/
     Dashboard/                top bar, sidebar, content panel
     Analytics/
@@ -550,6 +675,28 @@ moving the service to a VPS is a proxy or base-URL change, not a code change.
 `useDateWindow` is shared between both analytics screens on purpose. Two copies
 drift — that is exactly how the season selector once shipped bound to state
 nobody read.
+
+---
+
+## Deliberately not done
+
+Recorded so they are not re-litigated as oversights:
+
+- **Chart palettes are not merged into the UI accent system.** They are already
+  CVD-validated; re-encoding them for visual consistency would trade a real
+  property for a cosmetic one. See the colour section.
+- **Rarity tokens** (`--rarity-common` … `--rarity-champion`) stay greyscale.
+  Clash Royale has canonical rarity colours and adopting them is a reasonable
+  follow-up, but that is a call about game fidelity, not UI colour.
+- **Versus-mode side colours** (`--player-blue` / `--player-red`) stay neutral
+  greys separated by lightness. Making the red side actually red would collide
+  with red meaning "negative", which a duel side is not.
+- **Motion stays off.** Hover changes colour and nothing else; the global
+  `animation/transition: none` switch in `index.css` is intact and
+  `document.getAnimations()` is asserted to stay at `0`.
+- **`--accent` stays neutral.** It is still correct for high-contrast neutral
+  fills. Components opt into `--accent-select` / `--accent-action` / etc. rather
+  than every `--accent` being globally swapped for a hue.
 
 ---
 
