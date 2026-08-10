@@ -73,25 +73,37 @@ const SECTION_BLURB: Record<string, string> = {
 
 const POPULAR_TAGS = ['#QJ2L8VR', '#8G9UCG', '#LYPR9LQC', '#2P8R88', '#UVC8GJ'] as const;
 
-/* The three built pages, reachable from the panel as well as the top bar. */
+/* The three built tools, as full panels down the home screen. */
 const FEATURES = [
   {
     icon: SwordsIcon,
-    title: 'Duel Builder',
-    body: 'Five decks, forty unique cards, Evo / Hero / Wild slots enforced.',
+    kicker: 'Royal Duels',
+    title: 'The duel deck forge',
+    body: 'Build all five battle decks side by side. Evolution, Hero and Wild slots are enforced by position, so an illegal lineup is impossible.',
+    chips: ['Up to 5 decks · 40 cards', 'Evo · Hero · Wild', 'Live elixir stats'],
+    cta: 'Open Duel Builder',
     hash: '#/builder',
+    art: ['knight', 'archer-queen', 'golden-knight'],
   },
   {
     icon: DeckIcon,
-    title: 'Deck Builder',
-    body: 'Your collection — unlimited single decks that save themselves.',
+    kicker: "Deck's Home",
+    title: 'Your collection hall',
+    body: 'A home for every deck you dream up — unlimited single decks that save themselves, each with the same slot rules as a duel deck.',
+    chips: ['Unlimited decks', 'Auto-saving', 'Win-condition filter'],
+    cta: 'Open Deck Builder',
     hash: '#/decks',
+    art: ['mega-knight', 'golden-knight', 'bandit'],
   },
   {
     icon: PaletteIcon,
-    title: 'Counter Palette',
-    body: 'Archetype folders keeping every counter deck filed and filterable.',
+    kicker: 'Counter Palette',
+    title: 'The archetype armory',
+    body: 'Sort your arsenal into folders, one per archetype you face. Every counter deck stays filed, filterable and ready to deploy.',
+    chips: ['Unlimited folders', 'Decks by archetype', 'Auto-saving'],
+    cta: 'Open Counter Palette',
     hash: '#/palette',
+    art: ['pekka', 'inferno-tower', 'skeleton-army'],
   },
 ] as const;
 
@@ -292,33 +304,95 @@ export function Dashboard({ view = 'home' }: { view?: DashboardView }) {
                 </div>
               </div>
 
-              <div className={styles.features}>
-                {FEATURES.map((f) => {
-                  const Icon = f.icon;
+            </section>
+          ) : (
+            <SectionPanel name={section} />
+          )}
+
+          {/* Full-size panels for the built tools, and a grid for the analytics
+              areas. They live below the hero so the home screen scrolls, which
+              is where the one-line strip fell short. */}
+          {view === 'home' && section === 'Search Player' && (
+            <>
+              <section className={styles.blockHead}>
+                <h2 className={styles.blockTitle}>Your tools</h2>
+                <p className={styles.blockSub}>Everything built so far — open any of them.</p>
+              </section>
+
+              {FEATURES.map((f, i) => {
+                const Icon = f.icon;
+                return (
+                  <button
+                    key={f.kicker}
+                    type="button"
+                    className={`${styles.toolPanel} ${i % 2 === 1 ? styles.toolPanelFlip : ''}`}
+                    onClick={() => go(f.hash)}
+                  >
+                    <span className={styles.toolText}>
+                      <span className={styles.toolKicker}>
+                        <Icon size={14} />
+                        {f.kicker}
+                      </span>
+                      <span className={styles.toolTitle}>{f.title}</span>
+                      <span className={styles.toolBody}>{f.body}</span>
+                      <span className={styles.toolChips}>
+                        {f.chips.map((c) => (
+                          <span key={c} className={styles.toolChip}>
+                            {c}
+                          </span>
+                        ))}
+                      </span>
+                      <span className={styles.toolCta}>
+                        {f.cta}
+                        <ArrowRightIcon size={15} />
+                      </span>
+                    </span>
+
+                    <span className={styles.toolArt} aria-hidden="true">
+                      {f.art.map((key, n) => (
+                        <img
+                          key={key}
+                          src={getCardIconUrl(key)}
+                          alt=""
+                          draggable={false}
+                          className={`${styles.toolArtCard} ${styles[`toolArt${n + 1}`]}`}
+                        />
+                      ))}
+                    </span>
+                  </button>
+                );
+              })}
+
+              <section className={styles.blockHead}>
+                <h2 className={styles.blockTitle}>Analytics</h2>
+                <p className={styles.blockSub}>
+                  Every area from the sidebar — pick one to open it here.
+                </p>
+              </section>
+
+              <div className={styles.areaGrid}>
+                {SIDE_NAV.filter((s) => s.label !== 'Search Player').map((item) => {
+                  const Icon = item.icon;
                   return (
                     <button
-                      key={f.title}
+                      key={item.label}
                       type="button"
-                      className={styles.feature}
-                      onClick={() => go(f.hash)}
+                      className={styles.areaCard}
+                      onClick={() => setSection(item.label)}
                     >
-                      <span className={styles.featureIcon}>
-                        <Icon />
+                      <span className={styles.areaIcon}>
+                        <Icon size={19} />
                       </span>
-                      <span className={styles.featureText}>
-                        <span className={styles.featureTitle}>
-                          {f.title}
-                          <ArrowRightIcon size={14} />
-                        </span>
-                        <span className={styles.featureBody}>{f.body}</span>
+                      <span className={styles.areaTitle}>
+                        {item.label}
+                        <ArrowRightIcon size={14} />
                       </span>
+                      <span className={styles.areaBody}>{SECTION_BLURB[item.label]}</span>
                     </button>
                   );
                 })}
               </div>
-            </section>
-          ) : (
-            <SectionPanel name={section} />
+            </>
           )}
         </main>
       </div>

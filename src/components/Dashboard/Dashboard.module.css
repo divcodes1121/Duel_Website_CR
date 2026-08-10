@@ -244,10 +244,15 @@
 
 /* --------------------------------------------------------------------- main */
 
+/* The home screen scrolls: the hero fills the first view, the tool panels and
+   analytics grid sit below it. A hosted tool still fills the column exactly,
+   because it manages its own internal scrolling. */
 .main {
   min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  gap: 1rem;
 }
 
 /* --------------------------------------------------------- hosted tool panel */
@@ -269,10 +274,12 @@
 
 /* ---------------------------------------------------------------- hero panel */
 
+/* Sized to fill the first screen without pinning the column, so the panels
+   below it are reachable by scrolling. */
 .hero {
   position: relative;
-  flex: 1;
-  min-height: 0;
+  flex: none;
+  min-height: min(34rem, calc(100vh - 7.5rem));
   display: flex;
   flex-direction: column;
   border-radius: 18px;
@@ -502,68 +509,6 @@
   cursor: pointer;
 }
 
-/* --- the three built pages, reachable from here as well as the top bar --- */
-
-.features {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  padding: 1.25rem 1.6rem;
-  border-top: 1px solid var(--border);
-  background: var(--surface-sunken);
-}
-
-.feature {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.85rem;
-  min-width: 0;
-  padding: 0.7rem;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-
-.featureIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 11px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.featureText {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.featureTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.9rem;
-  font-weight: 750;
-  color: var(--text);
-}
-
-.featureBody {
-  font-size: 0.8rem;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-
 /* ------------------------------------------------------- section placeholder */
 
 .panel {
@@ -681,6 +626,205 @@
   text-align: center;
 }
 
+/* ------------------------------------------------------- tools + areas below */
+
+/* Section heading between the stacked panels. */
+.blockHead {
+  padding: 0.9rem 0.4rem 0;
+}
+
+.blockTitle {
+  margin: 0;
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 1.5rem;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.blockSub {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* A full-width panel per built tool — the shape the old landing used, back on
+   the home screen and clickable end to end. */
+.toolPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 1.5rem;
+  align-items: center;
+  width: 100%;
+  padding: 2rem 2.2rem;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Art and copy trade sides down the stack so the run does not read as a list. */
+.toolPanelFlip .toolText {
+  order: 2;
+}
+
+.toolPanelFlip .toolArt {
+  order: 1;
+}
+
+.toolText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.toolKicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.toolTitle {
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-weight: 400;
+  font-size: clamp(1.5rem, 2.4vw, 2.1rem);
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.toolBody {
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+
+.toolChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.toolChip {
+  padding: 0.36rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.toolCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+  padding: 0.7rem 1.4rem;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
+.toolArt {
+  position: relative;
+  display: block;
+  height: 190px;
+  min-width: 0;
+}
+
+.toolArtCard {
+  position: absolute;
+  width: clamp(90px, 9vw, 124px);
+  border-radius: 10px;
+}
+
+.toolArt1 {
+  top: 26px;
+  left: 6%;
+  rotate: -9deg;
+}
+
+.toolArt2 {
+  top: 0;
+  left: 34%;
+  width: clamp(102px, 10vw, 140px);
+  rotate: 5deg;
+}
+
+.toolArt3 {
+  top: 54px;
+  left: 63%;
+  rotate: 12deg;
+}
+
+/* --- analytics areas --- */
+
+.areaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.85rem;
+  padding-bottom: 0.4rem;
+}
+
+.areaCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 1.15rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.areaIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.areaTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.areaBody {
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
 /* --------------------------------------------------------------- responsive */
 
 @media (max-width: 1180px) {
@@ -694,9 +838,12 @@
     white-space: normal;
   }
 
-  .features {
+  .toolPanel {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0.4rem;
+  }
+
+  .toolArt {
+    display: none;
   }
 }
 
