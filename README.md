@@ -7,10 +7,17 @@ Vite + React 18 + TypeScript, CSS Modules, zustand, hash routing (no router
 library). The analytics half is served by a small Python API reading the Discord
 bot's SQLite files read-only.
 
-> **Status: local revamp in progress.** This lives on the `revamp` branch and
-> has never been pushed. Production (`royal-duels.vercel.app`) is still on
-> `6ab701d`, the last commit before the revamp began. Nothing here is deployed
-> and nothing here should be pushed until the revamp is finished.
+> **Status: revamp in progress, on the `revamp` branch.** Production
+> (`royal-duels.vercel.app`) still runs `6ab701d`, the last commit before the
+> revamp began — Vercel deploys from `main`, and `main` has not moved. Merging
+> `revamp` into `main` is what would ship it, so that is a deliberate decision
+> rather than a side effect of pushing.
+>
+> **The analytics half does not work on Vercel.** It needs `server/app.py` and
+> ~43 GB of local SQLite that is not in this repo and never will be. Deployed,
+> those screens show "Analytics service is not running", which is the intended
+> message rather than a crash — see [Where the data comes from](#where-the-data-comes-from)
+> for the environment variables that would point it at a hosted service instead.
 
 ---
 
