@@ -1,24 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getCardIconUrl } from '../../data/cards';
 import { ChartLegend, TrendChart } from './TrendChart';
 import {
-  DECK_SORTS,
-  RANGES,
-  SAMPLE_DECKS,
-  SAMPLE_PLAYER,
-  SAMPLE_USE_TREND,
-  SAMPLE_WIN_TREND,
-  type DeckSort,
-  type Series,
-  type TrendData,
-} from './playerData';
+  AnalyticsError,
+  fetchPlayerReport,
+  type PlayerReport,
+} from '../../state/analyticsClient';
+import { DECK_SORTS, RANGES, type DeckSort, type Series, type TrendData } from './playerData';
 import styles from './PlayerAnalysis.module.css';
 
 /* Player analysis — the screen the Analyze button lands on.
  *
- * Structure only: every figure below comes from the placeholder set in
- * playerData.ts. Wiring the SQLite import means replacing that module's
- * SAMPLE_* exports; nothing in this file changes. */
+ * Reads the local analytics API (server/app.py), which serves the Clash_Bot
+ * SQLite tiers read-only. Three states matter and all three are handled: the
+ * service not running, a tag with no stored battles, and a successful report. */
 
 function CrownIcon({ size = 18 }: { size?: number }) {
   return (
@@ -143,17 +138,118 @@ function TrendPanel({
   );
 }
 
+
+/** Percentage-point change across the window, for the Trend column. */
+function trendOf(points: number[]): number {
+  if (points.length < 2) return 0;
+  const third = Math.max(1, Math.ceil(points.length / 3));
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  return Number((avg(points.slice(-third)) - avg(points.slice(0, third))).toFixed(1));
+}
+
+/** '2026-08-10' -> '10 Aug'. */
+function shortDay(iso: string): string {
+  const d = new Date(iso + 'T00:00:00Z');
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
 export function PlayerAnalysis({ tag }: { tag: string }) {
   const [sort, setSort] = useState<DeckSort>('top');
-  const player = { ...SAMPLE_PLAYER, tag: tag || SAMPLE_PLAYER.tag };
+  const [report, setReport] = useState<PlayerReport | null>(null);
+  const [error, setError] = useState<AnalyticsError | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const decks = [...SAMPLE_DECKS].sort((a, b) =>
-    sort === 'winrate' ? b.winRate - a.winRate : sort === 'recent' ? b.matches - a.matches : a.rank - b.rank,
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    setError(null);
+    fetchPlayerReport(tag)
+      .then((r) => {
+        if (!live) return;
+        setReport(r);
+        setError(null);
+      })
+      .catch((e) => {
+        if (!live) return;
+        setReport(null);
+        setError(e as AnalyticsError);
+      })
+      .finally(() => {
+        if (live) setLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [tag]);
+
+  if (loading) {
+    return (
+      <div className={styles.page}>
+        <section className={styles.notice}>Reading the battle database…</section>
+      </div>
+    );
+  }
+
+  if (error || !report) {
+    const offline = error?.kind === 'offline';
+    return (
+      <div className={styles.page}>
+        <section className={styles.notice}>
+          <h2 className={styles.noticeTitle}>
+            {offline ? 'Analytics service is not running' : 'No stored battles for that tag'}
+          </h2>
+          <p className={styles.noticeBody}>{error?.message}</p>
+          {offline && <pre className={styles.noticeCode}>python server/app.py</pre>}
+          <p className={styles.noticeBody}>
+            Searched for <strong>{tag}</strong>.
+          </p>
+        </section>
+      </div>
+    );
+  }
+
+  const { player, decks: apiDecks, trends, sources } = report;
+
+  // Series are keyed by deck hash, so re-sorting the table never repaints the
+  // charts — colour follows the deck, not its row position.
+  const byHash = new Map(trends.series.map((s) => [s.deckHash, s]));
+  const withTrend = apiDecks.map((d) => ({
+    ...d,
+    trend: trendOf(byHash.get(d.deckHash)?.win ?? []),
+  }));
+
+  const decks = [...withTrend].sort((a, b) =>
+    sort === 'winrate'
+      ? b.winRate - a.winRate
+      : sort === 'recent'
+        ? (b.lastSeen || '').localeCompare(a.lastSeen || '')
+        : a.rank - b.rank,
   );
+
+  const ticks = trends.days.length
+    ? [0, 0.25, 0.5, 0.75, 1]
+        .map((f) => Math.round(f * (trends.days.length - 1)))
+        .filter((v, i, arr) => arr.indexOf(v) === i)
+        .map((at) => ({ at, label: shortDay(trends.days[at]) }))
+    : [];
+
+  const toTrendData = (pick: 'use' | 'win'): TrendData => ({
+    ticks,
+    series: apiDecks.map((d) => ({
+      label: d.name,
+      points: byHash.get(d.deckHash)?.[pick] ?? trends.days.map(() => 0),
+    })),
+  });
+
+  const winRate = player.battles ? (player.wins / player.battles) * 100 : 0;
+  const rangeLabel = trends.days.length
+    ? `${shortDay(trends.days[0])} – ${shortDay(trends.days[trends.days.length - 1])}`
+    : '—';
 
   return (
     <div className={styles.page}>
-      {/* --- player summary --- */}
       <section className={styles.summary}>
         <div className={styles.identity}>
           <span className={styles.badge}>
@@ -163,7 +259,7 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
             <h1 className={styles.playerName}>
               {player.name}
               {player.verified && (
-                <span className={styles.verified}>
+                <span className={styles.verified} title="Tracked player">
                   <VerifiedIcon />
                 </span>
               )}
@@ -173,48 +269,49 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
         </div>
 
         <div className={styles.stat}>
-          <span className={styles.statIcon}>{ICONS.trophy}</span>
+          <span className={styles.statIcon}>{ICONS.swords}</span>
           <span className={styles.statText}>
-            <span className={styles.statValue}>{nf.format(player.trophies)}</span>
-            <span className={styles.statLabel}>Trophies</span>
+            <span className={styles.statValue}>{nf.format(player.battles)}</span>
+            <span className={styles.statLabel}>Battles Analyzed</span>
           </span>
         </div>
 
         <div className={styles.stat}>
-          <span className={styles.statIcon}>{ICONS.swords}</span>
+          <span className={styles.statIcon}>{ICONS.trophy}</span>
           <span className={styles.statText}>
-            <span className={styles.statValue}>{nf.format(player.battlesAnalyzed)}</span>
-            <span className={styles.statLabel}>Battles Analyzed</span>
+            <span className={styles.statValue}>{winRate.toFixed(1)}%</span>
+            <span className={styles.statLabel}>
+              Win Rate ({nf.format(player.wins)}W / {nf.format(player.losses)}L)
+            </span>
           </span>
         </div>
 
         <div className={styles.stat}>
           <span className={styles.statIcon}>{ICONS.calendar}</span>
           <span className={styles.statText}>
-            <span className={styles.statValue}>
-              {player.rangeStart} – {player.rangeEnd}
-            </span>
-            <span className={styles.statLabel}>Data Range ({player.rangeDays} Days)</span>
+            <span className={styles.statValue}>{rangeLabel}</span>
+            <span className={styles.statLabel}>Data Range ({trends.days.length} Days)</span>
           </span>
         </div>
 
         <div className={styles.stat}>
           <span className={styles.statIcon}>{ICONS.rank}</span>
           <span className={styles.statText}>
-            <span className={styles.statValue}>Top {nf.format(player.globalRank)}</span>
-            <span className={styles.statLabel}>Global Rank</span>
+            <span className={styles.statValue}>{nf.format(player.crownsFor)}</span>
+            <span className={styles.statLabel}>
+              Crowns For ({nf.format(player.crownsAgainst)} against)
+            </span>
           </span>
         </div>
       </section>
 
-      {/* --- top 10 decks --- */}
       <section className={styles.decksPanel}>
         <header className={styles.decksHead}>
           <h2 className={styles.decksTitle}>
             <span className={styles.decksTitleIcon}>
               <CrownIcon size={17} />
             </span>
-            Top 10 Decks
+            Top {decks.length} Decks
           </h2>
           <button type="button" className={styles.exportButton}>
             {ICONS.download}
@@ -252,26 +349,32 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
                 <th className={styles.thNum}>Wins</th>
                 <th className={styles.thNum}>Losses</th>
                 <th className={styles.thNum}>
-                  Trend (30d) <span className={styles.thInfo}>{ICONS.info}</span>
+                  Trend ({trends.days.length}d) <span className={styles.thInfo}>{ICONS.info}</span>
                 </th>
               </tr>
             </thead>
             <tbody>
               {decks.map((d) => (
-                <tr key={d.name}>
+                <tr key={d.deckHash}>
                   <td>
                     <span className={styles.rank} data-medal={d.rank <= 3 ? d.rank : undefined}>
                       {d.rank}
                     </span>
                   </td>
-                  <td className={styles.deckName}>{d.name}</td>
+                  <td className={styles.deckName} title={d.deckHash}>
+                    {d.name}
+                    {d.avgElixir ? (
+                      <span className={styles.deckMeta}>{d.avgElixir.toFixed(1)} elixir</span>
+                    ) : null}
+                  </td>
                   <td>
                     <span className={styles.cards}>
                       {d.cards.map((c) => (
                         <img
                           key={c}
                           src={getCardIconUrl(c)}
-                          alt=""
+                          alt={c}
+                          title={c}
                           draggable={false}
                           className={styles.cardIcon}
                         />
@@ -283,7 +386,7 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
                     <span className={styles.meter}>
                       <span
                         className={styles.meterFill}
-                        style={{ width: `${Math.min(100, d.useRate * 4)}%` }}
+                        style={{ width: `${Math.min(100, d.useRate * 3)}%` }}
                       />
                     </span>
                   </td>
@@ -298,9 +401,9 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
                       />
                     </span>
                   </td>
-                  <td className={styles.num}>{d.matches}</td>
-                  <td className={styles.num}>{d.wins}</td>
-                  <td className={styles.num}>{d.losses}</td>
+                  <td className={styles.num}>{nf.format(d.matches)}</td>
+                  <td className={styles.num}>{nf.format(d.wins)}</td>
+                  <td className={styles.num}>{nf.format(d.losses)}</td>
                   <td className={styles.num}>
                     <span className={styles.trend} data-dir={d.trend >= 0 ? 'up' : 'down'}>
                       {d.trend >= 0 ? '▲' : '▼'} {Math.abs(d.trend).toFixed(1)}%
@@ -313,15 +416,22 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
         </div>
       </section>
 
-      {/* --- trends. Two charts, not one with two y-scales. --- */}
+      {/* Two charts, not one with two y-scales. */}
       <div className={styles.charts}>
-        <TrendPanel title="Use Rate Trend" data={SAMPLE_USE_TREND} yTicks={[0, 5, 10, 15, 20, 25]} />
-        <TrendPanel title="Win Rate Trend" data={SAMPLE_WIN_TREND} yTicks={[40, 50, 60, 70, 80]} />
+        <TrendPanel title="Use Rate Trend" data={toTrendData('use')} yTicks={[0, 25, 50, 75, 100]} />
+        <TrendPanel title="Win Rate Trend" data={toTrendData('win')} yTicks={[0, 25, 50, 75, 100]} />
       </div>
 
       <footer className={styles.foot}>
         <p>All data is based on the battles we have stored and analyzed.</p>
-        <p>Data refreshes every 24 hours.</p>
+        <p>
+          Reading {sources.hot.available ? 'the local database' : 'no local database'}
+          {sources.archive.available
+            ? trends.archiveUsed
+              ? ' plus the archive drive.'
+              : ' — archive connected, not needed for this window.'
+            : ' — archive drive not connected, showing the recent window only.'}
+        </p>
       </footer>
     </div>
   );

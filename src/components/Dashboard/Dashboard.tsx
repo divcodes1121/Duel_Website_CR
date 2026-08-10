@@ -8,6 +8,7 @@ import { DecksHome } from '../DecksHome/DecksHome';
 import { CounterPalette } from '../CounterPalette/CounterPalette';
 import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
 import { SEASONS } from '../Analytics/playerData';
+import { fetchSuggestedTags } from '../../state/analyticsClient';
 import {
   AnalyticsIcon,
   ArrowRightIcon,
@@ -73,7 +74,8 @@ const SECTION_BLURB: Record<string, string> = {
   Evolutions: 'Every Evolution, its slot competition and its impact.',
 };
 
-const POPULAR_TAGS = ['#QJ2L8VR', '#8G9UCG', '#LYPR9LQC', '#2P8R88', '#UVC8GJ'] as const;
+/* Filled from the database at runtime — hardcoded tags would 404 on click. */
+const FALLBACK_TAGS = ['#9GJ0Q0LGG', '#U2YVYGGV2', '#L8GVPJ900'];
 
 /* The three built tools, as full panels down the home screen. */
 const FEATURES = [
@@ -136,6 +138,19 @@ export function Dashboard({
   useEffect(() => {
     if (playerTag) setTopTag(playerTag);
   }, [playerTag]);
+
+  // Real tags with the most stored battles, so a chip always resolves. Falls
+  // back to a known-good handful if the service is not running.
+  const [popular, setPopular] = useState<string[]>(FALLBACK_TAGS);
+  useEffect(() => {
+    let live = true;
+    fetchSuggestedTags()
+      .then((r) => live && r.tags.length && setPopular(r.tags.map((t) => t.tag)))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // The open tool decides which top-bar item is lit; on the home view it is
   // whichever analytics area the sidebar has selected.
@@ -357,7 +372,7 @@ export function Dashboard({
                   <div className={styles.popular}>
                     <span className={styles.popularLabel}>Popular players</span>
                     <div className={styles.popularTags}>
-                      {POPULAR_TAGS.map((t) => (
+                      {popular.map((t) => (
                         <button
                           key={t}
                           type="button"

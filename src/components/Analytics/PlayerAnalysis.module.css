@@ -590,3 +590,49 @@
     padding-right: 0;
   }
 }
+
+/* --------------------------------------------------- loading / empty states */
+
+.notice {
+  composes: pane;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 3.5rem 1.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.noticeTitle {
+  margin: 0;
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 1.5rem;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.noticeBody {
+  margin: 0;
+  max-width: 52ch;
+  line-height: 1.6;
+}
+
+.noticeCode {
+  margin: 0.4rem 0;
+  padding: 0.65rem 1.1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.deckMeta {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}

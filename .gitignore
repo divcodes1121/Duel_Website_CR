@@ -35,3 +35,6 @@ video/
 *.njsproj
 *.sln
 *.sw?
+
+# Local analytics API artefacts
+server/__pycache__/
