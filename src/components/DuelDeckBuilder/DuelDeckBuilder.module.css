@@ -46,10 +46,12 @@
    feature in that library — it measures both nodes and runs a FLIP transition
    on every switch. The tabs are different widths ("Solo" vs "Versus"), so there
    is no honest pure-CSS slide to keep; the pill simply moves. */
-.modeTabActive {
-  color: var(--accent-contrast);
-  background: linear-gradient(135deg, var(--accent-light), var(--accent));
-  box-shadow: inset 0 1px 0 var(--highlight);
+.modeTabActive,
+.modeTabActive:hover {
+  color: var(--accent-select);
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
 }
 
 .modeLabel {

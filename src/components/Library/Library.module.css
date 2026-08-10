@@ -125,8 +125,8 @@
 .primaryButton {
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--accent-contrast);
-  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  color: var(--accent-action-text);
+  background: var(--accent-action);
   border: none;
   border-radius: 999px;
   padding: 0.45rem 1.15rem;

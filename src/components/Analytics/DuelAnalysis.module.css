@@ -206,10 +206,15 @@
   opacity: 0.6;
 }
 
-.rangeChipOn {
-  border-color: var(--border-strong);
-  background: var(--accent);
-  color: var(--accent-contrast);
+.rangeChip:hover {
+  background: var(--neutral-wash);
+}
+
+.rangeChipOn,
+.rangeChipOn:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
   opacity: 1;
 }
 
@@ -241,9 +246,9 @@
   grid-column: 1 / -1;
   padding: 0.45rem;
   border-radius: 9px;
-  border: 1px solid var(--border-strong);
-  background: var(--accent);
-  color: var(--accent-contrast);
+  border: 1px solid transparent;
+  background: var(--accent-action);
+  color: var(--accent-action-text);
   font: inherit;
   font-size: 0.8rem;
   font-weight: 600;
@@ -289,11 +294,23 @@
   cursor: pointer;
 }
 
-.tabOn {
-  border-color: var(--glass-stroke);
-  background: var(--glass-fill-strong);
+.tab:hover {
+  background: var(--neutral-wash);
   color: var(--text);
+}
+
+/* Violet: this tab is the one you are on. */
+.tabOn,
+.tabOn:hover {
+  background: var(--accent-select-wash);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
   box-shadow: inset 0 1px 0 var(--glass-sheen);
+}
+
+.tabOn .tabCount {
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
 }
 
 .tabIcon {
@@ -519,6 +536,16 @@
 
 .row {
   cursor: pointer;
+}
+
+.row:hover > td {
+  background: var(--neutral-wash);
+}
+
+/* The expanded row is a selection, so it wears violet like every other. */
+.rowOpen > td,
+.rowOpen:hover > td {
+  background: var(--accent-select-wash);
 }
 
 .rowOpen > td {

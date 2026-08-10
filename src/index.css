@@ -48,16 +48,19 @@
 
 :root[data-theme='dark'] {
   /* 1–2 backgrounds */
-  --bg-1: #0b0b0b;
+  --bg-1: #111111;
   --bg-2: #161616;
-  --bg-3: #1f1f1f;
+  --bg-3: #202020;
 
   /* 3–5 component backgrounds. Elevation on dark is carried by lightness, not
      shadow — a shadow against a near-black page is invisible. Each step up is
-     a step lighter, which is why a card reads as sitting above the page. */
-  --surface: #181818;
-  --surface-strong: #212121;
-  --surface-sunken: #070707;
+     a step lighter, which is why a card reads as sitting above the page.
+     The ladder is deliberately shallow and evenly spaced (#111 page → #1A1A1A
+     card → #202020 raised) so page, sidebar, card and input are all separable
+     without any of them being pure black. */
+  --surface: #1a1a1a;
+  --surface-strong: #202020;
+  --surface-sunken: #0d0d0d;
 
   /* 6–8 borders. Two jobs, two contrast bars: --border is a decorative
      separator (WCAG exempts those), --border-strong outlines interactive
@@ -117,13 +120,32 @@
   --rarity-legendary: #c9c9c9;
   --rarity-champion: #ededed;
 
-  /* Kept neutral on purpose. Destructive actions are distinguished by weight
-     and by their confirm dialogs rather than by colour; say the word and error
-     becomes a real red. */
-  --success: #c9c9c9;
-  --warning: #a1a1a1;
-  --error: #ededed;
-  --error-soft: #d4d4d4;
+  /* ── The five hues ────────────────────────────────────────────────────
+     Brighter steps for the dark ground. Every one clears 4.5:1 against all
+     three dark surfaces, so each is safe as text, icon, border or fill:
+
+              #111111  #161616  #1A1A1A  #202020
+       violet  6.94     6.65     6.40     5.99
+       pink    7.13     6.83     6.57     6.15
+       blue    5.85     5.60     5.39     5.04
+       green   9.82     9.41     9.05     8.48
+       red     6.83     6.54     6.29     5.89                            */
+  --hue-violet: #a78bfa;
+  --hue-pink: #f472b6;
+  --hue-blue: #5b8def;
+  --hue-green: #34d399;
+  --hue-red: #f87171;
+
+  /* Level 1 (wash, ~8%) and level 2 (fill, ~14%) are mixed against the CARD
+     surface rather than the page, because that is what they actually sit on.
+     Level 3 is the raw hue above. */
+  --mix-ground: #1a1a1a;
+  --edge-strength: 45%;
+
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --error-soft: #fca5a5;
 
   --scrim: rgba(0, 0, 0, 0.7);
   --overlay-chip: rgba(0, 0, 0, 0.78);
@@ -138,14 +160,16 @@
      as raised no matter what border it carries, which is exactly how this
      looked before. Grey ground, white card is what every minimal light theme
      does for the same reason. */
-  --bg-1: #f4f4f5;
+  --bg-1: #fbfbfc;
   --bg-2: #ffffff;
-  --bg-3: #ebebec;
+  --bg-3: #f5f5f6;
 
-  /* 3–5 component backgrounds */
+  /* 3–5 component backgrounds. Light mode is designed, not inverted: the page
+     is the faint grey step, cards are pure white, and sunken wells (meters,
+     inputs) drop back to #F5F5F6. */
   --surface: #ffffff;
   --surface-strong: #ffffff;
-  --surface-sunken: #efeff0;
+  --surface-sunken: #f5f5f6;
 
   /* 6–8 borders — see the dark block for why these two differ. */
   --border: #e4e4e7;
@@ -197,10 +221,30 @@
   --rarity-legendary: #3d3d3d;
   --rarity-champion: #1a1a1a;
 
-  --success: #454545;
-  --warning: #646464;
-  --error: #1a1a1a;
-  --error-soft: #333333;
+  /* ── The five hues, re-stepped for a light ground ─────────────────────
+     Deeper, not the dark values dimmed. Each clears 4.5:1 on all three light
+     surfaces AND carries white text at 4.5:1+ when used as a solid button
+     fill, so a pink CTA is legible without a second thought:
+
+              #FBFBFC  #FFFFFF  #F5F5F6   white-on-hue
+       violet  6.87     7.10     6.52       7.10
+       pink    5.28     5.46     5.01       5.46
+       blue    6.48     6.70     6.15       6.70
+       green   5.30     5.48     5.03       5.48
+       red     5.75     5.95     5.46       5.95                          */
+  --hue-violet: #6d28d9;
+  --hue-pink: #c81e69;
+  --hue-blue: #1d4ed8;
+  --hue-green: #047857;
+  --hue-red: #c02618;
+
+  --mix-ground: #ffffff;
+  --edge-strength: 32%;
+
+  --success: #047857;
+  --warning: #b45309;
+  --error: #c02618;
+  --error-soft: #c02618;
 
   --scrim: rgba(0, 0, 0, 0.4);
   --overlay-chip: rgba(0, 0, 0, 0.72);
@@ -211,23 +255,93 @@
 
 
 
-/* Legacy aliases. Component stylesheets still reference the older "glass"
-   naming in places; mapping them here keeps one source of truth rather than
-   two parallel palettes. */
+/* ── The three intensity levels ────────────────────────────────────────────
+   Defined ONCE. Both `--hue-*` and `--mix-ground` are theme-scoped, so every
+   mix below re-resolves per theme automatically — there is no second copy of
+   this ladder to drift.
+
+     level 1  wash   ~8%   hover, icon-tile backgrounds, faint row tint
+     level 2  fill   ~14%  the selected state's background
+     level 3  edge / raw   borders, icons, text, meters, indicators
+
+   The whole discipline of this palette is that level 3 is the ONLY place the
+   raw hue appears, and it appears on small things: an icon, a 2px border, a
+   number, a meter. Large surfaces never go past level 2. That is what keeps a
+   neutral interface neutral while still reading as coloured. */
 :root {
+  --violet-wash: color-mix(in srgb, var(--hue-violet) 8%, var(--mix-ground));
+  --violet-fill: color-mix(in srgb, var(--hue-violet) 14%, var(--mix-ground));
+  --violet-edge: color-mix(in srgb, var(--hue-violet) var(--edge-strength), transparent);
+
+  --pink-wash: color-mix(in srgb, var(--hue-pink) 8%, var(--mix-ground));
+  --pink-fill: color-mix(in srgb, var(--hue-pink) 14%, var(--mix-ground));
+  --pink-edge: color-mix(in srgb, var(--hue-pink) var(--edge-strength), transparent);
+
+  --blue-wash: color-mix(in srgb, var(--hue-blue) 8%, var(--mix-ground));
+  --blue-fill: color-mix(in srgb, var(--hue-blue) 14%, var(--mix-ground));
+  --blue-edge: color-mix(in srgb, var(--hue-blue) var(--edge-strength), transparent);
+
+  --green-wash: color-mix(in srgb, var(--hue-green) 8%, var(--mix-ground));
+  --green-fill: color-mix(in srgb, var(--hue-green) 14%, var(--mix-ground));
+  --green-edge: color-mix(in srgb, var(--hue-green) var(--edge-strength), transparent);
+
+  --red-wash: color-mix(in srgb, var(--hue-red) 8%, var(--mix-ground));
+  --red-fill: color-mix(in srgb, var(--hue-red) 14%, var(--mix-ground));
+  --red-edge: color-mix(in srgb, var(--hue-red) var(--edge-strength), transparent);
+
+  /* Neutral hover, for surfaces that carry no semantic hue. */
+  --neutral-wash: color-mix(in srgb, var(--text) 6%, var(--mix-ground));
+
+  /* ── Semantic aliases — the names components should actually reach for ──
+     A component opts into a ROLE, never into a colour. That is what stops a
+     hue meaning "selected" in one place and "bad" in another.
+
+       select  violet   you are here / this is chosen
+       action  pink     the primary thing to click
+       info    blue     neutral information
+       success green    positive outcome
+       error   red      negative or destructive                             */
+  --accent-select: var(--hue-violet);
+  --accent-select-wash: var(--violet-wash);
+  --accent-select-fill: var(--violet-fill);
+  --accent-select-edge: var(--violet-edge);
+
+  --accent-action: var(--hue-pink);
+  --accent-action-wash: var(--pink-wash);
+  --accent-action-fill: var(--pink-fill);
+  --accent-action-edge: var(--pink-edge);
+  /* Both hues carry white text at >=4.5:1 in light AND dark, so a filled
+     primary button does not need a per-theme text colour. */
+  --accent-action-text: #ffffff;
+
+  --accent-info: var(--hue-blue);
+  --success-wash: var(--green-wash);
+  --error-wash: var(--red-wash);
+
+  /* Legacy aliases. Component stylesheets still reference the older "glass"
+     naming in places; mapping them here keeps one source of truth rather than
+     two parallel palettes. */
   --glass-bg: var(--surface);
   --glass-bg-strong: var(--surface-strong);
   --glass-border: var(--border);
   --glass-highlight: var(--highlight);
   --slot-bg: var(--surface-sunken);
   --slot-border: var(--border);
+  /* These three stay NEUTRAL, and that is the point. `--accent-purple` outlines
+     the Evolution role slot; if it were violet you could not tell the Evolution
+     slot from the SELECTED slot, because violet is what selection means. Role
+     identity is carried by position and by the slot's own gems instead. */
   --accent-purple: var(--accent);
   --accent-cyan: var(--accent);
   --accent-orange: var(--text-muted);
-  --info: var(--accent);
+
+  --info: var(--hue-blue);
+  /* A legal drop target is a positive state, so it is green — the one place in
+     the builder where a hue other than violet appears on a slot. */
+  --drop-valid: var(--hue-green);
 
   /* --shadow / --shadow-float are per-theme; see the blocks above. Hover
-     elevation stays off — nothing on the page reacts to the cursor. */
+     elevation stays off — hover changes colour, never geometry. */
   --shadow-hover: var(--shadow);
 }
 
@@ -281,6 +395,26 @@ body {
 
 button {
   font-family: inherit;
+}
+
+/* ==========================================================================
+   Keyboard focus
+   ==========================================================================
+   There was no `:focus-visible` rule anywhere in this codebase, and a dozen
+   stylesheets carry `outline: none`, which removes the browser default too —
+   so a keyboard user genuinely could not see where they were.
+
+   `:focus-visible` (not `:focus`) is the right selector: it fires for keyboard
+   and assistive navigation but not for a mouse click, so buttons do not sprout
+   a ring when clicked. Declared last and with the `!important` that the
+   scattered `outline: none` rules force, until those are cleaned up.
+
+   Violet, because focus is a species of "you are here". */
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-select) !important;
+  outline-offset: 2px;
+  border-radius: inherit;
 }
 
 ::-webkit-scrollbar {

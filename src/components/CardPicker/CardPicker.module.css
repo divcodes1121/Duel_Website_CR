@@ -111,10 +111,12 @@
 /* Active pill drawn directly on the segment. Previously a separate element
    moved between segments by framer's shared-layout `layoutId` FLIP transition —
    used by both the 8 filter tabs and the 2 sort tabs. */
-.segmentActive {
-  color: var(--accent-contrast);
-  background: linear-gradient(135deg, var(--accent-light), var(--accent));
-  box-shadow: inset 0 1px 0 var(--highlight);
+.segmentActive,
+.segmentActive:hover {
+  color: var(--accent-select);
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
 }
 
 .segmentLabel {
@@ -239,7 +241,9 @@
 .tileSelected {
   position: relative;
   z-index: 1;
-  border-color: var(--accent);
+  border-color: var(--accent-select);
+  box-shadow: 0 0 0 1px var(--accent-select-edge);
+  background: var(--accent-select-wash);
 }
 
 .tileDisabled {

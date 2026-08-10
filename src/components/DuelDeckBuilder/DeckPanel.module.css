@@ -52,9 +52,9 @@
 }
 
 .fillCountFull {
-  color: var(--accent-contrast);
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  color: var(--hue-green);
+  border-color: var(--green-edge);
+  background: var(--green-fill);
 }
 
 .nameInput {
@@ -102,9 +102,9 @@
    which on a neutral palette left near-white text on a mid grey. Solid accent
    against --accent-contrast keeps it legible in both themes. */
 .crButton {
-  color: var(--accent-contrast);
-  border-color: var(--accent);
-  background: var(--accent);
+  color: var(--accent-action-text);
+  border-color: transparent;
+  background: var(--accent-action);
 }
 
 .crButton[aria-disabled='true'] {
@@ -429,7 +429,7 @@
 /* Per-owner selection accent: solo keeps the purple accent; Versus players get
    their side's colour so it's always obvious which player is being edited. */
 .panel {
-  --selection-accent: var(--accent);
+  --selection-accent: var(--accent-select);
 }
 
 .panel[data-owner='blue'] {
@@ -456,12 +456,13 @@
    as long as one was selected (i.e. the whole time the user is picking cards). */
 .slot.slotSelected {
   border-color: var(--selection-accent);
+  background: var(--accent-select-wash);
   box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 /* Valid drop target under an in-progress drag — wins over everything. */
 .slot.slotDropHover {
-  border-color: var(--accent-cyan);
+  border-color: var(--drop-valid);
   border-style: solid;
   transform: scale(1.07);
   animation: none;

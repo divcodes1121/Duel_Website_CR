@@ -78,10 +78,16 @@
   cursor: pointer;
 }
 
-/* Underline, the way the reference marks the current top-level section. */
-.topNavItemActive {
+.topNavItem:hover {
   color: var(--text);
-  border-bottom-color: var(--accent);
+}
+
+/* Underline, the way the reference marks the current top-level section —
+   violet for the same reason the sidebar is. */
+.topNavItemActive,
+.topNavItemActive:hover {
+  color: var(--accent-select);
+  border-bottom-color: var(--accent-select);
 }
 
 .topActions {
@@ -161,6 +167,7 @@
 }
 
 .sideItem {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.7rem;
@@ -176,17 +183,78 @@
   cursor: pointer;
 }
 
-/* Filled pill for the open section — step 5 of the ramp, its stated job. */
-.sideItemActive {
-  background: var(--accent);
-  color: var(--accent-contrast);
+/* Level 1: a faint neutral wash. Hover says "clickable", not "selected" — the
+   hue is reserved for the item that actually is. Snaps, no transition. */
+.sideItem:hover {
+  background: var(--neutral-wash);
+  color: var(--text);
 }
 
+/* Level 2 for the open section: a tinted fill, a hue border and hue text —
+   NOT the solid slab this used to be. Violet, because violet means
+   "you are here" everywhere in this app. */
+.sideItemActive,
+.sideItemActive:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
+}
+
+/* The leading edge. Meaning is never carried by colour alone, so the selected
+   item is marked by position and weight as well as hue. */
+.sideItemActive::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 1.15rem;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent-select);
+}
+
+.sideItem:active {
+  background: color-mix(in srgb, var(--accent-select) 20%, var(--mix-ground));
+}
+
+/* Section identity. A small hue tile per area, which is where the reference
+   gets most of its richness — and because the label sits right beside it,
+   repeating four hues across nine sections costs nothing. Level 1 background
+   with a level 3 icon: an accent, never a colour block. */
 .sideIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--tile-wash, transparent);
+  color: var(--tile-hue, currentColor);
+}
+
+.sideItem[data-hue='violet'] {
+  --tile-hue: var(--hue-violet);
+  --tile-wash: var(--violet-wash);
+}
+.sideItem[data-hue='blue'] {
+  --tile-hue: var(--hue-blue);
+  --tile-wash: var(--blue-wash);
+}
+.sideItem[data-hue='pink'] {
+  --tile-hue: var(--hue-pink);
+  --tile-wash: var(--pink-wash);
+}
+.sideItem[data-hue='green'] {
+  --tile-hue: var(--hue-green);
+  --tile-wash: var(--green-wash);
+}
+
+/* On the open item the tile stops competing: one hue per row, and that hue is
+   violet. Without this the active row shows two colours at once. */
+.sideItemActive .sideIcon {
+  --tile-hue: var(--accent-select);
+  --tile-wash: transparent;
 }
 
 /* --- upsell card --- */
@@ -215,6 +283,7 @@
   color: var(--text);
 }
 
+/* Pink is Royal Pro's identity — but as a tile and a CTA, not a pink card. */
 .proMark {
   display: flex;
   align-items: center;
@@ -222,8 +291,8 @@
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 7px;
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--accent-action-wash);
+  color: var(--accent-action);
 }
 
 .proBody {
@@ -243,11 +312,15 @@
   padding: 0.55rem 0.9rem;
   border-radius: 999px;
   border: none;
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--accent-action);
+  color: var(--accent-action-text);
   font-size: 0.79rem;
   font-weight: 750;
   cursor: pointer;
+}
+
+.proButton:hover {
+  background: color-mix(in srgb, var(--accent-action) 85%, var(--text));
 }
 
 /* --------------------------------------------------------------------- main */
@@ -380,9 +453,9 @@
   gap: 0.55rem;
   padding: 0.55rem 1.2rem;
   border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-sunken);
-  color: var(--text);
+  border: 1px solid var(--blue-edge);
+  background: var(--blue-wash);
+  color: var(--accent-info);
   font-size: 0.78rem;
   font-weight: 750;
   letter-spacing: 0.2em;
@@ -404,7 +477,7 @@
 }
 
 .heroTitleAccent {
-  color: var(--text-muted);
+  color: var(--accent-action);
 }
 
 .heroSub {
@@ -463,8 +536,8 @@
   padding: 0.95rem 1.85rem;
   border-radius: 14px;
   border: none;
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--accent-action);
+  color: var(--accent-action-text);
   font-size: 1rem;
   font-weight: 750;
   cursor: pointer;
@@ -752,8 +825,8 @@
   margin-top: 0.35rem;
   padding: 0.7rem 1.4rem;
   border-radius: 12px;
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--accent-action);
+  color: var(--accent-action-text);
   font-size: 0.88rem;
   font-weight: 750;
 }
@@ -816,6 +889,11 @@
   box-shadow: inset 0 1px 0 var(--glass-sheen);
 }
 
+.areaCard:hover {
+  background: var(--neutral-wash);
+}
+
+/* Level 1 tile, level 3 icon — the card itself stays neutral. */
 .areaIcon {
   display: flex;
   align-items: center;
@@ -823,10 +901,15 @@
   width: 2.4rem;
   height: 2.4rem;
   border-radius: 11px;
-  border: 1px solid var(--border);
-  background: var(--surface-sunken);
-  color: var(--text);
+  border: 1px solid transparent;
+  background: var(--tile-wash, var(--surface-sunken));
+  color: var(--tile-hue, var(--text));
 }
+
+.areaCard[data-hue='violet'] { --tile-hue: var(--hue-violet); --tile-wash: var(--violet-wash); }
+.areaCard[data-hue='blue']   { --tile-hue: var(--hue-blue);   --tile-wash: var(--blue-wash); }
+.areaCard[data-hue='pink']   { --tile-hue: var(--hue-pink);   --tile-wash: var(--pink-wash); }
+.areaCard[data-hue='green']  { --tile-hue: var(--hue-green);  --tile-wash: var(--green-wash); }
 
 .areaTitle {
   display: inline-flex;
@@ -948,8 +1031,8 @@
   padding: 0.48rem 1.15rem;
   border-radius: 9px;
   border: none;
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--accent-action);
+  color: var(--accent-action-text);
   font-size: 0.83rem;
   font-weight: 750;
   cursor: pointer;

@@ -33,9 +33,12 @@
   display: block;
 }
 
-.winconChipActive {
+.winconChipActive,
+.winconChipActive:hover {
   opacity: 1;
-  border-color: var(--accent);
+  border-color: var(--accent-select-edge);
+  background: var(--accent-select-fill);
+  color: var(--accent-select);
 }
 
 .winconClear {

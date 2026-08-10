@@ -32,10 +32,12 @@
 
 /* --- one saved group --------------------------------------------------- */
 
-.group {
+.group {
+
   border: 1px solid var(--glass-border);
   border-radius: 20px;
-  padding: 1rem 1.25rem 1.1rem;
+  padding: 1rem 1.25rem 1.1rem;
+
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   background: var(--glass-fill);
   backdrop-filter: blur(18px) saturate(140%);
@@ -229,7 +231,7 @@
 /* Won nothing: a red struck-through crown with 0, mirroring the builder's
    "no crowns" button. Same width as the gold badge, so rows stay aligned. */
 .crownBadgeZero {
-  color: var(--error);
-  border-color: color-mix(in srgb, var(--error) 40%, var(--slot-border));
-  background: color-mix(in srgb, var(--error) 10%, var(--slot-bg));
+  color: var(--hue-red);
+  border-color: var(--red-edge);
+  background: var(--red-wash);
 }

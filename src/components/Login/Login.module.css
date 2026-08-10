@@ -244,8 +244,8 @@
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--accent-contrast);
-  background: linear-gradient(135deg, var(--accent-light), var(--accent) 70%);
+  color: var(--accent-action-text);
+  background: var(--accent-action);
   border: none;
   border-radius: 999px;
   padding: 0.8rem 1.5rem;

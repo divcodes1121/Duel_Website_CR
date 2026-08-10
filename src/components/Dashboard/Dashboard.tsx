@@ -54,17 +54,24 @@ const TOP_NAV = [
 
 /* `slug` is the section's place in the URL once a tag is loaded
    (`#/player/<tag>/duels`), so every analytics screen is linkable and survives
-   a refresh. 'Top 10 Decks' is the landing section and owns the bare path. */
+   a refresh. 'Top 10 Decks' is the landing section and owns the bare path.
+ *
+ * `hue` is the section's identity colour, worn only by its small icon tile.
+ * It cycles violet → blue → pink → green in fixed order; because every tile
+ * sits directly beside its own label, a repeat across nine sections carries no
+ * ambiguity. This is decoration with a job — it makes an area recognisable at
+ * a glance — and it is deliberately NOT the selected state, which is always
+ * violet regardless of the row's identity hue. */
 const SIDE_NAV = [
-  { label: 'Search Player', icon: SearchIcon, slug: null },
-  { label: 'Top 10 Decks', icon: BarsIcon, slug: '' },
-  { label: 'Deck Analysis', icon: PieIcon, slug: 'decks' },
-  { label: 'Duel Analysis', icon: SwordsIcon, slug: 'duels' },
-  { label: 'Deck Counter', icon: ShieldIcon, slug: 'counter' },
-  { label: 'Win Conditions', icon: TargetIcon, slug: 'wincons' },
-  { label: 'Cards', icon: CardsIcon, slug: 'cards' },
-  { label: 'Champions', icon: CrownIcon, slug: 'champions' },
-  { label: 'Evolutions', icon: EvolutionIcon, slug: 'evolutions' },
+  { label: 'Search Player', icon: SearchIcon, slug: null, hue: 'violet' },
+  { label: 'Top 10 Decks', icon: BarsIcon, slug: '', hue: 'blue' },
+  { label: 'Deck Analysis', icon: PieIcon, slug: 'decks', hue: 'pink' },
+  { label: 'Duel Analysis', icon: SwordsIcon, slug: 'duels', hue: 'green' },
+  { label: 'Deck Counter', icon: ShieldIcon, slug: 'counter', hue: 'violet' },
+  { label: 'Win Conditions', icon: TargetIcon, slug: 'wincons', hue: 'blue' },
+  { label: 'Cards', icon: CardsIcon, slug: 'cards', hue: 'pink' },
+  { label: 'Champions', icon: CrownIcon, slug: 'champions', hue: 'green' },
+  { label: 'Evolutions', icon: EvolutionIcon, slug: 'evolutions', hue: 'violet' },
 ] as const;
 
 const SECTION_BLURB: Record<string, string> = {
@@ -272,6 +279,7 @@ export function Dashboard({
                   key={item.label}
                   type="button"
                   className={`${styles.sideItem} ${active ? styles.sideItemActive : ''}`}
+                  data-hue={item.hue}
                   aria-current={active || undefined}
                   onClick={() => {
                     // With a tag loaded the sidebar is navigation, so it moves
@@ -491,6 +499,7 @@ export function Dashboard({
                       key={item.label}
                       type="button"
                       className={styles.areaCard}
+                      data-hue={item.hue}
                       onClick={() => setSection(item.label)}
                     >
                       <span className={styles.areaIcon}>
