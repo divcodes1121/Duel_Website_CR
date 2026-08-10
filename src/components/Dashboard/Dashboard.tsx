@@ -88,9 +88,15 @@ const SECTION_BLURB: Record<string, string> = {
 /* Filled from the database at runtime — hardcoded tags would 404 on click. */
 const FALLBACK_TAGS = ['#9GJ0Q0LGG', '#U2YVYGGV2', '#L8GVPJ900'];
 
-/* The three built tools, as full panels down the home screen. */
+/* The three built tools, as full panels down the home screen.
+ *
+ * `hue` is the tool's identity, worn by its kicker chip and its CTA. Three
+ * identical pink buttons stacked down one page said nothing about which tool
+ * each opened; a hue per tool does. This is identity colour, not action colour
+ * — Analyze stays pink because it is the one genuine primary action here. */
 const FEATURES = [
   {
+    hue: 'violet',
     icon: SwordsIcon,
     kicker: 'Royal Duels',
     title: 'The duel deck forge',
@@ -101,6 +107,7 @@ const FEATURES = [
     art: ['knight', 'archer-queen', 'golden-knight'],
   },
   {
+    hue: 'green',
     icon: DeckIcon,
     kicker: "Deck's Home",
     title: 'Your collection hall',
@@ -111,6 +118,7 @@ const FEATURES = [
     art: ['mega-knight', 'golden-knight', 'bandit'],
   },
   {
+    hue: 'blue',
     icon: PaletteIcon,
     kicker: 'Counter Palette',
     title: 'The archetype armory',
@@ -447,6 +455,7 @@ export function Dashboard({
                     key={f.kicker}
                     type="button"
                     className={`${styles.toolPanel} ${i % 2 === 1 ? styles.toolPanelFlip : ''}`}
+                    data-hue={f.hue}
                     onClick={() => go(f.hash)}
                   >
                     <span className={styles.toolText}>

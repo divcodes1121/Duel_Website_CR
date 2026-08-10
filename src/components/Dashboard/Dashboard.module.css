@@ -477,7 +477,7 @@
 }
 
 .heroTitleAccent {
-  color: var(--accent-action);
+  color: var(--accent-info);
 }
 
 .heroSub {
@@ -772,15 +772,20 @@
   min-width: 0;
 }
 
+.toolPanel[data-hue='violet'] { --tool-hue: var(--hue-violet); --tool-wash: var(--violet-wash); --tool-edge: var(--violet-edge); }
+.toolPanel[data-hue='green']  { --tool-hue: var(--hue-green);  --tool-wash: var(--green-wash);  --tool-edge: var(--green-edge); }
+.toolPanel[data-hue='blue']   { --tool-hue: var(--hue-blue);   --tool-wash: var(--blue-wash);   --tool-edge: var(--blue-edge); }
+.toolPanel[data-hue='pink']   { --tool-hue: var(--hue-pink);   --tool-wash: var(--pink-wash);   --tool-edge: var(--pink-edge); }
+
 .toolKicker {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 0.9rem;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-sunken);
-  color: var(--text-muted);
+  border: 1px solid var(--tool-edge, var(--border));
+  background: var(--tool-wash, var(--surface-sunken));
+  color: var(--tool-hue, var(--text-muted));
   font-size: 0.68rem;
   font-weight: 750;
   letter-spacing: 0.18em;
@@ -825,8 +830,8 @@
   margin-top: 0.35rem;
   padding: 0.7rem 1.4rem;
   border-radius: 12px;
-  background: var(--accent-action);
-  color: var(--accent-action-text);
+  background: var(--tool-hue, var(--accent-action));
+  color: #ffffff;
   font-size: 0.88rem;
   font-weight: 750;
 }
