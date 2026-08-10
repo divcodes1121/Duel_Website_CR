@@ -53,6 +53,12 @@
   flex-wrap: wrap;
   gap: 1.5rem;
   padding: 1.15rem 1.4rem;
+  /* The range popup escapes this pane. Every panel below carries a
+     backdrop-filter, and that creates a stacking context — so a later panel
+     paints over the popup and swallows its clicks no matter how high the
+     popup's own z-index is. Raising the ancestor is what actually fixes it. */
+  position: relative;
+  z-index: 40;
 }
 
 .identity {
@@ -635,4 +641,140 @@
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------ range picker */
+
+.rangeWrap {
+  position: relative;
+  min-width: 0;
+}
+
+.rangeButton {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+/* Anchored to the cell, above the panels below it. */
+.rangePop {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  left: 0;
+  z-index: 30;
+  width: max(300px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill-strong);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow-float);
+}
+
+.rangePopLabel {
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rangePresets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rangeChip {
+  padding: 0.38rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.rangeChipOn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.rangeDates {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.rangeField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.rangeField input {
+  padding: 0.42rem 0.55rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8rem;
+  color-scheme: light dark;
+}
+
+.rangeApply {
+  padding: 0.48rem 0.95rem;
+  border-radius: 9px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 0.8rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.rangeApply:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rangeNote {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* The window read-out in each chart header. */
+.rangeBadge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* Offered, but flagged as longer than this player's stored history. */
+.rangeChip[data-beyond] {
+  opacity: 0.55;
 }

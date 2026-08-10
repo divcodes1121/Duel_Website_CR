@@ -49,11 +49,37 @@ export interface ApiSources {
   archive: { path: string; available: boolean; sizeBytes: number };
 }
 
+export interface ApiCoverage {
+  start: string | null;
+  end: string | null;
+  days: number;
+}
+
+export interface ApiProfile {
+  name: string | null;
+  trophies: number | null;
+  bestTrophies: number | null;
+  expLevel: number | null;
+  arena: string | null;
+  clan: string | null;
+}
+
 export interface PlayerReport {
   player: ApiPlayer;
   decks: ApiDeck[];
   trends: ApiTrends;
+  /** How much history exists for this player, whatever window is shown. */
+  coverage: ApiCoverage;
+  window: { from: string | null; to: string | null };
+  /** Live CR API fields the databases do not carry. Null when unavailable. */
+  profile: ApiProfile | null;
   sources: ApiSources;
+}
+
+export interface DateWindow {
+  from?: string;
+  to?: string;
+  days?: number;
 }
 
 /** Distinguishes "no data for this player" from "the service is not running". */
@@ -86,8 +112,22 @@ async function get<T>(path: string): Promise<T> {
   throw new AnalyticsError(err || `Request failed (${res.status})`, 'server');
 }
 
-export function fetchPlayerReport(tag: string, days = 30): Promise<PlayerReport> {
-  return get<PlayerReport>(`/api/analytics/player/${encodeURIComponent(tag)}?days=${days}`);
+export function fetchPlayerReport(tag: string, win: DateWindow = {}): Promise<PlayerReport> {
+  const q = new URLSearchParams();
+  if (win.from && win.to) {
+    q.set('from', win.from);
+    q.set('to', win.to);
+  } else {
+    q.set('days', String(win.days ?? 30));
+  }
+  return get<PlayerReport>(`/api/analytics/player/${encodeURIComponent(tag)}?${q}`);
+}
+
+export function fetchCoverage(tag?: string): Promise<{
+  global: ApiCoverage;
+  player: ApiCoverage | null;
+}> {
+  return get(`/api/analytics/coverage${tag ? `?tag=${encodeURIComponent(tag)}` : ''}`);
 }
 
 export function fetchSuggestedTags(): Promise<{

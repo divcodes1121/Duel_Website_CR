@@ -7,7 +7,7 @@ import { DuelDeckBuilder } from '../DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from '../DecksHome/DecksHome';
 import { CounterPalette } from '../CounterPalette/CounterPalette';
 import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
-import { SEASONS } from '../Analytics/playerData';
+import { SEASONS, type Season } from '../Analytics/playerData';
 import { fetchSuggestedTags } from '../../state/analyticsClient';
 import {
   AnalyticsIcon,
@@ -294,7 +294,7 @@ export function Dashboard({
 
         <main className={styles.main}>
           {view === 'player' ? (
-            <PlayerAnalysis tag={playerTag} />
+            <PlayerAnalysis tag={playerTag} season={season as Season} />
           ) : view !== 'home' ? (
             /* A built tool, hosted in the panel. `.tool` gives it the same
                raised surface as everything else and clips its own scrolling

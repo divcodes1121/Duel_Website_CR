@@ -6,7 +6,15 @@ import {
   fetchPlayerReport,
   type PlayerReport,
 } from '../../state/analyticsClient';
-import { DECK_SORTS, RANGES, type DeckSort, type Series, type TrendData } from './playerData';
+import {
+  DECK_SORTS,
+  RANGE_PRESETS,
+  seasonWindow,
+  type DeckSort,
+  type Season,
+  type Series,
+  type TrendData,
+} from './playerData';
 import styles from './PlayerAnalysis.module.css';
 
 /* Player analysis — the screen the Analyze button lands on.
@@ -95,12 +103,13 @@ function TrendPanel({
   title,
   data,
   yTicks,
+  rangeLabel,
 }: {
   title: string;
   data: TrendData;
   yTicks: number[];
+  rangeLabel: string;
 }) {
-  const [range, setRange] = useState<string>(RANGES[0]);
   const { plotted, folded } = foldSeries(data);
 
   return (
@@ -109,18 +118,9 @@ function TrendPanel({
         <h3 className={styles.chartTitle}>
           {title} <span className={styles.chartTitleSub}>(Top 10 Decks)</span>
         </h3>
-        <label className={styles.selectWrap}>
-          <span className="sr-only">Range for {title}</span>
-          <select
-            className={styles.select}
-            value={range}
-            onChange={(e) => setRange(e.target.value)}
-          >
-            {RANGES.map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </select>
-        </label>
+        {/* One window drives the whole page, so this reports it rather than
+            offering a second, conflicting control. */}
+        <span className={styles.rangeBadge}>{rangeLabel}</span>
       </header>
 
       <div className={styles.chartBody}>
@@ -155,17 +155,39 @@ function shortDay(iso: string): string {
     : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
-export function PlayerAnalysis({ tag }: { tag: string }) {
+export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string; season?: Season }) {
   const [sort, setSort] = useState<DeckSort>('top');
+  // Window state. `preset` 0 means all data, -1 means the custom date fields.
+  const [preset, setPreset] = useState<number>(30);
+  const [custom, setCustom] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [report, setReport] = useState<PlayerReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // The season selector in the top bar sets an explicit month window; picking
+  // a preset afterwards takes over again.
+  useEffect(() => {
+    const w = seasonWindow(season, report?.coverage.end ?? null);
+    if (w.from && w.to) {
+      setCustom({ from: w.from, to: w.to });
+      setPreset(-1);
+    } else if (season === 'All Time') {
+      setPreset(0);
+    }
+    // Only react to the season changing, not to every report refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season]);
 
   useEffect(() => {
     let live = true;
     setLoading(true);
     setError(null);
-    fetchPlayerReport(tag)
+    const win =
+      preset === -1 && custom.from && custom.to
+        ? { from: custom.from, to: custom.to }
+        : { days: preset === 0 ? 3650 : preset };
+    fetchPlayerReport(tag, win)
       .then((r) => {
         if (!live) return;
         setReport(r);
@@ -182,7 +204,7 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
     return () => {
       live = false;
     };
-  }, [tag]);
+  }, [tag, preset, custom.from, custom.to]);
 
   if (loading) {
     return (
@@ -210,7 +232,7 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
     );
   }
 
-  const { player, decks: apiDecks, trends, sources } = report;
+  const { player, decks: apiDecks, trends, sources, profile } = report;
 
   // Series are keyed by deck hash, so re-sorting the table never repaints the
   // charts — colour follows the deck, not its row position.
@@ -288,19 +310,117 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
 
         <div className={styles.stat}>
           <span className={styles.statIcon}>{ICONS.calendar}</span>
-          <span className={styles.statText}>
-            <span className={styles.statValue}>{rangeLabel}</span>
-            <span className={styles.statLabel}>Data Range ({trends.days.length} Days)</span>
-          </span>
+          <div className={styles.rangeWrap}>
+            <button
+              type="button"
+              className={styles.rangeButton}
+              aria-expanded={pickerOpen}
+              onClick={() => setPickerOpen((o) => !o)}
+            >
+              <span className={styles.statValue}>{rangeLabel}</span>
+              <span className={styles.statLabel}>
+                Data Range ({trends.days.length} of {report.coverage.days} days) ▾
+              </span>
+            </button>
+
+            {pickerOpen && (
+              <div className={styles.rangePop}>
+                <span className={styles.rangePopLabel}>Preset</span>
+                <div className={styles.rangePresets}>
+                  {/* Every preset is offered, including ones longer than this
+                      player's history. Hiding them raises "why can't I pick 60
+                      days?"; the query clamps to what exists and the button
+                      reports "N of M days", which explains itself. */}
+                  {RANGE_PRESETS.map((r) => (
+                    <button
+                      key={r.label}
+                      type="button"
+                      className={`${styles.rangeChip} ${preset === r.days ? styles.rangeChipOn : ''}`}
+                      title={
+                        r.days > 0 && r.days > report.coverage.days
+                          ? `Only ${report.coverage.days} days stored for this player`
+                          : undefined
+                      }
+                      data-beyond={r.days > 0 && r.days > report.coverage.days ? '' : undefined}
+                      onClick={() => {
+                        setPreset(r.days);
+                        if (r.days !== -1) setPickerOpen(false);
+                      }}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+
+                <span className={styles.rangePopLabel}>Custom range</span>
+                <div className={styles.rangeDates}>
+                  {/* Native date inputs: a real calendar popup, bounded by the
+                      dates the databases actually hold, with no dependency. */}
+                  <label className={styles.rangeField}>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={custom.from || report.window.from || ''}
+                      min={report.coverage.start ?? undefined}
+                      max={custom.to || report.coverage.end || undefined}
+                      onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))}
+                    />
+                  </label>
+                  <label className={styles.rangeField}>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={custom.to || report.window.to || ''}
+                      min={custom.from || report.coverage.start || undefined}
+                      max={report.coverage.end ?? undefined}
+                      onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className={styles.rangeApply}
+                    disabled={!custom.from || !custom.to}
+                    onClick={() => {
+                      setPreset(-1);
+                      setPickerOpen(false);
+                    }}
+                  >
+                    Apply
+                  </button>
+                </div>
+
+                <p className={styles.rangeNote}>
+                  Stored: {report.coverage.start} to {report.coverage.end}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* Trophies and arena are not in the battle databases — they come from
+            the live CR API. When that is unreachable the cell falls back to
+            crowns, which is stored, rather than showing a blank. */}
         <div className={styles.stat}>
           <span className={styles.statIcon}>{ICONS.rank}</span>
           <span className={styles.statText}>
-            <span className={styles.statValue}>{nf.format(player.crownsFor)}</span>
-            <span className={styles.statLabel}>
-              Crowns For ({nf.format(player.crownsAgainst)} against)
-            </span>
+            {profile?.trophies != null ? (
+              <>
+                <span className={styles.statValue}>{nf.format(profile.trophies)}</span>
+                <span className={styles.statLabel}>
+                  Trophies{profile.arena ? ` · ${profile.arena}` : ''}
+                  {profile.bestTrophies != null
+                    ? ` · best ${nf.format(profile.bestTrophies)}`
+                    : ''}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className={styles.statValue}>{nf.format(player.crownsFor)}</span>
+                <span className={styles.statLabel}>
+                  Crowns For ({nf.format(player.crownsAgainst)} against)
+                </span>
+              </>
+            )}
           </span>
         </div>
       </section>
@@ -418,8 +538,8 @@ export function PlayerAnalysis({ tag }: { tag: string }) {
 
       {/* Two charts, not one with two y-scales. */}
       <div className={styles.charts}>
-        <TrendPanel title="Use Rate Trend" data={toTrendData('use')} yTicks={[0, 25, 50, 75, 100]} />
-        <TrendPanel title="Win Rate Trend" data={toTrendData('win')} yTicks={[0, 25, 50, 75, 100]} />
+        <TrendPanel title="Use Rate Trend" data={toTrendData('use')} yTicks={[0, 25, 50, 75, 100]} rangeLabel={rangeLabel} />
+        <TrendPanel title="Win Rate Trend" data={toTrendData('win')} yTicks={[0, 25, 50, 75, 100]} rangeLabel={rangeLabel} />
       </div>
 
       <footer className={styles.foot}>

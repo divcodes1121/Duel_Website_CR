@@ -68,26 +68,49 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/analytics/suggest":
                 return self._send({"tags": cd.suggest_tags(5)})
 
+            if path == "/api/analytics/coverage":
+                q = parse_qs(parsed.query)
+                raw = (q.get("tag") or [""])[0]
+                tag = cd.normalize_tag(raw) if raw else None
+                return self._send(
+                    {"global": cd.coverage(), "player": cd.coverage(tag) if tag else None}
+                )
+
             if path.startswith("/api/analytics/player/"):
                 raw = unquote(path[len("/api/analytics/player/"):])
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
 
-                overview = cd.player_overview(tag)
-                if not overview:
-                    return self._send({"error": "not_found", "tag": tag}, 404)
-
                 q = parse_qs(parsed.query)
-                days = int((q.get("days") or ["30"])[0])
-                top = overview["decks"][:10]
-                trends = cd.deck_trends(tag, [d["deckHash"] for d in top], days=days)
+                cov = cd.coverage(tag)
+
+                # An explicit window wins; otherwise fall back to `days` back
+                # from the last battle we hold, not from today — a player who
+                # stopped playing a month ago would otherwise get an empty
+                # chart.
+                since = (q.get("from") or [""])[0] or None
+                until = (q.get("to") or [""])[0] or None
+                if not since and cov["end"]:
+                    import datetime as _dt
+
+                    days = max(1, min(400, int((q.get("days") or ["30"])[0])))
+                    end = _dt.date.fromisoformat(cov["end"])
+                    since = (end - _dt.timedelta(days=days - 1)).isoformat()
+                    until = until or cov["end"]
+
+                report = cd.player_report(tag, since, until)
+                if not report:
+                    return self._send({"error": "not_found", "tag": tag}, 404)
 
                 return self._send(
                     {
-                        "player": overview["player"],
-                        "decks": top,
-                        "trends": trends,
+                        "player": report["player"],
+                        "decks": report["decks"][:10],
+                        "trends": report["trends"],
+                        "coverage": cov,
+                        "window": {"from": since, "to": until},
+                        "profile": cd.cr_profile(tag),
                         "sources": cd.sources(),
                     }
                 )

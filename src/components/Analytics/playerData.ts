@@ -53,8 +53,35 @@ export const DECK_SORTS: { id: DeckSort; label: string }[] = [
   { id: 'winrate', label: 'Highest Win Rate' },
 ];
 
+/* Clash Royale seasons run a calendar month. 'Current' is the month the latest
+   stored battle falls in — not today's month, or a player who stopped playing
+   would get an empty screen. */
 export const SEASONS = ['Current Season', 'Last Season', 'All Time'] as const;
-export const RANGES = ['Last 30 Days', 'Last 14 Days', 'Last 7 Days'] as const;
+export type Season = (typeof SEASONS)[number];
+
+export function seasonWindow(season: Season, coverageEnd: string | null): { from?: string; to?: string } {
+  if (!coverageEnd || season === 'All Time') return {};
+  const end = new Date(coverageEnd + 'T00:00:00Z');
+  const y = end.getUTCFullYear();
+  const m = end.getUTCMonth();
+  const shift = season === 'Last Season' ? -1 : 0;
+  const first = new Date(Date.UTC(y, m + shift, 1));
+  const last = new Date(Date.UTC(y, m + shift + 1, 0));
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { from: iso(first), to: season === 'Last Season' ? iso(last) : coverageEnd };
+}
+/* Presets, plus 'Custom' which reveals the two date fields. The list is
+   filtered against real coverage at render time — offering 90 days when the
+   databases hold 50 is just a way to show an empty chart. */
+export const RANGE_PRESETS = [
+  { label: 'Last 7 Days', days: 7 },
+  { label: 'Last 14 Days', days: 14 },
+  { label: 'Last 30 Days', days: 30 },
+  { label: 'Last 60 Days', days: 60 },
+  { label: 'Last 90 Days', days: 90 },
+  { label: 'All Data', days: 0 },
+  { label: 'Custom…', days: -1 },
+] as const;
 
 /* ----------------------------------------------------------- placeholder */
 
