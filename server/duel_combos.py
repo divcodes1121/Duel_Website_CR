@@ -688,7 +688,14 @@ def combo_report(tag: str, since: str | None = None, until: str | None = None) -
                 evo[c] = evo.get(c, 0) + 1
             per = art_tally.setdefault(c, {})
             per[kind] = per.get(kind, 0) + 1
-    art = {c: max(sorted(k), key=lambda x: k[x]) for c, k in art_tally.items()}
+    # OBSERVED FIRST, THEN THE GLOBAL PROFILE. A combo is a pair of cards, not a
+    # deck, so there is no slot to reason about — the only honest statement is
+    # "this card is usually brought as X". Without the fallback the tab rendered
+    # art for some players and not others, purely because `player_evo` covers
+    # battles from 2026-08-05 onward (~29% of the database) and a player whose
+    # duels predate that has no marks at all.
+    art = dict(cd.card_art_profile())
+    art.update({c: max(sorted(k), key=lambda x: k[x]) for c, k in art_tally.items()})
 
     total = len(decks)
     slot_totals = [0] * SLOTS

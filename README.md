@@ -21,13 +21,14 @@ bot's SQLite files read-only.
 3. [Where the data comes from](#where-the-data-comes-from)
 4. [The analytics API](#the-analytics-api)
 5. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
-6. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
-7. [Colour: how it was chosen](#colour-how-it-was-chosen)
-8. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
-9. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
-10. [Testing and verification](#testing-and-verification)
-11. [Project layout](#project-layout)
-12. [Deliberately not done](#deliberately-not-done)
+6. [Deck rendering: the three special slots](#deck-rendering-the-three-special-slots)
+7. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
+8. [Colour: how it was chosen](#colour-how-it-was-chosen)
+9. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
+10. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
+11. [Testing and verification](#testing-and-verification)
+12. [Project layout](#project-layout)
+13. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -50,7 +51,8 @@ the browser only ever talks to its own origin.
 npx tsc -b                        # typecheck
 npm run test                      # 95 tests over the deck logic (vitest)
 python server/test_duel_combos.py # 34 checks over the duel logic, no DB needed
-python server/test_meta.py        # 15 checks over the meta board rules
+python server/test_meta.py        # 23 checks over the meta board rules
+python server/test_card_art.py    # 39 checks over deck arrangement and card art
 npm run lint
 npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
@@ -251,42 +253,97 @@ what the first version actually produced:
   `_deck_name` appends the priciest non-win-condition card — "Hog Musketeer",
   "Hog Earthquake" — which is how players name these decks anyway.
 
-### Deck rendering: three special slots
-
-A Clash Royale deck's first **three** positions are the special slots —
-evolution, hero and champion. Measured on this data: of 795 decks whose payload
-carried evolution marks, **all 795** had every mark inside slots 0-2 (slot 0 in
-791, slot 1 in 569, slot 2 in 775).
-
-Two consequences, and both were bugs before they were rules:
-
-- **Decks render in payload order, never deck-hash order.** The hash is
-  alphabetical — it identifies a deck, it does not describe one — so splitting
-  it for display scattered the three special slots through the row.
-- **Only slots 0-2 can carry evolution or hero art.** That is the game's rule
-  and a better cap than a magic number; it is what stopped a merged cluster's
-  pooled marks drawing a deck with five evolved cards.
-- **The three slots have distinct roles** (player numbering): slot 1 is
-  evolution only, slot 2 is hero or champion, slot 3 is hero, evolution or
-  champion. That caps a deck at **two** evolutions.
-
-  This is stated rather than inferred, because the payload does not cleanly
-  report it: over ~8,000 marked battles slot 2 reads hero 70% but *evolution
-  30%*, and 14% of single battles carry three evolution marks. Rendering that
-  majority put three evolution frames on decks that cannot have three. The bot's
-  own `evolution_marks` docstring records the same ambiguity as unresolvable
-  from the stored columns.
-
-`player_evo` only covers battles from 2026-08-05 (~29% of the database), so
-decks last played before that have their slots read positionally instead.
-Observed always wins, and inferred decks say so in the tooltip and a footnote.
-
-An earlier pass here concluded the positional reading was wrong, on a
-measurement that checked only the first *two* slots. It was the measurement that
-was wrong.
-
 Use rate is a share of **every** competitive battle in the window, including
-those on decks the floor rejects — a share of all play, not of the board.
+those on decks the floor rejects — a share of all play, not of the board. The
+top 50 covers ~27% of it; Clash Royale's meta is a genuinely long tail across
+roughly a million distinct deck lists, so a leading deck at ~2% is the real
+number rather than a bug.
+
+---
+
+## Deck rendering: the three special slots
+
+Applies to every screen that draws a deck. One function owns it —
+`clash_data.arrange_deck` — and it decides both the ORDER of the cards and which
+art each draws.
+
+### The rule
+
+A deck's first three positions are special, in the numbering a player sees:
+
+| slot | may hold |
+|---|---|
+| 1 | evolution only |
+| 2 | hero, champion, or an ordinary card — never an evolution |
+| 3 | hero, evolution or champion (the "wild" slot) |
+
+which caps a deck at **two** evolutions. A champion has neither an evolution nor
+a hero form, so wherever one is legal it simply draws as itself.
+
+`arrange_deck` fills as many special slots as it can. The four cards that own
+*both* forms — knight, valkyrie, musketeer, wizard — take an evolution slot when
+one is free and the hero slot when the evolutions are already spent, because two
+evolutions **and** a hero renders more of the same deck than two evolutions and a
+gap.
+
+### Why the stored order is rebuilt rather than trusted
+
+The order is not random, but it is not reliable either:
+
+| source | marks inside slots 1-3 |
+|---|---|
+| `battles.player_card_keys` (per battle) | **1194 / 1194** |
+| `decks.cards` (dimension table) | **774 / 1056** |
+
+The per-battle order is perfect; the decks table — which the meta board reads —
+loses the arrangement about a quarter of the time. That is exactly why an X-Bow
+and a Goblin Drill deck rendered almost entirely plain on the meta board while
+the same decks were fine on a player's screen. And the deck *hash* is useless
+for display in either case: it is alphabetical, so it identifies a deck without
+describing one.
+
+### Why the rule is stated, not inferred
+
+**The bot never settled this, and its own sources disagree.**
+
+| source | says |
+|---|---|
+| `Clash_Bot/CLAUDE.md` (measured) | marks cap at three per deck; the data *"cannot distinguish"* two evolution slots plus one from three special slots — *"Do NOT add a derived `player_hero` column until something settles which reading is right"* |
+| `Clash_Bot/card_art.py` (the code) | checks `can_be_hero` **first** in slots 0 and 1 |
+| `Clash_Bot/CLAUDE.md:720` (the docs for that code) | "slots 1-2 render evolution art; slot 3 champion/hero" |
+
+Measured here over ~8,000 recent marked battles: slot 1 evolution **92%**, slot 2
+hero **70%** / evolution 30%, slot 3 evolution **83%**. So the bot's renderer
+would draw hero art in a position that is 92% evolution, and its docs describe a
+third arrangement again.
+
+Reading the raw majority is not an option either: 14% of single battles carry
+three evolution marks, which put three evolution frames on decks that cannot
+have three.
+
+So the rule above is asserted, and this table is why.
+
+### Which art a card wears is measured
+
+Never guessed from capability flags. `card_art_profile` reads what each card is
+actually brought as across the database — all four both-form cards come back
+**100% evolution**. `player_evo` stores `[card_key, level, art]` with `art`
+already resolved by the bot from the payload's icon URLs.
+
+Where the payload says nothing — it only covers battles from 2026-08-05, ~29% of
+the database — the slots are read positionally and the deck is flagged
+`artInferred`, which the tooltip and a footnote say out loud. The Duel Analysis
+combos take the same fallback; without it the tab drew art for some players and
+not others purely on whether their duels predated the backfill. A combo is a
+pair rather than a deck, so there is no slot to reason about there — the only
+honest statement is "this card is usually brought as X", which is exactly what
+the profile holds. A dashed outline
+was tried as the visual marker and removed: it read as a broken image rather than
+as a caveat.
+
+An earlier pass here concluded the positional reading was invalid, on a
+measurement that checked only the first *two* slots. It was the measurement that
+was wrong — all three are special.
 
 ---
 
@@ -634,6 +691,29 @@ reader sees.
 `--accent-contrast`, which in dark mode *equals the ground* — so the headline
 rendered in exactly the background colour and vanished.
 
+**Decks rendered in alphabetical order.** The deck *hash* is alphabetical — it
+identifies a deck without describing one — so using it for display scattered the
+three special slots through the row and nothing could be configured. The decks
+dimension table is better but not reliable either: measured, the per-battle
+`player_card_keys` puts every mark inside slots 1-3 **1194/1194** times, while
+`decks.cards` manages **774/1056**. `arrange_deck` rebuilds the order instead of
+trusting either.
+
+**Four separate bugs in the evolution art, in one sitting.** Worth listing
+because each looked finished before the next appeared: `card_info` never exposed
+`can_be_hero`, so the hero branch could not fire at all; collapsing an empty
+hero slot shifted the second evolution into slot 2, the one position it may not
+occupy; a both-form card always claimed an evolution slot, leaving slot 2 plain
+in decks whose only hero-capable cards also evolve; and pooling a merged
+cluster's marks drew a deck with five evolutions. Only the first was visible
+from the code — the rest needed looking at the rendered page.
+
+**A measurement that checked the wrong number of slots.** An early pass
+concluded the positional reading was invalid because only 63 of 391 decks had
+their marks in the first *two* slots. There are *three* special slots; on that
+test it is 795 of 795. The conclusion was confidently wrong and went into a
+code comment and both READMEs before it was caught.
+
 **Violet meant two things at once.** Remapping the legacy `--accent-purple`
 alias to the new violet made the Evolution *role* slot permanently violet — so
 it was indistinguishable from the *selected* slot, because violet is what
@@ -674,7 +754,7 @@ npx tsc -b                        # typecheck
 npm run test                      # 95 tests — deck logic, deck links, PDF export
 python server/test_duel_combos.py # 34 checks — duel logic, no database needed
 python server/test_meta.py        # 23 checks — meta board rules, no database
-python server/test_card_art.py    # 32 checks — evolution/hero slot rules
+python server/test_card_art.py    # 39 checks — deck arrangement, evolution/hero art
 npm run build
 ```
 
@@ -755,7 +835,8 @@ server/
   duel_combos.py              the Pair Board port
   meta.py                     global meta rollup, background snapshot
   test_duel_combos.py         34 checks, no DB
-  test_meta.py                15 checks, no DB
+  test_meta.py                23 checks, no DB
+  test_card_art.py            39 checks, no DB
   README.md                   API and storage detail
 ```
 
