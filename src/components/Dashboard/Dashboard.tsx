@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useThemeStore } from '../../state/themeStore';
 import { getCardIconUrl } from '../../data/cards';
 import { ProfileMenu } from '../Profile/ProfileMenu';
@@ -6,6 +6,8 @@ import { Header } from '../Header/Header';
 import { DuelDeckBuilder } from '../DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from '../DecksHome/DecksHome';
 import { CounterPalette } from '../CounterPalette/CounterPalette';
+import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
+import { SEASONS } from '../Analytics/playerData';
 import {
   AnalyticsIcon,
   ArrowRightIcon,
@@ -37,7 +39,7 @@ import styles from './Dashboard.module.css';
  * is rendered `embedded`, which drops the page nav it used to carry — the top
  * bar already provides the brand, theme toggle and profile menu. */
 
-export type DashboardView = 'home' | 'builder' | 'decks' | 'palette';
+export type DashboardView = 'home' | 'builder' | 'decks' | 'palette' | 'player';
 
 const TOP_NAV = [
   { label: 'Home', icon: HomeIcon, hash: null },
@@ -114,11 +116,26 @@ function go(hash: string) {
   window.location.hash = hash;
 }
 
-export function Dashboard({ view = 'home' }: { view?: DashboardView }) {
+export function Dashboard({
+  view = 'home',
+  playerTag = '',
+}: {
+  view?: DashboardView;
+  playerTag?: string;
+}) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const [section, setSection] = useState<string>(SIDE_NAV[0].label);
   const [tag, setTag] = useState('');
+  // The analysis screen carries the query in the top bar, seeded from the URL.
+  const [topTag, setTopTag] = useState(playerTag);
+  const [season, setSeason] = useState<string>(SEASONS[0]);
+
+  // Navigating to another tag (a popular chip, a fresh search) has to move the
+  // field with it — the component does not remount on a hash change.
+  useEffect(() => {
+    if (playerTag) setTopTag(playerTag);
+  }, [playerTag]);
 
   // The open tool decides which top-bar item is lit; on the home view it is
   // whichever analytics area the sidebar has selected.
@@ -141,6 +158,48 @@ export function Dashboard({ view = 'home' }: { view?: DashboardView }) {
           Royal Arena
         </button>
 
+        {view === 'player' ? (
+          <div className={styles.topQuery}>
+            <span className={styles.topScope}>
+              <AnalyticsIcon size={15} />
+              Analytics
+            </span>
+            <form
+              className={styles.topSearch}
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (topTag.trim()) go(`#/player/${encodeURIComponent(topTag.trim())}`);
+              }}
+            >
+              <span className={styles.topSearchIcon}>
+                <SearchIcon size={16} />
+              </span>
+              <input
+                className={styles.topSearchInput}
+                value={topTag}
+                onChange={(e) => setTopTag(e.target.value)}
+                placeholder="Enter player tag..."
+                aria-label="Player tag"
+                spellCheck={false}
+              />
+              <button type="submit" className={styles.topSearchButton}>
+                Search
+              </button>
+            </form>
+            <label className={styles.topSeason}>
+              <span className="sr-only">Season</span>
+              <select
+                className={styles.topSeasonSelect}
+                value={season}
+                onChange={(e) => setSeason(e.target.value)}
+              >
+                {SEASONS.map((x) => (
+                  <option key={x}>{x}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : (
         <nav className={styles.topNav}>
           {TOP_NAV.map((item) => {
             const Icon = item.icon;
@@ -158,6 +217,7 @@ export function Dashboard({ view = 'home' }: { view?: DashboardView }) {
             );
           })}
         </nav>
+        )}
 
         <div className={styles.topActions}>
           <button
@@ -183,7 +243,8 @@ export function Dashboard({ view = 'home' }: { view?: DashboardView }) {
           <nav className={styles.sideNav}>
             {SIDE_NAV.map((item) => {
               const Icon = item.icon;
-              const active = section === item.label;
+              const active =
+                view === 'player' ? item.label === 'Top 10 Decks' : section === item.label;
               return (
                 <button
                   key={item.label}
@@ -217,7 +278,9 @@ export function Dashboard({ view = 'home' }: { view?: DashboardView }) {
         </aside>
 
         <main className={styles.main}>
-          {view !== 'home' ? (
+          {view === 'player' ? (
+            <PlayerAnalysis tag={playerTag} />
+          ) : view !== 'home' ? (
             /* A built tool, hosted in the panel. `.tool` gives it the same
                raised surface as everything else and clips its own scrolling
                region to the rounded corners. */
@@ -266,7 +329,14 @@ export function Dashboard({ view = 'home' }: { view?: DashboardView }) {
                     Deck stats, win rates, counters and more.
                   </p>
 
-                  <form className={styles.searchRow} onSubmit={(e) => e.preventDefault()}>
+                  <form
+                    className={styles.searchRow}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const t = tag.trim();
+                      if (t) go(`#/player/${encodeURIComponent(t)}`);
+                    }}
+                  >
                     <span className={styles.searchIcon}>
                       <SearchIcon size={19} />
                     </span>
@@ -292,7 +362,7 @@ export function Dashboard({ view = 'home' }: { view?: DashboardView }) {
                           key={t}
                           type="button"
                           className={styles.tagChip}
-                          onClick={() => setTag(t)}
+                          onClick={() => go(`#/player/${encodeURIComponent(t)}`)}
                         >
                           <SearchIcon size={13} />
                           {t}

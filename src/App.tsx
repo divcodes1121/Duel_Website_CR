@@ -14,7 +14,18 @@ function viewFor(hash: string): DashboardView {
   if (hash.startsWith('#/builder')) return 'builder';
   if (hash.startsWith('#/decks')) return 'decks';
   if (hash.startsWith('#/palette')) return 'palette';
+  if (hash.startsWith('#/player/')) return 'player';
   return 'home';
+}
+
+/** `#/player/%23QJ2L9V8R` -> `#QJ2L9V8R`. */
+function tagFor(hash: string): string {
+  if (!hash.startsWith('#/player/')) return '';
+  try {
+    return decodeURIComponent(hash.slice('#/player/'.length));
+  } catch {
+    return '';
+  }
 }
 
 function useHashRoute(): string {
@@ -41,7 +52,7 @@ function App() {
 
   return (
     <div className={styles.app}>
-      <Dashboard view={viewFor(route)} />
+      <Dashboard view={viewFor(route)} playerTag={tagFor(route)} />
     </div>
   );
 }

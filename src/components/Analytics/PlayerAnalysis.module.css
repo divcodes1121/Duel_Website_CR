@@ -1,0 +1,592 @@
+/* Player analysis screen.
+ *
+ * Chrome uses the app's neutral tokens. Series colour does not: identity across
+ * eight lines cannot be carried by a greyscale ramp, so the charts bring their
+ * own validated categorical palette, assigned in fixed order and never cycled.
+ * Both columns below pass the lightness band, chroma floor, CVD separation and
+ * normal-vision floor on this app's own surfaces (#ffffff light, #181818 dark);
+ * three light hues sit under 3:1, which the deck table directly above satisfies
+ * as the required relief. */
+
+.page {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Same eight hues re-stepped for the dark surface, not an automatic flip. */
+:global([data-theme='dark']) .page {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+}
+
+.pane {
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
+}
+
+/* ------------------------------------------------------------ player summary */
+
+.summary {
+  composes: pane;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 1.15rem 1.4rem;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+  padding-right: 1.5rem;
+  border-right: 1px solid var(--border);
+}
+
+.badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.1rem;
+  height: 3.1rem;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.identityText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.playerName {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 1.5rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.verified {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.playerTag {
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.statIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.statText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.statValue {
+  font-size: 1.02rem;
+  font-weight: 750;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.statLabel {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- deck table */
+
+.decksPanel {
+  composes: pane;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.25rem 1.4rem 1rem;
+  min-width: 0;
+}
+
+.decksHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.decksTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 1.4rem;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.decksTitleIcon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.exportButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sortTabs {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.sortTab {
+  padding: 0.5rem 1.05rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sortTabActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.tableScroll {
+  overflow-x: auto;
+  margin: 0 -0.35rem;
+  padding: 0 0.35rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.table th {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.thNum {
+  text-align: right;
+}
+
+.thRank {
+  width: 3.5rem;
+}
+
+.thInfo {
+  display: inline-flex;
+  vertical-align: -1px;
+  opacity: 0.55;
+}
+
+.table td {
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Top three read as placings — by weight and fill, not by colour alone. */
+.rank[data-medal] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.rank[data-medal='2'] {
+  opacity: 0.78;
+}
+
+.rank[data-medal='3'] {
+  opacity: 0.56;
+}
+
+.deckName {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.cards {
+  display: inline-flex;
+  gap: 0.2rem;
+}
+
+.cardIcon {
+  width: 26px;
+  aspect-ratio: 302 / 363;
+  border-radius: 4px;
+  display: block;
+}
+
+.meterValue {
+  display: block;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  margin-bottom: 0.28rem;
+}
+
+.meterValueWin {
+  color: var(--text);
+}
+
+/* 4px rounded data-end, anchored to a track — the standard bar anatomy. */
+.meter {
+  display: block;
+  width: 92px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--series-1);
+}
+
+.meterFillWin {
+  background: var(--series-3);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Direction is carried by the arrow glyph as well as the hue, so it survives
+   colour-blindness and greyscale printing. */
+.trend {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend[data-dir='up'] {
+  color: var(--series-6);
+}
+
+.trend[data-dir='down'] {
+  color: var(--series-8);
+}
+
+/* ------------------------------------------------------------------- charts */
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.chartPanel {
+  composes: pane;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.2rem 1.3rem 1.1rem;
+  min-width: 0;
+}
+
+.chartHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.chartTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.chartTitleSub {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.selectWrap {
+  display: inline-flex;
+}
+
+.select {
+  padding: 0.42rem 0.7rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.chartBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: center;
+}
+
+.chartWrap {
+  position: relative;
+  min-width: 0;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.axisText {
+  fill: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.crosshair {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* A surface-coloured ring keeps overlapping points readable where lines cross. */
+.dot {
+  fill: currentColor;
+  stroke: var(--bg-1);
+  stroke-width: 1.5;
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 200px;
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.legendDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* Hover read-out. A line chart with eight series cannot be read from the marks
+   alone, so this is behaviour rather than decoration. */
+.readout {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill-strong);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow-float);
+  pointer-events: none;
+}
+
+.readoutDay {
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.readoutRow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.72rem;
+}
+
+.readoutSwatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.readoutLabel {
+  color: var(--text-muted);
+  margin-right: auto;
+}
+
+.readoutValue {
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.foldNote {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------- foot */
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0 1rem;
+}
+
+.foot p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- responsive */
+
+@media (max-width: 1280px) {
+  .charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .chartBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .identity {
+    border-right: none;
+    padding-right: 0;
+  }
+}

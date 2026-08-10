@@ -876,3 +876,105 @@
   }
 }
 
+
+/* ------------------------------------------------- top-bar query (analysis) */
+
+/* On the analysis screen the reference swaps the nav links for the query row:
+   scope, tag search, season. */
+.topQuery {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+}
+
+.topScope {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  padding: 0.55rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.topSearch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  max-width: 460px;
+  padding: 0.28rem 0.28rem 0.28rem 0.8rem;
+  border-radius: 11px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+}
+
+.topSearchIcon {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.topSearchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  padding: 0.42rem 0;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.topSearchInput::placeholder {
+  color: var(--text-muted);
+  font-variant-numeric: normal;
+}
+
+.topSearchButton {
+  flex-shrink: 0;
+  padding: 0.48rem 1.15rem;
+  border-radius: 9px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 0.83rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.topSeason {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.topSeasonSelect {
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+@media (max-width: 1080px) {
+  .topScope,
+  .topSeason {
+    display: none;
+  }
+}
