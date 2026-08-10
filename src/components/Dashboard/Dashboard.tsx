@@ -7,6 +7,7 @@ import { DuelDeckBuilder } from '../DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from '../DecksHome/DecksHome';
 import { CounterPalette } from '../CounterPalette/CounterPalette';
 import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
+import { DuelAnalysis } from '../Analytics/DuelAnalysis';
 import { SEASONS, type Season } from '../Analytics/playerData';
 import { fetchSuggestedTags } from '../../state/analyticsClient';
 import {
@@ -51,16 +52,19 @@ const TOP_NAV = [
   { label: 'About', icon: InfoIcon, hash: null },
 ] as const;
 
+/* `slug` is the section's place in the URL once a tag is loaded
+   (`#/player/<tag>/duels`), so every analytics screen is linkable and survives
+   a refresh. 'Top 10 Decks' is the landing section and owns the bare path. */
 const SIDE_NAV = [
-  { label: 'Search Player', icon: SearchIcon },
-  { label: 'Top 10 Decks', icon: BarsIcon },
-  { label: 'Deck Analysis', icon: PieIcon },
-  { label: 'Duel Analysis', icon: SwordsIcon },
-  { label: 'Deck Counter', icon: ShieldIcon },
-  { label: 'Win Conditions', icon: TargetIcon },
-  { label: 'Cards', icon: CardsIcon },
-  { label: 'Champions', icon: CrownIcon },
-  { label: 'Evolutions', icon: EvolutionIcon },
+  { label: 'Search Player', icon: SearchIcon, slug: null },
+  { label: 'Top 10 Decks', icon: BarsIcon, slug: '' },
+  { label: 'Deck Analysis', icon: PieIcon, slug: 'decks' },
+  { label: 'Duel Analysis', icon: SwordsIcon, slug: 'duels' },
+  { label: 'Deck Counter', icon: ShieldIcon, slug: 'counter' },
+  { label: 'Win Conditions', icon: TargetIcon, slug: 'wincons' },
+  { label: 'Cards', icon: CardsIcon, slug: 'cards' },
+  { label: 'Champions', icon: CrownIcon, slug: 'champions' },
+  { label: 'Evolutions', icon: EvolutionIcon, slug: 'evolutions' },
 ] as const;
 
 const SECTION_BLURB: Record<string, string> = {
@@ -121,9 +125,12 @@ function go(hash: string) {
 export function Dashboard({
   view = 'home',
   playerTag = '',
+  playerSection = '',
 }: {
   view?: DashboardView;
   playerTag?: string;
+  /** Slug from the URL — which analytics screen is open for the loaded tag. */
+  playerSection?: string;
 }) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
@@ -259,14 +266,25 @@ export function Dashboard({
             {SIDE_NAV.map((item) => {
               const Icon = item.icon;
               const active =
-                view === 'player' ? item.label === 'Top 10 Decks' : section === item.label;
+                view === 'player' ? item.slug === playerSection : section === item.label;
               return (
                 <button
                   key={item.label}
                   type="button"
                   className={`${styles.sideItem} ${active ? styles.sideItemActive : ''}`}
                   aria-current={active || undefined}
-                  onClick={() => setSection(item.label)}
+                  onClick={() => {
+                    // With a tag loaded the sidebar is navigation, so it moves
+                    // the URL; without one it just picks which area the home
+                    // screen shows.
+                    if (view === 'player' && item.slug !== null) {
+                      const base = `#/player/${encodeURIComponent(playerTag)}`;
+                      go(item.slug ? `${base}/${item.slug}` : base);
+                    } else {
+                      setSection(item.label);
+                      if (view !== 'home') go('');
+                    }
+                  }}
                 >
                   <span className={styles.sideIcon}>
                     <Icon />
@@ -294,7 +312,17 @@ export function Dashboard({
 
         <main className={styles.main}>
           {view === 'player' ? (
-            <PlayerAnalysis tag={playerTag} season={season as Season} />
+            playerSection === 'duels' ? (
+              <DuelAnalysis tag={playerTag} season={season as Season} />
+            ) : playerSection ? (
+              <SectionPanel
+                name={
+                  SIDE_NAV.find((s) => s.slug === playerSection)?.label ?? 'Top 10 Decks'
+                }
+              />
+            ) : (
+              <PlayerAnalysis tag={playerTag} season={season as Season} />
+            )
           ) : view !== 'home' ? (
             /* A built tool, hosted in the panel. `.tool` gives it the same
                raised surface as everything else and clips its own scrolling

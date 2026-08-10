@@ -28,9 +28,29 @@ from urllib.parse import unquote, urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import clash_data as cd  # noqa: E402
+import duel_combos as dcx  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
+
+
+def _window(q: dict, cov: dict) -> tuple[str | None, str | None]:
+    """The (since, until) a request asks for.
+
+    An explicit from/to wins; otherwise `days` counts back from the LAST BATTLE
+    WE HOLD rather than from today. A player who stopped playing a month ago
+    would otherwise be handed an empty screen and no explanation.
+    """
+    since = (q.get("from") or [""])[0] or None
+    until = (q.get("to") or [""])[0] or None
+    if not since and cov["end"]:
+        import datetime as _dt
+
+        days = max(1, min(4000, int((q.get("days") or ["30"])[0])))
+        end = _dt.date.fromisoformat(cov["end"])
+        since = (end - _dt.timedelta(days=days - 1)).isoformat()
+        until = until or cov["end"]
+    return since, until
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -76,29 +96,30 @@ class Handler(BaseHTTPRequestHandler):
                     {"global": cd.coverage(), "player": cd.coverage(tag) if tag else None}
                 )
 
+            if path.startswith("/api/analytics/duels/"):
+                raw = unquote(path[len("/api/analytics/duels/"):])
+                tag = cd.normalize_tag(raw)
+                if not tag:
+                    return self._send({"error": "invalid_tag", "input": raw}, 400)
+
+                cov = cd.coverage(tag)
+                since, until = _window(parse_qs(parsed.query), cov)
+                report = dcx.combo_report(tag, since, until)
+                if not report:
+                    return self._send({"error": "not_found", "tag": tag}, 404)
+                report["coverage"] = cov
+                report["window"] = {"from": since, "to": until}
+                report["sources"] = cd.sources()
+                return self._send(report)
+
             if path.startswith("/api/analytics/player/"):
                 raw = unquote(path[len("/api/analytics/player/"):])
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
 
-                q = parse_qs(parsed.query)
                 cov = cd.coverage(tag)
-
-                # An explicit window wins; otherwise fall back to `days` back
-                # from the last battle we hold, not from today — a player who
-                # stopped playing a month ago would otherwise get an empty
-                # chart.
-                since = (q.get("from") or [""])[0] or None
-                until = (q.get("to") or [""])[0] or None
-                if not since and cov["end"]:
-                    import datetime as _dt
-
-                    days = max(1, min(400, int((q.get("days") or ["30"])[0])))
-                    end = _dt.date.fromisoformat(cov["end"])
-                    since = (end - _dt.timedelta(days=days - 1)).isoformat()
-                    until = until or cov["end"]
-
+                since, until = _window(parse_qs(parsed.query), cov)
                 report = cd.player_report(tag, since, until)
                 if not report:
                     return self._send({"error": "not_found", "tag": tag}, 404)

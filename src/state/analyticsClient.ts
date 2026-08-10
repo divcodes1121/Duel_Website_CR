@@ -76,6 +76,67 @@ export interface PlayerReport {
   sources: ApiSources;
 }
 
+/* ------------------------------------------------------- duel combinations */
+
+export type TabId = 'win-conditions' | 'spells' | 'evolutions';
+
+export interface ApiCombo {
+  a: string;
+  b: string;
+  aName: string;
+  bName: string;
+  name: string;
+  games: number;
+  wins: number;
+  winRate: number;
+  useRate: number;
+  /** How many DIFFERENT decks the pairing survived into — its reach. */
+  decks: number;
+  /** Jaccard index: of decks holding either card, the share holding both. */
+  lock: number;
+  lockClass: 'shared' | 'frequent' | 'locked' | 'unknown';
+  /** null means the sample cannot support a claim at all, not "low". */
+  tier: 'high' | 'medium' | 'low' | null;
+  interval: string | null;
+  /** Decks carrying this pair, by loadout position: [G1, G2, G3]. */
+  slots: [number, number, number];
+  /** Each slot's own decks, as a share of every deck played in that slot. */
+  slotShare: [number, number, number];
+  /** How much of this pairing is really one deck. */
+  topShare: number;
+}
+
+export interface ApiComboTab {
+  id: TabId;
+  label: string;
+  blurb: string;
+  noun: string;
+  eligible: number;
+  mostUsed: ApiCombo | null;
+  perSlot: (ApiCombo | null)[];
+  rows: ApiCombo[];
+}
+
+export interface DuelReport {
+  player: { name: string; tag: string };
+  duels: {
+    total: number;
+    native: number;
+    reconstructed: number;
+    decks: number;
+    uniqueDecks: number;
+    slots: [number, number, number];
+    evoCoverage: number;
+  };
+  pairs: { observed: number; eligible: number };
+  floors: { minGames: number; minDecks: number };
+  tabs: Record<TabId, ApiComboTab>;
+  archiveUsed: boolean;
+  coverage: ApiCoverage;
+  window: { from: string | null; to: string | null };
+  sources: ApiSources;
+}
+
 export interface DateWindow {
   from?: string;
   to?: string;
@@ -112,7 +173,7 @@ async function get<T>(path: string): Promise<T> {
   throw new AnalyticsError(err || `Request failed (${res.status})`, 'server');
 }
 
-export function fetchPlayerReport(tag: string, win: DateWindow = {}): Promise<PlayerReport> {
+function windowQuery(win: DateWindow): string {
   const q = new URLSearchParams();
   if (win.from && win.to) {
     q.set('from', win.from);
@@ -120,7 +181,18 @@ export function fetchPlayerReport(tag: string, win: DateWindow = {}): Promise<Pl
   } else {
     q.set('days', String(win.days ?? 30));
   }
-  return get<PlayerReport>(`/api/analytics/player/${encodeURIComponent(tag)}?${q}`);
+  return q.toString();
+}
+
+export function fetchPlayerReport(tag: string, win: DateWindow = {}): Promise<PlayerReport> {
+  return get<PlayerReport>(
+    `/api/analytics/player/${encodeURIComponent(tag)}?${windowQuery(win)}`,
+  );
+}
+
+/** Card combinations in duel play — the Duel Analysis screen. */
+export function fetchDuelReport(tag: string, win: DateWindow = {}): Promise<DuelReport> {
+  return get<DuelReport>(`/api/analytics/duels/${encodeURIComponent(tag)}?${windowQuery(win)}`);
 }
 
 export function fetchCoverage(tag?: string): Promise<{

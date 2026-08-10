@@ -53,10 +53,47 @@ client module change when the service moves.
 |-------|---------|
 | `GET /api/analytics/status` | which tiers are readable, and their sizes |
 | `GET /api/analytics/suggest` | a few real tags with the most stored battles |
-| `GET /api/analytics/player/<tag>?days=30` | summary, top decks, per-day trends |
+| `GET /api/analytics/coverage?tag=` | earliest/latest stored day, globally and per player |
+| `GET /api/analytics/player/<tag>` | summary, top decks, per-day trends |
+| `GET /api/analytics/duels/<tag>` | card combinations in duel play, three tabs |
+
+Both `player` and `duels` take the same window: `?days=N`, or `?from=&to=` as
+`YYYY-MM-DD`. `days` counts back from the **last battle stored for that player**
+rather than from today, so someone who stopped playing a month ago still gets a
+populated screen.
 
 Tags are validated against Supercell's 14-symbol alphabet before they reach a
 query (same rule as `clashdb.normalize_tag`), so junk never hits the database.
+
+## Duel combinations (`duel_combos.py`)
+
+A port of the bot's Pair Board (`clashdb.get_card_pair_stats` +
+`pdf_pages.pair_board_data`), including its evidence floors (8 decks, 2 shells),
+its Wilson confidence tiers, and its card/deck budgets — without those a table
+is one heavily-played deck sliced twenty-four ways, because a pair inherits the
+record of whole decks.
+
+Two things to know before changing it:
+
+* **There is no synergy score, and its absence is a measured result.** The
+  obvious observed-versus-expected lift was built and tested against a
+  permutation null across 14 player shapes in the bot project and came out
+  indistinguishable from chance. Don't reinstate one without a fresh, leak-free
+  measurement.
+* **A native duel is stored as one row carrying the whole loadout** — 16 or 24
+  cards, i.e. two or three decks end to end. So the G1/G2/G3 split is read out
+  of the data. Friendly practice has no such row, so those duels are rebuilt
+  with the bot's `duel_split` rules (>30 min gap closes, card reuse closes, a
+  2-0 arms exactly one dead rubber).
+
+The one deliberate divergence: the PDF gives each pair exactly one category,
+since it prints all four on one board. Here the same predicates are applied
+independently per tab, because an "Evolutions" tab that hides a pairing when a
+win condition outranked it is answering a different question from its label.
+
+```bash
+python server/test_duel_combos.py    # 33 checks, no database needed
+```
 
 ## Safety
 

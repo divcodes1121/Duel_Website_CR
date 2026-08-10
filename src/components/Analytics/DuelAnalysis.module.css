@@ -1,0 +1,718 @@
+/* Duel Analysis — card combinations in duel play.
+ *
+ * Chrome uses the app's neutral tokens. Data colour does not, and it is a small,
+ * deliberate set rather than a borrow from the eight-hue chart palette:
+ *
+ *   --c-use / --c-win   two CATEGORICAL hues. Validated on this app's surfaces
+ *                       in both modes — lightness band, chroma floor, CVD
+ *                       separation (ΔE 20.7 protan light / 19.6 deutan dark) and
+ *                       3:1 contrast all pass. Their tritan separation is under
+ *                       the floor, which is legal here because each meter prints
+ *                       its own percentage beside it — the required secondary
+ *                       encoding, not an excuse.
+ *
+ *   --g1 / --g2 / --g3  a SEQUENTIAL ramp, one hue light-to-dark. G1/G2/G3 are
+ *                       ordered positions in a duel loadout, so three unrelated
+ *                       hues would encode "three of something" where the data
+ *                       says first, second, third. Lightness is monotonic with
+ *                       even steps (OKLab L 0.636/0.514/0.392 light,
+ *                       0.833/0.695/0.566 dark) and every step clears 3:1.
+ *
+ * The dark column is re-stepped against the dark surface, never an auto-flip.
+ */
+
+.page {
+  --c-use: #2a78d6;
+  --c-win: #169b6b;
+  --g1: #9376d8;
+  --g2: #6a4fbe;
+  --g3: #402f96;
+
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+:global([data-theme='dark']) .page {
+  --c-use: #3987e5;
+  --c-win: #199e70;
+  --g1: #cabff8;
+  --g2: #9a8ded;
+  --g3: #6f61d6;
+}
+
+.pane {
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
+}
+
+.panel {
+  composes: pane;
+  padding: 1.25rem 1.4rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.notice {
+  composes: pane;
+  padding: 2.25rem 1.6rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.noticeTitle {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display, inherit);
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.noticeBody {
+  margin: 0 auto;
+  max-width: 46ch;
+  line-height: 1.55;
+}
+
+.noticeCode {
+  display: inline-block;
+  margin: 0.9rem 0 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  /* The range popup escapes this row. Every panel below carries a
+     backdrop-filter, which creates a stacking context — so a later panel paints
+     over the popup and swallows its clicks whatever its own z-index is. */
+  position: relative;
+  z-index: 40;
+}
+
+.headIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill-strong);
+  color: var(--text);
+}
+
+.headText {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.45rem;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.2rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.headTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* ----------------------------------------------------------- range picker */
+
+.rangeWrap {
+  position: relative;
+}
+
+.rangeButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 11px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill-strong);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rangePop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: 320px;
+  padding: 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong, var(--surface));
+  box-shadow: var(--shadow-float);
+}
+
+.rangePopLabel {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rangePresets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+
+.rangeChip {
+  padding: 0.34rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.rangeChip[data-beyond] {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.rangeChipOn {
+  border-color: var(--border-strong);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  opacity: 1;
+}
+
+.rangeDates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.rangeField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.rangeField input {
+  padding: 0.38rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.rangeApply {
+  grid-column: 1 / -1;
+  padding: 0.45rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rangeApply:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.rangeNote {
+  margin: 0.7rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ tabs */
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  padding: 0.35rem;
+  border-radius: 14px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabOn {
+  border-color: var(--glass-stroke);
+  background: var(--glass-fill-strong);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
+}
+
+.tabIcon {
+  display: grid;
+  place-items: center;
+}
+
+.tabCount {
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ----------------------------------------------------------------- tiles */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 1080px) {
+  .tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.tile {
+  composes: pane;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.95rem 1rem;
+  min-height: 148px;
+}
+
+.tileLabel {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tileBig {
+  font-family: var(--font-display, inherit);
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--text);
+}
+
+.tileName {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tileFig {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: auto;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tileSub {
+  font-weight: 400;
+  font-size: 0.74rem;
+}
+
+.tileEmpty {
+  margin: auto 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------------- card art */
+
+.pairArt,
+.pairArtLg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: none;
+}
+
+.pairArt img {
+  width: 34px;
+  border-radius: 4px;
+}
+
+.pairArtLg img {
+  width: 46px;
+  border-radius: 5px;
+}
+
+.plus {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* ----------------------------------------------------------------- table */
+
+.tablePanel {
+  composes: pane;
+  padding: 1rem 1.1rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tableHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.tableTitle {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  /* Text wears text tokens; the dot beside it carries identity. */
+  color: var(--text-muted);
+}
+
+.legendDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.legendDot[data-key='use'] {
+  background: var(--c-use);
+}
+.legendDot[data-key='win'] {
+  background: var(--c-win);
+}
+.legendDot[data-slot='1'] {
+  background: var(--g1);
+}
+.legendDot[data-slot='2'] {
+  background: var(--g2);
+}
+.legendDot[data-slot='3'] {
+  background: var(--g3);
+}
+
+.legendNote {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  border-left: 1px solid var(--border);
+  padding-left: 0.9rem;
+}
+
+.tableScroll {
+  /* Wide content scrolls inside its own box; the page body never scrolls
+     sideways. */
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.table th {
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.thRank {
+  width: 62px;
+}
+
+.thMeter {
+  width: 130px;
+}
+
+.thSlot {
+  width: 92px;
+}
+
+.thChev {
+  width: 40px;
+}
+
+.table td {
+  padding: 0.6rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.row {
+  cursor: pointer;
+}
+
+.rowOpen > td {
+  border-bottom-color: transparent;
+}
+
+.rank {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.rank[data-medal] {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.comboName {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.meterValue {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.meter {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  /* 4px rounded data-end, anchored to the baseline. */
+  border-radius: 0 4px 4px 0;
+}
+
+.meterFill[data-key='use'] {
+  background: var(--c-use);
+}
+.meterFill[data-key='win'] {
+  background: var(--c-win);
+}
+
+/* One bar per loadout slot, aligned under its own column heading. */
+.slotBar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.slotFill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+}
+
+.slotFill[data-slot='1'] {
+  background: var(--g1);
+}
+.slotFill[data-slot='2'] {
+  background: var(--g2);
+}
+.slotFill[data-slot='3'] {
+  background: var(--g3);
+}
+
+.chevCell {
+  text-align: right;
+}
+
+.chev {
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.chev[data-open] {
+  transform: rotate(90deg);
+  color: var(--text);
+}
+
+/* --------------------------------------------------------- expanded facts */
+
+.detailRow > td {
+  padding: 0 0.6rem 0.8rem;
+}
+
+.detail {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.7rem 1.2rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+}
+
+@media (max-width: 1080px) {
+  .detail {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.factLabel {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.factValue {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.factNote {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.empty {
+  margin: 0;
+  padding: 1.5rem 0.5rem;
+  max-width: 68ch;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.viewAll {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.foot p {
+  margin: 0;
+}
+
+.footNote {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  max-width: 92ch;
+}

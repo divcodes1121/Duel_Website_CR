@@ -92,7 +92,7 @@ export function TrendChart({ series, ticks, yTicks, format }: TrendChartProps) {
         {series.map((s, si) => {
           const d = s.points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)} ${y(p)}`).join(' ');
           return (
-            <g key={s.label} style={{ color: colorFor(si) }}>
+            <g key={s.id ?? s.label} style={{ color: colorFor(si) }}>
               <path d={d} className={styles.line} />
               {s.points.map((p, i) => (
                 <circle key={i} cx={x(i)} cy={y(p)} r={hover === i ? 3.6 : 2.1} className={styles.dot} />
@@ -108,7 +108,7 @@ export function TrendChart({ series, ticks, yTicks, format }: TrendChartProps) {
         <div className={styles.readout} key={`${uid}-${hover}`}>
           <span className={styles.readoutDay}>Day {hover + 1}</span>
           {series.map((s, si) => (
-            <span key={s.label} className={styles.readoutRow}>
+            <span key={s.id ?? s.label} className={styles.readoutRow}>
               <span
                 className={styles.readoutSwatch}
                 style={{ background: colorFor(si) }}
@@ -129,7 +129,7 @@ export function ChartLegend({ series }: { series: Series[] }) {
   return (
     <ul className={styles.legend}>
       {series.map((s, si) => (
-        <li key={s.label} className={styles.legendItem}>
+        <li key={s.id ?? s.label} className={styles.legendItem}>
           <span
             className={styles.legendDot}
             style={{ background: colorFor(si) }}

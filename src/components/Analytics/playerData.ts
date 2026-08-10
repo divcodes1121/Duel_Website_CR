@@ -6,6 +6,9 @@
  * the screen does not change when the data becomes real.
  */
 
+import { useEffect, useState } from 'react';
+import type { DateWindow } from '../../state/analyticsClient';
+
 export interface PlayerSummary {
   name: string;
   tag: string;
@@ -35,6 +38,10 @@ export interface DeckRow {
 
 /** One line on a trend chart. */
 export interface Series {
+  /** Stable identity for React keys and colour assignment. Labels are NOT
+   *  unique — two different decks routinely share an archetype name, and
+   *  keying on the label silently drops one of them from the legend. */
+  id?: string;
   label: string;
   points: number[];
 }
@@ -82,6 +89,46 @@ export const RANGE_PRESETS = [
   { label: 'All Data', days: 0 },
   { label: 'Custom…', days: -1 },
 ] as const;
+
+/* --------------------------------------------------------- window state */
+
+/**
+ * The date window every analytics screen queries with.
+ *
+ * SHARED ON PURPOSE. The season control and the preset list have to agree about
+ * which window is live, and two copies of this drift — the season selector
+ * shipped once as a `<select>` bound to state nobody read, which is exactly the
+ * failure a second copy reintroduces.
+ *
+ * `preset` is a day count, with two sentinels: 0 = every stored day, -1 = the
+ * custom from/to fields.
+ */
+export function useDateWindow(season: Season, coverageEnd: string | null) {
+  const [preset, setPreset] = useState<number>(30);
+  const [custom, setCustom] = useState<{ from: string; to: string }>({ from: '', to: '' });
+
+  // Picking a season sets an explicit month; picking a preset afterwards takes
+  // over again. Deliberately keyed on the season alone — reacting to every
+  // report refresh would stamp the month back over a preset the user just
+  // chose.
+  useEffect(() => {
+    const w = seasonWindow(season, coverageEnd);
+    if (w.from && w.to) {
+      setCustom({ from: w.from, to: w.to });
+      setPreset(-1);
+    } else if (season === 'All Time') {
+      setPreset(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season]);
+
+  const win: DateWindow =
+    preset === -1 && custom.from && custom.to
+      ? { from: custom.from, to: custom.to }
+      : { days: preset === 0 ? 3650 : preset };
+
+  return { win, preset, setPreset, custom, setCustom };
+}
 
 /* ----------------------------------------------------------- placeholder */
 

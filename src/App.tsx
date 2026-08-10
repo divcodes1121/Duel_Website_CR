@@ -18,13 +18,21 @@ function viewFor(hash: string): DashboardView {
   return 'home';
 }
 
-/** `#/player/%23QJ2L9V8R` -> `#QJ2L9V8R`. */
-function tagFor(hash: string): string {
-  if (!hash.startsWith('#/player/')) return '';
+/* `#/player/%23QJ2L9V8R/duels` -> tag `#QJ2L9V8R`, section `duels`.
+ *
+ * The section lives in the URL rather than in component state so a analytics
+ * screen is linkable and survives a refresh — the sidebar is navigation, not a
+ * toggle. */
+function playerRoute(hash: string): { tag: string; section: string } {
+  if (!hash.startsWith('#/player/')) return { tag: '', section: '' };
+  const rest = hash.slice('#/player/'.length);
+  const cut = rest.indexOf('/');
+  const rawTag = cut === -1 ? rest : rest.slice(0, cut);
+  const section = cut === -1 ? '' : rest.slice(cut + 1);
   try {
-    return decodeURIComponent(hash.slice('#/player/'.length));
+    return { tag: decodeURIComponent(rawTag), section };
   } catch {
-    return '';
+    return { tag: '', section };
   }
 }
 
@@ -50,9 +58,11 @@ function App() {
     );
   }
 
+  const { tag, section } = playerRoute(route);
+
   return (
     <div className={styles.app}>
-      <Dashboard view={viewFor(route)} playerTag={tagFor(route)} />
+      <Dashboard view={viewFor(route)} playerTag={tag} playerSection={section} />
     </div>
   );
 }

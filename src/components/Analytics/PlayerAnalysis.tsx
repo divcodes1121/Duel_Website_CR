@@ -9,7 +9,7 @@ import {
 import {
   DECK_SORTS,
   RANGE_PRESETS,
-  seasonWindow,
+  useDateWindow,
   type DeckSort,
   type Season,
   type Series,
@@ -157,36 +157,22 @@ function shortDay(iso: string): string {
 
 export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string; season?: Season }) {
   const [sort, setSort] = useState<DeckSort>('top');
-  // Window state. `preset` 0 means all data, -1 means the custom date fields.
-  const [preset, setPreset] = useState<number>(30);
-  const [custom, setCustom] = useState<{ from: string; to: string }>({ from: '', to: '' });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [report, setReport] = useState<PlayerReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // The season selector in the top bar sets an explicit month window; picking
-  // a preset afterwards takes over again.
-  useEffect(() => {
-    const w = seasonWindow(season, report?.coverage.end ?? null);
-    if (w.from && w.to) {
-      setCustom({ from: w.from, to: w.to });
-      setPreset(-1);
-    } else if (season === 'All Time') {
-      setPreset(0);
-    }
-    // Only react to the season changing, not to every report refresh.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [season]);
+  // Shared with Duel Analysis so the two screens cannot disagree about what
+  // "Last Season" or "Last 60 Days" means.
+  const { win, preset, setPreset, custom, setCustom } = useDateWindow(
+    season,
+    report?.coverage.end ?? null,
+  );
 
   useEffect(() => {
     let live = true;
     setLoading(true);
     setError(null);
-    const win =
-      preset === -1 && custom.from && custom.to
-        ? { from: custom.from, to: custom.to }
-        : { days: preset === 0 ? 3650 : preset };
     fetchPlayerReport(tag, win)
       .then((r) => {
         if (!live) return;
@@ -260,6 +246,9 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
   const toTrendData = (pick: 'use' | 'win'): TrendData => ({
     ticks,
     series: apiDecks.map((d) => ({
+      // Two decks routinely share an archetype name ("Mortar", "Piggies"), so
+      // identity is the hash — the label is only what the reader sees.
+      id: d.deckHash,
       label: d.name,
       points: byHash.get(d.deckHash)?.[pick] ?? trends.days.map(() => 0),
     })),
