@@ -58,9 +58,6 @@
 
 /* --- The glass panel ----------------------------------------------------- */
 
-/* The blurred backdrop is gone: this panel is opaque enough that blurring the
-   body gradient behind it changed almost nothing, and backdrop-filter forces a
-   separate compositing pass over everything underneath. */
 .card {
   position: relative;
   width: min(400px, 92vw);
@@ -69,10 +66,12 @@
   align-items: center;
   padding: 2.2rem 2.2rem 1.8rem;
   border-radius: 26px;
-  background: var(--glass-bg-strong);
   border: 1px solid transparent;
 
-  box-shadow: var(--shadow);
+  background: var(--glass-fill-strong);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
 }
 
 /* Gradient border ring. The angle used to be an @property custom prop spun by

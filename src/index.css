@@ -73,6 +73,20 @@
   --shadow: none;
   --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.55);
 
+  /* Glass. A translucent fill over the page wash, plus a lit top edge — the
+     highlight is what actually sells it as a pane rather than a flat tint. */
+  --glass-fill: rgba(255, 255, 255, 0.05);
+  --glass-fill-strong: rgba(255, 255, 255, 0.075);
+  --glass-stroke: rgba(255, 255, 255, 0.1);
+  --glass-sheen: rgba(255, 255, 255, 0.09);
+
+  /* The wash the panes refract. Static; blurring a flat colour would cost the
+     compositing pass and show nothing. */
+  --page-wash:
+    radial-gradient(62% 52% at 16% 10%, rgba(255, 255, 255, 0.055), transparent 70%),
+    radial-gradient(54% 46% at 84% 80%, rgba(255, 255, 255, 0.045), transparent 70%),
+    radial-gradient(46% 42% at 66% 26%, rgba(255, 255, 255, 0.03), transparent 70%);
+
   /* 11–12 text */
   --text: #ededed;
   --text-muted: #a1a1a1;
@@ -143,6 +157,19 @@
      short ambient one. Anything larger stops looking minimal. */
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+
+  /* Glass, inverted: on light the pane is frosted white rather than a lifted
+     tint, and it needs to be far more opaque than the dark one or the text on
+     it stops being readable against whatever passes underneath. */
+  --glass-fill: rgba(255, 255, 255, 0.66);
+  --glass-fill-strong: rgba(255, 255, 255, 0.82);
+  --glass-stroke: rgba(255, 255, 255, 0.85);
+  --glass-sheen: rgba(255, 255, 255, 0.95);
+
+  --page-wash:
+    radial-gradient(62% 52% at 16% 10%, rgba(0, 0, 0, 0.055), transparent 70%),
+    radial-gradient(54% 46% at 84% 80%, rgba(0, 0, 0, 0.045), transparent 70%),
+    radial-gradient(46% 42% at 66% 26%, rgba(0, 0, 0, 0.03), transparent 70%);
 
   /* 11–12 text */
   --text: #1a1a1a;
@@ -227,13 +254,12 @@ body,
   height: 100%;
 }
 
-/* Flat. A neutral system wants an even ground — any gradient across a grey
-   page reads as a smudge rather than as depth, and depth here is carried by
-   the surface steps and borders instead. */
+/* The wash the glass panes refract, over the flat ground. Static gradients —
+   no animation, no blur filter; a radial gradient is soft by construction. */
 body {
   margin: 0;
   min-width: 320px;
-  background: var(--bg-1);
+  background: var(--page-wash), var(--bg-1);
   overflow: hidden;
   position: relative;
 }

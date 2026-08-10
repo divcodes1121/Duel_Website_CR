@@ -115,9 +115,11 @@
   gap: 0.7rem;
   padding: 0.9rem 1rem;
   border-radius: 18px;
-  background: var(--surface);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-float);
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-sheen);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -14,7 +14,6 @@
 
 .dialog,
 .modal {
-  background: var(--surface-strong);
   border: 1px solid var(--glass-border);
   border-radius: 22px;
 
@@ -22,7 +21,10 @@
   /* Entrance for all three dialogs (save, library, export). Replaces a
      framer spring per dialog; there is no exit pass any more. */
   animation: dialog-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.1);
-  box-shadow: var(--shadow-float);
+  background: var(--glass-fill-strong);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-sheen);
 }
 
 @keyframes dialog-scrim-in {

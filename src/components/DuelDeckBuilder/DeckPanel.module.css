@@ -1,9 +1,8 @@
 .panel {
   position: relative;
-  /* Opaque. This is the single most-repeated surface in the app — Versus shows
-     up to ten of these at once, and each backdrop-filter is its own compositing
-     pass over whatever is behind it. */
-  background: var(--surface);
+  /* The most-repeated pane in the app — Versus shows up to ten at once, and
+     each backdrop-filter is its own compositing pass. Blur is kept lower here
+     than on the shell panels for that reason. */
   border: 1px solid var(--glass-border);
   border-radius: 22px;
   padding: 1.15rem 1.4rem 1.25rem;
@@ -12,7 +11,10 @@
   gap: 0.9rem;
 
   transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
-  box-shadow: var(--shadow);
+  background: var(--glass-fill);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
 }
 
 .header {
