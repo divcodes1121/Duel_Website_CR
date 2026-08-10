@@ -122,14 +122,23 @@ print("\nevolution slots")
 
 d = deck(1)
 raw = f'[["{d[0]}", 1, "evolution"], ["{d[3]}", 2, "hero"]]'
-got = dx._evo_keys(raw, d)
-check("player_evo is used when present", got == {d[0]}, f"got {got}")
-check("a hero slot is not an evolution", d[3] not in got)
+got = dx._evo_marks(raw, d)
+check("player_evo is used when present", got.get(d[0]) == "evolution", f"got {got}")
+check(
+    "hero art is kept as HERO, not folded into evolution",
+    got.get(d[3]) == "hero",
+    "level-2 marks are served hero art; calling them evolutions draws the wrong card",
+)
 check(
     "cards from another deck are ignored",
-    dx._evo_keys('[["not-in-this-deck", 1, "evolution"]]', d) == set(),
+    dx._evo_marks('[["not-in-this-deck", 1, "evolution"]]', d) == {},
 )
-check("malformed player_evo falls back rather than raising", dx._evo_keys("{{{", d) == set())
+check("malformed player_evo does not raise", dx._evo_marks("{{{", d) == {})
+check(
+    "nothing is claimed when player_evo is absent",
+    dx._evo_marks(None, d) == {},
+    "absence of marks means 'not told', which must stay distinct from 'ran none'",
+)
 
 
 # ── evidence ────────────────────────────────────────────────────────────────

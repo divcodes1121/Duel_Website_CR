@@ -38,3 +38,5 @@ video/
 
 # Local analytics API artefacts
 server/__pycache__/
+
+.meta_snapshot.json

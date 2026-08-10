@@ -87,6 +87,7 @@ def _load_cards() -> None:
             "is_win_condition": bool(m.get("is_win_condition")),
             "is_champion": bool(m.get("is_champion")),
             "can_evolve": bool(m.get("can_evolve")),
+            "can_be_hero": bool(m.get("can_be_hero")),
         }
 
 
@@ -102,6 +103,7 @@ def card_info(key: str) -> dict:
             "is_win_condition": False,
             "is_champion": False,
             "can_evolve": False,
+            "can_be_hero": False,
         },
     )
 
@@ -218,29 +220,36 @@ DECK_SIZE = 8
 SLOTS = 3  # G1 / G2 / G3 — a duel loadout is three decks
 
 
-def _evo_keys(raw: str | None, deck: list[str]) -> set[str]:
-    """Which of `deck`'s cards were brought in an EVOLUTION slot.
+def _evo_marks(raw: str | None, deck: list[str]) -> dict[str, str]:
+    """{card_key: 'evolution' | 'hero'} for the cards this deck fielded specially.
 
-    `player_evo` stores [card, slot, kind] triples and is the exact answer, but
-    it only exists for battles whose raw payload was still on the SSD when the
-    backfill ran (~29% of rows). The fallback is the bot's positional rule —
-    deck-relative slots 0 and 1, and only for a card that can evolve.
+    `player_evo` stores [card_key, level, art] and the `art` field is already
+    the resolved answer — the bot's `evolution_marks` records what the Clash
+    Royale payload asserted and explicitly documents that the obvious
+    interpretations are wrong. It exists for ~29% of rows.
 
-    A hero in slot 2 is not an evolution, which is the distinction the
-    positional rule cannot make and `player_evo` can.
+    THE SLOT RULE IS 0-2, NOT 0-1. A deck's first THREE positions are the
+    special slots (evolution / hero / champion); measured here, of 795 decks
+    whose payload carried marks, all 795 had every mark inside slots 0-2 — slot
+    0 in 791, slot 1 in 569, slot 2 in 775. An earlier version of this comment
+    claimed the positional reading was wrong; it had only checked two slots.
+
+    Nothing is claimed when `player_evo` is absent. The slot tells you WHERE a
+    special card sits, not whether one was brought, and `evolution_marks`
+    returns None for "we were never told" precisely so that stays distinct from
+    "they ran none".
     """
-    if raw:
-        try:
-            got = {
-                e[0]
-                for e in json.loads(raw)
-                if len(e) >= 3 and e[2] == "evolution" and e[0] in deck
-            }
-            if got:
-                return got
-        except Exception:
-            pass
-    return {c for c in deck[:2] if card_info(c).get("can_evolve")}
+    if not raw:
+        return {}
+    try:
+        marks = json.loads(raw)
+    except Exception:
+        return {}
+    out: dict[str, str] = {}
+    for m in marks:
+        if len(m) >= 3 and m[2] in ("evolution", "hero") and m[0] in deck:
+            out[m[0]] = m[2]
+    return out
 
 
 def duel_decks(tag: str, since: str | None, until: str | None) -> dict:
@@ -361,7 +370,7 @@ def duel_decks(tag: str, since: str | None, until: str | None) -> dict:
         won = r["result"] == "win"
         for i in range(n):
             deck = cards[i * DECK_SIZE : (i + 1) * DECK_SIZE]
-            evo = _evo_keys(r["evo"], deck)
+            evo = _evo_marks(r["evo"], deck)
             if r["evo"]:
                 evo_covered += 1
             decks.append(
@@ -397,7 +406,7 @@ def duel_decks(tag: str, since: str | None, until: str | None) -> dict:
                 deck = rec["cards"][:DECK_SIZE]
                 if len(deck) < DECK_SIZE:
                     continue
-                evo = _evo_keys(rec["evo"], deck)
+                evo = _evo_marks(rec["evo"], deck)
                 if rec["evo"]:
                     evo_covered += 1
                 decks.append(
@@ -615,8 +624,9 @@ def _select(pool: list[dict], want: int) -> list[dict]:
     return got
 
 
-def _combo_json(r: dict, total: int, slot_totals: list[int]) -> dict:
+def _combo_json(r: dict, total: int, slot_totals: list[int], art: dict | None = None) -> dict:
     ia, ib = card_info(r["a"]), card_info(r["b"])
+    art = art or {}
     return {
         "a": r["a"],
         "b": r["b"],
@@ -642,6 +652,8 @@ def _combo_json(r: dict, total: int, slot_totals: list[int]) -> dict:
             for i in range(SLOTS)
         ],
         "topShare": round(r["top_share"], 1),
+        "artA": art.get(r["a"]),
+        "artB": art.get(r["b"]),
     }
 
 
@@ -666,10 +678,17 @@ def combo_report(tag: str, since: str | None = None, until: str | None = None) -
             e["slots"][d["slot"]] += 1
 
     # Evolution slots, counted over the same population the pairs come from.
+    # `evo` counts EVOLUTION fieldings (what the Evolutions tab means); `art`
+    # remembers how each card is most often drawn, hero included.
     evo: dict[str, int] = {}
+    art_tally: dict[str, dict[str, int]] = {}
     for d in decks:
-        for c in d["evo"]:
-            evo[c] = evo.get(c, 0) + 1
+        for c, kind in d["evo"].items():
+            if kind == "evolution":
+                evo[c] = evo.get(c, 0) + 1
+            per = art_tally.setdefault(c, {})
+            per[kind] = per.get(kind, 0) + 1
+    art = {c: max(sorted(k), key=lambda x: k[x]) for c, k in art_tally.items()}
 
     total = len(decks)
     slot_totals = [0] * SLOTS
@@ -736,7 +755,7 @@ def combo_report(tag: str, since: str | None = None, until: str | None = None) -
         pool = [r for r in rows if _in_tab(tab, r["a"], r["b"], evo)]
         chosen = _select(pool, PAIR_TARGET)
         chosen.sort(key=_pair_rank)
-        out = [_combo_json(r, total, slot_totals) for r in chosen]
+        out = [_combo_json(r, total, slot_totals, art) for r in chosen]
 
         # The headline tiles. "Most used" is by games; the G2/G3 tiles name the
         # combo that dominates that slot, which is a different question and
@@ -755,7 +774,7 @@ def combo_report(tag: str, since: str | None = None, until: str | None = None) -
                 key=lambda r: (-r["slots"][i], r["a"], r["b"]),
             )
             best = live[0] if live else None
-            per_slot.append(_combo_json(best, total, slot_totals) if best else None)
+            per_slot.append(_combo_json(best, total, slot_totals, art) if best else None)
 
         tabs[tab] = {
             "id": tab,
@@ -763,7 +782,7 @@ def combo_report(tag: str, since: str | None = None, until: str | None = None) -
             "blurb": TAB_META[tab]["blurb"],
             "noun": TAB_META[tab]["noun"],
             "eligible": len(pool),
-            "mostUsed": _combo_json(most_used, total, slot_totals) if most_used else None,
+            "mostUsed": _combo_json(most_used, total, slot_totals, art) if most_used else None,
             "perSlot": per_slot,
             "rows": out,
         }

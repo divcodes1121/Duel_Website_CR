@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getCardIconUrl } from '../../data/cards';
+import { CardArt } from './CardArt';
 import { ChartLegend, TrendChart } from './TrendChart';
 import {
   AnalyticsError,
@@ -463,11 +463,16 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
               </tr>
             </thead>
             <tbody>
-              {decks.map((d) => (
+              {decks.map((d, i) => (
                 <tr key={d.deckHash}>
                   <td>
-                    <span className={styles.rank} data-medal={d.rank <= 3 ? d.rank : undefined}>
-                      {d.rank}
+                    {/* POSITION IN THE CURRENT SORT, not the server's usage
+                        rank. Printing the usage rank meant switching to "Most
+                        Recent" or "Highest Win Rate" left the numbers jumbled —
+                        a column headed "Rank" that does not count 1..n is
+                        reporting a different ordering from the one on screen. */}
+                    <span className={styles.rank} data-medal={i < 3 ? i + 1 : undefined}>
+                      {i + 1}
                     </span>
                   </td>
                   <td className={styles.deckName} title={d.deckHash}>
@@ -479,12 +484,11 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
                   <td>
                     <span className={styles.cards}>
                       {d.cards.map((c) => (
-                        <img
+                        <CardArt
                           key={c}
-                          src={getCardIconUrl(c)}
-                          alt={c}
-                          title={c}
-                          draggable={false}
+                          card={c}
+                          variant={d.art?.[c]}
+                          inferred={d.artInferred}
                           className={styles.cardIcon}
                         />
                       ))}
@@ -533,6 +537,14 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
 
       <footer className={styles.foot}>
         <p>All data is based on the battles we have stored and analyzed.</p>
+        {decks.some((d) => d.artInferred) && (
+          <p>
+            Cards are shown in deck order — the first three are the evolution, hero and
+            champion slots. Evolution art is only recorded for battles from 5 Aug 2026
+            onward, so decks last played before that show the slot&rsquo;s art inferred from
+            its position (marked with a dotted underline).
+          </p>
+        )}
         <p>
           Reading {sources.hot.available ? 'the local database' : 'no local database'}
           {sources.archive.available

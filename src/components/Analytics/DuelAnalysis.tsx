@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getCardIconUrl } from '../../data/cards';
+import { CardArt } from './CardArt';
 import {
   AnalyticsError,
   fetchDuelReport,
@@ -93,9 +93,9 @@ function CardPair({ combo, size = 'md' }: { combo: ApiCombo; size?: 'md' | 'lg' 
   const cls = size === 'lg' ? styles.pairArtLg : styles.pairArt;
   return (
     <span className={cls}>
-      <img src={getCardIconUrl(combo.a)} alt={combo.aName} title={combo.aName} draggable={false} />
+      <CardArt card={combo.a} variant={combo.artA} />
       <span className={styles.plus}>+</span>
-      <img src={getCardIconUrl(combo.b)} alt={combo.bName} title={combo.bName} draggable={false} />
+      <CardArt card={combo.b} variant={combo.artB} />
     </span>
   );
 }

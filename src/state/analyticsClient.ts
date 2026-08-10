@@ -36,6 +36,11 @@ export interface ApiDeck {
   avgElixir: number | null;
   winCondition: string | null;
   lastSeen: string;
+  /** Per-card art variant where this deck is fielded evolved or as a hero. */
+  art?: Record<string, 'evolution' | 'hero'>;
+  /** True when `art` was inferred from slot position rather than observed —
+   *  `player_evo` only covers battles from 2026-08-05 onward. */
+  artInferred?: boolean;
 }
 
 export interface ApiTrends {
@@ -76,6 +81,60 @@ export interface PlayerReport {
   sources: ApiSources;
 }
 
+/* ------------------------------------------------------ meta leaderboard */
+
+export interface MetaDeck {
+  rank: number;
+  deckHash: string;
+  name: string;
+  cards: string[];
+  /** How many DIFFERENT players ran it — the guard against one grinder. */
+  players: number;
+  /** Near-identical lists merged into this row (6-of-8 shared cards). */
+  variants: number;
+  /** Per-card art variant, where the deck is fielded evolved or as a hero. */
+  art: Record<string, 'evolution' | 'hero'>;
+  /** Share of all competitive battles in the window. */
+  useRate: number;
+  winRate: number;
+  battles: number;
+  wins: number;
+  losses: number;
+  avgElixir: number | null;
+  winCondition: string | null;
+  lastSeen: string;
+}
+
+export interface MetaBoard {
+  decks: MetaDeck[];
+  window: { from: string | null; to: string | null; days: number };
+  totalBattles?: number;
+  distinctDecks?: number;
+  /** Which game modes counted as "the meta". */
+  modes?: string[];
+  /** Distinct-player floor a deck must clear, and how many it rejected. */
+  minPlayers?: number;
+  excludedByFloor?: number;
+  /** Unix seconds. The rollup is a background snapshot, not a live query. */
+  computedAt?: number;
+  ageSeconds?: number;
+  tookSeconds?: number;
+  refreshSeconds?: number;
+  /** True while the first snapshot is still being built — poll and retry. */
+  building?: boolean;
+  elapsedSeconds?: number;
+  error?: string | null;
+}
+
+/**
+ * The global meta board. Answers instantly from a background-computed
+ * snapshot; `building: true` means no snapshot exists yet and the caller
+ * should poll. See server/meta.py for why it cannot be queried live.
+ */
+export function fetchMetaBoard(): Promise<MetaBoard> {
+  return get<MetaBoard>('/api/analytics/meta');
+}
+
 /* ------------------------------------------------------- duel combinations */
 
 export type TabId = 'win-conditions' | 'spells' | 'evolutions';
@@ -104,6 +163,9 @@ export interface ApiCombo {
   slotShare: [number, number, number];
   /** How much of this pairing is really one deck. */
   topShare: number;
+  /** Art variant each card is usually fielded with, when it is marked. */
+  artA?: 'evolution' | 'hero';
+  artB?: 'evolution' | 'hero';
 }
 
 export interface ApiComboTab {

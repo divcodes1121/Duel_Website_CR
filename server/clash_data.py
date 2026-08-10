@@ -370,7 +370,7 @@ def player_report(tag: str, since: str | None = None, until: str | None = None) 
                 con = connect(path)
                 try:
                     for r in con.execute(
-                        "SELECT deck_hash, archetype, avg_elixir, win_condition "
+                        "SELECT deck_hash, archetype, avg_elixir, win_condition, cards "
                         "FROM decks WHERE deck_hash IN (%s)" % ph,
                         top_hashes,
                     ):
@@ -413,7 +413,11 @@ def player_report(tag: str, since: str | None = None, until: str | None = None) 
                 "rank": i + 1,
                 "name": _archetype_title(m["archetype"] if m else None),
                 "deckHash": h,
-                "cards": [c for c in h.split(",") if c][:8],
+                # PAYLOAD ORDER, not the hash. The hash is alphabetical, so
+                # splitting it scatters the three special slots (evolution /
+                # hero / champion) through the row. `decks.cards` preserves the
+                # order Clash Royale sent, which is what puts them first.
+                "cards": _deck_order(m, h),
                 "useRate": round(battles / totals[0] * 100, 1) if totals[0] else 0.0,
                 "winRate": round(wins / battles * 100, 1) if battles else 0.0,
                 "matches": battles,
@@ -424,6 +428,25 @@ def player_report(tag: str, since: str | None = None, until: str | None = None) 
                 "lastSeen": last,
             }
         )
+
+    # Observed marks are looked up over the player's WHOLE history for the deck,
+    # not the report window: how someone fields a deck is not a property of the
+    # date range being viewed, and the lookup is indexed so it costs nothing.
+    art = deck_art(
+        tag,
+        [d["deckHash"] for d in decks[:10]],
+        None,
+        {d["deckHash"]: d["cards"] for d in decks[:10]},
+    )
+    for d in decks[:10]:
+        observed = art.get(d["deckHash"]) or {}
+        # One path for both: the deck is arranged into its slots and the art
+        # falls out of that arrangement.
+        d["cards"], final = arrange_deck(d["cards"], observed)
+        if final:
+            d["art"] = final
+            if not observed:
+                d["artInferred"] = True
 
     days = sorted(day_totals)
     series = []
@@ -452,6 +475,319 @@ def player_report(tag: str, since: str | None = None, until: str | None = None) 
         "decks": decks,
         "trends": {"days": days, "series": series, "archiveUsed": archive_used},
     }
+
+
+def _deck_order(meta_row, deck_hash: str) -> list[str]:
+    """A deck's eight cards in PAYLOAD order.
+
+    Clash Royale's first three positions are the special slots — evolution,
+    hero and champion. Measured on this data: of 795 decks whose payload carried
+    evolution marks, all 795 had every mark inside slots 0-2 (slot 0 in 791,
+    slot 1 in 569, slot 2 in 775).
+
+    `deck_hash` is alphabetical and therefore useless for display; it only
+    identifies. `decks.cards` keeps the real order, so that is preferred and the
+    hash is the fallback for a deck the dimension table has not seen.
+    """
+    if meta_row is not None:
+        try:
+            cards = json.loads(meta_row["cards"] or "[]")
+            if cards:
+                return cards[:8]
+        except Exception:
+            pass
+    return [c for c in (deck_hash or "").split(",") if c][:8]
+
+
+# The three special slots. A deck's first three positions carry the evolution /
+# hero / champion slots — measured: of 795 decks whose payload carried marks,
+# all 795 had every mark inside slots 0-2.
+SPECIAL_SLOTS = 3
+
+
+# HOW A CARD IS ACTUALLY FIELDED — measured, not assumed.
+#
+# The three special slots do have leanings (slot 0 evolution 91%, slot 1 hero
+# 72%, slot 2 evolution 85%), and an earlier version inferred from those. But
+# the slot is the wrong unit: slot 1 skews hero only because hero-only cards
+# tend to sit there. THE CARD DECIDES.
+#
+# Measured over ~6,000 recent battles carrying marks, NOT ONE card was
+# ambiguous — no card had even a 20% minority reading. Including the four cards
+# that own both forms (knight, valkyrie, musketeer, wizard), every one of which
+# is fielded as an EVOLUTION 100% of the time in every slot:
+#
+#     knight     586/586 evolution      musketeer  531/531 evolution
+#     valkyrie   867/867 evolution      wizard     479/479 evolution
+#
+# So the fallback looks up what a card is really brought as, and only guesses
+# from `can_evolve` / `can_be_hero` for a card never seen marked at all.
+SPECIAL_SLOTS = 3
+
+_ART_PROFILE: tuple[dict, float] | None = None
+_ART_PROFILE_TTL_S = 1800.0
+_ART_SAMPLE_ROWS = 6000
+
+
+def card_art_profile() -> dict:
+    """{card_key: 'evolution' | 'hero'} — how each card is usually fielded.
+
+    Bounded and cached: a LIMIT-ed read of recent marked battles, refreshed
+    every half hour. Cheap because `LIMIT` stops the scan early, and the answer
+    barely moves — a card's special form is a property of the card.
+    """
+    global _ART_PROFILE
+    now = time.monotonic()
+    if _ART_PROFILE and now - _ART_PROFILE[1] < _ART_PROFILE_TTL_S:
+        return _ART_PROFILE[0]
+
+    tally: dict[str, dict[str, int]] = {}
+    path = resolve_db_path()
+    if path:
+        try:
+            con = connect(path)
+            try:
+                for r in con.execute(
+                    "SELECT player_evo FROM battles "
+                    "WHERE player_evo IS NOT NULL AND player_evo != '' "
+                    "ORDER BY battle_time DESC LIMIT ?",
+                    (_ART_SAMPLE_ROWS,),
+                ):
+                    try:
+                        marks = json.loads(r["player_evo"])
+                    except Exception:
+                        continue
+                    for m in marks:
+                        if len(m) >= 3 and m[2] in ("evolution", "hero"):
+                            per = tally.setdefault(m[0], {})
+                            per[m[2]] = per.get(m[2], 0) + 1
+            finally:
+                con.close()
+        except Exception:
+            tally = {}
+
+    # sorted() keeps ties stable so the profile does not flip between refreshes.
+    profile = {c: max(sorted(k), key=lambda x: k[x]) for c, k in tally.items()}
+    _ART_PROFILE = (profile, now)
+    return profile
+
+
+# ── WHAT EACH SPECIAL SLOT MAY HOLD ────────────────────────────────────────
+#
+# THE BOT DID NOT SETTLE THIS, so it is settled here and the reasoning is
+# recorded. Clash_Bot/CLAUDE.md measured that marked cards cap at three per deck
+# and states plainly that its data "cannot distinguish" 2-evolution-slots-plus-
+# one from three special slots, warning against deriving a `player_hero` column
+# until something does. Its own renderer (`card_art.build_image`) meanwhile
+# checks `can_be_hero` FIRST in slots 0 and 1 — which would draw hero art in
+# slot 1, a position measured at 92% evolution — and its CLAUDE.md describes a
+# third arrangement again ("slots 1-2 evolution, slot 3 champion/hero"). Docs,
+# code and measurement all disagree over there.
+#
+# The three special positions are NOT interchangeable, and this is the game's
+# rule rather than a statistic (slots numbered as a player sees them):
+#
+#     slot 1  (index 0)   EVOLUTION only
+#     slot 2  (index 1)   hero or champion            — never an evolution
+#     slot 3  (index 2)   hero, evolution or champion — the "wild" slot
+#
+# A champion has neither an evolution nor a hero form, so wherever one is legal
+# it simply draws as itself; that is why champions are skipped rather than
+# listed in SLOT_ALLOWED. The rule caps a deck at TWO evolutions (slots 1 and
+# 3), matching Clash Royale's two evolution slots, and the website's own duel
+# builder already encodes the same shape (index 0 Evolution, 1 Hero, 2 Wild).
+#
+# THE STORED PAYLOAD DOES NOT CLEANLY AGREE, and that is why this is stated
+# rather than inferred. Measured over ~8,000 recent marked battles:
+#
+#     slot 0   evolution 92%   unknown 8%
+#     slot 1   hero      70%   evolution 30%
+#     slot 2   evolution 83%   hero 11%   unknown 6%
+#
+# and 14% of single battles carry three evolution marks. The bot's own
+# `evolution_marks` docstring says the same thing in more detail: `evolutionLevel`
+# takes values 1 and 2, level 2 is served hero art, and it explicitly records
+# that "2 evolution slots + 1 other special slot" versus "3 special slots"
+# CANNOT be settled from the stored columns.
+#
+# So the marks say which cards are special and what art each can wear; the slot
+# rule below decides what may actually be drawn. Rendering the raw majority put
+# three evolution frames on decks that cannot have three.
+SLOT_ALLOWED = ({"evolution"}, {"hero"}, {"evolution", "hero"})
+
+
+def arrange_deck(cards: list[str], marks: dict) -> tuple[list[str], dict]:
+    """Order a deck into its slots and say what art each special slot draws.
+
+    Returns (ordered_cards, {card: 'evolution' | 'hero'}).
+
+    WHY THE STORED ORDER IS NOT ENOUGH. `decks.cards` is usually the payload
+    order, and usually that already puts the special cards first — but not
+    always. One X-Bow deck on the meta board arrived with its Tesla evolution in
+    the hero slot and its remaining special card past position three, so the
+    slots could not be filled and the row rendered almost entirely plain.
+
+    So the deck is arranged from what its cards ARE rather than from the order
+    they happened to be stored in:
+
+        slot 1  an evolution
+        slot 2  a hero, or a champion
+        slot 3  the second evolution, else a hero, else a champion
+        rest    everything else, in stored order
+
+    Cards keep their relative order within each group, so two decks with the
+    same contents always render identically.
+    """
+    try:
+        import duel_combos as _dcx
+    except Exception:
+        return list(cards), {}
+
+    profile = card_art_profile()
+
+    def kind(c: str) -> str:
+        """What this card is ABLE to be: 'evolution', 'hero', 'both',
+        'champion' or ''.
+
+        Capability, not preference — the caller decides which form a both-form
+        card should serve, because that depends on the rest of the deck. Four
+        cards own both (knight, valkyrie, musketeer, wizard).
+        """
+        info = _dcx.card_info(c)
+        if info.get("is_champion"):
+            return "champion"
+        can_evo = bool(info.get("can_evolve"))
+        can_hero = bool(info.get("can_be_hero"))
+        if can_evo and can_hero:
+            return "both"
+        if can_evo:
+            return "evolution"
+        if can_hero:
+            return "hero"
+        return ""
+
+    # Three groups, because a card that owns BOTH forms is the interesting one:
+    # it can serve either slot, and which it should serve depends on what else
+    # the deck has. Grouping by capability rather than by preferred art is what
+    # lets slot 2 be filled at all in a deck whose only hero-capable cards are
+    # also evolutions — an X-Bow with Archers + Wizard + Tesla left slot 2 plain
+    # because Wizard had already been claimed as an evolution.
+    evo_only, hero_only, both, champions = [], [], [], []
+    for c in cards:
+        k = kind(c)
+        if k == "champion":
+            champions.append(c)
+        elif k == "both":
+            both.append(c)
+        elif k == "evolution":
+            evo_only.append(c)
+        elif k == "hero":
+            hero_only.append(c)
+
+    # THE GOAL IS TO FILL AS MANY SPECIAL SLOTS AS POSSIBLE — two evolutions and
+    # a hero is a better rendering of the same deck than two evolutions and a
+    # gap. A both-form card is spent on the hero slot only when doing so still
+    # leaves two evolutions behind; otherwise an evolution is worth more.
+    hero = hero_only[0] if hero_only else None
+    if hero is None and both and len(evo_only) + len(both) - 1 >= 2:
+        hero = both[-1]
+
+    evo_pool = [c for c in cards if (c in evo_only or c in both) and c != hero]
+    evos = evo_pool[:2]
+
+    slots: list[str | None] = [None, None, None]
+    art: dict[str, str] = {}
+
+    # slot 1 — evolution only.
+    if evos:
+        slots[0] = evos[0]
+        art[evos[0]] = "evolution"
+
+    # slot 2 — hero, else a champion (which draws as itself).
+    if hero:
+        slots[1] = hero
+        art[hero] = "hero"
+    elif champions:
+        slots[1] = champions.pop(0)
+
+    # slot 3 — the wild slot: the second evolution, else a champion.
+    if len(evos) > 1:
+        slots[2] = evos[1]
+        art[evos[1]] = "evolution"
+    elif champions:
+        slots[2] = champions.pop(0)
+
+    # AN EMPTY SPECIAL SLOT IS FILLED, NEVER COLLAPSED. Compacting the list
+    # instead shifted the second evolution up into slot 2 whenever a deck had no
+    # hero — which is exactly the position an evolution may not occupy. Slot 2
+    # holding an ordinary card is legal; slot 2 holding an evolution is not.
+    placed = {c for c in slots if c}
+    rest = [c for c in cards if c not in placed]
+    for i in range(SPECIAL_SLOTS):
+        if slots[i] is None and rest:
+            slots[i] = rest.pop(0)
+    ordered = [c for c in slots if c] + rest
+    return ordered, art
+
+
+def deck_art(tag: str, hashes: list[str], since: str | None,
+             order: dict[str, list[str]] | None = None) -> dict:
+    """{deck_hash: {card_key: 'evolution' | 'hero'}} for one player's decks.
+
+    Cheap, unlike the global version: `idx_battles_hash` covers
+    (player_tag, player_deck_hash), so this touches only that player's rows for
+    those decks rather than scanning.
+
+    The variant comes from `player_evo`, which stores what the Clash Royale
+    payload asserted — [card_key, level, art] with art already resolved. The
+    positional guess ("slots 0-1 are the evolution slots") is measurably wrong
+    on this data, so it is not used.
+    """
+    out: dict[str, dict[str, str]] = {}
+    if not hashes:
+        return out
+    lo = _compact(since) or "00000000"
+    for path in _tier_paths():
+        try:
+            con = connect(path)
+        except Exception:
+            continue
+        try:
+            for h in hashes:
+                if h in out:
+                    continue
+                tally: dict[str, dict[str, int]] = {}
+                try:
+                    rows = con.execute(
+                        "SELECT player_evo FROM battles "
+                        "WHERE player_tag = ? AND player_deck_hash = ? "
+                        "AND battle_time >= ? AND player_evo IS NOT NULL "
+                        "AND player_evo != '' LIMIT 200",
+                        (tag, h, lo),
+                    ).fetchall()
+                except Exception:
+                    rows = []
+                for r in rows:
+                    try:
+                        marks = json.loads(r["player_evo"])
+                    except Exception:
+                        continue
+                    for m in marks:
+                        if len(m) >= 3 and m[2] in ("evolution", "hero"):
+                            per = tally.setdefault(m[0], {})
+                            per[m[2]] = per.get(m[2], 0) + 1
+                if tally:
+                    # Most common fielding wins; sorted() keeps ties stable.
+                    # Only the three special positions can carry art at all.
+                    special = set((order or {}).get(h, [])[:3])
+                    out[h] = {
+                        c: max(sorted(k), key=lambda x: k[x])
+                        for c, k in tally.items()
+                        if not special or c in special
+                    }
+        finally:
+            con.close()
+    return out
 
 
 def suggest_tags(limit: int = 5) -> list[dict]:

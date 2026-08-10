@@ -1,0 +1,296 @@
+/* Top Meta Decks — a leaderboard.
+ *
+ * The panel owns its own scrolling region so the header and footer stay put
+ * while fifty rows move under them. Colour comes from the app's semantic
+ * tokens: blue for use rate (information), green for win rate (positive). */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-shrink: 0;
+  padding: 1.15rem 1.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.headIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  background: var(--blue-wash);
+  color: var(--accent-info);
+}
+
+.headText {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.45rem;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.2rem 0 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.headStats {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.statValue {
+  font-family: var(--font-display, inherit);
+  font-size: 1.35rem;
+  line-height: 1;
+  color: var(--text);
+}
+
+.statLabel {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------- table */
+
+/* The scrolling region. `min-height: 0` is what actually lets a flex child
+   scroll instead of growing its parent. */
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 1020px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+/* Sticky header, so rank 40 still tells you which column is which. */
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.thRank {
+  width: 56px;
+}
+.thCards {
+  width: 470px;
+}
+.thMeter {
+  width: 130px;
+}
+.thNum {
+  width: 92px;
+  text-align: right;
+}
+
+.table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.row:hover td {
+  background: var(--neutral-wash);
+}
+
+.rank {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Top three read as placings by weight and fill, never by colour alone. */
+.rank[data-medal] {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.rank[data-medal='1'] {
+  background: var(--surface-strong);
+}
+
+.deckName {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.deckMeta {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.cards {
+  display: inline-flex;
+  gap: 3px;
+}
+
+/* Big enough to actually recognise a card at a glance — this is a deck
+   leaderboard, so the eight cards ARE the row's identity. */
+.cardIcon {
+  width: 54px;
+  border-radius: 5px;
+  display: block;
+}
+
+.meterValue {
+  display: block;
+  margin-bottom: 0.28rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.meter {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+}
+
+.meterFill[data-key='use'] {
+  background: var(--accent-info);
+}
+.meterFill[data-key='win'] {
+  background: var(--hue-green);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- states */
+
+.notice {
+  margin: auto;
+  padding: 2.5rem 1.6rem;
+  max-width: 56ch;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.noticeTitle {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-display, inherit);
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.noticeSub {
+  margin-top: 0.8rem;
+  font-size: 0.8rem;
+  color: var(--accent-info);
+}
+
+.noticeCode {
+  display: inline-block;
+  margin: 0.9rem 0 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+/* --------------------------------------------------------------- footer */
+
+.foot {
+  flex-shrink: 0;
+  padding: 0.8rem 1.4rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.foot p {
+  margin: 0;
+}
+
+.footNote {
+  margin-top: 0.3rem !important;
+  opacity: 0.85;
+}

@@ -315,13 +315,15 @@
 
 .cards {
   display: inline-flex;
-  gap: 0.2rem;
+  gap: 3px;
 }
 
+/* Matched to the meta board. The eight cards ARE the row's identity, and at
+   26px an evolution frame was indistinguishable from a plain card. */
 .cardIcon {
-  width: 26px;
+  width: 52px;
   aspect-ratio: 302 / 363;
-  border-radius: 4px;
+  border-radius: 5px;
   display: block;
 }
 
@@ -793,3 +795,8 @@
 .rangeChip[data-beyond] {
   opacity: 0.55;
 }
+
+/* Inferred evolutions carry NO visual marker. A dashed outline was tried and
+   read as a broken image rather than as a caveat — it drew more attention than
+   the distinction deserves, on cards that are very likely right. The caveat
+   lives in the card's tooltip and in the footnote under the table instead. */

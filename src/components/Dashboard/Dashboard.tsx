@@ -8,6 +8,7 @@ import { DecksHome } from '../DecksHome/DecksHome';
 import { CounterPalette } from '../CounterPalette/CounterPalette';
 import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
 import { DuelAnalysis } from '../Analytics/DuelAnalysis';
+import { MetaDecks } from '../Analytics/MetaDecks';
 import { SEASONS, type Season } from '../Analytics/playerData';
 import { fetchSuggestedTags } from '../../state/analyticsClient';
 import {
@@ -63,8 +64,8 @@ const TOP_NAV = [
  * a glance — and it is deliberately NOT the selected state, which is always
  * violet regardless of the row's identity hue. */
 const SIDE_NAV = [
-  { label: 'Search Player', icon: SearchIcon, slug: null, hue: 'violet' },
-  { label: 'Top 10 Decks', icon: BarsIcon, slug: '', hue: 'blue' },
+  { label: 'Search Player', icon: SearchIcon, slug: '', hue: 'violet' },
+  { label: 'Top Meta Decks', icon: BarsIcon, slug: 'meta', hue: 'blue' },
   { label: 'Deck Analysis', icon: PieIcon, slug: 'decks', hue: 'pink' },
   { label: 'Duel Analysis', icon: SwordsIcon, slug: 'duels', hue: 'green' },
   { label: 'Deck Counter', icon: ShieldIcon, slug: 'counter', hue: 'violet' },
@@ -75,7 +76,7 @@ const SIDE_NAV = [
 ] as const;
 
 const SECTION_BLURB: Record<string, string> = {
-  'Top 10 Decks': 'The decks winning most right now, ranked by usage and win rate.',
+  'Top Meta Decks': 'What the whole player base is running, ranked by use rate.',
   'Deck Analysis': 'Break a deck down: elixir curve, cycle, role coverage and matchups.',
   'Duel Analysis': 'How a five-deck duel collection holds up across the field.',
   'Deck Counter': 'What beats a given deck, and what it beats in turn.',
@@ -330,10 +331,12 @@ export function Dashboard({
           {view === 'player' ? (
             playerSection === 'duels' ? (
               <DuelAnalysis tag={playerTag} season={season as Season} />
+            ) : playerSection === 'meta' ? (
+              <MetaDecks />
             ) : playerSection ? (
               <SectionPanel
                 name={
-                  SIDE_NAV.find((s) => s.slug === playerSection)?.label ?? 'Top 10 Decks'
+                  SIDE_NAV.find((s) => s.slug === playerSection)?.label ?? 'Top Meta Decks'
                 }
               />
             ) : (
@@ -353,6 +356,10 @@ export function Dashboard({
               {view === 'decks' && <DecksHome embedded />}
               {view === 'palette' && <CounterPalette embedded />}
             </section>
+          ) : section === 'Top Meta Decks' ? (
+            /* The meta board needs no tag — it is about everybody — so it
+               opens straight from the home sidebar. */
+            <MetaDecks />
           ) : section === 'Search Player' ? (
             <section className={styles.hero}>
               {/* Wrapper so the corner cards are positioned against the search

@@ -20,13 +20,14 @@ bot's SQLite files read-only.
 2. [What the app is now](#what-the-app-is-now)
 3. [Where the data comes from](#where-the-data-comes-from)
 4. [The analytics API](#the-analytics-api)
-5. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
-6. [Colour: how it was chosen](#colour-how-it-was-chosen)
-7. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
-8. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
-9. [Testing and verification](#testing-and-verification)
-10. [Project layout](#project-layout)
-11. [Deliberately not done](#deliberately-not-done)
+5. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
+6. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
+7. [Colour: how it was chosen](#colour-how-it-was-chosen)
+8. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
+9. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
+10. [Testing and verification](#testing-and-verification)
+11. [Project layout](#project-layout)
+12. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -48,7 +49,8 @@ the browser only ever talks to its own origin.
 ```bash
 npx tsc -b                        # typecheck
 npm run test                      # 95 tests over the deck logic (vitest)
-python server/test_duel_combos.py # 33 checks over the duel logic, no DB needed
+python server/test_duel_combos.py # 34 checks over the duel logic, no DB needed
+python server/test_meta.py        # 15 checks over the meta board rules
 npm run lint
 npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
@@ -80,6 +82,7 @@ panel). The hash drives what is open, so links and refreshes work.
 | `#/decks` | Deck's Home — unlimited auto-saving single decks |
 | `#/palette` | Counter Palette — archetype folders of counter decks |
 | `#/player/<tag>` | Player analysis — top decks, use/win trends |
+| `#/player/<tag>/meta` | **Top Meta Decks** — the global leaderboard (needs no tag) |
 | `#/player/<tag>/duels` | **Duel Analysis** — card combinations in duel play |
 | `#/player/<tag>/<slug>` | The remaining sidebar sections (shells, no data yet) |
 
@@ -203,6 +206,87 @@ Deck rows are aggregated from `battles` *inside the window* rather than read
 from `player_deck_agg`, which is lifetime-only. That is what makes the date
 range mean anything: pick a different window and the ranking, the use rates and
 the totals all move with it.
+
+---
+
+## Top Meta Decks — why it is a snapshot
+
+The one screen that is about everybody rather than one player: which decks the
+whole base runs, over the last 10 days, ranked by use rate.
+
+**It cannot be queried live.** A `GROUP BY player_deck_hash` over a date window
+was built and measured first:
+
+| window | via `idx_battles_time` | full table scan |
+|---|---|---|
+| 7 days | 39.9 s | — |
+| 10 days | 48.3 s (49.3 s warm) | 45.1 s |
+| 30 days | 76.3 s | — |
+
+The cost is I/O — the index yields rowids in time order and then ~1.4M rows are
+fetched from a 12.9 GB table whose rows carry two JSON card-list columns. The
+normal fix, a covering index on `(battle_time, player_deck_hash)`, **is not
+available**: this process opens the bot's databases `mode=ro` precisely so it
+can never modify them. So a background thread recomputes on a timer and requests
+read the finished snapshot in ~3 ms. Every response carries `computedAt`, and
+the header prints how old the numbers are instead of implying they are live.
+
+Three rules decide what lands on the board, and two of them are corrections to
+what the first version actually produced:
+
+- **Competitive 1v1 only** — ladder, ranked, clan-war 1v1, tournaments. 2v2 and
+  the event modes that hand you a deck would measure Supercell's choices.
+- **A deck needs 25+ distinct players.** Without it the board ranked a deck 50th
+  on 1,703 Ladder battles at an **8.5% win rate** — 144 wins from 1,703. The
+  stored results are clean, so those battles are real; they are just almost all
+  one account grinding one deck badly. A use-rate ranking is exactly the shape a
+  single heavy player can inject themselves into.
+- **Variants merge at 6-of-8 shared cards** — the bot's own
+  `COUNTER_MIN_OVERLAP`. Without merging the board printed "Mortar" twice,
+  "Bridge Spam" twice and "Royal Giant" twice, and every use rate looked
+  impossibly small because one archetype's play was split across dozens of
+  one-card tech variants.
+- **Names are qualified by a signature card.** Merging cannot join genuinely
+  different decks that share a win condition, so "Hog" still appeared six times.
+  `_deck_name` appends the priciest non-win-condition card — "Hog Musketeer",
+  "Hog Earthquake" — which is how players name these decks anyway.
+
+### Deck rendering: three special slots
+
+A Clash Royale deck's first **three** positions are the special slots —
+evolution, hero and champion. Measured on this data: of 795 decks whose payload
+carried evolution marks, **all 795** had every mark inside slots 0-2 (slot 0 in
+791, slot 1 in 569, slot 2 in 775).
+
+Two consequences, and both were bugs before they were rules:
+
+- **Decks render in payload order, never deck-hash order.** The hash is
+  alphabetical — it identifies a deck, it does not describe one — so splitting
+  it for display scattered the three special slots through the row.
+- **Only slots 0-2 can carry evolution or hero art.** That is the game's rule
+  and a better cap than a magic number; it is what stopped a merged cluster's
+  pooled marks drawing a deck with five evolved cards.
+- **The three slots have distinct roles** (player numbering): slot 1 is
+  evolution only, slot 2 is hero or champion, slot 3 is hero, evolution or
+  champion. That caps a deck at **two** evolutions.
+
+  This is stated rather than inferred, because the payload does not cleanly
+  report it: over ~8,000 marked battles slot 2 reads hero 70% but *evolution
+  30%*, and 14% of single battles carry three evolution marks. Rendering that
+  majority put three evolution frames on decks that cannot have three. The bot's
+  own `evolution_marks` docstring records the same ambiguity as unresolvable
+  from the stored columns.
+
+`player_evo` only covers battles from 2026-08-05 (~29% of the database), so
+decks last played before that have their slots read positionally instead.
+Observed always wins, and inferred decks say so in the tooltip and a footnote.
+
+An earlier pass here concluded the positional reading was wrong, on a
+measurement that checked only the first *two* slots. It was the measurement that
+was wrong.
+
+Use rate is a share of **every** competitive battle in the window, including
+those on decks the floor rejects — a share of all play, not of the board.
 
 ---
 
@@ -588,7 +672,9 @@ are in [Running it](#running-it).
 ```bash
 npx tsc -b                        # typecheck
 npm run test                      # 95 tests — deck logic, deck links, PDF export
-python server/test_duel_combos.py # 33 checks — duel logic, no database needed
+python server/test_duel_combos.py # 34 checks — duel logic, no database needed
+python server/test_meta.py        # 23 checks — meta board rules, no database
+python server/test_card_art.py    # 32 checks — evolution/hero slot rules
 npm run build
 ```
 
@@ -647,7 +733,9 @@ src/
     Dashboard/                top bar, sidebar, content panel
     Analytics/
       PlayerAnalysis.tsx      #/player/<tag>
+      MetaDecks.tsx           #/player/<tag>/meta — the global leaderboard
       DuelAnalysis.tsx        #/player/<tag>/duels
+      CardArt.tsx             one card icon, evolution/hero art when fielded so
       TrendChart.tsx          inline SVG multi-series chart + crosshair
       playerData.ts           shapes, range presets, useDateWindow hook
     DuelDeckBuilder/          the 5-deck duel builder
@@ -665,7 +753,9 @@ server/
   app.py                      stdlib HTTP API
   clash_data.py               read-only DB access, tier resolution, CR API
   duel_combos.py              the Pair Board port
-  test_duel_combos.py         33 checks, no DB
+  meta.py                     global meta rollup, background snapshot
+  test_duel_combos.py         34 checks, no DB
+  test_meta.py                15 checks, no DB
   README.md                   API and storage detail
 ```
 

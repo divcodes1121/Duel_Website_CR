@@ -1,0 +1,253 @@
+import { useEffect, useRef, useState } from 'react';
+import { CardArt } from './CardArt';
+import {
+  AnalyticsError,
+  fetchMetaBoard,
+  type MetaBoard,
+} from '../../state/analyticsClient';
+import styles from './MetaDecks.module.css';
+
+/* Top Meta Decks — what the whole player base is running, ranked by use rate.
+ *
+ * Every other analytics screen is about one player; this one aggregates across
+ * all tracked players. It reads a background-computed snapshot rather than
+ * querying live, because the underlying scan takes ~45 s — see server/meta.py.
+ * That is why the header states how old the numbers are instead of pretending
+ * they are real-time. */
+
+const nf = new Intl.NumberFormat('en-US');
+
+/** '2026-08-01' -> '1 Aug'. */
+function shortDay(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T00:00:00Z');
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+function ago(seconds: number): string {
+  if (seconds < 90) return 'just now';
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h} h ago` : `${Math.round(h / 24)} d ago`;
+}
+
+const ICONS = {
+  trophy: (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 4h10v5a5 5 0 0 1-10 0z" />
+      <path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3" />
+      <path d="M10 19h4M12 14v5" />
+    </svg>
+  ),
+  refresh: (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 11a8 8 0 1 0-.6 4" />
+      <path d="M20 4v7h-7" />
+    </svg>
+  ),
+};
+
+export function MetaDecks() {
+  const [board, setBoard] = useState<MetaBoard | null>(null);
+  const [error, setError] = useState<AnalyticsError | null>(null);
+  const [loading, setLoading] = useState(true);
+  const timer = useRef<number | null>(null);
+
+  useEffect(() => {
+    let live = true;
+
+    const load = () => {
+      fetchMetaBoard()
+        .then((b) => {
+          if (!live) return;
+          setBoard(b);
+          setError(null);
+          // While the first snapshot is being built the server has nothing to
+          // serve, so poll until it does. Once there is a board, stop — the
+          // background thread refreshes it on its own schedule.
+          if (b.building && !b.decks.length) {
+            timer.current = window.setTimeout(load, 4000);
+          }
+        })
+        .catch((e) => live && setError(e as AnalyticsError))
+        .finally(() => live && setLoading(false));
+    };
+
+    load();
+    return () => {
+      live = false;
+      if (timer.current) window.clearTimeout(timer.current);
+    };
+  }, []);
+
+  if (loading && !board) {
+    return (
+      <section className={styles.panel}>
+        <p className={styles.notice}>Reading the meta snapshot…</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    const offline = error.kind === 'offline';
+    return (
+      <section className={styles.panel}>
+        <div className={styles.notice}>
+          <h2 className={styles.noticeTitle}>
+            {offline ? 'Analytics service is not running' : 'Could not load the meta'}
+          </h2>
+          <p>{error.message}</p>
+          {offline && <pre className={styles.noticeCode}>python server/app.py</pre>}
+        </div>
+      </section>
+    );
+  }
+
+  if (board?.building && !board.decks.length) {
+    return (
+      <section className={styles.panel}>
+        <div className={styles.notice}>
+          <h2 className={styles.noticeTitle}>Building the meta snapshot…</h2>
+          <p>
+            Ranking every deck across the whole database takes about 45 seconds — it reads
+            millions of battles. This runs once in the background and then refreshes itself, so
+            it only happens on a cold start.
+          </p>
+          <p className={styles.noticeSub}>
+            {board.elapsedSeconds ? `${Math.round(board.elapsedSeconds)}s elapsed` : 'starting…'}
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  if (!board || !board.decks.length) {
+    return (
+      <section className={styles.panel}>
+        <p className={styles.notice}>No competitive battles stored for this window yet.</p>
+      </section>
+    );
+  }
+
+  const { decks, window: win } = board;
+  // A shared ruler so the bars are comparable down the whole board rather than
+  // each row being scaled to itself.
+  const topUse = Math.max(...decks.map((d) => d.useRate), 0.01);
+
+  return (
+    <section className={styles.panel}>
+      <header className={styles.head}>
+        <span className={styles.headIcon}>{ICONS.trophy}</span>
+        <div className={styles.headText}>
+          <h1 className={styles.title}>Top Meta Decks</h1>
+          <p className={styles.blurb}>
+            What the whole player base is running, ranked by use rate — last {win.days} days
+            {win.from ? `, ${shortDay(win.from)} – ${shortDay(win.to)}` : ''}.
+          </p>
+        </div>
+
+        <div className={styles.headStats}>
+          <span className={styles.stat}>
+            <span className={styles.statValue}>{nf.format(board.totalBattles ?? 0)}</span>
+            <span className={styles.statLabel}>battles ranked</span>
+          </span>
+          {/* Honest about freshness: this is a snapshot, not a live query. */}
+          <span className={styles.freshness} title={`Recomputed every ${Math.round((board.refreshSeconds ?? 1800) / 60)} min`}>
+            {ICONS.refresh}
+            {board.building ? 'refreshing…' : `updated ${ago(board.ageSeconds ?? 0)}`}
+          </span>
+        </div>
+      </header>
+
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.thRank}>#</th>
+              <th>Deck</th>
+              <th className={styles.thCards}>Cards</th>
+              <th className={styles.thMeter}>Use Rate</th>
+              <th className={styles.thMeter}>Win Rate</th>
+              <th className={styles.thNum}>Battles</th>
+              <th className={styles.thNum}>Elixir</th>
+            </tr>
+          </thead>
+          <tbody>
+            {decks.map((d) => (
+              <tr key={d.deckHash} className={styles.row}>
+                <td>
+                  <span className={styles.rank} data-medal={d.rank <= 3 ? d.rank : undefined}>
+                    {d.rank}
+                  </span>
+                </td>
+                <td className={styles.deckName} title={d.deckHash}>
+                  {d.name}
+                  {/* Variants merged into this row, so a reader can see that
+                      "Hog" is one deck with tech swaps rather than a name that
+                      happens to appear twice. */}
+                  <span className={styles.deckMeta}>
+                    {d.variants > 1
+                      ? `${d.variants} variants · ${nf.format(d.players)} players`
+                      : `${nf.format(d.players)} players`}
+                  </span>
+                </td>
+                <td>
+                  <span className={styles.cards}>
+                    {d.cards.map((c) => (
+                      <CardArt key={c} card={c} variant={d.art?.[c]} className={styles.cardIcon} />
+                    ))}
+                  </span>
+                </td>
+                <td>
+                  <span className={styles.meterValue} data-key="use">
+                    {d.useRate.toFixed(2)}%
+                  </span>
+                  <span className={styles.meter}>
+                    <span
+                      className={styles.meterFill}
+                      data-key="use"
+                      style={{ width: `${Math.min(100, (d.useRate / topUse) * 100)}%` }}
+                    />
+                  </span>
+                </td>
+                <td>
+                  <span className={styles.meterValue} data-key="win">
+                    {d.winRate.toFixed(1)}%
+                  </span>
+                  <span className={styles.meter}>
+                    <span
+                      className={styles.meterFill}
+                      data-key="win"
+                      style={{ width: `${d.winRate}%` }}
+                    />
+                  </span>
+                </td>
+                <td className={styles.num}>{nf.format(d.battles)}</td>
+                <td className={styles.num}>{d.avgElixir ? d.avgElixir.toFixed(1) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <footer className={styles.foot}>
+        <p>
+          {nf.format(board.distinctDecks ?? decks.length)} decks shown from{' '}
+          {nf.format(board.totalBattles ?? 0)} competitive battles. Use rate is a deck&rsquo;s
+          share of every battle in the window.
+        </p>
+        <p className={styles.footNote}>
+          Counts ladder and ranked 1v1, clan-war 1v1 and tournaments. 2v2, friendlies and
+          event modes that hand you a deck are excluded — they would measure Supercell&rsquo;s
+          choices rather than the player base&rsquo;s. A deck also needs{' '}
+          {board.minPlayers ?? 25}+ different players before it counts as meta rather than
+          one person&rsquo;s habit
+          {board.excludedByFloor ? ` (${nf.format(board.excludedByFloor)} decks did not clear it)` : ''}.
+        </p>
+      </footer>
+    </section>
+  );
+}

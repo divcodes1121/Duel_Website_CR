@@ -29,6 +29,7 @@ from urllib.parse import unquote, urlparse, parse_qs
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import clash_data as cd  # noqa: E402
 import duel_combos as dcx  # noqa: E402
+import meta as meta_board  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
@@ -84,6 +85,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/analytics/status":
                 return self._send(cd.sources())
+
+            if path == "/api/analytics/meta":
+                # Served from a background-computed snapshot: the underlying
+                # scan takes ~45 s, so it must never run inside a request.
+                # See the long note at the top of meta.py.
+                return self._send(meta_board.board())
 
             if path == "/api/analytics/suggest":
                 return self._send({"tags": cd.suggest_tags(5)})
@@ -153,6 +160,8 @@ def main():
         "OK" if src["archive"]["available"] else "not connected (hot tier only)",
     )
     print("  listening: http://%s:%d" % (HOST, PORT))
+    # The meta leaderboard rolls up in the background from here on.
+    meta_board.start_background()
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
 
 
