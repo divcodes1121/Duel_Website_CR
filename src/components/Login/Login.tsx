@@ -3,7 +3,7 @@ import { useAuthStore } from '../../state/authStore';
 import { useThemeStore } from '../../state/themeStore';
 import { getCardIconUrl } from '../../data/cards';
 import styles from './Login.module.css';
-import { CrownIntro } from '../../three/CrownIntro';
+import { Fireflies } from '../../three/Fireflies';
 
 function CrownIcon() {
   return (
@@ -54,6 +54,8 @@ export function Login() {
         {theme === 'dark' ? '☾' : '☀'}
       </button>
 
+      <Fireflies />
+
       <div className={styles.scene}>
         <img src={getCardIconUrl('archer-queen')} alt="" aria-hidden="true" className={`${styles.floatCard} ${styles.floatA}`} />
         <img src={getCardIconUrl('golden-knight')} alt="" aria-hidden="true" className={`${styles.floatCard} ${styles.floatB}`} />
@@ -67,11 +69,7 @@ export function Login() {
           <span className={styles.cardBorder} aria-hidden="true" />
 
           <span className={styles.logoMark} aria-hidden="true">
-            {/* One-shot: it tumbles in, glints once and stops rendering for
-                good. The flat CrownIcon is underneath throughout. */}
-            <CrownIntro>
-              <CrownIcon />
-            </CrownIntro>
+            <CrownIcon />
           </span>
 
           <h1 className={styles.title}>Royal Arena</h1>

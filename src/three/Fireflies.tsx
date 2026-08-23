@@ -1,10 +1,11 @@
 /**
- * Drifting motes over the landing hero, with a little parallax.
+ * Drifting fireflies, with a little parallax.
  *
- * The castle backdrop and the king stay exactly as they are — this is a
- * transparent layer above them, not a reconstruction of the scene. Trying to
- * re-render painted art in WebGL would lose everything that makes it look
- * painted; adding light in front of it costs one draw call.
+ * Used over the landing hero and over the login backdrop. The painted art
+ * underneath stays exactly as it is — this is a transparent layer above it, not
+ * a reconstruction of the scene. Re-rendering painted art in WebGL would lose
+ * everything that makes it look painted; adding light in front of it costs one
+ * draw call.
  *
  * The motes sit on three depth bands and the camera shifts a few hundredths of
  * a unit with the pointer, so the bands separate as you move. That is the whole
@@ -55,7 +56,7 @@ const FRAG = `
   }
 `;
 
-export function HeroMotes() {
+export function Fireflies() {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

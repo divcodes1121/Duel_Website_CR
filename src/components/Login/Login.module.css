@@ -8,6 +8,58 @@
   overflow: hidden;
 }
 
+/* The painted castle backdrop, same pair the landing hero uses.
+ *
+ * Two separate paintings rather than one image filtered, because that is what
+ * `scripts/build-hero-art.py` produces — a light cut and a dark cut — so this
+ * is an image swap on `data-theme`, never a filter.
+ *
+ * NOTE the composition has castles at BOTH edges. The scrim below must stay
+ * well under full opacity or the left one vanishes, which is exactly what
+ * happened on the landing page for a while. */
+.page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('/assets/background/light_background.webp');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
+}
+
+:global([data-theme='dark']) .page::before {
+  background-image: url('/assets/background/dark_background.webp');
+}
+
+/* A floor under the card, not a cover over the painting. Radial so it is
+ * strongest behind the form and fades out before it reaches either castle. */
+.page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 46% 60% at 50% 50%,
+    color-mix(in srgb, var(--bg) 72%, transparent),
+    color-mix(in srgb, var(--bg) 30%, transparent) 62%,
+    transparent 100%
+  );
+  z-index: 0;
+}
+
+/* The scene sits above both painted layers.
+ *
+ * Targeted rather than a blanket `.page > *`: that would force
+ * `position: relative` onto the fireflies layer too, which is absolutely
+ * positioned and would collapse to zero height. */
+.scene {
+  z-index: 2;
+}
+
+.themeToggle {
+  z-index: 3;
+}
+
 .themeToggle {
   position: absolute;
   top: 1.1rem;
@@ -151,8 +203,6 @@
 }
 
 .logoMark {
-  /* The 3D crown canvas is absolutely positioned inside this. */
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
