@@ -27,7 +27,11 @@ const DEFAULT_COUNT = 130;
  */
 const PALETTE = {
   dark: { color: '#ffdd94', opacity: 0.78 },
-  light: { color: '#d98a1f', opacity: 0.6 },
+  // Light is the brand green -- `--hue-green` / `--solid-green` in light theme,
+  // the same deep forest "Dominate." is set in. Amber read as warm dust; green
+  // reads as the site. Higher opacity than it looks like it needs because most
+  // of these are seen THROUGH a 90% panel, which leaves a tenth of them.
+  light: { color: '#047857', opacity: 0.95 },
 } as const;
 
 interface Props {
@@ -132,7 +136,7 @@ export function Fireflies({ count = DEFAULT_COUNT, fixed = false }: Props = {}) 
         // Pixels, near band first. gl_PointSize divides by view depth, so
         // these are pre-perspective units: keep them near 1 and let uScale do
         // the work, or a near mote fills the banner.
-        sizes[i] = (band === 0 ? 2.1 : band === 1 ? 1.45 : 0.95) * (0.75 + Math.random() * 0.5);
+        sizes[i] = (band === 0 ? 2.4 : band === 1 ? 1.65 : 1.1) * (0.75 + Math.random() * 0.5);
         phases[i] = Math.random();
         drifts[i] = 0.035 + Math.random() * 0.05 - band * 0.008;
       }

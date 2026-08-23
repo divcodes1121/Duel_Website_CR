@@ -356,11 +356,12 @@ export function Dashboard({
 
   return (
     <div className={styles.shell}>
-      {/* The app-wide backdrop. Dark only: the page is true black there
-          (--bg-1: #000000) and the panels sit above it, so the fireflies drift
-          in the gutters around them. On light the page is white and additive
-          motes are invisible, so there is nothing to render. */}
-      {theme === 'dark' && <Fireflies fixed count={240} />}
+      {/* The app-wide backdrop, both themes. It paints on the page at
+          z-index 0; the panel fills are 90% in both ladders, so it reads
+          through them rather than only in the gutters. Gold on the true-black
+          dark page, brand green on the light one -- see PALETTE in
+          Fireflies.tsx, which switches blend mode as well as colour. */}
+      <Fireflies fixed count={240} />
 
       <header className={styles.topbar}>
         <button

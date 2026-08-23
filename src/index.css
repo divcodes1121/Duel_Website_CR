@@ -103,7 +103,7 @@
      against that panel, never against the page. */
   --bg-1: #000000;
   --bg-2: #161616;
-  --bg-3: #202020;
+  --bg-3: #282828;
 
   /* 3–5 component backgrounds. Elevation on dark is carried by lightness, not
      shadow — a shadow against a near-black page is invisible. Each step up is
@@ -134,10 +134,28 @@
      to ~#1D1D1D, so panel-to-page is 29 points of lightness instead of 32.
      Light mode is untouched: the page there is white, there is no backdrop
      layer, and a translucent panel would only mean a paler panel. */
-  --surface: rgba(32, 32, 32, 0.9);
-  --surface-strong: #262626;
-  --surface-nested: rgba(26, 26, 26, 0.9);
-  --surface-sunken: #141414;
+  /* THE LADDER IS STATED AS COMPOSITED VALUES, not as the literals below.
+     A translucent panel over the true-black page lands DARKER than its own
+     colour (90% of #202020 is #1D1D1D), so lifting the panels means raising
+     the literal until the composite is where the rung should be:
+
+       page    #000000              0
+       panel   rgba(44,44,44,.9)   40  over the page
+       nested  rgba(33,33,33,.9)   34  over the panel, not over the page
+       raised  #2E2E2E             46  opaque
+       sunken  #1C1C1C             28  opaque
+
+     Nested composites over the PANEL, which is why its literal is lower than
+     the arithmetic suggests: 0.9x33 + 0.1x40 = 34. Every rung is ~6 points
+     apart and "nesting goes down, never up" holds at every step.
+
+     --surface-strong had to move too. It was #262626 (38), which was above the
+     old #202020 panel and would have been BELOW the new one — the raised rung
+     would have read as a dent. */
+  --surface: rgba(44, 44, 44, 0.9);
+  --surface-strong: #2e2e2e;
+  --surface-nested: rgba(33, 33, 33, 0.9);
+  --surface-sunken: #1c1c1c;
 
   /* 6–8 borders. Two jobs, two contrast bars: --border is a decorative
      separator (WCAG exempts those), --border-strong outlines interactive
@@ -145,7 +163,9 @@
   /* Lifted with the surfaces. #262626 against a #202020 panel is 6 points of
      lightness and reads as no edge at all — a border has to stay clear of the
      thing it borders, so it moves whenever the surface under it does. */
-  --border: #2e2e2e;
+  /* Lifted with the surfaces. #2E2E2E is now exactly --surface-strong, so a
+     border drawn on a raised surface would have disappeared entirely. */
+  --border: #3a3a3a;
   --border-strong: #6e6e6e;
   --highlight: rgba(255, 255, 255, 0.045);
 
@@ -170,9 +190,10 @@
      declarations still dotted around the components are inert. They are left
      in place rather than swept out of 21 files, because each one also creates
      the stacking context that portalled menus are already positioned against. */
-  /* Translucent for the same reason as --surface above. */
-  --glass-fill: rgba(32, 32, 32, 0.9);
-  --glass-fill-strong: #262626;
+  /* Translucent for the same reason as --surface above, and lifted with it.
+     `-strong` stays opaque: it backs the portal menus. */
+  --glass-fill: rgba(44, 44, 44, 0.9);
+  --glass-fill-strong: #2e2e2e;
   --glass-stroke: #383838;
   /* The lit top edge is the one part of the glass worth keeping: on a dark
      solid panel it is what stops the border reading as a flat outline. */
@@ -414,9 +435,18 @@
   /* 3–5 component backgrounds. Light mode is designed, not inverted: the page
      is the faint grey step, cards are pure white, and sunken wells (meters,
      inputs) drop back to #F5F5F6. */
-  --surface: #ffffff;
+  /* Translucent for the same reason as the dark ladder: the fireflies layer
+     paints on the page at z-index 0 and opaque panels cover the viewport.
+     85% of #FFF over the #F4F4F6 page composites to about #FDFDFD, so the
+     panels stay white to the eye and only the motes come through. Light needs
+     a lower number than dark: a green mote on a near-white page is a much
+     smaller colour difference than a gold one on true black, so a tenth of it
+     was not enough to see.
+     `-strong` and `-sunken` stay opaque -- menus and dialogs float over
+     arbitrary content and must not be see-through. */
+  --surface: rgba(255, 255, 255, 0.85);
   --surface-strong: #ffffff;
-  --surface-nested: #f8f8fa;
+  --surface-nested: rgba(248, 248, 250, 0.85);
   --surface-sunken: #f1f1f4;
 
   /* 6–8 borders — see the dark block for why these two differ. */
@@ -436,7 +466,8 @@
      boxes had no edge at all while on dark they were clearly outlined. Solid
      white with a real grey stroke gives light the same box the dark theme has
      always had. */
-  --glass-fill: #ffffff;
+  /* Translucent with --surface above; `-strong` stays opaque for the menus. */
+  --glass-fill: rgba(255, 255, 255, 0.85);
   --glass-fill-strong: #ffffff;
   --glass-stroke: #dedee4;
   /* No inner sheen on light: a white highlight inside a white panel is

@@ -14,7 +14,7 @@ three.js work.
 | | where | when |
 |---|---|---|
 | **Fireflies, hero** | landing hero, over the castle art | both themes |
-| **Fireflies, app-wide** | fixed behind the whole signed-in shell | **dark only** |
+| **Fireflies, app-wide** | fixed behind the whole signed-in shell | both themes |
 | **Login backdrop** | the painted castle pair behind the sign-in card | both themes |
 
 That is the whole surface. Two components, one of them used twice:
@@ -93,14 +93,17 @@ re-render painted art in WebGL would lose everything that makes it look painted.
 ```ts
 const PALETTE = {
   dark:  { color: '#ffdd94', opacity: 0.78 },   // additive
-  light: { color: '#d98a1f', opacity: 0.60 },   // normal
+  light: { color: '#047857', opacity: 0.95 },   // normal — the brand green
 };
 ```
+
+Light is `--hue-green` / `--solid-green` in light theme: the same deep forest
+"Dominate." is set in. Amber read as warm dust; green reads as the site.
 
 **Additive blending is only correct on black.** Adding warm gold to `#000` reads
 as light. Adding it to near-white clamps to white, so a light-mode mote is
 invisible *however far the opacity is turned up* — which is why turning it up
-was the wrong knob and the first light-mode attempt failed. Light paints amber
+was the wrong knob and the first light-mode attempt failed. Light paints green
 with `NormalBlending` instead. The blend mode therefore lives in the palette and
 switches with the theme, rather than being a fixed material property.
 
@@ -188,13 +191,37 @@ The app-wide layer was originally invisible everywhere but the landing page:
 the panels are opaque and cover almost the whole viewport, so the fireflies
 only showed in the ~16 px gutters.
 
-The fix is three tokens in `index.css`, **dark theme only**:
+The fix is the same three tokens in `index.css`, in **both** ladders:
 
 ```css
---surface:        rgba(32, 32, 32, 0.9);   /* was #202020 */
---surface-nested: rgba(26, 26, 26, 0.9);   /* was #1a1a1a */
---glass-fill:     rgba(32, 32, 32, 0.9);   /* was #202020 */
+/* dark */                                   /* light */
+--surface:        rgba(44, 44, 44, 0.9);     rgba(255, 255, 255, 0.85)
+--surface-nested: rgba(33, 33, 33, 0.9);     rgba(248, 248, 250, 0.85)
+--glass-fill:     rgba(44, 44, 44, 0.9);     rgba(255, 255, 255, 0.85)
 ```
+
+**Light needs a lower number than dark.** A green mote on a near-white page is
+a far smaller colour difference than a gold one on true black, so a tenth of it
+was not enough to see — the first attempt at 90% was effectively invisible.
+
+**The dark literals are higher than the rungs they produce.** A translucent
+panel over the true-black page lands *darker* than its own colour (90% of
+`#202020` composites to `#1D1D1D`), so making the panels lighter meant raising
+the literal until the composite sat where the rung should be:
+
+```
+page    #000000               0
+panel   rgba(44,44,44,.9)    40   over the page
+nested  rgba(33,33,33,.9)    34   over the PANEL, not the page
+raised  #2E2E2E              46   opaque
+sunken  #1C1C1C              28   opaque
+border  #3A3A3A              58
+```
+
+`--surface-strong` had to move with them. It was `#262626` (38), above the old
+panel and *below* the new one — the raised rung would have read as a dent.
+`--border` was `#2E2E2E`, which became exactly `--surface-strong`, so a border
+on a raised surface would have vanished.
 
 Only those three, which are the large content fills. **`--surface-strong`,
 `--surface-sunken`, `--glass-fill-strong` and `--slot-bg` stay opaque on
@@ -210,8 +237,8 @@ Elevation survives. `#202020` at 90% over `#000` composites to about `#1D1D1D`,
 so panel-to-page is 29 points of 8-bit lightness instead of 32 — the README's
 surface-ladder argument is intact.
 
-**Light mode is untouched.** The page there is white, there is no backdrop
-layer, and a translucent panel would only mean a paler panel.
+85% of `#FFF` over the `#F4F4F6` page composites to about `#FDFDFD`, so light
+panels still read as white and only the motes come through.
 
 ---
 
