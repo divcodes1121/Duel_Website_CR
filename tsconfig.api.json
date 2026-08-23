@@ -1,0 +1,27 @@
+{
+  /* The Vercel serverless functions. These were never typechecked: the root
+     project references only `app` (src) and `node` (vite.config.ts), so
+     api/decks.ts has compiled by hope since it was written. A module-level
+     mistake in here surfaces as an uncatchable FUNCTION_INVOCATION_FAILED in
+     production, which is the worst possible place to find one. */
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.api.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "types": ["node"],
+
+    "moduleResolution": "Bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["api"]
+}

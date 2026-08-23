@@ -1089,15 +1089,35 @@ export type OpponentReadOutcome =
   | { kind: 'timeout' }
   | { kind: 'error' };
 
+/**
+ * PHASE 24C, STEP 3. This is the one analytics call that does NOT use `BASE`.
+ *
+ * Every other endpoint may be pointed straight at a remote host with
+ * `VITE_ANALYTICS_BASE`. This one must not be: it goes through the same-origin
+ * Vercel function at `api/analytics/opponent-read/[tag].ts`, which is what
+ * attaches the upstream key server-side. Honouring `BASE` here would ask the
+ * browser to authenticate to the analytics service itself, and the browser is
+ * precisely who must never hold that key.
+ *
+ * The `credential` is the same `sha256(username:password)` the deck sync uses;
+ * the proxy maps it to an account and checks the OIE allowlist. Without one the
+ * proxy answers 401 and the panel renders nothing, which is the correct state
+ * for a signed-out reader.
+ */
 export async function fetchOpponentRead(
-  tag: string, timeoutMs = OPPONENT_READ_TIMEOUT_MS,
+  tag: string,
+  credential: string | null = null,
+  timeoutMs = OPPONENT_READ_TIMEOUT_MS,
 ): Promise<OpponentReadOutcome> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(
-      `${BASE}/api/analytics/coach/opponent-read/${encodeURIComponent(tag)}`,
-      { signal: ctrl.signal },
+      `/api/analytics/opponent-read/${encodeURIComponent(tag)}`,
+      {
+        signal: ctrl.signal,
+        ...(credential ? { headers: { Authorization: `Bearer ${credential}` } } : {}),
+      },
     );
     if (!res.ok) return { kind: 'error' };
     const body = (await res.json()) as { enabled: boolean; read: OpponentRead | null };

@@ -16,6 +16,7 @@ import {
   fetchOpponentRead,
   type OpponentReadOutcome,
 } from '../../state/analyticsClient';
+import { useAuthStore } from '../../state/authStore';
 import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
 
@@ -812,6 +813,8 @@ function recordOpponentReadMetric(o: OpponentReadOutcome, ms: number) {
 }
 
 function OpponentReadPanel({ tag }: { tag: string }) {
+  // The proxy needs to know WHICH account is asking, to check the allowlist.
+  const credential = useAuthStore((s) => s.credential);
   const [outcome, setOutcome] = useState<OpponentReadOutcome | null>(null);
   // The skeleton is DELAYED. When the engine is switched off the endpoint
   // answers instantly, so showing a skeleton immediately would flash
@@ -823,7 +826,7 @@ function OpponentReadPanel({ tag }: { tag: string }) {
     let alive = true;
     const started = performance.now();
     const timer = window.setTimeout(() => alive && setShowSkeleton(true), 250);
-    fetchOpponentRead(tag).then((o) => {
+    fetchOpponentRead(tag, credential).then((o) => {
       if (!alive) return;
       window.clearTimeout(timer);
       setOutcome(o);
@@ -834,7 +837,7 @@ function OpponentReadPanel({ tag }: { tag: string }) {
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [tag]);
+  }, [tag, credential]);
 
   // Disabled, timed out or failed — the Coach is complete without this, so it
   // says nothing rather than apologising for a feature the reader never saw.

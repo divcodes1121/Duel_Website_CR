@@ -380,6 +380,110 @@ the totals all move with it.
 
 ---
 
+## Reaching the analytics API from the hosted site
+
+Phase 24C, step 3. The analytics service runs on a machine under a desk, behind
+step 2's key. The site runs on Vercel. Something has to join them without
+handing the browser a credential, and this is it:
+
+```
+browser  ──►  /api/analytics/opponent-read/<tag>   same origin, no key
+         ──►  api/analytics/opponent-read/[tag].ts adds X-Analytics-Key
+         ──►  ANALYTICS_ORIGIN                     a tunnel, once step 4 exists
+         ──►  127.0.0.1 Python                     step 2's boundary
+         ──►  SQLite
+```
+
+Only the opponent read goes this way so far — it is the one screen the engine
+feeds, and the smallest thing that proves the shape works.
+
+**The browser never holds the key, and cannot be made to.** `ANALYTICS_ORIGIN`
+and `CLASH_API_KEY` are read with `process.env` inside the function. Neither is
+named `VITE_*`, which matters more than it looks: Vite inlines any `VITE_`
+variable straight into the bundle at build time, so the naming convention *is*
+the boundary. The build is audited for this — see below.
+
+**This is the one analytics call that ignores `VITE_ANALYTICS_BASE`.** Every
+other endpoint can be pointed straight at a remote host with it. Honouring it
+here would ask the browser to authenticate to the analytics service directly,
+and the browser is exactly who must never be able to.
+
+**No arbitrary upstream.** There is no `?url=`, and the browser contributes
+exactly one value: the tag. It is validated against Supercell's 14-symbol
+alphabet — an allowlist of characters, not an escape — so traversal and query
+injection are unrepresentable rather than encoded away. The origin comes from
+the environment, the path is a literal, and the assembled URL is re-parsed and
+its origin compared before a socket opens. Nothing of the browser's request is
+forwarded: not its cookies, not its headers, not a second `X-Analytics-Key` it
+tried to supply.
+
+**Who gets it.** The bearer credential is the same `sha256(username:password)`
+the deck sync uses; the proxy maps it to one of the 20 accounts and checks
+`OIE_ALLOWLIST`. An empty allowlist means **nobody** — an allowlist that
+defaults to everyone is not an allowlist. Not being on it is not an error, it
+is `enabled: false`, which is what the client already renders as nothing.
+
+**Rate limit: 30 requests a minute per account**, in the Upstash instance the
+project already runs for deck sync, falling back to a per-instance map when
+Redis is absent or unreachable. Per account rather than per IP because the
+account is the thing being rated and the testers may share a network. It sits
+under step 2's 120/60 s, so the proxy sheds first and the Python service
+survives. Losing Redis degrades the limiter rather than the feature.
+
+**The response is rebuilt, not forwarded.** Every field is copied by name into
+a fresh object, so an unknown key cannot survive by accident. On top of that,
+two deliberate rules:
+
+* A payload containing `changeProbability`, `weights`, `features`, `path` and
+  friends is **refused entirely**. Those keys mean the thing upstream is not the
+  engine this was written against — `changeProbability` was removed in Phase 23
+  — and the answer to an unrecognised peer is to stop, not to filter it and
+  carry on.
+* A payload that is well-formed but breaks a *display* invariant — a degraded
+  read carrying alternatives, a band on a domain that must not show one — is
+  **corrected**. Those invariants exist so nobody is shown something
+  unsupported, and stripping achieves that; refusing would turn a cosmetic
+  upstream regression into an outage.
+
+Prose fields are scanned for absolute paths, `.db`, and `Traceback` before they
+are allowed through.
+
+**Every failure looks the same from outside.** Upstream 401, 429, 500, a
+timeout, a refused connection, unparseable JSON, no origin configured, no key
+configured — all of it returns `{enabled: false, read: null}` with a 200. The
+Coach renders nothing, which is its correct behaviour when the engine is off.
+Distinguishing the causes would publish the state of a private service to
+anyone with an account.
+
+### The secret audit
+
+`npm run build` with `CLASH_API_KEY`, `ANALYTICS_ORIGIN` and `OIE_ALLOWLIST`
+all set, then `dist/` searched for each name and each value. None appear. The
+only related string in the bundle is the same-origin path
+`/api/analytics/opponent-read/`, which is the point.
+
+`tests/analyticsProxy.test.ts` (43) covers the boundary with a stubbed `fetch`;
+`tests/analyticsProxy.e2e.test.ts` (10) runs the whole chain over real sockets
+against a fake upstream, because a stubbed `fetch` proves the logic and not
+that a real request carries what we think it carries. Between them they assert
+the key is attached on the way out and absent on the way back, in both forms.
+
+### Two things this changed on the way past
+
+`api/` **was never typechecked.** The root `tsconfig.json` referenced only
+`app` (src) and `node` (vite.config.ts), so `api/decks.ts` had compiled by hope
+since it was written — and a module-level mistake in a Vercel function surfaces
+as an uncatchable `FUNCTION_INVOCATION_FAILED` with no useful log, which is the
+worst possible place to find one. `tsconfig.api.json` now covers it and is in
+the build.
+
+The **Vite dev proxy** forwards `X-Analytics-Key` from the environment (read in
+the config, which runs in Node, so it never reaches the bundle) and rewrites
+`/api/analytics/opponent-read/` onto the Python route. That is what lets the
+client use one URL in both places: in production it hits the Vercel function,
+under `vite dev` it hits Python directly.
+
+
 ## Top Meta Decks — why it is a snapshot
 
 The one screen that is about everybody rather than one player: which decks the
