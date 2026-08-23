@@ -280,6 +280,19 @@ describe('upstream failure modes', () => {
     expect(res.body).toEqual(disabled);
   });
 
+  it("Cloudflare's 502 HTML page → disabled", async () => {
+    // Observed for real in step 4: with the Python service stopped, the tunnel
+    // edge answers 502 with an HTML error page, not JSON. The `ok` check has to
+    // catch it before anything tries to parse it as a payload.
+    const { res } = await call({}, async () => ({
+      ok: false, status: 502,
+      json: async () => { throw new SyntaxError('Unexpected token <'); },
+      text: async () => '<!DOCTYPE html><title>502: Bad gateway</title>',
+    }));
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual(disabled);
+  });
+
   it('unparseable JSON → disabled', async () => {
     const { res } = await call({}, async () => ({
       ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token <'); },
