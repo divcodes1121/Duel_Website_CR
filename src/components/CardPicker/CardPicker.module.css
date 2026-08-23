@@ -1,122 +1,178 @@
-.drawer {
-  position: relative;
-  margin: 0.4rem 1.25rem 1.1rem;
-  border: 1px solid var(--glass-border);
-  border-radius: 24px;
-  padding: 0.85rem 1.25rem 1rem;
-  flex-shrink: 0;
-  max-height: 42vh;
-  display: flex;
-  flex-direction: column;
+/* ==========================================================================
+   The card library
+   ==========================================================================
+   A permanent column beside the decks, on all three deck screens.
 
-  background: var(--glass-fill-strong);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-sheen);
-}
+   It used to be a bottom drawer that slid up over the decks and capped itself
+   at 42vh — which meant filling a deck was: scroll to it, open the drawer, lose
+   sight of the deck under the drawer, pick, scroll back. That shape came from
+   the decks owning the full width, and a deck is eight cards on one line, so
+   the width was never theirs to need. The drawer is gone; this is what replaced
+   it, and DeckWorkspace owns the column it sits in.
 
-.drawerCollapsed {
-  padding: 0.35rem 1.25rem 0.45rem;
-}
+   Surfaces follow the app's ladder: the tool panel is the panel, this is a
+   NESTED box inside it, and its controls are wells. Nesting goes down. */
 
-/* --- collapse toggle (pill tab riding the drawer's top edge) ---------- */
-
-.drawerToggle {
-  position: absolute;
-  top: -13px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 3.6rem;
-  height: 1.7rem;
-  border-radius: 999px;
-  border: 1px solid var(--glass-border);
-  color: var(--text-muted);
-  cursor: pointer;
-  z-index: 5;
-  transition: color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
-  background: var(--glass-fill-strong);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
-}
-
-.drawerToggleChevron {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease;
-}
-
-.drawerToggleChevronUp {
-  transform: rotate(180deg);
-}
-
-.drawerContent {
+/* The gaps are tight on purpose. Above the grid sit a header, four controls,
+   eight type tabs and a status line — five rows of chrome that were taking half
+   the panel, in a panel whose entire job is the grid underneath them. */
+.library {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  gap: 0.45rem;
+  padding: 0.7rem 0.75rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface-nested);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
 }
 
-.collapsedRow {
+/* Collapsed: a 2.6rem spine holding one button, so the control that brings the
+   library back is never the thing that went away with it. */
+.libraryCollapsed {
+  padding: 0.6rem 0.35rem;
+  align-items: center;
+}
+
+.libraryReopen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 0.2rem;
   border: none;
+  border-radius: 14px;
   background: none;
-  padding: 0.2rem 0;
-  font-size: 0.7rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.libraryReopen:hover {
+  background: var(--neutral-wash);
+  color: var(--text);
+}
+
+.libraryReopenLabel {
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.15s ease;
+  writing-mode: vertical-rl;
 }
 
-.toolbar {
+.libraryHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin-bottom: 0.75rem;
+  gap: 0.5rem;
 }
 
-/* --- Segmented controls ---------------------------------------------- */
+.libraryTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+/* Identity tile, level 1 — the app's own convention for "this area is X". */
+.libraryIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 8px;
+  color: var(--accent-select);
+  background: var(--accent-select-wash);
+  border: 1px solid var(--accent-select-edge);
+}
+
+.libraryCount {
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+.libraryToggle {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.libraryToggle:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* The chevron points at where the panel goes — off to the right. */
+.libraryToggleIcon {
+  display: flex;
+  transform: rotate(-90deg);
+}
+
+.libraryRemoveHover {
+  border-color: var(--hue-red);
+  background: var(--red-wash);
+}
+
+/* --- Segmented controls (the type tabs) -------------------------------- */
 
 .segmented {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.15rem;
   padding: 0.22rem;
-  border-radius: 999px;
-  background: var(--slot-bg);
-  border: 1px solid var(--slot-border);
-  box-shadow: inset 0 1px 3px transparent;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
 }
 
 .segment {
   position: relative;
   background: none;
-  border: none;
-  border-radius: 999px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 650;
-  padding: 0.32rem 0.85rem;
+  padding: 0.22rem 0.5rem;
   cursor: pointer;
-  transition: color 0.18s ease;
+  flex: 1 1 auto;
+  white-space: nowrap;
 }
 
-/* Active pill drawn directly on the segment. Previously a separate element
-   moved between segments by framer's shared-layout `layoutId` FLIP transition —
-   used by both the 8 filter tabs and the 2 sort tabs. */
+.segment:hover {
+  color: var(--text);
+  background: var(--neutral-wash-sunken);
+}
+
+/* A SELECTED PILL IS A FILL, so it takes the solid step and white text. Drawn
+   as a tint with hue-coloured LABEL it was the last of the "why is the text
+   light" set: a pastel label is legible, but next to a solid sidebar row and a
+   solid button it reads as the odd one out. */
 .segmentActive,
 .segmentActive:hover {
-  color: var(--accent-select);
-  background: var(--accent-select-fill);
-  border-color: var(--accent-select-edge);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  color: var(--on-solid);
+  background: var(--solid-violet);
+  border-color: transparent;
 }
 
 .segmentLabel {
@@ -124,57 +180,232 @@
   z-index: 1;
 }
 
-/* --- Target pill / hint ------------------------------------------------ */
+/* --- Filter controls: reset, sort, elixir, rarity, search --------------- */
 
-.target {
-  --target-accent: var(--accent);
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.reset {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+}
+
+.reset[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Lit only while something is actually filtered, so the control states whether
+   there is anything to undo before it is pressed. */
+.reset[data-active] {
+  color: var(--accent-action);
+  border-color: var(--accent-action-edge);
+  background: var(--accent-action-wash);
+}
+
+.field {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
+}
+
+.fieldLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The chip is the wrapper; the <select> is transparent on top of it and sized
+   to it, so the thing you click is exactly the thing you see — and the platform
+   control keeps its keyboard behaviour and its native picker on a phone. */
+.select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.5rem 0.28rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.select select {
+  appearance: none;
+  border: none;
+  background: none;
+  outline: none;
+  font: inherit;
   font-size: 0.75rem;
+  font-weight: 650;
+  color: inherit;
+  padding: 0;
+  padding-right: 0.1rem;
+  cursor: pointer;
+  min-width: 3.4rem;
+}
+
+.select[data-narrow='true'] select {
+  min-width: 1.9rem;
+}
+
+/* A narrowed value is the state worth seeing from across the panel. */
+.select:has(select[data-on]) {
+  color: var(--accent-select);
+  border-color: var(--accent-select-edge);
+  background: var(--accent-select-fill-sunken);
+}
+
+.select svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.direction {
+  width: 1.6rem;
+  height: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.direction:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1 1 7rem;
+  min-width: 6rem;
+  padding: 0.26rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-sunken);
+}
+
+.search:focus-within {
+  border-color: var(--accent-select);
+}
+
+.searchIcon {
+  display: flex;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 0.76rem;
   font-weight: 600;
-  color: color-mix(in srgb, var(--target-accent) 70%, var(--text));
-  background: color-mix(in srgb, var(--target-accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--target-accent) 35%, transparent);
-  border-radius: 999px;
-  padding: 0.3rem 0.85rem;
-  white-space: nowrap;
+  color: var(--text);
 }
 
-.target::before {
-  content: '';
-  width: 8px;
-  height: 8px;
+.searchInput::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* The browser's own clear button would sit beside ours. */
+.searchInput::-webkit-search-cancel-button {
+  display: none;
+}
+
+.searchClear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: none;
   border-radius: 50%;
-  background: var(--target-accent);
-
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
-.target[data-owner='blue'] {
-  --target-accent: var(--player-blue);
+.searchClear:hover {
+  color: var(--text);
+  background: var(--neutral-wash-sunken);
 }
 
-.target[data-owner='red'] {
-  --target-accent: var(--player-red);
+/* --- The status line above the grid ------------------------------------ */
+
+.status {
+  --tone: var(--accent-select);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.28rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 8%, var(--surface-nested));
+  border: 1px solid color-mix(in srgb, var(--tone) var(--edge-strength), transparent);
 }
 
-.targetRemove {
-  --target-accent: var(--error);
+.status strong {
+  font-weight: 800;
 }
 
-/* Drawer highlighted as a "remove" drop zone while dragging a deck card over it */
-.drawerRemoveHover {
-  border-color: color-mix(in srgb, var(--error) 60%, var(--glass-border));
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+.status[data-owner='blue'] {
+  --tone: var(--player-blue);
 }
 
-/* Tiles advertise draggability */
-.tile:not(.tileDisabled) {
-  cursor: grab;
+.status[data-owner='red'] {
+  --tone: var(--player-red);
 }
 
-.tile:not(.tileDisabled):active {
-  cursor: grabbing;
+.statusRemove {
+  --tone: var(--hue-red);
+}
+
+/* Nothing is armed — this is a hint, so it recedes to neutral rather than
+   wearing a hue that would read as a live state. */
+.statusIdle {
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border-color: var(--border);
+}
+
+.statusHint {
+  margin-left: auto;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.75;
 }
 
 /* --- Ownership ribbons (Versus mode) ----------------------------------- */
@@ -193,7 +424,6 @@
   width: 8px;
   height: 13px;
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
-
 }
 
 .ribbonBlue {
@@ -204,26 +434,66 @@
   background: linear-gradient(180deg, color-mix(in srgb, var(--player-red) 80%, #fff), var(--player-red));
 }
 
-.hint {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  text-align: center;
-  padding: 0.4rem 0;
-}
-
 /* --- Card grid ---------------------------------------------------------- */
 
+/* The grid is the only thing in this panel that scrolls, and `min-height: 0` is
+   what lets it: without it the flex item refuses to shrink below its content,
+   the panel grows to all 123 tiles, and the whole page scrolls instead.
+
+   Tiles FLEX rather than sitting at a fixed 62px. A fixed width has to suit the
+   narrowest column it will ever be in, and this column changes width whenever
+   the library collapses, the dashboard rail collapses or the window moves — so
+   the tiles would be sized for the worst case forever. `minmax(3.4rem, 1fr)`
+   keeps a floor and spends everything above it on bigger art. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 62px);
-  grid-auto-rows: 75px;
-  justify-content: space-between;
+  grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
   align-content: start;
-  gap: 0.85rem 0.55rem;
+  align-items: start;
+  /* `max-content`, not the implicit `auto`.
+     An auto row sizes itself from its items, and a tile whose only child is an
+     `<img>` at `height: 100%` contributes almost nothing to that — its height
+     comes from `aspect-ratio`, which auto row sizing does not consult. Measured
+     on the rendered page: rows resolved to 4.53px while the tiles themselves
+     were 71px, so every tile overflowed its row and covered the one below.
+     Clicking Knight hit Dart Goblin, which is how it was found.
+     `max-content` asks for the item's own resolved height instead — 70.8px —
+     and the columns stay flexible, which a fixed row height would not allow.
+     `align-items: start` keeps a tile from being stretched past it. */
+  grid-auto-rows: max-content;
+  gap: 0.5rem 0.4rem;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
-  padding: 0.25rem 0.3rem 0.3rem 0.1rem;
+  padding: 0.25rem 0.35rem 0.3rem 0.1rem;
+}
+
+.gridEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 2rem 1rem;
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.emptyReset {
+  border: 1px solid var(--accent-action-edge);
+  border-radius: 999px;
+  background: var(--accent-action-wash);
+  color: var(--accent-action);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.35rem 0.9rem;
+  cursor: pointer;
 }
 
 .tile {
@@ -235,10 +505,24 @@
   padding: 0;
   cursor: pointer;
   overflow: hidden;
-  transition: border-color 0.15s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
-.tileSelected {
+/* Tiles advertise draggability */
+.tile:not(.tileDisabled) {
+  cursor: grab;
+}
+
+.tile:not(.tileDisabled):active {
+  cursor: grabbing;
+}
+
+.tile:not(.tileDisabled):hover {
+  border-color: var(--border-strong);
+  background: var(--neutral-wash);
+}
+
+.tileSelected,
+.tileSelected:hover {
   position: relative;
   z-index: 1;
   border-color: var(--accent-select);
@@ -255,4 +539,29 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+/* Narrow windows: the builder's workspace drops to one column and the library
+   becomes a band under the decks. It has to cap itself there — as an `auto`
+   grid row it would otherwise grow to all 123 tiles and push the decks off the
+   top of the scroll. */
+@media (max-width: 62rem) {
+  .library {
+    max-height: 42vh;
+  }
+
+  .libraryCollapsed {
+    max-height: none;
+    flex-direction: row;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .libraryReopen {
+    flex-direction: row;
+    padding: 0.4rem;
+  }
+
+  .libraryReopenLabel {
+    writing-mode: horizontal-tb;
+  }
 }

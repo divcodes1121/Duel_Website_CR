@@ -91,6 +91,12 @@ def _load_cards() -> None:
         }
 
 
+def card_keys() -> list[str]:
+    """Every card key the website knows about, in the data file's own order."""
+    _load_cards()
+    return list(_CARD_INFO)
+
+
 def card_info(key: str) -> dict:
     _load_cards()
     return _CARD_INFO.get(
@@ -168,13 +174,14 @@ def _split_series(chunk: list[dict]) -> list[list[dict]]:
     out: list[list[dict]] = []
     cur: list[dict] = []
     used_p: set[str] = set()
+    used_o: set[str] = set()
     pending_dead_rubber = False
 
     def close():
-        nonlocal cur, used_p, pending_dead_rubber
+        nonlocal cur, used_p, used_o, pending_dead_rubber
         if len(cur) >= MIN_DUEL_GAMES:
             out.append(cur)
-        cur, used_p = [], set()
+        cur, used_p, used_o = [], set(), set()
         pending_dead_rubber = False
 
     for rec in chunk:
@@ -186,11 +193,19 @@ def _split_series(chunk: list[dict]) -> list[list[dict]]:
 
         deck = set(rec["cards"])
         # A duel loadout cannot repeat a card, so a repeat means a new duel.
-        if cur and (deck & used_p):
+        # BOTH SIDES ARE TRACKED, and separately — duel_split.split does the
+        # same. A card in your deck one game and in the opponent's another is
+        # legal inside one series, but the opponent repeating a card of their
+        # own ends the duel just as surely as you repeating one. Callers that
+        # do not read the opponent's deck pass nothing and get the one-sided
+        # rule they had before.
+        opp = set(rec.get("opp_cards") or ())
+        if cur and ((deck & used_p) or (opp & used_o)):
             close()
 
         cur.append(rec)
         used_p |= deck
+        used_o |= opp
 
         pw = sum(1 for g in cur if g["result"] == "win")
         ow = sum(1 for g in cur if g["result"] == "loss")
@@ -212,6 +227,89 @@ def _split_series(chunk: list[dict]) -> list[list[dict]]:
     return out
 
 
+def _decided(series: list[dict]) -> bool:
+    """True when this series ended the way a duel actually ends.
+
+    Two wins takes a Bo3 and three takes a Bo5, so a finished duel always has a
+    side on 2+. Anything below that did not finish.
+    """
+    pw = sum(1 for g in series if g["result"] == "win")
+    ow = sum(1 for g in series if g["result"] == "loss")
+    return max(pw, ow) >= 2
+
+
+def _merge_unfinished(series_list: list[list[dict]]) -> list[list[dict]]:
+    """Fold an undecided tail back into the series it was cut from.
+
+    A DELIBERATE DIVERGENCE FROM THE BOT, and the one place this file does not
+    reproduce `duel_split`. Its rule is that ANY repeated card ends a series,
+    which is right for a duel loadout in principle — but real practice decks
+    share incidental cards (Zap, The Log, Skeletons), so one long set gets cut
+    at every brushed card rather than at every new duel.
+
+    Measured on the case that produced this: eight consecutive friendly games
+    against one opponent, decks overlapping by 1-4 cards and never by 6 (never
+    the same deck twice). The bot's rule split them 3 / 3 / 2 and left a
+    two-game `1-1` tail, which is not a scoreline a duel can end on. Folding
+    the tail back gives a 1-2 Bo3 followed by a 2-3 Bo5 — two complete duels,
+    which is what the games actually were.
+
+    So a tail is absorbed only when every one of these holds, and it is put back
+    exactly where it was cut from:
+
+      * neither side reached two wins, so it cannot be a finished duel;
+      * the series before it is the same opponent (guaranteed inside a chunk)
+        and within `DUEL_MAX_GAP_MINUTES`, so a genuinely separate session is
+        never glued on;
+      * the combined length still fits `MAX_DUEL_GAMES`, so merging can never
+        invent a six-game duel.
+
+    A tail that cannot be folded anywhere is DROPPED, for the same reason
+    `_split_series` already drops a lone game: two friendly games that ended 1-1
+    are not a duel, and a duel does not end 1-1. Over five players that is 3% of
+    series; before the fold it was 6.6%.
+
+    WHAT WAS NOT CHANGED, because it was measured. The obvious other fix is to
+    let a series survive one or two shared cards. It is wrong — real practice
+    decks brush against each other constantly, and raising the threshold splices
+    separate duels together. Over the same five players:
+
+        shared cards | coverage | series over 3 games
+                   1 |    66.0% |   1.1%   <- the bot's rule, kept
+                   2 |    68.9% |   4.3%
+                   3 |    70.4% |   9.9%
+                   6 |    71.7% |  25.3%
+
+    A genuine Bo5 is roughly 0.3% of this data, so anything past 1 buys a few
+    points of coverage by inventing Bo5s. The rule is right; what it needed was
+    a tidy-up of the fragments it leaves behind.
+    """
+    out: list[list[dict]] = []
+    for series in series_list:
+        if not _decided(series):
+            if (
+                out
+                and len(out[-1]) + len(series) <= MAX_DUEL_GAMES
+                and series[0]["opponent_tag"] == out[-1][-1]["opponent_tag"]
+                and (_parse_ts(series[0]["battle_time"])
+                     - _parse_ts(out[-1][-1]["battle_time"])).total_seconds() / 60
+                <= DUEL_MAX_GAP_MINUTES
+            ):
+                out[-1] = out[-1] + series
+            continue
+        out.append(series)
+    return out
+
+
+def split_chunk(chunk: list[dict]) -> list[list[dict]]:
+    """One same-opponent chunk -> finished duel series.
+
+    THE ENTRY POINT every duel screen uses, so the pair board and the Duel Zone
+    can never disagree about where one duel ends and the next begins.
+    """
+    return _merge_unfinished(_split_series(chunk))
+
+
 # --------------------------------------------------------------------------
 # Reading duel decks out of the databases
 # --------------------------------------------------------------------------
@@ -223,10 +321,11 @@ SLOTS = 3  # G1 / G2 / G3 — a duel loadout is three decks
 def _evo_marks(raw: str | None, deck: list[str]) -> dict[str, str]:
     """{card_key: 'evolution' | 'hero'} for the cards this deck fielded specially.
 
-    `player_evo` stores [card_key, level, art] and the `art` field is already
-    the resolved answer — the bot's `evolution_marks` records what the Clash
-    Royale payload asserted and explicitly documents that the obvious
-    interpretations are wrong. It exists for ~29% of rows.
+    `player_evo` stores [card_key, level, art] and it is the LEVEL that decides
+    — level 1 is an evolution, level 2 is a hero. The `art` string looks like
+    the resolved answer and is not: it mislabels 9.2% of heroes as evolutions
+    and writes 'unknown' over 6.9% of evolutions. `cd.mark_variant` owns that
+    reading and records the measurement. It exists for ~29% of rows.
 
     THE SLOT RULE IS 0-2, NOT 0-1. A deck's first THREE positions are the
     special slots (evolution / hero / champion); measured here, of 795 decks
@@ -247,71 +346,43 @@ def _evo_marks(raw: str | None, deck: list[str]) -> dict[str, str]:
         return {}
     out: dict[str, str] = {}
     for m in marks:
-        if len(m) >= 3 and m[2] in ("evolution", "hero") and m[0] in deck:
-            out[m[0]] = m[2]
+        v = cd.mark_variant(m)
+        if v and m[0] in deck:
+            out[m[0]] = v
     return out
 
 
-def duel_decks(tag: str, since: str | None, until: str | None) -> dict:
-    """Every duel deck this player fielded in the window.
+def read_duel_rows(tag: str, since: str | None,
+                   until: str | None) -> tuple[list[dict], bool]:
+    """Every duel-like battle row for one player in the window, oldest first.
 
-    Returns {"decks": [...], "duels": n, "native": n, "reconstructed": n,
-             "evoCovered": n, "archiveUsed": bool}
-    where each deck is {"cards", "hash", "slot", "won", "evo"}.
+    ONE READ SERVING EVERY DUEL SCREEN. The pair board and the Duel Zone have to
+    describe the same duels — a player whose Duel Zone shows six series and
+    whose combos were computed over seven is wrong in a way nothing would
+    report. So the query, the mode filter and the tier partition live here once
+    and both callers take what they need from the same rows.
 
-    A deck's `slot` is its position in the loadout: 0 = G1, 1 = G2, 2 = G3.
-
-    NATIVE ROWS CARRY THE WHOLE LOADOUT — 16 or 24 cards — so the split is read,
-    not inferred, and the row's result is the DUEL's result, which every deck in
-    that loadout inherits. Friendly practice stores one deck per row with its
-    own result, and the loadout is rebuilt with the bot's series rules.
+    Returns `(rows, archive_used)`; each row is
+    `{battle_time, mode, opponent_tag, opponent_name, result, cards, opp_cards,
+      archetype, opp_archetype, crowns, opp_crowns, evo}`.
     """
-    tiers = cd._tier_paths()
-    if not tiers:
-        return {"decks": [], "duels": 0, "native": 0, "reconstructed": 0,
-                "evoCovered": 0, "archiveUsed": False}
-
-    lo = cd._compact(since) or "00000000"
-    hi = (cd._compact(until) or "99999999") + "￿"
-
-    # Same tier partition as clash_data.player_report: the archive holds every
-    # battle INCLUDING the ones still in the hot tier, so querying both over the
-    # same dates counts the overlap twice.
-    hot_from = None
-    try:
-        con = cd.connect(tiers[0])
-        try:
-            r = con.execute(
-                "SELECT MIN(battle_time) m FROM battles WHERE player_tag = ?", (tag,)
-            ).fetchone()
-            hot_from = (r["m"] or "")[:8] or None
-        finally:
-            con.close()
-    except Exception:
-        hot_from = None
-
-    def window_for(idx: int) -> tuple[str, str] | None:
-        if idx == 0:
-            return (max(lo, hot_from) if hot_from else lo), hi
-        if not hot_from or lo >= hot_from:
-            return None
-        return lo, hot_from + "\x00"
+    windows = cd.tier_windows(tag, since, until)
+    if not windows:
+        return [], False
 
     raw_rows: list[dict] = []
     archive_used = False
-    for idx, path in enumerate(tiers):
-        win = window_for(idx)
-        if win is None:
-            continue
-        w_lo, w_hi = win
+    for idx, (path, w_lo, w_hi) in enumerate(windows):
         try:
             con = cd.connect(path)
         except Exception:
             continue
         try:
             rows = con.execute(
-                "SELECT battle_time, game_mode, opponent_tag, result, "
-                "       player_card_keys, player_evo "
+                "SELECT battle_time, game_mode, opponent_tag, opponent_name, "
+                "       result, player_card_keys, opponent_card_keys, "
+                "       player_win_condition, opponent_win_condition, "
+                "       player_crowns, opponent_crowns, player_evo, opponent_evo "
                 "FROM battles "
                 "WHERE player_tag = ? AND battle_time >= ? AND battle_time <= ?",
                 (tag, w_lo, w_hi),
@@ -336,21 +407,94 @@ def duel_decks(tag: str, since: str | None, until: str | None) -> dict:
                 continue
             if not cards:
                 continue
+            try:
+                opp_cards = json.loads(r["opponent_card_keys"] or "[]")
+            except Exception:
+                opp_cards = []
             kept += 1
             raw_rows.append(
                 {
                     "battle_time": r["battle_time"] or "",
                     "mode": mode,
                     "opponent_tag": r["opponent_tag"] or "",
+                    "opponent_name": r["opponent_name"] or "",
                     "result": r["result"] or "",
                     "cards": cards,
+                    "opp_cards": opp_cards,
+                    "archetype": r["player_win_condition"] or "",
+                    "opp_archetype": r["opponent_win_condition"] or "",
+                    "crowns": r["player_crowns"] or 0,
+                    "opp_crowns": r["opponent_crowns"] or 0,
                     "evo": r["player_evo"],
+                    # The opponent's marks, in the SAME [card, level, art] shape
+                    # as `player_evo`. Carried so the Duel Zone can draw the
+                    # deck the player was actually facing with its evolutions
+                    # and heroes, rather than as eight plain cards — in a duel
+                    # what the opponent spent is the information, and a plain
+                    # render throws half of it away.
+                    "opp_evo": r["opponent_evo"],
                 }
             )
         if kept and idx > 0:
             archive_used = True
 
     raw_rows.sort(key=lambda r: r["battle_time"])
+    return raw_rows, archive_used
+
+
+def group_chunks(rows: list[dict]) -> list[list[dict]]:
+    """Consecutive same-opponent practice rows, as `duel_split.group` does it.
+
+    Because a chunk never spans two opponents, every rule `_split_series` then
+    applies gets "same opponent" for free.
+    """
+    chunks: list[list[dict]] = []
+    chunk: list[dict] = []
+    for rec in rows:
+        if not chunk:
+            chunk = [rec]
+        elif rec["opponent_tag"] == chunk[-1]["opponent_tag"]:
+            chunk.append(rec)
+        else:
+            if len(chunk) >= MIN_DUEL_GAMES:
+                chunks.append(chunk)
+            chunk = [rec]
+    if len(chunk) >= MIN_DUEL_GAMES:
+        chunks.append(chunk)
+    return chunks
+
+
+def _iso_day(stamp: str) -> str:
+    """`20260726T131502.000Z` -> `2026-07-26`. Empty stays empty."""
+    s = (stamp or "")[:8]
+    if len(s) != 8 or not s.isdigit():
+        return ""
+    return f"{s[:4]}-{s[4:6]}-{s[6:]}"
+
+
+def duel_decks(tag: str, since: str | None, until: str | None) -> dict:
+    """Every duel deck this player fielded in the window.
+
+    Returns {"decks": [...], "duels": n, "native": n, "reconstructed": n,
+             "evoCovered": n, "span": (first, last), "archiveUsed": bool}
+    where each deck is {"cards", "hash", "slot", "won", "evo"}.
+
+    `span` is the battle_time of the first and last DUEL row read — not of the
+    player's battles generally. A player can be active today and still have their
+    last duel months back, and when the Evolutions tab is empty that gap is
+    usually the whole explanation, so the tab has to be able to quote it.
+
+    A deck's `slot` is its position in the loadout: 0 = G1, 1 = G2, 2 = G3.
+
+    NATIVE ROWS CARRY THE WHOLE LOADOUT — 16 or 24 cards — so the split is read,
+    not inferred, and the row's result is the DUEL's result, which every deck in
+    that loadout inherits. Friendly practice stores one deck per row with its
+    own result, and the loadout is rebuilt with the bot's series rules.
+    """
+    raw_rows, archive_used = read_duel_rows(tag, since, until)
+    if not raw_rows:
+        return {"decks": [], "duels": 0, "native": 0, "reconstructed": 0,
+                "evoCovered": 0, "span": ("", ""), "archiveUsed": False}
 
     decks: list[dict] = []
     duels = native = reconstructed = evo_covered = 0
@@ -384,22 +528,8 @@ def duel_decks(tag: str, since: str | None, until: str | None) -> dict:
             )
 
     # ── practice rows: rebuild the series, then read the slot off the index ──
-    chunk: list[dict] = []
-    chunks: list[list[dict]] = []
-    for rec in practice:
-        if not chunk:
-            chunk = [rec]
-        elif rec["opponent_tag"] == chunk[-1]["opponent_tag"]:
-            chunk.append(rec)
-        else:
-            if len(chunk) >= MIN_DUEL_GAMES:
-                chunks.append(chunk)
-            chunk = [rec]
-    if len(chunk) >= MIN_DUEL_GAMES:
-        chunks.append(chunk)
-
-    for ch in chunks:
-        for series in _split_series(ch):
+    for ch in group_chunks(practice):
+        for series in split_chunk(ch):
             duels += 1
             reconstructed += 1
             for i, rec in enumerate(series[:SLOTS]):
@@ -425,6 +555,8 @@ def duel_decks(tag: str, since: str | None, until: str | None) -> dict:
         "native": native,
         "reconstructed": reconstructed,
         "evoCovered": evo_covered,
+        # read_duel_rows() sorts by battle_time, so the ends ARE the span.
+        "span": (raw_rows[0]["battle_time"], raw_rows[-1]["battle_time"]),
         "archiveUsed": archive_used,
     }
 
@@ -824,6 +956,12 @@ def combo_report(tag: str, since: str | None = None, until: str | None = None) -
             # was still on the SSD when the backfill ran carry it — so the
             # Evolutions tab has to be able to say why it is thin.
             "evoCoverage": round(src["evoCovered"] / total * 100, 1) if total else 0.0,
+            # ISO days (YYYY-MM-DD) for the first and last duel read, so the
+            # Evolutions tab can name the period it found nothing in.
+            "span": {
+                "from": _iso_day(src["span"][0]),
+                "to": _iso_day(src["span"][1]),
+            },
         },
         "pairs": {"observed": len(pairs), "eligible": len(rows)},
         "floors": {"minGames": PAIR_MIN_GAMES, "minDecks": PAIR_MIN_DECKS},

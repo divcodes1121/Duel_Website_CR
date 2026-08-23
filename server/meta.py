@@ -93,9 +93,10 @@ CLUSTER_CANDIDATES = int(os.getenv("CLASH_META_CANDIDATES", "600"))
 # data: of 795 decks whose payload carried evolution marks, **795** had every
 # mark inside slots 0-2 — slot 0 in 791, slot 1 in 569, slot 2 in 775.
 #
-# Art is therefore only ever applied to these positions. That is a better cap
-# than a magic number: it is the game's own rule, and it is what stopped a
-# merged cluster's pooled marks drawing a deck with five evolved cards.
+# The rule caps a deck at two evolutions, two heroes and three marks in total,
+# and `arrange_deck` is what puts each one in its position. This module does NOT
+# apply it as a positional filter over the representative's stored order — that
+# deleted real marks off 21 of 50 decks; see `cd.cap_special_marks`.
 SPECIAL_SLOTS = 3
 
 # Within those slots a card must still be the deck's HABITUAL fielding, since a
@@ -129,40 +130,15 @@ _snapshot: dict | None = None
 _state = {"building": False, "error": None, "startedAt": None}
 
 
-def _archetype_title(archetype: str | None) -> str:
-    if not archetype:
-        return "Unknown Deck"
-    return " ".join(w.capitalize() for w in archetype.replace("_", "-").split("-"))
+# One definition, in clash_data — the board and the player screen must not name
+# the same archetype two different ways.
+_archetype_title = cd._archetype_title
 
 
-def _deck_name(archetype: str | None, cards: list[str], card_meta: dict) -> str:
-    """A name that is actually unique on the board.
-
-    The archetype alone is not: clustering merges tech variants but it cannot
-    merge genuinely different decks that share a win condition, so a board of
-    fifty printed "Hog" six times, "Bridge Spam" five times and "3 Musk" twice.
-    Those really are different decks — the label was just too coarse to say so.
-
-    So the archetype is qualified by the deck's most expensive non-win-condition
-    card, which is how players name these decks anyway ("Hog EQ", "Hog
-    Musketeer"). Ties break on the card key so the name is stable across runs.
-    """
-    base = _archetype_title(archetype)
-    arch_key = (archetype or "").lower().replace("_", "-")
-    best = None
-    for c in cards:
-        if c == arch_key:
-            continue
-        info = card_meta.get(c) or {}
-        if info.get("is_win_condition"):
-            continue
-        cost = info.get("elixir") or 0
-        if best is None or (cost, c) > (best[0], best[1]):
-            best = (cost, c)
-    if not best:
-        return base
-    label = (card_meta.get(best[1]) or {}).get("name") or best[1].replace("-", " ").title()
-    return f"{base} {label}"
+# Also in clash_data, for the same reason as `_archetype_title`: the Duel Zone
+# lists a player's openers and hit the identical problem — two genuinely
+# different Mortar decks, both labelled "Mortar".
+_deck_name = cd.deck_name
 
 
 def select_board(rows, min_players: int = None, size: int = None):
@@ -241,74 +217,220 @@ def cluster_variants(rows, min_overlap: int = MERGE_MIN_OVERLAP, size: int = Non
     return clusters[:size]
 
 
-def _evo_art(con, lo: str, hashes: list[str], order: dict[str, list[str]] | None = None) -> dict[str, dict[str, str]]:
-    """{deck_hash: {card_key: 'evolution' | 'hero'}} for the board's decks.
+def card_totals(rows, total: int) -> list[dict]:
+    """Global use and win rate for every card, from the board's OWN scan.
+
+    PURE, so the rule is testable without a database.
+
+    `player_deck_hash` is the sorted card list — that is stated all over this
+    project and is why the hash is useless for display — which means the grouped
+    result the board already has is also a complete per-card tally. Splitting
+    each hash and adding that row's battles and wins to each of its eight cards
+    is EXACT, not a sample: every competitive battle in the window contributes
+    its whole deck. So this costs a dictionary walk over the deck hashes rather
+    than a second 45-second pass over `battles`.
+
+    It is computed over `rows`, the full grouped result, and not over the ranked
+    board: the board is the top 600 candidates and the 25-player floor has
+    already thrown decks away, so counting cards there would answer "what is on
+    the leaderboard" while the label says "what people play".
+
+    Use rate is a share of every competitive battle in the window, the same
+    denominator the deck board uses, so the two figures are comparable.
+    """
+    tally: dict[str, dict] = {}
+    for r in rows:
+        h = r["h"] or ""
+        n, w = r["n"] or 0, r["w"] or 0
+        if not n:
+            continue
+        # A hash with the wrong shape is a duel loadout or junk, never a deck —
+        # `deck_counter._build_reps` rejects the same thing for the same reason.
+        keys = [c for c in h.split(",") if c]
+        if len(keys) != 8:
+            continue
+        for c in set(keys):
+            t = tally.setdefault(c, {"battles": 0, "wins": 0, "decks": 0})
+            t["battles"] += n
+            t["wins"] += w
+            t["decks"] += 1
+
+    out = []
+    for card, t in tally.items():
+        n, w = t["battles"], t["wins"]
+        out.append(
+            {
+                "key": card,
+                "battles": n,
+                "wins": w,
+                "decks": t["decks"],
+                "useRate": round(n / total * 100, 3) if total else 0.0,
+                "winRate": round(w / n * 100, 1) if n else 0.0,
+            }
+        )
+    # Ties break on the key so identical data always ranks identically.
+    out.sort(key=lambda c: (-c["battles"], c["key"]))
+    return out
+
+
+def merge_forms(cards: list[dict], forms: dict) -> None:
+    """Attach per-form records to the card rows, in place.
+
+    A card carries `forms` ONLY if it was seen in a battle that recorded which
+    form was fielded, so the client can tell "never observed in either form"
+    from "observed, zero" — the same distinction `player_cards.py` draws, for
+    the same reason.
+
+    A form's use rate is a share of the MARKED battles, never of every battle:
+    a share of a population the form could not have been observed in would
+    understate every one of them by the coverage gap.
+    """
+    for row in cards:
+        seen = forms.get(row["key"])
+        if not seen:
+            continue
+        total = sum(v["battles"] for v in seen.values())
+        if not total:
+            continue
+        row["forms"] = {
+            name: {
+                "battles": v["battles"],
+                "wins": v["wins"],
+                "winRate": round(v["wins"] / v["battles"] * 100, 1) if v["battles"] else 0.0,
+                "share": round(v["battles"] / total * 100, 1),
+            }
+            for name, v in sorted(seen.items())
+            if v["battles"]
+        }
+
+
+def _evo_art(con, lo: str, hashes: list[str]) -> tuple[dict, dict, dict, dict]:
+    """({deck_hash: {card: variant}}, {deck_hash: {card: slot}}, forms, coverage).
 
     `player_evo` is JSON and only ~29% of rows carry it, so this parses only the
-    rows that have it AND belong to a deck on the board. The variant is taken
-    from the payload's own `art` field rather than inferred: the bot's
-    `evolution_marks` records exactly what Clash Royale asserted, and its
-    docstring is explicit that the obvious positional readings are all wrong.
+    rows that have it AND belong to a deck on the board. The variant is read off
+    the mark's LEVEL rather than its `art` string — `cd.mark_variant` records
+    why, and it is the difference between this board drawing heroes and not.
 
-    Two constraints, and the first is the game's own rule rather than a
-    heuristic: art applies ONLY to a deck's first three positions, because that
-    is where Clash Royale puts the evolution / hero / champion slots (795 of 795
-    measured decks had every mark inside slots 0-2). Within those slots a card
-    must also be marked in at least ART_MIN_SHARE of the deck's sampled battles,
-    because a cluster pools many players' choices.
+    Two constraints. A card must be marked in at least ART_MIN_SHARE of the
+    deck's sampled battles, because a row here is a CLUSTER and pools many
+    players' choices; and the survivors are then capped to the slots that
+    exist — two evolutions, two heroes, three in total, most-observed first.
 
-    Together those stopped a deck being drawn with five evolved cards.
+    Together those stop a deck being drawn with five evolved cards. The cap used
+    to be positional instead, against the representative's stored order, and it
+    silently deleted a fifth of the board's marks: see `cd.cap_special_marks`.
+
+    The second return is the slot each mark was most often seen in, which is the
+    only thing that can order two marks of the same form.
+
+    The third and fourth are a GLOBAL per-card form record — an evolved
+    Skeletons scored apart from a plain one — and how thin the evidence for it
+    is. They come out of this same cursor deliberately: the pass is most of the
+    rollup's cost, and a second scan of the same rows is how the board's art and
+    the card board's forms would eventually describe different battles.
+
+    They are tallied BEFORE the two filters below them. `want` keeps only decks
+    on the board and the 400-row cap keeps only enough of each to establish a
+    habit — both correct for drawing a deck, both wrong for counting cards,
+    because they would answer "how do the top decks field this card" while the
+    label says "how does everyone".
     """
     if not hashes:
-        return {}
+        return {}, {}, {}, {}
     want = set(hashes)
     tally: dict[str, dict[str, dict[str, int]]] = {}
+    where: dict[str, dict[str, dict[int, int]]] = {}
     seen: dict[str, int] = {}
+    forms: dict[str, dict[str, dict[str, int]]] = {}
+    cov = {"battles": 0, "from": "", "to": ""}
     try:
         cur = con.execute(
-            "SELECT player_deck_hash AS h, player_evo AS e FROM battles "
+            "SELECT player_deck_hash AS h, player_evo AS e, player_card_keys AS k, "
+            "       result AS res, battle_time AS t "
+            "FROM battles "
             "WHERE battle_time >= ? AND player_evo IS NOT NULL AND player_evo != ''",
             (lo,),
         )
         for r in cur:
             h = r["h"]
+            try:
+                marks = json.loads(r["e"])
+            except Exception:
+                continue
+            try:
+                keys = json.loads(r["k"] or "[]")
+            except Exception:
+                keys = []
+
+            # ── the global per-card form tally, over every marked row ────────
+            # Only a battle that recorded the form can be split, and BOTH sides
+            # come from that subset: inside a marked row, a card carrying no
+            # mark of its own was fielded plain, and that is the only place
+            # `base` can honestly be counted from. Outside one the form is
+            # unknown, which is not the same thing.
+            if len(keys) == 8:
+                cov["battles"] += 1
+                t = r["t"] or ""
+                if t:
+                    cov["from"] = min(cov["from"] or t, t)
+                    cov["to"] = max(cov["to"], t)
+                won = 1 if (r["res"] or "") == "win" else 0
+                worn = {}
+                for m in marks:
+                    v = cd.mark_variant(m)
+                    if v:
+                        worn[m[0]] = v
+                for c in set(keys):
+                    bucket = forms.setdefault(c, {})
+                    slot = bucket.setdefault(worn.get(c, "base"), {"battles": 0, "wins": 0})
+                    slot["battles"] += 1
+                    slot["wins"] += won
+
+            # ── the board's own art, which wants a much narrower sample ──────
             if h not in want:
                 continue
             # Enough rows to know the usual fielding; more would only cost time.
             if seen.get(h, 0) >= 400:
                 continue
             seen[h] = seen.get(h, 0) + 1
-            try:
-                marks = json.loads(r["e"])
-            except Exception:
-                continue
             deck = tally.setdefault(h, {})
+            seats = where.setdefault(h, {})
             for m in marks:
-                if len(m) >= 3 and m[2] in ("evolution", "hero"):
-                    per = deck.setdefault(m[0], {})
-                    per[m[2]] = per.get(m[2], 0) + 1
+                v = cd.mark_variant(m)
+                if not v:
+                    continue
+                per = deck.setdefault(m[0], {})
+                per[v] = per.get(v, 0) + 1
+                if m[0] in keys:
+                    pos = seats.setdefault(m[0], {})
+                    i = keys.index(m[0])
+                    pos[i] = pos.get(i, 0) + 1
     except Exception:
-        return {}
+        return {}, {}, {}, {}
 
-    order = order or {}
     out: dict[str, dict[str, str]] = {}
+    slots: dict[str, dict[str, int]] = {}
     for h, cards in tally.items():
         sampled = seen.get(h, 0)
         if not sampled:
             continue
-        # Only the three special positions can carry art at all.
-        special = set((order.get(h) or [])[:SPECIAL_SLOTS])
-        picked: dict[str, str] = {}
+        habitual = []
         for card, kinds in cards.items():
-            if special and card not in special:
-                continue
-            if sum(kinds.values()) / sampled < ART_MIN_SHARE:
+            n = sum(kinds.values())
+            if n / sampled < ART_MIN_SHARE:
                 continue
             # Deterministic on ties, so identical data renders identically.
-            picked[card] = max(sorted(kinds), key=lambda k: kinds[k])
+            habitual.append((n, card, max(sorted(kinds), key=lambda k: kinds[k])))
+        picked = cd.cap_special_marks(habitual)
         if picked:
             out[h] = picked
-    return out
+            slots[h] = {
+                c: max(sorted(p), key=lambda i: p[i])
+                for c, p in (where.get(h) or {}).items()
+                if c in picked
+            }
+    return out, slots, forms, cov
 
 
 def _compute() -> dict:
@@ -400,14 +522,15 @@ def _compute() -> dict:
         # rollup's cost. A shorter bound means idx_battles_time touches far
         # fewer rows.
         art_lo = (end - _dt.timedelta(days=ART_WINDOW_DAYS - 1)).isoformat().replace("-", "")
-        art = _evo_art(
-            con,
-            max(art_lo, lo),
-            [c["h"] for c in clusters],
-            {c["h"]: c["order"] for c in clusters},
+        art, art_slots, card_forms, form_cov = _evo_art(
+            con, max(art_lo, lo), [c["h"] for c in clusters]
         )
     finally:
         con.close()
+
+    # The global card board, off the SAME grouped result the decks came from.
+    cards_board = card_totals(rows, total)
+    merge_forms(cards_board, card_forms)
 
     card_meta = {c: dcx.card_info(c) for c in {c for r in clusters for c in r["order"]}}
 
@@ -417,7 +540,8 @@ def _compute() -> dict:
         m = meta.get(h)
         n, w, d = r["n"] or 0, r["w"] or 0, r["d"] or 0
         cards, slot_art = cd.arrange_deck(
-            (r["order"] or sorted(r["cards"]))[:8], art.get(h, {})
+            (r["order"] or sorted(r["cards"]))[:8], art.get(h, {}),
+            slot_of=art_slots.get(h),
         )
         decks.append(
             {
@@ -446,6 +570,15 @@ def _compute() -> dict:
 
     return {
         "decks": decks,
+        "cards": cards_board,
+        # How thin the per-form half is, stated rather than implied: a form's
+        # win rate must not pass for the same kind of number as a card's.
+        "formCoverage": {
+            "battles": form_cov["battles"],
+            "from": form_cov["from"][:8] or None,
+            "to": form_cov["to"][:8] or None,
+            "days": ART_WINDOW_DAYS,
+        },
         "window": {"from": start.isoformat(), "to": cov["end"], "days": WINDOW_DAYS},
         "totalBattles": total,
         "distinctDecks": len(clusters),
@@ -543,30 +676,52 @@ def refresh(force: bool = False) -> None:
             _state["building"] = False
 
 
-def board() -> dict:
-    """What the endpoint returns. Never blocks: if nothing is computed yet it
-    says so, and the client polls."""
-    with _lock:
-        snap = _snapshot
-        building = _state["building"]
-        error = _state["error"]
-        started = _state["startedAt"]
-
+def _envelope(snap, building, error, started, empty: dict) -> dict:
     if snap is None:
         return {
             "building": True,
             "error": error,
             "elapsedSeconds": round(time.time() - started, 1) if started else 0,
-            "decks": [],
             "window": {"from": None, "to": None, "days": WINDOW_DAYS},
+            **empty,
         }
-
     out = dict(snap)
     out["building"] = building
     out["error"] = error
     # Age in seconds, so the UI can say how old the numbers are instead of
     # implying they are live.
     out["ageSeconds"] = round(time.time() - snap.get("computedAt", 0), 1)
+    return out
+
+
+def board() -> dict:
+    """What the deck endpoint returns. Never blocks: if nothing is computed yet
+    it says so, and the client polls."""
+    with _lock:
+        snap, building = _snapshot, _state["building"]
+        error, started = _state["error"], _state["startedAt"]
+    out = _envelope(snap, building, error, started, {"decks": []})
+    # The card board rides in the same snapshot; it has its own endpoint and
+    # would otherwise double every meta response for no reader.
+    out.pop("cards", None)
+    return out
+
+
+def card_board() -> dict:
+    """Global use and win rate for every card, from the same snapshot.
+
+    One rollup, two products. The alternative was a second background scan of
+    the same window, which costs the same 45 seconds and creates a second
+    source of truth for a number the deck board is already computing on the way
+    past. Nothing here is card METADATA — type, elixir, rarity and the
+    evolution flags live in `src/data/*.json`, which the browser already loads
+    to draw the art.
+    """
+    with _lock:
+        snap, building = _snapshot, _state["building"]
+        error, started = _state["error"], _state["startedAt"]
+    out = _envelope(snap, building, error, started, {"cards": [], "formCoverage": None})
+    out.pop("decks", None)
     return out
 
 

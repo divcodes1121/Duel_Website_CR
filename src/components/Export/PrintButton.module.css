@@ -1,0 +1,41 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--accent-select);
+  background: var(--accent-select-wash);
+  color: var(--accent-select);
+}
+
+/* Not `cursor: wait` on the button alone — the label changes too, because the
+   export takes a second or two while card art is rasterised and a control that
+   only greys out reads as broken rather than busy. */
+.button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* Failure is stated, not swallowed. The one thing worse than an export that
+   fails is an export that fails silently and leaves the reader waiting for a
+   file that is never coming. */
+.error {
+  margin-left: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--error);
+}

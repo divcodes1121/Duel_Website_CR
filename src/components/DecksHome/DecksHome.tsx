@@ -3,8 +3,7 @@ import { useBuilderStore } from '../../state/store';
 import { useThemeStore } from '../../state/themeStore';
 import { useAuthStore } from '../../state/authStore';
 import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
-import { CardPickerDrawer } from '../CardPicker/CardPickerDrawer';
-import { FlightLayer } from '../FlightLayer/FlightLayer';
+import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { ProfileMenu } from '../Profile/ProfileMenu';
 import { ExportDialog } from '../Export/ExportDialog';
 import { WinConFilter, deckMatchesFilter, filterCardName } from '../WinConFilter/WinConFilter';
@@ -127,37 +126,49 @@ export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
       </header>
       )}
 
-      {/* Hiding the nav would otherwise take Export PDF with it — it is the one
-          action in there that is not duplicated by the dashboard top bar. */}
-      {embedded && canExport && (
-        <div className={styles.embeddedActions}>
-          <span className={styles.autoSaveHint}>Decks save automatically</span>
-          <button
-            type="button"
-            className={libStyles.ghostButton}
-            title="Download a PDF report of every deck here"
-            onClick={() => setExportOpen(true)}
-          >
-            Export PDF
-          </button>
-        </div>
-      )}
+      <DeckWorkspace
+        toolbar={
+          <>
+            <h2 className={styles.galleryTitle}>
+              My Decks
+              <span className={styles.galleryCount}>
+                {winFilter.length > 0
+                  ? `${visibleDecks.length} / ${homeDecks.length}`
+                  : homeDecks.length}
+              </span>
+            </h2>
 
-      <div className={styles.scrollArea}>
-        <section className={styles.deckList}>
-          <h2 className={styles.galleryTitle}>
-            My Decks
-            <span className={styles.galleryCount}>
-              {winFilter.length > 0 ? `${visibleDecks.length} / ${homeDecks.length}` : homeDecks.length}
-            </span>
-          </h2>
+            <div className={styles.filterSlot}>
+              <WinConFilter
+                selected={winFilter}
+                onToggle={toggleWinCon}
+                onClear={() => setWinFilter([])}
+              />
+            </div>
 
-          <WinConFilter
-            selected={winFilter}
-            onToggle={toggleWinCon}
-            onClear={() => setWinFilter([])}
-          />
+            <span className={styles.autoSaveHint}>Decks save automatically</span>
 
+            {/* Hiding the page nav in the dashboard would otherwise take Export
+                PDF with it — the one action in there the top bar does not
+                already carry. */}
+            {embedded && canExport && (
+              <button
+                type="button"
+                className={libStyles.ghostButton}
+                title="Download a PDF report of every deck here"
+                onClick={() => setExportOpen(true)}
+              >
+                Export PDF
+              </button>
+            )}
+          </>
+        }
+      >
+        {/* A gallery, not a stack. Deck's Home holds an unlimited number of
+            decks, and one per row meant scrolling past four screens of them to
+            reach the fifth — so they lay out at as many columns as the deck
+            column can give an eight-card row. */}
+        <div className={styles.deckGrid}>
           {visibleDecks.map(({ deck, index }) => (
             <DeckPanel
               key={deck.id}
@@ -168,23 +179,21 @@ export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
             />
           ))}
 
-          {winFilter.length > 0 && visibleDecks.length === 0 && (
-            <p className={styles.noMatches}>
-              No decks with {winFilter.map(filterCardName).join(' + ')} yet.
-            </p>
-          )}
-
           {winFilter.length === 0 && (
             <button type="button" className={styles.addDeck} onClick={addHomeDeck}>
               <span className={styles.addDeckPlus}>+</span>
               Add deck
             </button>
           )}
-        </section>
-      </div>
+        </div>
 
-      <CardPickerDrawer />
-      <FlightLayer />
+        {winFilter.length > 0 && visibleDecks.length === 0 && (
+          <p className={styles.noMatches}>
+            No decks with {winFilter.map(filterCardName).join(' + ')} yet.
+          </p>
+        )}
+      </DeckWorkspace>
+
       {exportOpen && <ExportDialog source="home" onClose={() => setExportOpen(false)} />}
     </div>
   );

@@ -1,0 +1,1079 @@
+/* Deck Counter — what beats what.
+ *
+ * Chrome is shared with the Cards board (glass panel, chips, tabs). The data
+ * colour is the app's: green a favourable matchup, red an unfavourable one,
+ * neutral inside +-2 points, and blue only ever on a statement about the
+ * EVIDENCE (the confidence chip) rather than about the outcome.
+ */
+
+.page {
+  /* The data pair, re-stepped per theme — never an auto-flip of the light
+     column. Same values as the duel-analysis meters, because they are the same
+     two measures and one app should not encode "use rate" two ways. */
+  --c-use: #2a78d6;
+  --c-win: #169b6b;
+
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+:global([data-theme='dark']) .page {
+  --c-use: #3987e5;
+  --c-win: #199e70;
+}
+
+.glass {
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+}
+
+.panel {
+  composes: glass;
+  padding: 1.25rem 1.4rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.notice {
+  composes: glass;
+  padding: 2.25rem 1.6rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.noticeTitle {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display, inherit);
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.noticeBody {
+  margin: 0 auto;
+  max-width: 46ch;
+  line-height: 1.55;
+}
+
+.noticeCode {
+  display: inline-block;
+  margin: 0.9rem 0 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  /* The range popover escapes this row, and every panel below carries a
+     backdrop-filter — a stacking context that would otherwise paint over it. */
+  position: relative;
+  z-index: 40;
+}
+
+.headIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.headText {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.32rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.range {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.34rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--neutral-wash);
+  color: var(--text);
+}
+
+.chipOn,
+.chipOn:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
+}
+
+.chip[data-beyond] {
+  opacity: 0.55;
+}
+
+.customWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.customPop {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 15rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  box-shadow: var(--shadow-float);
+}
+
+.customLabel {
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.customField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.customField input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.32rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.customApply {
+  padding: 0.42rem;
+  border-radius: 9px;
+  border: none;
+  background: var(--accent-action-solid);
+  color: var(--accent-action-text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customApply:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.customNote {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- filters */
+
+.filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 8.5rem;
+}
+
+.fieldLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.field select {
+  padding: 0.42rem 0.55rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toggle input {
+  accent-color: var(--accent-select);
+  cursor: pointer;
+}
+
+.reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  margin-bottom: 0.3rem;
+  padding: 0.42rem 0.7rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.reset:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--neutral-wash);
+}
+
+.reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------ tabs */
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.83rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+/* The label takes the app's ink, not the hue. On an underline tab the coloured
+   RULE is the indicator — the text does not also need to be violet, and a
+   pastel label beside a solid sidebar row is what read as washed. Meaning still
+   does not rest on hue alone: the label is brighter AND heavier AND ruled. */
+.tabOn,
+.tabOn:hover {
+  color: var(--text);
+  font-weight: 750;
+  border-bottom-color: var(--accent-select);
+}
+
+
+/* ------------------------------------------------------------- stat tiles */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.6rem;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.tileLabel {
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tileBig {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.tileBig[data-kind='bad'] {
+  color: var(--error);
+}
+
+.tileSub {
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* ----------------------------------------------------------------- blocks */
+
+/* Two decks being compared, side by side. Separate from `.two` because that
+   one was stacked for the matchup LISTS — which also stacked these, and a
+   head-to-head where the two sides are one above the other is not a
+   head-to-head. */
+.facing {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+@media (max-width: 1000px) {
+  .facing {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* STACKED, not side by side.
+ *
+ * Worst and best matchups sat in two half-width columns, which is what forced
+ * the deck strip down to 26px cards and the meter out of the row entirely — a
+ * row carrying eight card images, a name, three figures and two chips does not
+ * fit in half a panel. Full width gives every one of them the same room the
+ * "bring this against them" table already had, and the two lists are read one
+ * after the other anyway rather than compared side by side. */
+.two {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.7rem;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.8rem 0.9rem 0.9rem;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.blockTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* How many rows the list actually holds, beside its heading. The lists page,
+   so without this the heading describes only the first page — and "16
+   analyzed" in the tile above with five rows underneath was the complaint
+   that produced the paging in the first place. */
+.blockCount {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.7rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* Paging control for a matchup list. Same shape as the card board's. */
+.more {
+  align-self: center;
+  margin-top: 0.5rem;
+  padding: 0.45rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.more:hover {
+  background: var(--neutral-wash-sunken);
+  border-color: var(--border-strong);
+}
+
+.blockNote {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Name, THE DECK, then the figures. The deck column is what turns a row from a
+   label into something a reader can act on, and it is sized so eight cards fit
+   without the numbers wrapping.
+
+   EVERY TRACK IS A DEFINITE SIZE, and that is not fussiness — it is what makes
+   the columns line up at all. Each row is its own independent grid, so nothing
+   forces one row's tracks to agree with the next one's; they agree only if
+   every track resolves to the same width from the rule alone.
+
+   The last track used to be `auto`, sized to the evidence chip inside it. That
+   chip reads "Low" on one row and "Medium" on the next — 37px against 54px —
+   so each row had a different amount of free space left for the `1fr` name
+   column, which came out 101.8 / 118.1 / 121.6px. Measured on the player
+   board: three different left edges for the card strips inside ONE list.
+
+   So the chip column is fixed at the width of its longest label. THE FLEXIBLE
+   TRACK IS THE METER, not the name: once these lists went full width the name
+   column absorbed every spare pixel and left a gap the width of a deck between
+   "X-Bow" and its cards. A meter is the one thing here that gets better with
+   more room. Everything else is a definite size, so `1fr` still resolves the
+   same on every row. */
+.row,
+.rowHead {
+  display: grid;
+  /* The deck column is `minmax`, not a fixed 21rem. Its eight cards now flex to
+     fill whatever it is given, so a fixed track meant a fixed card size — 39.4px
+     measured, with the panel wide enough for 51. It takes the slack up to 27rem
+     and gives it back before the figures start to crowd; below 1150px the whole
+     column is dropped anyway (see the media query at the end of this file). */
+  grid-template-columns:
+    12rem minmax(21rem, 27rem) 3.4rem minmax(2.5rem, 1fr) 3.4rem 3rem 3.6rem;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.42rem 0;
+  font-size: 0.79rem;
+}
+
+/* Column labels, so a row of percentages is not four bare numbers. */
+.rowHead {
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rowHead span:nth-child(3),
+.rowHead span:nth-child(5),
+.rowHead span:nth-child(6) {
+  text-align: right;
+}
+
+/* The evidence ladder: a label, a pooled-deck count, then the same figures
+   every other table uses. No deck column — every rung is the same deck. */
+.ladderRow {
+  grid-template-columns: 14rem 7rem 3.4rem minmax(2.5rem, 1fr) 5rem 3.6rem;
+}
+
+/* The history table: name, deck, record, games, verdict. No meter and no
+   evidence chip — there is no rate here to qualify. */
+.playedRow {
+  grid-template-columns: 12rem 21rem 4rem minmax(4rem, 1fr) 7rem;
+}
+
+/* The counters table carries one extra column: which record the number came
+   from. Only that table mixes the two sources, so only it pays for the width —
+   the player board's rows are all the same kind of measurement. */
+.withSource,
+.withSource.rowHead {
+  grid-template-columns:
+    12rem 21rem 3.4rem minmax(2.5rem, 1fr) 3.4rem 3rem 3.6rem 6.4rem;
+}
+
+/* Inside the side-by-side worst/best blocks a row has half the width, so the
+   meter goes rather than the deck — a bar duplicates the percentage beside it,
+   the cards do not. */
+/* No narrow variant any more — `.two` is full width, so its rows use the same
+   grid as every other table and the meter comes back. */
+
+@media (max-width: 1150px) {
+  .row,
+  .rowHead {
+    grid-template-columns: minmax(6rem, 10rem) 3.4rem minmax(2.5rem, 1fr) 3.4rem 3rem 3.6rem;
+  }
+
+  /* The deck spans the row on its own line rather than squeezing the figures
+     into unreadable columns. */
+  .rowDeck,
+  .rowDeckEmpty,
+  .rowHead span:nth-child(2) {
+    display: none;
+  }
+}
+
+.row + .row {
+  border-top: 1px solid var(--border);
+}
+
+/* Wraps rather than clips. In the side-by-side blocks the name column is at
+   its floor, and "Three Musketeers" plus its style label does not fit on one
+   line — it was being cut mid-word to "Beatdo". The style drops to a second
+   line instead, which costs a few pixels of row height on two rows and keeps
+   the word readable. */
+.rowName {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 0.4rem;
+  min-width: 0;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.rowStyle {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.rowFig,
+.rowDiff {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Green a favourable matchup, red an unfavourable one, neutral inside +-2
+   points — a 51% matchup is not a counter and must not be painted like one. */
+.rowFig[data-kind='good'],
+.rowDiff[data-kind='good'] {
+  color: var(--success);
+}
+
+.rowFig[data-kind='bad'],
+.rowDiff[data-kind='bad'] {
+  color: var(--error);
+}
+
+.rowFig[data-kind='flat'],
+.rowDiff[data-kind='flat'] {
+  color: var(--text-muted);
+}
+
+.rowDeck {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rowDeckEmpty {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.rowGames {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.meter {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
+.meterFill[data-kind='good'] {
+  background: var(--success);
+}
+
+.meterFill[data-kind='bad'] {
+  background: var(--error);
+}
+
+/* Whose record a number is. Deliberately quiet — it qualifies the figure
+   beside it rather than competing with it — but always present, because the
+   difference between "this deck's own 4,000 battles" and "the archetype
+   average" is the difference between two claims, not two shades of one.
+
+   Blue only, never green or red: this states something about the EVIDENCE, and
+   in this app those two hues are reserved for outcomes. */
+.source {
+  justify-self: start;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.source[data-source='exact'],
+.source[data-source='deck'] {
+  border-color: var(--blue-edge);
+  background: var(--blue-wash);
+  color: var(--accent-info);
+}
+
+/* In the versus panel it sits under the battle count rather than in a grid. */
+.mid .source {
+  justify-self: center;
+  margin-top: 0.15rem;
+}
+
+/* `justify-self: start` because its track is now a fixed width — without it
+   the chip would stretch to fill 4.5rem and every one would be the same size
+   regardless of its word. The track is fixed so the COLUMNS line up; the chip
+   still hugs its own text. */
+.tier {
+  justify-self: start;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.62rem;
+  font-weight: 750;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Blue states a fact about the evidence, never about the outcome. */
+.tier[data-tier='high'] {
+  border-color: var(--accent-info);
+  color: var(--accent-info);
+}
+
+/* --------------------------------------------------------- deck inputs */
+
+.deckBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.deckLabel {
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pasteRow {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.paste {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+/* The paste box empties itself once a link parses, so emptying it by hand can
+   no longer mean "remove this deck". This is where that moved to. */
+.pasteClear {
+  flex-shrink: 0;
+  width: 2rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pasteClear:hover {
+  color: var(--hue-red);
+  border-color: var(--red-edge);
+  background: var(--red-wash);
+}
+
+.deckError {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--error);
+}
+
+/* EIGHT CARDS, ONE LINE, AS BIG AS THE COLUMN ALLOWS.
+ *
+ * These were fixed widths with `flex-wrap: wrap`, which is the wrong pair of
+ * rules for a deck: a deck is eight cards in a row, and a row that wraps to
+ * 5 + 3 stops reading as one. A fixed width has to be chosen for the narrowest
+ * column it will ever sit in, so every wider column wasted the space.
+ *
+ * Flexible instead — `flex: 1 1 0` gives all eight an identical share of
+ * whatever the column has, `nowrap` keeps them on the line, and `max-width`
+ * stops a wide column blowing them up past the point of usefulness. The cards
+ * grow and shrink with the panel and never wrap. */
+.strip,
+.stripSm {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 3px;
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.strip img,
+.stripSm img {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+}
+
+/* The paste boxes: two of these sit side by side, so each gets about half the
+   panel — roughly 68px a card, against the 58px fixed width this replaced. */
+.strip img {
+  max-width: 76px;
+  border-radius: 4px;
+}
+
+/* Row-sized: the deck column inside a matchup row. Smaller cap, same rule, so
+   these still shrink before the row does. */
+.stripSm img {
+  max-width: 52px;
+  border-radius: 3px;
+}
+
+/* CENTRED. It sits under two side-by-side paste boxes and acts on both, so
+   hanging it off the left edge tied it visually to Deck A alone. */
+.action {
+  align-self: center;
+  padding: 0.6rem 1.6rem;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent-action-solid);
+  color: var(--accent-action-text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The target deck inside its stat tile. It is the subject of the whole tab, so
+   it gets a readable card rather than the 26px table thumbnail it inherited. */
+/* 40px, not 46: the stat tiles are a `minmax(11rem, 1fr)` auto-fit grid, so at
+   three across each is ~370px wide and ~343px inside its padding. Eight cards
+   plus seven 3px gutters is 341px at 40 wide and 396 at 46 — which wrapped the
+   eighth card onto a line of its own. A deck reads as a deck on one line. */
+.tile .stripSm {
+  flex-wrap: nowrap;
+  gap: 3px;
+  margin-top: 0.35rem;
+}
+
+.tile .stripSm img {
+  width: 40px;
+  border-radius: 5px;
+}
+
+/* The slot-3 form picker. Two real cards rather than a text toggle, because
+   the whole question is which PICTURE is right — the frames are the difference
+   the reader is being asked about, and a radio button cannot show them. */
+.wildPick {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 11px;
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-sunken);
+}
+
+.wildLabel {
+  margin-right: auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.wildOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.3rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.wildOption img {
+  width: 30px;
+  height: auto;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.wildOption:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* Violet, because this is a selection — the same thing it means everywhere. */
+.wildOn,
+.wildOn:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select);
+  color: var(--accent-select);
+}
+
+/* ------------------------------------------------------------- versus */
+
+.versus {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.9rem 1rem;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.side[data-side='b'] {
+  text-align: right;
+}
+
+.side[data-side='b'] .stripSm {
+  justify-content: flex-end;
+}
+
+/* The versus panel is the result — the two decks it is about should be the
+   biggest cards on the screen, not the smallest. It has a full half-panel per
+   side, so they are sized to that rather than to a table row. */
+.side .stripSm {
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 0.2rem;
+}
+
+.side .stripSm img {
+  width: 54px;
+  border-radius: 5px;
+}
+
+.sideName {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sideBig {
+  font-size: 1.7rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.sideSub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0 0.6rem;
+  text-align: center;
+}
+
+.midBig {
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.midSub {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+}
+
+.diffGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.7rem;
+}
+
+.diffLabel {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.styles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.styleRow {
+  display: grid;
+  grid-template-columns: 7rem 1fr 3.2rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+}
+
+.styleName {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.styleShare {
+  text-align: right;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.empty {
+  margin: 0;
+  padding: 1.4rem 0;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.foot {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.foot svg {
+  vertical-align: -2px;
+  margin-right: 0.2rem;
+}

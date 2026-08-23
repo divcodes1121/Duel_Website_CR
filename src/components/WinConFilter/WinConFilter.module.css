@@ -1,29 +1,70 @@
-/* --- win-condition filter chips (shared by Deck's Home and Duels) ------- */
+/* --- Deck filter (shared by the duel builder, Deck's Home and the Palette) --
+   One trigger button plus whatever is selected. The twenty-one permanent card
+   chips this used to draw are in the panel now — see the note on the component
+   for why they could not stay on the bar once a card library sat beside the
+   decks. */
+
+.wrap {
+  position: relative;
+}
 
 .winconBar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.45rem;
-  margin: -0.2rem 0 1.1rem;
+  gap: 0.4rem;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.36rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.trigger:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.trigger[data-on] {
+  color: var(--on-solid);
+  border-color: transparent;
+  background: var(--solid-violet);
+}
+
+.triggerCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--solid-violet);
+  color: var(--on-solid);
+  font-size: 0.66rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .winconChip {
   position: relative;
-  width: 44px;
+  width: 30px;
   aspect-ratio: 302 / 363;
   padding: 0;
-  border-radius: 9px;
-  border: 2px solid var(--slot-border);
-  background: var(--slot-bg);
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
   cursor: pointer;
   overflow: hidden;
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    opacity 0.16s ease,
-    transform 0.14s ease;
-  opacity: 0.82;
 }
 
 .winconChip img {
@@ -33,135 +74,101 @@
   display: block;
 }
 
+.winconChip:hover {
+  border-color: var(--border-strong);
+}
+
 .winconChipActive,
 .winconChipActive:hover {
-  opacity: 1;
-  border-color: var(--accent-select-edge);
-  background: var(--accent-select-fill);
-  color: var(--accent-select);
+  border-color: var(--accent-select);
+  box-shadow: 0 0 0 1px var(--accent-select-edge);
 }
 
 .winconClear {
-  margin-left: 0.3rem;
-  padding: 0.4rem 0.95rem;
+  padding: 0.34rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--slot-border));
-  background: color-mix(in srgb, var(--accent) 12%, var(--slot-bg));
-  color: var(--text);
-  font-size: 0.72rem;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  transition: background 0.16s ease, border-color 0.16s ease;
-}
-
-/* --- "All cards" dropdown ---------------------------------------------- */
-
-.wrap {
-  position: relative;
-}
-
-.moreButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-left: 0.3rem;
-  padding: 0.42rem 0.9rem;
-  border-radius: 999px;
-  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--slot-border));
-  background: var(--slot-bg);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
   color: var(--text-muted);
   font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
 
-.moreChevron {
-  display: flex;
-  align-items: center;
-  transition: transform 0.2s ease;
+.winconClear:hover {
+  color: var(--hue-red);
+  border-color: var(--red-edge);
+  background: var(--red-wash);
 }
 
-.moreChevronOpen {
-  transform: rotate(180deg);
-}
+/* --- The panel ----------------------------------------------------------
+   Absolutely positioned, not in flow. In flow it pushed the whole workspace
+   down by its own height every time it opened, which on a screen whose columns
+   are sized to the space left over is a layout change rather than a menu. */
 
-/* Same grid-track open as the deck import row — see DeckPanel.module.css. */
 .panel {
-  display: grid;
-  grid-template-rows: 1fr;
-  overflow: hidden;
-  margin: -0.6rem 0 1.1rem;
-  animation: wincon-panel-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.panel > * {
-  min-height: 0;
-}
-
-@keyframes wincon-panel-in {
-  from {
-    grid-template-rows: 0fr;
-    opacity: 0;
-  }
-  to {
-    grid-template-rows: 1fr;
-    opacity: 1;
-  }
-}
-
-.panelInner {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 40;
+  width: min(30rem, 80vw);
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
-  padding: 0.9rem 1rem;
-  border-radius: 18px;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-fill);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-sheen);
+  gap: 0.6rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-float);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .panel {
-    animation: none;
-  }
+.panelScroll {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 20rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.groupLabel {
+  margin: 0.2rem 0 0;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .search {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 600;
   font-family: inherit;
   color: var(--text);
-  background: var(--slot-bg);
-  border: 1px solid var(--slot-border);
-  border-radius: 10px;
-  padding: 0.55rem 0.8rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0.45rem 0.7rem;
   outline: none;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .search::placeholder {
-  color: color-mix(in srgb, var(--text-muted) 65%, transparent);
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .search:focus {
-  border-color: var(--accent);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  border-color: var(--accent-select);
 }
 
 .panelGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
-  gap: 0.45rem;
-  max-height: 240px;
-  overflow-y: auto;
-  padding-right: 0.2rem;
+  grid-template-columns: repeat(auto-fill, minmax(2.4rem, 1fr));
+  /* An auto row does not consult a child's `aspect-ratio`, so it collapses and
+     the chips overlap — the same trap the card grid hit. */
+  grid-auto-rows: max-content;
+  align-items: start;
+  gap: 0.35rem;
 }
 
 .panelGrid .winconChip {

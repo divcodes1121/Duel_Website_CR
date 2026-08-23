@@ -1,7 +1,9 @@
 import { MAX_CROWNS, type PlayerId } from '../../types/deck';
+import { GoldCrownIcon } from '../Dashboard/icons';
 import styles from './CrownCounter.module.css';
 
-function CrownIcon() {
+/** An UNWON crown: the same shape, drawn as an empty seat rather than metal. */
+function CrownOutline() {
   return (
     <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
       <path d="M3 8l4 4 5-7 5 7 4-4v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z" />
@@ -35,19 +37,33 @@ interface CrownCounterProps {
   onChange: (crowns: number) => void;
   side: PlayerId;
   deckName: string;
+  /**
+   * `row` lays the pips out horizontally. The counter used to flank a deck panel
+   * in a full-width column, where a vertical stack cost nothing; in the
+   * two-column workspace the deck column is narrower and that width is the eight
+   * card slots' to spend, so the counter sits above the deck instead.
+   */
+  orientation?: 'column' | 'row';
 }
 
 /**
  * Crowns a duel deck won. Each button sets its value directly: the struck-through
  * crown means zero, and crown N sets the count to N.
  */
-export function CrownCounter({ value, onChange, side, deckName }: CrownCounterProps) {
+export function CrownCounter({
+  value,
+  onChange,
+  side,
+  deckName,
+  orientation = 'column',
+}: CrownCounterProps) {
   const crowns = Math.max(0, Math.min(MAX_CROWNS, Math.round(value || 0)));
 
   return (
     <div
       className={styles.counter}
       data-side={side}
+      data-layout={orientation}
       data-empty={crowns === 0 ? 'true' : undefined}
       role="group"
       aria-label={`Crowns won by ${deckName}: ${crowns} of ${MAX_CROWNS}`}
@@ -66,7 +82,10 @@ export function CrownCounter({ value, onChange, side, deckName }: CrownCounterPr
               title={`${n} crown${n === 1 ? '' : 's'}`}
               onClick={() => onChange(n)}
             >
-              <CrownIcon />
+              {/* Gold only once it is WON. An unlit crown drawn in metal would
+                  say the player has it; the counter's whole job is which of the
+                  three they took. */}
+              {lit ? <GoldCrownIcon size={15} /> : <CrownOutline />}
             </button>
           );
         })}

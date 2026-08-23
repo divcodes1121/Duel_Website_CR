@@ -1,0 +1,278 @@
+/* The closing band of the landing screen. Uses the shared card system — same
+   radius, border, surface and reveal behaviour as everything above it — so it
+   reads as the end of one page rather than a strip bolted on. */
+
+.band {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  align-items: center;
+  padding: clamp(1.5rem, 3vw, 2.6rem);
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+}
+
+.copy {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.5rem, 2.4vw, 2.1rem);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.lede {
+  margin: 0.9rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+
+/* --- the three claims --------------------------------------------------- */
+
+.claims {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+}
+
+.claim {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.claim[data-hue='blue'] { --claim-hue: var(--hue-blue); --claim-wash: var(--blue-wash); }
+.claim[data-hue='green'] { --claim-hue: var(--hue-green); --claim-wash: var(--green-wash); }
+.claim[data-hue='violet'] { --claim-hue: var(--hue-violet); --claim-wash: var(--violet-wash); }
+
+.claimIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.3rem;
+  height: 2.3rem;
+  border-radius: 12px;
+  background: var(--claim-wash);
+  color: var(--claim-hue);
+  /* Dark-mode only, and inert in light — see the glow note in index.css. */
+  box-shadow: 0 0 18px color-mix(in srgb, var(--claim-hue) var(--glow-halo), transparent);
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.claim:hover .claimIcon {
+  transform: translateY(-2px);
+}
+
+.claimText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.claimTitle {
+  font-size: 0.92rem;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.claimBody {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* --- the histogram ------------------------------------------------------- */
+
+.figure {
+  margin: 0;
+  min-width: 0;
+}
+
+.figHead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1.1rem;
+}
+
+.figTitle {
+  font-size: 0.92rem;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.figSub {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* Bars sit ON the baseline, so the row is bottom-aligned and each column owns
+   its own full-height track. */
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+  height: 172px;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  height: 100%;
+  /* The whole column is the hit area, not the 12px-wide bar — a tooltip you
+     have to aim at is a tooltip nobody reads. */
+  cursor: default;
+}
+
+.barWrap {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ONE FLAT HUE. Height already encodes the magnitude, so grading the colour by
+   value too would be the same number said twice — and a rainbow across ordered
+   bins is the classic version of that mistake.
+   The DEEP step: a graphic mark needs 3:1, not the 4.5:1 the body-ink blue is
+   graded for, so it can be the richer blue and still clear the floor (3.37:1
+   on this card). */
+.bar {
+  width: 100%;
+  max-width: 30px;
+  border-radius: 4px 4px 0 0;
+  background: var(--hue-blue-deep);
+  transform-origin: bottom;
+  transition: background-color var(--dur-2) var(--ease);
+}
+
+.col:hover .bar {
+  background: color-mix(in srgb, var(--hue-blue-deep) 78%, var(--text));
+}
+
+.barValue {
+  position: absolute;
+  bottom: calc(100% + 0.3rem);
+  font-size: 0.7rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  /* Ink, not the series colour — the bar beside it already carries identity. */
+  color: var(--text-muted);
+}
+
+.colLabel {
+  font-size: 0.72rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.axisNote {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* The bars grow once, when the band first scrolls in. `useReveal` puts
+   `data-reveal` on `.band`, so this keys off the ancestor rather than needing a
+   second observer. Transform only, and one-shot. */
+.band[data-reveal='out'] .bar {
+  transform: scaleY(0);
+}
+
+.band[data-reveal='in'] .bar {
+  animation: barGrow var(--dur-4) var(--ease) backwards;
+}
+
+/* Left to right, a beat apart, so the row reads as filling in rather than as
+   nine things twitching at once. Capped at the ninth bin. */
+.band[data-reveal='in'] .col:nth-child(2) .bar { animation-delay: 40ms; }
+.band[data-reveal='in'] .col:nth-child(3) .bar { animation-delay: 80ms; }
+.band[data-reveal='in'] .col:nth-child(4) .bar { animation-delay: 120ms; }
+.band[data-reveal='in'] .col:nth-child(5) .bar { animation-delay: 160ms; }
+.band[data-reveal='in'] .col:nth-child(6) .bar { animation-delay: 200ms; }
+.band[data-reveal='in'] .col:nth-child(7) .bar { animation-delay: 240ms; }
+.band[data-reveal='in'] .col:nth-child(n + 8) .bar { animation-delay: 280ms; }
+
+@keyframes barGrow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* --- footer -------------------------------------------------------------- */
+
+.footer {
+  margin: 0;
+  padding: 0.4rem 0 1.25rem;
+  font-size: 0.74rem;
+  line-height: 1.7;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* --- responsive ---------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2rem;
+  }
+
+  .lede {
+    max-width: none;
+  }
+
+  .chart {
+    height: 140px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chart {
+    gap: 0.22rem;
+    height: 120px;
+  }
+
+  .claimBody {
+    font-size: 0.82rem;
+  }
+}

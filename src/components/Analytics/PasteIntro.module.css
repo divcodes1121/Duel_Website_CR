@@ -1,0 +1,206 @@
+/* ==========================================================================
+   The opening state of a paste screen
+   ==========================================================================
+   Centred, because there is exactly one thing being asked for. The hue is the
+   section's own identity — the same one its sidebar tile wears — and it stays
+   on SMALL things: the icon tile, the kicker, one word of the headline, the
+   chip borders. The panel behind them never goes past a level-1 wash. That is
+   the rule that keeps a neutral interface neutral while still reading as
+   coloured; see index.css. */
+
+.intro {
+  --tone: var(--accent-select);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  text-align: center;
+  padding: 2rem 1.5rem 3rem;
+}
+
+/* Two steps per hue: `--tone` is INK (it has to be legible as text on the page)
+   and `--solid` is a FILL. Drawing a slab in the ink step is what made these
+   read washed out on dark. */
+.intro[data-hue='violet'] { --tone: var(--hue-violet); --solid: var(--solid-violet); }
+.intro[data-hue='pink']   { --tone: var(--hue-pink);   --solid: var(--solid-maroon); }
+.intro[data-hue='blue']   { --tone: var(--hue-blue);   --solid: var(--solid-blue); }
+.intro[data-hue='green']  { --tone: var(--hue-green);  --solid: var(--solid-green); }
+
+/* A SOLID tile, not a 10% wash with a coloured glyph. The wash was the same
+   mistake as the sidebar row: at that size it is a block of colour, and a block
+   drawn from the ink step looks dim. */
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: 16px;
+  color: var(--on-solid);
+  background: var(--solid);
+}
+
+/* A PILL, so the section's name can wear the deep colour. As bare text it could
+   not: #96204A on the page measures 2.05:1 and is unreadable, while the ink step
+   that IS readable is a pastel. Turning the text into a fill is what lets it be
+   the same colour as the button — the constraint is on ink, not on the hue. */
+.kicker {
+  margin-top: 0.5rem;
+  padding: 0.24rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--on-solid);
+  background: var(--solid);
+}
+
+/* The display face, at a size that reads as a headline rather than as a label.
+   `clamp` so it does not tower over a narrow panel or shrink on a wide one. */
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  max-width: 20ch;
+}
+
+/* The accent word is HIGHLIGHTED, not tinted.
+   It was the last coloured text left: as ink on a dark page the deep colour is
+   impossible — #96204A there measures 2.05:1 — so the word could only ever be
+   the pastel, which is exactly what "the fonts are still light" meant. Making
+   it a fill removes the constraint, because the constraint was never on the
+   hue; it was on ink. Same colour as the button, the kicker and the sidebar row,
+   in both themes. */
+.title em {
+  font-style: normal;
+  color: var(--on-solid);
+  background: var(--solid);
+  border-radius: 10px;
+  padding: 0.02em 0.3em;
+  /* The pill hugs the word instead of inheriting the headline's 1.15 leading,
+     which would draw a slab taller than the letters. */
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.blurb {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+
+.form {
+  width: min(38rem, 100%);
+  margin-top: 1rem;
+}
+
+/* The ask is the one thing on this screen, so it is sized like it. Element
+   selectors rather than a shared class: the two screens own their own paste
+   controls and this is the intro adjusting them in place, not a third copy of
+   how a paste box looks. */
+.form input {
+  font-size: 0.92rem;
+  padding: 0.78rem 1rem;
+  border-radius: 12px;
+}
+
+.form button {
+  font-size: 0.9rem;
+  padding: 0.78rem 1.5rem;
+  border-radius: 12px;
+}
+
+/* The border lights in the section's hue on focus rather than the global
+   violet — inside this block the identity is the section's, not "selected". */
+.form input:focus {
+  border-color: var(--tone);
+}
+
+/* What the screen will give back, said before it is given anything — an empty
+   panel that lists its own output is an invitation; one that lists nothing is a
+   form someone forgot to finish. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 1.1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--text-muted);
+  background: var(--surface-nested);
+  border: 1px solid var(--border);
+}
+
+.chip::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tone);
+  flex-shrink: 0;
+}
+
+/* --- Once a deck is loaded ---------------------------------------------- */
+
+/* The same identity, collapsed to one row: the screen now has an answer to
+   show and the ask should not be the biggest thing on it any more. */
+.header {
+  --tone: var(--accent-select);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.header[data-hue='violet'] { --tone: var(--hue-violet); --solid: var(--solid-violet); }
+.header[data-hue='pink']   { --tone: var(--hue-pink);   --solid: var(--solid-maroon); }
+.header[data-hue='blue']   { --tone: var(--hue-blue);   --solid: var(--solid-blue); }
+.header[data-hue='green']  { --tone: var(--hue-green);  --solid: var(--solid-green); }
+
+.headerMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 10px;
+  color: var(--on-solid);
+  background: var(--solid);
+}
+
+.headerTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.headerForm {
+  flex: 1;
+  min-width: 16rem;
+}

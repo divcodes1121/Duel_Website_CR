@@ -204,22 +204,61 @@ function GroupCard({
   );
 }
 
-/** Saved duel groups for the active tab, shown right below the deck builder. */
+/** Every deck a saved group holds, across both sides for a versus set. */
+function groupDecks(entry: SavedDeckSet): Deck[] {
+  if (entry.mode === 'solo') return entry.solo?.decks ?? [];
+  return [...(entry.blue?.decks ?? []), ...(entry.red?.decks ?? [])];
+}
+
+/**
+ * Saved duel groups for the active mode — its own view, not a footer.
+ *
+ * This used to render below the builder, which put it under three to six deck
+ * panels: reaching it meant scrolling past the entire board, and it returned
+ * `null` outright when there was nothing saved, so the one time you most wanted
+ * to know where it had gone there was nothing on screen to find. It now fills
+ * the same area the board does and says so when it is empty.
+ *
+ * The win-condition filter SELECTS here rather than only dimming. Below the
+ * builder its job was "show me which of these decks holds Hog Rider", so
+ * dimming the rest was right; as a library its job is "find me the groups with
+ * Hog Rider in them", and a group with no matching deck is not an answer to
+ * that. Matching decks are still highlighted inside the groups that survive.
+ */
 export function SavedGroups({ mode, winFilter = [] }: { mode: BuilderMode; winFilter?: string[] }) {
   const library = useBuilderStore((s) => s.library);
-  const entries = library.filter((e) => e.mode === mode);
-
-  if (entries.length === 0) return null;
+  const all = library.filter((e) => e.mode === mode);
+  const filtering = winFilter.length > 0;
+  const entries = filtering
+    ? all.filter((e) => groupDecks(e).some((d) => deckMatchesFilter(d.slots, winFilter)))
+    : all;
 
   return (
     <section className={styles.section} aria-label="Saved duel deck groups">
       <h2 className={styles.sectionTitle}>
         Saved Groups
-        <span className={styles.sectionCount}>{entries.length}</span>
+        <span className={styles.sectionCount}>
+          {filtering ? `${entries.length} of ${all.length}` : all.length}
+        </span>
       </h2>
-      {entries.map((entry) => (
-        <GroupCard key={entry.id} entry={entry} winFilter={winFilter} />
-      ))}
+
+      {all.length === 0 ? (
+        <p className={styles.empty}>
+          Nothing saved for {mode === 'solo' ? 'Solo' : 'Versus'} yet. Build a set on the Build
+          tab and press <strong>Save</strong> — it lands here, and loading one puts it straight
+          back into the builder.
+        </p>
+      ) : entries.length === 0 ? (
+        <p className={styles.empty}>
+          None of your {all.length} saved {mode === 'solo' ? 'Solo' : 'Versus'} group
+          {all.length === 1 ? '' : 's'} holds every card in the filter. Clear it, or pick fewer
+          cards.
+        </p>
+      ) : (
+        entries.map((entry) => (
+          <GroupCard key={entry.id} entry={entry} winFilter={winFilter} />
+        ))
+      )}
     </section>
   );
 }

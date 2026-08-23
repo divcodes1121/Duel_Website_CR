@@ -1,0 +1,307 @@
+/* Deck Counter — what beats a pasted deck.
+ *
+ * One data hue: the counter's win rate is a single magnitude per row, so there
+ * is no identity to encode and no second series to separate from. `--c-loss` is
+ * the same red pole the Deck Analysis spread uses for "against you" — a DEEPER
+ * step than the UI red, because that one is a bright pastel on dark and
+ * collapses against the data green under protanopia. See DeckLab.module.css.
+ */
+
+.page {
+  --c-loss: #c02618;
+
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+:global([data-theme='dark']) .page {
+  --c-loss: #d92d20;
+}
+
+
+.blurb {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+/* A MEASURE, centred. Results used to run the full width of the panel, which
+   at 1500px put a matchup row's label 40rem from its bar. 82rem is about as wide
+   as these tables read comfortably; wider than that the eye loses the row. */
+.body {
+  width: min(82rem, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.1rem 1.3rem 1.5rem;
+}
+
+/* --- Paste box ---------------------------------------------------------- */
+
+.paste {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pasteInput {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  outline: none;
+}
+
+.pasteInput::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.pasteInput:focus {
+  border-color: var(--accent-select);
+}
+
+.pasteInputError {
+  border-color: var(--error);
+}
+
+.pasteButton {
+  border: none;
+  border-radius: 10px;
+  padding: 0.6rem 1.3rem;
+  background: var(--accent-action-solid);
+  color: var(--accent-action-text);
+  font-size: 0.83rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Nothing to analyse yet — the control says so before it is pressed. */
+.pasteButton[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+.error {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--error);
+}
+
+.empty {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 66ch;
+}
+
+/* --- The pasted deck ---------------------------------------------------- */
+
+.target {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.targetCard {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 5rem;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+}
+
+/* --- The list ----------------------------------------------------------- */
+
+.listHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.listTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.listCount {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+}
+
+.baseline {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1;
+}
+
+/* EVERY TRACK HAS A DEFINITE WIDTH. Each row is its own grid, so columns line
+   up across rows only if every one of them resolves to the same size from the
+   rule alone — an `auto` track sized to an evidence chip reading "Low" on one
+   row and "Medium" on the next gave one list three different left edges for
+   its card strips. */
+.row {
+  display: grid;
+  grid-template-columns: 1.6rem 8.5rem minmax(11rem, 20rem) 1fr 3.4rem 3.6rem 3.6rem;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rowName {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowStyle {
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* A deck is eight cards on one line. Fixed widths plus wrap is the wrong pair
+   of rules together: a fixed width has to suit the narrowest column it will
+   ever sit in, and wrapping to 5 + 3 stops a deck reading as a deck. */
+.rowDeck {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.rowCard {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 2.6rem;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+}
+
+.rowMeter {
+  position: relative;
+  height: 0.5rem;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.rowMeterFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--c-loss);
+}
+
+.rowRate {
+  font-size: 0.82rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--c-loss);
+}
+
+.rowGames {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+/* Fixed at 3.6rem, measured from the widest of its four labels — this is the
+   column whose `auto` width was shifting whole rows. */
+.rowTier {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 0.15rem 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.rowTier[data-tier='high'] {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+@media (max-width: 68rem) {
+  .row {
+    grid-template-columns: 1.6rem 7rem minmax(9rem, 1fr) 3.2rem 3.4rem;
+  }
+
+  .rowMeter,
+  .rowGames {
+    display: none;
+  }
+}

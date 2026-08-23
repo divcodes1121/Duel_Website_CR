@@ -1,0 +1,357 @@
+/* Duel Insights.
+ *
+ * Every surface here COMPOSES `.pane` from DuelAnalysis.module.css rather than
+ * redeclaring it, so the radius, border, fill and sheen cannot drift from the
+ * panels above. The chart tokens (--c-win, --c-loss, --g1..--g3) are declared
+ * on `.page` in that file and this section renders inside it, so they inherit
+ * down the tree — there is no second copy of the palette here either. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.headIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.45rem;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.2rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+/* Two-up where there is room, stacked below. */
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.card {
+  composes: pane from './DuelAnalysis.module.css';
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ facts */
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0.9rem 1.1rem;
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.factLabel {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.factValue {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* The denominator, always. A rate without its sample is not a claim, and this
+   section is built on samples that are often small. */
+.factNote {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.factValue[data-tone='good'] {
+  color: var(--c-win);
+}
+
+.factValue[data-tone='bad'] {
+  color: var(--c-loss);
+}
+
+/* Not a percentage — the explicit "we cannot say" state. Deliberately quiet
+   and deliberately present: hiding the row entirely would leave the reader
+   unsure whether the figure is missing or zero. */
+.thin {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- scorelines */
+
+.scorelines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.scoreLabel {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.score[data-won='true'] .scoreLabel {
+  color: var(--c-win);
+}
+
+.score[data-won='false'] .scoreLabel {
+  color: var(--c-loss);
+}
+
+/* ------------------------------------------------------------------ decks */
+
+.deckPick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.deckPickHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.deckName {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.deckRate {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--c-win);
+}
+
+/* Eight cards on one line, sharing the width — never fixed widths with wrap,
+   which breaks a deck into 5 + 3 and stops it reading as a deck. */
+.strip {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0.2rem;
+}
+
+/* The box is the BASE card's shape and the art letterboxes inside it. The PNGs
+   are not one shape — evolution frames run much taller — so sizing by width
+   alone makes a row's height depend on whether the deck fields one. */
+.strip img {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 3rem;
+  width: 100%;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+}
+
+.lineupOrder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.arrow {
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------- rows */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.listRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.5rem 3.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.listName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listMeta {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.listPct {
+  font-weight: 700;
+  text-align: right;
+}
+
+/* The meter track. A bar needs somewhere to be empty or a short bar is
+   indistinguishable from a missing row. */
+.meter {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--c-use);
+}
+
+/* --------------------------------------------------------------- verdicts */
+
+.verdict {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+}
+
+/* A shape as well as a colour, so a verdict's tone survives a monochrome
+   screenshot and does not rest on hue alone. */
+.dot {
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: var(--text-muted);
+}
+
+.verdict[data-tone='good'] .dot {
+  background: var(--c-win);
+}
+
+.verdict[data-tone='bad'] .dot {
+  background: var(--c-loss);
+}
+
+.verdictTitle {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.verdictBody {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------ key insight */
+
+.key {
+  composes: pane from './DuelAnalysis.module.css';
+  padding: 1.2rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  border-color: var(--accent-select);
+}
+
+.keyTitle {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent-select);
+}
+
+/* ------------------------------------------------------------------ empty */
+
+.empty {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.foot {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.loading {
+  composes: pane from './DuelAnalysis.module.css';
+  padding: 1.5rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .listRow {
+    grid-template-columns: minmax(0, 1fr) 3.6rem 3rem;
+  }
+}

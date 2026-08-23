@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { CardArt } from './CardArt';
+import { DeckActions } from '../DeckActions/DeckActions';
+import { ReportButton } from '../Export/ReportButton';
+import { metaBoardDoc } from '../../utils/reportAdapters';
 import {
   AnalyticsError,
   fetchMetaBoard,
@@ -150,6 +153,10 @@ export function MetaDecks() {
         </div>
 
         <div className={styles.headStats}>
+          {/* A thunk, not a built document — the report describes the board as
+              it stands when the button is pressed, including how stale the
+              snapshot has become by then. */}
+          <ReportButton build={() => metaBoardDoc(board)} />
           <span className={styles.stat}>
             <span className={styles.statValue}>{nf.format(board.totalBattles ?? 0)}</span>
             <span className={styles.statLabel}>battles ranked</span>
@@ -195,10 +202,13 @@ export function MetaDecks() {
                   </span>
                 </td>
                 <td>
-                  <span className={styles.cards}>
-                    {d.cards.map((c) => (
-                      <CardArt key={c} card={c} variant={d.art?.[c]} className={styles.cardIcon} />
-                    ))}
+                  <span className={styles.cardsCell}>
+                    <span className={styles.cards}>
+                      {d.cards.map((c) => (
+                        <CardArt key={c} card={c} variant={d.art?.[c]} className={styles.cardIcon} />
+                      ))}
+                    </span>
+                    <DeckActions cards={d.cards} name={d.name} />
                   </span>
                 </td>
                 <td>

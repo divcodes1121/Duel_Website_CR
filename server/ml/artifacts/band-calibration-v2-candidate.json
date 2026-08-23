@@ -1,0 +1,60 @@
+{
+  "version": "band-calibration-v2-CANDIDATE",
+  "status": "CANDIDATE - NOT ACTIVE",
+  "fitted": "2026-08-20",
+  "basis": "Phase 19C reconciled production outcomes (real subsequent battles)",
+  "why_not_active": "Duel could not be calibrated (38 reconciled players, 100 required), and no competitive band except 'medium' clears the 30-player support floor on held-out data. Activating would also change VERSIONS mid-collection and split the running experiment across two systems.",
+  "supersedes": "band-calibration-v1",
+  "method": "two thresholds on P(change); fitted on half the players, scored on the other half",
+  "support_floor_players": 30,
+  "domain_floor_players": 100,
+  "domains": {
+    "competitive": {
+      "high_below": 0.008,
+      "medium_below": 0.051,
+      "held_out": {
+        "high": {
+          "players": 26,
+          "accuracy": 0.846,
+          "ci": [
+            0.665,
+            0.939
+          ],
+          "published": null,
+          "publishable": false
+        },
+        "medium": {
+          "players": 35,
+          "accuracy": 0.686,
+          "ci": [
+            0.52,
+            0.814
+          ],
+          "published": 0.686,
+          "publishable": true
+        },
+        "low": {
+          "players": 14,
+          "accuracy": 0.571,
+          "ci": [
+            0.326,
+            0.786
+          ],
+          "published": null,
+          "publishable": false
+        }
+      },
+      "ordering_holds_held_out": true,
+      "brier": 0.2588,
+      "ece": 0.247,
+      "note": "Ordering holds out of sample, but only 'medium' has enough players to carry an accuracy claim. The deeper issue is score overconfidence, not the cuts: 162 of 167 predictions sit in the 0.8-1.0 confidence bin where the model says 96.7% and reality is 71.6%. Thresholds relabel; they cannot fix that."
+    },
+    "duel": {
+      "calibrated": false,
+      "reconciled_players": 38,
+      "brier": 0.5413,
+      "ece": 0.591,
+      "note": "INTERNAL USE ONLY. No accuracy claim is published for any duel band."
+    }
+  }
+}

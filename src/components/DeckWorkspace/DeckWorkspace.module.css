@@ -1,0 +1,92 @@
+/* ==========================================================================
+   The shared deck-screen layout
+   ==========================================================================
+   One grid. The toolbar takes the first row of the left column, the decks take
+   the second, and the card library spans both — so the library is as tall as
+   the panel rather than starting where the decks start and leaving a band of
+   empty surface beside the toolbar.
+
+   The rule that matters is `min-height: 0` on every flex/grid child in the
+   chain. A flex item's default `min-height: auto` refuses to shrink below its
+   content, so without it the columns grow to fit all the decks and all 123
+   tiles, the inner `overflow-y: auto` never has anything to do, and the whole
+   page scrolls as one piece instead — which is exactly what made these screens
+   read as a pile. */
+
+.shell {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(17rem, 28%, 24rem);
+  /* toolbar sizes to content; the decks take everything left. */
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.7rem 0.85rem;
+  padding: 0.7rem 1.1rem 1rem;
+}
+
+/* Collapsed, the library keeps a 2.9rem spine — wide enough for the control
+   that brings it back, which must not disappear with the thing it hides. */
+.shell[data-library='closed'] {
+  grid-template-columns: minmax(0, 1fr) 2.9rem;
+}
+
+.toolbar {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.deckColumn {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+
+/* The full height of the panel, beside both rows. A wrapper rather than the
+   library itself, because grid placement belongs to the grid that owns it and
+   `.library` lives in another stylesheet. */
+.libraryCell {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.libraryCell > * {
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- Narrow windows ----------------------------------------------------- */
+
+/* Under ~62rem there is no room for two columns of anything, so the pool goes
+   back to being a band under the decks. It keeps its own scroll and a capped
+   height (set on `.library` itself), which is the drawer's behaviour without
+   the drawer's overlay. */
+@media (max-width: 62rem) {
+  .shell,
+  .shell[data-library='closed'] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .libraryCell {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .deckColumn {
+    padding-right: 0;
+  }
+}

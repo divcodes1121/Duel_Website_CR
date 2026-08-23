@@ -1,54 +1,102 @@
+/* ==========================================================================
+   One deck
+   ==========================================================================
+   The panel is a NESTED box: it lives inside the tool panel, so it steps toward
+   the well rather than away from it, and its own controls (slots, icon buttons,
+   the import field) step once more. Nesting goes down — see index.css.
+
+   The layout is a header row, the eight slots, and a footer. Everything that
+   used to be a text button in the header is an icon now; what paid for the card
+   library sitting beside the decks is this row. */
+
 .panel {
   position: relative;
-  /* The most-repeated pane in the app — Versus shows up to ten at once, and
-     each backdrop-filter is its own compositing pass. Blur is kept lower here
-     than on the shell panels for that reason. */
-  border: 1px solid var(--glass-border);
-  border-radius: 22px;
-  padding: 1.15rem 1.4rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-
-  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
-  background: var(--glass-fill);
-  backdrop-filter: blur(10px) saturate(130%);
-  -webkit-backdrop-filter: blur(10px) saturate(130%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  gap: 0.7rem;
+  padding: 0.85rem 0.95rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-nested);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
 }
+
+/* --- Header ------------------------------------------------------------- */
 
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* Deck ORDER, not the name. In a duel collection the position is a fact about
+   the deck (which game it is brought for), and a name can be anything. */
+.index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-select);
+  background: var(--accent-select-wash);
+  border: 1px solid var(--accent-select-edge);
 }
 
 .name {
-  font-family: 'Subscribe', Inter, system-ui, sans-serif;
-  font-size: 1.3rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
   letter-spacing: 0.03em;
-  font-weight: 400;
+  font-weight: 600;
   margin: 0;
+  padding: 0.1rem 0.35rem;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
   color: var(--text);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: text;
+}
+
+.name:hover {
+  background: var(--neutral-wash);
+  border-color: var(--border);
+}
+
+.nameInput {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.03em;
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-sunken);
+  border: 1px solid var(--accent-select);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.1rem 0.35rem;
+  outline: none;
 }
 
 .fillCount {
-  font-family: Inter, system-ui, sans-serif;
   font-size: 0.65rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
-  background: var(--slot-bg);
-  border: 1px solid var(--slot-border);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.15rem 0.55rem;
-  margin-left: 0.6rem;
-  vertical-align: middle;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  padding: 0.12rem 0.5rem;
+  flex-shrink: 0;
 }
 
 .fillCountFull {
@@ -57,157 +105,101 @@
   background: var(--green-fill);
 }
 
-.nameInput {
-  font-size: 1.05rem;
-  font-weight: 600;
-  flex: 1;
-  min-width: 0;
-  background: var(--slot-bg);
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  color: inherit;
-  padding: 0.25rem 0.6rem;
-  outline: none;
-}
+/* --- Icon action rail --------------------------------------------------- */
 
-.headerActions {
+.actions {
   display: flex;
-  gap: 0.45rem;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: auto;
   flex-shrink: 0;
 }
 
 .iconButton {
-  background: var(--slot-bg);
-  border: 1px solid var(--slot-border);
-  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
   color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 0.32rem 0.8rem;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  transition:
-    color 0.18s ease,
-    border-color 0.18s ease,
-    background 0.18s ease,
-    transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.4),
-    box-shadow 0.18s ease;
 }
 
-.iconButton:active {
+.iconButton:hover {
+  color: var(--text);
+  background: var(--neutral-wash);
+  border-color: var(--border);
 }
 
-/* "Open in Clash Royale" — the primary action on a deck, so it is the one solid
-   accent fill in the header row. It used to be a part-transparent gradient,
-   which on a neutral palette left near-white text on a mid grey. Solid accent
-   against --accent-contrast keeps it legible in both themes. */
-.crButton {
-  color: var(--accent-action-text);
-  border-color: transparent;
-  background: var(--accent-action);
+/* Open (the import field) is a state, so it stays lit while it is one. */
+.iconButton[data-on] {
+  color: var(--accent-select);
+  background: var(--accent-select-wash);
+  border-color: var(--accent-select-edge);
 }
 
-.crButton[aria-disabled='true'] {
-  opacity: 0.45;
+/* Momentary confirmation — the icon itself swaps to a tick. */
+.iconButton[data-flash] {
+  color: var(--hue-green);
+  background: var(--green-fill);
+  border-color: var(--green-edge);
+}
+
+.iconButton[aria-disabled='true'] {
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
-/* --- Deck link import -------------------------------------------------- */
-
-/* Zero-height when closed; halves cancel the panel's flex gap so the layout
-   is identical to having no import UI at all. */
-.importWrap {
-  position: relative;
-  margin-block: -0.45rem;
+.iconButton[aria-disabled='true']:hover {
+  color: var(--text-muted);
+  background: none;
+  border-color: transparent;
 }
 
-/* Open animation for the paste-a-link row.
- *
- * framer-motion used to animate height 0 -> auto here. In CSS that is the
- * `grid-template-rows: 0fr -> 1fr` trick: the row is a grid whose single track
- * grows from nothing to its content height, which is animatable where a bare
- * `height: auto` is not. It runs as a keyframe (not a transition) because the
- * element is mounted only while open, and a transition has no from-state on
- * first paint. Closing is now instant — the exit pass is exactly the kind of
- * thing that required keeping an animation runtime on the page. */
+.iconButtonDanger:hover {
+  color: var(--hue-red);
+  background: var(--red-wash);
+  border-color: var(--red-edge);
+}
+
+/* --- Deck link import --------------------------------------------------- */
+
 .importRow {
-  display: grid;
-  grid-template-rows: 1fr;
-  overflow: hidden;
-  animation: import-row-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.importRow > * {
-  min-height: 0;
-}
-
-@keyframes import-row-in {
-  from {
-    grid-template-rows: 0fr;
-    opacity: 0;
-  }
-  to {
-    grid-template-rows: 1fr;
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .importRow {
-    animation: none;
-  }
-}
-
-/* A card that another duel deck already uses: black & white until the player
-   resolves the duplicate (removing either copy restores the color live). */
-.slotDuplicate .slotIcon {
-  filter: grayscale(1) brightness(0.82);
-}
-
-.slotDuplicate {
-  border-color: color-mix(in srgb, var(--text-muted) 40%, var(--slot-border));
-}
-
-.importInner {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0 0 0.7rem;
+  gap: 0.5rem;
 }
 
 .importInput {
   flex: 1;
   min-width: 0;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 600;
   font-family: inherit;
   color: var(--text);
-  background: var(--slot-bg);
-  border: 1px solid var(--slot-border);
-  border-radius: 10px;
-  padding: 0.5rem 0.75rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0.42rem 0.7rem;
   outline: none;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .importInput::placeholder {
-  color: color-mix(in srgb, var(--text-muted) 65%, transparent);
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .importInput:focus {
-  border-color: var(--accent);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  border-color: var(--accent-select);
 }
 
-.importInputError {
-  border-color: var(--error);
-}
-
+.importInputError,
 .importInputError:focus {
   border-color: var(--error);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 .importErrorText {
@@ -224,61 +216,68 @@
   color: var(--success);
 }
 
-/* --- Slot grid -------------------------------------------------------- */
+.importClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  cursor: pointer;
+}
 
+.importClose:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* --- Slot grid ---------------------------------------------------------- */
+
+/* Eight cards on ONE line, always. Equal fractions rather than a fixed width,
+   so the row takes whatever the column has — the deck column now grows and
+   shrinks with the card library beside it, and a fixed slot width would have to
+   suit the narrowest case forever. */
 .slotGrid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 0.6rem;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  /* Same pair as the card grid, for the same reason: an auto row does not
+     consult a child's `aspect-ratio`, so a row of slots collapses to a few
+     pixels and the slots overlap each other. `max-content` takes the slot's own
+     resolved height; `align-items: start` stops one tall evolution frame
+     stretching the seven plain cards beside it. */
+  grid-auto-rows: max-content;
+  align-items: start;
+  gap: 0.35rem;
 }
 
 .slot {
   position: relative;
   aspect-ratio: 302 / 363; /* matches the card art exactly — no letterboxing */
   background: transparent;
-  border: 1px solid var(--slot-border);
-  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   padding: 0;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  transition:
-    transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.3),
-    border-color 0.16s ease,
-    box-shadow 0.2s ease,
-    background 0.2s ease;
 }
 
 /* Empty slots read as dashed drop-targets */
 .slotEmpty {
-  background: color-mix(in srgb, var(--slot-bg) 70%, transparent);
+  background: var(--surface-sunken);
   border-style: dashed;
   border-color: color-mix(in srgb, var(--text-muted) 40%, transparent);
 }
 
-/* --- Static rarity tints when occupied (no animations — cheap to paint) --- */
-
-.slot[data-rarity='Common'] {
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-}
-
-.slot[data-rarity='Rare'] {
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-}
-
-.slot[data-rarity='Epic'] {
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-}
-
-.slot[data-rarity='Legendary'] {
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-}
-
-.slot[data-rarity='Champion'] {
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+.slotEmpty:hover {
+  border-color: var(--border-strong);
+  background: var(--neutral-wash-sunken);
 }
 
 .slotIcon {
@@ -287,25 +286,48 @@
   object-fit: contain;
 }
 
+/* EVO / HERO / WILD, printed in an empty special slot. Muted, and it disappears
+   the moment a card lands — at which point the filled slot's own badge takes
+   over saying the same thing. */
+.slotStub {
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  opacity: 0.7;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* A card that another duel deck already uses: black & white until the player
+   resolves the duplicate (removing either copy restores the color live). */
+.slotDuplicate .slotIcon {
+  filter: grayscale(1) brightness(0.82);
+}
+
+.slotDuplicate {
+  border-color: color-mix(in srgb, var(--text-muted) 40%, var(--border));
+}
+
 .slotClear {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 3px;
+  right: 3px;
   /* One of these per filled slot — up to 80 on a full Versus board. Sits on top
      of card art, so it carries its own overlay tokens rather than surface ones. */
   background: var(--overlay-chip);
   color: var(--overlay-chip-text);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   line-height: 1;
   border-radius: 999px;
-  width: 1.2rem;
-  height: 1.2rem;
+  width: 1.1rem;
+  height: 1.1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.14s ease, transform 0.14s ease;
   z-index: 2;
+  cursor: pointer;
 }
 
 .slotClear:hover {
@@ -313,7 +335,8 @@
   color: var(--overlay-chip-on-text);
 }
 
-.slot:hover .slotClear {
+.slot:hover .slotClear,
+.slot:focus-within .slotClear {
   opacity: 1;
 }
 
@@ -335,7 +358,7 @@
 /* Lit vs unlit is carried by opacity alone while the palette is monochrome —
    the two gems can no longer be told apart by hue. */
 .slotFormGem {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   opacity: 0.3;
 }
 
@@ -353,15 +376,15 @@
 
 .slotRoleBadge {
   position: absolute;
-  bottom: 4px;
-  left: 4px;
-  right: 4px;
-  font-size: 0.55rem;
+  bottom: 3px;
+  left: 3px;
+  right: 3px;
+  font-size: 0.52rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-align: center;
-  border-radius: 5px;
-  padding: 0.08rem 0;
+  border-radius: 4px;
+  padding: 0.06rem 0;
   color: var(--accent-contrast);
   z-index: 2;
 }
@@ -378,23 +401,27 @@
 }
 
 .slotRoleBadge-champion {
-  font-size: 0.48rem;
-  letter-spacing: 0.05em;
+  font-size: 0.46rem;
+  letter-spacing: 0.04em;
   background: var(--rarity-champion);
 }
 
-/* Positional slot roles (fixed, not user-assigned): 1st slot = Evolution (purple),
-   2nd slot = Hero (gold), 3rd slot = Wild (half purple / half gold).
-   Their solid 2px borders visually swallow the standard rarity glow, so these
-   slots get extra glow spread to keep the pulse as visible as normal slots. */
+/* Positional slot roles, fixed by index: 1 = Evolution, 2 = Hero, 3 = Wild.
+   They stay NEUTRAL on purpose — violet is what "selected" means in this app,
+   so a violet Evolution slot would be indistinguishable from the slot you just
+   clicked. Identity is carried by the outline weight and the badge instead.
+
+   Mixed back rather than drawn at full strength: `--accent` is near-white on
+   dark, and three 2px near-white boxes at the head of every deck read louder
+   than the cards. They still separate clearly from the plain slots' `--border`. */
 .slotRoleEvolution {
   border-width: 2px;
-  border-color: var(--accent-purple);
+  border-color: color-mix(in srgb, var(--accent-purple) 55%, transparent);
 }
 
 .slotRoleHero {
   border-width: 2px;
-  border-color: var(--accent-gold-bright);
+  border-color: color-mix(in srgb, var(--accent-gold-bright) 55%, transparent);
 }
 
 .slotRoleWild {
@@ -403,14 +430,18 @@
 }
 
 /* Masked gradient ring: draws only a 2px band just inside the slot edge, so
-   the slot's own translucent background stays visible in the middle. */
+   the slot's own background stays visible in the middle. */
 .slotRoleWild::before {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 10px;
+  border-radius: 9px;
   padding: 2px;
-  background: linear-gradient(135deg, var(--accent-purple) 50%, var(--accent-gold-bright) 50%);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-purple) 55%, transparent) 50%,
+    color-mix(in srgb, var(--accent-gold-bright) 55%, transparent) 50%
+  );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -426,7 +457,7 @@
   border-style: solid;
 }
 
-/* Per-owner selection accent: solo keeps the purple accent; Versus players get
+/* Per-owner selection accent: solo keeps the violet accent; Versus players get
    their side's colour so it's always obvious which player is being edited. */
 .panel {
   --selection-accent: var(--accent-select);
@@ -450,27 +481,25 @@
 }
 
 /* Defined after the role/rarity rules (and with matching specificity) so the
-   selection ring always wins over the positional border and rarity glows. */
-/* Static ring. This used to run `selection-breathe` infinitely — an animated
-   box-shadow, which cannot be composited, so every frame repainted the slot for
-   as long as one was selected (i.e. the whole time the user is picking cards). */
+   selection ring always wins over the positional border. */
 .slot.slotSelected {
   border-color: var(--selection-accent);
+  border-style: solid;
   background: var(--accent-select-wash);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  box-shadow: 0 0 0 1px var(--accent-select-edge);
 }
 
 /* Valid drop target under an in-progress drag — wins over everything. */
 .slot.slotDropHover {
   border-color: var(--drop-valid);
   border-style: solid;
-  transform: scale(1.07);
-  animation: none;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  background: var(--green-fill);
+  box-shadow: 0 0 0 1px var(--green-edge);
 }
 
-/* Card landing in a slot. Replaces a framer-motion spring on the <img>; keyed on
-   the card so React remounts the node and the animation replays per swap. */
+/* Card landing in a slot. Keyed on the card so React remounts the node and the
+   animation replays per swap. The global no-motion switch in index.css turns it
+   off; it is kept so reinstating motion stays a one-line decision there. */
 .slotIconEnter {
   animation: slot-icon-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
@@ -492,21 +521,73 @@
   }
 }
 
-/* --- Stats ------------------------------------------------------------ */
+/* --- Footer: the two figures, and the one primary action ---------------- */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
 
 .stats {
   display: flex;
-  gap: 0.6rem;
+  align-items: center;
+  gap: 0.9rem;
 }
 
-.statBadge {
-  font-size: 0.74rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+.stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
-  background: var(--slot-bg);
-  border: 1px solid var(--slot-border);
+}
+
+.statIcon {
+  align-self: center;
+  display: flex;
+  color: var(--text-muted);
+}
+
+.statValue {
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.statLabel {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* A complete deck's figures are final; a partial deck's will still move. */
+.stats[data-complete] .statValue,
+.stats[data-complete] .statIcon {
+  color: var(--hue-green);
+}
+
+/* The deck's primary action, and the only filled control on the panel. Text on
+   a hue fill is always --on-hue — white fails badly on the dark steps. */
+.launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid transparent;
   border-radius: 999px;
-  padding: 0.28rem 0.85rem;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  background: var(--accent-action-solid);
+  color: var(--accent-action-text);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.35rem 0.9rem;
+  cursor: pointer;
+}
+
+.launch[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

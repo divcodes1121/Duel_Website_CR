@@ -69,7 +69,83 @@ export interface ApiProfile {
   clan: string | null;
 }
 
-export interface PlayerReport {
+/** Where a tag stands with collection.
+ *
+ *  The three states mean different things to someone waiting for data and the
+ *  UI must not merge them: `tracked` is being collected, `pending` is queued
+ *  and NOT yet being collected, `unknown` is neither. */
+export interface TrackingState {
+  tag: string;
+  tracked: boolean;
+  requested: boolean;
+  requestedAt: string | null;
+  lastSeenAt: string | null;
+  hits: number;
+  state: 'tracked' | 'pending' | 'unknown';
+}
+
+/** One deck, as seen in a live battlelog. Deliberately a different shape from
+ *  `ApiDeck` — there is no rank, no lifetime totals and no inferred art here,
+ *  because the live payload states the form of every card in every battle. */
+export interface LiveDeck {
+  hash: string;
+  name: string;
+  archetype: string | null;
+  cards: string[];
+  art: Record<string, 'evolution' | 'hero'>;
+  inferredArt: boolean;
+  games: number;
+  wins: number;
+  winRate: number;
+  useRate: number;
+  lastSeen: string | null;
+}
+
+export interface LiveCard {
+  key: string;
+  name: string;
+  games: number;
+  wins: number;
+  winRate: number;
+  useRate: number;
+}
+
+/** A player's most recent battles, straight from the Clash Royale API.
+ *
+ *  THIS IS WHAT A NEVER-TRACKED TAG GETS. The databases hold what the bot
+ *  polled, so a tag searched for the first time has nothing stored — but the
+ *  game has been keeping its last ~25 battles the whole time. Every figure here
+ *  is computed over that fixed, non-paginated window, which is why the type is
+ *  separate and why `basis` is on the wire: a screen must be able to say which
+ *  kind of number it is showing. */
+export interface LivePlayerReport {
+  basis: 'live';
+  tag: string;
+  battles: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  crownsFor: number;
+  crownsAgainst: number;
+  trophyChange: number;
+  span: { from: string | null; to: string | null };
+  modes: { mode: string; battles: number }[];
+  decks: LiveDeck[];
+  cards: LiveCard[];
+  /** Battles dropped as 2v2 or a mode that hands you a deck. Printed, because
+   *  "25 battles" on the tin and 19 in the figures needs explaining. */
+  skipped: number;
+  logSize: number;
+  limits: { endpointCap: boolean; note: string };
+  tracking: TrackingState;
+  profile: ApiProfile | null;
+  coverage?: ApiCoverage;
+  sources?: ApiSources;
+}
+
+export interface StoredPlayerReport {
+  basis: 'stored';
   player: ApiPlayer;
   decks: ApiDeck[];
   trends: ApiTrends;
@@ -78,7 +154,16 @@ export interface PlayerReport {
   window: { from: string | null; to: string | null };
   /** Live CR API fields the databases do not carry. Null when unavailable. */
   profile: ApiProfile | null;
+  tracking: TrackingState;
   sources: ApiSources;
+}
+
+/** The player endpoint answers with one of two shapes, discriminated on
+ *  `basis`. A caller that does not care can narrow with `isLive` below. */
+export type PlayerReport = StoredPlayerReport | LivePlayerReport;
+
+export function isLiveReport(r: PlayerReport): r is LivePlayerReport {
+  return r.basis === 'live';
 }
 
 /* ------------------------------------------------------ meta leaderboard */
@@ -131,6 +216,56 @@ export interface MetaBoard {
  * snapshot; `building: true` means no snapshot exists yet and the caller
  * should poll. See server/meta.py for why it cannot be queried live.
  */
+export interface GlobalCardForm {
+  battles: number;
+  wins: number;
+  winRate: number;
+  /** Share of the MARKED battles this card appeared in — not of every battle. */
+  share: number;
+}
+
+export interface GlobalCard {
+  key: string;
+  battles: number;
+  wins: number;
+  /** Distinct deck lists in the window that held this card. */
+  decks: number;
+  /** Share of every competitive battle in the window — the same denominator
+   *  the deck board's use rate uses, so the two are comparable. */
+  useRate: number;
+  winRate: number;
+  /** Present ONLY when the card was seen in a battle that recorded which form
+   *  was fielded. Absent means "never observed in either form", which is a
+   *  different claim from "observed, zero". */
+  forms?: Partial<Record<CardForm, GlobalCardForm>>;
+}
+
+export interface GlobalCardBoard {
+  cards: GlobalCard[];
+  /** How thin the per-form half is. A form's win rate must not pass for the
+   *  same kind of number as a card's, so the screen prints this. */
+  formCoverage: { battles: number; from: string | null; to: string | null; days: number } | null;
+  window: { from: string | null; to: string | null; days: number };
+  totalBattles?: number;
+  computedAt?: number;
+  ageSeconds?: number;
+  building?: boolean;
+  elapsedSeconds?: number;
+  error?: string | null;
+}
+
+/**
+ * Use and win rate for every card across the WHOLE player base.
+ *
+ * Same background snapshot as the meta deck board — a deck hash is the sorted
+ * card list, so the per-card tally falls out of the scan that board already
+ * runs. Which means this is as cheap as `/meta` and can never describe a
+ * different window from it.
+ */
+export function fetchGlobalCards(): Promise<GlobalCardBoard> {
+  return get<GlobalCardBoard>('/api/analytics/meta/cards');
+}
+
 export function fetchMetaBoard(): Promise<MetaBoard> {
   return get<MetaBoard>('/api/analytics/meta');
 }
@@ -189,6 +324,8 @@ export interface DuelReport {
     uniqueDecks: number;
     slots: [number, number, number];
     evoCoverage: number;
+    /** ISO days of the first and last duel read; `''` when there were none. */
+    span?: { from: string; to: string };
   };
   pairs: { observed: number; eligible: number };
   floors: { minGames: number; minDecks: number };
@@ -197,6 +334,366 @@ export interface DuelReport {
   coverage: ApiCoverage;
   window: { from: string | null; to: string | null };
   sources: ApiSources;
+}
+
+/* ------------------------------------------------------------- duel zone */
+
+/** One deck as it was actually fielded in a duel game. */
+export interface DuelGame {
+  /** Position in the loadout: 0 = G1, 1 = G2, 2 = G3. */
+  slot: number;
+  cards: string[];
+  art?: Record<string, 'evolution' | 'hero'>;
+  artInferred?: boolean;
+  avgElixir: number;
+  /** Empty on a native duel row: it stores the DUEL's result, not each game's. */
+  result: 'win' | 'loss' | 'draw' | '' | null;
+  playerCrowns?: number;
+  opponentCrowns?: number;
+  archetype: string;
+  deckName: string;
+  /** The deck they were facing, arranged and art-resolved by the same server
+   *  function as the player's — `opponent_evo` carries the same marks. Null on
+   *  a native duel row, which stores a loadout and no per-game opponent. */
+  opponent: {
+    cards: string[];
+    archetype: string;
+    deckName: string;
+    avgElixir?: number;
+    art?: Record<string, 'evolution' | 'hero'>;
+    artInferred?: boolean;
+  } | null;
+}
+
+export interface DuelSeries {
+  id: string;
+  startTime: string;
+  endTime?: string;
+  opponentTag: string;
+  opponentName: string;
+  /** 'native' = one stored row carrying the whole loadout; 'reconstructed' =
+   *  rebuilt from consecutive friendly games with the bot's measured rules. */
+  source: 'native' | 'reconstructed';
+  /** Decided only by a 4th game — a played-out 2-0 reaches 3-0 and is a Bo3. */
+  format: 'bo3' | 'bo5';
+  games: DuelGame[];
+  playerWins: number | null;
+  opponentWins: number | null;
+  /** Short phrase for the shape of the result; '' when the score is unverified. */
+  caption: string;
+  won: boolean;
+  scoreKnown: boolean;
+}
+
+export interface SequenceDeck {
+  /** Arranged into the three special slots by the server, exactly like a deck
+   *  in the series log — the order and the art come from one function. */
+  cards: string[];
+  archetype: string;
+  deckName: string;
+  avgElixir: number;
+  art?: Record<string, 'evolution' | 'hero'>;
+  artInferred?: boolean;
+  /** Times this exact loadout was actually played (observed rows only). */
+  seen?: number;
+  count?: number;
+  prob?: number;
+  /** Series where this deck appeared alongside the opener — what drives the
+   *  ranking, so the UI has to show it or the list looks mis-sorted. */
+  coRevealed?: number;
+}
+
+export interface SequenceEntry {
+  opener: SequenceDeck & { count: number; prob: number };
+  /** 'observed' = a real series shows this exact loadout; 'predicted' = the
+   *  companions were inferred and filtered for card-legality. */
+  source: 'observed' | 'predicted';
+  seen?: number;
+  next: SequenceDeck[];
+}
+
+export interface DuelZoneReport {
+  series: DuelSeries[];
+  sequence: {
+    entries: SequenceEntry[];
+    nGames: number;
+    observed: number;
+    lowConfidence: boolean;
+  };
+  summary: {
+    duels: number;
+    native: number;
+    reconstructed: number;
+    games: number;
+    wins: number;
+    shown: number;
+    archiveUsed: boolean;
+  };
+  coverage: ApiCoverage;
+  window: { from: string | null; to: string | null };
+  sources: ApiSources;
+}
+
+/* ----------------------------------------------------------- card board */
+
+export type CardMode = 'all' | 'ranked' | 'duel' | 'tournament';
+
+export interface ApiCardRow {
+  key: string;
+  rank: number;
+  battles: number;
+  wins: number;
+  losses: number;
+  /** Share of the player's battles in the window that fielded this card. */
+  useRate: number;
+  winRate: number;
+  /** Share of its own play where it was fielded EVOLVED. A floor, not a count:
+   *  `player_evo` only covers battles from 2026-08-05 onward. */
+  evoRate: number;
+  /** Share of its own play where it was fielded as a HERO. Counted separately
+   *  from `evoRate` — they are two different special forms, and four cards
+   *  (knight, valkyrie, musketeer, wizard) have both. Same coverage caveat. */
+  heroRate: number;
+  /** Enough battles behind the win rate to be ranked on it. */
+  tiered: boolean;
+  /** null means the sample cannot support a claim at all, not "low". */
+  tier: 'high' | 'medium' | 'low' | null;
+  interval: string | null;
+  /** Movement against the equally long window immediately before this one.
+   *  `winDelta` is absent when either window has no games to compare. */
+  useDelta?: number;
+  winDelta?: number;
+  /** The same card scored once per FORM it was seen in — an evolved Skeletons
+   *  has its own use rate and its own win rate, separate from the plain one.
+   *
+   *  Counted over a DIFFERENT population: only battles whose payload recorded
+   *  which form was fielded, which is `CardBoard.formCoverage`. Absent when the
+   *  card was never seen in a battle that recorded a form, which is distinct
+   *  from being seen and scoring zero. */
+  forms?: Partial<Record<CardForm, ApiCardForm>>;
+}
+
+export type CardForm = 'base' | 'evolution' | 'hero';
+
+export interface ApiCardForm {
+  battles: number;
+  wins: number;
+  /** Share of the FORM-RECORDING battles, not of every battle — see above. */
+  useRate: number;
+  winRate: number;
+  tiered: boolean;
+  tier: 'high' | 'medium' | 'low' | null;
+  interval: string | null;
+}
+
+export interface CardBoard {
+  cards: ApiCardRow[];
+  totals: {
+    battles: number;
+    wins: number;
+    played: number;
+    ranked: number;
+    cards: number;
+    minBattles: number;
+    archiveUsed: boolean;
+  };
+  mode: CardMode;
+  previous: { from: string; to: string; battles: number } | null;
+  /** What the per-form split is built on. The form is only known for battles
+   *  whose payload carried marks — a minority of the window, over a narrower
+   *  date range than the one requested. The screen states this rather than
+   *  presenting a form's win rate as the same kind of number as a card's. */
+  formCoverage: { battles: number; share: number; from: string | null; to: string | null };
+  coverage: ApiCoverage;
+  window: { from: string | null; to: string | null };
+  sources: ApiSources;
+}
+
+/* --------------------------------------------------------- deck counter */
+
+export interface CounterStatus {
+  /** The archetype matrix is a background snapshot; poll while it builds. */
+  building: boolean;
+  error: string | null;
+  elapsedSeconds: number;
+  ageSeconds: number | null;
+  /** How often the tracked player wins in the raw table — the bias that the
+   *  symmetrised numbers correct for. Shown so the correction is visible. */
+  rawBias: number | null;
+  battles: number;
+}
+
+export interface Matchup {
+  a: string;
+  b: string;
+  games: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  avgCrownsFor: number;
+  avgCrownsAgainst: number;
+  crownDiff: number;
+  threeCrownFor: number;
+  threeCrownAgainst: number;
+  tier: 'high' | 'medium' | 'low' | null;
+  interval: string | null;
+}
+
+/** A real deck of an archetype, taken from the current meta board so the rows
+ *  can show cards rather than only a label. Absent while that snapshot builds. */
+export interface RepDeck {
+  cards: string[];
+  art: Record<string, 'evolution' | 'hero'>;
+  /** The art was derived from slot rules rather than observed. */
+  inferredArt?: boolean;
+  name: string;
+  useRate: number | null;
+  winRate: number | null;
+  avgElixir: number | null;
+}
+
+export interface CounterDeckSide {
+  archetype: string;
+  name: string;
+  /** Stored battles for this EXACT list, both directions. */
+  battles?: number;
+  /** Ordered into slots by the server's `arrange_deck`, not link order. */
+  cards: string[];
+  /** Which slots draw evolution or hero art.
+   *
+   *  A Clash Royale copy-deck link carries eight card IDs and nothing else, so
+   *  this is DERIVED from what the cards are — see `inferredArt`. Without it a
+   *  pasted deck rendered eight plain cards next to a meta deck that had its
+   *  evolutions drawn, on the same screen. */
+  art?: Record<string, 'evolution' | 'hero'>;
+  /** True when `art` was inferred from slot rules rather than observed in a
+   *  stored battle. Passed to `CardArt`, which says so in the tooltip. */
+  inferredArt?: boolean;
+  avgElixir: number;
+  /** The archetype's current meta deck, for context beside a pasted list. */
+  meta?: RepDeck | null;
+}
+
+/** Where a matchup number came from, best first.
+ *
+ *  `exact`     these two card-for-card lists have actually met
+ *  `deck`      this exact list, against every deck of that archetype
+ *  `archetype` archetype vs archetype — the deck itself has too few battles
+ *
+ *  Printed on screen. "62.4% from this deck's own 4,000 battles" and "62.4%
+ *  from the archetype average" are different claims and the reader is owed the
+ *  difference. */
+export type MatchupSource = 'exact' | 'deck' | 'cluster7' | 'cluster6' | 'archetype';
+
+export interface MatchupReport {
+  a: CounterDeckSide;
+  b: CounterDeckSide;
+  /** The two pasted lists are the same eight cards. */
+  mirror: boolean;
+  /** Different lists, same archetype — no longer the same thing as a mirror. */
+  sameArchetype?: boolean;
+  matchup: Matchup | null;
+  source: MatchupSource | null;
+  /** Every reading with evidence behind it, narrowest first: this exact list,
+   *  then lists one card different, then two, then the archetype. Shown in
+   *  full so a thin exact record can be weighed against a wide approximate
+   *  one — and so a disagreement between them is visible. */
+  ladder?: MatchupRung[];
+  status: CounterStatus;
+}
+
+export interface MatchupRung extends Matchup {
+  source: MatchupSource;
+  /** How many distinct decks were pooled. 1 for the exact list, null for the
+   *  archetype rung. */
+  decks: number | null;
+}
+
+export interface CounterRow {
+  archetype: string;
+  name: string;
+  style: string;
+  winRate: number;
+  games: number;
+  crownDiff: number;
+  /** How much better than the field this archetype does against the target. */
+  advantage: number | null;
+  tier: 'high' | 'medium' | 'low' | null;
+  interval: string | null;
+  deck?: RepDeck | null;
+  /** Whether this row is the pasted deck's own record, a widened one, or the
+   *  archetype's. */
+  source?: MatchupSource;
+  /** Decks pooled for that reading. */
+  pooledDecks?: number | null;
+}
+
+export interface CountersReport {
+  target: CounterDeckSide;
+  counters: CounterRow[];
+  /** EVERY archetype weighed, not only the ones that beat the deck. `counters`
+   *  is deliberately a short list — "what do I have to fear" — and a spread of
+   *  the deck across the whole field cannot be rebuilt from it once everything
+   *  under 50% has been dropped. Each row's `winRate` is the ARCHETYPE's, so
+   *  the deck's own is its complement. */
+  field?: CounterRow[];
+  /** Archetypes weighed to produce that list — a short list is a real answer. */
+  considered?: number;
+  styles: { style: string; share: number; games: number }[];
+  overall: { winRate: number | null; games: number } | null;
+  /** Whether `overall` is the pasted deck's own baseline or the archetype's. */
+  source?: MatchupSource;
+  /** The decks this exact list has ACTUALLY played, with no evidence floor.
+   *  A win rate needs a sample; "you lost to this deck" needs only a record,
+   *  and the floor was hiding real games. Reported as W–L, never as a %. */
+  played?: PlayedDeck[];
+  status: CounterStatus;
+}
+
+export interface PlayedDeck {
+  archetype: string;
+  name: string;
+  style: string;
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt?: boolean;
+  wins: number;
+  losses: number;
+  draws: number;
+  games: number;
+  avgElixir: number;
+  /** It has a losing record against you. */
+  beatsYou: boolean;
+}
+
+export interface PlayerMatchup {
+  archetype: string;
+  name: string;
+  style: string;
+  battles: number;
+  wins: number;
+  winRate: number;
+  /** Against this player's own average — what makes it a weakness. */
+  diff: number;
+  avgCrownsFor: number;
+  avgCrownsAgainst: number;
+  tier: 'high' | 'medium' | 'low' | null;
+  interval: string | null;
+  yourWinRate?: number;
+  deck?: RepDeck | null;
+}
+
+export interface PlayerCounterReport {
+  player: { tag: string; winRate: number; battles: number; wins: number; archiveUsed: boolean };
+  worst: PlayerMatchup[];
+  best: PlayerMatchup[];
+  recommended: PlayerMatchup[];
+  analyzed: number;
+  minBattles: number;
+  coverage: ApiCoverage;
+  window: { from: string | null; to: string | null };
+  status: CounterStatus;
 }
 
 export interface DateWindow {
@@ -246,15 +743,119 @@ function windowQuery(win: DateWindow): string {
   return q.toString();
 }
 
+/** The analysis screen's data.
+ *
+ * Searching a tag is also what ENROLS it: the server queues any tag it is not
+ * already collecting, and answers from the live Clash Royale battlelog when
+ * there is no stored history yet. So this can come back as either shape — see
+ * `PlayerReport` — and callers narrow on `basis`. A 404 now means the tag is
+ * real but BOTH sources are empty, which is a much rarer thing than it was. */
 export function fetchPlayerReport(tag: string, win: DateWindow = {}): Promise<PlayerReport> {
   return get<PlayerReport>(
     `/api/analytics/player/${encodeURIComponent(tag)}?${windowQuery(win)}`,
   );
 }
 
+/** The live battlelog on its own, for a screen that wants "right now" even
+ *  where stored history exists. */
+export function fetchLivePlayer(tag: string): Promise<LivePlayerReport> {
+  return get<LivePlayerReport>(`/api/analytics/live/${encodeURIComponent(tag)}`);
+}
+
+/** Where a tag stands with collection, enrolling it if it is new. */
+export function fetchTracking(tag: string): Promise<TrackingState> {
+  return get<TrackingState>(`/api/analytics/track/${encodeURIComponent(tag)}`);
+}
+
 /** Card combinations in duel play — the Duel Analysis screen. */
 export function fetchDuelReport(tag: string, win: DateWindow = {}): Promise<DuelReport> {
   return get<DuelReport>(`/api/analytics/duels/${encodeURIComponent(tag)}?${windowQuery(win)}`);
+}
+
+/**
+ * The Duel Zone: this player's duel series log and their deck sequence.
+ *
+ * Both halves come from one server-side read, so the series on screen and the
+ * sequence computed from them can never describe different duels.
+ */
+export function fetchDuelZone(
+  tag: string,
+  win: DateWindow = {},
+  /** Omit for every duel in the window, which is the default. */
+  limit?: number,
+): Promise<DuelZoneReport> {
+  const cap = limit ? `&limit=${limit}` : '';
+  return get<DuelZoneReport>(
+    `/api/analytics/duelzone/${encodeURIComponent(tag)}?${windowQuery(win)}${cap}`,
+  );
+}
+
+/** Every card, as one player actually plays it — the Cards screen. */
+export function fetchCardBoard(
+  tag: string,
+  win: DateWindow = {},
+  mode: CardMode = 'all',
+): Promise<CardBoard> {
+  return get<CardBoard>(
+    `/api/analytics/cards/${encodeURIComponent(tag)}?${windowQuery(win)}&mode=${mode}`,
+  );
+}
+
+/** How a player is beaten, and by which archetypes. */
+export function fetchPlayerCounter(tag: string, win: DateWindow = {}): Promise<PlayerCounterReport> {
+  return get<PlayerCounterReport>(
+    `/api/analytics/counter/${encodeURIComponent(tag)}?${windowQuery(win)}`,
+  );
+}
+
+/** Head-to-head for two decks, at archetype level — see server/deck_counter.py
+ *  for why exact deck pairings cannot answer this. */
+export function fetchMatchup(
+  a: string[], b: string[], wildA?: WildForm | null, wildB?: WildForm | null,
+): Promise<MatchupReport> {
+  // `wild` only decides how slot 3 is drawn; it changes no figure. Passed so
+  // the result renders the deck the way the paste box does.
+  const w = `${wildA ? `&wildA=${wildA}` : ''}${wildB ? `&wildB=${wildB}` : ''}`;
+  return get<MatchupReport>(
+    `/api/analytics/matchup?a=${encodeURIComponent(a.join(','))}&b=${encodeURIComponent(b.join(','))}${w}`,
+  );
+}
+
+/** What beats a pasted deck. */
+export function fetchCounters(deck: string[], wild?: WildForm | null): Promise<CountersReport> {
+  const w = wild ? `&wild=${wild}` : '';
+  return get<CountersReport>(
+    `/api/analytics/counters?deck=${encodeURIComponent(deck.join(','))}${w}`);
+}
+
+/** How a pasted deck DRAWS — slot order plus evolution/hero art, nothing else.
+ *
+ *  Called the moment a link parses so the preview lands in its real slots
+ *  immediately. The alternative was re-implementing `arrange_deck` in
+ *  TypeScript, which is a second copy of a decision that has to match the meta
+ *  board, the player screens and the PDF exactly. This costs one request that
+ *  touches no database. */
+export function fetchDrawnDeck(deck: string[], wild?: WildForm): Promise<DrawnDeck> {
+  const w = wild ? `&wild=${wild}` : '';
+  return get<DrawnDeck>(`/api/analytics/deck?cards=${encodeURIComponent(deck.join(','))}${w}`);
+}
+
+export type WildForm = 'evolution' | 'hero';
+
+export interface DrawnDeck {
+  /** In the link's own order — a copyDeck link writes the three special slots
+   *  first, so that order is the answer rather than something to rebuild. */
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt: boolean;
+  avgElixir: number;
+  /** The card in slot 3. */
+  wildSlot: string | null;
+  /** True when that card has BOTH forms, so only the player knows which was
+   *  meant — knight, valkyrie, musketeer and wizard. */
+  wildChoosable: boolean;
+  /** Which form slot 3 is currently drawn as. */
+  wild: WildForm | null;
 }
 
 export function fetchCoverage(tag?: string): Promise<{
@@ -272,4 +873,239 @@ export function fetchSuggestedTags(): Promise<{
 
 export function fetchSources(): Promise<ApiSources> {
   return get<ApiSources>('/api/analytics/status');
+}
+
+/* ── Coach Assist ─────────────────────────────────────────────────────────
+ *
+ * Two windows over `server/coach.py`. Both are STEPWISE — the user answers a
+ * question, pastes a deck, answers the next — so each step is its own request
+ * and the flow state lives in the component. The server holds nothing between
+ * calls, which is why a reload lands on question one rather than in a
+ * half-finished duel that no longer exists. */
+
+/** A deck the coach is talking about, ready to draw.
+ *
+ *  `cards` is already in slot order and `art` already says which slots wear
+ *  evolution or hero art — same `arrange_deck` every other screen goes
+ *  through, so a deck here renders identically to the same deck on the meta
+ *  board. */
+export interface CoachDeck {
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt?: boolean;
+  archetype: string;
+  deckName: string;
+  avgElixir?: number | null;
+  /** Times this deck was seen in the observations being ranked. */
+  count?: number;
+  /** Share of the candidates — already renormalised over what is shown. */
+  prob?: number;
+  /** How often it appeared in the same series as the revealed deck. The
+   *  ranking is driven by this, so the UI has to show it or the list reads as
+   *  mis-sorted against the raw usage figures. */
+  coRevealed?: number;
+  /** A meta deck used to top up a thin personal list, not one of theirs. */
+  fill?: boolean;
+  /** Only on recommendations. */
+  expected?: CoachExpected | null;
+}
+
+export interface CoachMatchup {
+  winRate: number;
+  games: number;
+  /** Which rung of the evidence ladder answered — 'exact' | 'deck' |
+   *  'cluster7' | 'cluster6' | 'archetype'. Shown, never hidden: "62%" from
+   *  this exact list and "62%" from its archetype are different claims. */
+  source: string;
+  tier?: string | null;
+  decks?: number | null;
+}
+
+export interface CoachExpected {
+  winRate: number;
+  /** Probability mass that actually had evidence behind it. Below 1 means some
+   *  of their candidate decks could not be scored and were dropped rather than
+   *  guessed at 50%. */
+  weight: number;
+  per: { cards: string[]; prob: number; matchup: CoachMatchup | null }[];
+}
+
+/** One deck inside a recorded duel loadout. */
+export interface CoachLoadoutDeck extends CoachDeck {
+  /** 1-based position in the loadout. Meaningless unless the group is ordered. */
+  game: number;
+  result: string;
+  /** This is the deck that was pasted — context, not the answer. */
+  revealed: boolean;
+}
+
+/** A three-deck loadout this player has really run, containing the pasted deck. */
+export interface CoachLoadout {
+  /** How many recorded duels used this same loadout. */
+  times: number;
+  wins: number;
+  losses: number;
+  lastSeen: string;
+  seenOn: string[];
+  /** The paste matched card-for-card rather than at the 6-of-8 rule. */
+  exact: boolean;
+  /** Whether the game ORDER is known. False for native duel rows, which store
+   *  the loadout in one row without proving the sequence. */
+  ordered: boolean;
+  /** Which game the pasted deck was, when the order is known. */
+  position: number | null;
+  games: CoachLoadoutDeck[];
+}
+
+/** Their real duel log for the decks shown — not a ranking, a record. */
+export interface CoachHistory {
+  /** Whole loadouts, most-run first. The answer to "what else does he bring". */
+  loadouts: CoachLoadout[];
+  /** The decks that travel with it, merged so a tech swap counts once. */
+  nextDecks: CoachDeck[];
+  matched: number;
+  /** How many of the matches have a usable game order. */
+  ordered: number;
+  /** Duels examined. */
+  searched: number;
+  searchedFor: number;
+}
+
+export interface CoachPrediction {
+  tag: string;
+  name: string;
+  stage: number;
+  summary: { series: number; games: number; orderedSeries: number; archiveUsed: boolean };
+  decks: CoachDeck[];
+  /** Opening only: whether the ranking is game-1 history or overall play rate. */
+  basis?: string | null;
+  nObs?: number;
+  nSeries?: number;
+  nGames?: number;
+  orderedSeries?: number;
+  lowConfidence: boolean;
+  /** Games 2 and 3 only. */
+  cards?: { card: string; prob: number }[];
+  archetypes?: { archetype: string; name: string; prob: number }[];
+  observedLoadout?: { times: number; decks: CoachDeck[] } | null;
+  history?: CoachHistory | null;
+  nCandidates?: number;
+  revealed?: CoachDeck[];
+}
+
+export interface CoachSuggestion {
+  stage: number;
+  myTag: string;
+  oppTag: string;
+  myName: string;
+  oppName: string;
+  opponent: { decks: CoachDeck[]; source: string; nCandidates: number };
+  recommendations: CoachDeck[];
+  best: CoachDeck | null;
+  /** 'expected win rate' | 'how much you play it' — which ranking was used. */
+  basis: string;
+  observedLoadout: { times: number; decks: CoachDeck[] } | null;
+  history?: CoachHistory | null;
+  myPlayed: CoachDeck[];
+  oppPlayed: CoachDeck[];
+  notes: string[];
+  caveats: string[];
+}
+
+/** Window 1 — which decks this player will bring. No revealed decks asks about
+ *  the opening; one or two asks what is left for game 2 or 3. */
+export function fetchCoachPrediction(
+  tag: string, revealed: string[][],
+): Promise<CoachPrediction> {
+  const q = new URLSearchParams();
+  revealed.forEach((d, i) => q.set(`r${i + 1}`, d.join(',')));
+  const qs = q.toString();
+  return get<CoachPrediction>(
+    `/api/analytics/coach/predict/${encodeURIComponent(tag)}${qs ? `?${qs}` : ''}`,
+  );
+}
+
+/** Window 2 — what to play next. `opp` may be empty: the read then falls back
+ *  to meta decks and says so, which is a weaker answer rather than none. */
+export function fetchCoachSuggestion(
+  me: string, opp: string, myPlayed: string[][], oppPlayed: string[][],
+): Promise<CoachSuggestion> {
+  const q = new URLSearchParams({ me });
+  if (opp) q.set('opp', opp);
+  myPlayed.forEach((d, i) => q.set(`m${i + 1}`, d.join(',')));
+  oppPlayed.forEach((d, i) => q.set(`o${i + 1}`, d.join(',')));
+  return get<CoachSuggestion>(`/api/analytics/coach/suggest?${q.toString()}`);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   OPPONENT READ — Phase 19B
+   ────────────────────────────────────────────────────────────────────────
+   A SEPARATE request on purpose. This used to ride along on /coach/predict,
+   which made the whole screen wait on a cold spinning-disk read (~2.5s p95
+   under bot write load) for a purely additive enhancement.
+
+   Eighteen phases of measurement produced one shippable claim: the most
+   recent deck is the prediction, and a confidence band on it carries real
+   information (duel 92.1% high vs 47.3% low, held out). The alternatives are
+   NOT forecasts and the UI must never present them as such.
+
+   This never rejects. Disabled, slow, failed, offline — the caller gets
+   `null` and renders nothing, because the Coach is already complete without
+   it. */
+
+export interface OpponentAlternative {
+  cards: string[];
+  out: string[];
+  in: string[];
+  confidence: string;
+  evidence: string[];
+}
+
+/** PHASE 23. `changeProbability` used to be here and is gone (FIX 1): it is a
+ *  logistic score, i.e. a model internal, and it is the same score measured at
+ *  ECE 0.2806 competitive / 0.6097 practice — both internal and wrong.
+ *
+ *  `confidence` is now OPTIONAL and `bandShown` says whether it is present
+ *  (FIX 3). A band is only sent for a domain whose ordering has been validated
+ *  against real outcomes; the practice population's does not hold, so it
+ *  arrives without one and the panel must render without one. */
+export interface OpponentRead {
+  primary: { cards: string[]; confidence?: string; basis: string };
+  alternatives: OpponentAlternative[];
+  note: string;
+  degraded: boolean;
+  bandShown: boolean;
+}
+
+/** How long the client waits before giving up. Chosen from the measured cold
+ *  read (Phase 19A: p95 ~2.5s under write load), with headroom — long enough
+ *  that a slow disk still lands, short enough that a hung request does not
+ *  leave a skeleton on screen forever. */
+export const OPPONENT_READ_TIMEOUT_MS = 6000;
+
+export type OpponentReadOutcome =
+  | { kind: 'read'; read: OpponentRead }
+  | { kind: 'disabled' }
+  | { kind: 'timeout' }
+  | { kind: 'error' };
+
+export async function fetchOpponentRead(
+  tag: string, timeoutMs = OPPONENT_READ_TIMEOUT_MS,
+): Promise<OpponentReadOutcome> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(
+      `${BASE}/api/analytics/coach/opponent-read/${encodeURIComponent(tag)}`,
+      { signal: ctrl.signal },
+    );
+    if (!res.ok) return { kind: 'error' };
+    const body = (await res.json()) as { enabled: boolean; read: OpponentRead | null };
+    if (!body?.enabled || !body.read) return { kind: 'disabled' };
+    return { kind: 'read', read: body.read };
+  } catch (e) {
+    return (e as Error)?.name === 'AbortError' ? { kind: 'timeout' } : { kind: 'error' };
+  } finally {
+    clearTimeout(timer);
+  }
 }

@@ -1,17 +1,33 @@
-@font-face {
-  font-family: 'Subscribe';
-  src: url('/assets/fonts/Subscribe.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Subscribe';
-  src: url('/assets/fonts/Subscribe-Italic.ttf') format('truetype');
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
+/* THE DISPLAY FACE IS ARIAL, and it is a system font — there is no `@font-face`
+ * here and nothing is downloaded for it.
+ *
+ * It was Kids Word, a hand-drawn OpenType/CFF file served from
+ * `public/assets/fonts/`. Replacing it with a system stack settles several
+ * things that face cost us, all at once:
+ *
+ *   - NOTHING TO LOAD. No webfont request, no `font-display: swap` reflow, and
+ *     no first-paint in a fallback face.
+ *   - REAL WEIGHTS. Kids Word ships ONE cut, which is why `font-synthesis:
+ *     weight` had to stay on for `font-weight: 600` to do anything at all.
+ *     Arial has a genuine bold, so headings get a drawn weight rather than a
+ *     synthesised smear.
+ *   - THE PDF MATCHES THE SCREEN FOR FREE. jsPDF's built-in Helvetica is
+ *     metrically compatible with Arial, so the export needs no embedded font,
+ *     no conversion step and no verification that the embed worked — three
+ *     things the CFF face required and silently failed at.
+ *
+ * ONE TOKEN, named `--font-display`, because two patterns were in use across
+ * the stylesheets: a literal `'Kids Word', Inter, system-ui, sans-serif` stack
+ * and `var(--font-display, inherit)`, the latter resolving to nothing because
+ * the variable was never actually defined. Both now point here, so the display
+ * face is one edit rather than thirty-seven.
+ *
+ * `scripts/build-pdf-font.py` and `KidsWord*.{otf,ttf}` are left in place but
+ * unreferenced — the converter is the record of how to bring back a custom
+ * face, and it is the part that is hard to rediscover.
+ */
+:root {
+  --font-display: Arial, Helvetica, 'Liberation Sans', sans-serif;
 }
 
 /* ==========================================================================
@@ -33,12 +49,32 @@
      11     low-contrast text (secondary)
      12     high-contrast text (primary)
 
+   ── The depth ladder, and the one rule that governs it ────────────────────
+
+     page             --bg-1              #000000   #F4F4F6
+     panel            --glass-fill        #202020   #FFFFFF
+     box in a panel   --surface-nested    #1A1A1A   #F8F8FA
+     well / control   --surface-sunken    #141414   #F1F1F4
+
+   NESTING GOES DOWN, NEVER UP. A panel inside a panel does not get lighter,
+   because on light there is nothing above #FFFFFF to get lighter into — the
+   panel is already the brightest surface the theme has. Every level of nesting
+   therefore steps toward the well, which is a direction both themes can travel
+   equally far, and that is what keeps a nested box readable on light and dark
+   with one value instead of two.
+
+   Roughly 7 points of 8-bit lightness per rung, in both directions.
+
    Two rules taken from how GitHub, Linear and Vercel actually do this, both of
    which the earlier attempts got wrong:
 
-   - The dark ground is #0B0B0B, not #000. Pure black leaves nowhere darker to
-     go for sunken surfaces, and pure-white-on-pure-black haloes badly at small
-     sizes. GitHub's dark canvas is #0D1117 for the same reason.
+   - The dark PAGE is #000 by request, against this guidance. The guidance is
+     about surfaces that CARRY BODY TEXT, and the page carries none — every
+     surface that does (panel #202020, nested #1A1A1A, well #141414) sits well
+     clear of it, so no small text is ever set on pure black. Do not push #000
+     up the ladder: a panel at #000 would halo its own copy, which is the thing
+     the rule exists to prevent. GitHub's dark canvas is #0D1117 for that
+     reason.
    - Dark-mode body text is #EDEDED, not #FFF, for the same halation reason.
      GitHub uses #E6EDF3.
 
@@ -47,41 +83,100 @@
    floor for body copy and 3:1 for UI. */
 
 :root[data-theme='dark'] {
-  /* 1–2 backgrounds */
-  --bg-1: #111111;
+  /* 1–2 backgrounds.
+     THE PAGE IS TRUE BLACK, by request. The note above argues for #111 — a
+     near-black ground rather than #000, because maximum contrast against light
+     text is what makes body copy shimmer. That reasoning still stands and is
+     why #000 stops HERE, at the page: it is the one surface that carries no
+     body text. Every surface that does — panel, nested box, well — is
+     unchanged, so nothing that is actually read sits on pure black, and the
+     halation argument never applies to it.
+
+     What this does change is elevation. Page-to-panel was 9 points of 8-bit
+     lightness (#111 → #1A1A1A) and is now 32 (#000 → #202020), so panels read
+     as properly raised and the gutters read as empty space rather than as a
+     surface of their own. That is the intended look.
+
+     Every rung ABOVE the page moved up with it — see `--surface` below. The
+     well (#141414) is now lighter than the page, which is not a break of
+     "nesting goes down": a well always sits inside a panel and is stepped
+     against that panel, never against the page. */
+  --bg-1: #000000;
   --bg-2: #161616;
   --bg-3: #202020;
 
   /* 3–5 component backgrounds. Elevation on dark is carried by lightness, not
      shadow — a shadow against a near-black page is invisible. Each step up is
      a step lighter, which is why a card reads as sitting above the page.
-     The ladder is deliberately shallow and evenly spaced (#111 page → #1A1A1A
-     card → #202020 raised) so page, sidebar, card and input are all separable
-     without any of them being pure black. */
-  --surface: #1a1a1a;
-  --surface-strong: #202020;
-  --surface-sunken: #0d0d0d;
+     The ladder above the page is deliberately shallow and evenly spaced
+     (#202020 card → #262626 raised) so sidebar, card and input stay separable.
+     The page itself is true black by request — see --bg-1. */
+  /* STEPPED UP ONE RUNG now the page is #000. Against a near-black page a
+     #1A1A1A panel was itself near-black and the whole stack read as one flat
+     dark field; against true black it can afford to be properly grey, which is
+     what makes a panel look like a panel rather than a slightly different
+     shade of the background. Every rung moved together, so the ~6-point
+     spacing and "nesting goes down, never up" are both intact:
+     panel #202020 → nested #1A1A1A → well #141414, all still above the page. */
+  --surface: #202020;
+  --surface-strong: #262626;
+  --surface-nested: #1a1a1a;
+  --surface-sunken: #141414;
 
   /* 6–8 borders. Two jobs, two contrast bars: --border is a decorative
      separator (WCAG exempts those), --border-strong outlines interactive
      controls like inputs and is held to the 3:1 non-text contrast floor. */
-  --border: #262626;
-  --border-strong: #666666;
+  /* Lifted with the surfaces. #262626 against a #202020 panel is 6 points of
+     lightness and reads as no edge at all — a border has to stay clear of the
+     thing it borders, so it moves whenever the surface under it does. */
+  --border: #2e2e2e;
+  --border-strong: #6e6e6e;
   --highlight: rgba(255, 255, 255, 0.045);
 
   /* Elevation. Nothing on dark: a cast shadow against #0b0b0b cannot be seen,
      so raising a surface is done with --surface above and its border. Floating
      layers (menus, dialogs) still get one, to separate them from the content
-     they cover. */
-  --shadow: none;
+     they cover.
+
+     Written as a transparent shadow rather than `none` so it can be COMPOSED:
+     `box-shadow: var(--shadow), inset 0 1px 0 ...` is how a panel gets light's
+     elevation and dark's inner sheen from one declaration, and `none` inside a
+     shadow list is a syntax error that would drop the whole rule. */
+  --shadow: 0 0 0 0 transparent;
   --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.55);
 
-  /* Glass. A translucent fill over the page wash, plus a lit top edge — the
-     highlight is what actually sells it as a pane rather than a flat tint. */
-  --glass-fill: rgba(255, 255, 255, 0.05);
-  --glass-fill-strong: rgba(255, 255, 255, 0.075);
-  --glass-stroke: rgba(255, 255, 255, 0.1);
-  --glass-sheen: rgba(255, 255, 255, 0.09);
+  /* Panels. These were translucent `backdrop-filter` glass and are now SOLID —
+     see the note above the light block for why. The names are kept because
+     twenty stylesheets reach for them; what changed is only the value, so the
+     whole app went solid from these four lines.
+
+     A blur behind an opaque fill paints nothing, so the `backdrop-filter`
+     declarations still dotted around the components are inert. They are left
+     in place rather than swept out of 21 files, because each one also creates
+     the stacking context that portalled menus are already positioned against. */
+  --glass-fill: #202020;
+  --glass-fill-strong: #262626;
+  --glass-stroke: #383838;
+  /* The lit top edge is the one part of the glass worth keeping: on a dark
+     solid panel it is what stops the border reading as a flat outline. */
+  --glass-sheen: rgba(255, 255, 255, 0.05);
+
+  /* ── Real glass ────────────────────────────────────────────────────────
+     The `--glass-*` tokens above are FLAT despite their names — the frosted
+     pass was dropped app-wide because a translucent panel refracts whatever
+     scrolls behind it and drags its own contrast around. These two are the
+     genuine article, for the small number of places that ask for it on
+     purpose: an overlay that floats ABOVE the page rather than sitting in it,
+     is small, and is short-lived. The season menu is the first.
+
+     0.80 is not a look, it is the floor. Text on a translucent fill has no
+     fixed contrast — it depends on whatever happens to be behind — so the
+     alpha is set at the point where the WORST backing is still legible.
+     Composited over pure white, this dark panel resolves to #484848 and
+     `--text` still reads 6.3:1 on it; over anything darker it only improves.
+     Dropping to 0.6 to make the blur more obvious is what would break it. */
+  --glass-panel: rgba(26, 26, 26, 0.8);
+  --glass-panel-stroke: rgba(255, 255, 255, 0.13);
 
   /* The wash the panes refract. Static; blurring a flat colour would cost the
      compositing pass and show nothing. */
@@ -101,6 +196,21 @@
   --accent-deep: #cfcfcf;
   --accent-contrast: #0b0b0b;
 
+  /* ── Gold ──────────────────────────────────────────────────────────────
+     The one hue in this palette that is not semantic and not neutral.
+     Everything else in the interface earns its colour by meaning; a crown is
+     gold because a Clash Royale crown IS gold, and drawing it in the app's
+     near-white made the one piece of game iconography on screen look like a
+     UI glyph. This is game fidelity, the same call the README defers on for
+     rarity colours — taken here because the crown is the brand.
+
+     Three steps, not one: metal reads as metal because it has a highlight, a
+     body and a shade. A flat #FFD700 reads as yellow plastic. The gradient
+     built from them runs across the shape rather than down it, which is what
+     makes it look struck rather than lit. */
+  --gold-bright: #ffe9a8;
+  --gold: #e8b33c;
+  --gold-deep: #a9741a;
   --accent-gold: #ededed;
   --accent-gold-bright: #ffffff;
 
@@ -124,28 +234,140 @@
      Brighter steps for the dark ground. Every one clears 4.5:1 against all
      three dark surfaces, so each is safe as text, icon, border or fill:
 
-              #111111  #161616  #1A1A1A  #202020
+              #000000  #161616  #202020  #262626
        violet  6.94     6.65     6.40     5.99
        pink    7.13     6.83     6.57     6.15
        blue    5.85     5.60     5.39     5.04
        green   9.82     9.41     9.05     8.48
        red     6.83     6.54     6.29     5.89                            */
   --hue-violet: #a78bfa;
-  --hue-pink: #f472b6;
+  /* MAROON, and it is a two-step hue — see the note beside --accent-action.
+     This is the INK step: text, icons, borders, and what a wash is mixed from.
+
+     IT IS GRADED TO THE REST OF THE PALETTE, and the first attempt was not.
+     Measured in OKLCH, the four other dark hues sit at chroma 0.153–0.166:
+
+       violet #A78BFA  C 0.159      green #34D399  C 0.153
+       blue   #5B8DEF  C 0.156      red   #F87171  C 0.166
+
+     The first maroon came in at C 0.121 — 22% under that band — and that is
+     exactly what "it looks dimmed, like the opacity dropped" was seeing. It was
+     not darker than the others; it was less SATURATED than them, which on a
+     dark ground reads as washed rather than deep. Lightness was never the
+     problem, so lightness is not the fix: this step is C 0.157, in band, at
+     L 0.655.
+
+     There is a hard limit behind all of this. On a near-black page ink must
+     clear 4.5:1 against grounds up to #202020, which puts a floor under how
+     dark it can be — and a light, saturated red IS a rose. A burgundy dark
+     enough to read as burgundy measures 2.3:1 there and is simply unreadable
+     as text. So the dark theme cannot have "maroon-dark" and "as vivid as the
+     rest" in the same value. It gets vividness here, where the colour is small
+     and has to be legible, and the true maroon on the FILL step below, which is
+     where the large coloured surfaces actually are.
+
+     Hue 350 rather than the light step's 5: it keeps the app's existing colour
+     family and buys separation from the error red — ΔE 10.6 against 7.7, where
+     the old pink managed 9.7 and violet-vs-blue is 10.0. Maroon IS a dark red,
+     and "the primary thing to click" must never read as "this will destroy
+     something". */
+  --hue-pink: #d05e99;
   --hue-blue: #5b8def;
+  /* A DEEPER blue for large display type and chart marks on dark.
+     `--hue-blue` is graded for body-sized ink, so it is light enough to hold
+     4.5:1 at 14px — which at 3.6rem reads as washed rather than as blue. This
+     step trades that headroom for saturation: 3.37:1 on the card and 3.48:1 on
+     the hero, both above the 3:1 that large text and graphic marks require, and
+     visibly closer to the light theme's #1d4ed8.
+     It is NOT `--solid-blue`: that measures 2.60:1 here and fails the floor —
+     the solid ramp is graded to carry white ON it, not to be read against a
+     near-black page. Only for 24px+/bold text and marks; never for body copy. */
+  --hue-blue-deep: #2563eb;
   --hue-green: #34d399;
+  /* The display step for green, and it exists for exactly the reason
+     `--hue-blue-deep` does. `--hue-green` is #34d399 — a pale mint, and pale
+     BY DESIGN, because it has to hold 4.5:1 as 14px body ink on this ground.
+     Set at 48px it reads washed out, which is the same complaint the blue drew
+     before it got a deep step. Large text only needs 3:1, so this spends the
+     headroom on saturation instead: #0F9D6E measures 6.4:1 on the #000 page,
+     well past the floor, and reads as green rather than as mint.
+     Display type 24px+ and bare marks only — never body copy, which is what
+     the pale step is for. */
+  --hue-green-deep: #0f9d6e;
   --hue-red: #f87171;
+
+  /* ── The data pair ─────────────────────────────────────────────────────
+     NOT part of the five-hue system above, and deliberately not merged with
+     it: UI colour communicates interface meaning, chart colour communicates
+     data, and only the second has to survive being compared without a label.
+     Re-encoding these to match the UI hues would trade a measured property
+     for a cosmetic one.
+
+     Computed with the palette validator: both clear the lightness band, the
+     chroma floor, 3:1 contrast, and CVD separation (ΔE 20.7 protan light /
+     19.6 deutan dark). Tritan separation is under the floor, which is legal
+     only because every meter also prints its own figure beside it.
+
+     These were declared on `.page` in four component modules — with a comment
+     in each saying one app should not encode "use rate" two ways. Hoisted here
+     so that is structurally true rather than a note. The module copies are
+     more specific and still win, so nothing changed on screen; what this buys
+     is a root-level value the PDF exporter can READ, which is how a report
+     ends up in the same colours as the screen instead of a hand-matched
+     approximation of them. */
+  --c-use: #3987e5;
+  --c-win: #199e70;
 
   /* Level 1 (wash, ~8%) and level 2 (fill, ~14%) are mixed against the CARD
      surface rather than the page, because that is what they actually sit on.
      Level 3 is the raw hue above. */
-  --mix-ground: #1a1a1a;
+  /* The card surface the level-1 and level-2 tints are mixed against —
+     moved with `--surface`, or every wash would be computed against a
+     panel colour that no longer exists. */
+  --mix-ground: #202020;
   --edge-strength: 45%;
+
+  /* ── Glow ──────────────────────────────────────────────────────────────
+     A STRENGTH, mixed per hue at the point of use — the same trick as
+     `--edge-strength` above, and for the same reason: one declaration in the
+     component works in both themes, because the light theme sets these to 0%
+     and `color-mix(in srgb, <hue> 0%, transparent)` is simply transparent.
+     No `[data-theme]` branch per component, no second set of rules to drift.
+
+     Dark mode NEEDS this in a way light does not. `--shadow` is
+     `0 0 0 0 transparent` here, because a black shadow on a near-black page is
+     invisible — which left dark mode with no elevation cue at all on hover.
+     Light gets depth from a real shadow; dark gets it from the surface
+     appearing to emit its own hue.
+
+     THIS IS STATIC. The lag that once got all motion banned came from animating
+     box-shadow and filter in an infinite loop — repainting a blurred layer every
+     frame. A glow that is painted once and then only crossfades on hover costs
+     nothing like that. Do not put either of these in a keyframe. */
+  --glow-core: 30%; /* the tight halo that reads as emission */
+  --glow-halo: 15%; /* the wide, faint spill around it */
 
   --success: #34d399;
   --warning: #fbbf24;
   --error: #f87171;
   --error-soft: #fca5a5;
+
+  /* Text on a SOLID fill of ANY of the five hues. The dark steps are bright
+     pastels chosen to read as text on a near-black page, which is exactly what
+     makes white unusable on top of them — white on #34D399 is 1.6:1 and on
+     #5B8DEF 3.3:1. Against the ground colour every one of the five clears 6:1:
+
+       violet 7.3   pink 7.5   blue 6.1   green 10.3   red 7.2
+
+     One token for all five, so a filled control never has to think about which
+     hue it happens to be wearing. */
+  --on-hue: #0b0b0b;
+  --accent-info-text: var(--on-hue);
+  --success-text: var(--on-hue);
+
+  /* A blue deep enough to carry WHITE text, unlike --hue-blue. Superseded by
+     the shared --solid-* ramp; kept as the name components already reach for. */
+  --accent-info-solid: var(--solid-blue);
 
   --scrim: rgba(0, 0, 0, 0.7);
   --overlay-chip: rgba(0, 0, 0, 0.78);
@@ -159,20 +381,29 @@
      that way round, not the reverse. A white card on a white page cannot read
      as raised no matter what border it carries, which is exactly how this
      looked before. Grey ground, white card is what every minimal light theme
-     does for the same reason. */
-  --bg-1: #fbfbfc;
+     does for the same reason.
+
+     The page was #FBFBFC, one step off white, and that step was too small to
+     do the job now that panels are solid instead of frosted: the panel and the
+     page behind it were 1.6% apart in lightness, so on light the whole screen
+     read as one undifferentiated sheet while on dark it read as stacked cards.
+     The two themes are now matched — 9 points of 8-bit lightness between page
+     and panel on dark (#000000 → #202020, deliberately a big step since the
+     page went true black), 11 on light (#F4F4F6 → #FFFFFF). */
+  --bg-1: #f4f4f6;
   --bg-2: #ffffff;
-  --bg-3: #f5f5f6;
+  --bg-3: #ececed;
 
   /* 3–5 component backgrounds. Light mode is designed, not inverted: the page
      is the faint grey step, cards are pure white, and sunken wells (meters,
      inputs) drop back to #F5F5F6. */
   --surface: #ffffff;
   --surface-strong: #ffffff;
-  --surface-sunken: #f5f5f6;
+  --surface-nested: #f8f8fa;
+  --surface-sunken: #f1f1f4;
 
   /* 6–8 borders — see the dark block for why these two differ. */
-  --border: #e4e4e7;
+  --border: #e2e2e7;
   --border-strong: #8f8f94;
   --highlight: rgba(255, 255, 255, 0.9);
 
@@ -182,18 +413,37 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
 
-  /* Glass, inverted: on light the pane is frosted white rather than a lifted
-     tint, and it needs to be far more opaque than the dark one or the text on
-     it stops being readable against whatever passes underneath. */
-  --glass-fill: rgba(255, 255, 255, 0.66);
-  --glass-fill-strong: rgba(255, 255, 255, 0.82);
-  --glass-stroke: rgba(255, 255, 255, 0.85);
-  --glass-sheen: rgba(255, 255, 255, 0.95);
+  /* Panels, solid — see the dark block. The frosted version is what made the
+     two themes diverge most: at 66% white over a near-white page a light panel
+     was barely a panel, and its stroke was WHITE-on-white, so on light the
+     boxes had no edge at all while on dark they were clearly outlined. Solid
+     white with a real grey stroke gives light the same box the dark theme has
+     always had. */
+  --glass-fill: #ffffff;
+  --glass-fill-strong: #ffffff;
+  --glass-stroke: #dedee4;
+  /* No inner sheen on light: a white highlight inside a white panel is
+     invisible, and any darker value would read as a seam. Light gets its
+     depth from --shadow instead, which is the direction that actually works
+     on a pale ground. */
+  --glass-sheen: transparent;
 
+  /* Real glass — see the dark block for why the alpha is a floor rather than a
+     look. Composited over pure black this resolves to #CCCCCC, where `--text`
+     (#1a1a1a) still reads 11:1; over the page it is indistinguishable from
+     white. The stroke is a real grey rather than white-on-white, which is the
+     mistake the app-wide frosted pass actually made. */
+  --glass-panel: rgba(255, 255, 255, 0.8);
+  --glass-panel-stroke: rgba(0, 0, 0, 0.1);
+
+  /* Halved. These alphas were set against the old #FBFBFC ground, where a 5.5%
+     black radial was barely a tint; on the darker #F4F4F6 the same gradient
+     read as a grey smudge in the gutter between two white panels. The wash is
+     supposed to be something you notice only if you look for it. */
   --page-wash:
-    radial-gradient(62% 52% at 16% 10%, rgba(0, 0, 0, 0.055), transparent 70%),
-    radial-gradient(54% 46% at 84% 80%, rgba(0, 0, 0, 0.045), transparent 70%),
-    radial-gradient(46% 42% at 66% 26%, rgba(0, 0, 0, 0.03), transparent 70%);
+    radial-gradient(62% 52% at 16% 10%, rgba(0, 0, 0, 0.028), transparent 70%),
+    radial-gradient(54% 46% at 84% 80%, rgba(0, 0, 0, 0.022), transparent 70%),
+    radial-gradient(46% 42% at 66% 26%, rgba(0, 0, 0, 0.015), transparent 70%);
 
   /* 11–12 text */
   --text: #1a1a1a;
@@ -205,6 +455,11 @@
   --accent-deep: #000000;
   --accent-contrast: #ffffff;
 
+  /* Re-stepped for the light ground, not the dark values dimmed: on white the
+     highlight has to come down or the shine disappears into the page. */
+  --gold-bright: #f3cf76;
+  --gold: #c9901f;
+  --gold-deep: #8a5c0f;
   --accent-gold: #1a1a1a;
   --accent-gold-bright: #000000;
 
@@ -224,27 +479,61 @@
   /* ── The five hues, re-stepped for a light ground ─────────────────────
      Deeper, not the dark values dimmed. Each clears 4.5:1 on all three light
      surfaces AND carries white text at 4.5:1+ when used as a solid button
-     fill, so a pink CTA is legible without a second thought:
+     fill, so a pink CTA is legible without a second thought. Re-measured after
+     the page and the sunken well were darkened — a darker ground costs a dark
+     hue a little contrast, and the worst of them (pink on a well) still lands
+     at 4.85:
 
-              #FBFBFC  #FFFFFF  #F5F5F6   white-on-hue
-       violet  6.87     7.10     6.52       7.10
-       pink    5.28     5.46     5.01       5.46
-       blue    6.48     6.70     6.15       6.70
-       green   5.30     5.48     5.03       5.48
-       red     5.75     5.95     5.46       5.95                          */
+              page     panel    well
+              #F4F4F6  #FFFFFF  #F1F1F4   white-on-hue
+       violet  6.54     7.10     6.31       7.10
+       pink    5.03     5.46     4.85       5.46
+       blue    6.17     6.70     5.95       6.70
+       green   5.05     5.48     4.87       5.48
+       red     5.48     5.95     5.28       5.95                          */
   --hue-violet: #6d28d9;
-  --hue-pink: #c81e69;
+  /* Light has no such floor — ink only has to be DARK enough here — so the
+     light column is the real maroon: 7.16:1 worst case against the surfaces,
+     and ΔE 43 from the error red. */
+  --hue-pink: #96204a;
   --hue-blue: #1d4ed8;
+  /* Light already reads deep, so this is the same step — the token exists so
+     the component needs no theme branch. */
+  --hue-blue-deep: #1d4ed8;
   --hue-green: #047857;
+  /* Same step as `--hue-green` here: light's green is already a deep forest,
+     so there is nothing to deepen. The token exists so a component can name
+     the display step without a theme branch — exactly as blue does above. */
+  --hue-green-deep: #047857;
   --hue-red: #c02618;
+
+  /* The data pair, re-stepped against the light ground — never an auto-flip
+     of the dark column. See the dark block for why this system is separate. */
+  --c-use: #2a78d6;
+  --c-win: #169b6b;
 
   --mix-ground: #ffffff;
   --edge-strength: 32%;
+
+  /* Off. Light mode has a real shadow for elevation and a hue glow on white
+     reads as a printing error, not as depth. Zero rather than deleting the
+     tokens, so every component can carry ONE unconditional glow declaration. */
+  --glow-core: 0%;
+  --glow-halo: 0%;
 
   --success: #047857;
   --warning: #b45309;
   --error: #c02618;
   --error-soft: #c02618;
+
+  /* The light steps are deep enough to take white on all five, per the table
+     above — 5.46:1 is the worst of them, on the pink. */
+  --on-hue: #ffffff;
+  --accent-info-text: var(--on-hue);
+  --success-text: var(--on-hue);
+
+  /* Light's blue is already deep enough — white on it is 6.70:1. */
+  --accent-info-solid: var(--solid-blue);
 
   --scrim: rgba(0, 0, 0, 0.4);
   --overlay-chip: rgba(0, 0, 0, 0.72);
@@ -289,8 +578,78 @@
   --red-fill: color-mix(in srgb, var(--hue-red) 14%, var(--mix-ground));
   --red-edge: color-mix(in srgb, var(--hue-red) var(--edge-strength), transparent);
 
+  /* Struck metal: highlight, body, shade, across the shape. Used by the brand
+     mark and by a won crown — the two places this app shows gold. */
+  --gold-sheen: linear-gradient(
+    135deg,
+    var(--gold-bright) 0%,
+    var(--gold) 42%,
+    var(--gold-deep) 78%,
+    var(--gold) 100%
+  );
+
+  /* ── The SOLID ramp — one set, shared by BOTH themes ───────────────────
+     A hue has two jobs and they want opposite values. The five `--hue-*` steps
+     above are INK: on the dark theme they are bright pastels, because text and
+     icons have to clear 4.5:1 against a near-black page. That is correct for a
+     glyph and wrong for a SLAB — a filled sidebar row or a primary button drawn
+     in a pastel reads exactly as the report said: "like the opacity decreased,
+     dim, washed".
+
+     These are the fill steps, and they are the LIGHT theme's own hues, unchanged.
+     That is not a shortcut; a light-theme hue is already "dark enough to carry
+     white on a white page", which is the same requirement a dark-theme fill has.
+     Measured, all five work on both grounds:
+
+                     white on it   visible on the #000 page
+       violet #6D28D9    7.10             2.66
+       maroon #96204A    8.07             2.34
+       blue   #1D4ED8    6.70             2.82
+       green  #047857    5.48             3.44
+       red    #C02618    5.95             3.18
+
+     So the light theme has ONE step per hue and the dark theme has two, which is
+     the honest shape: light needs no pastel because its page is not dark. */
+  --solid-violet: #6d28d9;
+  --solid-maroon: #96204a;
+  --solid-blue: #1d4ed8;
+  --solid-green: #047857;
+  --solid-red: #c02618;
+  /* Text on any of the five. Not `--on-hue`: these are deep by construction, so
+     the answer is white in both themes rather than flipping per theme. */
+  --on-solid: #ffffff;
+
   /* Neutral hover, for surfaces that carry no semantic hue. */
   --neutral-wash: color-mix(in srgb, var(--text) 6%, var(--mix-ground));
+
+  /* ── The same ladder, mixed against a SUNKEN surface ───────────────────
+     A tint has to be mixed against the ground it will actually sit on. The
+     ladder above mixes against the card, so a control whose resting fill is
+     `--surface-sunken` gets a step made of two parts: the tint itself, PLUS
+     the gap between the card and the sunken well. In light those two cancel
+     (both go darker); in dark they compound (the tint goes lighter, the well
+     goes darker). Measured on screen, that made one selected state 2.45x
+     stronger in dark than in light — the same control reading as a bold slab
+     on one theme and a whisper on the other.
+
+     Mixing against the sunken surface removes the second part. The same
+     selected control then measures 9.5 dark / 8.0 light instead of 13.9 / 5.7.
+
+     Use these ONLY on a control whose unselected background is
+     `--surface-sunken`; anything sitting on a card or a glass panel wants the
+     ladder above. */
+  --violet-wash-sunken: color-mix(in srgb, var(--hue-violet) 8%, var(--surface-sunken));
+  --violet-fill-sunken: color-mix(in srgb, var(--hue-violet) 14%, var(--surface-sunken));
+  --neutral-wash-sunken: color-mix(in srgb, var(--text) 6%, var(--surface-sunken));
+  /* The action hue on the same ground — the deck-action chips rest on
+     `--surface-sunken`, so their hover tint has to be mixed against it for the
+     same reason the selected states are. */
+  --maroon-wash-sunken: color-mix(in srgb, var(--accent-action) 8%, var(--surface-sunken));
+
+  --accent-select-wash-sunken: var(--violet-wash-sunken);
+  --accent-select-fill-sunken: var(--violet-fill-sunken);
+  --accent-action-wash-sunken: var(--maroon-wash-sunken);
+
 
   /* ── Semantic aliases — the names components should actually reach for ──
      A component opts into a ROLE, never into a colour. That is what stops a
@@ -306,13 +665,41 @@
   --accent-select-fill: var(--violet-fill);
   --accent-select-edge: var(--violet-edge);
 
+  /* ── The action hue is MAROON, in two steps ────────────────────────────
+     It was pink. Maroon is what was asked for, and it cannot be one value the
+     way pink was, because the two jobs pull in opposite directions:
+
+       INK   (--accent-action) is text, icons and borders ON a surface. On the
+             dark theme it must clear 4.5:1 against grounds up to #202020,
+             which puts a floor under how dark it may be. A true burgundy
+             measures 2.3:1 there — unreadable. The dark ink step is therefore
+             #C76B8A, the deepest wine that clears it.
+
+       FILL  (--accent-action-solid) is a surface with text ON it, so it wants
+             the opposite: dark enough for white. #96204A carries white at
+             8.07:1 in both themes, and it is the colour that actually looks
+             like maroon.
+
+     One value cannot be both. Pink got away with a single step only because
+     --on-hue (near-black in dark) was doing the reading; a maroon fill dark
+     enough to be maroon needs white on it instead, so the fill and its text
+     are their own pair.
+
+     Both steps stay clear of the error red — ΔE 29.5 dark, 43 light — which is
+     load-bearing rather than decorative: maroon IS a dark red, and "the primary
+     thing to click" must not read as "this will destroy something". */
   --accent-action: var(--hue-pink);
   --accent-action-wash: var(--pink-wash);
   --accent-action-fill: var(--pink-fill);
   --accent-action-edge: var(--pink-edge);
-  /* Both hues carry white text at >=4.5:1 in light AND dark, so a filled
-     primary button does not need a per-theme text colour. */
-  --accent-action-text: #ffffff;
+  --accent-action-solid: var(--solid-maroon);
+  /* White, and MEASURED white this time. The previous value was a literal
+     `#ffffff` under a comment asserting it cleared 4.5:1 in both themes; it did
+     not, because a hue light enough to read against a dark page is far too
+     light to carry white text. That was true of pink and it is still true of
+     the maroon INK step. It is not true of the FILL step, which is why the two
+     exist: white on #96204A is 8.07:1. */
+  --accent-action-text: var(--on-solid);
 
   --accent-info: var(--hue-blue);
   --success-wash: var(--green-wash);
@@ -352,7 +739,14 @@
 
   color: var(--text);
 
-  font-synthesis: none;
+  /* This line was load-bearing for the OLD display face, which shipped a single
+     cut: `none` meant `font-weight: 600` on a heading did nothing at all, and
+     `weight` let the browser thicken the one file it had.
+     Arial has a real bold, so nothing here is synthesised any more and the
+     headings get a drawn weight. Kept at `weight` rather than deleted because
+     it is still correct for any future face without one, and because `none`
+     is the value that caused the original silent failure. */
+  font-synthesis: weight;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -379,18 +773,59 @@ body {
 }
 
 /* ==========================================================================
-   No motion
+   Motion
    ==========================================================================
-   Every transition and animation in the app is switched off from one place.
-   Kept as a single deliberate switch rather than by deleting the underlying
-   declarations, so reinstating specific motion later is a decision made here
-   instead of an archaeology exercise across fifteen stylesheets. */
+   This was an unconditional kill: `*, *::before, *::after { animation: none
+   !important; transition: none !important }`, which switched off every
+   transition in the app from one place. It was written to be reversible —
+   "reinstating specific motion later is a decision made here instead of an
+   archaeology exercise across fifteen stylesheets" — and this is that decision.
 
-*,
-*::before,
-*::after {
-  animation: none !important;
-  transition: none !important;
+   What it was really protecting against was CONTINUOUS motion: the landing
+   page's old glow loops animated box-shadow and filter in an infinite
+   `alternate`, which is a repaint of a blurred layer every frame and it made
+   the whole page stutter. Those loops are gone from the source, not merely
+   suppressed, so the blanket is now switching off nine keyframes' worth of
+   menu, dialog and login entrances plus a few dozen hover transitions — all of
+   them one-shot, all of them cheap, and all of them the difference between an
+   interface that responds and one that snaps.
+
+   The rules that keep it honest, and the reason this is safe to lift:
+
+   * ONE-SHOT ONLY. Entrances and state changes. Nothing loops; there is no
+     `infinite` anywhere in this codebase and adding one is the thing to argue
+     about, not this.
+   * TRANSFORM AND OPACITY. Both are composited, so they cost no layout and no
+     repaint. Animating box-shadow, filter or width is what caused the original
+     problem.
+   * SHORT. 150–300ms for interaction, up to ~600ms for a section entrance.
+
+   The duration and easing tokens below exist so those numbers are set in one
+   place rather than guessed per component. */
+
+:root {
+  --dur-1: 140ms; /* icon nudges, colour swaps */
+  --dur-2: 200ms; /* the default: hover, focus, press */
+  --dur-3: 320ms; /* card lift, indicator travel */
+  --dur-4: 560ms; /* section entrance */
+  /* Decelerating. Motion that starts fast and settles reads as responsive;
+     ease-in-out reads as slow because it hesitates before it moves. */
+  --ease: cubic-bezier(0.22, 0.68, 0.32, 1);
+}
+
+/* THE KILL SWITCH IS STILL HERE — it is just conditional now.
+   Same blanket, same one place, applied only when the reader has asked their
+   system for less motion. `scroll-behavior` is included because a smooth
+   programmatic scroll is motion the user did not ask for either. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 button {

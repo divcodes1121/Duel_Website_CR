@@ -1,0 +1,826 @@
+/* Duel Zone — the series log and the deck sequence.
+ *
+ * Colour discipline, the same as everywhere else in the app:
+ *
+ *   violet  selection, and ONLY selection. The two window selectors take it;
+ *           nothing else on this screen does, so the chosen pane is unambiguous.
+ *   blue    neutral information — the legend's leading edge.
+ *   green   a won game. red, a lost one.
+ *   neutral everything else.
+ *
+ * The raw hue only ever lands on small things: a 2px edge, a badge, a label.
+ * A series card is a large surface, so its outcome tint stops at level 1.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.glass {
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+}
+
+.panel {
+  composes: glass;
+  padding: 1.25rem 1.4rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.notice {
+  composes: glass;
+  padding: 2.25rem 1.6rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.noticeTitle {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display, inherit);
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.noticeBody {
+  margin: 0 auto;
+  max-width: 46ch;
+  line-height: 1.55;
+}
+
+.noticeCode {
+  display: inline-block;
+  margin: 0.9rem 0 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  /* The range popover escapes this row. Every panel below carries a
+     backdrop-filter, which creates a stacking context — so a later panel paints
+     over the popover and swallows its clicks whatever its own z-index is. */
+  position: relative;
+  z-index: 40;
+}
+
+.headIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.headText {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.32rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.15rem 0 0;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.range {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.rangeChip {
+  padding: 0.34rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rangeChip:hover {
+  background: var(--neutral-wash);
+  color: var(--text);
+}
+
+.rangeChipOn,
+.rangeChipOn:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
+  opacity: 1;
+}
+
+.rangeChip[data-beyond] {
+  opacity: 0.55;
+}
+
+/* ------------------------------------------------------ custom date range */
+
+.customWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.customWrap .rangeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+}
+
+.customPop {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 15rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  box-shadow: var(--shadow-float);
+}
+
+.customLabel {
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.customField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.customField input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.32rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.customApply {
+  padding: 0.42rem;
+  border-radius: 9px;
+  border: none;
+  background: var(--accent-action-solid);
+  color: var(--accent-action-text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customApply:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.customNote {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------- the two windows */
+
+.panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .panes {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pane {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 14px;
+  /* A 2px leading edge, a border AND a text change carry the selected state
+     together, so it never rests on hue alone. */
+  border: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pane:hover {
+  background: var(--neutral-wash-sunken);
+}
+
+/* The -sunken tints, because `.pane` rests on `--surface-sunken`. Mixed against
+   the card instead, this selected state measured 13.9 dE in dark against 5.7 in
+   light — the same control reading twice as loud on one theme. */
+.paneOn,
+.paneOn:hover {
+  background: var(--accent-select-fill-sunken);
+  border-color: var(--accent-select-edge);
+  border-left-color: var(--accent-select);
+}
+
+.paneIcon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text-muted);
+}
+
+.paneOn .paneIcon {
+  color: var(--accent-select);
+  border-color: var(--accent-select-edge);
+}
+
+.paneText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.paneLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.paneOn .paneLabel {
+  color: var(--accent-select);
+}
+
+.paneCount {
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.paneBlurb {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------------- the body */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.empty,
+.more,
+.legend {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.legend {
+  padding: 0.6rem 0.8rem;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent-info);
+  background: var(--surface-sunken);
+}
+
+.legend strong {
+  color: var(--text);
+}
+
+.empty {
+  padding: 1.6rem 0;
+  text-align: center;
+}
+
+.more {
+  padding-top: 0.2rem;
+  text-align: center;
+}
+
+.foot {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------- window one: log */
+
+.series {
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  /* Level 1 only. The card is one of the largest surfaces on the screen, and a
+     level-2 fill at this size reads as a colour panel rather than an accent. */
+  border-left: 2px solid var(--border-strong);
+  background: var(--surface-nested);
+  overflow: hidden;
+}
+
+.series[data-outcome='win'] {
+  border-left-color: var(--success);
+  /* Plain wash, not a -sunken/-raised variant: measured, these two land at
+     3.1 dE dark against 3.3 light already, and re-grounding them against the
+     panel pushed the green to 1.48x the light one. Balanced is balanced. */
+  background: var(--green-wash);
+}
+
+.series[data-outcome='loss'] {
+  border-left-color: var(--error);
+  background: var(--red-wash);
+}
+
+.seriesHead {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.format {
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.seriesScore {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.caption {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.seriesOpp {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.seriesOpp strong {
+  color: var(--text);
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 16ch;
+}
+
+.seriesTag {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.seriesWhen {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* The row is now a wrapper: the clickable line, and the opponent panel that
+   drops beneath it. The grid moved onto `.gameRowBtn`. */
+.game {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The expanding row control and the deck actions, side by side. They cannot
+   nest — the row IS a <button> — so this is the row and the button is its
+   first child, taking all the width the actions do not need. */
+.gameRow {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding-right: 0.5rem;
+}
+
+.gameRow > button {
+  flex: 1;
+  min-width: 0;
+}
+
+.game + .game {
+  border-top: 1px solid var(--border);
+}
+
+/* A real <button>, so the row is reachable by keyboard and announces its own
+   expanded state — reset to look like the row it replaced. */
+/* THE IDENTITY COLUMN IS A FIXED WIDTH, and that is what makes the opponent's
+   strip start on the same vertical as the player's.
+   It was `minmax(9rem, 1fr)`. A flexible track resolves against whatever else
+   is in ITS row, and the row has three trailing columns (result, crowns,
+   chevron) that the opponent panel does not — so the same `1fr` came out wider
+   in the panel and pushed its strip to the right of the one it sits under.
+   Pinning the track means both grids reach the strip column at exactly the
+   same offset: 0.85 + 2.2 + 0.75 + 13 + 0.75 rem. */
+.gameRowBtn {
+  display: grid;
+  grid-template-columns: 2.2rem 13rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0.85rem;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.gameRowBtn:hover:not(:disabled) {
+  background: var(--neutral-wash);
+}
+
+/* A game with no stored opponent deck is not clickable, and says so by not
+   reacting rather than by opening onto nothing. */
+.gameRowBtn:disabled {
+  cursor: default;
+}
+
+.gameChevron {
+  display: flex;
+  color: var(--text-muted);
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.gameChevron[data-open] {
+  transform: rotate(90deg);
+}
+
+/* Aligned to the same columns as the row above it, so the opponent's strip
+   lands directly under the player's rather than floating loose. */
+/* The SAME first two tracks as `.gameRowBtn`, so the opponent's strip begins on
+   exactly the vertical the player's strip above it does.
+ *
+ * NEUTRAL, AND ITS OWN COLOUR. The series card behind this is washed green on a
+ * win and red on a loss, and an expanded panel sitting inside that wash picked
+ * the tint up — so the opponent's deck was framed in green precisely when YOU
+ * had won, which says the wrong thing about whose deck it is. The panel paints
+ * its own opaque surface to cut the wash off, keeps its text on the neutral
+ * ink steps like every other row, and takes a maroon leading edge that means
+ * "the other side" rather than an outcome. Maroon, not `--error`: this is an
+ * identity, not a bad result. */
+.oppPanel {
+  display: grid;
+  grid-template-columns: 2.2rem 13rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  /* The strip must land on the SAME vertical as the player's strip above:
+     0.85 + 2.2 + 0.75 + 13 + 0.75 = 17.55rem from the row's left edge. The
+     3px border sits inside that budget, so the padding gives 3px back —
+     otherwise the edge shifts every column right by its own width. */
+  padding: 0.5rem 0.85rem 0.6rem calc(0.85rem - 3px);
+  margin: 0 0 0.4rem;
+  border-radius: 0 10px 10px 0;
+  border-left: 3px solid var(--solid-maroon);
+  background: var(--surface-nested);
+  color: var(--text);
+}
+
+/* The wash reaches text through inheritance too, so the panel restates both ink
+   steps rather than trusting whatever the outcome-tinted parent was using. */
+.oppPanel .oppName,
+.oppPanel .gameSub,
+.oppPanel .oppLabel {
+  color: inherit;
+}
+
+.oppPanel .oppLabel,
+.oppPanel .gameSub {
+  color: var(--text-muted);
+}
+
+.oppSlot {
+  width: 2.2rem;
+}
+
+.oppMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.oppLabel {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.oppName {
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .gameRowBtn {
+    grid-template-columns: 2.2rem 1fr auto auto;
+  }
+
+  .gameRowBtn .strip {
+    grid-column: 1 / -1;
+  }
+
+  .oppPanel {
+    grid-template-columns: 2.2rem 1fr;
+  }
+
+  .oppPanel .strip {
+    grid-column: 1 / -1;
+  }
+}
+
+.gameSlot {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.gameMeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gameArch {
+  font-size: 0.84rem;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gameSub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gameResult {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-self: end;
+}
+
+.gameBadge,
+.gameBadgeMuted {
+  padding: 0.16rem 0.42rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.game[data-outcome='win'] .gameBadge {
+  border-color: var(--green-edge);
+  color: var(--success);
+}
+
+.game[data-outcome='loss'] .gameBadge {
+  border-color: var(--red-edge);
+  color: var(--error);
+}
+
+.crowns {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ card strips */
+
+/* Card art is 302x363, so the tiles carry that ratio and only a width is set —
+   height follows. Each tile may SHRINK below its width (min-width: 0 plus the
+   default flex-shrink), so a narrow panel squeezes the strip instead of pushing
+   the row into a horizontal scroll. */
+.strip,
+.stripSm {
+  display: inline-flex;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* Three strips share one line here, so the gutter between tiles is worth more
+   as card than as space. */
+.stripSm {
+  gap: 2px;
+}
+
+.strip img,
+.stripSm img {
+  height: auto;
+  aspect-ratio: 302 / 363;
+  min-width: 0;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.strip img {
+  width: 52px;
+}
+
+.stripSm img {
+  width: 52px;
+}
+
+/* --------------------------------------------------- window two: sequence */
+
+.seq {
+  display: grid;
+  /* All three decks on ONE line — opener, then its two followers. That caps a
+     tile at a third of the row, so the gutters are kept tight on purpose: the
+     tiles carry a 52px width but may shrink, and every millimetre taken back
+     from padding, the arrow and the column gaps goes straight into card size
+     (~42px at 1500px wide, the full 52px past ~1750px). */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.7rem 0.6rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+@media (max-width: 1180px) {
+  .seq {
+    grid-template-columns: 1fr;
+  }
+
+  .seqArrow {
+    display: none;
+  }
+}
+
+.opener,
+.next {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.openerHead,
+.nextHead {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.openerSlot,
+.nextSlot {
+  padding: 0.1rem 0.35rem;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  font-size: 0.64rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.openerArch {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.nextArch {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.openerFig {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.seqArrow {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.nexts {
+  display: contents;
+}
+
+.nextNote {
+  margin: 0;
+  align-self: center;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}

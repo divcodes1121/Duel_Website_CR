@@ -1,0 +1,253 @@
+/* Cards — use and win rate for every card, across the whole player base.
+ *
+ * Data colour is the app's existing CATEGORICAL pair, and only that pair:
+ *
+ *   --c-use / --c-win   validated on this app's surfaces in both modes —
+ *                       lightness band, chroma floor, CVD separation (ΔE 20.7
+ *                       protan light / 19.6 deutan dark) and 3:1 contrast all
+ *                       pass. Their tritan separation is under the floor, which
+ *                       is legal here only because each tile PRINTS its own two
+ *                       percentages: the secondary encoding, not an excuse.
+ *
+ * Violet is not an option for either — it means "selected" everywhere in this
+ * app, and 122 tiles wearing the selection hue is the mistake the elixir badge
+ * already made once.
+ */
+
+.page {
+  --c-use: #2a78d6;
+  --c-win: #169b6b;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.1rem 1.3rem 1.5rem;
+}
+
+:global([data-theme='dark']) .page {
+  --c-use: #3987e5;
+  --c-win: #199e70;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.25rem 0 0;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 56ch;
+}
+
+/* The numbers are a snapshot, so how old they are is printed rather than the
+   page implying they are live. */
+.window {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.age {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* --- Controls ---------------------------------------------------------- */
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  padding: 0.22rem;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+
+.tab {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.73rem;
+  font-weight: 650;
+  padding: 0.26rem 0.6rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--neutral-wash-sunken);
+}
+
+/* A SELECTED PILL IS A FILL, so it takes the solid step and white text. Drawn
+   as a tint with hue-coloured LABEL it was the last of the "why is the text
+   light" set: a pastel label is legible, but next to a solid sidebar row and a
+   solid button it reads as the odd one out. */
+.tabActive,
+.tabActive:hover {
+  color: var(--on-solid);
+  background: var(--solid-violet);
+  border-color: transparent;
+}
+
+.sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.sortLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sort select {
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+}
+
+.note,
+.formNote {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  max-width: 82ch;
+}
+
+.formNote {
+  color: var(--accent-info);
+  background: var(--blue-wash);
+  border-color: var(--blue-edge);
+}
+
+/* --- The grid ----------------------------------------------------------- */
+
+/* 6.1rem is a measured FLOOR, not a preference: with the two rates on one line
+   the tiles were pushed to 5.6rem to fit twelve per row, and the win rate then
+   hung 8px over the right edge of all 122 of them. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.1rem, 1fr));
+  /* An auto row does not consult a child's aspect-ratio; without this the rows
+     collapse and the tiles overlap. */
+  grid-auto-rows: max-content;
+  align-items: start;
+  gap: 0.5rem;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0.35rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  overflow: hidden;
+}
+
+.tile[data-empty] {
+  opacity: 0.5;
+}
+
+.tileArt {
+  width: 100%;
+  max-width: 4.2rem;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+}
+
+.tileName {
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Both figures on ONE line — that is what pays for eleven cards per row
+   instead of seven, and each prints its own number beside its own hue. */
+.tileRates {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.use {
+  color: var(--c-use);
+}
+
+.win {
+  color: var(--c-win);
+}
+
+.tileNone {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.footer {
+  margin: 0.3rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 86ch;
+}

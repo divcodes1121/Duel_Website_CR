@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import { CardArt } from './CardArt';
+import { DeckActions } from '../DeckActions/DeckActions';
 import { ChartLegend, TrendChart } from './TrendChart';
+import { LivePlayer } from './LivePlayer';
+import { ReportButton } from '../Export/ReportButton';
+import { playerReportDoc } from '../../utils/reportAdapters';
 import {
   AnalyticsError,
   fetchPlayerReport,
+  isLiveReport,
   type PlayerReport,
 } from '../../state/analyticsClient';
 import {
@@ -164,9 +169,11 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
 
   // Shared with Duel Analysis so the two screens cannot disagree about what
   // "Last Season" or "Last 60 Days" means.
+  // `coverage` is optional on a live report — there is no stored history to
+  // measure — so the window falls back to its own defaults there.
   const { win, preset, setPreset, custom, setCustom } = useDateWindow(
     season,
-    report?.coverage.end ?? null,
+    report?.coverage?.end ?? null,
   );
 
   useEffect(() => {
@@ -216,6 +223,17 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
         </section>
       </div>
     );
+  }
+
+  // NOBODY HAS TRACKED THIS PLAYER YET, so there is no stored history to draw
+  // trends from — the server answered from the live Clash Royale battlelog
+  // instead. That is a genuinely different kind of report (a fixed ~25-battle
+  // window, no previous window to compare against, no date control that can
+  // mean anything), so it gets its own view rather than being forced through
+  // one built for stored data. Searching the tag has queued it for collection;
+  // this screen switches to the stored view on its own once the bot catches up.
+  if (isLiveReport(report)) {
+    return <LivePlayer report={report} tag={tag} />;
   }
 
   const { player, decks: apiDecks, trends, sources, profile } = report;
@@ -422,10 +440,11 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
             </span>
             Top {decks.length} Decks
           </h2>
-          <button type="button" className={styles.exportButton}>
-            {ICONS.download}
-            Export Data
-          </button>
+          {/* This was a button with no handler at all — the same decoration the
+              sidebar's Upgrade Now was caught being, and the reason this project
+              refuses to draw a control that does nothing. It now builds the real
+              report, at whatever window and sort are live when it is pressed. */}
+          <ReportButton build={() => playerReportDoc(report, tag)} label="Export Data" />
         </header>
 
         <div className={styles.sortTabs}>
@@ -482,16 +501,19 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
                     ) : null}
                   </td>
                   <td>
-                    <span className={styles.cards}>
-                      {d.cards.map((c) => (
-                        <CardArt
-                          key={c}
-                          card={c}
-                          variant={d.art?.[c]}
-                          inferred={d.artInferred}
-                          className={styles.cardIcon}
-                        />
-                      ))}
+                    <span className={styles.cardsCell}>
+                      <span className={styles.cards}>
+                        {d.cards.map((c) => (
+                          <CardArt
+                            key={c}
+                            card={c}
+                            variant={d.art?.[c]}
+                            inferred={d.artInferred}
+                            className={styles.cardIcon}
+                          />
+                        ))}
+                      </span>
+                      <DeckActions cards={d.cards} name={d.name} />
                     </span>
                   </td>
                   <td>

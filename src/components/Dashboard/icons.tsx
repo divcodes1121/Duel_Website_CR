@@ -1,7 +1,46 @@
+import { useId } from 'react';
+
 /* Line icons for the dashboard shell. All 24x24, 1.8 stroke, currentColor, so
    they inherit the nav item's colour and need no per-theme handling. */
 
 type P = { size?: number };
+
+/**
+ * A crown in struck gold — the one icon in this app that does not take
+ * `currentColor`.
+ *
+ * Metal needs a highlight, a body and a shade; a flat `#FFD700` reads as yellow
+ * plastic. That means a real gradient, which means an SVG `<linearGradient>`,
+ * which means an id — and a fixed id would be duplicated the moment two crowns
+ * are on screen, which is invalid and makes the second one inherit the first's
+ * stops. `useId` gives each instance its own.
+ *
+ * The stops are CSS variables rather than literals, applied through `style` so
+ * they resolve as properties: both themes step their own gold, and neither is
+ * the other one dimmed.
+ */
+export function GoldCrownIcon({ size = 18 }: P) {
+  const id = useId().replace(/:/g, '');
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" style={{ stopColor: 'var(--gold-bright)' }} />
+          <stop offset="42%" style={{ stopColor: 'var(--gold)' }} />
+          <stop offset="78%" style={{ stopColor: 'var(--gold-deep)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--gold)' }} />
+        </linearGradient>
+      </defs>
+      <path
+        d="M3 8l4 4 5-7 5 7 4-4v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z"
+        fill={`url(#${id})`}
+        stroke="var(--gold-deep)"
+        strokeWidth="0.75"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 const base = (size: number) => ({
   viewBox: '0 0 24 24',
@@ -61,6 +100,19 @@ export function SwordsIcon({ size = 17 }: P) {
   );
 }
 
+/* Three stacked decks — a duel loadout is three decks, which is what the Duel
+   Zone is about. Deliberately not the swords: those are Duel Analysis, and two
+   sidebar rows wearing one glyph is two rows that look like the same thing. */
+export function LoadoutIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <rect x="3" y="4" width="8" height="11" rx="1.5" />
+      <path d="M13 6h3.5a1.5 1.5 0 0 1 1.5 1.5V17" />
+      <path d="M16.5 9H19a1.5 1.5 0 0 1 1.5 1.5V20a1.5 1.5 0 0 1-1.5 1.5H9" />
+    </svg>
+  );
+}
+
 export function InfoIcon({ size = 17 }: P) {
   return (
     <svg {...base(size)}>
@@ -99,6 +151,18 @@ export function ShieldIcon({ size = 17 }: P) {
   return (
     <svg {...base(size)}>
       <path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3z" />
+    </svg>
+  );
+}
+
+/* A coach's whistle — the one object that reads as "someone calling the play"
+   at 17px without needing a face or a clipboard's fine detail. */
+export function CoachIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <path d="M13.5 8.5h6.2a1.3 1.3 0 0 1 1.3 1.3v1.4a1.3 1.3 0 0 1-1.3 1.3H13.5" />
+      <circle cx="8.5" cy="12.5" r="5" />
+      <path d="M11 6.2 14.6 4" />
     </svg>
   );
 }
@@ -171,6 +235,24 @@ export function ArrowRightIcon({ size = 16 }: P) {
     <svg {...base(size)}>
       <path d="M4 12h15" />
       <path d="m13 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+/** A single chevron. Points left to collapse the rail, right to bring it back —
+ *  the direction IS the affordance, so it flips with the state. */
+export function ChevronLeftIcon({ size = 16 }: P) {
+  return (
+    <svg {...base(size)}>
+      <path d="m14 6-6 6 6 6" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon({ size = 16 }: P) {
+  return (
+    <svg {...base(size)}>
+      <path d="m10 6 6 6-6 6" />
     </svg>
   );
 }

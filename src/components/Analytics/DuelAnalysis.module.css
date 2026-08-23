@@ -21,12 +21,98 @@
  * The dark column is re-stepped against the dark surface, never an auto-flip.
  */
 
+/* Duel Analysis — the Dekkies light system.
+ *
+ * COLOUR CARRIES INFORMATION AND NOTHING ELSE:
+ *
+ *   purple  selected / primary        green   positive, a win rate
+ *   blue    usage, neutral fact       orange  negative, a loss
+ *   yellow  special, rank #1 only
+ *
+ * G1/G2/G3 ARE THREE DISTINCT HUES HERE, and that is a deliberate reversal.
+ * They had been a sequential ramp — one hue light-to-dark — on the argument
+ * that they are ordered positions in a loadout, so a ramp says "first, second,
+ * third" where three unrelated colours only say "three of something". The brief
+ * asks for three, and three is defensible: the columns are read ACROSS a row as
+ * much as down, and a reader comparing G1 to G3 on one combo is comparing
+ * categories, not steps. Run through the palette validator on the white card:
+ *
+ *   lightness band, chroma floor, 3:1 contrast   PASS
+ *   worst pair  #3182F6 blue ↔ #7C3AED purple    ΔE 6.4 deutan
+ *
+ * 6.4 sits in the 6–8 floor band, which is legal ONLY with a secondary
+ * encoding — and there is one: every G column prints its own percentage above
+ * its bar, and the legend labels each. Without those figures this palette would
+ * not be allowed.
+ *
+ * TWO SPEC VALUES ARE SPLIT IN TWO, because a colour that works as a bar does
+ * not automatically work as a number. Measured on #FFFFFF:
+ *
+ *              as a fill   as text
+ *   #20B875     2.57:1      2.57:1   <- green, fails even the 3:1 bar floor
+ *   #3182F6     3.71:1      3.71:1   <- blue, fine as a bar, thin as text
+ *   #F05A3A     3.37:1      3.37:1   <- orange, same
+ *   #F4C542     1.63:1      1.63:1   <- yellow, a fill only, never ink
+ *
+ * The fills keep the briefed values exactly (the bars are labelled, which is
+ * the relief the 3:1 floor allows). The FIGURES take a darker step of the same
+ * hue — `--*-ink` — so a win rate is still green and still readable at 4.9:1.
+ *
+ * The dark column is re-stepped against the dark card, never an auto-flip of
+ * the light one.
+ */
+
 .page {
-  --c-use: #2a78d6;
-  --c-win: #169b6b;
-  --g1: #9376d8;
-  --g2: #6a4fbe;
-  --g3: #402f96;
+  /* fills — exactly as briefed */
+  --c-use: #3182f6;
+  --c-use-soft: #e8f0ff;
+  --c-win: #20b875;
+  --c-win-soft: #eaf9f2;
+  --c-loss: #f05a3a;
+  --c-loss-soft: #fff0ec;
+  --c-special: #f4c542;
+  --c-special-soft: #fff8dd;
+
+  --g1: #7c3aed;
+  --g1-soft: #eee9fa;
+  --g2: #3182f6;
+  --g2-soft: #e8f0ff;
+  --g3: #f05a3a;
+  --g3-soft: #fff0ec;
+
+  /* ink — the same hues, dark enough to be read as numbers */
+  --c-use-ink: #2563eb;
+  --c-win-ink: #0b8150;
+  --c-loss-ink: #ce4426;
+  --c-special-ink: #9a6b00;
+
+  --pri: #7c3aed;
+  --pri-soft: #f1ebff;
+  --pri-border: #d9c8ff;
+
+  /* THE BRIEF'S SURFACES AND INK, redefined at page scope.
+     These are the same token names the whole file already reads, so overriding
+     them here re-skins this screen and nothing else — no other page is touched
+     and no rule below had to change. The dark block restores the app's own
+     values, because the brief is a light-mode system and an auto-flip of it
+     would be exactly the one-theme-only pass this project keeps being caught
+     by. */
+  --text: #111318;
+  --text-secondary: #6b6f78;
+  --text-muted: #6b6f78;
+  --text-faint: #969aa3;
+
+  --surface: #ffffff;
+  --surface-nested: #fcfcfc;
+  --surface-sunken: #f7f7f8;
+  --surface-hover: #f8f7fb;
+  --glass-fill: #ffffff;
+  --glass-stroke: #e8e8ec;
+  --border: #e8e8ec;
+  --border-light: #f0f0f2;
+
+  /* Soft, never glassy: one 20px lift at 4% and nothing else. */
+  --shadow: 0 4px 20px rgba(20, 20, 40, 0.04);
 
   display: flex;
   flex-direction: column;
@@ -34,20 +120,60 @@
 }
 
 :global([data-theme='dark']) .page {
-  --c-use: #3987e5;
-  --c-win: #199e70;
-  --g1: #cabff8;
-  --g2: #9a8ded;
-  --g3: #6f61d6;
+  --c-use: #5b9bf8;
+  --c-use-soft: #16233a;
+  --c-win: #3dd292;
+  --c-win-soft: #102b20;
+  --c-loss: #ff8264;
+  --c-loss-soft: #2e1810;
+  --c-special: #f4c542;
+  --c-special-soft: #2c2410;
+
+  --g1: #a78bfa;
+  --g1-soft: #1e1830;
+  --g2: #5b9bf8;
+  --g2-soft: #16233a;
+  --g3: #ff8264;
+  --g3-soft: #2e1810;
+
+  /* On a dark card the fill steps are already light enough to read as text, so
+     ink and fill converge — the split only exists because white is bright. */
+  --c-use-ink: #5b9bf8;
+  --c-win-ink: #3dd292;
+  --c-loss-ink: #ff8264;
+  --c-special-ink: #f4c542;
+
+  --pri: #a78bfa;
+  --pri-soft: #1e1830;
+  --pri-border: #33285a;
+
+  /* Back to the app's dark ladder — the brief specifies light only. */
+  --text: #ededed;
+  --text-secondary: #a1a1a1;
+  --text-muted: #a1a1a1;
+  --text-faint: #8a8a8a;
+
+  --surface: #1a1a1a;
+  --surface-nested: #141414;
+  --surface-sunken: #0d0d0d;
+  --surface-hover: #1c1c1c;
+  --glass-fill: #1a1a1a;
+  --glass-stroke: #303030;
+  --border: #262626;
+  --border-light: #1f1f1f;
+  --shadow: 0 0 0 0 transparent;
 }
 
+/* A TOP-LEVEL panel — it sits on the page, so it keeps the panel fill. Boxes
+   nested inside it take --surface-nested (see .tabs) and the wells inside
+   those take --surface-sunken (see .meter). Ladder documented in index.css. */
 .pane {
   border-radius: 18px;
   border: 1px solid var(--glass-stroke);
   background: var(--glass-fill);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
 }
 
 .panel {
@@ -110,8 +236,8 @@
   height: 42px;
   flex: none;
   border-radius: 12px;
-  border: 1px solid var(--glass-stroke);
-  background: var(--glass-fill-strong);
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
   color: var(--text);
 }
 
@@ -152,8 +278,8 @@
   gap: 0.5rem;
   padding: 0.55rem 0.85rem;
   border-radius: 11px;
-  border: 1px solid var(--glass-stroke);
-  background: var(--glass-fill-strong);
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
   color: var(--text);
   font: inherit;
   font-size: 0.85rem;
@@ -247,7 +373,7 @@
   padding: 0.45rem;
   border-radius: 9px;
   border: 1px solid transparent;
-  background: var(--accent-action);
+  background: var(--accent-action-solid);
   color: var(--accent-action-text);
   font: inherit;
   font-size: 0.8rem;
@@ -275,7 +401,7 @@
   padding: 0.35rem;
   border-radius: 14px;
   border: 1px solid var(--glass-stroke);
-  background: var(--glass-fill);
+  background: var(--surface-nested);
 }
 
 .tab {
@@ -287,30 +413,48 @@
   border-radius: 10px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-muted);
+  /* NEUTRAL WHEN INACTIVE. An unselected tab is not a category to be colour-
+     coded — it is a thing you have not chosen. Tinting Spells orange and
+     Evolutions green made three tabs look like three simultaneous states when
+     only one can be live, and it spent the palette's meaning on decoration. */
+  color: var(--text);
   font: inherit;
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
 }
 
-.tab:hover {
-  background: var(--neutral-wash);
-  color: var(--text);
+.tabIcon {
+  color: var(--text-secondary, var(--text-muted));
 }
 
-/* Violet: this tab is the one you are on. */
+.tab:hover {
+  background: var(--surface-hover, var(--neutral-wash));
+}
+
+/* PURPLE IS "SELECTED", whichever tab it is. The active treatment is one
+   treatment, so the colour answers "which is chosen" rather than "which is
+   this" — the same reason violet means selection everywhere else in the app. */
 .tabOn,
 .tabOn:hover {
-  background: var(--accent-select-wash);
-  border-color: var(--accent-select-edge);
-  color: var(--accent-select);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  background: var(--pri-soft);
+  border-color: var(--pri-border);
+  color: var(--pri);
+  /* The glow belongs to the TAB. A page-wide aura would say the whole screen
+     is selected; this is a 1px ring and a 12px lift, and nothing else. */
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--pri) 12%, transparent),
+    0 3px 12px color-mix(in srgb, var(--pri) 8%, transparent);
+}
+
+.tabOn .tabIcon {
+  color: var(--pri);
 }
 
 .tabOn .tabCount {
-  border-color: var(--accent-select-edge);
-  color: var(--accent-select);
+  border-color: var(--pri-border);
+  background: var(--surface);
+  color: var(--pri);
 }
 
 .tabIcon {
@@ -398,6 +542,16 @@
   align-items: center;
   gap: 0.3rem;
   flex: none;
+}
+
+/* Same fixed box as every other card strip: the two cards in a pair are read
+   as a unit, so one of them being an evolution must not make it taller than its
+   partner. */
+.pairArt img,
+.pairArtLg img {
+  height: auto;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
 }
 
 .pairArt img {
@@ -538,14 +692,17 @@
   cursor: pointer;
 }
 
+/* A whisper of the brand, not a highlight — the row is being pointed at, not
+   chosen. */
 .row:hover > td {
-  background: var(--neutral-wash);
+  background: var(--surface-hover, var(--neutral-wash));
 }
 
-/* The expanded row is a selection, so it wears violet like every other. */
+/* The expanded row IS chosen, so it takes the same purple every other selected
+   thing takes. */
 .rowOpen > td,
 .rowOpen:hover > td {
-  background: var(--accent-select-wash);
+  background: var(--pri-soft);
 }
 
 .rowOpen > td {
@@ -564,7 +721,23 @@
   color: var(--text-muted);
 }
 
-.rank[data-medal] {
+/* YELLOW IS FOR RANK #1 AND NOTHING ELSE. It is the one "special" in the
+   palette, so spending it on second and third would leave the top row saying
+   nothing the row below it does not. */
+.rank[data-medal='1'] {
+  border-color: var(--c-special);
+  background: var(--c-special-soft);
+  color: var(--c-special-ink);
+  font-weight: 800;
+}
+
+.rank[data-medal]:not([data-medal='1']) {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.rankLegacy[data-medal] {
   border-color: var(--border-strong);
   color: var(--text);
 }
@@ -582,12 +755,24 @@
   white-space: nowrap;
 }
 
+/* The figure wears its measure's INK step — same hue as the bar under it, dark
+   enough to be read as a number. On white the fill greens and blues measure
+   2.57:1 and 3.71:1, which is a bar, not text. */
 .meterValue {
   display: block;
   margin-bottom: 0.3rem;
   font-size: 0.83rem;
-  font-weight: 600;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--text);
+}
+
+.meterValue[data-key='use'] {
+  color: var(--c-use-ink);
+}
+
+.meterValue[data-key='win'] {
+  color: var(--c-win-ink);
 }
 
 .meter {
@@ -612,14 +797,44 @@
   background: var(--c-win);
 }
 
+/* Each track tinted from its own measure rather than a shared grey, so an
+   empty bar still says which column it is. */
+.meter[data-key='use'] {
+  background: var(--c-use-soft);
+}
+.meter[data-key='win'] {
+  background: var(--c-win-soft);
+}
+
 /* One bar per loadout slot, aligned under its own column heading. */
+/* Figure over bar, matching the Use Rate and Win Rate columns exactly so the
+   five measures on a row read as one set. */
+.slotCell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.slotValue {
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
 .slotBar {
   display: block;
   height: 6px;
   border-radius: 999px;
-  background: var(--surface-sunken);
   overflow: hidden;
 }
+
+/* The track carries its own group's tint, so G1/G2/G3 are told apart even at
+   zero — the one case a fill cannot speak. */
+.slotCell[data-slot='1'] .slotBar { background: var(--g1-soft); }
+.slotCell[data-slot='2'] .slotBar { background: var(--g2-soft); }
+.slotCell[data-slot='3'] .slotBar { background: var(--g3-soft); }
 
 .slotFill {
   display: block;
@@ -627,15 +842,25 @@
   border-radius: 0 4px 4px 0;
 }
 
+/* A 6px glow on the BAR only. Not the row, not the card — at this size it
+   reads as the ink being slightly alive, which is the whole intent. */
 .slotFill[data-slot='1'] {
   background: var(--g1);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--g1) 20%, transparent);
 }
 .slotFill[data-slot='2'] {
   background: var(--g2);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--g2) 18%, transparent);
 }
 .slotFill[data-slot='3'] {
   background: var(--g3);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--g3) 18%, transparent);
 }
+
+/* The figure takes the group's INK step — same hue, dark enough to read. */
+.slotCell[data-slot='1'] .slotValue { color: var(--g1); }
+.slotCell[data-slot='2'] .slotValue { color: var(--c-use-ink); }
+.slotCell[data-slot='3'] .slotValue { color: var(--c-loss-ink); }
 
 .chevCell {
   text-align: right;
@@ -665,7 +890,7 @@
   padding: 0.85rem 1rem;
   border-radius: 12px;
   border: 1px solid var(--glass-stroke);
-  background: var(--glass-fill);
+  background: var(--surface-nested);
 }
 
 @media (max-width: 1080px) {
@@ -742,4 +967,20 @@
   padding-top: 0.5rem;
   border-top: 1px solid var(--border);
   max-width: 92ch;
+}
+
+/* Stacked tab blocks — only ever more than one when printing, where each needs
+   naming because the tab bar that would have identified it is a dead control
+   on paper. */
+.tabBlock + .tabBlock {
+  margin-top: 26px;
+}
+
+.printTabHeading {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
 }

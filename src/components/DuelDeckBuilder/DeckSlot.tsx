@@ -53,6 +53,17 @@ const ROLE_LABEL = {
   normal: '',
 };
 
+/* Printed inside the slot while it is EMPTY. The three special positions are
+   the one rule of this builder a newcomer cannot infer from looking, and an
+   outline weight does not say which is which — an empty deck was eight
+   identical dark boxes, three of them merely outlined more firmly. */
+const ROLE_STUB = {
+  evolution: 'EVO',
+  hero: 'HERO',
+  wild: 'WILD',
+  normal: '',
+};
+
 export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlotProps) {
   const selectedSlot = useBuilderStore((s) => s.selectedSlot);
   const selectSlot = useBuilderStore((s) => s.selectSlot);
@@ -117,7 +128,7 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
     const slotEl = (e.currentTarget as HTMLElement).closest('button');
     const targetEl =
       document.querySelector(`[data-card-key="${card.key}"]`) ??
-      document.querySelector('[data-drawer]');
+      document.querySelector('[data-card-library]');
     if (slotEl && targetEl) {
       launchFlight(getCardIconUrl(card.key), rectOf(slotEl), rectOf(targetEl));
     }
@@ -269,6 +280,10 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
               ×
             </span>
           </>
+        ) : ROLE_STUB[role] ? (
+          <span className={styles.slotStub} aria-hidden="true">
+            {ROLE_STUB[role]}
+          </span>
         ) : null}
       </button>
 

@@ -14,7 +14,7 @@
   background: var(--glass-fill);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
   overflow: hidden;
 }
 
@@ -126,7 +126,7 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
-  background: var(--surface);
+  background: var(--surface-nested);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
@@ -190,15 +190,41 @@
   color: var(--text-muted);
 }
 
+/* The strip and its two actions. The actions are a sibling of the strip rather
+   than inside it, because `.cards` is a flex row whose children are all card
+   art and whose `align-items` is doing load-bearing work (see below). */
+.cardsCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .cards {
   display: inline-flex;
   gap: 3px;
+  /* NOT the default `stretch`. These are images sized by width with an auto
+     height, so stretch grew every one of them to the tallest in the row — and
+     the art PNGs are not one shape: 302x363 for a plain card against 553x793
+     for the Lumberjack evolution. Measured before this line existed, the board
+     rendered seven different card heights (65.9px to 77.4px) and a plain Arrows
+     came out 16.2% taller than its own artwork because of what it happened to
+     be sitting next to. */
+  align-items: flex-start;
 }
 
 /* Big enough to actually recognise a card at a glance — this is a deck
-   leaderboard, so the eight cards ARE the row's identity. */
+   leaderboard, so the eight cards ARE the row's identity.
+
+   Every card gets the SAME box, the base card's 302x363, and the art is
+   letterboxed into it rather than stretched to fill it. An evolution frame is a
+   different shape from the card it replaces, so without this the row reflowed
+   whenever a deck happened to field one. Same treatment as the deck strips in
+   Deck Counter and the Duel Zone. */
 .cardIcon {
   width: 54px;
+  height: auto;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
   border-radius: 5px;
   display: block;
 }

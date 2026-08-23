@@ -40,3 +40,20 @@ video/
 server/__pycache__/
 
 .meta_snapshot.json
+.counter_snapshot.json
+server/.counter_snapshot.json
+
+# The tag-enrolment queue. Derived local state like the two snapshots above,
+# and the only file this API writes anywhere — see server/tracking.py.
+server/.tracking.db
+server/.tracking.db-wal
+server/.tracking.db-shm
+
+# Phase 2 feature cache — derived data, regenerable via `--dump` (8.7 MB)
+server/ml/results/*.jsonl.gz
+
+# Phase 15 offline research artifacts (regenerable)
+server/ml/results/
+
+# Shadow-mode observation log (diagnostic, regenerable)
+server/ml/results/shadow-log.jsonl*

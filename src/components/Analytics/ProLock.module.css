@@ -1,0 +1,213 @@
+/* ==========================================================================
+   The Royal Pro gate
+   ==========================================================================
+   The only blur left in the app, and the one place it earns its compositing
+   pass: here the blur is the message rather than the finish. See ProLock.tsx. */
+
+/* Preview and veil are STACKED IN ONE GRID CELL rather than the veil being
+   absolutely positioned over a fixed-height box. Absolute positioning takes the
+   veil out of flow, so the container sized itself to the preview alone — and
+   the gate card is taller than four blurred rows, so its badge was clipped off
+   the top and its Subscribe button off the bottom. In one cell the row is as
+   tall as the TALLER of the two and neither can be cut. */
+.lock {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-areas: 'stack';
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.lockInline {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+/* The real content, out of focus. Scaled up a touch so the blur has no soft
+   edge against the frame — a blurred element leaks its own background inwards
+   at the boundary otherwise, which reads as a grey border. */
+.preview {
+  grid-area: stack;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  filter: blur(7px) saturate(0.85);
+  transform: scale(1.03);
+  opacity: 0.65;
+  user-select: none;
+}
+
+/* `position: relative; z-index: 1` is LOAD-BEARING, not tidying.
+   `filter` on the preview gives it a stacking context, and an element with one
+   paints in the positioned phase — after every in-flow sibling. So once the
+   veil stopped being `position: absolute` (which had been putting it in that
+   same late phase), the blurred preview began painting ON TOP of it: every
+   computed style said the card was opaque white with a #c81e69 button, and the
+   pixels showed a washed-out card and a pale pink button. A reminder that
+   `getComputedStyle` reports the declaration, never the composite. */
+.veil {
+  grid-area: stack;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  /* A wash rather than an opaque sheet, so the shape of what is underneath
+     still reads — that is the whole point of showing it at all. */
+  background: color-mix(in srgb, var(--bg-1) 55%, transparent);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  max-width: 26rem;
+  padding: 1.6rem 1.8rem;
+  text-align: center;
+  border-radius: 18px;
+  border: 1px solid var(--accent-select-edge);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-float);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--on-solid);
+  background: var(--gate-solid);
+  border: 1px solid transparent;
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-top: 0.2rem;
+  border-radius: 50%;
+  color: var(--gate-hue);
+  background: var(--gate-wash);
+  border: 1px solid var(--gate-edge);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.perks {
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.perks li {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.perks li::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-select);
+  flex-shrink: 0;
+}
+
+.cta {
+  margin-top: 0.5rem;
+  padding: 0.55rem 1.4rem;
+  border: none;
+  border-radius: 999px;
+  /* The SAME hue as the badge and the lock above it, and as the block on the
+     home screen that opens this area. `--on-solid` rather than
+     `--accent-action-text`: the solid ramp is graded so white clears 5.48:1 on
+     all five, which is exactly what this token means. */
+  background: var(--gate-solid);
+  color: var(--on-solid);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 20px color-mix(in srgb, var(--gate-solid) var(--glow-core), transparent);
+  transition: background-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+
+.cta:hover {
+  background: color-mix(in srgb, var(--gate-solid) 86%, var(--text));
+}
+
+/* Said out loud rather than left for someone to discover by pressing it. */
+.note {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+/* ── The gate takes the hue of the area behind it ─────────────────────────
+   One set of names, four values, so the badge, the lock ring and the CTA can
+   never drift apart again — they all read `--gate-*`. Same four hues and the
+   same tokens the sidebar rows and the home blocks use. */
+.card[data-hue='violet'] {
+  --gate-solid: var(--solid-violet);
+  --gate-hue: var(--hue-violet);
+  --gate-wash: var(--violet-wash);
+  --gate-edge: var(--violet-edge);
+}
+
+.card[data-hue='blue'] {
+  --gate-solid: var(--solid-blue);
+  --gate-hue: var(--hue-blue);
+  --gate-wash: var(--blue-wash);
+  --gate-edge: var(--blue-edge);
+}
+
+.card[data-hue='pink'] {
+  --gate-solid: var(--solid-maroon);
+  --gate-hue: var(--hue-pink);
+  --gate-wash: var(--pink-wash);
+  --gate-edge: var(--pink-edge);
+}
+
+.card[data-hue='green'] {
+  --gate-solid: var(--solid-green);
+  --gate-hue: var(--hue-green);
+  --gate-wash: var(--green-wash);
+  --gate-edge: var(--green-edge);
+}

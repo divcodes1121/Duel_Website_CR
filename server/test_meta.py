@@ -120,7 +120,7 @@ META = {
 a = meta._deck_name("hog", ["hog-rider", "musketeer", "skeletons"], META)
 b = meta._deck_name("hog", ["hog-rider", "earthquake", "skeletons"], META)
 check("two decks of one archetype get different names", a != b, f"{a!r} vs {b!r}")
-check("the qualifier is the priciest support card", a == "Hog Musketeer", f"got {a!r}")
+check("the qualifier is the priciest support card", a == "Hog Rider Musketeer", f"got {a!r}")
 check(
     "a second win condition is never the qualifier",
     "Mortar" not in meta._deck_name("hog", ["hog-rider", "mortar", "skeletons"], META),
@@ -128,7 +128,7 @@ check(
 )
 check(
     "a deck with nothing to qualify on still gets a name",
-    meta._deck_name("hog", ["hog-rider"], META) == "Hog",
+    meta._deck_name("hog", ["hog-rider"], META) == "Hog Rider",
 )
 check("an unknown archetype does not crash", meta._deck_name(None, [], META) == "Unknown Deck")
 
@@ -183,6 +183,86 @@ check(
 check("ladder and ranked 1v1 are included", "ladder" in meta.META_MODES
       and any(m.startswith("ranked1v1") for m in meta.META_MODES))
 
+
+print("\nthe global card board")
+
+# `player_deck_hash` IS the sorted card list, so the board's own grouped result
+# is also a complete per-card tally. Two decks, sharing one card.
+A = "arrows,cannon,fireball,goblins,hog-rider,ice-spirit,musketeer,skeletons"
+B = "arrows,barbarians,giant,knight,minions,prince,wizard,zap"
+ROWS = [
+    {"h": A, "n": 100, "w": 60},
+    {"h": B, "n": 50, "w": 20},
+    # A duel loadout, not a deck — 16 cards. Must never be counted.
+    {"h": ",".join(f"c{i}" for i in range(16)), "n": 999, "w": 999},
+]
+cards = meta.card_totals(ROWS, total=200)
+by_key = {c["key"]: c for c in cards}
+
+check(
+    "a card's battles are its decks' battles",
+    by_key["hog-rider"]["battles"] == 100 and by_key["giant"]["battles"] == 50,
+)
+check(
+    "a card shared by two decks sums both",
+    by_key["arrows"]["battles"] == 150 and by_key["arrows"]["wins"] == 80,
+    "the pooling IS the point — a card's record is every deck holding it",
+)
+check("decks holding the card are counted", by_key["arrows"]["decks"] == 2)
+check(
+    "win rate is wins over that card's own battles",
+    by_key["arrows"]["winRate"] == round(80 / 150 * 100, 1),
+)
+check(
+    "use rate is a share of ALL battles in the window, not of the board",
+    by_key["hog-rider"]["useRate"] == 50.0,
+    "100 of the 200 competitive battles held Hog Rider",
+)
+check(
+    "a 16-card duel loadout is never read as a deck",
+    "c0" not in by_key,
+    "those rows hold a whole 16- or 24-card loadout; splitting one would "
+    "invent sixteen card records out of one battle. deck_counter._build_reps "
+    "rejects the same shape for the same reason",
+)
+check(
+    "ranking is deterministic — battles, then the key",
+    [c["key"] for c in cards][:2] == sorted(
+        [c["key"] for c in cards if c["battles"] == 150]
+    )[:1] + [k for k in [c["key"] for c in cards] if k != "arrows"][:1],
+    "ties must not depend on dict iteration order",
+)
+
+# Per-form: an evolved card is a different card and is scored as one.
+FORMS = {
+    "skeletons": {
+        "base": {"battles": 40, "wins": 20},
+        "evolution": {"battles": 10, "wins": 8},
+    },
+    # Never seen in a marked battle at all.
+    "giant": {},
+}
+meta.merge_forms(cards, FORMS)
+check(
+    "an evolved card is scored apart from the plain one",
+    by_key["skeletons"]["forms"]["evolution"]["winRate"] == 80.0
+    and by_key["skeletons"]["forms"]["base"]["winRate"] == 50.0,
+    "'the normal Skeletons will have a different use rate and win rate than "
+    "evo Skeletons' — one counter for both was reporting eleven cards as "
+    "evolved that cannot evolve at all",
+)
+check(
+    "a form's share is of the MARKED battles, not of every battle",
+    by_key["skeletons"]["forms"]["evolution"]["share"] == 20.0,
+    "10 of the 50 battles that recorded a form; a share of all 100 would "
+    "understate it by the coverage gap",
+)
+check(
+    "a card with no marked battle gets no forms key at all",
+    "forms" not in by_key["giant"] and "forms" not in by_key["arrows"],
+    "'never observed in either form' and 'observed, zero' are different "
+    "claims and the client has to be able to tell them apart",
+)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CardArt } from './CardArt';
+import { DuelInsights } from './DuelInsights';
+import { useIsPrinting } from '../../state/printMode';
 import {
   AnalyticsError,
   fetchDuelReport,
@@ -118,14 +120,22 @@ function CardPair({ combo, size = 'md' }: { combo: ApiCombo; size?: 'md' | 'lg' 
 function SlotCell({ slot, share, decks, scale }: { slot: number; share: number; decks: number; scale: number }) {
   return (
     <span
-      className={styles.slotBar}
+      className={styles.slotCell}
+      data-slot={slot + 1}
       title={`${SLOT_NAMES[slot]} · ${nf.format(decks)} decks · ${share.toFixed(1)}% of ${SLOT_NAMES[slot]}`}
     >
-      <span
-        className={styles.slotFill}
-        data-slot={slot + 1}
-        style={{ width: `${scale > 0 ? Math.min(100, (share / scale) * 100) : 0}%` }}
-      />
+      {/* The figure, then the bar — the same shape as Use Rate and Win Rate.
+          These three columns were bar-only, which made them the only numbers on
+          the row a reader had to hover to get, and left three unlabelled
+          meters sitting beside two labelled ones. */}
+      <span className={styles.slotValue}>{share.toFixed(1)}%</span>
+      <span className={styles.slotBar}>
+        <span
+          className={styles.slotFill}
+          data-slot={slot + 1}
+          style={{ width: `${scale > 0 ? Math.min(100, (share / scale) * 100) : 0}%` }}
+        />
+      </span>
     </span>
   );
 }
@@ -134,10 +144,13 @@ function TileCombo({
   label,
   combo,
   caption,
+  unmeasured = false,
 }: {
   label: string;
   combo: ApiCombo | null;
   caption: (c: ApiCombo) => string;
+  /** Nothing was ever recorded to count — a different fact from "too few". */
+  unmeasured?: boolean;
 }) {
   return (
     <div className={styles.tile}>
@@ -149,13 +162,19 @@ function TileCombo({
           <span className={styles.tileFig}>{caption(combo)}</span>
         </>
       ) : (
-        <span className={styles.tileEmpty}>Not enough duels yet</span>
+        /* "Not enough duels yet" is a claim about VOLUME, and it is false for a
+           player with 96 duels whose evolution slots simply were never stored.
+           Same distinction the tab badge and the empty table already make. */
+        <span className={styles.tileEmpty}>
+          {unmeasured ? 'No evolution slots recorded' : 'Not enough duels yet'}
+        </span>
       )}
     </div>
   );
 }
 
 export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; season?: Season }) {
+  const printing = useIsPrinting();
   const [tab, setTab] = useState<TabId>('win-conditions');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -226,13 +245,19 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
     );
   }
 
-  const t = report.tabs[tab];
-  const rows = showAll ? t.rows : t.rows.slice(0, PAGE);
   const { duels } = report;
 
-  // One ruler for every G1/G2/G3 bar in the tab. Taken from the whole tab, not
-  // the visible page, so "view all" cannot rescale the rows already on screen.
-  const slotScale = Math.max(1, ...t.rows.flatMap((c) => c.slotShare));
+  // WHICH TABS TO DRAW. On screen, the one you picked. On paper, all of them —
+  // the three tabs are slices of ONE payload (`report.tabs`), so drawing the
+  // other two costs no fetch, and a tab bar in a PDF is a control nobody can
+  // press. See `state/printMode`.
+  const tabsToRender: TabId[] = printing ? TAB_ORDER : [tab];
+
+  // NOT MEASURED, as opposed to measured-and-zero. Only Evolutions can hit this:
+  // the other two tabs read the card lists, which are always stored. Derived
+  // once because five places on this screen have to agree about it — the tab
+  // badge, the big figure, the three combo tiles and the empty table.
+  const evoUnmeasured = duels.evoCoverage === 0;
 
   return (
     <div className={styles.page}>
@@ -340,20 +365,58 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
               >
                 <span className={styles.tabIcon}>{TAB_ICONS[id]}</span>
                 {meta.label} (Combo)
-                <span className={styles.tabCount}>{meta.eligible}</span>
+                {/* An em dash, not a 0, when the slot was never recorded. A "0"
+                    beside Evolutions reads as "this player runs none", which is
+                    a measurement; "—" reads as "not measured", which is what it
+                    is. Hovering says which. */}
+                <span
+                  className={styles.tabCount}
+                  title={
+                    id === 'evolutions' && evoUnmeasured
+                      ? 'No evolution slots recorded for these duels — not measured, rather than zero'
+                      : `${meta.eligible} pairings clear the evidence floor`
+                  }
+                >
+                  {id === 'evolutions' && evoUnmeasured ? '—' : meta.eligible}
+                </span>
               </button>
             );
           })}
         </div>
 
+        {/* ONE BLOCK PER TAB. On screen this loops once over the open tab;
+            on paper it loops over all three, because `report.tabs` already
+            holds them and a tab bar in a PDF is a control nobody can press.
+            Every per-tab value is derived INSIDE the loop — computing `t` or
+            `slotScale` outside it would silently draw the active tab's numbers
+            under all three headings. */}
+        {tabsToRender.map((tabId) => {
+          const t = report.tabs[tabId];
+          const unmeasured = tabId === 'evolutions' && evoUnmeasured;
+          // Printing shows every row: "top 8 of 24" is a screen affordance for
+          // a list you can expand, and there is nothing to expand on paper.
+          const rows = showAll || printing ? t.rows : t.rows.slice(0, PAGE);
+          // One ruler for every G1/G2/G3 bar in THIS tab, taken from the whole
+          // tab rather than the visible page so "view all" cannot rescale rows
+          // already on screen.
+          const slotScale = Math.max(1, ...t.rows.flatMap((c) => c.slotShare));
+          return (
+            <div key={tabId} className={styles.tabBlock}>
+              {/* Only when several are stacked does each need naming. */}
+              {printing && <h2 className={styles.printTabHeading}>{t.label}</h2>}
         <div className={styles.tiles}>
           <div className={styles.tile}>
             <span className={styles.tileLabel}>Total {t.noun} Combos</span>
-            <span className={styles.tileBig}>{nf.format(t.eligible)}</span>
+            {/* A big "0" is a measurement — it says they ran none. When no
+                evolution slot was ever recorded there is no measurement, so the
+                figure is "—" and the caption explains, matching the tab badge. */}
+            <span className={styles.tileBig}>{unmeasured ? '—' : nf.format(t.eligible)}</span>
             <span className={styles.tileFig}>
-              Unique combinations
+              {unmeasured ? 'Not recorded' : 'Unique combinations'}
               <span className={styles.tileSub}>
-                from {nf.format(duels.total)} duels · {nf.format(duels.decks)} decks
+                {unmeasured
+                  ? `no evolution slots stored for these ${nf.format(duels.decks)} decks`
+                  : `from ${nf.format(duels.total)} duels · ${nf.format(duels.decks)} decks`}
               </span>
             </span>
           </div>
@@ -361,16 +424,19 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
           <TileCombo
             label="Most Used Combo"
             combo={t.mostUsed}
+            unmeasured={unmeasured}
             caption={(c) => `Use Rate ${pct(c.useRate)}`}
           />
           <TileCombo
             label="Top G2 Combo"
             combo={t.perSlot[1] ?? null}
+            unmeasured={unmeasured}
             caption={(c) => `Use Rate ${pct(c.slotShare[1])}`}
           />
           <TileCombo
             label="Top G3 Combo"
             combo={t.perSlot[2] ?? null}
+            unmeasured={unmeasured}
             caption={(c) => `Use Rate ${pct(c.slotShare[2])}`}
           />
         </div>
@@ -400,6 +466,37 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
           </header>
 
           {rows.length === 0 ? (
+            /* TWO DIFFERENT EMPTINESSES, and they must not share a sentence.
+             *
+             * "Nothing cleared the evidence floor" says the pairings existed and
+             * were too thin. "No evolution slot was ever recorded" says there
+             * were no candidates to weigh at all — we were never told which
+             * cards were brought evolved, so the tab cannot have an opinion.
+             * `_evo_marks` keeps that distinction on purpose ("returns None for
+             * 'we were never told' precisely so that stays distinct from 'they
+             * ran none'") and the screen was collapsing it: at 0% coverage it
+             * blamed the evidence floor, which reads as "this player does not
+             * run evolutions" and is a claim the data does not support. */
+            unmeasured ? (
+              <p className={styles.empty}>
+                <strong>No evolution slots were recorded</strong> for any of this player&rsquo;s{' '}
+                {duels.decks} duel decks, so there is nothing to pair — this tab is empty because
+                the data is missing, not because they field no evolutions.
+                {duels.span?.from && (
+                  <>
+                    {' '}
+                    Their duels run <strong>{shortDay(duels.span.from)}</strong> to{' '}
+                    <strong>{shortDay(duels.span.to)}</strong>, and evolution slots were not yet
+                    being stored across that period.
+                  </>
+                )}{' '}
+                Any evolutions visible in their recent battle history are from{' '}
+                <strong>ladder and ranked play</strong>, which this page does not read — a duel
+                combo is a pairing within one duel loadout, so only duel battles can supply
+                it. The other two tabs
+                are unaffected: they read the cards themselves, which are always stored.
+              </p>
+            ) : (
             <p className={styles.empty}>
               No {t.label.toLowerCase()} combination clears the evidence floor yet — a pairing
               needs {report.floors.minGames}+ duel decks and has to appear in at least{' '}
@@ -412,6 +509,7 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
                 </>
               )}
             </p>
+            )
           ) : (
             <div className={styles.tableScroll}>
               <table className={styles.table}>
@@ -455,7 +553,7 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
                           <span className={styles.meterValue} data-key="use">
                             {pct(c.useRate)}
                           </span>
-                          <span className={styles.meter}>
+                          <span className={styles.meter} data-key="use">
                             <span
                               className={styles.meterFill}
                               data-key="use"
@@ -467,7 +565,7 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
                           <span className={styles.meterValue} data-key="win">
                             {pct(c.winRate)}
                           </span>
-                          <span className={styles.meter}>
+                          <span className={styles.meter} data-key="win">
                             <span
                               className={styles.meterFill}
                               data-key="win"
@@ -548,6 +646,9 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
             </button>
           )}
         </section>
+            </div>
+          );
+        })}
 
         <footer className={styles.foot}>
           <p>
@@ -574,6 +675,13 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
           </p>
         </footer>
       </section>
+
+      {/* DUEL INSIGHTS — appended below everything above, and self-contained.
+          It loads the duel SERIES log itself, because this page's own report is
+          the pair board and holds no series, games, results or opponents. Its
+          fetch, loading and failure are its own, so nothing above this line is
+          affected by it. */}
+      <DuelInsights tag={tag} win={win} />
     </div>
   );
 }

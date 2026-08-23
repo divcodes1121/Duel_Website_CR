@@ -1,0 +1,101 @@
+/**
+ * Two square chips: copy the deck link, open it in Clash Royale.
+ *
+ * They sit at rest as real controls — a sunken square with its own border —
+ * rather than as bare glyphs that only become buttons on hover. A deck row is
+ * a dense place and a floating icon reads as decoration there; a framed one
+ * reads as something to press.
+ *
+ * Colour is neutral at rest ON PURPOSE. These repeat once per deck, and a
+ * fifty-row meta board with a hue on every chip is the "large surfaces stay
+ * neutral" rule broken fifty times. The hue arrives only on hover, and only on
+ * the launch chip, which is the one that leaves the app.
+ */
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  vertical-align: middle;
+  line-height: 1;
+  /* Breathing room from the card strip these almost always follow. */
+  margin-left: 0.45rem;
+  /* Most callers drop this straight into an existing card strip, which is a
+     flex row that does not set `align-items` — so the default `stretch` would
+     pull this to the full height of a 52px card. */
+  align-self: center;
+  /* Card strips put their cards on `flex: 1 1 0`; without this the chips would
+     be handed a share of that width and squash. */
+  flex: 0 0 auto;
+}
+
+.button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  cursor: pointer;
+  /* Transform and opacity are the only animated geometry the project allows;
+     the colour legs are cheap and are what make the press read as a state. */
+  transition:
+    color var(--dur-1) var(--ease),
+    background-color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
+}
+
+.actions[data-size='sm'] .button {
+  width: 1.55rem;
+  height: 1.55rem;
+}
+
+.actions[data-size='md'] .button {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+
+.button:hover {
+  color: var(--text);
+  background: var(--neutral-wash-sunken);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+/* The launch chip takes the action hue on hover — it is the one that hands the
+   deck to another application, and that is worth distinguishing from copying a
+   string. Ink step, not solid: this is a 12px glyph and a 1px border, both of
+   which have to clear 4.5:1 as INK. `--glow-core` is a STRENGTH mixed per hue,
+   and light resolves it to 0%, so this one declaration is correct in both
+   themes with no [data-theme] branch. */
+.launch:hover {
+  color: var(--accent-action);
+  border-color: var(--accent-action-edge);
+  background: var(--accent-action-wash-sunken);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent-action) var(--glow-core), transparent);
+}
+
+/* Momentary confirmation. The glyph also swaps to a tick, so the state is
+   carried by shape as well as by hue. */
+.button[data-flash] {
+  color: var(--hue-green);
+  background: var(--green-fill);
+  border-color: var(--green-edge);
+  transform: none;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--hue-green) var(--glow-core), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button:hover,
+  .button:active {
+    transform: none;
+  }
+}

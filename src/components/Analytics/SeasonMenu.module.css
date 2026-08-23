@@ -1,0 +1,124 @@
+/* The trigger keeps the exact metrics the native <select> had — same padding,
+   radius, weight and border — so swapping the control did not move anything
+   else in the query row. */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease);
+}
+
+.trigger:hover {
+  border-color: var(--accent-select);
+  background: var(--accent-select-wash);
+}
+
+/* Violet, because an open dropdown is a species of "you are here" — the same
+   rule the tabs, the range chips and the focus ring follow. */
+.trigger[data-open] {
+  border-color: var(--accent-select);
+  color: var(--accent-select);
+}
+
+.chevron {
+  display: flex;
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.trigger[data-open] .chevron {
+  transform: rotate(180deg);
+}
+
+/* THE GLASS PANEL.
+ *
+ * This is one of the few deliberate uses of a real backdrop-filter left in the
+ * app. The app-wide frosted pass was removed because a translucent PANEL sits
+ * in the page and refracts whatever scrolls behind it, so its contrast drifts
+ * as you scroll. None of that applies to a menu: it floats above the page, it
+ * is ~150px tall, it is dismissed within a second or two, and it never scrolls.
+ * The blur is doing the one thing blur is good at — saying "this is on top".
+ *
+ * `--glass-panel` carries the alpha floor that keeps the labels legible over
+ * ANY backing; see index.css. The blur is what makes it read as glass, not the
+ * transparency, which is why the alpha can stay high.
+ *
+ * Portalled to <body>, so it is positioned in viewport coordinates. Every
+ * ancestor in the chrome creates a stacking context via its own
+ * backdrop-filter, which would otherwise trap it. */
+.menu {
+  position: fixed;
+  z-index: 240;
+  min-width: 11.5rem;
+  padding: 0.35rem;
+  border-radius: 14px;
+  border: 1px solid var(--glass-panel-stroke);
+  background: var(--glass-panel);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-sheen);
+  animation: menuIn var(--dur-2) var(--ease);
+}
+
+/* One-shot, transform and opacity only — the two rules the motion policy in
+   index.css sets out. The reduced-motion blanket there collapses it to 0.01ms
+   without this file knowing. */
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+/* Neutral hover, hue for selection — hover means "clickable", selection means
+   "this is the one". If hover were tinted too the two would compete, which is
+   the rule the sidebar settled. */
+.option:hover {
+  background: var(--neutral-wash);
+}
+
+.option[aria-selected='true'] {
+  background: var(--accent-select-fill);
+  color: var(--accent-select);
+}
+
+/* The tick is a SHAPE, so the selected row survives a monochrome screenshot and
+   does not rest on hue alone. */
+.tick {
+  display: flex;
+  width: 0.9rem;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.option[aria-selected='true'] .tick {
+  opacity: 1;
+}

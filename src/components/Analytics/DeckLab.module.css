@@ -1,0 +1,510 @@
+/* Deck Analysis — one pasted deck, measured.
+ *
+ * Chrome uses the app's neutral tokens. Data colour does not, and the set is
+ * deliberately small:
+ *
+ *   --c-use   the magnitude hue. One series per chart, so it needs no partner
+ *             and carries no identity — it is the app's existing data blue.
+ *
+ *   --c-win / --c-loss   the DIVERGING pair for the matchup spread, which is
+ *             polarity: above or below an even matchup.
+ *
+ *   --c-thin  a CONFIDENCE marker on a bar that is already one of the two
+ *             poles, not a third category.
+ *
+ * THE LOSS POLE IS RED, AND THE RED IS RE-STEPPED. The app's UI red on the dark
+ * ground (#f87171) is a bright pastel, and measured against the data green it
+ * separates by ΔE 2.9 under protanopia — under the floor, and under even the
+ * 6–8 band a secondary encoding is allowed to rescue. It is not red that fails;
+ * it is that particular step of it. A deeper red passes comfortably:
+ *
+ *   dark  (surface #141414)  #199e70 / #d92d20 — ΔE 9.3 deutan, ALL PASS
+ *   light (surface #f8f8fa)  #169b6b / #c02618 — ΔE 9.6 deutan, ALL PASS
+ *
+ * THE THIN MARKER CARRIES A HATCH, AND THAT IS NOT DECORATION. Red against
+ * amber is the pair deuteranopia collapses hardest: measured across a dozen
+ * candidates, no light-mode red/orange pair clears the CVD floor on hue alone
+ * (best 4.9, floor 6) and none clears the 15-point normal-vision floor either.
+ * Dark does pass (#c58200, ΔE 7.9 deutan / 16.7 normal), which is exactly the
+ * kind of one-theme-only pass this project has been burned by. So the thin
+ * state is carried by a 45° hatch as well as by hue — the sanctioned secondary
+ * encoding — and it survives deuteranopia, a monochrome print and forced
+ * colours, none of which a hue difference does. Every bar also prints its own
+ * percentage and its battle count, and on a thin row the count IS the point.
+ */
+
+.page {
+  --c-use: #2a78d6;
+  --c-win: #169b6b;
+  --c-loss: #c02618;
+  --c-thin: #a06a00;
+
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+:global([data-theme='dark']) .page {
+  --c-use: #3987e5;
+  --c-win: #199e70;
+  --c-loss: #d92d20;
+  --c-thin: #c58200;
+}
+
+
+.blurb {
+  margin: 0.25rem 0 0;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 52ch;
+}
+
+/* A MEASURE, centred. Results used to run the full width of the panel, which
+   at 1500px put a matchup row's label 40rem from its bar. 78rem is about as wide
+   as these tables read comfortably; wider than that the eye loses the row. */
+.body {
+  width: min(78rem, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.1rem 1.3rem 1.5rem;
+}
+
+/* --- Paste box ---------------------------------------------------------- */
+
+.paste {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pasteInput {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  outline: none;
+}
+
+.pasteInput::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.pasteInput:focus {
+  border-color: var(--accent-select);
+}
+
+.pasteInputError {
+  border-color: var(--error);
+}
+
+.pasteButton {
+  border: none;
+  border-radius: 10px;
+  padding: 0.6rem 1.3rem;
+  background: var(--accent-action-solid);
+  color: var(--accent-action-text);
+  font-size: 0.83rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Nothing to analyse yet — the control says so before it is pressed. */
+.pasteButton[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+.error {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--error);
+}
+
+.loading,
+.empty {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  padding: 0.6rem 0;
+  max-width: 62ch;
+}
+
+.warn {
+  margin: 0.6rem 0 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+/* --- The deck --------------------------------------------------------- */
+
+.deckStrip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+/* A box, not a width: the evolution frames run from 287x384 to 553x793 against
+   a plain card's 302x363, so a row sized by width alone reflows the moment a
+   deck fields one. `contain` letterboxes instead of stretching. */
+.deckCard {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 5.4rem;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+}
+
+/* --- Stat tiles -------------------------------------------------------- */
+
+.statRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.6rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.statValue {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.65rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.statValue[data-tone='win'] {
+  color: var(--c-win);
+}
+
+.statValue[data-tone='loss'] {
+  color: var(--c-loss);
+}
+
+.statLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.statHint {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.metaNote {
+  margin: 0;
+  padding: 0.5rem 0.8rem;
+  border-radius: 10px;
+  font-size: 0.79rem;
+  color: var(--accent-info);
+  background: var(--blue-wash);
+  border: 1px solid var(--blue-edge);
+}
+
+/* --- Cards ------------------------------------------------------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.card {
+  padding: 0.9rem 1rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.cardTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.cardSub {
+  margin: 0.2rem 0 0.85rem;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 66ch;
+}
+
+/* --- Elixir curve ------------------------------------------------------ */
+
+.curve {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 0.35rem;
+  height: 8.5rem;
+}
+
+.curveCol {
+  display: grid;
+  grid-template-rows: 1rem 1fr 1rem;
+  gap: 0.2rem;
+  align-items: end;
+  justify-items: center;
+}
+
+.curveCount {
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.curveTrack {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 5px;
+  background: var(--surface-sunken);
+}
+
+/* 4px rounded data-end, anchored to the baseline. */
+.curveBar {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 4px 4px 2px 2px;
+  background: var(--c-use);
+}
+
+.curveCost {
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* --- Matchup spread (diverging) ---------------------------------------- */
+
+.spread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.spreadAxis {
+  display: grid;
+  grid-template-columns: 9rem 1fr 4rem 4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The three axis labels ride the track column, so they line up with the bars
+   rather than with the row as a whole. */
+.spreadAxis > span:first-child {
+  grid-column: 2;
+  text-align: left;
+}
+
+.spreadEven {
+  grid-column: 2;
+  text-align: center;
+}
+
+.spreadAxis > span:last-child {
+  grid-column: 2;
+  text-align: right;
+}
+
+.spreadRow {
+  display: grid;
+  grid-template-columns: 9rem 1fr 4rem 4rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.spreadName {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spreadTrack {
+  position: relative;
+  height: 0.85rem;
+  border-radius: 5px;
+  background: var(--surface-sunken);
+}
+
+.spreadCentre {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.spreadBar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 2px;
+  border-radius: 3px;
+}
+
+.spreadBar[data-sign='up'] {
+  background: var(--c-win);
+}
+
+.spreadBar[data-sign='down'] {
+  background: var(--c-loss);
+}
+
+.spreadValue {
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.spreadValue[data-sign='up'] {
+  color: var(--c-win);
+}
+
+.spreadValue[data-sign='down'] {
+  color: var(--c-loss);
+}
+
+.spreadGames {
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+/* A thin reading keeps its place — the games happened — but it is marked, so it
+   cannot pass for a row measured on thousands of battles. Amber AND a 45° hatch:
+   the hue is the quick read, the hatch is what survives deuteranopia (where
+   amber and red collapse), a monochrome print and forced-colours mode. */
+.spreadRow[data-thin] .spreadBar {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--surface-nested) 65%, transparent) 3px 6px
+    ),
+    var(--c-thin);
+}
+
+.spreadRow[data-thin] .spreadValue {
+  color: var(--c-thin);
+}
+
+.spreadRow[data-thin] .spreadName {
+  color: var(--text-muted);
+}
+
+/* The count is the reason the row is marked, so on a thin row it stops being
+   the quietest thing in it. */
+.spreadRow[data-thin] .spreadGames {
+  color: var(--c-thin);
+  font-weight: 700;
+}
+
+/* --- Ranked bars ------------------------------------------------------- */
+
+.ranked {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* EVERY TRACK DEFINITE. The value column was `auto`, so a row whose caption is
+   "Hog Rider, Goblin Barrel, Mortar" shrank its own bar while the row below it,
+   captioned "3", kept a full-width one — two bars of the same value drawn at
+   different lengths, which is the one thing a bar chart must never do. */
+.rankedRow {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr 10rem;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.rankedLabel {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rankedTrack {
+  height: 0.6rem;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.rankedBar {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 4px;
+  background: var(--c-use);
+}
+
+.rankedValue {
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 52rem) {
+  .spreadAxis,
+  .spreadRow {
+    grid-template-columns: 6rem 1fr 3.4rem;
+  }
+
+  .spreadGames {
+    display: none;
+  }
+}

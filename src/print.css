@@ -1,0 +1,128 @@
+/* Print / Export-PDF — an exact copy of what is on screen.
+ *
+ * WHY THE BROWSER'S OWN PRINT ENGINE, and not a DOM rasteriser. This design
+ * uses 43 `backdrop-filter` panels and 97 `color-mix()` values. html2canvas
+ * ignores the first outright and barely supports the second, so a canvas
+ * "screenshot" would render the glass flat and the colours wrong. The print
+ * engine composites the real page, so what lands in the PDF is what you saw.
+ *
+ * THE ONE THING THAT ACTUALLY NEEDS FIXING is scrolling. The app does NOT
+ * scroll the document — `.main` and `.body` are `overflow-y: auto` containers,
+ * so `document.body.scrollHeight` sits at the viewport height and a naive print
+ * captures only the visible slice. Everything below unclips those containers so
+ * the whole page flows onto as many sheets as it needs.
+ */
+
+@media print {
+  /* 1. Let the document, not a div, own the scroll. */
+  html,
+  body,
+  #root {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Blunt on purpose. Any ancestor that clips will cut the page off at the
+     fold, and in print there is no reason for anything to clip. */
+  *,
+  *::before,
+  *::after {
+    overflow: visible !important;
+    max-height: none !important;
+    /* Backgrounds and colours are the point of an exact copy; without this
+       browsers strip them to save ink. */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    /* One-shot transitions can be mid-flight when the dialog opens and would
+       be captured half-applied. */
+    transition: none !important;
+    animation: none !important;
+  }
+
+  /* 2. Anything pinned would either repeat on every sheet or sit on top of the
+     content. Let it flow with the page instead.
+     The header is deliberately KEPT — it carries the brand and the tag being
+     analysed, which is what makes a printed page identifiable later. */
+  [class*='shell'],
+  [class*='header'],
+  [class*='Header'],
+  [class*='topbar'] {
+    position: static !important;
+  }
+
+  /* 3. Chrome that means nothing on paper.
+     THE SIDEBAR IS DROPPED, and this was found by looking at the output rather
+     than reasoning about it: un-pinning it collapsed the two-column layout into
+     a stack, so the first sheet of every export was a full page of navigation
+     links and an "Upgrade Now" advert before any analysis appeared. Navigation
+     is not content — nobody can click it in a PDF. */
+  [class*='sidebar'],
+  [class*='railToggle'],
+  [class*='proCard'],
+  [data-noprint],
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  /* With the sidebar gone the content column should take the sheet. */
+  [class*='body'] {
+    grid-template-columns: 1fr !important;
+    display: block !important;
+  }
+
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* 4. Keep related things together rather than split across a page break. */
+  section,
+  article,
+  li,
+  tr,
+  [class*='block'],
+  [class*='card'],
+  [class*='deckRow'],
+  [class*='panel'] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h1, h2, h3, h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* 5. The main column is sized against the viewport on screen; on paper it
+     should simply be the sheet. */
+  [class*='main'],
+  [class*='body'],
+  [class*='content'] {
+    width: auto !important;
+    max-width: none !important;
+    display: block !important;
+  }
+
+  /* Images must not be cut in half by a page break. */
+  img {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    max-width: 100% !important;
+  }
+
+  /* 6. Backdrop-filter is expensive and, once nothing scrolls behind it, buys
+     nothing on paper — but the SURFACE colour underneath must stay, which is
+     why only the filter is dropped and never the background. */
+  * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Sheet setup. Landscape matches the app's wide layout far better than
+   portrait, which would otherwise shrink every deck strip to illegibility. */
+@page {
+  size: A4 landscape;
+  margin: 10mm;
+}

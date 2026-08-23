@@ -1,0 +1,1164 @@
+/* Coach Assist.
+ *
+ * Chrome matches the other analytics screens exactly — same panel, same header,
+ * same tabs — because this is another one of them, not a new kind of thing.
+ *
+ * COLOUR IS BY MEANING, on the app's five-hue system and never picked to look
+ * nice:
+ *
+ *   violet  the prediction itself — the same hue the sidebar uses for selection
+ *   pink    the OPPONENT's side, everywhere it appears
+ *   blue    yours, and anything stating evidence rather than outcome
+ *   green   an observed fact and the recommendation to act on
+ *
+ * Sections carry `data-hue` and everything inside them inherits it through one
+ * `--tone` variable, so a block's identity is set once at its edge rather than
+ * threaded through a dozen rules. Level 3 of the ladder — the raw hue — appears
+ * only on small things: a rail, a rank, a number. Large surfaces stop at the
+ * 8% wash, which is what keeps the screen neutral while still reading as
+ * coloured.
+ */
+
+.panel {
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+  padding: 1.25rem 1.4rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.headIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.headText {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.32rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.83rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+/* The label takes the app's ink, not the hue. On an underline tab the coloured
+   RULE is the indicator — the text does not also need to be violet, and a
+   pastel label beside a solid sidebar row is what read as washed. Meaning still
+   does not rest on hue alone: the label is brighter AND heavier AND ruled. */
+.tabOn,
+.tabOn:hover {
+  color: var(--text);
+  font-weight: 750;
+  border-bottom-color: var(--accent-select);
+}
+
+/* ------------------------------------------------------------- the interview
+ *
+ * One question on screen at a time, centred and given room. This is the part
+ * a coach uses with a phone in the other hand mid-duel, so the target sizes are
+ * generous and the current step is always named — you can be interrupted and
+ * still know where you are. */
+
+.ask {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.6rem 1.4rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.askHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.askStep {
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-select);
+}
+
+.askQuestion {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.askHint {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.askActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* The two answer weights. Pink is the app's ACTION hue and is spent on the
+   move that carries the interview forward; everything else is an outline, so
+   there is never a screen with two things competing to be pressed. */
+.primary {
+  padding: 0.62rem 1.15rem;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent-action-solid);
+  color: var(--accent-action-text);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.secondary {
+  padding: 0.62rem 1.15rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.secondary:hover {
+  background: var(--neutral-wash);
+}
+
+/* THE STAGE BUTTONS — a hue each, and the hue means something.
+ *
+ * These are not one action plus some alternatives; they are three parallel
+ * statements about the state of the duel, and pink-plus-two-outlines said the
+ * first one was recommended. A hue apiece makes them read as a set, and the
+ * assignment is the duel's own progression rather than decoration:
+ *
+ *     green   nothing played  — everything still open
+ *     blue    one game played
+ *     violet  two games played
+ *
+ * The same stage wears the same hue in BOTH windows, so the colour is worth
+ * learning once. Level 2 of the ladder (the 14% fill) is the ceiling for a
+ * surface this size; the raw hue appears only on the 1px edge. */
+.choice {
+  --tone: var(--hue-green);
+  --tone-fill: var(--green-fill);
+  --tone-edge: var(--green-edge);
+
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.66rem 1.15rem;
+  border-radius: 11px;
+  border: 1px solid var(--tone-edge);
+  background: var(--tone-fill);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.choice:hover {
+  border-color: var(--tone);
+}
+
+.choice:focus-visible {
+  outline: 2px solid var(--tone);
+  outline-offset: 2px;
+}
+
+.choice[data-hue='blue'] {
+  --tone: var(--hue-blue);
+  --tone-fill: var(--blue-fill);
+  --tone-edge: var(--blue-edge);
+}
+
+.choice[data-hue='violet'] {
+  --tone: var(--hue-violet);
+  --tone-fill: var(--violet-fill);
+  --tone-edge: var(--violet-edge);
+}
+
+.choice[data-hue='pink'] {
+  --tone: var(--hue-pink);
+  --tone-fill: var(--pink-fill);
+  --tone-edge: var(--pink-edge);
+}
+
+/* A dot in the button's own hue — the colour is then carried by something with
+   a shape, not by a tint a reader has to notice. */
+.choiceDot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.back:hover {
+  color: var(--text);
+  background: var(--neutral-wash);
+}
+
+/* ------------------------------------------------------------- paste step */
+
+.pasteBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.3rem 1.4rem 1.4rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.pasteRow {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.paste {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+/* The box empties itself once a link parses, so emptying it by hand can no
+   longer mean "remove this deck". This is where that moved to. */
+.pasteClear {
+  flex-shrink: 0;
+  width: 2.2rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pasteClear:hover {
+  color: var(--hue-red);
+  border-color: var(--red-edge);
+  background: var(--red-wash);
+}
+
+.paste:focus-visible {
+  outline: 2px solid var(--accent-select);
+  outline-offset: 1px;
+}
+
+.error {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--error);
+}
+
+.tagGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .tagGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tagField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.tagLocked {
+  display: block;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.tagLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Slot 3's form picker — the same control as the Deck Counter's, because it is
+   the same question and a second design for it would be a second thing to
+   learn. */
+.wildPick {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.wildLabel {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.wildOption {
+  padding: 0.28rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.wildOn,
+.wildOn:hover {
+  border-color: var(--accent-select);
+  background: var(--accent-select-fill);
+  color: var(--text);
+}
+
+/* ----------------------------------------------------------- deck strips */
+
+.strip,
+.stripSm {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 3px;
+  min-width: 0;
+  /* Never `stretch`: the art PNGs are not one shape, so a row of images sized
+     by width alone grows every one of them to the tallest in it. */
+  align-items: flex-start;
+}
+
+/* Every card gets the SAME box — the base card's 302x363 — and the art is
+   letterboxed into it rather than stretched to fill it. An evolution frame is a
+   different shape from the card it replaces (287x384 up to 553x793), so without
+   this a strip reflows the moment a deck fields one. */
+.strip img,
+.stripSm img {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+}
+
+.strip img {
+  max-width: 62px;
+  border-radius: 5px;
+}
+
+.stripSm img {
+  max-width: 62px;
+  border-radius: 5px;
+}
+
+/* --------------------------------------------------------------- results */
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.resultHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.resultTitle {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.resultSub {
+  margin: 0.2rem 0 0;
+  max-width: 78ch;
+  font-size: 0.79rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.warn {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--red-edge);
+  background: var(--red-wash);
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.notice {
+  padding: 2rem 1.4rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.noticeTitle {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-display, inherit);
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.noticeCode {
+  display: inline-block;
+  margin: 0.8rem 0 0;
+  padding: 0.45rem 0.8rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+/* A block owns one hue. `--tone` is resolved once here from `data-hue` and
+   every child reads it, so adding a hue is one line rather than a sweep. */
+.block {
+  --tone: var(--hue-violet);
+  --tone-wash: var(--violet-wash);
+  --tone-edge: var(--violet-edge);
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 0.95rem 0.95rem;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--tone);
+  background: var(--surface-nested);
+}
+
+.block[data-hue='pink'] {
+  --tone: var(--hue-pink);
+  --tone-wash: var(--pink-wash);
+  --tone-edge: var(--pink-edge);
+}
+
+.block[data-hue='blue'] {
+  --tone: var(--hue-blue);
+  --tone-wash: var(--blue-wash);
+  --tone-edge: var(--blue-edge);
+}
+
+.block[data-hue='green'] {
+  --tone: var(--hue-green);
+  --tone-wash: var(--green-wash);
+  --tone-edge: var(--green-edge);
+}
+
+.blockTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.blockNote {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+@media (max-width: 1000px) {
+  .two {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ------------------------------------------------------------- deck rows */
+
+.deckList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The deck column is `minmax`, not fixed: its eight cards flex to fill
+   whatever it is given, so a fixed track would mean a fixed card size in a
+   panel that is often much wider. */
+.deckRow {
+  display: grid;
+  /* The deck track is `minmax`, not fixed, because the eight cards inside it
+     flex to fill whatever it is given — a fixed track means a fixed card size
+     in a panel that is usually much wider. Raised from 22rem so the cards are
+     actually readable; they still shrink before the row does. */
+  grid-template-columns: 1.6rem minmax(8rem, 11rem) minmax(16rem, 30rem) 4.6rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.42rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.deckRow:first-child {
+  border-top: none;
+}
+
+/* No figure on this row, so the column is not reserved — the Duel Prediction
+   lists dropped their "% likely" and the space belongs to the cards. */
+.deckRow[data-nofigure] {
+  grid-template-columns: 1.6rem minmax(8rem, 11rem) minmax(16rem, 34rem);
+}
+
+@media (max-width: 900px) {
+  .deckRow,
+  .deckRow[data-nofigure] {
+    grid-template-columns: 1.6rem 1fr 4.6rem;
+  }
+
+  /* The strip spans the row on its own line rather than squeezing the name and
+     the figure into unreadable columns. */
+  .deckRow .stripSm {
+    grid-column: 1 / -1;
+  }
+}
+
+.rank {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 7px;
+  background: var(--tone-wash);
+  border: 1px solid var(--tone-edge);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Holds the rank column open on a row that has no number, so the tracks still
+   line up with the ranked rows above it. */
+.rankEmpty {
+  display: block;
+  width: 1.5rem;
+}
+
+.deckIdent {
+  min-width: 0;
+}
+
+.deckName {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.deckMeta {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* A meta deck standing in for a personal one. Labelled, never silently mixed
+   in — "what they play" and "what people play" are different claims. */
+.fillTag {
+  padding: 0.05rem 0.35rem;
+  border-radius: 6px;
+  border: 1px solid var(--blue-edge);
+  background: var(--blue-wash);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.figure {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.figureValue {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 750;
+  color: var(--text);
+}
+
+/* Green only where it means "favourable", never as decoration. */
+.figureValue[data-good] {
+  color: var(--success);
+}
+
+.figureLabel {
+  display: block;
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- verdict */
+
+.verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid var(--green-edge);
+  background: var(--green-wash);
+}
+
+.verdictLabel {
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--success);
+}
+
+.verdictBody {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.verdictName {
+  font-family: var(--font-display, inherit);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.verdictFigure {
+  text-align: right;
+  font-size: 1.25rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* The rung the number came from, printed beside it rather than in a tooltip:
+   "62% because these two decks have met" and "62% because their archetypes
+   have" are different claims. */
+.verdictFigureLabel {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+.notes {
+  margin: 0;
+  padding-left: 1.05rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.81rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.notes li::marker {
+  color: var(--tone);
+}
+
+/* Caveats are the quietest thing on the screen and still always present. */
+.caveats {
+  margin: 0;
+  padding: 0.6rem 0.85rem 0.6rem 1.9rem;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------- their duel log
+ *
+ * A record, not a ranking, so it is styled as receipts: a dated header per
+ * series and the games listed in order underneath. The games that MATCHED what
+ * was pasted are context and are dimmed; the games after them are the answer
+ * and are drawn at full strength. Without that split all three games read as
+ * equally important and the block stops answering "what came next". */
+
+.empty {
+  margin: 0;
+  font-size: 0.79rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.seqList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.seq {
+  padding: 0.5rem 0.6rem 0.6rem;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.seqHead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.seqDate {
+  font-size: 0.72rem;
+  font-weight: 750;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.seqOpp,
+.seqScore {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.seqScore {
+  font-weight: 650;
+}
+
+.seqWhen {
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+/* Whether the paste matched card-for-card or at the 6-of-8 rule. Blue, because
+   it is a statement about the EVIDENCE rather than about the outcome. */
+.seqMatch {
+  margin-left: auto;
+  padding: 0.05rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.seqMatch[data-exact] {
+  border-color: var(--blue-edge);
+  background: var(--blue-wash);
+}
+
+.seqGame {
+  display: grid;
+  grid-template-columns: 1.7rem minmax(7rem, 11rem) minmax(14rem, 26rem) 1.4rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.18rem 0;
+}
+
+/* Already on screen above — this is the deck that was pasted, kept for
+   orientation rather than for reading. */
+.seqGame[data-shown] {
+  opacity: 0.55;
+}
+
+.seqGameNo {
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.seqGameName {
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seqResult {
+  display: grid;
+  place-items: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 5px;
+  border: 1px solid var(--red-edge);
+  background: var(--red-wash);
+  font-size: 0.64rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.seqResult[data-win] {
+  border-color: var(--green-edge);
+  background: var(--green-wash);
+}
+
+.seqFoot {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+  .seqGame {
+    grid-template-columns: 1.7rem 1fr 1.4rem;
+  }
+
+  .seqGame .stripSm {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ------------------------------------------------------------ odds tables */
+
+.oddsGrid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
+  gap: 0.45rem;
+}
+
+.oddsCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.oddsCard img {
+  width: 100%;
+  max-width: 54px;
+  height: auto;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+  border-radius: 5px;
+}
+
+.oddsValue {
+  font-size: 0.72rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.barList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Every track a definite width, so the bars line up down the column — rows are
+   independent grids and only agree when nothing is `auto`. */
+.barRow {
+  display: grid;
+  grid-template-columns: 8rem 1fr 3rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.barName {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar {
+  display: block;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--tone);
+}
+
+.barValue {
+  text-align: right;
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.nextRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-top: 0.2rem;
+}
+
+/* ── opponent read (Phase 19B) ─────────────────────────────────────────────
+   Deliberately quieter than the prediction blocks above it. This is a
+   secondary read on a settled screen, and the alternatives are quieter still
+   than the primary — the hierarchy is the honesty. */
+
+.oieSkeleton {
+  margin: 0;
+  padding: 14px 0 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+  /* No spinner. A one-shot fade is enough to say "working" without pulling the
+     eye off the prediction that is already answered above. */
+  animation: oieFade var(--dur-2) var(--ease);
+}
+
+@keyframes oieFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.oiePrimary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding-top: 6px;
+}
+
+.oieCards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.oieCards > li { display: flex; }
+.oieCards img { width: 44px; height: auto; border-radius: 6px; }
+.oieCards[data-small] img { width: 32px; border-radius: 5px; }
+
+.oieMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 180px;
+}
+
+.oieLabel {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.oieConfidence {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--hue-violet);
+}
+
+/* The band is graded to the ink step, not the fill step: this is small
+   coloured text and must hold 4.5:1 at 14px. */
+.oieConfidence[data-band='high']   { color: var(--hue-green); }
+.oieConfidence[data-band='medium'] { color: var(--hue-blue); }
+.oieConfidence[data-band='low']    { color: var(--hue-pink); }
+
+.oieNote {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.oieAlts {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.oieAltsTitle {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.oieAltList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.oieAlt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.oieEvidence {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .oieCards img { width: 36px; }
+  .oieCards[data-small] img { width: 28px; }
+}

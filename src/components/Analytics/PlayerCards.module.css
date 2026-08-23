@@ -1,0 +1,605 @@
+/* Cards — one player's whole card pool.
+ *
+ * Colour discipline is the app's: violet is selection and only selection,
+ * green a rise, red a fall, everything else neutral. The tiles are a grid of
+ * small surfaces, so nothing here goes past level 2, and the only raw hue is on
+ * a number or a 2px edge.
+ */
+
+.page {
+  /* The data pair, re-stepped per theme — never an auto-flip of the light
+     column. Same values as the duel-analysis meters, because they are the same
+     two measures and one app should not encode "use rate" two ways. */
+  --c-use: #2a78d6;
+  --c-win: #169b6b;
+
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+:global([data-theme='dark']) .page {
+  --c-use: #3987e5;
+  --c-win: #199e70;
+}
+
+.glass {
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+}
+
+.panel {
+  composes: glass;
+  padding: 1.25rem 1.4rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.notice {
+  composes: glass;
+  padding: 2.25rem 1.6rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.noticeTitle {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display, inherit);
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.noticeBody {
+  margin: 0 auto;
+  max-width: 46ch;
+  line-height: 1.55;
+}
+
+.noticeCode {
+  display: inline-block;
+  margin: 0.9rem 0 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  /* The range popover escapes this row, and every panel below carries a
+     backdrop-filter — a stacking context that would otherwise paint over it. */
+  position: relative;
+  z-index: 40;
+}
+
+.headIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.headText {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.32rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.range {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.34rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--neutral-wash);
+  color: var(--text);
+}
+
+.chipOn,
+.chipOn:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
+}
+
+.chip[data-beyond] {
+  opacity: 0.55;
+}
+
+.customWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.customPop {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 15rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  box-shadow: var(--shadow-float);
+}
+
+.customLabel {
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.customField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.customField input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.32rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.customApply {
+  padding: 0.42rem;
+  border-radius: 9px;
+  border: none;
+  background: var(--accent-action-solid);
+  color: var(--accent-action-text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customApply:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.customNote {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------- filters */
+
+.filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 8.5rem;
+}
+
+.fieldLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.field select {
+  padding: 0.42rem 0.55rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toggle input {
+  accent-color: var(--accent-select);
+  cursor: pointer;
+}
+
+.reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  margin-bottom: 0.3rem;
+  padding: 0.42rem 0.7rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.reset:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--neutral-wash);
+}
+
+.reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------ tabs */
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.83rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+/* The label takes the app's ink, not the hue. On an underline tab the coloured
+   RULE is the indicator — the text does not also need to be violet, and a
+   pastel label beside a solid sidebar row is what read as washed. Meaning still
+   does not rest on hue alone: the label is brighter AND heavier AND ruled. */
+.tabOn,
+.tabOn:hover {
+  color: var(--text);
+  font-weight: 750;
+  border-bottom-color: var(--accent-select);
+}
+
+/* ---------------------------------------------------------------- search */
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.searchIcon {
+  display: grid;
+  place-items: center;
+  margin-right: -1.9rem;
+  z-index: 1;
+  padding-left: 0.6rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.search {
+  flex: 1;
+  max-width: 22rem;
+  padding: 0.45rem 0.7rem 0.45rem 2rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.searchClear {
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ grid */
+
+.grid {
+  /* Dense on purpose. The tiles were 9.5rem with three stacked stat lines,
+     which fitted seven per row and made the page mostly gutter. At 6.1rem with
+     the two rates on one line the same screen holds eleven, which is what a
+     122-card board wants; the battle count, the deltas and the confidence
+     interval moved into the tile's tooltip to pay for it.
+
+     6.1rem is the floor, not a preference: below it the two percentages plus
+     their glyphs no longer fit one line, and the win figure overflowed the
+     tile's right edge by 8px on every card at 5.6rem. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.1rem, 1fr));
+  gap: 0.4rem;
+}
+
+/* With the sidebar collapsed the reclaimed ~226px is spent on BIGGER tiles,
+   not on more of them.
+   `auto-fill` with a fixed floor would have taken the extra width and fitted
+   two more 6.1rem cards per row, which is the opposite of what collapsing the
+   rail is for — the point of the control is legibility, not density.
+
+   Raising the floor to 7.4rem holds the row count roughly where it was and
+   grows every tile instead, art included. The floor itself is still the
+   measured 6.1rem; this is above it, so the two-rates-on-one-line constraint
+   that produced that number is not at risk. */
+:global([data-rail='closed']) .grid {
+  grid-template-columns: repeat(auto-fill, minmax(7.4rem, 1fr));
+  gap: 0.5rem;
+}
+
+:global([data-rail='closed']) .artWrap {
+  width: 70px;
+  height: 84px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0.4rem 0.55rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  cursor: help;
+  /* Nothing may hang outside the tile. The badge used to be pinned at -4px and
+     broke the border on every card in the grid. */
+  overflow: hidden;
+}
+
+.tile[data-unplayed] {
+  opacity: 0.55;
+}
+
+/* A FIXED art box, not a fluid one. Every tile reserving the same height is
+   what makes the rows line up — with `height: auto` the images settled at
+   fractionally different heights and the names below them stepped up and down
+   across a row. */
+.artWrap {
+  position: relative;
+  display: block;
+  width: 58px;
+  height: 70px;
+  flex: none;
+}
+
+.art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 5px;
+}
+
+/* The elixir badge that used to sit over the top-left of the art is gone,
+   removed on request — the grid is scanned as pictures at this density and the
+   cost is in the tooltip. `.artWrap` keeps `position: relative` because the
+   evolution and hero art is a different aspect ratio (598x730 against the base
+   302x363) and `object-fit: contain` needs a box to letterbox inside. */
+
+.name {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.never {
+  margin-top: auto;
+  padding: 0.3rem 0;
+  font-size: 0.63rem;
+  color: var(--text-muted);
+}
+
+/* ── the two rates, on one line ──────────────────────────────────────────
+   --c-use / --c-win are the app's data pair, not UI accents: two CATEGORICAL
+   hues already validated on these surfaces in both themes (lightness band,
+   chroma floor, CVD separation dE 20.7 protan light / 19.6 deutan dark, 3:1
+   contrast). Their tritan separation is under the floor, which is legal here
+   ONLY because each figure prints its own number beside it — that is the
+   required secondary encoding, not a get-out. Violet is deliberately not used:
+   it means "selected" everywhere else in the app. */
+.rates {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  width: 100%;
+  margin-top: auto;
+}
+
+
+
+
+.rate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  font-size: 0.63rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rate svg {
+  flex: none;
+}
+
+.rate[data-kind='use'] {
+  color: var(--c-use);
+}
+
+.rate[data-kind='win'] {
+  color: var(--c-win);
+}
+
+.rate[data-kind='thin'] {
+  color: var(--text-muted);
+}
+
+.bars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.bar {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.fill[data-kind='use'] {
+  background: var(--c-use);
+}
+
+.fill[data-kind='win'] {
+  background: var(--c-win);
+}
+
+.fill[data-kind='thin'] {
+  background: var(--border-strong);
+}
+
+.more {
+  align-self: center;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.more:hover {
+  background: var(--neutral-wash);
+}
+
+.empty {
+  margin: 0;
+  padding: 2rem 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.foot {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.73rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}

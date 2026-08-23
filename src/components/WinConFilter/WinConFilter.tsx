@@ -5,13 +5,11 @@ import styles from './WinConFilter.module.css';
 
 const byElixirThenName = (a: Card, b: Card) => a.elixir - b.elixir || a.name.localeCompare(b.name);
 
-/** Win conditions get permanent chips — they're the filters people reach for most. */
+/** Win conditions lead the panel — they are the filters people reach for most. */
 export const WIN_CONDITIONS = CARDS.filter((c) => c.isWinCondition).sort(byElixirThenName);
 
-/** Every card, for the "All cards" dropdown selector. */
+/** Every card, for the full list under them. */
 const ALL_CARDS = [...CARDS].sort(byElixirThenName);
-
-const WIN_CONDITION_KEYS = new Set(WIN_CONDITIONS.map((c) => c.key));
 
 /** A deck matches when it holds every selected card (multi-select AND). */
 export function deckMatchesFilter(slots: (string | null)[], selected: string[]): boolean {
@@ -44,6 +42,14 @@ function CardChip({
   );
 }
 
+function FilterIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 5h18l-7 8v5l-4 2v-7L3 5z" />
+    </svg>
+  );
+}
+
 interface WinConFilterProps {
   selected: string[];
   onToggle: (key: string) => void;
@@ -52,6 +58,20 @@ interface WinConFilterProps {
   children?: React.ReactNode;
 }
 
+/**
+ * Filter the decks on screen down to the ones holding particular cards.
+ *
+ * The twenty-one win conditions used to sit here as permanent 44px chips. That
+ * fitted when a deck screen was one full-width column and the row of them was a
+ * row; beside a card library it wraps to two lines and becomes the largest
+ * thing on the page — a control for a job most visits do not do, drawn bigger
+ * than the decks it filters.
+ *
+ * So it is one button now, and the panel behind it keeps everything: the win
+ * conditions first because they are what people want, then all 122 cards, with
+ * the search that was already there. Whatever IS selected stays out on the bar
+ * as a chip, because a filter you cannot see is a filter you cannot undo.
+ */
 export function WinConFilter({ selected, onToggle, onClear, children }: WinConFilterProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -61,66 +81,56 @@ export function WinConFilter({ selected, onToggle, onClear, children }: WinConFi
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        // The deck screens use Escape to drop the slot selection; while this is
+        // open, closing it is the nearer meaning.
+        e.stopPropagation();
+        setOpen(false);
+      }
     }
     function onPointerDown(e: PointerEvent) {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
     }
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('pointerdown', onPointerDown);
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('pointerdown', onPointerDown);
     };
   }, [open]);
 
-  // Selected non-win-condition cards get their own chips, so they stay visible
-  // (and removable) once the dropdown is closed.
-  const extraSelected = selected
-    .filter((k) => !WIN_CONDITION_KEYS.has(k))
+  const selectedCards = selected
     .map((k) => CARDS_BY_KEY.get(k))
     .filter((c): c is Card => !!c);
 
   const q = query.trim().toLowerCase();
-  const results = q ? ALL_CARDS.filter((c) => c.name.toLowerCase().includes(q)) : ALL_CARDS;
+  const results = q ? ALL_CARDS.filter((c) => c.name.toLowerCase().includes(q)) : null;
 
   return (
     <div className={styles.wrap} ref={wrapRef}>
       <div className={styles.winconBar} role="group" aria-label="Filter decks by card">
-        {WIN_CONDITIONS.map((card) => (
-          <CardChip
-            key={card.key}
-            card={card}
-            active={selected.includes(card.key)}
-            onToggle={onToggle}
-          />
-        ))}
+        <button
+          type="button"
+          className={styles.trigger}
+          data-on={selected.length > 0 || undefined}
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          title="Show only decks holding particular cards"
+        >
+          <FilterIcon />
+          Filter
+          {selected.length > 0 && <span className={styles.triggerCount}>{selected.length}</span>}
+        </button>
 
-        {extraSelected.map((card) => (
+        {/* Selected cards stay on the bar so the filter is visible and
+            reversible with the panel shut. */}
+        {selectedCards.map((card) => (
           <CardChip key={card.key} card={card} active onToggle={onToggle} />
         ))}
 
-        <button
-          type="button"
-          className={`${styles.moreButton} ${open ? styles.moreButtonOpen : ''}`}
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          title="Filter by any card"
-        >
-          All cards
-          <span
-            className={`${styles.moreChevron} ${open ? styles.moreChevronOpen : ''}`}
-            aria-hidden="true"
-          >
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </span>
-        </button>
-
         {selected.length > 0 && (
           <button type="button" className={styles.winconClear} onClick={onClear}>
-            Clear ×
+            Clear
           </button>
         )}
 
@@ -129,16 +139,18 @@ export function WinConFilter({ selected, onToggle, onClear, children }: WinConFi
 
       {open && (
         <div className={styles.panel}>
-          <div className={styles.panelInner}>
-            <input
-              className={styles.search}
-              value={query}
-              autoFocus
-              spellCheck={false}
-              placeholder={`Search ${ALL_CARDS.length} cards…`}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {results.length === 0 ? (
+          <input
+            className={styles.search}
+            value={query}
+            autoFocus
+            spellCheck={false}
+            aria-label="Search cards to filter by"
+            placeholder={`Search ${ALL_CARDS.length} cards…`}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+
+          {results ? (
+            results.length === 0 ? (
               <p className={styles.noResults}>No cards match “{query}”.</p>
             ) : (
               <div className={styles.panelGrid}>
@@ -151,8 +163,34 @@ export function WinConFilter({ selected, onToggle, onClear, children }: WinConFi
                   />
                 ))}
               </div>
-            )}
-          </div>
+            )
+          ) : (
+            <div className={styles.panelScroll}>
+              <p className={styles.groupLabel}>Win conditions</p>
+              <div className={styles.panelGrid}>
+                {WIN_CONDITIONS.map((card) => (
+                  <CardChip
+                    key={card.key}
+                    card={card}
+                    active={selected.includes(card.key)}
+                    onToggle={onToggle}
+                  />
+                ))}
+              </div>
+
+              <p className={styles.groupLabel}>Every card</p>
+              <div className={styles.panelGrid}>
+                {ALL_CARDS.map((card) => (
+                  <CardChip
+                    key={card.key}
+                    card={card}
+                    active={selected.includes(card.key)}
+                    onToggle={onToggle}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

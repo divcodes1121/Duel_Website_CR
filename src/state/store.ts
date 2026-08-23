@@ -12,7 +12,7 @@ import type {
   WildVariant,
 } from '../types/deck';
 import type { SortDirection, SortKey } from '../utils/sort';
-import type { CardTypeFilter } from '../utils/filter';
+import type { CardTypeFilter, ElixirFilter, RarityFilter } from '../utils/filter';
 import {
   assignCard as assignCardUtil,
   canAssignCardToSlot,
@@ -78,6 +78,16 @@ interface BuilderState extends PersistedSlice {
   sortKey: SortKey;
   sortDirection: SortDirection;
   /**
+   * The library's free-text query, matched against a card's name AND its key
+   * with punctuation folded out. Runtime-only, like the other three controls
+   * below it — a filter is how you are looking at the pool right now, not part
+   * of the collection, so none of them is in `partialize` and adding them
+   * needed no persist-version bump.
+   */
+  cardSearch: string;
+  elixirFilter: ElixirFilter;
+  rarityFilter: RarityFilter;
+  /**
    * The saved-library entry currently loaded into the builder, so Save can offer
    * "update the existing set" vs "save as new". Only loadSaved attaches — a set
    * you just created stays unattached. Runtime-only (not persisted): a page
@@ -111,6 +121,11 @@ interface BuilderState extends PersistedSlice {
   setDeckCrowns: (owner: DeckOwner, deckIndex: number, crowns: number) => void;
   setFilterType: (filter: CardTypeFilter) => void;
   setSort: (key: SortKey) => void;
+  setCardSearch: (query: string) => void;
+  setElixirFilter: (value: ElixirFilter) => void;
+  setRarityFilter: (value: RarityFilter) => void;
+  /** The library's Reset: back to All / no query / any elixir / any rarity. */
+  resetCardFilters: () => void;
   resetAll: () => void;
   /** Snapshot the current tab's decks into the library as a NEW entry (stays unattached). */
   saveCurrent: (name: string) => void;
@@ -271,6 +286,9 @@ export const useBuilderStore = create<BuilderState>()(
       filterType: 'All',
       sortKey: 'elixir',
       sortDirection: 'asc',
+      cardSearch: '',
+      elixirFilter: 'all',
+      rarityFilter: 'all',
       activeSavedId: null,
 
       // Switching tabs detaches from the loaded set (it belongs to the other mode).
@@ -421,6 +439,17 @@ export const useBuilderStore = create<BuilderState>()(
         }),
 
       setFilterType: (filter) => set({ filterType: filter }),
+
+      setCardSearch: (query) => set({ cardSearch: query }),
+
+      setElixirFilter: (value) => set({ elixirFilter: value }),
+
+      setRarityFilter: (value) => set({ rarityFilter: value }),
+
+      // Sort is deliberately NOT reset: it is how you read the grid, not what
+      // the grid is narrowed to, and losing it here would be a surprise.
+      resetCardFilters: () =>
+        set({ filterType: 'All', cardSearch: '', elixirFilter: 'all', rarityFilter: 'all' }),
 
       setSort: (key) =>
         set((state) =>

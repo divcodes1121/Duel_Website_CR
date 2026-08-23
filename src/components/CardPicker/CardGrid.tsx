@@ -1,13 +1,11 @@
 import {
-  CARDS,
   CARDS_BY_KEY,
   getCardIconUrl,
   getEvolutionIconUrl,
   getHeroIconUrl,
 } from '../../data/cards';
-import { filterCardsByType } from '../../utils/filter';
-import { sortCards } from '../../utils/sort';
 import { useBuilderStore } from '../../state/store';
+import { useFilteredCards } from './useFilteredCards';
 import { useFlightStore, rectOf } from '../../state/flightStore';
 import { canPlaceCardInSlot, getUsedCardKeys, MAX_CHAMPIONS_PER_DECK } from '../../state/deckUtils';
 import { CardTile } from './CardTile';
@@ -18,12 +16,11 @@ export function CardGrid() {
   const mode = useBuilderStore((s) => s.mode);
   const selectedSlot = useBuilderStore((s) => s.selectedSlot);
   const filterType = useBuilderStore((s) => s.filterType);
-  const sortKey = useBuilderStore((s) => s.sortKey);
-  const sortDirection = useBuilderStore((s) => s.sortDirection);
   const assignCard = useBuilderStore((s) => s.assignCard);
+  const resetFilters = useBuilderStore((s) => s.resetCardFilters);
   const launchFlight = useFlightStore((s) => s.launch);
 
-  const cards = sortCards(filterCardsByType(CARDS, filterType), sortKey, sortDirection);
+  const cards = useFilteredCards();
 
   // The Evos / Heroes filters preview the cards in their special art form.
   const iconFor = (cardKey: string) =>
@@ -39,6 +36,20 @@ export function CardGrid() {
   const redUsed = showRibbons ? getUsedCardKeys(sets.red) : null;
 
   const activeSet = selectedSlot ? sets[selectedSlot.owner] : null;
+
+  // An empty grid used to be an unexplained blank area; with four filters that
+  // can combine it is now reachable in one keystroke, so it says which controls
+  // produced it and offers the way out.
+  if (cards.length === 0) {
+    return (
+      <div className={`${styles.grid} ${styles.gridEmpty}`}>
+        <p className={styles.emptyTitle}>No cards match these filters</p>
+        <button type="button" className={styles.emptyReset} onClick={resetFilters}>
+          Clear filters
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.grid}>

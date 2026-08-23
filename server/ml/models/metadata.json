@@ -1,0 +1,110 @@
+{
+  "model_version": "oie-phase7-0.1.0",
+  "git_revision": "2c83882",
+  "generated": "2026-08-19T06:40:08Z",
+  "domains": {
+    "competitive": {
+      "model_version": "oie-phase7-0.1.0",
+      "domain": "competitive",
+      "training_start": "20260806",
+      "examples_scorer": 53532,
+      "examples_calibration": 23008,
+      "test_steps": 94466,
+      "features": [
+        "p_change",
+        "p_one_card",
+        "p_two_card",
+        "pred_size",
+        "exit_margin",
+        "exit_entropy",
+        "entry_margin",
+        "entry_entropy",
+        "entry_pool_size",
+        "exit_support",
+        "transition_support",
+        "exit_is_top_edited",
+        "cluster_size",
+        "n_variants",
+        "variant_entropy",
+        "edit_concentration",
+        "is_duel"
+      ],
+      "hyperparameters": {
+        "width": 3,
+        "j_wrong": 0.5445
+      },
+      "metrics": {
+        "R1 one-card only": {
+          "jaccard_delta": -0.05218003076065454,
+          "coverage": 0.267477818885153,
+          "accuracy": 0.00866055662995039
+        },
+        "R2 expected utility": {
+          "jaccard_delta": 0.0,
+          "coverage": 0.0,
+          "accuracy": 0.0
+        }
+      },
+      "calibration_metrics": {
+        "brier_raw": 0.01646222259961669,
+        "ece_raw": 0.007996264557336135,
+        "brier_cal": 0.01627928807142779,
+        "ece_cal": 0.03581432906787169
+      },
+      "break_even": 0.303,
+      "seconds": 171.7
+    },
+    "duel": {
+      "model_version": "oie-phase7-0.1.0",
+      "domain": "duel",
+      "training_start": "20260810",
+      "examples_scorer": 4400,
+      "examples_calibration": 1888,
+      "test_steps": 6830,
+      "features": [
+        "p_change",
+        "p_one_card",
+        "p_two_card",
+        "pred_size",
+        "exit_margin",
+        "exit_entropy",
+        "entry_margin",
+        "entry_entropy",
+        "entry_pool_size",
+        "exit_support",
+        "transition_support",
+        "exit_is_top_edited",
+        "cluster_size",
+        "n_variants",
+        "variant_entropy",
+        "edit_concentration",
+        "is_duel"
+      ],
+      "hyperparameters": {
+        "width": 3,
+        "j_wrong": 0.5912
+      },
+      "metrics": {
+        "R1 one-card only": {
+          "jaccard_delta": -0.05557790492463693,
+          "coverage": 0.45443387542190855,
+          "accuracy": 0.04659014179608373
+        },
+        "R2 expected utility": {
+          "jaccard_delta": 1.3012573399046945e-05,
+          "coverage": 0.00015342129487572875,
+          "accuracy": 0.0
+        }
+      },
+      "calibration_metrics": {
+        "brier_raw": 0.0666637302154525,
+        "ece_raw": 0.05323185273404304,
+        "brier_cal": 0.06389073412936613,
+        "ece_cal": 0.025082397251530292
+      },
+      "break_even": 0.233,
+      "seconds": 28.6
+    }
+  },
+  "note": "Offline research artifact. NOT loaded by production."
+}

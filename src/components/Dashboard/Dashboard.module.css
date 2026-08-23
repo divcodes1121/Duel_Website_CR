@@ -19,9 +19,7 @@
   padding: 0.7rem 1.15rem;
   border-bottom: 1px solid var(--border);
   background: var(--glass-fill-strong);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
 }
 
 .brand {
@@ -33,21 +31,34 @@
   border: none;
   background: none;
   cursor: pointer;
-  font-family: 'Subscribe', Inter, system-ui, sans-serif;
-  font-size: 1.15rem;
+  /* The wordmark is a heavy grotesque, NOT the display face. A hand-drawn or
+     condensed display face is for headings inside the product; the brand has to
+     hold at 1.2rem beside six nav items and read as a logo, which is what the
+     weight and the tracking do. */
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 1.22rem;
+  font-weight: 800;
   letter-spacing: 0.06em;
   color: var(--text);
 }
 
+.brand:hover {
+  color: var(--accent-select);
+}
+
+/* A solid violet tile with a white crown — the logo, not an icon button. It is
+   the one place the brand hue appears as a large fill in the chrome, which is
+   what makes it read as a mark rather than as another control. */
 .brandMark {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 9px;
-  background: var(--accent);
-  color: var(--accent-contrast);
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 11px;
+  background: var(--solid-violet);
+  color: var(--on-solid);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--solid-violet) var(--glow-core), transparent);
 }
 
 .topNav {
@@ -63,31 +74,71 @@
   display: none;
 }
 
+/* `position: relative` for the indicator; the rounded hover fill is a separate
+   layer from the rule so the two can move independently. */
 .topNavItem {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
   white-space: nowrap;
   padding: 0.5rem 0.85rem;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 9px 9px 0 0;
   background: none;
   color: var(--text-muted);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    color var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease);
 }
 
 .topNavItem:hover {
   color: var(--text);
+  background: var(--neutral-wash);
+}
+
+/* The icon leads the label by a pixel on hover. Small enough to register as
+   responsiveness rather than as movement. */
+.topNavItem svg {
+  transition: transform var(--dur-1) var(--ease);
+}
+
+.topNavItem:hover svg {
+  transform: translateY(-1px);
+}
+
+/* THE RULE IS A PSEUDO-ELEMENT, not `border-bottom`, so it can grow from the
+   centre instead of appearing all at once. A border can only pop; this scales.
+   `transform` only — no width animation, which would be a layout pass a frame. */
+.topNavItem::after {
+  content: '';
+  position: absolute;
+  left: 0.55rem;
+  right: 0.55rem;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent-select);
+  transform: scaleX(0);
+  transition: transform var(--dur-3) var(--ease);
 }
 
 /* Underline, the way the reference marks the current top-level section —
    violet for the same reason the sidebar is. */
+/* The label takes the app's ink, not the hue. On an underline tab the coloured
+   RULE is the indicator — the text does not also need to be violet, and a
+   pastel label beside a solid sidebar row is what read as washed. Meaning still
+   does not rest on hue alone: the label is brighter AND heavier AND ruled. */
 .topNavItemActive,
 .topNavItemActive:hover {
-  color: var(--accent-select);
-  border-bottom-color: var(--accent-select);
+  color: var(--text);
+}
+
+.topNavItemActive::after {
+  transform: scaleX(1);
 }
 
 .topActions {
@@ -95,6 +146,102 @@
   align-items: center;
   gap: 0.4rem;
   flex-shrink: 0;
+}
+
+/* --- the always-there tag search --- */
+
+.topFind {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: clamp(11rem, 18vw, 17rem);
+  margin-right: 0.35rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  transition:
+    border-color var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+
+.topFind:hover {
+  border-color: var(--border-strong);
+}
+
+/* ONE indicator, not three. This had a 3px ring on the wrapper AND the global
+   `:focus-visible` outline on the input inside it, which stacked into a visible
+   double box — an outline hugging the text and a ring around the pill — as soon
+   as the field was clicked. The border it already has simply changes colour,
+   and the glow carries it on dark. The inner outline is suppressed just here,
+   where the wrapper is doing the job for it; everywhere else in the app
+   `:focus-visible` is untouched. */
+.topFind:focus-within {
+  border-color: var(--accent-select);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-select) var(--glow-core), transparent);
+}
+
+.topFindInput:focus-visible {
+  outline: none !important;
+}
+
+.topFindInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.topFindInput::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* The submit control. A round puck inside the pill, sized to the field rather
+   than to the top bar's 2.15rem icon buttons, so it reads as part of the input
+   and not as a third button in the actions cluster. */
+.topFindGo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin: -0.15rem -0.35rem -0.15rem 0;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--neutral-wash-sunken);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+
+.topFindGo:hover {
+  background: var(--accent-select);
+  color: var(--on-solid);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent-select) var(--glow-core), transparent);
+}
+
+/* Once there is something to submit, the control stops looking optional. */
+.topFind:focus-within .topFindGo {
+  background: var(--accent-select);
+  color: var(--on-solid);
+}
+
+@media (max-width: 74rem) {
+  .topFind {
+    display: none;
+  }
 }
 
 .iconButton {
@@ -108,6 +255,18 @@
   background: var(--surface-sunken);
   color: var(--text-muted);
   cursor: pointer;
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+
+.iconButton:hover {
+  background: var(--neutral-wash-sunken);
+  border-color: var(--border-strong);
+  color: var(--text);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--text) var(--glow-halo), transparent);
 }
 
 .avatar {
@@ -125,17 +284,97 @@
 
 /* ------------------------------------------------------------------- layout */
 
+/* `--rail` is the sidebar's width, and it is a variable because three things
+   have to agree on it: the grid track, the toggle's position, and the gutter.
+   Collapsing is then one declaration rather than three that can drift. */
 .body {
+  --rail: 236px;
+  --pad: 1rem;
+
+  position: relative;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
-  gap: 1rem;
-  padding: 1rem;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  gap: var(--pad);
+  padding: var(--pad);
+}
+
+.body[data-rail='closed'] {
+  --rail: 0px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.body[data-rail='closed'] .sidebar {
+  display: none;
+}
+
+/* The landing screen has no rail at all — not collapsed, absent. It takes the
+   same single-column grid, but independently of the rail's remembered open or
+   closed state, so coming back from a tool with the rail open does not reserve
+   236px for a sidebar this screen never renders. */
+.body[data-landing] {
+  --rail: 0px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+/* --- the collapse toggle --- */
+
+/* A round button straddling the rail's right edge, the same 2.15rem puck as
+   the theme and notification buttons in the top bar — it reads as one of the
+   app's controls rather than a piece of chrome invented for this panel.
+
+   Positioned against `.body` rather than against the sidebar because the
+   sidebar scrolls: `overflow-y: auto` clips a child sitting at `right: -14px`,
+   and an absolutely positioned control that gets a scrollbar instead of a
+   position is worse than no control. */
+.railToggle {
+  position: absolute;
+  z-index: 20;
+  top: 1.15rem;
+  left: calc(var(--pad) + var(--rail));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-float);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.railToggle:hover {
+  background: var(--accent-select-wash);
+  border-color: var(--accent-select);
+  color: var(--accent-select);
+}
+
+/* With the rail gone there is no edge to straddle, so it tucks against the
+   left of the screen instead of hanging half off it — and the body reserves a
+   lane for it. Floating it over the panel instead would have put it 2px from
+   the header's icon tile; the lane costs ~26px of the ~252px just reclaimed
+   and means the button never covers content. */
+.body[data-rail='closed'] .railToggle {
+  left: 0.5rem;
+  transform: none;
+}
+
+.body[data-rail='closed'] {
+  padding-left: 2.6rem;
 }
 
 /* ------------------------------------------------------------------ sidebar */
 
+/* Solid, not frosted. The blur is gone from this file entirely — the sidebar
+   is a fixed rail that never moves over anything, so the only thing the glass
+   did was let the page wash bleed through and drag the whole column's contrast
+   around as it scrolled past. */
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -145,10 +384,8 @@
   padding: 1rem 0.85rem;
   border-radius: 16px;
   border: 1px solid var(--glass-stroke);
-  background: var(--glass-fill);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  background: var(--surface);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
 }
 
 .sideLabel {
@@ -166,6 +403,10 @@
   gap: 0.15rem;
 }
 
+/* FULL-STRENGTH TEXT, not the muted step. These are the rail's primary
+   navigation — seven destinations, each one a thing you click — and drawing
+   them all in `--text-muted` made the whole column read as secondary against
+   the panel beside it. Muted is for supporting copy, which a nav label is not. */
 .sideItem {
   position: relative;
   display: flex;
@@ -176,7 +417,7 @@
   border-radius: 10px;
   border: 1px solid transparent;
   background: none;
-  color: var(--text-muted);
+  color: var(--text);
   font-size: 0.85rem;
   font-weight: 600;
   text-align: left;
@@ -190,18 +431,34 @@
   color: var(--text);
 }
 
-/* Level 2 for the open section: a tinted fill, a hue border and hue text —
-   NOT the solid slab this used to be. Violet, because violet means
-   "you are here" everywhere in this app. */
+/* THE SELECTED ROW IS A TINT WITH A LEADING BAR, not a solid slab.
+ *
+ * It was solid for a while — a full-strength block in the row's own hue — and
+ * that is a legible, confident treatment. The redesign asks for the quieter
+ * one, and the quieter one has an argument: the rail carries six rows, the
+ * icon tile already states each section's identity in colour, and a solid slab
+ * makes the OPEN row the loudest object on a screen whose subject is the panel
+ * beside it. A tint plus a 3px bar says "you are here" without competing.
+ *
+ * Violet, not the row's own hue: with a bar and a tint doing the work, one
+ * consistent "selected" colour reads more clearly than six, and violet is what
+ * selection means everywhere else in the app. The per-section hue stays on the
+ * icon tile, which is where identity belongs.
+ *
+ * Meaning does not rest on colour alone — the bar is a shape, and the label
+ * also goes brighter and heavier. */
+/* NO GLOW. This was the one persistent glow left in the chrome, on the argument
+   that "you are here" is a state rather than a reaction. It is gone with the
+   rest of them. The row still has three cues that do not bloom and survive a
+   monochrome screenshot: the tint, the 3px leading bar, and the heavier label. */
 .sideItemActive,
 .sideItemActive:hover {
   background: var(--accent-select-fill);
   border-color: var(--accent-select-edge);
   color: var(--accent-select);
+  font-weight: 700;
 }
 
-/* The leading edge. Meaning is never carried by colour alone, so the selected
-   item is marked by position and weight as well as hue. */
 .sideItemActive::before {
   content: '';
   position: absolute;
@@ -209,19 +466,24 @@
   top: 50%;
   transform: translateY(-50%);
   width: 3px;
-  height: 1.15rem;
+  height: 60%;
   border-radius: 0 3px 3px 0;
   background: var(--accent-select);
 }
 
 .sideItem:active {
-  background: color-mix(in srgb, var(--accent-select) 20%, var(--mix-ground));
+  background: var(--tile-wash);
+}
+
+.sideItemActive:active {
+  background: var(--accent-select-fill);
 }
 
 /* Section identity. A small hue tile per area, which is where the reference
    gets most of its richness — and because the label sits right beside it,
-   repeating four hues across nine sections costs nothing. Level 1 background
-   with a level 3 icon: an accent, never a colour block. */
+   repeating four hues across seven sections costs nothing so long as no two
+   NEIGHBOURS share one, which the cycle guarantees. Level 1 background with a
+   level 3 icon: an accent, never a colour block. */
 .sideIcon {
   display: grid;
   place-items: center;
@@ -235,26 +497,32 @@
 
 .sideItem[data-hue='violet'] {
   --tile-hue: var(--hue-violet);
+  --tile-solid: var(--solid-violet);
   --tile-wash: var(--violet-wash);
 }
 .sideItem[data-hue='blue'] {
   --tile-hue: var(--hue-blue);
+  --tile-solid: var(--solid-blue);
   --tile-wash: var(--blue-wash);
 }
 .sideItem[data-hue='pink'] {
   --tile-hue: var(--hue-pink);
+  --tile-solid: var(--solid-maroon);
   --tile-wash: var(--pink-wash);
 }
 .sideItem[data-hue='green'] {
   --tile-hue: var(--hue-green);
+  --tile-solid: var(--solid-green);
   --tile-wash: var(--green-wash);
 }
 
-/* On the open item the tile stops competing: one hue per row, and that hue is
-   violet. Without this the active row shows two colours at once. */
+/* The tile keeps its OWN hue on the open row. It had to invert while the row
+   was a solid slab — a tile cannot wear the same colour as the block under it —
+   but on a tint it can simply stay itself, so a section looks the same whether
+   it is open or not. */
 .sideItemActive .sideIcon {
-  --tile-hue: var(--accent-select);
-  --tile-wash: transparent;
+  background: var(--tile-wash);
+  color: var(--tile-hue);
 }
 
 /* --- upsell card --- */
@@ -267,13 +535,20 @@
   gap: 0.5rem;
   padding: 0.95rem;
   border-radius: 14px;
-  border: 1px solid var(--glass-stroke);
-  background: var(--glass-fill);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  border: 1px solid var(--blue-edge);
+  background: var(--blue-wash);
 }
 
+/* ONE HUE FOR THE CARD, and it is the button's — but the COPY stays ink.
+   The card used to wear two hues: a pink crown tile beside a blue CTA, so the
+   aside read as a second call to action next to the page's real one. The card
+   is blue throughout now; the text on it is the normal text colour rather than
+   more blue, so the words are read as words and the hue is left to the frame,
+   the crown and the button.
+
+   `--text`, not a literal white: it is #EDEDED on dark and near-black on light,
+   which is what "white text" has to mean on a card that also exists in a light
+   theme — a real white would vanish into the pale blue wash there. */
 .proTitle {
   display: flex;
   align-items: center;
@@ -283,7 +558,6 @@
   color: var(--text);
 }
 
-/* Pink is Royal Pro's identity — but as a tile and a CTA, not a pink card. */
 .proMark {
   display: flex;
   align-items: center;
@@ -291,8 +565,8 @@
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 7px;
-  background: var(--accent-action-wash);
-  color: var(--accent-action);
+  background: var(--blue-wash);
+  color: var(--accent-info);
 }
 
 .proBody {
@@ -312,15 +586,22 @@
   padding: 0.55rem 0.9rem;
   border-radius: 999px;
   border: none;
-  background: var(--accent-action);
-  color: var(--accent-action-text);
+  /* Blue, not pink: the sidebar's upgrade card is an aside, and pink is spent
+     on the one real action of the page.
+     WHITE text, which needs the deeper step of blue — see --accent-info-solid
+     in index.css. White on the ordinary dark blue is 3.23:1; on this one it is
+     5.90:1, and light is 6.70:1. */
+  background: var(--accent-info-solid);
+  color: #ffffff;
   font-size: 0.79rem;
   font-weight: 750;
   cursor: pointer;
+  box-shadow: 0 3px 18px color-mix(in srgb, var(--accent-info-solid) var(--glow-core), transparent);
+  transition: box-shadow var(--dur-2) var(--ease), background-color var(--dur-2) var(--ease);
 }
 
 .proButton:hover {
-  background: color-mix(in srgb, var(--accent-action) 85%, var(--text));
+  background: color-mix(in srgb, var(--accent-info-solid) 88%, var(--text));
 }
 
 /* --------------------------------------------------------------------- main */
@@ -328,12 +609,30 @@
 /* The home screen scrolls: the hero fills the first view, the tool panels and
    analytics grid sit below it. A hosted tool still fills the column exactly,
    because it manages its own internal scrolling. */
+/* THE SCROLLBAR IS HIDDEN, in both themes, and nothing replaces it.
+ *
+ * There was briefly a travelling glow on the right edge on dark, fed by a
+ * `--scroll-progress` custom property. It went because the page did not need
+ * it: the content itself is the cue that there is more — panels are cut off
+ * mid-card at the fold — and a light tracking down the edge of a page that is
+ * only three screens tall is decoration pretending to be a control. The hook
+ * that fed it was deleted with it rather than left dangling.
+ *
+ * `position: relative` stays: it is the containing block for anything the
+ * panel positions against its own edges rather than the window's. */
 .main {
+  position: relative;
   min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  scrollbar-width: none;
+}
+
+.main::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 /* --------------------------------------------------------- hosted tool panel */
@@ -350,9 +649,7 @@
   border: 1px solid var(--glass-stroke);
   overflow: hidden;
   background: var(--glass-fill);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
 }
 
 /* ---------------------------------------------------------------- hero panel */
@@ -369,9 +666,57 @@
   border: 1px solid var(--glass-stroke);
   overflow: hidden;
   background: var(--glass-fill);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+}
+
+/* THE CASTLE BACKDROP, one asset per theme.
+ *
+ * It is a real painting, not a texture: castles anchor the left and right
+ * edges, the centre is deliberately empty, and the bottom mists out. So it is
+ * `cover`, bottom-anchored — the mist is what the panel edge should meet — and
+ * it lives on a ::before rather than on `background-image` so the scrim above
+ * it can be a separate layer that fades independently.
+ *
+ * The two files are a matched pair (same composition, same floating diamonds,
+ * one painted light and one dark), which is why this is an image swap on
+ * `data-theme` and not a filter over one image. */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('/assets/background/light_background.webp');
+  background-size: cover;
+  background-position: center bottom;
+  background-repeat: no-repeat;
+}
+
+:global([data-theme='dark']) .hero::before {
+  background-image: url('/assets/background/dark_background.webp');
+}
+
+/* Keeps the headline and the field legible without erasing the painting.
+ *
+ * The first version ramped from FULLY OPAQUE `--glass-fill` at the left edge,
+ * which flattened the whole left third of the panel — and the left castle,
+ * which is half the composition, simply never appeared on the site. The artwork
+ * is already low-contrast where the copy sits (both files mist out towards the
+ * centre), so it does not need covering; it needs a floor under the text.
+ *
+ * So: a light, even veil across the whole panel with a slight left bias, topping
+ * out at 62% rather than 100%. Both castles read, and the headline still has
+ * something solid behind it. `--glass-fill` rather than a hand-picked colour, so
+ * this stays correct in both themes with no second definition. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--glass-fill) 62%, transparent) 0%,
+    color-mix(in srgb, var(--glass-fill) 45%, transparent) 38%,
+    color-mix(in srgb, var(--glass-fill) 18%, transparent) 66%,
+    transparent 88%
+  );
 }
 
 /* The search area only — the features strip sits below this, outside it. */
@@ -380,49 +725,6 @@
   flex: 1;
   min-height: 0;
   display: flex;
-}
-
-/* One card per corner, behind the content. They were stacked on the right,
-   which squeezed the text into a narrow column and left the panel lopsided. */
-.corners {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Held back deliberately: they frame the corners, and the centre block is what
-   should carry the eye. Pushed tighter into the corners now that the middle is
-   larger, so the two never crowd each other. */
-.cornerCard {
-  position: absolute;
-  width: clamp(80px, 8vw, 122px);
-  border-radius: 10px;
-  opacity: 0.4;
-}
-
-.corner1 {
-  top: 5%;
-  left: 2%;
-  rotate: -13deg;
-}
-
-.corner2 {
-  top: 3.5%;
-  right: 2.5%;
-  rotate: 11deg;
-}
-
-.corner3 {
-  bottom: 6%;
-  left: 3.5%;
-  rotate: 9deg;
-}
-
-.corner4 {
-  bottom: 4.5%;
-  right: 2%;
-  rotate: -10deg;
 }
 
 /* Scrolls if the viewport is short; the content itself stays centred. */
@@ -435,49 +737,134 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2.5rem clamp(1.5rem, 11vw, 10rem);
+  /* Was `11vw` a side. With a figure in the right half that gutter is no longer
+     doing the centring job it was there for, and it was costing the copy column
+     the width it needs to stay off three lines. */
+  padding: 2.5rem clamp(1.5rem, 4.5vw, 4rem);
 }
 
+/* Copy left, character right.
+ *
+ * `minmax(0, …)` on the copy column is what stops the long headline from
+ * forcing the track wider than its share and shoving the figure off the panel —
+ * a grid item's automatic minimum is its content, not zero. */
 .heroInner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  align-items: center;
+  gap: clamp(1rem, 3vw, 3rem);
+  width: 100%;
+  /* Widened once the rail left this screen. At 1180 the copy floated in from
+     the panel edge by ~200px on a wide window, which reads as an indent rather
+     than a margin. */
+  max-width: 1340px;
+}
+
+.heroCopy {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  width: 100%;
-  max-width: 880px;
+  align-items: flex-start;
+  text-align: left;
+  min-width: 0;
 }
 
-.heroBadge {
-  display: inline-flex;
+/* --- the character ------------------------------------------------------- */
+
+.heroFigure {
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0.55rem 1.2rem;
-  border-radius: 999px;
-  border: 1px solid var(--blue-edge);
-  background: var(--blue-wash);
-  color: var(--accent-info);
-  font-size: 0.78rem;
-  font-weight: 750;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  justify-content: center;
+  min-width: 0;
+  /* Decorative. Nothing here is a control, and a drag of the king that ends on
+     a deck slot should not look like it meant something. */
+  pointer-events: none;
 }
+
+/* A CONTACT SHADOW, not a glow. The art is a 3-D render lit from above, so it
+   needs something under it to sit on; a soft ellipse reads as ground where a
+   symmetric halo would read as neon. Anchored to the figure's base rather than
+   nudged down by a fixed offset, so it stays put as the art scales. */
+.heroFigure::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  bottom: 4%;
+  width: min(78%, 20rem);
+  height: 2.6rem;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--text) 15%, transparent) 0%,
+    transparent 70%
+  );
+}
+
+/* Above its own contact shadow: the ::after comes later in paint order, so
+   without this the ellipse draws over the boots. */
+.heroKing {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: clamp(15rem, 27vw, 26rem);
+  height: auto;
+  animation: heroKingIn 620ms cubic-bezier(0.22, 0.68, 0.32, 1) both;
+}
+
+@keyframes heroKingIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* `.heroBadge` was the "ANALYSIS" pill above the headline. Removed with the
+   element rather than left as dead style. */
 
 /* One line, centred, and the largest thing on the page — the block is the
    whole point of this screen, so it is sized to carry it. The clamp keeps it
    on one line down to tablet widths; below that the media query lets it wrap. */
 .heroTitle {
-  margin: 1.7rem 0 0;
-  font-family: 'Subscribe', Inter, system-ui, sans-serif;
-  font-weight: 400;
-  font-size: clamp(2.4rem, 5vw, 4.6rem);
-  line-height: 1.08;
-  letter-spacing: 0.01em;
-  color: var(--text);
+  /* Was 1.7rem, which was the gap under the removed "ANALYSIS" badge. The
+     headline is the first element in the column now, so it starts at zero —
+     leaving the old margin would have read as the column sitting low. */
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  /* ONE LINE, and the size is what buys it.
+     This was allowed to wrap because the old display face was hand-drawn and
+     genuinely unpredictable in width — pinning it to a line at 5vw pushed a
+     1040px headline through an 880px panel. Arial is a known quantity: the
+     26-character line runs about 12.5em, and the copy column tops out near
+     678px at the widest the hero gets, so a 3.1rem (49.6px) ceiling lands it
+     around 620px with room to spare. The vw term keeps it shrinking with the
+     column below that.
+     Below 900px the copy becomes a single centred column and the mobile block
+     hands `white-space: normal` back — one line is a desktop shape, not a
+     phone one. */
+  font-size: clamp(1.6rem, 3.2vw, 3.1rem);
   white-space: nowrap;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  color: var(--text);
 }
 
+/* THE DEEP STEP, not `--hue-green`.
+   This was `--hue-green` on the assumption that green did not need a display
+   step the way blue does. It does, and for the identical reason: the dark
+   `--hue-green` is #34d399, a mint that is pale BECAUSE it has to hold 4.5:1
+   as 14px body ink, and at 48px on a black page it reads washed out. That is
+   the same mistake this project has now made twice — reaching for the ink step
+   for display type. `--hue-green-deep` is graded for the 3:1 that large text
+   actually needs and spends the rest on saturation. */
 .heroTitleAccent {
-  color: var(--accent-info);
+  color: var(--hue-green-deep);
 }
 
 .heroSub {
@@ -502,6 +889,31 @@
   border-radius: 18px;
   border: 1px solid var(--border-strong);
   background: var(--surface-sunken);
+  transition:
+    border-color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+
+.searchRow:hover {
+  border-color: var(--accent-select-edge);
+}
+
+/* The field is the point of this screen, so it takes the focus ring on the
+   WRAPPER rather than on the bare input inside it — otherwise the outline
+   draws around a borderless box floating in the middle of the pill. */
+/* The wrapper keeps its ring — this field is the point of the screen and the
+   ring is the deliberate part — but the INPUT's own `:focus-visible` outline is
+   suppressed, because the two together drew a box inside a box. One indicator
+   per control. */
+.searchRow:focus-within {
+  border-color: var(--accent-select);
+  box-shadow:
+    0 0 0 3px var(--accent-select-edge),
+    0 0 28px color-mix(in srgb, var(--accent-select) var(--glow-core), transparent);
+}
+
+.searchInput:focus-visible {
+  outline: none !important;
 }
 
 .searchIcon {
@@ -536,11 +948,44 @@
   padding: 0.95rem 1.85rem;
   border-radius: 14px;
   border: none;
-  background: var(--accent-action);
-  color: var(--accent-action-text);
+  /* Green rather than the action pink. The home screen already reads hue as
+     identity — each tool panel wears its own — and green is the "go" of this
+     page. Its text token is theme-scoped because the dark green is too bright
+     for white; see index.css. */
+  background: var(--solid-green);
+  color: var(--on-solid);
   font-size: 1rem;
   font-weight: 750;
   cursor: pointer;
+  transition:
+    background-color var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+
+.analyzeButton:hover {
+  background: color-mix(in srgb, var(--solid-green) 85%, var(--text));
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--solid-green) 35%, transparent),
+    0 0 34px color-mix(in srgb, var(--solid-green) var(--glow-core), transparent);
+}
+
+/* Press returns to the resting plane rather than going below it — a button that
+   dips reads as a mis-click on a control this size. */
+.analyzeButton:active {
+  transform: translateY(0);
+  box-shadow: none;
+  transition-duration: var(--dur-1);
+}
+
+/* The arrow leads on hover, the way the CTA arrows do further down the page. */
+.analyzeButton svg {
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.analyzeButton:hover svg {
+  transform: translateX(3px);
 }
 
 /* --- popular players --- */
@@ -563,7 +1008,8 @@
   white-space: nowrap;
 }
 
-.popularLabel::before,
+/* Trailing rule only. With the copy left-aligned a line leading INTO the label
+   reads as a stray border rather than a divider. */
 .popularLabel::after {
   content: '';
   flex: 1;
@@ -574,7 +1020,6 @@
 .popularTags {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 0.65rem;
   margin-top: 1.2rem;
 }
@@ -592,6 +1037,24 @@
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
+}
+
+.tagChip:hover {
+  background: var(--accent-select-wash-sunken);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
+  transform: translateY(-2px);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--accent-select) var(--glow-halo), transparent);
+}
+
+.tagChip:active {
+  transform: translateY(0);
+  transition-duration: var(--dur-1);
 }
 
 /* ------------------------------------------------------- section placeholder */
@@ -605,9 +1068,7 @@
   border: 1px solid var(--glass-stroke);
   overflow: hidden;
   background: var(--glass-fill);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
 }
 
 .panelHead {
@@ -641,8 +1102,8 @@
 
 .panelTitle {
   margin: 0;
-  font-family: 'Subscribe', Inter, system-ui, sans-serif;
-  font-weight: 400;
+  font-family: var(--font-display);
+  font-weight: 600;
   font-size: 1.5rem;
   letter-spacing: 0.03em;
   color: var(--text);
@@ -716,24 +1177,10 @@
 /* ------------------------------------------------------- tools + areas below */
 
 /* Section heading between the stacked panels. */
-.blockHead {
-  padding: 0.9rem 0.4rem 0;
-}
-
-.blockTitle {
-  margin: 0;
-  font-family: 'Subscribe', Inter, system-ui, sans-serif;
-  font-weight: 400;
-  font-size: 1.5rem;
-  letter-spacing: 0.03em;
-  color: var(--text);
-}
-
-.blockSub {
-  margin: 0.25rem 0 0;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
+/* `.blockHead` / `.blockTitle` / `.blockSub` were the "Analytics" and "Your
+   tools" headings on the home screen. Both were removed — each grid below them
+   already names and describes its own items — and the classes went with them
+   rather than being left as dead style. */
 
 /* A full-width panel per built tool — the shape the old landing used, back on
    the home screen and clickable end to end. */
@@ -750,9 +1197,48 @@
   cursor: pointer;
   font: inherit;
   background: var(--glass-fill);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+  /* `transform` and `box-shadow` only — the wash and the border are colour,
+     which is free. No `scale`: these panels are ~200px tall and full-bleed
+     wide, and a 1.005 scale on something that size is a visible 6px of growth,
+     which is the "everything bounces" failure rather than a lift. */
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    transform var(--dur-3) var(--ease),
+    box-shadow var(--dur-3) var(--ease);
+}
+
+/* Hover is where the tool's own hue shows up on the panel itself — a wash and
+   a hue edge, so the whole slab reads as the thing you are about to open. */
+/* The lift is the same in both themes; what carries it differs. Light gets
+   `--shadow-float`; dark gets the panel emitting its own tool hue, because the
+   float shadow is black on a near-black page and does nothing. Both are in the
+   one declaration — the glow legs collapse to transparent in light. */
+/* Lift, wash and border — no glow, matching the area cards above. */
+.toolPanel:hover {
+  background: var(--tool-wash);
+  border-color: var(--tool-edge);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-sheen);
+}
+
+.toolPanel:active {
+  transform: translateY(-1px);
+  transition-duration: var(--dur-1);
+}
+
+
+.toolPanel:hover .toolCta {
+  transform: translateX(2px);
+}
+
+.toolCta svg {
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.toolPanel:hover .toolCta svg {
+  transform: translateX(4px);
 }
 
 /* Art and copy trade sides down the stack so the run does not read as a list. */
@@ -772,10 +1258,10 @@
   min-width: 0;
 }
 
-.toolPanel[data-hue='violet'] { --tool-hue: var(--hue-violet); --tool-wash: var(--violet-wash); --tool-edge: var(--violet-edge); }
-.toolPanel[data-hue='green']  { --tool-hue: var(--hue-green);  --tool-wash: var(--green-wash);  --tool-edge: var(--green-edge); }
-.toolPanel[data-hue='blue']   { --tool-hue: var(--hue-blue);   --tool-wash: var(--blue-wash);   --tool-edge: var(--blue-edge); }
-.toolPanel[data-hue='pink']   { --tool-hue: var(--hue-pink);   --tool-wash: var(--pink-wash);   --tool-edge: var(--pink-edge); }
+.toolPanel[data-hue='violet'] { --tool-hue: var(--hue-violet); --tool-wash: var(--violet-wash); --tool-edge: var(--violet-edge); --tool-solid: var(--solid-violet); }
+.toolPanel[data-hue='green']  { --tool-hue: var(--hue-green);  --tool-wash: var(--green-wash);  --tool-edge: var(--green-edge);  --tool-solid: var(--solid-green); }
+.toolPanel[data-hue='blue']   { --tool-hue: var(--hue-blue);   --tool-wash: var(--blue-wash);   --tool-edge: var(--blue-edge);   --tool-solid: var(--solid-blue); }
+.toolPanel[data-hue='pink']   { --tool-hue: var(--hue-pink);   --tool-wash: var(--pink-wash);   --tool-edge: var(--pink-edge);   --tool-solid: var(--solid-maroon); }
 
 .toolKicker {
   display: inline-flex;
@@ -792,12 +1278,31 @@
   text-transform: uppercase;
 }
 
+/* Same painted-heading treatment as the analytics blocks: white marker
+   lettering on a solid block of the tool's own hue. `--tool-solid` is the fill
+   ramp (white clears 5.48:1 on all five); `--tool-hue` stays the ink step and
+   is still what the kicker and the CTA use.
+
+   `inline-block` + `box-decoration-break: clone` because these titles are long
+   enough to wrap on a narrow panel, and clone gives each line its own rounded
+   fill rather than one L-shaped slab. The parent is already
+   `align-items: flex-start`, so the block sizes to the text rather than
+   stretching the column. */
 .toolTitle {
-  font-family: 'Subscribe', Inter, system-ui, sans-serif;
-  font-weight: 400;
+  display: inline-block;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.2rem 0.75rem;
+  border-radius: 14px;
+  background: var(--tool-solid, var(--text));
+  color: var(--on-solid);
+  font-family: var(--font-display);
+  font-weight: 600;
   font-size: clamp(1.5rem, 2.4vw, 2.1rem);
   letter-spacing: 0.02em;
-  color: var(--text);
+  line-height: 1.3;
+  /* No glow — the solid fill under white lettering is already the strongest
+     mark on the panel. */
 }
 
 .toolBody {
@@ -830,10 +1335,24 @@
   margin-top: 0.35rem;
   padding: 0.7rem 1.4rem;
   border-radius: 12px;
-  background: var(--tool-hue, var(--accent-action));
-  color: #ffffff;
+  /* THE SOLID RAMP, not the ink one. This was `--tool-hue`, which on dark is
+     the PASTEL step — so the button became a mint/lilac slab that then needed
+     dark text (`--on-hue`) to be readable at all, and the result is the exact
+     "dim and opaque in dark mode" complaint this project has now hit three
+     times. A fill wears `--solid-*` and carries `--on-solid`; ink wears
+     `--hue-*`. White on `--solid-violet` measures 7.10:1 where white on
+     `--hue-violet` was 2.72:1. */
+  background: var(--tool-solid, var(--accent-action-solid));
+  color: var(--on-solid);
   font-size: 0.88rem;
   font-weight: 750;
+  transition:
+    transform var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease);
+}
+
+.toolPanel:hover .toolCta {
+  background: color-mix(in srgb, var(--tool-solid) 86%, var(--text));
 }
 
 .toolArt {
@@ -870,59 +1389,169 @@
 
 /* --- analytics areas --- */
 
+/* SQUARE BLOCKS, and they are the landing screen's primary navigation now that
+   the rail is gone from it. `auto-fit` rather than `auto-fill` so seven blocks
+   spread across the full width instead of leaving a phantom empty column, and
+   `1fr` rows so every block in a row is the same height whatever its blurb. */
+/* EXPLICIT COLUMN COUNTS, not `auto-fit`. There are seven blocks, and auto-fit
+   packs as many as fit — which at a lot of common widths is six, leaving one
+   card marooned on a row of its own. Seven is prime, so the only tidy splits are
+   7 and 4+3; the counts below step between those two and then halve. */
 .areaGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 0.85rem;
   padding-bottom: 0.4rem;
 }
 
+@media (min-width: 1500px) {
+  .areaGrid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1000px) {
+  .areaGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .areaGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Centred, like the reference's tiles: icon over title over blurb, with the
+   arrow pinned to the bottom so it lines up across a row of unequal blurbs. */
 .areaCard {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.45rem;
-  padding: 1.15rem;
-  border-radius: 14px;
+  align-items: center;
+  text-align: center;
+  gap: 0.55rem;
+  padding: 1.5rem 1.15rem 1.25rem;
+  border-radius: 16px;
   border: 1px solid var(--glass-stroke);
   text-align: left;
   cursor: pointer;
   font: inherit;
   background: var(--glass-fill);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    transform var(--dur-3) var(--ease),
+    box-shadow var(--dur-3) var(--ease);
 }
 
+/* Same hue-on-hover as the tool panels, so the two grids behave identically —
+   including the lift, which is the point of a shared card system: one hover
+   behaviour, not a different idea per grid. */
+/* NO GLOW, on hover either. Hover keeps the lift, the hue wash and the coloured
+   border — three cues, all of which survive a monochrome screenshot, none of
+   which bloom. */
 .areaCard:hover {
-  background: var(--neutral-wash);
+  background: var(--tile-wash);
+  border-color: var(--tile-edge, var(--border-strong));
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-sheen);
 }
 
-/* Level 1 tile, level 3 icon — the card itself stays neutral. */
+.areaCard:active {
+  transform: translateY(-1px);
+  transition-duration: var(--dur-1);
+}
+
+.areaCard:hover .areaIcon {
+  transform: scale(1.04);
+}
+
+
+.areaCard[data-hue='violet'] { --tile-edge: var(--violet-edge); }
+.areaCard[data-hue='blue']   { --tile-edge: var(--blue-edge); }
+.areaCard[data-hue='pink']   { --tile-edge: var(--pink-edge); }
+.areaCard[data-hue='green']  { --tile-edge: var(--green-edge); }
+
+/* Level 1 tile, level 3 icon — the card itself stays neutral.
+ *
+ * NO RESTING GLOW. The tile and the painted title beneath it both used to emit
+ * one on dark, which put two lit objects inside every card and seven cards on
+ * the screen at once — the grid read as backlit rather than as a set of blocks.
+ * The glow moved to hover only, where it marks the ONE card being pointed at,
+ * which is the job it was doing well. Identity at rest is carried by the wash,
+ * the icon colour and the title's solid fill; none of those needed help. */
 .areaIcon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 11px;
+  /* Bigger than the 2.4rem rail tile: on a centred block the icon is the thing
+     that identifies the area at a glance, not a bullet beside a label. */
+  width: 3rem;
+  height: 3rem;
+  border-radius: 14px;
   border: 1px solid transparent;
   background: var(--tile-wash, var(--surface-sunken));
   color: var(--tile-hue, var(--text));
+  transition:
+    transform var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
 }
 
-.areaCard[data-hue='violet'] { --tile-hue: var(--hue-violet); --tile-wash: var(--violet-wash); }
-.areaCard[data-hue='blue']   { --tile-hue: var(--hue-blue);   --tile-wash: var(--blue-wash); }
-.areaCard[data-hue='pink']   { --tile-hue: var(--hue-pink);   --tile-wash: var(--pink-wash); }
-.areaCard[data-hue='green']  { --tile-hue: var(--hue-green);  --tile-wash: var(--green-wash); }
+/* The tile scales a touch with the card; it does not light up. */
 
+/* `--tile-solid` is the fill under the white heading; `--tile-hue` stays the ink
+   step for the icon. Same four names the sidebar rows use. */
+.areaCard[data-hue='violet'] { --tile-hue: var(--hue-violet); --tile-wash: var(--violet-wash); --tile-solid: var(--solid-violet); }
+.areaCard[data-hue='blue']   { --tile-hue: var(--hue-blue);   --tile-wash: var(--blue-wash);   --tile-solid: var(--solid-blue); }
+.areaCard[data-hue='pink']   { --tile-hue: var(--hue-pink);   --tile-wash: var(--pink-wash);   --tile-solid: var(--solid-maroon); }
+.areaCard[data-hue='green']  { --tile-hue: var(--hue-green);  --tile-wash: var(--green-wash);  --tile-solid: var(--solid-green); }
+
+
+/* THE HEADING IS PAINTED ONTO THE AREA'S HUE — white marker lettering on a
+ * solid block of colour, not coloured ink on a tint.
+ *
+ * `--tile-solid` and `--on-solid`, which is exactly the pair this project built
+ * for the case: the solid ramp is graded so white sits at 5.5:1 or better on
+ * every one of the five, in both themes, so the label needs no theme-scoped
+ * variant of its own. (The other ramp, `--hue-*`, is the INK step — right for
+ * text on a card, wrong as a fill under white.)
+ *
+ * `inline-block` with `box-decoration-break: clone` rather than `inline-flex`:
+ * a two-word label in a narrow block wraps, and clone gives each line its own
+ * rounded fill instead of one L-shaped slab with a notch in it. */
 .areaTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.95rem;
-  font-weight: 750;
-  color: var(--text);
+  display: inline-block;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.26rem 0.8rem;
+  border-radius: 12px;
+  background: var(--tile-solid, var(--text));
+  color: var(--on-solid);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.35;
+  /* No glow — see `.areaIcon`. The solid fill under white lettering is already
+     the strongest mark on the card; haloing it as well was the second lit
+     object in a block that only needed one. */
+}
+
+/* The arrow sits on its own line at the foot of the block, so a row of blocks
+   has its arrows on one baseline. `margin-top: auto` is what does it — the
+   blurb takes the slack, not the arrow. */
+.areaArrow {
+  display: flex;
+  margin-top: auto;
+  padding-top: 0.55rem;
+  color: var(--tile-hue, var(--text-muted));
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.areaCard:hover .areaArrow {
+  transform: translateY(2px);
 }
 
 .areaBody {
@@ -933,13 +1562,81 @@
 
 /* --------------------------------------------------------------- responsive */
 
+/* Tablet: the figure keeps its place but yields width to the copy, which is
+   carrying a headline, a field and a row of chips. */
 @media (max-width: 1180px) {
-  .corners {
-    display: none;
+  .heroInner {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  }
+
+  .heroKing {
+    max-width: clamp(12rem, 26vw, 18rem);
   }
 }
 
+/* THE MOBILE HERO IS A DIFFERENT COMPOSITION, not the desktop one scaled down.
+   One column, and the character moves to the END — below the search and the
+   chips — because on a phone the first screen has room for exactly one job and
+   that job is the field. `order` rather than a second copy of the markup. */
 @media (max-width: 900px) {
+  /* THE HERO STOPS BEING ITS OWN SCROLLER.
+     Stacked, the content is taller than the panel's min-height, so the inner
+     `overflow-y: auto` turned the hero into a scroll box nested inside the page
+     scroll — the character was cut off mid-boot and reaching it meant scrolling
+     the right thing first. On a phone the panel should just be as tall as what
+     is in it and let the page do the scrolling. */
+  .hero {
+    min-height: 0;
+  }
+
+  .heroScroll {
+    overflow: visible;
+    padding: 2rem 1.25rem;
+  }
+
+  .heroInner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+    max-width: 34rem;
+  }
+
+  .heroCopy {
+    order: 0;
+    align-items: center;
+    text-align: center;
+  }
+
+  .heroFigure {
+    order: 1;
+  }
+
+  .heroKing {
+    max-width: min(20rem, 68vw);
+  }
+
+  /* Centred copy wants the rule on both sides again, or neither. */
+  .popularLabel::before {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .popularTags {
+    justify-content: center;
+  }
+
+  /* The left-anchored scrim is wrong once the copy is centred — it would darken
+     one edge of a column that no longer sits there. Straight up-down instead. */
+  .hero::after {
+    background: linear-gradient(
+      to bottom,
+      var(--glass-fill) 0%,
+      color-mix(in srgb, var(--glass-fill) 82%, transparent) 55%,
+      color-mix(in srgb, var(--glass-fill) 55%, transparent) 100%
+    );
+  }
+
   .heroTitle {
     white-space: normal;
   }
@@ -953,13 +1650,45 @@
   }
 }
 
+/* Small phones: the figure is the first thing to give up room, never the field. */
+@media (max-width: 480px) {
+  .heroKing {
+    max-width: min(15rem, 60vw);
+  }
+
+  .searchRow {
+    flex-wrap: wrap;
+    padding: 0.75rem;
+    gap: 0.6rem;
+  }
+
+  .searchInput {
+    padding: 0.4rem 0;
+  }
+
+  /* Full-width rather than a stub beside a wrapped field. */
+  .analyzeButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .searchIcon {
+    padding-left: 0.35rem;
+  }
+}
+
 @media (max-width: 860px) {
-  .body {
+  .body,
+  .body[data-rail='closed'] {
     grid-template-columns: minmax(0, 1fr);
+    padding-left: 1rem;
   }
 
   .sidebar,
-  .topNav {
+  .topNav,
+  /* The rail is already gone at this width, so a control for hiding it would
+     do nothing on press. */
+  .railToggle {
     display: none;
   }
 }
@@ -969,7 +1698,20 @@
 
 /* On the analysis screen the reference swaps the nav links for the query row:
    scope, tag search, season. */
+/* In the panel now, not the chrome: ONE row above the screen it drives.
+   It was laid out for a top bar — a flex row that could wrap under a nav — and
+   dropped into a full-width panel it wrapped into three lines. Grid, so the
+   field takes the space and the season control sits beside it at its own
+   width. */
 .topQuery {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.topQueryUnused {
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -988,18 +1730,25 @@
   border: 1px solid var(--border-strong);
   background: var(--surface-sunken);
   color: var(--text);
+  font-family: inherit;
   font-size: 0.82rem;
   font-weight: 700;
+  cursor: pointer;
+}
+
+.topScope:hover {
+  background: var(--neutral-wash-sunken);
+  border-color: var(--text-muted);
 }
 
 .topSearch {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex: 1;
   min-width: 0;
-  max-width: 460px;
-  padding: 0.28rem 0.28rem 0.28rem 0.8rem;
+  /* No max-width: in the top bar this had to leave room for a nav beside it;
+     in the panel it is the row's own column and should fill it. */
+  padding: 0.34rem 0.34rem 0.34rem 0.9rem;
   border-radius: 11px;
   border: 1px solid var(--border-strong);
   background: var(--surface-sunken);
@@ -1036,28 +1785,19 @@
   padding: 0.48rem 1.15rem;
   border-radius: 9px;
   border: none;
-  background: var(--accent-action);
+  background: var(--accent-action-solid);
   color: var(--accent-action-text);
   font-size: 0.83rem;
   font-weight: 750;
   cursor: pointer;
 }
 
+/* Just the slot in the row now. The control itself is `SeasonMenu`, which owns
+   its own trigger styling — a native <select> was replaced because its OPEN
+   list is drawn by the OS and ignored the theme completely. */
 .topSeason {
   display: inline-flex;
   flex-shrink: 0;
-}
-
-.topSeasonSelect {
-  padding: 0.55rem 0.8rem;
-  border-radius: 10px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-sunken);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 650;
-  cursor: pointer;
 }
 
 @media (max-width: 1080px) {

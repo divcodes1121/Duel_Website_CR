@@ -264,5 +264,16 @@ check(
 )
 
 
+# --- the duel span -------------------------------------------------------
+# An empty Evolutions tab is nearly always a DATE story: the payload only began
+# carrying evolution slots part-way through the stored history, so a player whose
+# duels all predate that shows 0 while their ladder history is full of evolutions.
+# The tab quotes the span to say so, which means the span has to be right.
+check("iso day from a battle stamp", dx._iso_day("20260726T131502.000Z") == "2026-07-26")
+check("iso day tolerates a bare day", dx._iso_day("20260726") == "2026-07-26")
+check("iso day of nothing is empty", dx._iso_day("") == "")
+check("iso day rejects non-digits", dx._iso_day("not-a-time") == "")
+check("iso day of None is empty", dx._iso_day(None) == "")
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

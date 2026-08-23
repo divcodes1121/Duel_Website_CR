@@ -136,6 +136,13 @@ function collectIconUrls(pages: ContentPage[], topCards: string[]): string[] {
  * and jsPDF subsets it, so it costs a few KB in the file. Small copy stays on
  * Helvetica: the face has a single weight and gets mushy below ~8 pt.
  */
+/* NOT the site's display face, and it cannot be.
+ * The site sets headings in Kids Word, which is OpenType/CFF ('OTTO'). jsPDF
+ * embeds TrueType only — it has no CFF parser — so pointing this at Kids Word
+ * produces an export with no headings rather than an error. Subscribe.ttf stays
+ * because it is TrueType and already known to subset cleanly here. A future
+ * display face can follow the site into the PDF only if its outlines are
+ * TrueType; check the first four bytes before wiring it up. */
 const DISPLAY = 'Subscribe';
 const DISPLAY_URL = `${import.meta.env.BASE_URL}assets/fonts/Subscribe.ttf`;
 

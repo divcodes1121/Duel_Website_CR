@@ -18,17 +18,37 @@ Mirrors the bot's own model (`Clash_Bot/clashdb.py`, `Clash_Bot/archive.py`):
 
 | Tier | Default path | Role |
 |------|--------------|------|
-| Hot | `C:\ClashBot\data\battles.db` | rolling window, ~12 GB |
-| Archive | `H:\ClashArchive\archive.db` | every battle ever, ~29 GB |
+| Hot | `H:\ClashBot\data\battles.db` | rolling window (150 days), ~11.5 GB |
+| Archive | `H:\ClashArchive\archive.db` | every battle ever, ~46 GB |
 
-The archive is **never assumed present**. If drive H: is not connected, every
-query answers from the hot tier alone and the page footer says so. The archive
-is only opened when the requested window reaches further back than the hot
-tier holds, so normally the 29 GB file is not touched at all.
+**Both tiers moved to H: on 2026-08-17**, along with the bot's `RETENTION_DAYS`
+going 60 → 150: a five-month window is ~28.5M battles and does not fit on the
+internal SSD. Tier 1 was `C:\ClashBot\data\battles.db` before that date.
+
+The archive is still only *opened* when the requested window reaches further
+back than the hot tier holds, so normally the 46 GB file is not touched.
+
+**What the move changed is the failure story.** An unplugged H: used to cost
+only the archive, because the hot tier was on C:. Both tiers are one failure
+domain now, and the migration deleted the old C: database and the desktop
+`battles-pre-retention.db` with it — so a detached drive leaves no database at
+all. `resolve_db_path()` returns `None` and the screens show the explicit
+"no database" state rather than 500-ing, but nothing answers from an older
+local copy any more, because there is no older local copy. Check
+`GET /api/analytics/status` for which paths actually resolved.
 
 A candidate database must also *carry the schema*, not merely exist — the
-desktop copy ships a 4 KB `battles.db` stub with no tables in it, and picking a
-file by existence alone selects that stub and then fails on every query.
+desktop copy still ships a 4 KB `battles.db` stub with no tables in it, and
+picking a file by existence alone selects that stub and then fails on every
+query. That stub is now the only `.db` left on the internal disk, which is
+exactly why `_has_schema()` is not optional.
+
+**Cold reads are much slower on the spinning volume**, and the bot measured it:
+SQLite page reads run ~2.4 MB/s at 430–620 IOPS against 104.5 MB/s sequential,
+because each 4 KB page costs a seek. The bot repaged its database to 32 KB
+pages to close most of the gap. Warm queries match or beat the old SSD; cold
+ones do not, so the two background snapshots (meta, counter) matter more than
+they used to — they are what keeps a request off the disk.
 
 ## Configuration
 
@@ -37,10 +57,16 @@ migration seam — moving to a VPS means setting these, not editing code.
 
 | Variable | Default |
 |----------|---------|
-| `CLASH_DB_PATH` | `C:\ClashBot\data\battles.db` |
+| `CLASH_DB_PATH` | `H:\ClashBot\data\battles.db` |
 | `CLASH_DB_FALLBACK` | Desktop `Clash_Bot/battles-pre-retention.db` |
 | `CLASH_ARCHIVE_DB_PATH` | `H:\ClashArchive\archive.db` |
 | `CLASH_API_HOST` / `CLASH_API_PORT` | `127.0.0.1` / `8787` |
+| `CLASH_OIE` | `off` — also `shadow` / `on` |
+| `CLASH_OIE_LOG` | `ml/results/shadow-log.jsonl` |
+| `CLASH_OIE_SALT` | `oie-shadow-v1` (tag hashing) |
+| `CLASH_OIE_HISTORY_DAYS` | `60` |
+| `CLASH_OIE_CACHE_TTL` | `120` seconds |
+| `CLASH_DB_MAINTENANCE_FLAG` | `<db dir>/.maintenance` |
 
 Client side: `CLASH_API_URL` retargets the Vite proxy, and
 `VITE_ANALYTICS_BASE` points a built bundle straight at a remote host. The
@@ -56,6 +82,14 @@ client module change when the service moves.
 | `GET /api/analytics/coverage?tag=` | earliest/latest stored day, globally and per player |
 | `GET /api/analytics/player/<tag>` | summary, top decks, per-day trends |
 | `GET /api/analytics/duels/<tag>` | card combinations in duel play, three tabs |
+| `GET /api/analytics/duelzone/<tag>` | duel series log (Bo3/Bo5) + deck sequence |
+| `GET /api/analytics/cards/<tag>` | per-card use/win rate + movement (`?mode=`) |
+| `GET /api/analytics/counter/<tag>` | which archetypes beat this player |
+| `GET /api/analytics/deck?cards=&wild=` | how one pasted deck draws — slots + art (`wild=evolution` or `wild=hero` picks slot 3) |
+| `GET /api/analytics/matchup?a=&b=` | head-to-head for two decks (comma-separated keys) |
+| `GET /api/analytics/counters?deck=` | what beats a deck |
+| `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2` |
+| `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2` |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
 
 Both `player` and `duels` take the same window: `?days=N`, or `?from=&to=` as
@@ -92,11 +126,110 @@ since it prints all four on one board. Here the same predicates are applied
 independently per tab, because an "Evolutions" tab that hides a pairing when a
 win condition outranked it is answering a different question from its label.
 
+### `evoCoverage` and `span` exist to explain an empty Evolutions tab
+
+The Evolutions predicate needs both cards to have been **observed** in an
+evolution slot — never merely `can_evolve` — and `player_evo` is opportunistic:
+it went from ~1% of all stored battles on 20 Jul 2026 to 99% on 5 Aug. A player
+whose duels all predate that shows zero, correctly, while their recent ladder
+history is full of evolutions.
+
+That is two different emptinesses and `_evo_marks` keeps them apart on purpose
+(it returns `None` for "we were never told", distinct from "they ran none"). So
+the envelope carries both halves of the explanation:
+
+* `duels.evoCoverage` — share of duel decks whose evolution slots were recorded.
+  `0.0` means *not measured*, and the UI renders an em dash rather than a `0`.
+* `duels.span` — `{from, to}` ISO days of the **first and last duel row read**,
+  not of the player's battles generally. A player can be active today and have
+  their last duel months back; when the tab is empty that gap is usually the
+  whole story, so the tab quotes it.
+
+`span` comes off `read_duel_rows`, which sorts by `battle_time` — so the ends of
+the list *are* the span, with no second query.
+
 ```bash
-python server/test_duel_combos.py    # 34 checks, no database needed
-python server/test_meta.py           # 23 checks, no database needed
-python server/test_card_art.py       # 32 checks, no database needed
+python server/test_duel_combos.py    # 39 checks, no database needed
+python server/test_meta.py           # 33 checks, no database needed
+python server/test_card_art.py       # 110 checks, no database needed
+python server/test_duel_zone.py      # 88 checks, no database needed
+python server/test_player_cards.py   # 60 checks, no database needed
+python server/test_deck_counter.py   # 58 checks, no database needed
+python server/test_coach.py          # 69 checks, no database needed
 ```
+
+## The Duel Zone (`duel_zone.py`)
+
+Two windows over the same duels, both ported from the bot: the series log
+behind `!duels`, and the `!duelspdf` "Deck Sequence Prediction" page.
+
+`duel_combos.read_duel_rows` does the single database read both use, so the
+series on screen and the sequence computed from them cannot describe different
+duels. While wiring it, `_split_series` was corrected to track **both sides'**
+card reuse the way `duel_split.split` does — the earlier copy watched only the
+player's, because it had never read the opponent's deck.
+
+**The one divergence from `duel_split`.** Its rule that any repeated card ends a
+series cuts real practice data too often — measured, raising the threshold
+instead takes series longer than three games from 1.1% to 25.3% while buying
+only six points of coverage, i.e. it invents Bo5s. So the rule stays and
+`_merge_unfinished` tidies up after it: an undecided tail is folded back into
+the series it was cut from (same opponent, inside the gap, total <= 5 games) or
+dropped. A duel does not end 1-1. `split_chunk` is the entry point both duel
+screens use.
+
+Things to keep, each of which the bot learned the hard way:
+
+* **`bo5` needs a 4th game.** "Someone reached 3 wins" is not evidence — a Bo3
+  decided 2-0 whose dead third game is played out reaches 3-0 in three games.
+* **A native row has no per-game scoreline.** It stores the *duel's* result, so
+  the response sends `playerWins: null` and an empty caption rather than a
+  score that would be indistinguishable from a real one.
+* **A predicted loadout must be card-disjoint** (`pick_duel_legal_sequence`).
+  76% of the bot's rendered triples were impossible before this rule. Returning
+  one companion instead of two is correct.
+* **Companions rank by co-occurrence with the opener**, weighted `CO_WEIGHT`
+  (3). Raw play count makes every row the player's two most-played decks.
+* **Observed beats inferred** (`observed_duel_loadout`): ~85% of openers have a
+  real 3-game series, and those are card-legal by construction.
+
+**No display caps.** The bot's three (40 openers, 27 rows, four pages) are PDF
+page geometry, and a scrolling panel has no pages: the date window decides how
+much there is and `report()` returns all of it. `?limit=N` still trims the
+series list for a caller that wants a preview. The bot's `count >= 2` filter on
+openers is dropped too — the play count is printed beside each row.
+
+**Every deck goes through `clash_data.arrange_deck`**, which owns the slot order
+and the art together. Skipping it is what made the sequence board render the
+same deck in a different order and with no evolution art beside its own row in
+the series log.
+
+**A pasted link's order is authoritative — pass `trust_order=True`.** A
+copyDeck link writes the three special slots first, in slot order, so its first
+three IDs already name the evolution, the hero and the wild. Rebuilding them
+from capability put Goblins in the hero slot of a Goblin Barrel / Valkyrie /
+Princess deck and rendered it as a different deck. It also outranks `marks`:
+pooled marks are what everyone's copy of those eight cards was fielded as, and
+they were reordering a Battle Ram / Wizard / Elite Barbarians link into Battle
+Ram / Elite Barbarians / Wizard. `wild=` overrides slot 3, the only one a link
+cannot settle — knight, valkyrie, musketeer and wizard have both forms — and it
+is applied on every path, not only this one.
+
+**Pass it the observed marks whenever you have them — they decide.** The second
+argument is `{card: 'evolution' | 'hero'}` for what the deck was actually seen
+fielding, and it is authoritative: a card nobody was seen bringing specially
+renders plain however capable it is. Capability inference is the fallback for a
+deck with no record, and callers flag that case with `artInferred`.
+
+This mattered more than it sounds. The argument was accepted and never read, so
+every deck was rendered at the maximum loadout its cards permitted — 43 of 50
+meta decks drew two evolutions and a hero against 28 played that way, and 19 of
+50 renderings contradicted the evidence. Barbarian Barrel can be a hero and is
+in eight of the seventeen archetype decks, so it was promoted to the hero slot
+in all eight, and every archetype row on the Deck Counter opened with the same
+three frames. The game's cap (one mark per slot) still applies on top of
+the marks, because a pooled cluster can report three evolutions that no single
+player fields.
 
 ## The meta leaderboard (`meta.py`)
 
@@ -164,9 +297,20 @@ slot 1 in 569, slot 2 in 775.
 
 So:
 
-* Art is only ever applied to slots 0-2. That is the game's own rule, and it is
-  a better cap than a magic number — it is what stopped a cluster's pooled marks
-  drawing a deck with **five** evolved cards.
+* Art is only ever applied to slots 0-2, and a deck can wear at most two
+  evolutions, two heroes and three marks in total — one per slot. That is the
+  game's own rule, and it is what stopped a
+  cluster's pooled marks drawing a deck with **five** evolved cards.
+
+  **The cap is enforced on the evidence, not on the stored order.** Both art
+  lookups used to drop any mark on a card outside the first three entries of
+  `decks.cards`. That order is genuine payload order (0 of 20,000 rows are
+  merely alphabetical) but it is *one* player's copy, while the marks are pooled
+  over everybody running the list — so it deleted 23 real marks across 21 of the
+  50 meta decks, and those decks then drew a plain card in a special slot.
+  `clash_data.cap_special_marks` now keeps the two most-observed evolutions and
+  the most-observed hero (ties on the card key), and `arrange_deck` decides
+  which position each one lands in.
 * **The three slots are not interchangeable**, and `clash_data.SLOT_ALLOWED`
   states the game's rule (player numbering):
 
@@ -179,23 +323,32 @@ So:
   which caps a deck at **two** evolutions. A champion has neither form, so it
   simply draws as itself wherever it is legal.
 
-  **This is stated, not inferred, because the payload does not cleanly report
-  it.** Over ~8,000 recent marked battles: slot 1 evolution 92%, slot 2 hero 70%
-  / *evolution 30%*, slot 3 evolution 83% / hero 11% — and 14% of single battles
-  carry three evolution marks. The bot's own `evolution_marks` docstring says
-  the same, recording explicitly that "2 evolution slots + 1 other special slot"
-  versus "3 special slots" cannot be settled from the stored columns. Rendering
-  the raw majority put three evolution frames on decks that cannot have three.
+  **The payload does report it, once the level is read.** The old figures here
+  — slot 2 "hero 70% / *evolution* 30%", 14% of battles carrying three evolution
+  marks — were an artefact of reading `art`, and they are what made the bot's
+  `evolution_marks` docstring conclude that "2 evolution slots + 1 other special
+  slot" versus "3 special slots" could not be settled from the stored columns.
+  By level it settles cleanly: level 1 lands at index 0 or 2 and **never** at
+  index 1; level 2 lands at index 1 or 2 and **never** at index 0; and a battle
+  carries at most two level-1 marks and one level-2 mark. That is the table
+  above, measured.
 
-  So the marks say which cards are special and what art each can wear;
-  `apply_slot_rules` decides what may actually be drawn, and both the player
-  screen and the meta board go through it.
+  So the marks say which cards are special and which form each wears;
+  `arrange_deck` decides what position each one lands in, and both the player
+  screens and the meta board go through it.
 * `decks.cards` is used for display, never `deck_hash`. The hash is alphabetical
   and identifies a deck; splitting it for display scatters the three special
   slots through the row.
-* The variant itself is never inferred. `player_evo` stores
-  `[card_key, level, art]` with `art` already resolved by the bot from the
-  payload's icon URLs.
+* The variant itself is never inferred, and **it is read off the LEVEL, not the
+  `art` string** — `clash_data.mark_variant` is the only place that decides.
+  `player_evo` stores `[card_key, level, art]`; level 1 is an evolution, level 2
+  is a hero. `art` looks like the resolved answer and is a lossy derivation of
+  it: measured over 60,000 battles it labels 9.2% of heroes "evolution" and 6.9%
+  of evolutions "unknown", 16.1% of all marks wrong or discarded. Reading `art`
+  had X-Bow Tesla reporting Tesla, Archers *and* Knight as evolutions at ~100%
+  each — three in a deck that can field two, so the hero never survived the cap.
+  Level 1 covers exactly the 42 cards that can evolve and level 2 exactly the 16
+  that can be a hero, 162,919 marks with no exceptions.
 
 Within those slots a card must still be marked in at least `ART_MIN_SHARE` (25%)
 of a deck's sampled battles, because a cluster pools many players' choices. The
@@ -223,6 +376,135 @@ its prescribed role. Observed marks always win; inferred decks are flagged
 A dashed outline was tried as the visual marker and removed: it read as a broken
 image rather than as a caveat, on cards that are very likely right.
 
+## The card board (`player_cards.py`)
+
+Use rate and win rate for all 122 cards for one player, over a window, with
+movement against the equally long window before it. `?mode=` scopes it to
+`all` / `ranked` / `duel` / `tournament`; each is a Python predicate over the
+stored `game_mode` string, not a SQL clause, for the reason `duel_stats` gives.
+
+* **`battles`, not `player_card_agg`** — the rollup is lifetime-only, so reading
+  it would make the date and mode controls decoration.
+* **Every card is returned**, including never-played ones. A zero row answers
+  "what do they not run"; the UI hides them behind a checkbox.
+* **The rank floor is `duel_combos.CONF_MIN_GAMES` (8)**, reused rather than
+  reinvented. Below it a card is returned with `tiered: false` and `tier: null`.
+* **No card metadata is sent.** Type, elixir, rarity, win-condition, champion
+  and evolution live in `src/data/*.json`, which the browser already loads.
+
+### Per-form rates
+
+Each row also carries `forms: {base|evolution|hero: {...}}` — an evolved
+Skeletons scored separately from a plain one, with its own use rate, win rate,
+evidence tier and Wilson interval.
+
+* **Evolution and hero are separate counters.** `_evo_marks` resolves each mark
+  to one or the other, and `_tally` used to add both into `evoRate`. That
+  reported eleven cards as evolved on the test account — Berserker at 76.8% —
+  none of which can evolve at all.
+* **Only marked battles can be split**, and both sides come from that subset.
+  Inside a row that carries marks, a card with no mark of its own was fielded
+  plain; that is the only place `base` can be counted from. Outside one the form
+  is unknown, which is not the same thing.
+* **`formCoverage` says how thin that is** — battles, share, and the dates they
+  span. On the test account 350 of 2,268 (15.4%), inside an 8-day window against
+  a ~50-day history. The screen prints it; a form's win rate must not pass for
+  the same kind of number as a card's.
+* **A form's use rate is a share of the marked battles**, not of every battle —
+  a share of a population the form could not have been observed in would
+  understate every one of them by the coverage gap.
+* **A card with no marked battles gets no `forms` key at all**, so the client
+  can tell "never observed in either form" from "observed, zero".
+
+## The matchup engine (`deck_counter.py`)
+
+Three answers: which archetypes beat a player, a deck-vs-deck head-to-head, and
+what counters a given deck. Three measurements shaped all of it.
+
+* **Exact deck-vs-deck is not answerable.** Of 1,961,367 stored pairings only
+  0.59% have even 8 games, so matchups are computed at ARCHETYPE level, where
+  all 289 cells clear 50 games.
+* **The raw table is biased.** `deck_a` is the tracked player's deck and tracked
+  players win 58.59% of everything, so read straight every deck counters every
+  deck. Cell (A,B) is combined with the reverse of (B,A); the check that this is
+  right is that every mirror then lands at exactly 50.0% (raw: bait 58.0%, hog
+  58.8%, graveyard 62.5%). `_symmetric()` is the only way a number leaves the
+  module — never report a raw cell.
+* **No match duration exists** in `battles`, `pair_matchup_agg` or the stored
+  payload, so there is no "average match time" anywhere.
+
+The matrix costs ~60 s (1.96M pairings joined to a 1.05M-row deck table) and is
+a background snapshot on meta.py's pattern, persisted to
+`server/.counter_snapshot.json`, refreshed every `CLASH_COUNTER_REFRESH` (3600)
+seconds. The per-player half needs no snapshot: `battles.opponent_win_condition`
+is stored and 100% populated, so that query is ~40 ms.
+
+Every matchup row carries a real deck of that archetype, taken from the current
+meta board rather than invented: its top 50 covers all seventeen archetypes, the
+decks are what people are actually running, and the evolution art is already
+resolved. `_representatives()` degrades to `{}` while that snapshot builds.
+
+Only archetypes over 50% are returned as counters — ranking the field and taking
+the top five hands back a "counter" at 48.3%. Play styles (Beatdown / Control /
+Siege / Cycle / Bridge Spam) are an editorial map, because the database stores a
+win condition, which is a card and not a play style.
+
+**Pasted decks are arranged before they are returned.** A copy-deck link carries
+eight card IDs and nothing else, so `_drawn()` runs them through
+`clash_data.arrange_deck` — the same slot rules the meta board and the player
+screens use — and the response carries the ordered list plus an `art` map and an
+`inferredArt` flag. Without it a pasted deck rendered as eight plain cards next
+to a meta deck with its evolutions drawn.
+
+Evidence first, though: `deck_hash` is the sorted card list, so `_board_art()`
+checks whether the meta board already covers the pasted deck and uses its
+observed marks if so. A pasted meta deck then renders identically to the same
+deck one row below, with `inferredArt: false`. Only a deck the board has never
+seen falls through to capability inference, and the flag says so.
+
+**Duels are already in every figure.** `pair_matchup_agg` is filled by
+`clashdb._accumulate`, which has no game-mode filter — measured, an 8-card duel
+battle's deck pair is present 72.7% of the time against 61.3% for a ladder one.
+The exception is a native duel row: it holds a 16/24-card loadout and only the
+series result, so it can never contribute a deck pair, and `_build_reps` rejects
+any hash without exactly seven commas so a loadout is never read as a deck.
+
+Because of that, `_representatives()` no longer reads the meta board's top 50 —
+that board excludes duel modes on purpose. Representatives come from the matchup
+table itself (`snapshot["reps"]`, the most-observed deck per archetype, the
+bot's own rule), so the deck shown and the numbers beside it come from one
+population. The board is still asked for observed art.
+
+**The ladder.** `matchup_ladder(cards, archetype, snap)` returns every reading
+with evidence behind it, narrowest first: the exact list, then lists one card
+different, then two, then the archetype. `deck_vs_deck` ships the whole thing
+and takes the first as its headline; `find_counters` walks it per archetype and
+labels each row. The two cluster rungs are the bot's `CLUSTER_MIN_OVERLAP = 6`
+idea split in two, because 6-of-8 and 7-of-8 are different amounts of "the same
+deck".
+
+Costs, and the shape they forced: no index answers "shares six cards with this",
+so the 1,054,394 deck hashes are read once at startup on the background thread
+(~86 MB, 2.2 s) and the scan is 1.6 s per deck. Both levels share that scan AND
+a single TEMP-table join — chunked `IN (...)` was 4.4 s, the join is 1.0 s, and
+one pass fills both buckets. `mode=ro` still allows temp tables. Net 15.2 s →
+5.5 s cold, 2.1 s cached.
+
+**`real_opponents` has no evidence floor, on purpose.** `MIN_GAMES` stops the
+screen quoting a win rate off two games; it should not stop it saying the games
+happened. A deck that lost 0-3 to a specific list was vanishing behind archetype
+rows measured on other decks. That function reports W-L per opposing deck from
+two indexed lookups and the UI prints it as a record, never a percentage.
+
+**Every list is returned whole; the client pages it.** `worst` and `best` used
+to be `matchups[:5]` and `matchups[-5:]`, which overlap below ten archetypes and
+left the screen unable to honour its own "16 analyzed" figure. They now
+PARTITION the field on the player's own average (`diff < 0` / `diff >= 0`), so
+they cannot overlap and cannot leave a gap. `find_counters` likewise returns
+every archetype that beats the deck rather than the first five — a deck with
+twelve real counters was reporting five while the style breakdown below it
+counted all twelve.
+
 ## Safety
 
 Connections open with `mode=ro`, so SQLite itself refuses writes — this process
@@ -236,3 +518,247 @@ The trend query pushes its date bound into SQL (`battle_time >= ?`). Because
 date filter and lets SQLite use the `(player_tag, player_deck_hash)` index.
 Without that bound the pair of queries took ~17 s; with it, 74 ms cold and
 under 10 ms warm.
+
+## Coach Assist (`coach.py`)
+
+The bot's duel advisor, in two windows: `!predict`/`!predict2`/`!predict3` (what
+they will bring) and `!suggestion` (what you should answer with).
+
+`duel_zone` already ports the deck-ranking half — `predict_companions`,
+`observed_duel_loadout`, `rank_companions_by_series` — for its sequence board,
+and it is imported rather than re-implemented. This module adds the parts that
+belong to the interactive commands: the OPENING distribution, the card and
+archetype odds, and the recommendation.
+
+Things to keep:
+
+* **A recommendation is stricter than a prediction.** `RECOMMEND_MAX_SHARED = 0`
+  against the predictor's 2. A predicted deck may overlap what was revealed
+  because the history is noisy; a deck we tell someone to play next cannot,
+  because they physically cannot play it.
+* **Only reconstructed series can answer "what do they open with".** A native
+  duel row is a loadout, and the bot records that its 8-card blocks are not
+  proven chronological. Under `MIN_FIRST_SERIES` ordered series the answer falls
+  back to overall play rate and the response says which via `basis`.
+* **Expected win rate walks `deck_counter`'s ladder LAZILY.** `matchup_ladder`
+  builds every rung for display; the ≥7 cluster scan is 11.6 s cold, and the
+  Coach asks for a whole grid. Stopping at the first rung with evidence took
+  `suggest` from 25.7 s to 2–3 s with an identical answer.
+* **An unscorable pairing is dropped, never scored at 50%**, and the surviving
+  probability mass is returned as `weight` so the caller can discount it.
+* **No counter-sniping.** Measured by the bot on 3,569 leak-free trials: top-1
+  accuracy 8.3% → 2.7%. Recency and per-opponent tendency lost to plain usage
+  too. `_read` narrates evidence and invents no tendency.
+* **`observed_sequences` is a record, not a ranking.** It returns the whole
+  three-deck loadouts the player has really run that CONTAIN the pasted deck,
+  grouped and counted with their win record. Matched anywhere in the loadout,
+  not anchored to game 1 — anchoring left 20 of 40 real decks showing nothing.
+  Native rows are included for membership and flagged `ordered: false`, because
+  their 8-card blocks are not proven chronological.
+* **`_history` is cached for 120 s.** Both windows are stepwise and every step
+  asks the same question of the same tag; the read is ~3–6 s uncached.
+
+## The Opponent Intelligence Engine (`ml/`)
+
+Research package plus a production boundary. Nineteen phases of it are written
+up in the root README; this is the operational half.
+
+```
+ml/
+├── evaluation/       the phase harnesses (phase2.py … phase18.py)
+├── production/       the only code the API is allowed to call
+│   ├── policy.py         seven safety rules, each with a test
+│   ├── predictor.py      predict() — the single entry point
+│   ├── calibration.py    confidence bands, versioned
+│   ├── recalibrate.py    fits new bands from REAL outcomes (offline)
+│   ├── source.py         ordered per-battle plays, cached
+│   ├── shadow.py         observation log + reconciliation
+│   └── frontier.py       the cheap readiness check
+└── artifacts/        offline-trained JSON. Production NEVER fits.
+```
+
+**Production scores; it does not train.** `policy.forbid_training()` replaces
+`fit` with a raise on every loaded model, and the change model ships as a JSON
+artifact whose `feature_names` must match at load time — a reordered feature list
+silently invalidates every weight, and refusing is the difference between a
+degraded read and a confidently wrong one.
+
+### Modes
+
+`CLASH_OIE` — `off` (default) / `shadow` / `on`.
+
+| mode | Coach payload | shadow log | UI |
+|---|---|---|---|
+| `off` | unchanged | nothing | nothing |
+| `shadow` | unchanged | records | nothing |
+| `on` | unchanged | records | fetched separately |
+
+**The Coach never waits for the engine.** It used to attach the read inline, so
+a cold spinning-disk read delayed the whole screen for a purely additive
+enhancement. Now `GET /api/analytics/coach/opponent-read/<tag>` is its own
+request, and in `shadow` the observation runs on a daemon thread purely to fill
+the log.
+
+### The shadow log, and how it was lost twice
+
+`ml/results/shadow-log.jsonl`. Salted tag hash, domain, history depth, cluster
+size, change probability, confidence band, latency, and a deck **hash** — never
+card lists, deck contents, player tags or opponent identities. The deck hash is
+what makes live accuracy measurable later without ever storing a deck.
+
+1,277 collected observations were destroyed, and the cause was not exotic:
+
+```python
+# test_ml_production.py — deleted the PRODUCTION log
+if _os.path.exists(shadow.LOG_PATH):
+    _os.remove(shadow.LOG_PATH)
+```
+
+Running the test suite wiped the experiment. Two other paths could have lost
+records silently: rotation used a **fixed `.1` name**, so a second rotation
+overwrote its own archive, and the whole write sat inside `except: pass`.
+
+Fixed, smallest mechanism first — `LOG_PATH` is overridable via `CLASH_OIE_LOG`
+so a test can never reach production, archives are timestamped and never clobber,
+a cross-process lock guards rotation, every record carries a unique `id`, and
+`write_stats()` exposes `written / errors / lockFailures / rotateFailures` so a
+failure stops being silent. **A failed lock still writes** — losing a record is
+worse than an unlocked append.
+
+`test_shadow_durability.py` covers concurrent threads, four concurrent
+*processes*, restart mid-collection, rotation, malformed trailing records, and a
+guard that scans every `test_*.py` for anyone deleting the production log again.
+
+### Reconciliation, without raw tags
+
+`verify_log()` reports records, malformed lines, duplicate ids, anchor coverage
+and version-stamp count, and marks the log CORRUPT rather than letting it
+through. `checkpoint()` refuses a population conclusion on **integrity failure**,
+**mixed version stamps**, or **fewer than 100 players with outcomes per domain**.
+
+The log holds only salted hashes and cannot reverse them, so
+`reconcile_from_tags(tags, load_plays)` takes the tag list the caller already
+has, recomputes `H(salt, tag)` in-process, and never writes a raw tag anywhere.
+A wrong tag list reconciles *nothing* rather than reconciling wrongly.
+
+Three populations are reported separately because they diverge — waiting for
+every observed player to produce an outcome waits on inactive accounts forever:
+
+```
+players observed | resolvable | with outcomes | reconciled predictions
+```
+
+### What the checkpoint reports, and why each column is there
+
+`checkpoint_report()` prints, per domain: population (observed / resolvable /
+with outcomes / reconciled), latency percentiles, degraded rate with reasons,
+**score calibration (Brier, ECE, a reliability curve by bin)**, and then per
+band its share, **outcome count**, pooled accuracy, player-macro accuracy and the
+shipped 17A claim.
+
+Two of those columns exist because of specific mistakes:
+
+**Outcome count is not observation count.** Competitive `high` fires on 94.9% of
+reads but rested on 179 real outcomes; `low` fired on 0.4% and rested on **one**.
+Only the second number licenses an accuracy claim, and a report showing share
+alone invites quoting a band built on a coin flip.
+
+**Score calibration is separate from the bands.** Band cuts decide which label a
+prediction gets; they cannot change whether the underlying score is honest. On
+the first real sample the score claimed 96.7% in the bin holding 162 of 167
+predictions and delivered 71.6% — **ECE 0.247**. No choice of thresholds repairs
+that, so the report shows it separately rather than letting a monotonic band
+table imply the model is calibrated.
+
+The metrics skip rows without a numeric score rather than raising. A checkpoint
+exists to survive bad data and say so.
+
+### Ripeness before reconciliation
+
+Reconciliation is expensive — it loads full history per player, ~15 minutes on a
+spinning volume. Most of the time it is not worth running, because the answer is
+gated on how many anchors have RIPENED, and that is answerable far more cheaply.
+
+A ripeness check asks only "what is this player's newest battle per mode",
+one batched `MAX(battle_time)` query per 60 tags. ~5 minutes against ~15, and it
+does not score anything — it only says whether the expensive run is worth doing.
+
+**The tag list matters.** Ripeness resolves hashed players by recomputing
+`H(salt, tag)` over a supplied tag list, so a wave of players collected under a
+new tag file is invisible until that file is included. Wave 2 initially reported
+zero ripened anchors for 1,084 real players purely because the checker had not
+been told about `tags_wave2.json`.
+
+**What it measured, and why it settles an argument.** The original duel cohort
+ripened at 0.11/hour after four days; wave 2, selected on RECENT duel activity
+rather than lifetime volume, ripened at roughly 13/hour. The earlier stall was
+never that outcomes are rare — those particular players had simply stopped
+duelling.
+
+### `frontier.py` — why row count is the wrong signal
+
+An outcome is a battle **strictly later** than a prediction's anchor. Between two
+checkpoint runs the database grew by **43,698 rows and produced zero outcomes**,
+because those rows were historical backfill: the count climbed while
+`MAX(battle_time)` stood still.
+
+So readiness is one indexed lookup:
+
+```sql
+SELECT MAX(battle_time) FROM battles;
+```
+
+~70 ms, against ~12 minutes for a full reconciliation. Poll it; reconcile only
+when it moves past the freeze point.
+
+An earlier version compared the frontier against the newest *anchor* and returned
+READY when reconciliation had just found zero — the newest anchor belongs to one
+player and the global frontier to another, so the comparison was already true at
+freeze time. The baseline is the frontier **as it stood when the observations
+were frozen**.
+
+### Running the bot and the site together
+
+The bot writes `battles.db`; this service reads it. They coexist fine for normal
+use — the WAL only becomes a problem when overlapping readers leave no gap for a
+TRUNCATE checkpoint (see below), and casual browsing does not do that. A bulk
+collection run does.
+
+The ideal configuration while an experiment is ripening is **bot only**: stop
+the API, let the bot own the file, and its checkpoints fold cleanly. Confirm
+with:
+
+```powershell
+try { $f=[IO.File]::Open('H:\ClashBot\dataattles.db','Open','ReadWrite','None'); $f.Close(); 'FREE' } catch { 'HELD' }
+```
+
+`HELD` while the bot is running is correct and expected — it is the writer. It
+is only a problem when something else is holding it and the WAL is climbing.
+
+## The WAL deadlock
+
+`battles.db` is WAL, and a WAL cannot be reset while any reader holds a snapshot.
+This service opens read-only, short-lived connections and closes every one of
+them — 28 call sites, all in `finally` blocks — but under load those connections
+**overlap**, so there is never a gap, and `PRAGMA wal_checkpoint(TRUNCATE)` folds
+nothing however often the bot retries. The WAL reached **5.66 GB**, at which point
+every query on both projects crawls.
+
+The fix is not fewer connections. It is a scheduled gap:
+
+```
+H:\ClashBot\data\.maintenance
+```
+
+While that file exists, `resolve_db_path()` returns `None` and every screen
+reports "no database" — a path this codebase already handles everywhere, because
+an unplugged H: does exactly the same thing. The bot creates it, checkpoints, and
+deletes it. No restart on either side.
+
+**Do not point this service at `archive.db` to dodge the problem.** Measured:
+the archive ends `20260818T184047Z` against the live database's
+`20260820T154231Z` and holds 5,744,095 rows against 6,164,558. It starts earlier,
+which is where "more history" comes from, but it is **two days stale** — the
+site would show nothing recent and the OIE experiment, whose anchors are by
+definition the newest battles, would break entirely.
+

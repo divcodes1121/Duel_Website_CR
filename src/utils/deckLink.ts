@@ -11,7 +11,24 @@ const CARDS_BY_ID = new Map(CARDS.map((c) => [c.id, c]));
  * Returns null while the deck has empty slots or an unknown card.
  */
 export function getClashRoyaleDeckLink(deck: Deck): string | null {
-  const keys = deck.slots.filter((k): k is string => k !== null);
+  return getDeckLinkFromKeys(deck.slots.filter((k): k is string => k !== null));
+}
+
+/**
+ * The same link, built from bare card keys in the order they should be written.
+ *
+ * This is what every analytics screen needs: those decks arrive from the API as
+ * a `cards: string[]` already put through `clash_data.arrange_deck`, so the
+ * three special slots are ALREADY first and in slot order — which is exactly
+ * what a copyDeck link encodes. Passing them straight through is therefore
+ * correct, and re-deriving an order here would undo the server's work (see the
+ * README on why a pasted link's order is authoritative).
+ *
+ * Returns null unless there are exactly DECK_SIZE known cards. A duel loadout
+ * is 16 or 24 cards in one row, so those rows get no link rather than a wrong
+ * one — the caller renders nothing.
+ */
+export function getDeckLinkFromKeys(keys: readonly string[]): string | null {
   if (keys.length !== DECK_SIZE) return null;
 
   const ids: number[] = [];

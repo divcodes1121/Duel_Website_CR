@@ -1,0 +1,339 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.15rem;
+}
+
+/* ---------------------------------------------------------------- the basis */
+
+/* Blue, because this is NEUTRAL INFORMATION about where the numbers come from —
+   not a warning and not a success. The five-hue system assigns that meaning
+   once; using amber here would say "something is wrong", and nothing is. */
+.basis {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  border: 1px solid var(--blue-edge, var(--border-strong));
+  background: var(--blue-wash);
+}
+
+.basisTag {
+  flex-shrink: 0;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  background: var(--accent-info-solid);
+  color: var(--on-solid);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.basisText {
+  min-width: 0;
+}
+
+.basisTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.basisBody {
+  margin: 0.3rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------ tracking state */
+
+.tracking {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 1.15rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+/* The dot is a SHAPE as well as a colour, and it changes hue with the state, so
+   the row does not rest on the wording alone. */
+.trackDot {
+  flex-shrink: 0;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: var(--text-muted);
+}
+
+.tracking[data-state='tracked'] .trackDot {
+  background: var(--success);
+}
+
+.tracking[data-state='pending'] .trackDot {
+  background: var(--accent-info);
+}
+
+.trackTitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.trackBody {
+  margin: 0.2rem 0 0;
+  font-size: 0.79rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------- stats */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+}
+
+.statValue {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.statLabel {
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+/* The denominator. At ~25 battles this is the more informative half of the
+   tile, which is why it is always present rather than a tooltip. */
+.statNote {
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ panels */
+
+.panel {
+  border-radius: 16px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--surface);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+}
+
+.panelHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.15rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.panelNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.empty {
+  margin: 0;
+  padding: 1.15rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------- decks */
+
+.deckList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deckRow {
+  display: grid;
+  /* Definite widths on the outer two columns. The card strip is the only
+     elastic track, so every row's identity block and rate land on the same
+     verticals however long a deck name runs — the rule the Deck Counter's
+     tables had to learn. */
+  grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr) 5rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1.15rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.deckRow:last-child {
+  border-bottom: none;
+}
+
+.deckName {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.deckMeta {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Eight cards on ONE line. `flex: 1 1 0` with nowrap so they take an equal
+   share of whatever the column has, rather than fixed widths that have to suit
+   the narrowest column they will ever sit in and then wrap 5 + 3. */
+.deckStrip {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.deckStrip .cardImg {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 3.6rem;
+}
+
+/* THE BOX IS THE BASE CARD'S SHAPE, and the art letterboxes inside it.
+   The PNGs are not one shape — a base card is 302x363 while evolution frames
+   run to 553x793 — so sizing by width alone makes a row's height depend on
+   whether the deck happens to field an evolution. */
+.cardImg {
+  display: block;
+  width: 100%;
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+}
+
+.deckRate {
+  text-align: right;
+}
+
+.deckRateValue {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.deckRateLabel {
+  display: block;
+  font-size: 0.66rem;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------- cards */
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.9rem, 1fr));
+  gap: 0.5rem;
+  padding: 1.15rem;
+}
+
+.cardTile {
+  position: relative;
+  display: block;
+}
+
+/* The count rides the corner of the art rather than taking a line under it —
+   at this density the grid is read as pictures. */
+.cardUse {
+  position: absolute;
+  right: 0.15rem;
+  bottom: 0.15rem;
+  min-width: 1.15rem;
+  padding: 0.05rem 0.28rem;
+  border-radius: 999px;
+  background: var(--overlay-chip);
+  color: var(--overlay-chip-on);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------- modes */
+
+.modeList {
+  margin: 0;
+  padding: 0.5rem 1.15rem 1rem;
+  list-style: none;
+}
+
+.modeRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.modeRow:last-child {
+  border-bottom: none;
+}
+
+.modeName {
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.modeCount {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .deckRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.6rem;
+  }
+
+  .deckRate {
+    text-align: left;
+  }
+}

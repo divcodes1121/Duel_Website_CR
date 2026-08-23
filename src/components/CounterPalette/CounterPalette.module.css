@@ -1,5 +1,26 @@
-/* Counter Palette — folder gallery + in-folder view. Page scaffolding
-   (nav, scroll area, deck list, add-deck) reuses DecksHome.module.css. */
+/* Counter Palette — folder gallery + in-folder view. The nav, the gallery
+   heading and the add-deck tile reuse DecksHome.module.css; a folder that is
+   OPEN is a deck screen and uses the shared DeckWorkspace instead.
+
+   The gallery keeps its own scroll container, because it is the one view here
+   with no deck open — there is nothing to put a card into, so it has no card
+   library beside it and no second column to divide. */
+
+.galleryScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem 0.75rem;
+}
+
+.galleryList {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  padding-bottom: 1rem;
+}
 
 .emptyHint {
   margin: 0;
@@ -25,10 +46,12 @@
   border: 1px solid var(--glass-border);
   overflow: hidden;
   transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
-  background: var(--glass-fill);
+  /* Nested inside the hosted-tool panel, so it goes DOWN a step rather than up
+     — see the note in DuelAnalysis.module.css. */
+  background: var(--surface-nested);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: inset 0 1px 0 var(--glass-sheen);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
 }
 
 .folderBody {
@@ -58,7 +81,8 @@
 }
 
 .folderName {
-  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-family: var(--font-display);
+  font-weight: 600;
   font-size: 1.08rem;
   letter-spacing: 0.03em;
   color: var(--text);
@@ -113,7 +137,8 @@
 }
 
 .renameInput {
-  font-family: 'Subscribe', Inter, system-ui, sans-serif;
+  font-family: var(--font-display);
+  font-weight: 600;
   font-size: 1rem;
   letter-spacing: 0.03em;
   width: 100%;

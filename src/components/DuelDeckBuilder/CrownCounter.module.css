@@ -17,6 +17,33 @@
   --crown-accent: var(--player-red);
 }
 
+/* Horizontal form, for the counter sitting above its deck rather than beside
+   it. Same control, same tokens — only the two flex axes turn. */
+.counter[data-layout='row'] {
+  flex-direction: row;
+  gap: 0.5rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  /* Hug its own content. Its parent stretches its children so the deck panel
+     fills the column, which would otherwise draw this as a full-width bar for
+     four crowns. */
+  align-self: flex-start;
+}
+
+.counter[data-layout='row'] .pips {
+  flex-direction: row;
+}
+
+.counter[data-layout='row'] .pip {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.counter[data-layout='row'] .pipZero {
+  margin-top: 0;
+  margin-left: 0.28rem;
+}
+
 /* No crowns yet: recede so it doesn't compete with the deck art. */
 .counter[data-empty='true'] {
   border-color: var(--slot-border);
@@ -28,7 +55,7 @@
   font-size: 1.15rem;
   font-weight: 850;
   line-height: 1;
-  color: var(--crown-accent);
+  color: var(--gold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -66,11 +93,12 @@
 .pip:active {
 }
 
+/* A won crown is struck GOLD — see the note on the gold ramp in index.css.
+   The seat under it takes a wash of the same metal so the pip reads as filled
+   rather than as a gold glyph floating on a grey button. */
 .pipLit {
-  color: var(--accent-gold-bright);
-  border-color: color-mix(in srgb, var(--accent-gold) 60%, var(--slot-border));
-  background: color-mix(in srgb, var(--accent-gold) 14%, var(--slot-bg));
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 14%, var(--surface-sunken));
 }
 
 /* "No crowns" — a struck-through crown, separated from the counting crowns. */

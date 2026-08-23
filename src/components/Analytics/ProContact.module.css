@@ -1,0 +1,185 @@
+/* ==========================================================================
+   "Write to me" — what Subscribe to Royal Pro actually opens
+   ==========================================================================
+   Glass, like the gate it comes from. This and ProLock are the only two places
+   the app still blurs anything: everywhere else a frosted pane refracted
+   whatever scrolled behind it and cost a compositing pass for decoration, but a
+   dialog genuinely floats over the page and the blur is what says so. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--scrim);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+}
+
+.panel {
+  position: relative;
+  width: min(30rem, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 1.8rem 1.9rem 1.5rem;
+  text-align: center;
+  border-radius: 20px;
+  border: 1px solid var(--accent-select-edge);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-float);
+  outline: none;
+}
+
+.close {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.8rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--on-solid);
+  background: var(--solid-violet);
+  border: 1px solid transparent;
+}
+
+.title {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 34ch;
+}
+
+/* --- The two ways to reach a person ------------------------------------- */
+
+.links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.7rem;
+}
+
+.link {
+  --tone: var(--accent-info);
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  text-decoration: none;
+  text-align: left;
+}
+
+.link:hover {
+  border-color: color-mix(in srgb, var(--tone) 55%, transparent);
+  background: color-mix(in srgb, var(--tone) 8%, var(--surface-sunken));
+}
+
+/* X is monochrome by brand, so its tile takes the app's ink rather than a hue
+   it does not have. Mail keeps the information blue. */
+.link[data-net='x'] {
+  --tone: var(--text);
+}
+
+.linkIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  flex-shrink: 0;
+  border-radius: 10px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent);
+}
+
+.linkText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.linkLabel {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.linkValue {
+  font-size: 0.84rem;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linkGo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  flex-shrink: 0;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.link:hover .linkGo {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+.note {
+  margin: 0.6rem 0 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}

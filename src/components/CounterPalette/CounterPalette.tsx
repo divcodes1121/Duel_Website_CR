@@ -3,8 +3,7 @@ import type { DuelDeckSet } from '../../types/deck';
 import { useBuilderStore } from '../../state/store';
 import { useThemeStore } from '../../state/themeStore';
 import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
-import { CardPickerDrawer } from '../CardPicker/CardPickerDrawer';
-import { FlightLayer } from '../FlightLayer/FlightLayer';
+import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { ProfileMenu } from '../Profile/ProfileMenu';
 import { WinConFilter, deckMatchesFilter, filterCardName } from '../WinConFilter/WinConFilter';
 import libStyles from '../Library/Library.module.css';
@@ -58,7 +57,7 @@ function FolderGallery() {
   }
 
   return (
-    <section className={homeStyles.deckList}>
+    <section className={styles.galleryList}>
       <h2 className={homeStyles.galleryTitle}>
         Archetype Folders
         <span className={homeStyles.galleryCount}>{folders.length}</span>
@@ -169,13 +168,11 @@ function FolderView({ folder }: { folder: DuelDeckSet }) {
     removePaletteDeck(deckIndex);
   }
 
-  return (
-    <section className={homeStyles.deckList}>
-      <div className={styles.folderViewHeader}>
-        <button type="button" className={libStyles.ghostButton} onClick={closePaletteFolder}>
-          ← All folders
-        </button>
-      </div>
+  const toolbar = (
+    <>
+      <button type="button" className={libStyles.ghostButton} onClick={closePaletteFolder}>
+        ← All folders
+      </button>
 
       <h2 className={homeStyles.galleryTitle}>
         {editingName ? (
@@ -183,11 +180,13 @@ function FolderView({ folder }: { folder: DuelDeckSet }) {
             className={styles.titleInput}
             value={draftName}
             autoFocus
+            aria-label="Folder name"
             onChange={(e) => setDraftName(e.target.value)}
             onBlur={commitRename}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitRename();
               if (e.key === 'Escape') {
+                e.stopPropagation();
                 setDraftName(folder.name);
                 setEditingName(false);
               }
@@ -210,35 +209,45 @@ function FolderView({ folder }: { folder: DuelDeckSet }) {
           </button>
         )}
         <span className={homeStyles.galleryCount}>
-          {winFilter.length > 0 ? `${visibleDecks.length} / ${folder.decks.length}` : folder.decks.length}
+          {winFilter.length > 0
+            ? `${visibleDecks.length} / ${folder.decks.length}`
+            : folder.decks.length}
         </span>
       </h2>
 
-      <WinConFilter selected={winFilter} onToggle={toggleWinCon} onClear={() => setWinFilter([])} />
+      <div className={homeStyles.filterSlot}>
+        <WinConFilter selected={winFilter} onToggle={toggleWinCon} onClear={() => setWinFilter([])} />
+      </div>
+    </>
+  );
 
-      {visibleDecks.map(({ deck, index }) => (
-        <DeckPanel
-          key={deck.id}
-          owner="palette"
-          deckIndex={index}
-          deck={deck}
-          onDelete={() => handleDeleteDeck(index)}
-        />
-      ))}
+  return (
+    <DeckWorkspace toolbar={toolbar}>
+      <div className={homeStyles.deckGrid}>
+        {visibleDecks.map(({ deck, index }) => (
+          <DeckPanel
+            key={deck.id}
+            owner="palette"
+            deckIndex={index}
+            deck={deck}
+            onDelete={() => handleDeleteDeck(index)}
+          />
+        ))}
+
+        {winFilter.length === 0 && (
+          <button type="button" className={homeStyles.addDeck} onClick={addPaletteDeck}>
+            <span className={homeStyles.addDeckPlus}>+</span>
+            Add deck
+          </button>
+        )}
+      </div>
 
       {winFilter.length > 0 && visibleDecks.length === 0 && (
         <p className={homeStyles.noMatches}>
           No decks with {winFilter.map(filterCardName).join(' + ')} yet.
         </p>
       )}
-
-      {winFilter.length === 0 && (
-        <button type="button" className={homeStyles.addDeck} onClick={addPaletteDeck}>
-          <span className={homeStyles.addDeckPlus}>+</span>
-          Add deck
-        </button>
-      )}
-    </section>
+    </DeckWorkspace>
   );
 }
 
@@ -315,16 +324,15 @@ export function CounterPalette({ embedded = false }: { embedded?: boolean } = {}
       </header>
       )}
 
-      <div className={homeStyles.scrollArea}>
-        {activeFolder ? <FolderView key={activeFolder.id} folder={activeFolder} /> : <FolderGallery />}
-      </div>
-
-      {/* The gallery has no deck to add cards to — the picker only makes sense inside a folder. */}
-      {activeFolder && (
-        <>
-          <CardPickerDrawer />
-          <FlightLayer />
-        </>
+      {/* A folder is a deck screen, so it gets the shared workspace and the card
+          library beside it. The gallery is not — there is no deck open to put a
+          card into — so it stays a single scrolling column. */}
+      {activeFolder ? (
+        <FolderView key={activeFolder.id} folder={activeFolder} />
+      ) : (
+        <div className={styles.galleryScroll}>
+          <FolderGallery />
+        </div>
       )}
     </div>
   );

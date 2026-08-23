@@ -1,7 +1,16 @@
-# Royal Arena
+# Dekkies
+
+*(formerly Royal Arena — see the note on the name below)*
 
 A Clash Royale companion: deck-building tools plus a player analytics suite
 driven by a local battle database of ~3.8 million battles.
+
+Three deck tools (a duel builder, a deck collection, archetype folders) and seven
+analytics screens — a global meta board, per-player deck trends, duel card
+combinations, a duel series log with a next-deck prediction, a per-card use/win
+board, a matchup engine for what beats what, and a mid-duel coach that predicts
+the opponent's next deck and ranks yours against it. The duel logic is a port of
+a Discord bot's, not a rewrite.
 
 Vite + React 18 + TypeScript, CSS Modules, zustand, hash routing (no router
 library). The analytics half is served by a small Python API reading the Discord
@@ -13,6 +22,14 @@ bot's SQLite files read-only.
 > `revamp` into `main` is what would ship it, so that is a deliberate decision
 > rather than a side effect of pushing.
 >
+> **The rename is half-applied, and that is a known inconsistency rather than a
+> decision.** The signed-in shell wears **DEKKIES** — top bar, sidebar, Dekkies
+> Pro card — but the login screen still says **Royal Arena**, and so do the
+> persistence keys (`royal-duels-builder`, `royal-duels-auth`,
+> `royal-duels-theme`, `royal-rail`). The storage keys are deliberately left
+> alone: renaming them orphans every saved deck in every browser unless a
+> migration reads the old keys first. The login screen is simply not done.
+>
 > **The analytics half does not work on Vercel.** It needs `server/app.py` and
 > ~43 GB of local SQLite that is not in this repo and never will be. Deployed,
 > those screens show "Analytics service is not running", which is the intended
@@ -20,6 +37,39 @@ bot's SQLite files read-only.
 > for the environment variables that would point it at a hosted service instead.
 
 ---
+
+---
+
+## Status — 2026-08-23
+
+| | |
+|---|---|
+| deck tools + analytics screens | shipped |
+| Export PDF (print-exact, every section) | shipped |
+| Opponent Intelligence Engine | built, **flagged off** (`CLASH_OIE=off`) |
+| OIE live validation (Phase 19C) | **first real accuracy measured** — ordering holds, calibration does not |
+| OIE wave-2 collection (Phase 19D) | **complete** — 2,476 records, 1,367 duel / 1,067 competitive players |
+| **both 19C gates reached** | competitive 267, duel **156** anchors ripened |
+| next | reconcile once the bot finishes its pass |
+| Phase 20A (matchup response) | **closed** — oracle arm loses to X's default |
+| tests | 910 Python checks, 118 vitest, `tsc -b` and `npm run build` clean |
+
+The engine is complete and cannot be reached by a user until `CLASH_OIE` is set.
+The first reconciliation against real subsequent battles is in:
+**the confidence ordering holds and the published magnitudes are wrong** —
+every band in both domains came in below its claim, competitive `high` by 19
+points and duel `high` by 32. Wave 2 is collecting the support needed to
+recalibrate properly.
+See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine).
+
+**Two operational notes before running anything:**
+
+- The website and the bot share `battles.db`. Overlapping readers stop the bot
+  folding its WAL — drop `H:\ClashBot\data\.maintenance` to make the site let
+  go, and delete it afterwards.
+- Do **not** repoint the site at `archive.db` to dodge that. It is two days
+  stale (`20260818T184047Z` vs `20260820T154231Z`) and would break the OIE
+  experiment outright.
 
 ## Table of contents
 
@@ -30,12 +80,29 @@ bot's SQLite files read-only.
 5. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
 6. [Deck rendering: the three special slots](#deck-rendering-the-three-special-slots)
 7. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
-8. [Colour: how it was chosen](#colour-how-it-was-chosen)
-9. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
-10. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
-11. [Testing and verification](#testing-and-verification)
-12. [Project layout](#project-layout)
-13. [Deliberately not done](#deliberately-not-done)
+8. [Duel Zone — the series log and the deck sequence](#duel-zone--the-series-log-and-the-deck-sequence)
+9. [Cards — one player's whole card pool](#cards--one-players-whole-card-pool)
+10. [Deck Counter — what beats what](#deck-counter--what-beats-what)
+11. [Coach Assist — mid-duel help](#coach-assist--mid-duel-help)
+12. [Colour: how it was chosen](#colour-how-it-was-chosen)
+13. [The UI pass — surfaces, selection and navigation](#the-ui-pass--surfaces-selection-and-navigation)
+14. [The display face, and the one property that decides it](#the-display-face-and-the-one-property-that-decides-it)
+15. ["Why is Evolutions 0?" — two emptinesses that shared a sentence](#why-is-evolutions-0--two-emptinesses-that-shared-a-sentence)
+16. [Duel Analysis, on the Dekkies light system](#duel-analysis-on-the-dekkies-light-system)
+17. [The Dekkies redesign — shell first](#the-dekkies-redesign--shell-first)
+18. [The deck builder — two columns instead of a drawer](#the-deck-builder--two-columns-instead-of-a-drawer)
+19. [The home screen — three real areas, three behind a gate](#the-home-screen--three-real-areas-three-behind-a-gate)
+20. [The landing screen, rebuilt](#the-landing-screen-rebuilt)
+21. [Tracking a new tag, and the live battlelog](#tracking-a-new-tag-and-the-live-battlelog)
+22. [Duel Insights](#duel-insights)
+23. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
+24. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
+25. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
+26. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
+27. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
+28. [Testing and verification](#testing-and-verification)
+29. [Project layout](#project-layout)
+30. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -56,10 +123,15 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 95 tests over the deck logic (vitest)
-python server/test_duel_combos.py # 34 checks over the duel logic, no DB needed
-python server/test_meta.py        # 23 checks over the meta board rules
-python server/test_card_art.py    # 39 checks over deck arrangement and card art
+npm run test                      # 118 tests over the deck and duel logic (vitest)
+python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
+python server/test_meta.py        # 33 checks over the meta board and card rules
+python server/test_card_art.py    # 110 checks over deck arrangement and card art
+python server/test_duel_zone.py   # 88 checks over the series and sequence rules
+python server/test_player_cards.py # 60 checks over the card board
+python server/test_deck_counter.py # 58 checks over the matchup engine
+python server/test_coach.py       # 69 checks over the Coach Assist rules
+python server/test_live_player.py # 23 checks over the live battlelog reader
 npm run lint
 npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
@@ -81,19 +153,54 @@ netstat -ano | grep LISTENING | grep -E ":517[0-9]|:8787"
 
 ## What the app is now
 
-Everything lives inside one dashboard shell (top bar, left sidebar, content
-panel). The hash drives what is open, so links and refreshes work.
+Everything lives inside one dashboard shell (top bar, content panel, and a left
+sidebar on every screen **except the landing one**). The hash drives what is
+open, so links and refreshes work.
 
 | Route | Screen |
 |---|---|
-| `#/` | Dashboard home — search, tool panels, analytics areas |
+| `#/` | Landing — hero search, analytics blocks, tool panels. No sidebar. |
 | `#/builder` | Duel deck builder (5 decks × 8 slots, cards unique across the set) |
 | `#/decks` | Deck's Home — unlimited auto-saving single decks |
 | `#/palette` | Counter Palette — archetype folders of counter decks |
 | `#/player/<tag>` | Player analysis — top decks, use/win trends |
 | `#/player/<tag>/meta` | **Top Meta Decks** — the global leaderboard (needs no tag) |
 | `#/player/<tag>/duels` | **Duel Analysis** — card combinations in duel play |
-| `#/player/<tag>/<slug>` | The remaining sidebar sections (shells, no data yet) |
+| `#/player/<tag>/duelzone` | **Duel Zone** — the Bo3/Bo5 series log and the deck sequence |
+| `#/player/<tag>/cards` | **Cards** — use rate and win rate for all 122 cards |
+| `#/player/<tag>/counter` | **Deck Counter** — player counter, deck vs deck, find counters |
+| `#/player/<tag>/coach` | **Coach Assist** — duel prediction and the next-deck suggestion |
+| `#/player/<tag>/<slug>` | Deck Analysis (a shell, no data yet) |
+
+The analytics areas are **Search Player · Top Meta Decks · Deck Analysis · Duel
+Analysis · Duel Zone · Cards · Deck Counter · Coach Assist**, each with its own
+identity hue. The open row takes a violet tint and a 3px bar — violet is
+"selected" regardless of the row's identity hue, which stays on its icon tile.
+Win Conditions, Champions and Evolutions used to sit there too and are now tabs
+on the Cards screen — they were never separate screens, only ways of looking at
+one card list.
+
+**They appear in two forms, and only one of them at a time.** On the landing
+screen they are a grid of painted blocks under the search; everywhere else they
+are the sidebar. A rail of a player's analytics areas, rendered before there is
+a player, is navigation to seven screens that all say "search for someone
+first" — so the landing screen has no rail at all, and gets the width instead.
+Opening an area or loading a tag brings it back. See
+[The landing screen, rebuilt](#the-landing-screen-rebuilt).
+
+The brand and the top bar's **Home** both return to the landing screen, from any
+screen including a hosted tool and the player view. The top bar also carries a
+tag field whose magnifier button opens the analysis for whatever is typed;
+⌘K / Ctrl-K focuses it from anywhere. Where the rail does appear it
+**collapses** via a chevron on its right edge, which reclaims 226px and spends
+it on larger elements rather than more of them; the choice persists, and is
+tracked separately from the landing screen's rail-less state so returning from a
+tool does not reserve 236px for a sidebar that never renders.
+
+**Top Meta Decks is on the home sidebar only.** It is about the whole player
+base rather than the loaded player, so once a tag is open the sidebar lists that
+player's own sections and drops it. The `/meta` route still renders, so links
+already out there keep working.
 
 The builder tools were previously separate full pages with their own nav bars;
 they now render `embedded` inside the dashboard panel, so the chrome stays put
@@ -117,12 +224,28 @@ rather than inventing a second one:
 
 | Tier | Default path | Size | Role |
 |---|---|---|---|
-| Hot | `C:\ClashBot\data\battles.db` | ~12.9 GB | rolling window, the bot writes here continuously |
-| Archive | `H:\ClashArchive\archive.db` | ~30.6 GB | every battle ever, never pruned |
-| Fallback | `~/Desktop/Clash_Bot/battles-pre-retention.db` | — | used when the C: install is absent |
+| Hot | `H:\ClashBot\data\battles.db` | ~11.5 GB | rolling window (150 days), the bot writes here continuously |
+| Archive | `H:\ClashArchive\archive.db` | ~46 GB | every battle ever, never pruned |
 
-At the time of writing that is 3,835,233 battles across 88,067 players in the
-hot tier, spanning 2026-05-01 to 2026-08-10 (102 days).
+**Both tiers moved to H: on 2026-08-17.** The hot tier was
+`C:\ClashBot\data\battles.db` until then; the bot's retention window went 60 →
+150 days, and at ~190,000 battles/day a five-month window is ~28.5M battles —
+28–41 GB for `battles` and its indexes alone, against 47 GB free on a C: that
+was already 90% full. The reasoning and the performance measurements are in
+`Clash_Bot/CLAUDE.md` → *Everything on H: — the 2026-08-17 move*.
+
+At the time of writing the hot tier holds battles spanning 2026-06-01 to
+2026-08-17 across 3,277 tracked players; the archive reaches back to 2026-05-01,
+which is the earliest anything exists anywhere (the seed source had already been
+pruned).
+
+**There is no longer a local fallback.** A `~/Desktop/Clash_Bot/battles-pre-retention.db`
+used to catch the case where the C: install was absent. The migration deleted it
+along with the old C: database, so the only `.db` left on the internal disk is
+the 4 KB schema-less stub that `_has_schema()` exists to reject. H: is a hard
+dependency now — the same conclusion the bot reached, which refuses to start
+with `THE H: DRIVE IS NOT CONNECTED` rather than let SQLite create an empty
+database and run happily against nothing.
 
 ### Three properties that are the whole reason `server/clash_data.py` exists
 
@@ -131,10 +254,11 @@ migration seam. Moving to a cloud VPS means setting these, not editing code.
 
 | Variable | Default |
 |---|---|
-| `CLASH_DB_PATH` | `C:\ClashBot\data\battles.db` |
-| `CLASH_DB_FALLBACK` | Desktop `Clash_Bot/battles-pre-retention.db` |
+| `CLASH_DB_PATH` | `H:\ClashBot\data\battles.db` |
+| `CLASH_DB_FALLBACK` | Desktop `Clash_Bot/battles-pre-retention.db` (deleted by the migration — set this if you keep a local copy) |
 | `CLASH_ARCHIVE_DB_PATH` | `H:\ClashArchive\archive.db` |
 | `CLASH_API_HOST` / `CLASH_API_PORT` | `127.0.0.1` / `8787` |
+| `CLASH_META_REFRESH` / `CLASH_COUNTER_REFRESH` | `1800` / `3600` seconds between snapshot rebuilds |
 | `CLASH_API_URL` | retargets the Vite proxy |
 | `VITE_ANALYTICS_BASE` | points a built bundle straight at a remote host |
 
@@ -143,14 +267,25 @@ the client module change when the service moves.
 
 **2. The archive is never assumed present.** `archive_available()` walks up to
 the nearest existing ancestor directory and tests it, with a 30-second cache so
-an unplug/replug is noticed without a restart. If drive H: is not connected,
-every query answers from the hot tier alone, nothing raises, nothing 500s, and
-the page footer says which tiers answered. This was an explicit requirement:
-*"make sure if the harddisk is not connected then it takes from local desktop
-and doesn't break."*
+an unplug/replug is noticed without a restart. It is also only *opened* when the
+requested window reaches further back than the hot tier holds — so normally the
+46 GB file is not touched at all.
 
-The archive is also only *opened* when the requested window reaches further back
-than the hot tier holds — so normally the 30 GB file is not touched at all.
+**The 2026-08-17 move broke half of this, and it is worth stating plainly.** The
+original requirement was *"make sure if the harddisk is not connected then it
+takes from local desktop and doesn't break"*, and it was satisfiable while the
+hot tier lived on C:. Both tiers are on H: now, and the migration deleted the
+old C: database and the desktop pre-retention copy, so there is nothing local
+left to fall back to.
+
+What survives is the second half: it still does not break. `resolve_db_path()`
+returns `None`, the API answers with an explicit "no database", and the screens
+show that state rather than raising or 500-ing. What is gone is the first half —
+a detached drive now means no data at all, not older data. If the fallback
+behaviour is wanted back it needs a real local copy to fall back to;
+`deploy/backup_db.py` on the bot side writes a verified one to the internal
+disk, and pointing `CLASH_DB_FALLBACK` at it would restore the original
+guarantee.
 
 **3. Connections are strictly read-only** (`mode=ro` URI). SQLite itself refuses
 writes, so a bug here can never corrupt the bot's data even by mistake. WAL mode
@@ -187,9 +322,20 @@ to it exactly the way it will talk to a hosted API later.
 | `GET /api/analytics/coverage?tag=` | earliest/latest stored day, globally and per player |
 | `GET /api/analytics/player/<tag>` | summary, top decks, per-day trends |
 | `GET /api/analytics/duels/<tag>` | card combinations in duel play |
+| `GET /api/analytics/duelzone/<tag>` | the duel series log, and the deck sequence |
+| `GET /api/analytics/cards/<tag>` | use/win rate per card, and movement against last window |
+| `GET /api/analytics/counter/<tag>` | which archetypes beat this player |
+| `GET /api/analytics/deck?cards=&wild=` | how one pasted deck draws — slot order + art |
+| `GET /api/analytics/matchup?a=&b=` | head-to-head for two pasted decks |
+| `GET /api/analytics/counters?deck=` | what beats a pasted deck |
+| `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
+| `GET /api/analytics/meta/cards` | global use/win rate per card, split by form |
+| `GET /api/analytics/live/<tag>` | the live Clash Royale battlelog, analysed |
+| `GET /api/analytics/track/<tag>` | enrol a searched tag; report its collection state |
 
-Both report routes take the same window: `?days=N` or `?from=&to=` as
-`YYYY-MM-DD`.
+Every per-player route takes the same window: `?days=N`, or `?from=&to=` as
+`YYYY-MM-DD`. `duelzone` also takes `?limit=` (uncapped by default) and `cards`
+takes `?mode=all|ranked|duel|tournament`.
 
 **`days` counts back from the last battle stored for that player, not from
 today.** A player who stopped playing a month ago would otherwise be handed an
@@ -284,8 +430,11 @@ A deck's first three positions are special, in the numbering a player sees:
 | 2 | hero, champion, or an ordinary card — never an evolution |
 | 3 | hero, evolution or champion (the "wild" slot) |
 
-which caps a deck at **two** evolutions. A champion has neither an evolution nor
-a hero form, so wherever one is legal it simply draws as itself.
+so a deck can wear at most **two evolutions**, at most **two heroes**, and at
+most **three marks in total** — one per slot. Those are three separate limits
+and all three are needed: two of each is individually legal, but slot 3 is the
+single seat the second of each competes for. A champion has neither an evolution
+nor a hero form, so wherever one is legal it simply draws as itself.
 
 `arrange_deck` fills as many special slots as it can. The four cards that own
 *both* forms — knight, valkyrie, musketeer, wizard — take an evolution slot when
@@ -320,22 +469,27 @@ describing one.
 | `Clash_Bot/CLAUDE.md:720` (the docs for that code) | "slots 1-2 render evolution art; slot 3 champion/hero" |
 
 Measured here over ~8,000 recent marked battles: slot 1 evolution **92%**, slot 2
-hero **70%** / evolution 30%, slot 3 evolution **83%**. So the bot's renderer
-would draw hero art in a position that is 92% evolution, and its docs describe a
-third arrangement again.
+hero **70%** / evolution 30%, slot 3 evolution **83%**, and 14% of single battles
+carrying three evolution marks — which is one more than the game allows.
 
-Reading the raw majority is not an option either: 14% of single battles carry
-three evolution marks, which put three evolution frames on decks that cannot
-have three.
+**Every one of those numbers came from reading the `art` string, and they are
+artefacts of that.** Re-measured by level ([below](#the-level-says-which-form-it-is-the-art-string-does-not))
+the ambiguity is gone: level 1 never appears in slot 2, level 2 never appears in
+slot 1, and no battle carries three evolutions. The disagreement between the
+bot's three sources was real, but it was a disagreement about a derived field —
+the raw one underneath it says the rule above, exactly.
 
-So the rule above is asserted, and this table is why.
+The rule is still *asserted* rather than derived, because it is the game's rule
+and should not depend on whichever sample we happen to hold. It now has the
+measurement behind it as well.
 
 ### Which art a card wears is measured
 
 Never guessed from capability flags. `card_art_profile` reads what each card is
-actually brought as across the database — all four both-form cards come back
-**100% evolution**. `player_evo` stores `[card_key, level, art]` with `art`
-already resolved by the bot from the payload's icon URLs.
+actually brought as across the database. Read by level (below), the four
+both-form cards split — knight **75.7% hero**, wizard **71.5%**, valkyrie
+**61.9%**, musketeer **36.1%** — while the other twelve hero-capable cards come
+back 100% hero, because they have no evolution to be confused with.
 
 Where the payload says nothing — it only covers battles from 2026-08-05, ~29% of
 the database — the slots are read positionally and the deck is flagged
@@ -351,6 +505,244 @@ as a caveat.
 An earlier pass here concluded the positional reading was invalid, on a
 measurement that checked only the first *two* slots. It was the measurement that
 was wrong — all three are special.
+
+### The level says which form it is. The `art` string does not
+
+This is the root cause of every "the hero is missing" report, and it had been
+wrong since the first line of art code was written.
+
+`player_evo` stores `[card_key, level, art]`. Every reader in this project used
+`art`, because it looks like the answer — the bot resolves it from the payload's
+icon URLs, and it holds the literal strings `'evolution'` and `'hero'`. It is a
+lossy derivation. Measured over 60,000 recent battles carrying marks, 162,919
+marks:
+
+| what the row says | | |
+|---|---:|---|
+| level 1, `art` "evolution" | 99,423 | 61.0% — correct |
+| level 2, `art` "hero" | 37,231 | 22.9% — correct |
+| level 2, `art` **"evolution"** | 14,960 | **9.2% — a hero drawn as an evolution** |
+| level 1, `art` **"unknown"** | 11,305 | **6.9% — an evolution thrown away** |
+
+**16.1% of all marks were wrong or discarded.**
+
+The symptom the user saw, reported deck by deck: *"the Giant Skeleton deck,
+Wizard is in the second slot, still no hero is discovered for it"*, *"X-Bow deck
+— Knight is hero, evo Archers and evo Tesla"*, *"Lumber Loon deck — hero Knight,
+evo Baby Drag and evo Inferno Drag, can't see that."* All three were right, and
+the raw rows say so plainly once you look at the level:
+
+```
+X-Bow Tesla, 400 sampled battles, every one identical:
+  [['tesla', 1, 'evolution'], ['knight', 2, 'evolution'], ['archers', 1, 'evolution']]
+  card order: ['tesla', 'knight', 'archers', 'skeletons', ...]
+```
+
+Reading `art`, that is **three evolutions** in a deck that can field two — so
+whichever two survived the cap, the hero was never one of them, and slot 2 got
+filled with an arbitrary leftover (The Log). Reading `level`, it is Tesla
+evolution / **Knight hero** / Archers evolution, which is exactly the deck.
+
+Two independent checks say the level is exact:
+
+* **It is the slot.** Of level-1 marks, 99.8% sit at index 0 or 2 — the two
+  evolution slots — and **none** at index 1. Of level-2 marks, 87.1% sit at
+  index 1 and 12.7% at index 2 (the wild slot), and **none** at index 0. The two
+  levels are perfectly disjoint over the positions each is allowed to occupy.
+* **It matches the cards.** Level 1 covers exactly the 42 cards `cardMeta` says
+  can evolve, level 2 exactly the 16 it says can be a hero. 162,919 marks, zero
+  exceptions in either direction.
+
+It also agrees with the bot, which had said so all along: `evolution_marks`
+documents that `evolutionLevel` takes values 1 and 2 and that **level 2 is
+served hero art**. The field was in the tuple the whole time, one index away
+from the one being read.
+
+`clash_data.mark_variant` is now the only place this decision is made — four
+readers had their own copy of `if m[2] in ("evolution", "hero")` and all four
+were wrong the same way, which is the argument for it being a function. It
+consults `art` only when the level is neither 1 nor 2, so a payload that stops
+carrying a usable level degrades to the old reading rather than to nothing.
+
+**How it hid for so long.** The measurement that blessed the old reading is
+still quoted a few paragraphs up in the source: all four both-form cards
+"fielded as an EVOLUTION 100% of the time", knight 586/586, valkyrie 867/867.
+A *unanimous* answer to a question that is genuinely two-sided was the tell, and
+it was read as confirmation instead. Re-measured by level, three of the four are
+mostly the opposite. Unanimity is evidence about your reading before it is
+evidence about the world.
+
+### A pasted link's order IS the answer
+
+Reported from a real paste: a Goblin Barrel / Valkyrie / Princess list came back
+with **Goblins in the hero slot** and Valkyrie drawn as an evolution. No card was
+missing and none was wrong — the deck simply rendered as a different deck.
+
+| slot | the game draws | we drew |
+|---|---|---|
+| 1 | Goblin Barrel — evolution | Goblin Barrel — evolution |
+| 2 | **Valkyrie — hero** | **Goblins — hero** |
+| 3 | **Princess — evolution** | **Valkyrie — evolution** |
+
+The cause is `arrange_deck` doing its job too well. It rebuilds the three
+special slots from what each card is *capable* of, which is right for a stored
+deck whose order cannot be trusted — but a **copyDeck link writes the three
+special slots first, in slot order**. The link already said Goblin Barrel /
+Valkyrie / Princess; the rebuild threw that away and preferred Goblins, because
+Goblins *can* be a hero and nothing told it otherwise.
+
+`trust_order=True` reads the art off the positions instead. Same link, and the
+render now matches the game card for card.
+
+**Slot 3 is the one a link cannot settle.** Four cards — knight, valkyrie,
+musketeer, wizard — have both forms, so a link that puts one in the wild slot is
+genuinely ambiguous: nothing in the data can say which was meant. Rather than
+guess, the paste box offers the choice, as two real cards so the reader is
+comparing the pictures they are being asked about. It appears only when the card
+actually has both forms. This is the same decision the duel builder already
+makes on its own wild slot, which is why it looks familiar.
+
+**And the link outranks pooled marks.** That was the second half of the same
+bug, reported separately: a Battle Ram / Wizard / Elite Barbarians link came
+back with Elite Barbarians in the *middle* and Wizard third. The deck is on the
+meta board, so `arrange_deck` got its marks — and those say Battle Ram and
+Wizard are both evolutions, which is what *other people's* copies of those eight
+cards were fielded as. Two evolutions and no hero leaves slot 2 to be filled
+from the rest, so the order collapsed.
+
+Marks are aggregated across everyone running the list; the link is the deck the
+person in front of you built. When they disagree the link wins. Stored decks —
+the meta board, the player screens, the Duel Zone — still defer to what was
+observed, because there is no link there to trust.
+
+The slot-3 override applies **on every path**, not just this one. It first
+shipped inside the trust-order branch alone, so it worked on a deck nobody had
+played and did nothing on a deck the board had marks for — which is most of what
+anyone pastes. From the outside that is one button that sometimes does nothing.
+
+### Observation beats inference, and for a while it did not
+
+`arrange_deck(cards, marks)` took the observed marks as its second argument and
+**never read them**. Every caller was already passing real evidence —
+`meta.py` its aggregated `_evo_art` map, `duel_zone.py` the battle's own
+`player_evo`, the player screens their per-deck lookup — and the function
+derived the whole arrangement from what the cards were *capable* of, then
+maximised: two evolutions and a hero wherever the cards allowed it.
+
+The symptom was reported as *"I can see similar decks for all the archetypes"*,
+and that is exactly what it was. Measured on the live meta board:
+
+| | rendered | actually observed |
+|---|---|---|
+| decks drawing 3 special slots | 43 / 50 | 28 / 50 |
+| decks drawing a hero | 43 / 50 | 25 / 50 |
+| renderings contradicting the evidence | **19 / 50** | — |
+
+The mechanism is one card. **Barbarian Barrel can be a hero and sits in eight of
+the seventeen archetype decks**, so it was promoted into the hero slot in all
+eight — eight different decks with the same gold card second. Across the whole
+board it was drawn as the hero **10 times**. Since the arrangement also *orders*
+the deck, every archetype row opened with the identical frame signature:
+
+```
+before   all 17 archetypes:  [evolution] [hero] [evolution]
+after    E.E ×7   EHE ×8   E.. ×1   EH. ×1
+```
+
+The fix is that the marks decide when they exist. A card nobody was seen
+fielding specially now stays plain however capable it is; the game's own cap
+(one mark per slot: two evolutions, two heroes, three in total) still applies
+on top, because a pooled sample can
+report three evolutions for a cluster that no single player fields. Barbarian
+Barrel is now the hero in 3 archetypes rather than 8, and in those three the
+payload says so.
+
+Inference is still there and still correct — it is what a deck with no record
+gets, and every caller flags it with `artInferred` so a guess never passes for
+an observation. **A pasted deck reaches for evidence first too**: `deck_hash` is
+just the sorted card list, so if the meta board already covers the deck its
+observed marks are a dictionary hit away, and a pasted meta deck now renders
+identically to the same deck in the row beneath it.
+
+The two paths are pinned separately in `test_card_art.py` — thirteen checks on
+the observed path including idempotence, the caps, and the rule that an
+unobserved staple stays plain.
+
+### Slot 3 takes either form, and the cap said otherwise
+
+Reported immediately after the level fix landed, on a Lava Hound deck whose
+slot-3 hero Valkyrie still drew plain: *"why is it fixing one breaking
+another?"* — a fair question, and the answer is that the first cap encoded the
+wrong rule.
+
+It read "two evolutions and **one** hero", treating slot 3 as an evolution slot.
+Slot 3 takes **either**. Measured over 60,000 battles by what the three slots
+actually held:
+
+| slot 1 / slot 2 / slot 3 | share |
+|---|---:|
+| evolution / hero / evolution | 62.96% |
+| evolution / — / evolution | 21.60% |
+| **evolution / hero / hero** | **9.25%** |
+| evolution / hero / — | 2.88% |
+| evolution / — / hero | 1.57% |
+
+Two heroes is the third-commonest loadout there is — 5,540 battles — and capping
+at one made every one of them undrawable. The real constraint is one mark per
+slot: **two evolutions, two heroes, three in total**. `cap_special_marks` now
+gives slots 1 and 2 to the strongest of each form outright and lets whatever is
+left compete for slot 3, and `arrange_deck` will put a second hero there.
+
+**And the slot a mark was seen in is recorded, so it is used.** Two marks of the
+same form cannot be ordered any other way — the deck came out
+zap / Valkyrie / Berserker when the player's own sixteen battles say
+zap / **Berserker** / Valkyrie, fourteen of them unanimous on the middle card.
+The art lookups already read those rows; they were reading past
+`player_card_keys`. They now return `{card: slot}` alongside the variant and
+`arrange_deck` takes it as `slot_of=`. It only ever reorders cards the marks
+already chose — it cannot make a card special — and it moved the special slots
+on **15 of 50** meta decks without changing a single mark.
+
+A pasted link passes no `slot_of` and needs none: its card codes *are* the slot
+order, and `trust_order=True` already says so.
+
+### A fifth of the marks never reached the renderer
+
+The second defect behind the same report, and independent of the first: even
+correctly-read marks were being deleted before anything could draw them.
+
+`arrange_deck` was innocent here too.
+Both art lookups (`meta._evo_art`, `clash_data.deck_art`) capped their result by
+POSITION: a mark was dropped unless the card sat in the first three entries of
+the deck's stored order. The cap itself is right — one mark per slot — but the
+*test* was wrong.
+
+`decks.cards` is genuine payload order, not a sorted list (measured: **0 of
+20,000** rows are merely alphabetical). But it is **one** player's arrangement,
+and the marks are pooled over everybody who played those eight cards. A deck's
+habitual hero sitting eighth in the representative's copy is not evidence that
+it is not the hero; it is evidence that the representative is not the majority.
+
+Measured on the live board by running the art pass twice, once with the filter
+and once without:
+
+| | |
+|---|---|
+| marks discarded by the positional filter | **23** |
+| decks affected | **21 / 50** |
+| what was lost | Berserker as a hero ×5, Tesla ×2 and Knight ×2 as evolutions, a Lumberjack evolution, Battle Ram, Zap, Ice Golem… |
+
+So the cap moved to `clash_data.cap_special_marks`, which enforces the same
+limit — two evolutions, two heroes, three in total — on the **evidence**
+instead: the most-observed
+marks win, ties break on the card key so identical data always renders
+identically. Position is decided where positions are actually decided, in
+`arrange_deck`, which then lifts a late-ordered hero into slot 2 itself.
+
+`_evo_art` still applies `ART_MIN_SHARE` first, because a cluster row pools many
+players' choices and a mark seen in under a quarter of sampled battles is not
+that deck's habit. Nine checks in `test_card_art.py` pin the cap, the ranking,
+the tie-break, and the regression itself.
 
 ---
 
@@ -459,6 +851,852 @@ unchanged, applied **independently** per tab. A pair may appear under two tabs.
 
 ---
 
+## Duel Zone — the series log and the deck sequence
+
+`server/duel_zone.py`, two windows over the same duels: **Recent Duels** (the
+series log behind the bot's `!duels`) and **Deck Sequence** (the `!duelspdf`
+"Deck Sequence Prediction" page). Both are ports for the same reason
+`duel_combos.py` is — a second implementation would eventually describe a
+different set of duels from `!duels` for the same player, silently.
+
+**Both halves come from ONE database read.** `duel_combos.read_duel_rows` is
+shared, so the series on screen and the sequence computed from them can never
+disagree about which duels exist.
+
+### What a series is
+
+Two sources, merged the way `DuelEngine.extract` merges them:
+
+* a **native** duel is one stored row carrying the whole loadout (16 or 24
+  cards), so its decks are *read* rather than inferred;
+* **friendly practice** stores one row per game, so the series is rebuilt with
+  the measured `duel_split` rules — >30 min gap closes, card reuse closes, a 2-0
+  arms exactly one dead rubber, a 2-1 does **not** close.
+
+`bo3` vs `bo5` is decided **only by a 4th game**. A Bo3 decided 2-0 whose dead
+third game gets played out reaches 3-0 in three games and is still a Bo3.
+
+### The one place this diverges from the bot, and the measurement behind it
+
+The bot's rule is that **any** repeated card ends a series, which is right in
+principle — a duel loadout's three decks share no cards at all. Applied to real
+practice data it cuts too often, because practice decks brush against each other
+constantly (The Log, Zap, Skeletons). Eight consecutive games against one
+opponent, decks overlapping by 1-4 cards and never by six, came out as 3 / 3 / 2
+with a two-game **1-1** tail — and a duel cannot end 1-1.
+
+The obvious fix, allowing a shared card or two, is wrong. Measured over five
+players:
+
+| shared cards to close | coverage | series longer than 3 games |
+|---|---|---|
+| **1 — the bot's rule, kept** | 66.0% | **1.1%** |
+| 2 | 68.9% | 4.3% |
+| 3 | 70.4% | 9.9% |
+| 6 (a whole deck) | 71.7% | 25.3% |
+
+A genuine Bo5 is roughly 0.3% of this data, so anything past 1 buys a few points
+of coverage by **inventing Bo5s**. The rule is right; what it needed was a
+tidy-up of the fragments it leaves behind, so `_merge_unfinished` runs after it:
+
+* a series where neither side reached two wins did not finish, so it is folded
+  back into the series it was cut from — same opponent, inside the 30-minute
+  gap, and only while the total still fits five games;
+* one that cannot be folded anywhere is **dropped**, exactly as `_split_series`
+  already drops a lone game. Two friendly games that ended 1-1 are not a duel.
+
+On that eight-game set this gives a 1-2 Bo3 followed by a 2-3 Bo5 — two complete
+duels, which is what the games were. Across three players it took series ending
+on an impossible scoreline from 6.6% to zero.
+
+Both screens go through `duel_combos.split_chunk`, so the pair board and the
+Duel Zone cannot disagree about where one duel ends and the next begins.
+
+**A native row shows no scoreline, on purpose.** It stores the *duel's* result,
+not each game's, so the screen prints the loadout and the overall outcome and
+leaves the score blank. `duel_score_caption(None, None, n)` is `""` for exactly
+this case, which is distinct from `"NO RESULT"` — a real scoreless tie.
+
+While porting, `_split_series` was corrected to track **both sides'** card reuse
+as `duel_split.split` does. The website's copy only tracked the player's,
+because it had never read the opponent's deck; the Duel Zone needs it anyway.
+
+### Why the sequence looks like that
+
+Each step exists because the step before it was not enough:
+
+1. cluster every duel deck at 6-of-8 shared cards, so variants of one deck are
+   one opener rather than six;
+2. drop one-offs, and drop openers that near-duplicate an earlier one;
+3. rank by usage — the deck played 30 times is the one to prepare for;
+4. per opener, take the **observed** loadout when a real 3-game series shows one
+   (~85% of rows) and only otherwise predict companions.
+
+A predicted pair must be **card-disjoint** from the opener and from each other.
+Before that rule existed in the bot, 76% of its rendered triples were
+impossible — two decks sharing cards, sometimes the opener predicted as its own
+companion. Fewer than two companions is a real answer and is shown as one.
+
+Companions are ranked by **co-occurrence with the opener**, weighted 3× a play
+anywhere else. Ranking by raw play count makes every row identical (the
+player's two most-played decks); measured leak-free on 839 real 3-game series,
+co-occurrence took "names at least one true companion" from 16.6% to 23.6% and
+repeated rows from 63% to 8%. The count is printed, because the ranking is
+driven by it and the list otherwise looks mis-sorted.
+
+The response still carries whether a row was observed or predicted, but the UI
+does not badge it — by request, the rows show the decks and nothing else.
+
+**There are no display caps.** The bot has three — 40 openers clustered, 27
+rows, four pages — and every one is PDF page geometry; its own comment records
+the layout engine refusing fourteen tiles because four rows need 552px against a
+540px band. A scrolling panel has no pages, so the date window decides how much
+there is and all of it is drawn: every duel in the window, and every opener.
+100 duels is ~187 kB of JSON and ~0.2 s to build. The bot's `count >= 2` filter
+on openers is dropped for the same reason — the play count is printed beside
+each row, so a deck brought once can be shown and judged rather than hidden.
+Near-duplicate openers are still merged, which is one deck said once rather than
+one deck hidden.
+
+The window is the six presets plus a **custom From/To range** next to them,
+driven by the shared `useDateWindow` hook so the season control and the presets
+cannot disagree about which window is live.
+
+### A duel row opens onto the deck you were facing
+
+Each game in **Recent Duels** expands to show the opponent's eight cards. The
+row named their archetype and stopped there, which is the wrong half of the
+information: a duel forbids card reuse across the three decks, so what they
+spent in game 1 is what they cannot bring in game 2, and that is a card list
+rather than a label.
+
+Their deck goes through `_deck_view` exactly as the player's does —
+`opponent_evo` carries the same `[card, level, art]` triples as `player_evo`, so
+one function resolves both sides and the two strips in a row are comparable. The
+opponent's strip is aligned to the same vertical as the player's above it, which
+needs the identity column to be a fixed track: a flexible one resolves against
+whatever else is in *its* row, and the row has three trailing columns the
+expanded panel does not.
+
+**Only reconstructed series expand.** A native duel row is one stored row
+carrying the loadout and the series result — it has no per-game opponent at all,
+so those rows stay inert rather than opening onto an empty panel. Measured on a
+96-duel player: 95 expandable games, 97 with nothing to show.
+
+The panel paints its own surface and takes a maroon leading edge. The series
+card behind it is washed green on a win and red on a loss, and an expanded panel
+inheriting that framed the opponent's deck in green precisely when *you* had
+won, which says the wrong thing about whose deck it is.
+
+### Both windows draw a deck the same way
+
+Every deck on both windows goes through `clash_data.arrange_deck`, which owns
+the slot ORDER and the evolution/hero art together. The sequence board first
+shipped without it — its decks come out of the clusterer rather than off a row —
+so the same deck rendered in a different order and with no art at all next to
+its own entry in the series log.
+
+Marks are looked up by deck signature out of the rows the report already read,
+so an observed evolution still beats an inferred one; a deck with no marks in
+`player_evo` is flagged `artInferred` exactly as elsewhere.
+
+### Deck names are qualified
+
+Two openers both reading "Mortar" is the ambiguity `meta._deck_name` was written
+for, so that rule moved to `clash_data.deck_name` and both screens use it: the
+archetype plus the priciest non-win-condition card, giving "Mortar Rascals" and
+"Mortar Lightning". `_archetype_title` also moved there and now consults the
+bot's `ARCHETYPE_DISPLAY` map, so "xbow" reads as X-Bow and "bait" as Log Bait
+instead of being title-cased. **This renamed rows on the meta board too** —
+"Hog Musketeer" is now "Hog Rider Musketeer".
+
+---
+
+## Cards — one player's whole card pool
+
+`server/player_cards.py` behind `#/player/<tag>/cards`. Use rate and win rate
+for every card over a date window, plus how each moved against the window
+before it.
+
+**It scans `battles`, not `player_card_agg`.** The rollup exists and is one row
+per card, but it is lifetime-only — no date column, no game mode. Read from it,
+the date control and the mode control would both be decoration, which is the
+same failure the deck rows had before they moved onto `battles`. The per-player
+index makes the scan ~50 ms, and the previous window costs one more.
+
+**All 122 cards come back, including ones the player has never touched.**
+"Which cards do they not play?" is a real question about a card board; a zero
+row answers it, and dropping them would quietly turn the board into "cards they
+play" while the label says otherwise. The screen hides them by default behind a
+checkbox.
+
+**A win rate is only ranked once there is evidence behind it.** The floor is
+`duel_combos.CONF_MIN_GAMES` (8) — the pair board's, not a new number — and it
+exists for the same reason: without it the top of a "best cards" board is
+whatever was played once and won once, and Rage at 100% outranks a card with a
+real record. Below the floor a card still appears, marked **thin**, and the
+Wilson tier still refuses to tier it.
+
+**The grid sorts by use rate, descending, by default.** It used to open on win
+rate, which put that caveat at the top of the screen: even with the floor doing
+its job, the highest win rates skew hard toward the thinnest records, so the
+first thing you saw was a list of cards this player has barely touched. Use rate
+is a plain count, needs no floor, and answers the question a card board is
+opened to answer. Win rate is one select away and still ranks evidence-first —
+an unranked card never outranks a ranked one however high its percentage reads.
+
+**Movement is against the equally long window immediately before this one.**
+"Up 1.3 points" has to be against something. A card the player did not play last
+window gets no win-rate delta at all rather than a fall to zero — the comparison
+cannot be made, which is different from being made and coming out flat.
+
+**The tile is deliberately small.** 122 cards want a dense grid, so a tile
+carries the art, the name and the two rates on ONE line — use rate in the data
+blue, win rate in the data green, each printing its own figure. Those are the
+app's CVD-validated categorical pair, the same two the duel-analysis meters use;
+violet is not an option because it means "selected" everywhere else. The battle
+count, both deltas, the Wilson interval and the per-form shares moved into the
+tile's tooltip, which is what pays for twelve cards per row instead of seven.
+The elixir cost was a badge over the corner of the art and was **removed on
+request** — at this density the grid is read as pictures, and the cost is in the
+tooltip. The elixir *filter* and *sort* are untouched; it was the printed digit
+that was noise.
+
+### An evolved card is a different card, and it is scored as one
+
+The brief: *"the normal Skeletons will have a different use rate and win rate
+than evo Skeletons."* Correct, and the board could not say so — every figure was
+the card's whole record across all three of its forms.
+
+Three things had to be built for it.
+
+**The Evolutions tab was drawing base art, and there was no Heroes tab at all.**
+So the evolution and hero artwork the app ships — 42 and 16 PNGs, matching the
+`can_evolve` / `can_be_hero` metadata exactly, checked — appeared nowhere on the
+one screen actually about those forms. The tab now decides the art. Measured at
+32×32 in linear RGB, no form is close to another: the nearest pair of the 58
+differs by **45.5 of 255** mean channel difference, and the four cards with all
+three forms (knight, valkyrie, musketeer, wizard) separate by 47.7–53.2. A
+`test_card_art.py` check now fails if any special PNG is ever a byte-copy of its
+base card.
+
+**Evolved and hero were being added into one counter.** `_evo_marks` resolves
+each mark to `'evolution'` or `'hero'` and the card board summed both into
+`evoRate`. On real data that produced eleven cards reporting an evolution rate —
+Berserker at **76.8% "evolved"** — where every one of the eleven has no
+evolution at all. They are two forms, counted separately now.
+
+**A per-form rate can only come from the battles that recorded the form.**
+`player_evo` is the only column that says which form was fielded, and on the
+test account it covers **350 of 2,268 battles (15.4%)**, all inside an 8-day
+window against a ~50-day history. So the split is computed over that subset
+alone, and *both* sides of every comparison come from it: within a marked row, a
+card carrying no mark was fielded plain, which is the only place "plain" can be
+counted from. Outside one the form is unknown, which is not the same as plain.
+
+That subset is small, and the screen says so rather than letting a form's win
+rate pass for the same kind of number as a card's. On the test account 22 cards
+have been seen in both a special form and a plain one, and 6 clear the 8-battle
+floor on both sides — which is enough to answer the question that prompted this:
+
+| | plain | evolved |
+|---|---|---|
+| Knight | 60.0% (20) | **42.9%** (14) |
+| Cannon | 62.1% (66) | 50.0% (10) |
+| Tesla | 46.2% (39) | 48.6% (37) |
+| Princess | 41.7% (12) | 50.0% (30) |
+
+A form tile prints **the same two figures as every other tab** — use rate and
+win rate — and nothing else. It briefly carried a third line: first a delta
+("−6.1 vs plain"), then the plain card's own percentage. Both went, and the
+delta first, for the better reason: a difference cannot be sanity-checked on its
+own, since 6.1 points off 54% and off 12% are not the same claim. The percentage
+that replaced it was honest but still a third number competing with the two
+being compared, on a 6.1rem tile. The plain record lives in the tooltip, where
+it answers *against what?* for the reader who asks. The evidence floor applies
+per form, so a form with four battles is marked thin exactly as a card would be,
+and the use rate is a share of the form-recording battles, which the footer
+states is not comparable with the other tabs'.
+
+**Every filter is client-side.** Card type, elixir, rarity, win-condition,
+champion and evolution all come from `cards.json` + `cardMeta.json`, which the
+browser already has for the art; the server sends only counts. Shipping the
+metadata from the server too would be a second copy, free to disagree with the
+one drawing the cards.
+
+**Win Conditions, Champions and Evolutions are no longer sidebar sections.**
+They were never separate screens — each is a way of looking at the same card
+list — so they are tabs here, beside All / Troops / Buildings / Spells / Heroes.
+Three shells that each rendered this board with one filter pre-applied would
+have been three places to keep in step.
+
+**On a form tab, the figures follow the form — the filter does not.** The sort
+and the bar ruler read the same numbers the tile prints, otherwise "sort by win
+rate" would order the grid by a figure that is nowhere on it. But "hide
+unplayed" means *never played the card*, not *never recorded in this form*.
+
+That distinction was got wrong first and it showed: making it the latter hid ten
+of the forty-two evolution cards, Elite Barbarians among them — 56 battles on
+the card, zero of them marked as evolved, so a tab whose entire job is to list
+the evolutions dropped it. The reason it is wrong is coverage. `player_evo`
+records the form for about a quarter of battles, so "no evolved record" mostly
+means *not observed*, not *never evolved*; absence of a mark is not evidence of
+absence. All 42 evolutions and all 16 heroes are listed, and a card with no
+per-form record says "no evolution data" on its tile — the honest version of
+the same fact.
+
+---
+
+## Deck Counter — what beats what
+
+`server/deck_counter.py` behind `#/player/<tag>/counter`, in three tabs: what
+beats this **player**, a **deck-vs-deck** head-to-head, and **find counters**
+for a pasted deck. The shape of all three is a consequence of what the data
+turned out to support, so the measurements come first.
+
+### The number follows the cards — three ways to get one
+
+Deck vs **exact deck** is genuinely unanswerable. `pair_matchup_agg` holds
+1,979,822 pairings and they are almost all singletons:
+
+| games behind a pairing | pairings | share |
+|---|---|---|
+| ≥1 | 1,979,822 | 100% |
+| ≥2 | 108,670 | 5.49% |
+| ≥4 | 30,263 | 1.53% |
+| **≥8** (the evidence floor) | 11,633 | **0.59%** |
+
+A screen promising "62.4% over 284 battles" for two *specific lists* would be
+inventing the figure for 99.4% of inputs.
+
+**An earlier pass drew the right measurement and applied it too widely**, and
+answered everything at archetype level. That made the screen ignore the cards:
+every Hog deck, however built, returned the same row, and swapping a card
+changed nothing. Deck vs **archetype** is a different question, and the data
+answers it easily — the most-played Hog list appears in 29,562 pairings as
+`deck_a` and 20,182 as `deck_b`, **111,663 decided battles for that one list**,
+with all seventeen archetypes clearing 697 games against it.
+
+So a matchup is now resolved best-first, and the answer **says which it used**:
+
+| source | what it is | when |
+|---|---|---|
+| `exact` | these two lists have actually met | 0.59% of pairs |
+| `deck` | **this exact list**, against every deck of that archetype | usually |
+| `cluster7` | lists **one card different** | the exact list is thin |
+| `cluster6` | lists **two cards different** | thinner still |
+| `archetype` | archetype vs archetype | a deck nobody has played |
+
+The two middle rungs are the bot's own cluster idea
+(`deck_search.DeckArchetypeIndex.wr` backs off pair → cluster → model → global,
+where a cluster is every deck sharing `CLUSTER_MIN_OVERLAP = 6` cards). Split in
+two here, because "6 of 8" and "7 of 8" are different amounts of *the same
+deck* and the reader should see both rather than have one chosen for them.
+
+Change a card and the deck hash changes, so a different set of battles is
+counted. Measured on one Hog deck against Golem:
+
+| the list | win rate | battles | source |
+|---|---|---|---|
+| with Ice Golem | 45.4% | 6,610 | deck |
+| Ice Golem → Knight | **37.5%** | 104 | deck |
+| Musketeer → Earthquake | 48.7% | 35,387 | archetype (too rare) |
+
+And the counters it finds move with it too — the base list's worst matchup is
+Goblin Drill at 73.8% over 3,684 battles; swap Ice Golem for Knight and
+Graveyard takes over at 76.3% over 93.
+
+### A floor on rates is not a reason to hide a game
+
+Reported: a Log Bait list that had just lost 0–3 to a specific Lava Hound deck,
+pasted into Find Counters — and Lava Hound was nowhere. The table offered
+Electro Giant, Mortar and Balloon instead, every row measured on decks *one card
+different*.
+
+Traced: that list has **2 stored battles**, both against that one Lava Hound
+deck, 1–1. `MIN_GAMES = 8` dropped it, so the archetype row fell back to the
+cluster. Which is correct **for a rate** — one win and one loss is not 50% — but
+it also deleted the fact that the game happened, and a game that was played is
+not an estimate and does not need a sample size.
+
+So the floor stays where it belongs and a second section sits beside it:
+**"Decks this list has actually met"**, reporting `1–1 · 2 games` rather than a
+percentage, losing records first. Two indexed lookups on `pair_matchup_agg`, so
+it costs nothing. The rate table is the estimate; this is the history, and they
+answer different questions.
+
+### The ladder is shown, not silently picked
+
+Deck vs Deck prints every rung that has evidence, narrowest first, which is the
+only way to tell a thin exact reading from a real one:
+
+| measured on | decks pooled | win rate | battles |
+|---|---|---|---|
+| this exact deck | 1 | **37.5%** | 104 |
+| 1 card different | 1,442 | 45.2% | 7,105 |
+| 2 cards different | 4,980 | 44.8% | 8,681 |
+| archetype average | every deck | 48.7% | 35,733 |
+
+104 battles said 37.5%; 1,442 near-identical lists say 45.2%. The headline is
+still the narrowest reading, but a reader can now see that it is probably noise
+— which a single number never admits. Find Deck Counters walks the same ladder
+per archetype and labels each row with the rung that answered it.
+
+**Two things make this fast enough to run on a button press.** There is *no
+join*: `deck_hash` is the sorted card list, so an opponent's archetype comes off
+its own key rather than out of `decks`. Joining 29,562 primary-key lookups into
+a 1.05M-row table cost **9.7 s**; deriving them in Python costs ~50 ms and
+agrees with the stored column on **400,000 of 400,000** real decks. And
+`ix_pair_a` / `ix_pair_b` already exist, so both directions are index scans. A
+profile takes ~2 s cold and is cached per deck.
+
+The cluster rungs needed three more optimisations to be usable, and the first
+attempt at all of them was 15.2 s:
+
+* **One scan for both levels.** There is no index for "shares six cards with
+  this", so finding siblings means looking at all 1,054,394 deck hashes. `>=7`
+  is a subset of `>=6`, so the overlap is counted once and bucketed afterwards —
+  1.6 s instead of 3.2 s.
+* **A TEMP table instead of chunked `IN (...)`.** Aggregating a cluster's pair
+  rows was 4.4 s through 900-parameter `IN` chunks and is 1.0 s joined against
+  `ix_pair_a`. A `mode=ro` connection can still create temp tables; they live in
+  a separate temp database.
+* **One join for both levels.** The temp table carries each sibling's overlap
+  count, so a single walk fills every bucket — 46,869 rows read once rather than
+  39,925 + 46,869.
+
+Together: **15.2 s → 5.5 s cold, 2.1 s cached.** The 1,054,394-hash vocabulary
+(~86 MB of strings) is read once on the background thread at startup, so the
+first person to paste a deck does not pay the 2.2 s for it.
+
+**It is still symmetrised.** `deck_a` is the tracked player's side, so the
+forward rows carry the same house edge as the matrix; the reverse rows are
+folded in with wins, losses and crowns swapped. The check is the same one as
+before — that Hog list's record across the whole field comes out at **49.9%**,
+not 58%.
+
+One consequence worth stating: `mirror` now means *the same eight cards*. It
+used to mean "the same archetype", so two different Hog lists were declared a
+mirror and handed 50% by construction. Same archetype, different lists is
+reported separately.
+
+### Duels count, and so does ladder
+
+The question was whether these screens were reading ladder only. They are not,
+and the check is that duel battles are *better* represented than normal ones:
+taking recent 8-card battles and asking whether their deck pair exists in
+`pair_matchup_agg`,
+
+| | pair present |
+|---|---|
+| duel battles | **72.7%** |
+| ladder battles | 61.3% |
+
+`clashdb._accumulate`, which fills that table, has no game-mode filter at all —
+it streams every row of `battles`. So a deck's record here already pools every
+1v1 it has played. (Neither rate is 100% because the aggregate is built
+incrementally and drawn games never produce a pair row; that applies equally to
+both, which is the point of comparing them.)
+
+**One thing genuinely cannot be counted.** A native duel row stores the whole
+16- or 24-card loadout in `player_card_keys` plus the *series* result — there is
+no per-game scoreline to attribute to a deck pair, the same limit the Duel Zone
+already documents. Those hashes are in the table but can never match a pasted
+8-card list, and `_build_reps` explicitly rejects anything without exactly seven
+commas so a loadout is never mistaken for a deck. In a recent sample that is
+2,269 of 10,818 duel rows; the other 8,549 are ordinary 8-card rows and are
+fully counted.
+
+**The suggestion had to move to match.** The deck drawn beside each row used to
+come from the meta board's top 50 — and that board excludes duel and friendly
+modes *by design*, because it answers "what is the ladder running" and duels
+have their own screen. So the figures counted duels while the deck printed next
+to them was picked from a population that had them removed. Representatives now
+come from `pair_matchup_agg` itself, via the bot's own rule (`deck_search`'s
+"the most-observed deck of an archetype"), computed in the background snapshot.
+The meta board is still asked for *art*, which is the one thing it has that the
+pair table does not.
+
+### The raw table is biased, and the mirror test proves it
+
+`deck_a` is the **tracked player's** deck, and tracked players are not a random
+sample: they win **58.59%** of all stored battles. Read straight, every deck
+counters every deck. The bias shows up where it can be checked — a mirror
+matchup must be 50% by symmetry, and the raw table says:
+
+| mirror | raw | symmetrised |
+|---|---|---|
+| bait vs bait | 58.0% | **50.0%** |
+| hog vs hog | 58.8% | **50.0%** |
+| graveyard vs graveyard | 62.5% | **50.0%** |
+
+So cell (A,B) is combined with the **reverse** of cell (B,A) and the house edge
+cancels. Every mirror then lands at exactly 50.0% — that is the proof the
+correction is right, not an assumption — and real matchups come out sane:
+X-Bow vs Golem 39.9%, Lava vs X-Bow 42.0%, Graveyard vs Mortar 44.5%.
+`_symmetric()` is the only way a matchup number leaves the module; a raw cell is
+never reported.
+
+### There is no "average match time" tile
+
+The design has one. No match duration is stored anywhere — not in `battles`,
+not in `pair_matchup_agg`, and not in the raw payload, whose keys are `type`,
+`battleTime`, `isLadderTournament`, `arena`, `gameMode`, `deckSelection`,
+`team`, `opponent`, `isHostedMatch`, `leagueNumber`. The tile is absent rather
+than faked.
+
+### A pasted deck is drawn the same way as every other deck
+
+A Clash Royale copy-deck link carries **eight card IDs and nothing else** — no
+evolution flag, no hero flag, no slot order. So a pasted deck rendered eight
+plain cards while the meta deck beside it on the same screen had its evolutions
+and heroes drawn properly.
+
+Pasted decks now go through `clash_data.arrange_deck`, the app's single answer
+to "which slots are special" and the same function the meta board, the player
+screens and the PDF all use: slot 1 an evolution, slot 2 a hero or champion,
+slot 3 the second evolution else a hero else a champion, decided from what the
+cards *are* rather than from an order the link does not carry.
+
+This is **inference, and it is labelled as one.** `CardArt` has an `inferred`
+flag that says so in the tooltip. It is the correct inference for a legal deck
+and the same one the game would make, but a link cannot tell us the player
+really brought the evolution. It applies on both tabs, in the paste preview, the
+versus panel and all three card-difference columns — the shared column takes
+deck A's reading, since a card can legally be the evolution in one deck and
+plain in the other and picking a side is honest where merging them is not.
+
+### The paste box draws the deck immediately
+
+The preview used to echo the raw link order in plain art and only take on its
+real slots and evolution frames when **Compare** ran — seconds later, after the
+reader had already looked at it, so the deck visibly rearranged itself. The
+arrangement is a server decision, so the box now asks for it directly on paste
+via `GET /api/analytics/deck?cards=`, which touches no database (a dictionary
+hit on the meta snapshot plus `arrange_deck`) and lands within a frame or two.
+The raw strip still renders while the answer is in flight, because a blank box
+for one frame is worse than an unstyled one and because the API being down
+should degrade to "your eight cards" rather than to nothing.
+
+### A one-battle deck was allowed to be its own baseline
+
+Counter *advantage* is a row's win rate minus how the target does against the
+field. Once that baseline came from the pasted deck's own record, a deck played
+once and won once reported **"100.0% over 1 battles"** — and every advantage
+became the row's own win rate, "+61.5" against a field the deck had never met.
+
+The per-archetype floor of 8 cannot catch this, because the baseline pools all
+seventeen archetypes: every row correctly fell back to the matrix while the
+baseline did not. `BASELINE_MIN_BATTLES = 50` is a separate, much higher floor
+for exactly that reason — an error in a figure that is subtracted from every row
+matters more than an error in one row.
+
+### Every list pages, and the heading states the real count
+
+The tile said "16 matchups analyzed" and the lists underneath offered ten, with
+no control anywhere to reach the other six — the number was a claim the page
+could not honour. Two faults behind it, both server-side:
+
+* `matchups[:5]` and `matchups[-5:]` for worst and best. Below ten archetypes
+  those two slices **overlap**, so the same matchup appeared under both.
+* `find_counters` truncated to five, so a deck with twelve real counters
+  reported five and the style breakdown disagreed with the table above it.
+
+The server now returns everything and the client pages it, five at a time, which
+is where the decision belongs — the component knows how much room it has. Worst
+and best **partition** the field on the player's own average (`diff < 0` against
+`diff >= 0`) rather than on rank, because that is what makes a matchup a
+weakness instead of merely the lower half of a list. On the test account: 7
+worst + 10 best = 17 analyzed, no overlap, no gap. Each heading carries the full
+count so it describes the list rather than the first page.
+
+### Layout: stacked lists, bigger cards
+
+Worst and best matchups sat in two half-width columns, which is what forced the
+deck strip down to 26px and pushed the meter out of the row entirely — a row
+carrying eight card images, a name, three figures and two chips does not fit in
+half a panel. They are stacked now, at full width, and the cards are 38px with
+the meters back. The versus panel's decks are 54px, the target tile's 40px, and
+**Compare decks** is centred because it sits under two paste boxes and acts on
+both; hanging it off the left tied it visually to Deck A alone.
+
+One sizing note worth keeping: the target tile's cards are 40px rather than 46
+because the stat tiles are a `minmax(11rem, 1fr)` auto-fit grid — three across
+at 1500px is ~343px inside the padding, and eight 46px cards plus gutters is
+396px, which wrapped the eighth onto a line of its own.
+
+### The rows only line up if every column is a definite width
+
+Each row is its own independent CSS grid, so nothing forces one row's tracks to
+agree with the next one's — they agree only if every track resolves to the same
+width from the rule alone. The last track was `auto`, sized to the evidence chip
+inside it, and that chip reads "Low" on one row and "Medium" on the next: 33.8px
+against 53.7px. Different leftovers per row meant the flexible name column came
+out 101.8 / 118.1 / 121.6px, so **one list had three different left edges for
+its card strips**.
+
+The chip column is now fixed at 3.6rem — measured from the widest of its four
+labels, 53.7px — leaving the name as the only flexible track, which then
+resolves identically everywhere. Verified rather than eyeballed: a browser check
+asserts that every list has exactly one distinct deck-start x, across all four
+tables.
+
+### The rest of it
+
+* **Only archetypes that actually beat the target are listed.** Ranking the
+  field and taking the top five hands back a "counter" at 48.3%, which is the
+  opposite of one. A short list is the honest answer, and the screen says how
+  many archetypes were weighed to get it.
+* **Counter advantage** is measured against how the field does against that
+  target, not against 50 — that is what makes it an advantage rather than a
+  percentage.
+* **The player tab needs no snapshot.** `battles.opponent_win_condition` is
+  stored and 100% populated, so that query is ~40 ms and the date window drives
+  it directly.
+* **The matrix is a background snapshot**, on meta.py's pattern — the join of
+  1.96M pairings to a 1.05M-row deck table costs ~60 s, so it can never run
+  inside a request. Persisted to `server/.counter_snapshot.json`, refreshed
+  hourly (`CLASH_COUNTER_REFRESH`), and every response carries its age.
+* **Play styles are editorial and say so.** The database stores a win condition,
+  which is a card, not a play style. The seventeen archetypes are mapped to
+  Beatdown / Control / Siege / Cycle / Bridge Spam in one place, and the UI
+  states the grouping is a judgement call.
+* **Every row draws a real deck, and it costs nothing.** A matchup row naming
+  "Graveyard" and showing no cards is a row you cannot act on, so each one
+  carries eight cards with their evolution art. The decks are not invented per
+  archetype: the CURRENT meta board is asked for one. Its top 50 covers all
+  seventeen archetypes, every entry is a deck real players are running this
+  week, the art is already resolved on it, and it is a snapshot that exists
+  either way. While that snapshot is still building the rows simply render
+  without art rather than failing.
+* **An unknown deck is classified with the bot's own map.** `WIN_CONDITION_MAP`
+  and `WIN_CONDITION_PRIORITY` are carried over unchanged, because every stored
+  `decks.win_condition` was written by the function that reads them. Checked
+  rather than assumed: both tables compare equal to the bot's live source, and
+  the two classifiers agree on **5,000 of 5,000** random eight-card decks.
+* **Every archetype's deck is its most-played one**, which is the bot's own rule
+  for a representative (`deck_search._archetype_representative`: "the
+  most-observed deck of an archetype"). The meta board is ranked by use rate and
+  all seventeen archetypes appear in its top 50, so the first hit per archetype
+  *is* that archetype's most-played deck. Verified: 17 distinct decks, each
+  containing its own win condition, average overlap 0.82 of 8 cards.
+
+  When the rows looked alike it was never the deck choice — see
+  [Observation beats inference](#observation-beats-inference-and-for-a-while-it-did-not).
+
+---
+
+## Coach Assist — mid-duel help
+
+Two windows over `server/coach.py`, ported from the bot's duel advisor:
+
+| window | the bot | asks | answers |
+|---|---|---|---|
+| **Duel Prediction** | `!predict` / `!predict2` / `!predict3` | one tag | which decks they open with, and what is still legal after each reveal |
+| **Suggestion** | `!suggestion #YOU [#THEM]` | your tag; the opponent comes from the route | the same read, then YOUR still-legal decks ranked by expected win rate |
+
+### The rule the whole feature rests on
+
+A duel loadout is three decks that **cannot share a card**. That is what makes
+any of this predictable: every deck revealed removes eight cards from what a
+player can still bring, and by game 3 the field is usually down to a handful of
+lists they actually own. Nothing here models a personality — it is the card
+constraint plus that player's own history.
+
+### Both windows are interviews, not forms
+
+A duel has a state — nothing played, one deck shown, two shown — and the useful
+answer is a *different question* at each one. A single form with every field on
+it would ask a coach mid-duel to work out which boxes apply. One question at a
+time cannot be got wrong, and the step you are on IS the state of the duel:
+
+```
+Duel Prediction   Has the duel started?
+                    No             -> their opening decks
+                    One game       -> paste their game-1 deck -> game-2 read
+                    Two games      -> paste both their decks  -> game-3 read
+
+Suggestion        Who are you coaching?   (the opponent is LOCKED to the tag
+                                           this analysis is already open on)
+                  How far in are you?  none / 1 game / 2 games
+                    -> paste each deck played, yours then theirs, per game
+                    -> the recommendation
+```
+
+The three stage answers wear a hue each — **green** nothing played, **blue** one
+game, **violet** two — and the same stage is the same colour in both windows, so
+the mapping is worth learning once. They are three parallel statements about the
+state of the duel rather than one recommended action plus alternatives, which is
+what a single pink button and two outlines had implied.
+
+The opponent is locked because every other screen in this view is about them;
+letting one box disagree would put two different players on one screen with
+nothing saying which was which. Change it by searching a different tag.
+
+The flow state lives in the component and nowhere else; the server holds nothing
+between calls. A reload therefore lands on question one rather than resuming a
+duel that has since finished.
+
+### What the result shows, and what it deliberately does not
+
+Two things were on the prediction screen and were taken off:
+
+* **The stats line** — "ranked by their game-1 picks across 268 ordered duel
+  series · 268 series / 800 duel games stored". It described the query rather
+  than the answer. What survives is the one caveat that changes what the list
+  *means*: when there are too few ordered series, a line says the ranking is
+  their overall play rate and not a read on their opening at all.
+* **A "6% likely" beside every deck.** The list is already in order and the rank
+  says the same thing without asking anyone to compare six small percentages
+  mid-duel. Figures stay where the number *is* the answer — the Suggestion's
+  expected win rate, and the opponent distribution it is computed against.
+
+Card strips flex to fill their column with a max size rather than sitting at a
+fixed width, so the eight cards are as large as the panel allows and never wrap.
+
+### The opening is a different claim from the play rate, and this data supports it
+
+"They open with this" can only be read off series whose game order is real. A
+friendly/practice duel stores one row per game, so its order is time order; a
+NATIVE duel stores the whole loadout in one row and the bot is explicit that
+those 8-card blocks are *"not proven chronological"* — block 1 is not
+necessarily game 1.
+
+Measured across the twelve most-played tags:
+
+| | |
+|---|---:|
+| duel series | 759 |
+| reconstructed, i.e. ordered | **718 (94.6%)** |
+| full ordered three-game series | 587 |
+| native (loadout only) | 41 |
+
+So the opening question is answerable for almost everybody here, which is the
+opposite of the bot's situation. Where it is not — under three ordered series —
+the screen falls back to overall duel play rate and **says so**, because "what
+they open with" and "what they play a lot" are different claims.
+
+### Their real duel loadouts, which are not a prediction at all
+
+Everything else on both windows ranks what a player *could* bring. Once a deck
+is pasted, `observed_sequences` goes back through their duel log and returns the
+**whole three-deck loadouts they have actually run that contain it** — grouped,
+counted, with the win record and the date, and with the pasted deck flagged so
+the other two read as the answer.
+
+A duel is not three independent picks; it is one loadout a player builds and
+reuses. So the useful reply to "he played this" is the rest of the bag, not a
+list of loose candidates the reader has to reassemble.
+
+**It matches the deck anywhere in the loadout, and that correction mattered.**
+The first version anchored on game 1, reasoning that "when they *opened* with
+this, they followed it with that" is the sharper claim. It is — and it is the
+wrong question, because a coach pastes the deck they have just *seen*, which is
+game 2 as often as game 1. Measured over 40 decks these players really ran but
+not necessarily first:
+
+| | |
+|---|---:|
+| anchored at game 1 | 62 series found |
+| decks that returned **nothing at all** under the anchor | **20 of 40** |
+| matched anywhere in the loadout | 224 series |
+
+Every one of those 20 has a recorded loadout. It was reported from the screen as
+"he has a duel set where he played this deck" against a blank panel, and that is
+exactly what it was.
+
+**Native duels count here too**, which is the other half of the same fix. A
+native row stores the whole loadout in one row and the bot records only that its
+8-card blocks are *"not proven chronological"*. That makes the **order**
+unusable, not the **membership** — and membership is most of the answer. Those
+rows are included and flagged, so the UI prints "game order not recorded"
+instead of inventing a sequence, and the header counts them separately.
+
+The rest of the rules:
+
+* **Grouped by loadout, ranked by how often.** Series are clustered position by
+  position at the project's usual 6-of-8, so a tech swap in one slot does not
+  split one habit into two. Each row carries `3× run · 1W–2L · last 11 Aug`,
+  which is the difference between "they do this" and "they do this and it works".
+* **The representative per slot is their most-played exact list**, never a
+  synthetic average — the same rule `cluster_player_decks` follows, because a
+  deck that was never played is not a deck they can bring.
+* **Where they brought it is stated** — "played it as game 2" — since opening
+  with a deck and answering with it in game 3 are different reads.
+* **Exact vs variant is labelled.** On one account's top opener only 2 of 7
+  matches were card-for-card.
+* Above the loadouts, the decks that travel with it are merged across every
+  match, which answers "what else is in the bag" in one line.
+
+Two reveals require both decks, consecutively and in order where the order is
+known. When nothing matches it says so and states how many duels it searched.
+
+### The model is ours, and it is card-sensitive
+
+The bot scores candidates with a trained gradient-boosted matchup model loaded
+from artifacts on disk (`archetype_predictor`, `tree_runtime`) and falls back to
+nothing when they are missing. That is not portable into a stdlib-only service,
+and it should not be — this project already has a better grounded answer in
+`deck_counter`, and it is the one the Deck Counter screen shows.
+
+Expected win rate therefore comes off the evidence ladder — exact pair, this
+exact list vs that archetype, lists one and two cards different, archetype vs
+archetype — and **every number carries the rung it came from**. Two consequences:
+
+* **it is card-sensitive.** Swap one card and the deck hash changes, so a
+  different set of battles is counted. A trained archetype model returns the
+  same figure for every Hog list.
+* **it is symmetrised.** `_symmetric` cancels the 58.6% tracked-player bias,
+  checked by every mirror landing at exactly 50.0%.
+
+**Walked lazily, and that is not a micro-optimisation.** `matchup_ladder` builds
+every rung because its caller displays the whole backoff, and the ≥7-card
+cluster scan costs **11.6 s cold** against 0.17 s for the deck's own profile.
+The Coach asks for a grid of these — six of my decks against three of theirs —
+so building rungs nobody reads took `suggest` to **25.7 s**. Stopping at the
+first rung with evidence takes it to **2–3 s** and the answer is identical: the
+head of the ladder is the reading either way.
+
+### Three rules that keep the advice honest
+
+* **A recommendation is stricter than a prediction.** The companion predictor
+  tolerates two shared cards because it reads noisy pooled history; a deck we
+  tell someone to play *next* must share **zero** — they physically cannot play
+  it otherwise. The bot shipped the looser rule into its recommendations once
+  and told a player to bring a Golem deck repeating Lightning and Baby Dragon.
+* **An unscorable matchup is dropped, not guessed at 50%.** An invented coin
+  flip drags a real edge toward the middle and makes two genuinely different
+  candidates look alike. The probability mass that *did* have evidence is
+  returned as `weight`, so a reader can discount the figure.
+* **Meta decks that top up a thin list are labelled**, and their history keeps
+  70% of the probability mass (`OPP_HISTORY_MASS`). "What they play" and "what
+  people play" are different claims and the row says which it is.
+
+### What is deliberately not modelled
+
+Counter-sniping — "they just showed Hog, so they will bring the anti-Hog deck".
+The bot measured it on 3,569 leak-free trials and it made top-1 accuracy **three
+times worse** (8.3% → 2.7%). The deck a player actually brings scores 0.4856
+against the opponent's last deck versus 0.4961 for the average deck they could
+have brought: players do not counter-pick the previous game. Recency weighting
+and per-opponent tendency were tested the same way and neither beat plain usage.
+
+So the read narrates evidence and never invents a tendency. Every line of it is
+either a fact we hold or the ranking already computed, and the confidence is
+graded out loud — a real edge above 15 points, a slight one above 6, a coin flip
+below that.
+
+### Colour, by meaning
+
+Violet the prediction, **pink the opponent's side wherever it appears**, blue
+yours and anything stating evidence rather than outcome, green an observed fact
+and the recommendation to act on. Blocks carry `data-hue` and resolve one
+`--tone` variable that their children read, so a section's identity is set once
+at its edge. Level 3 of the ladder — the raw hue — appears only on a rail, a
+rank chip, a bar; large surfaces stop at the 8% wash.
+
+---
+
 ## Colour: how it was chosen
 
 All colour lives in `src/index.css` as tokens — it is the single source of
@@ -479,10 +1717,14 @@ than picked by eye. Two rules from that research drive the values:
 The ladder is shallow and evenly spaced so page, sidebar, card and input are all
 separable without any of them being pure black or white:
 
-| | page | card | raised | sunken |
+| | page | panel | nested box | well |
 |---|---|---|---|---|
-| dark | `#111111` | `#1A1A1A` | `#202020` | `#0D0D0D` |
-| light | `#FBFBFC` | `#FFFFFF` | `#FFFFFF` | `#F5F5F6` |
+| dark | `#111111` | `#1A1A1A` | `#141414` | `#0D0D0D` |
+| light | `#F4F4F6` | `#FFFFFF` | `#F8F8FA` | `#F1F1F4` |
+
+About seven points of 8-bit lightness per rung, in both directions, and the
+governing rule is **nesting goes down, never up** — see
+[The UI pass](#the-ui-pass--surfaces-selection-and-navigation) for why.
 
 ### The five hues
 
@@ -514,14 +1756,54 @@ card surface so both themes derive from the same ladder:
 a neutral interface neutral while still reading as coloured — a large surface
 never goes past level 2.
 
+**A tint must be mixed against the ground it will actually sit on.** The ladder
+above mixes against the card, so a control whose resting fill is
+`--surface-sunken` got a step made of two parts: the tint, plus the gap between
+the card and the well. In light those cancel — tint and well both go darker. In
+dark they compound: the tint goes lighter while the well goes darker. Sampled
+off the rendered page in OKLab, one selected control measured **13.9 dE in dark
+against 5.7 in light** — the same control reading as a bold slab on one theme
+and a whisper on the other, which is exactly what "the themes look different"
+meant. `--accent-select-fill-sunken` and friends mix against the sunken surface
+instead, and the same control now measures 9.6 / 8.1. Use them only where the
+resting background really is sunken; on a card or a glass panel the plain ladder
+is already correct.
+
+Not everything needed it, and the measurement said so: the duel series' win and
+loss tints sat at 3.1 dE dark against 3.3 light already. Re-grounding those
+against the panel pushed the green to 1.48x the light one, so they were put
+back.
+
+Two CTAs bend "pink means primary action" on request: the home screen's
+**Analyze** button is green and the sidebar's **Upgrade Now** is blue. On that
+page hue already reads as identity (each tool panel wears its own), and the
+sidebar card is an aside rather than the page's primary action.
+
+Both forced a token that has since become general. **Text on a solid fill of any
+hue is `--on-hue`** — `#0B0B0B` in dark, `#FFFFFF` in light. White is unusable
+on the dark steps (1.6:1 on the green, 3.3:1 on the blue) precisely *because*
+they are bright enough to read as text on a near-black page; against the ground
+colour all five clear 6:1. `--success-text` and `--accent-info-text` are now
+aliases of it. A filled control never has to know which hue it is wearing, which
+is what made a per-section coloured sidebar cheap to build.
+
+| on a solid fill | violet | pink | blue | green | red |
+|---|---|---|---|---|---|
+| dark, `#0B0B0B` text | 7.3 | 7.5 | 6.1 | 10.3 | 7.2 |
+| light, `#FFFFFF` text | 7.10 | 5.46 | 6.70 | 5.48 | 5.95 |
+
 Components opt into a **role**, never a colour: `--accent-select`,
 `--accent-action`, `--accent-info`, `--success`, `--error`. `--accent` stays
 neutral, because a hue that sometimes means "selected" and sometimes means "bad"
 teaches the reader to ignore it.
 
 Identity is a separate axis from selection: sidebar sections and tool panels
-wear a hue on their **icon tile** so an area is recognisable at a glance, while
-the *selected* row is always violet regardless of its identity hue.
+wear a hue on their **icon tile** so an area is recognisable at a glance.
+
+Selection used to be violet everywhere regardless of that identity hue. **In the
+sidebar it no longer is** — the open row fills solid in its own colour. The
+reasoning and the one place the old rule still holds are in
+[The UI pass](#the-ui-pass--surfaces-selection-and-navigation).
 
 ### Contrast and focus
 
@@ -576,6 +1858,1314 @@ never a dual-axis chart — two measures of different scale get two charts.
 
 ---
 
+## The UI pass — surfaces, selection and navigation
+
+The brief was a sweep rather than a feature: *"check the boxes part whatever is
+left from page to page, highlight, border etc, in light and dark mode both"*,
+plus four specific complaints. Everything below is one of those complaints
+traced to its cause.
+
+All of it lands in `src/index.css` where it can — twenty stylesheets reach for
+the same tokens, so the fixes that changed a token changed every page at once.
+
+### Glass is gone. Every panel is solid
+
+The whole app was frosted: `--glass-fill` was `rgba(255,255,255,0.05)` in dark
+and `rgba(255,255,255,0.66)` in light, over a `backdrop-filter: blur(18px)`.
+The request was blunt — *"if the glass panels are not working then make them
+solid but with good colour retention"* — and it was right. Three things were
+wrong with it:
+
+- **In light it barely was a panel.** 66% white over a near-white page is a
+  near-white box, and its `--glass-stroke` was *white at 85%* — a white edge on
+  a white surface. Light had boxes with no edges while dark had crisp ones. That
+  alone accounts for most of "the themes look different".
+- **The fill moved as you scrolled.** A translucent pane refracts whatever is
+  behind it, so a sidebar's contrast drifted with the page wash sliding past.
+- **It cost a compositing pass per pane**, on a project whose first revamp step
+  was removing animation for speed.
+
+The four tokens are now flat colours. Nothing else had to change: a blur behind
+an opaque fill paints nothing, so the ~67 `backdrop-filter` declarations still
+scattered across 21 component files are inert. They were **left in place on
+purpose** — each also creates the stacking context that this app's portalled
+menus are already positioned against, and removing them is a z-order change
+dressed up as a cleanup.
+
+Two supporting changes:
+
+- **The light page dropped to `#F4F4F6`** from `#FBFBFC`. A white panel needs
+  somewhere to be raised *from*, and 1.6% of lightness is not it. Page-to-panel
+  is now 11 points of 8-bit lightness in light against 9 in dark — matched.
+- **`--shadow` in dark became `0 0 0 0 transparent` instead of `none`.** Panels
+  want `box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen)` so light
+  gets elevation and dark gets its top sheen from one declaration — and `none`
+  inside a shadow list is a syntax error that silently drops the whole rule.
+
+### Nesting goes down, never up
+
+This is the rule the solid switch forced, and it is worth stating on its own.
+
+Translucent panes **compound**: glass on glass came out lighter, so a deck panel
+inside the builder's panel read as raised without anyone specifying how. Solid
+fills do not compound. A nested box painted with the same token as its parent
+now paints *exactly* the parent's colour and vanishes, leaving only its border.
+
+Light was already stuck this way even when the glass worked, because there is
+nothing above `#FFFFFF` to raise into. So every level of nesting steps **toward
+the well** — the one direction both themes can travel equally far:
+
+| | page | panel | nested box | well |
+|---|---|---|---|---|
+| dark | `#111111` | `#1A1A1A` | `#141414` | `#0D0D0D` |
+| light | `#F4F4F6` | `#FFFFFF` | `#F8F8FA` | `#F1F1F4` |
+
+`--surface-nested` is the rung that got added. It exists because the first fix
+sent nested boxes straight to `--surface-sunken` and collided with the controls
+already living there — a deck slot inside a deck panel came out the exact colour
+of the panel. Reclassified accordingly: deck panels, saved groups, palette
+folder cards, segmented tab strips and header icon tiles are **nested boxes**;
+meter tracks, date inputs and code blocks are **wells** and stayed put.
+
+A related bug in the same family: `--glass-fill-strong` means "one step more
+raised than a panel", which in light resolves to `#FFFFFF` — the panel colour.
+Every control using it *inside* a panel was invisible in light mode. Those were
+regrounded rather than given a new value.
+
+### The sidebar: solid, and a colour per section
+
+*"the left bar when i select options it's like purple but make solid, lets drop
+glass panel and colour it with green blue pink different for options."*
+
+The selected row was a 14% violet tint, because violet means "you are here"
+everywhere in this app. On a sidebar that rule stopped paying its way. Only one
+row can be selected, so there is nothing for the violet to *disambiguate* — and
+it discarded the one thing the rail already had, which is that each section owns
+an identity hue for its icon tile.
+
+The open row now fills **solid in its own hue**. Duel Analysis lights green,
+Cards blue, Deck Counter pink, Search Player violet. You can tell which section
+is open from the corner of your eye, which is the actual job of a selected state
+in a rail you are not looking at.
+
+- Text is `--on-hue`, so no row has to know its own colour.
+- The icon tile inverts on the filled row — a 20% scrim of `--on-hue` with the
+  glyph punched out — because a tile cannot wear the same hue as the slab under
+  it.
+- Hover stays **neutral**. Hover means "clickable", not "selected"; if hover
+  were also hue-tinted the two states would compete.
+- The old violet leading-edge bar was dropped. Meaning still does not rest on
+  hue alone — a filled row differs from its neighbours in lightness and weight,
+  which is a difference a monochrome screenshot survives.
+- The 4-hue cycle repeats across 7 sections. That is fine and deliberate: every
+  tile sits directly beside its own label, and no two *neighbours* share a hue.
+
+**Violet-means-selected still holds everywhere else** — tabs, range chips, the
+focus ring, card slots. The sidebar is the exception, with a reason.
+
+### The rail collapses, and the space goes into bigger elements
+
+A round chevron button rides the sidebar's right edge — the same puck as the
+theme and notification buttons, so it reads as one of the app's controls rather
+than something invented for this panel. Pressing it hides the rail and reclaims
+**226px** of the 252px it occupied.
+
+Four things make it work rather than merely function:
+
+- **The button is positioned against `.body`, not the sidebar.** The sidebar is
+  `overflow-y: auto`, which clips a child at `right: -14px` and hands you a
+  scrollbar instead of a button.
+- **It stays put when the rail goes**, tucked against the screen edge with the
+  arrow reversed. A control that hides along with the thing it hides is a
+  control you cannot undo.
+- **The body reserves a ~26px lane for it in the collapsed state.** Floating it
+  over the panel instead put it 2px from the header's icon tile — measured, not
+  guessed. The lane costs a tenth of what collapsing gained.
+- **`--rail` is one variable.** The grid track, the toggle's position and the
+  gutter all read it, so collapsing is one declaration instead of three that
+  can drift.
+
+**The reclaimed width buys BIGGER elements, not more of them.** This is the part
+that needed a decision. The card grid is `repeat(auto-fill, minmax(6.1rem, 1fr))`,
+so left alone it would have spent 226px on two extra columns of the same small
+tiles — the opposite of the point, which is legibility. The state is therefore
+mirrored onto `<html data-rail>` (the `data-theme` pattern, because a CSS module
+cannot see a parent's class from another file) and the grid raises its floor to
+7.4rem when the rail is closed. Measured at 1500px: a tile goes **100px → 120px**
+and its art **70px → 84px**, at the same 11 per row.
+
+6.1rem is still the measured floor from the density work; 7.4rem is above it, so
+the two-rates-on-one-line constraint that produced that number is untouched.
+
+The choice persists in `localStorage`, because a collapsed rail is a working
+preference and having it spring back on every reload is how a control stops
+getting used. Below 860px the rail is already hidden by media query, so the
+toggle is hidden too — a button that does nothing on press is worse than none.
+
+### The four cards on the home screen
+
+*"the 4 cards on the main screen in the analyze section are opacity, make them
+visible."*
+
+They were at `opacity: 0.4`, which on the frosted panel left four grey smudges
+rather than four cards. Now fully opaque, with a soft drop shadow so they sit
+*on* the panel instead of floating in it. The composition is held back by size
+and corner placement instead, which is the honest way to do it — they are far
+enough out of the centre column to sit behind nothing.
+
+### Navigation: Home and the brand actually go home
+
+*"clicking on home doesn't return to the main page, and also clicking on
+RoyalArena top doesn't make it return home."*
+
+Two separate faults, and the interesting one is not the route.
+
+**Going home is two things, and only one was wired.** Which screen the home view
+shows is `section`, component state that the sidebar and the analytics area
+cards both write to. Both Home and the brand moved the URL and nothing else — so
+after opening Deck Counter and clicking Home, the route went home and the panel
+did not, because `section` still pointed at the area you had just left. You
+landed straight back on it. `goHome()` resets the section *and* navigates, and
+both controls call it.
+
+**The home route is `#/`, not `''`.** `location.hash = ''` strips the fragment
+rather than setting one, so the next attempt to go home was a genuine no-op —
+assigning `''` to an already-absent hash changes nothing and fires no
+`hashchange`. `#/` matches no route prefix, so it still resolves to the home
+view, and it is a real value that can be compared against.
+
+Also fixed while in there:
+
+- **The player view had no Home control at all.** That screen swaps the entire
+  nav out for the query row, leaving the brand as the only way back with nothing
+  saying so. The row's static "Analytics" chip — decoration restating the screen
+  you were already looking at — is now the Home button.
+- The top-bar lit item distinguishes **Home** (landing search showing) from
+  **Analytics** (an area open), which it previously could not.
+- The brand and every chip, icon button and tool panel gained a hover state; the
+  hero search field takes its focus ring on the wrapper rather than on the
+  borderless input floating inside it.
+
+### One hardcoded colour, and it was the light/dark bug in miniature
+
+`.toolCta` — the call-to-action on each home-screen tool panel — painted
+`color: #ffffff` on a background of the tool's identity hue. Correct for all
+five hues in light. Wrong for all five in dark, and worst on the green panel at
+**1.6:1**: white text on a mint slab. It is now `--on-hue`, never below 6:1.
+
+This was the *only* hardcoded colour left in any component stylesheet, which is
+the point — the discipline of keeping colour in tokens is what made the rest of
+this pass a handful of edits instead of a survey.
+
+**And the same bug was hiding in a token that claimed to be safe.**
+`--accent-action-text` was the literal `#ffffff`, with a comment asserting that
+white clears 4.5:1 on both accent hues in light *and* dark. Measured, it does
+not:
+
+| | white on it | `--on-hue` on it |
+|---|---:|---:|
+| pink, light | 5.46:1 | 5.46:1 |
+| **pink, dark** | **2.65:1** | **7.43:1** |
+| violet, dark | 2.72:1 | 7.23:1 |
+
+A hue light enough to read against a dark page is far too light to carry white
+text, so "white works on the brand colour" cannot survive a dark theme whatever
+the brand colour is. The token now resolves to `--on-hue`, which fixes **every
+filled primary button in the app at once** — ten component stylesheets pair it
+with `background: var(--accent-action)` and all ten were failing in dark. Light
+is untouched, because `--on-hue` is `#ffffff` there.
+
+Caught by the Coach Assist verification rather than by review: its primary
+button is the same pair, and the sweep flagged the *top-bar Search button*
+alongside it — which is how a screen-wide check finds a bug that predates the
+screen.
+
+### Cards sorts by use rate
+
+*"in the cards section make them descending by use rate, right now its win rate
+order."*
+
+Done, and the default was wrong for a reason worth recording: sorting by win
+rate put the board's own caveat at the top of it. The highest win rates belong
+overwhelmingly to the cards with the fewest battles behind them, so the opening
+screen was a list of cards the player has barely touched. Use rate is a count —
+no evidence floor needed — and "what do they actually play" is the question a
+card board gets opened to answer. Win rate is one select away and still ranks
+evidence-first when chosen.
+
+### Card art gets one box, and it is the card's shape
+
+The art PNGs are **not one shape**. A base card is 302×363; the evolution frames
+run from 287×384 to 553×793, and the hero frames add a third. Any strip that
+sizes a card by width alone therefore reflows the moment a deck fields an
+evolution — which is most decks.
+
+Two screens were still doing it, and each got a different symptom:
+
+| screen | rule | what happened |
+|---|---|---|
+| Top Meta Decks | width only | `align-items` defaulted to `stretch`, so every image in a row grew to the tallest in it. **Seven distinct card heights** on one board, 65.9px to 77.4px, and a plain Arrows drawn **16.2% taller than its own artwork** purely because it sat next to a Lumberjack evolution |
+| Player top-10 decks | `aspect-ratio`, no `object-fit` | heights were uniform, but the default `fill` **squashed** off-shape art into the box — Cannon's evolution 5.6% out, Lumberjack 19% |
+
+Both now use what the Deck Counter and Duel Zone strips already used: a box
+fixed to the base card's `aspect-ratio: 302 / 363`, `object-fit: contain` so the
+art letterboxes inside it instead of stretching, and `align-items: flex-start`
+so a row can never resize its own contents. The saved-group previews and the
+duel combo pairs were missing the same property and got it too.
+
+**A deck is eight cards on one line, so the strips flex.** The Deck Counter's
+were fixed widths with `flex-wrap: wrap`, which is the wrong pair of rules
+together: a fixed width has to suit the narrowest column it will ever sit in, and
+wrapping to 5 + 3 stops a deck reading as a deck. They are now `flex: 1 1 0` with
+`nowrap` and a `max-width` cap, so eight cards take an equal share of whatever
+the column has. The matchup-row column also stopped being a fixed `21rem` —
+that was what actually capped the size — and became `minmax(21rem, 27rem)`.
+Measured: pasted decks **58 → 76px** a card, matchup rows **39.4 → 51.4px**, no
+strip on more than one line, no horizontal overflow.
+
+Measured before and after, same probe: **7 heights → 1** (64.9px), and painted
+art now matches its own proportions exactly on every screen. The cost is a few
+transparent pixels either side of a tall evolution frame, which is the trade the
+rest of the app had already made.
+
+### How it was verified
+
+80 assertions, run twice — once per theme — with Playwright against the live
+dev server, then the script deleted and the dependency uninstalled per the
+project's usual pattern. What they check:
+
+- every large box paints an **opaque** fill, and differs from the page behind it
+- **no** element wider than 200px is left with a background alpha between 0.02
+  and 0.9 — i.e. no frosted pane survived anywhere
+- each of four sidebar sections selects to *its own* hue, matched against the
+  computed `--hue-*` token, with `--on-hue` text
+- Home, the brand, the brand from inside a hosted tool, and the player view's
+  Home chip all return to the landing search, and the hash lands on `#/`
+- Cards defaults to `use` and the first 25 tiles run monotonically descending
+- four analytics screens have no horizontal overflow
+
+The panel-opacity check failed six times on the first run and all six were the
+probe's fault — three screens wrap their panel in a transparent layout div and
+the selector grabbed the wrapper. Worth noting because a failing assertion is
+not evidence until you have read why it failed.
+
+---
+
+## The display face, and the one property that decides it
+
+Headings are set in **Kids Word**, replacing Subscribe. A swap is one
+`@font-face` plus a find-and-replace across seventeen stylesheets, because the
+face is only ever named in a font stack — but two things about it are worth
+recording, both learned by trying the wrong file first.
+
+**Check the first four bytes.** jsPDF embeds TrueType only; it has no CFF parser.
+An OpenType/CFF face (sfnt tag `OTTO`) produces a PDF report with *no headings
+and no error* — the export succeeds and the type is simply missing. Of the faces
+tried:
+
+| face | sfnt tag | outlines | can the PDF use it? |
+|---|---|---|---|
+| Relidux `.otf` | `0x00010000` | TrueType *despite the extension* | yes |
+| Newscrash `.otf` | `OTTO` | CFF | no |
+| Super Jello `.ttf` | `0x00010000` | TrueType | yes |
+| Bebas Neue `.ttf` | `0x00010000` | TrueType | yes |
+| **Kids Word `.otf`** | `OTTO` | CFF | **no** |
+
+So the report keeps `Subscribe.ttf` and the export and the site currently wear
+different display faces. That is a real, visible divergence, and it is recorded
+in `pdfRenderer.ts` beside the code that causes it rather than only here.
+
+**A display face is not a fixed width.** The home headline was
+`clamp(2.4rem, 5vw, 4.6rem)` with `white-space: nowrap`, tuned to Subscribe. A
+face a third wider measured 1040px inside an 880px panel at a 1280px window — it
+did not wrap, it ran out the side. It is 4.2vw with `text-wrap: balance` now, and
+an overflow sweep across the screens at two widths is what caught it. Bebas Neue
+also showed the other end of the same problem: it has **no lowercase at all**, so
+anything in the display face renders as caps whatever the string says, including
+a deck name someone typed.
+
+Serve any face under a space-free name. The source files are "Super Jello.ttf"
+and "Kids Word.otf"; a space in a URL is one percent-encoding mistake away from
+a 404 that falls back to Inter and looks like nothing happened.
+
+### Six screens never used the display face at all
+
+`MetaDecks`, `DuelAnalysis`, `DuelZone`, `PlayerCards`, `DeckCounter` and
+`CoachAssist` set their headings in `var(--font-display, inherit)` — and
+`--font-display` **is not defined anywhere in the project**, so all eighteen of
+those declarations have always silently resolved to Inter. They are unaffected by
+a font swap because they were never wired to one. Recorded rather than fixed: it
+is a decision about which screens carry the display voice, not a bug in the swap.
+
+---
+
+## "Why is Evolutions 0?" — two emptinesses that shared a sentence
+
+Reported against a real tag. The counting was right and the screen was wrong.
+
+`#G9YV9GR8R` has **0.0% evolution coverage**: not one of their 269 duel decks in
+the window carries a `player_evo` mark. The Evolutions predicate needs both cards
+to have been *observed* in an evolution slot — never merely `can_evolve` — so
+zero candidates is the correct answer. The predicate itself is fine, and other
+players prove it:
+
+| tag | duels | evo coverage | Win Cons | Spells | Evolutions |
+|---|---:|---:|---:|---:|---:|
+| `#G9YV9GR8R` | 96 | **0.0%** | 103 | 15 | **0** |
+| `#C00CRGG2P` | 94 | 40.6% | 83 | 14 | 25 |
+| `#9GJ0Q0LGG` | 74 | 58.2% | 79 | 10 | 19 |
+
+**The bug was what the screen said about it.** An empty tab printed "no
+combination clears the evidence floor yet", which claims the pairings existed
+and were too thin — so an evolution-heavy player read as someone who fields no
+evolutions. Those are different facts, and `_evo_marks` goes out of its way to
+keep them apart:
+
+> returns None for "we were never told" precisely so that stays distinct from
+> "they ran none"
+
+The data layer preserved the distinction and the UI collapsed it. At 0% coverage
+the tab now says the slots were never recorded, that this is missing data rather
+than an absence of evolutions, and that the other two tabs are unaffected because
+they read the cards themselves — which are always stored. The partial-coverage
+caveat is untouched and still fires between 0 and 60%.
+
+**The tab badge shows an em dash, not a 0.** "0" beside Evolutions is a
+measurement; "—" is the absence of one. Hovering says which.
+
+### Then: "but I can see evolution combos in his battle history"
+
+The right pushback, and the first explanation was too vague to survive it. The
+player *does* have 84 evolution-marked battles. Two facts put them out of reach,
+and the message named neither.
+
+**Marks are a date, not a mode.** They ramp from ~1% of all battles on 20 Jul to
+99% on 5 Aug — whatever backfill ran, it reached everything at once. So "which
+modes record evolutions" is the wrong question; every mode does now.
+
+| | battles | marked |
+|---|---:|---:|
+| this player, **Friendly** (28 Jun – **26 Jul**) | 423 | **0** |
+| this player, **Ranked/Ladder** (29 Jun – **13 Aug**) | 291 | 84 |
+| everyone, Friendly, 5–13 Aug | ~29k | ~97% |
+
+**Their duels stop before the marks start.** Duel Analysis reads duel-like modes
+only, and every one of this player's duels is reconstructed from Friendly
+practice that ended 26 Jul — ten days before evolution slots were stored
+everywhere. The evolutions they can see in-app are Ranked and Ladder from August,
+which this page correctly does not read: a duel combo is a pairing *within one
+duel loadout*, so only duel battles can supply one.
+
+So `duel_decks()` now returns a **`span`** — the battle_time of the first and last
+duel row, surfaced as `duels.span.{from,to}` — and the empty tab quotes it: *their
+duels run 28 Jun to 26 Jul, and evolution slots were not yet being stored across
+that period*, followed by the mode point. A player whose duels reach into August
+gets real coverage from the same code (`#C00CRGG2P`, duels to 11 Aug, 34.3%), which
+is the check that the span explanation is the true one and not a story fitted to
+one tag.
+
+The lesson is the one this file keeps relearning: "the data is missing" is not an
+explanation, it is the start of one. The user could see the thing the screen said
+did not exist, and they were right — it existed in a mode and a month the page
+does not read.
+
+### And then: the same bug in the three places I hadn't looked
+
+Asked again *"why is it still zero"* — with a screenshot that answered its own
+question. The tab badge said "—" and the empty table gave the full explanation,
+because those are what I had fixed. Directly above them, four stat tiles still
+said **`0`**, **"Not enough duels yet"** ×3.
+
+"Not enough duels yet" is a claim about VOLUME, and it is plainly false for a
+player with 96 duels and 269 decks. Fixing one instance of a wording bug and
+leaving its siblings is worse than not fixing it, because the screen now
+contradicts itself and the wrong half is the bigger type.
+
+So `unmeasured` is derived **once** near the top of the component and the five
+places that must agree all read it — tab badge, big figure, three tiles, empty
+table. The tiles take it as a prop (`TileCombo unmeasured`). Note the badge uses
+`evoUnmeasured` rather than `unmeasured`: it renders for every tab id in the
+strip, not just the active one, so it cannot depend on `tab`.
+
+Verified with a 12-assertion probe over three tags, including a
+coverage-34% player to prove none of the "not recorded" wording leaks into a
+tab that has real data, and the Win Conditions tab to prove the evolutions
+branch does not touch it.
+
+**Probe note worth keeping:** the login form's username input has no `type`
+attribute, so `input[type="text"]` never matches it — the DOM *property* reports
+`"text"` by default, which is why dumping `n.type` says "text" and misleads you
+into writing a selector that cannot fire. Use `input:not([type="password"])`.
+And the form only mounts after the landing intro animation, so `networkidle` is
+not enough to wait on.
+
+---
+
+## Duel Analysis, on the Dekkies light system
+
+A visual pass only — no data, no layout, no information architecture moved. Two
+things about it are worth recording, because both are places where following the
+brief literally would have made the page worse.
+
+**A colour that works as a bar does not automatically work as a number.**
+Measured against the white card:
+
+| | contrast on `#FFFFFF` | |
+|---|---:|---|
+| `#20B875` green | 2.57:1 | fails even the 3:1 bar floor |
+| `#3182F6` blue | 3.71:1 | fine as a bar, thin as text |
+| `#F05A3A` orange | 3.37:1 | same |
+| `#F4C542` yellow | 1.63:1 | a fill only, never ink |
+
+So each hue is two steps. The **fills** keep the briefed values exactly — the
+bars are labelled, which is the relief the 3:1 floor allows — and the **figures**
+take a darker step of the same hue, so a win rate is still green and now reads at
+4.92:1 instead of 2.57.
+
+**G1/G2/G3 became three distinct hues, reversing a documented decision.** They
+had been a sequential ramp on the argument that they are ordered positions in a
+loadout, so one hue light-to-dark says "first, second, third" where three
+unrelated colours only say "three of something". Three is defensible here: the
+columns are read *across* a row as much as down, and comparing G1 to G3 on one
+combo is comparing categories rather than steps. Run through the palette
+validator on the white card, the briefed triple passes — with one condition:
+
+```
+lightness band · chroma floor · 3:1 contrast    PASS
+worst pair  #3182F6 blue ↔ #7C3AED purple       ΔE 6.4 (deutan)
+```
+
+6.4 sits in the 6–8 band, which is legal **only** with a secondary encoding.
+There is one — every G column prints its own percentage above its bar and the
+legend labels each — so the palette is allowed. Without those figures it would
+not be.
+
+**Inactive tabs are neutral; purple always means "selected".** Spells was orange
+and Evolutions green whether or not they were chosen, which made three tabs look
+like three simultaneous states when only one can be live, and spent the palette's
+meaning on decoration. The active treatment is now one treatment, so the colour
+answers *which is chosen* rather than *which is this* — and the glow is a 1px
+ring plus a 12px lift on the tab itself, never the row or the card.
+
+The brief's surfaces and typography are redefined **at page scope**, on the same
+token names the stylesheet already reads. That re-skins this screen and nothing
+else: no other page is touched and not one rule below the token block had to
+change. The dark block restores the app's own ladder, because the brief is a
+light-mode system and an auto-flip of it is exactly the one-theme-only pass this
+project keeps getting caught by.
+
+---
+
+## The Dekkies redesign — shell first
+
+The product is **Dekkies** now, and the shell was rebuilt to the new design:
+
+| | before | after |
+|---|---|---|
+| brand | "Royal Arena", gold crown on a sunken tile | **DEKKIES**, white crown on a solid violet tile |
+| nav | Home · Analytics · Deck Builder · Duel Builder · Counter Palette · About | Home · Analytics · **Deck Vault** · Duel Builder · **Counter Hub** · **Meta** |
+| tag search | on the landing section, and a row that replaced the nav | always in the chrome, ⌘K from anywhere |
+| sidebar selection | a solid slab in the row's own hue | a violet tint with a 3px leading bar |
+| upsell | Royal Pro | Dekkies Pro |
+
+**The nav no longer disappears.** It used to be swapped out wholesale for the
+player query row, which left every analysis screen with no way to reach Deck
+Vault, Duel Builder or Counter Hub without going home first — the same
+half-wired navigation the Home button was caught by, in a different costume. The
+query row moved into the panel, directly above the screen it drives, and its
+Home chip went with the move: that chip existed only because the row had eaten
+the nav, so keeping it would have put a second Home three centimetres from the
+first.
+
+**Meta was promoted out of the sidebar.** It is about the whole player base
+rather than the loaded player, which is why it was already home-only; making it
+a top-level destination states the same rule in the nav instead of in a
+comment.
+
+**The selected sidebar row went back to a tint.** Solid is the more confident
+treatment and it is what the rail wore for a while — but the rail carries six
+rows, the icon tile already states each section's identity in colour, and a
+solid slab makes the open row the loudest object on a screen whose subject is
+the panel beside it. Tint plus a bar says "you are here" without competing, and
+the bar is a shape, so meaning still does not rest on colour. The per-section
+hue stays on the icon tile, where identity belongs.
+
+**The G1/G2/G3 columns print their figures.** They were bar-only, which made
+them the only numbers on a row you had to hover to read, and left three
+unlabelled meters sitting beside two labelled ones.
+
+### Not carried over from the mock, and why
+
+* **Coach Assist stays in the sidebar.** The mock's rail does not show it. It is
+  a built, working screen, and dropping the only navigation to one is a
+  regression rather than a redesign.
+* **The three circular buttons beside the season control were not added.** In
+  the mock they are refresh, notifications and share; none has a behaviour
+  behind it here, and a button that does nothing is worse than no button — the
+  same reason the sidebar's Upgrade Now was wired to something real rather than
+  left as decoration.
+* **The G-bar legend keeps one hue.** G1/G2/G3 are ordered positions in a
+  loadout, so they are a sequential ramp light-to-dark rather than three
+  categorical colours; that is measured and documented in the colour section.
+
+---
+
+## The deck builder — two columns instead of a drawer
+
+All three deck screens (`#/builder`, `#/decks`, `#/palette`) were one scrolling
+column with the card pool in a drawer that slid up over it. Filling a deck was:
+scroll to the deck, open the drawer, lose sight of the deck *under* the drawer,
+pick a card, scroll back. And because the page scrolled as one piece, the
+toolbar, the decks and the pool all moved together, which is what
+*"it's so scattered and congested"* was describing.
+
+They now share one shell — `components/DeckWorkspace/` — with the decks on the
+left and the card library on the right, each scrolling by itself.
+
+**A deck is eight cards on one line and nothing else**, so the full width was
+never the decks' to need. Side by side, the deck being filled and the card being
+chosen are on screen together, which is the job.
+
+### What each column had to be told
+
+* **`min-height: 0` on every flex and grid child in the chain.** A flex item
+  defaults to `min-height: auto` and refuses to shrink below its content, so
+  without it both columns grow to fit all the decks and all 123 tiles, the inner
+  `overflow-y: auto` never has anything to do, and the page scrolls as one piece
+  again. That one property is the difference between two independent columns and
+  the pile they replaced.
+* **The library collapses to a 2.9rem spine**, and the state is owned by the
+  workspace rather than by the panel — the grid track and the panel's own shape
+  are one decision, so they cannot disagree. Collapsing moves the deck column
+  from 907px to 1219px, measured.
+* **One deck per row, and the rest scrolls.** This was briefly an `auto-fill`
+  gallery — two decks abreast, ~48px slots, more decks visible without
+  scrolling. Wrong trade, and it was reverted: a deck screen is a place to look
+  at and drag onto eight cards, so the cards get the whole column and the slots
+  go back to **104px**. Same reasoning as the dashboard rail — reclaimed width
+  buys BIGGER elements, not more of them.
+* **Versus is always two columns, Blue against Red.** A duel is one collection
+  against the other and the comparison is the point, so the sides sit parallel
+  with each player's decks stacked down their own side — Deck 1 opposite Deck 1.
+  `auto-fit` had been letting a wide deck column collapse them into one track,
+  which put Blue's three decks across the top and Red's underneath, reading as
+  one long list rather than two sides. They stack only under 62rem, where two
+  eight-card rows genuinely do not fit.
+
+### The filter had to shrink, and the deck panel with it
+
+The win-condition filter drew all twenty-one win conditions as permanent 44px
+chips. That fitted when a deck screen was one full-width column; beside a card
+library it wraps to two lines and becomes the largest thing on the page — a
+control for a job most visits do not do, drawn bigger than the decks it filters.
+It is one **Filter** button now, and the panel behind it keeps everything: win
+conditions first, then all 122 cards, with the search that was already there.
+Whatever is selected stays out on the bar as a chip, because a filter you cannot
+see is a filter you cannot undo. The panel is **absolutely positioned** — in
+flow it pushed the whole workspace down by its own height on every open, which
+on a screen whose columns are sized from the space left over is a layout change
+rather than a menu.
+
+The deck panel's five text buttons ("Open in Game", "Copy Link", "Import",
+"Rename", "Clear") became an icon rail for the same reason — that row was about
+a third of the panel's width. Every label survives in `title` and `aria-label`,
+and the one primary action keeps its words, in the footer where it reads as the
+end of the deck rather than one more control in a row of six.
+
+### What the library gained
+
+Search, an elixir filter and a rarity filter, beside the sort and type tabs it
+already had. Search folds case and punctuation on **both** ends — the card key
+is already the hyphenated form — so "ELITEbarb" finds Elite Barbarians. All four
+filters AND together, and `Reset` lights up only while something is actually
+narrowing the list, so the control states whether there is anything to undo
+before it is pressed.
+
+The three filter state fields are runtime-only and deliberately outside
+`partialize`: a filter is how you are looking at the pool right now, not part of
+the collection. **No persist-version bump was needed.**
+
+The type tabs and the mode tabs also had their selected tint re-grounded onto
+`--accent-select-fill-sunken`. They sit on a sunken strip and were mixing
+against the card, which is the documented way to get a control that reads as a
+bold slab in dark and a whisper in light.
+
+---
+
+## The home screen — three real areas, three behind a gate
+
+The home screen's analytics areas were placeholder panels. Four are now real,
+and the reason the other three are not is that they are what a subscription is
+for.
+
+| area | what it is |
+|---|---|
+| **Top Meta Decks** | already real — the global leaderboard |
+| **Deck Analysis** | paste a deck link → curve, roles, measured win rate, matchup spread |
+| **Cards** | use and win rate for every card across the whole player base |
+| **Deck Counter** | paste a deck → its three worst matchups; the rest behind the gate |
+| Duel Analysis · Duel Zone · Coach Assist | behind the Royal Pro gate |
+
+**The `Analytics` item in the top bar now goes somewhere.** It was a no-op from
+the one place people press it most: every analytics area already lives on the
+home screen, so `go(HOME)` from the home screen changed nothing and fired no
+`hashchange`. It resets the section *and* scrolls back to the top of the home
+screen, where the player-tag field and the Analyze button are — the same "going
+somewhere is two things" that Home and the brand were caught by. It scrolls to
+the search rather than down to the area grid because the areas are reachable
+from the rail on every screen, and the field is not.
+
+### Saved Groups is a view, not a footer
+
+The duel builder's saved sets used to render *below* the board, which put them
+under three to six deck panels — reaching them meant scrolling past everything
+you were working on — and `SavedGroups` returned `null` outright when nothing
+was saved, so the one time you most wanted to know where they had gone there was
+nothing on screen to find.
+
+A **Build / Saved** switch now sits beside Solo / Versus, and the two are
+deliberately separate controls: the mode is *which* collection, the view is
+whether you are looking at the board or at what you have saved of it. Saved
+fills the same column the board does and scrolls with it, and it says what to do
+when it is empty.
+
+**The win-condition filter SELECTS there rather than only dimming.** Below the
+builder its job was "show me which of these decks holds Hog Rider", so dimming
+the rest was right. As a library its job is "find me the groups with Hog Rider in
+them", and a group with no matching deck is not an answer to that — so groups are
+filtered out, the count reads "3 of 11", and matching decks are still highlighted
+inside the groups that survive.
+
+### The card library is as tall as the panel
+
+It was a toolbar stacked above a two-column workspace, so the library began where
+the *decks* began and left a band of empty surface beside the toolbar — a strip
+of nothing across the full width of the tallest thing on screen. The workspace is
+one grid now: toolbar in row 1, decks in row 2, library spanning both. Measured,
+the card grid gets ~50px of height back.
+
+### Gold, and the one hue that is not semantic
+
+Every other colour in this app earns its place by meaning. A crown is gold
+because a Clash Royale crown *is* gold, and drawing the one piece of game
+iconography in the chrome in the app's near-white made it look like a UI glyph.
+This is the game-fidelity call the README defers on for rarity colours, taken
+here because the crown is the brand.
+
+**Three steps, not one.** Metal reads as metal because it has a highlight, a body
+and a shade; a flat `#FFD700` reads as yellow plastic. `--gold-bright` / `--gold`
+/ `--gold-deep` are re-stepped per theme — on white the highlight has to come
+down or the shine disappears into the page — and the gradient runs *across* the
+shape rather than down it, which is what makes it look struck rather than lit.
+
+That means a real SVG `<linearGradient>`, which means an id, and a fixed id would
+be duplicated the moment two crowns are on screen — invalid, and the second crown
+inherits the first's stops. `useId` gives each instance its own.
+
+A crown goes gold **only once it is won**: an unlit pip drawn in metal would say
+the player has it, and which of the three they took is the counter's whole job.
+The brand mark also goes gold on hover rather than violet — violet is what
+"selected" means everywhere here, and the brand is never selected.
+
+### Subscribe opens the truth
+
+There is no checkout, so the gate's CTA does not pretend there is. It opens a
+glass dialog with the two real ways to reach a person — an `x.com` link that
+opens in a new tab with `rel="noopener noreferrer"`, and a `mailto:` with a copy
+button beside it. A button opening a checkout that does not exist would be the
+one dishonest thing on a screen whose entire argument is that its numbers are
+measured. The sidebar's **Upgrade Now** had no handler at all and now opens the
+same dialog.
+
+**White text needed a deeper blue.** `--accent-info-text` resolves to `--on-hue`
+— near-black on dark — because the dark hues are bright pastels chosen to read as
+text on a near-black page, and white on `#5B8DEF` is **3.23:1**. That is a fact
+about the step, not about blue: `--accent-info-solid` (`#2A5FC7` dark, `#1D4ED8`
+light) carries white at **5.90:1** and **6.70:1**. Same shape as the chart red —
+when a hue "cannot" carry the text you want, re-step the hue.
+
+### The Royal Pro gate is the real thing, behind glass
+
+**This is the one place blur comes back**, and it is the only place it earns its
+compositing pass. Everywhere else a frosted pane refracted whatever scrolled
+behind it and cost a layer for decoration. Here the blur *is* the message: a
+locked feature drawn as an empty box says "nothing here", while the same feature
+drawn as its own real content, out of focus, says "this exists and you cannot
+read it yet" — which is the only honest way to sell something.
+
+The preview is real markup, so it follows the theme, and it is made genuinely
+unreachable rather than merely hard to read. `inert` takes it out of the tab
+order, out of the accessibility tree and out of hit-testing in one property.
+Blur alone leaves a keyboard user tabbing through controls they cannot see;
+`pointer-events: none` alone leaves a screen reader reading content the page is
+pretending to withhold.
+
+The gate is on the **home screen only**. `#/player/<tag>/duels` and its siblings
+still render in full — nothing that already worked stopped working.
+
+### Deck Analysis, and what a "deck rating" is not
+
+There is no score out of ten. What a pasted deck gets is:
+
+- **its curve, roles and cycle**, computed from `cards.json` in the browser,
+  which is the copy already loaded to draw the art — a second copy from the
+  server would be free to disagree with the one drawing the cards;
+- **its measured win rate**, off `deck_counter`'s evidence ladder, printed with
+  the rung that answered — "51.0% over 102 battles, lists two cards different"
+  is a different claim from the same number off 30,000, and the reader is owed
+  which;
+- **a matchup spread against all seventeen archetypes**. `find_counters` used to
+  return only the ones that beat the deck, which is the right answer to "what do
+  I have to fear" and cannot be turned back into "how does this deck do" once
+  everything under 50% has been dropped. Those rows are computed either way, so
+  `field` costs nothing.
+
+**A thin reading keeps its place and loses its colour.** The spread sorts by win
+rate, which is right for a spread — and it put "77.8% over 9 battles" above
+"56.1% over 3,684". Both are true; one would not survive being measured again.
+Rows under 50 battles are drained to neutral rather than hidden, because a game
+that happened is not an estimate and does not need a sample size — the same
+argument `real_opponents` makes server-side.
+
+### Every paste box empties itself
+
+There are five of them — Deck Analysis, Deck Counter, the duel builder's import
+row, Deck vs Deck and the Coach's interview — and they all behaved slightly
+differently. Now they agree:
+
+- **A link is analysed when it is asked for, not on a keystroke.** The two
+  screens with an Analyze button used to fire the moment `deck=` appeared in the
+  field, which made the button decoration and started a multi-second matchup
+  query off a paste. The link now sits there until pressed, so a half-pasted URL
+  can be fixed before anything runs.
+- **The field empties once the deck lands.** A 200-character URL parked under a
+  deck that is already drawn is the longest thing on the screen and says nothing
+  the eight cards do not say better — and pasting the next deck meant selecting
+  all of it first.
+- **The builder's import row stays open** instead of closing itself after a
+  beat. Importing three decks in a row was: open, paste, wait for it to close,
+  open the next panel.
+- **Clearing a deck moved to its own control.** Emptying the box used to be how
+  you removed a loaded deck; a box that empties itself cannot mean that any
+  more, so Deck vs Deck and the Coach grew a Remove button rather than quietly
+  losing the capability.
+
+### A paste screen opens as an invitation, not an unfinished form
+
+Deck Analysis and Deck Counter both opened as a small left-aligned heading, a
+thin line of grey copy and a full-width input pinned to the top corner — with
+three quarters of the panel empty below it. The one thing being asked for is a
+link, so the ask is centred, the type is the display face at a headline size,
+and the panel says what it will hand back *before* it is given anything: a row
+of chips naming the output. An empty panel that lists its own output is an
+invitation; one that lists nothing is a form somebody forgot to finish.
+
+The section's identity hue — the same one its sidebar tile wears — lands on the
+icon tile, the kicker, one word of the headline and the chip dots. Nothing
+larger: the panel behind them never goes past a level-1 wash, which is the rule
+that keeps a neutral interface neutral while still reading as coloured.
+
+`PasteIntro` is shared, because the two screens are the same shape — paste a
+deck, get an answer — and two copies of that decision is how they drift apart.
+Once a deck IS loaded the hero collapses to `PasteHeader`, one row carrying the
+same icon and the same form: the screen now has an answer to show and the ask
+should not still be the biggest thing on it.
+
+**Results sit on a measure.** They used to run the full width of the panel,
+which at 1920px put a matchup row's label 40rem from its own bar. 78rem for
+Deck Analysis and 82rem for Deck Counter, centred — wider than that and the eye
+loses the row on the way across.
+
+### The card board is global, and an evolved card is a different card
+
+`/api/analytics/meta/cards`, and it costs **nothing extra to compute**.
+`player_deck_hash` is the sorted card list — that is why the hash is useless for
+display — so the grouped result the meta board already has is also a complete
+per-card tally. Splitting each hash and adding that row's battles and wins to
+each of its eight cards is exact, not a sample: every competitive battle in the
+window contributes its whole deck. One rollup, two products, and they can never
+describe different windows.
+
+It is tallied over the **full** grouped result, not the ranked board: the board
+is the top 600 candidates and the 25-player floor has already thrown decks away,
+so counting cards there would answer "what is on the leaderboard" while the
+label says "what people play".
+
+**The per-form split is the point.** An evolved Skeletons is scored apart from a
+plain one, and the difference is not cosmetic — measured on the live data:
+
+| card | plain | evolved | hero |
+|---|---:|---:|---:|
+| Elite Barbarians | 40.1% (2,242) | **57.6%** (41,100) | — |
+| Valkyrie | 51.7% (5,573) | 50.6% (11,252) | **53.4%** (17,410) |
+| Berserker | 49.0% (2,196) | — | **54.5%** (46,367) |
+
+Those come out of the art scan the board already runs, with `result` added to
+its SELECT — but tallied **before** its two filters. That scan keeps only decks
+on the board and caps each at 400 rows, both correct for establishing how a deck
+is drawn and both wrong for counting cards, because they would answer "how do
+the top decks field this card" while the label says "how does everyone".
+
+Every rule `player_cards.py` established is kept: only marked battles can be
+split, both sides come from that subset, a form's use rate is a share of the
+marked battles and not of every battle, and a card with no marked battle gets no
+`forms` key at all — "never observed in either form" and "observed, zero" are
+different claims.
+
+The rollup measures **166 s** with the card board included, on a background
+thread every 30 minutes. Coverage for the form half is stated on screen rather
+than implied: 222,745 marked battles over 3 days, at the time of writing.
+
+### Every hue has an INK step and a SOLID step
+
+> **Later addition:** blue has a third step, `--hue-blue-deep`, for display type
+> and bare graphic marks. The rule the three steps encode is stated in full in
+> [A third blue](#a-third-blue-and-the-rule-the-ramps-actually-encode) — it is
+> about which **contrast floor** an element has to clear, not about whether it
+> is a fill.
+
+Reported as *"in dark mode it looks like the opacity decreased — the left panel
+and the fonts are all lighter, and the other colours too"*, against a screenshot
+where the primary button was deep and everything else in the same hue was pale.
+
+The cause is that a hue has two jobs that want opposite values, and the dark
+theme only had one value:
+
+* **INK** — text, icons, a 1px border. On a near-black page it must clear 4.5:1
+  against grounds up to `#202020`, so the dark steps are bright pastels.
+* **SOLID** — a filled slab with text on it. It wants the opposite: dark enough
+  to carry white.
+
+A slab painted in the ink step is exactly what "dim" was. The five `--solid-*`
+tokens are the fill step, and they are **the light theme's own hues, unchanged** —
+a light-mode hue is already "dark enough to carry white on a white page", which
+is the same requirement a dark-mode fill has. Measured on both grounds:
+
+| | white on it | visible on the `#111` page |
+|---|---:|---:|
+| violet `#6D28D9` | 7.10 | 2.66 |
+| maroon `#96204A` | 8.07 | 2.34 |
+| blue `#1D4ED8` | 6.70 | 2.82 |
+| green `#047857` | 5.48 | 3.44 |
+| red `#C02618` | 5.95 | 3.18 |
+
+So light has one step per hue and dark has two, which is the honest shape: light
+needs no pastel because its page is not dark. The selected sidebar row, the
+identity tiles and every filled button now take the solid step with `--on-solid`
+white — and the rail looks the same weight in either theme.
+
+**Then the same complaint came back about the TEXT**, and the answer was not to
+push the ink darker — it cannot go darker, `#96204A` on the page is **2.05:1** —
+but to stop the coloured things being ink at all. An audit of every hue-coloured
+text node across five screens found exactly three, and each became a fill:
+
+| was | is |
+|---|---|
+| the section kicker, tinted text | a filled pill |
+| the headline accent word, tinted text | a highlighted word (`box-decoration-break: clone`) |
+| the Royal Pro badge, tint on tint | a solid badge |
+
+Selected states followed the same rule. A **pill** (the card-library type tabs,
+the builder's mode switch, the Cards group tabs, the filter trigger) is a fill,
+so it takes the solid step and white text. An **underline tab** (Coach Assist,
+Deck Counter, Player Cards, the top bar) is not — its coloured rule is the
+indicator — so the label went to full-contrast `--text` and the hue stayed on the
+rule. Meaning still never rests on hue alone: the selected label is brighter,
+heavier *and* ruled.
+
+The home screen's green **Analyze** button was the same bug in a different hue:
+`#34D399` fill with near-black text. It is `--solid-green` with white now, 5.48:1.
+
+**Meter bars deliberately did NOT change.** A bar sitting on a dark track has to
+be visible against it, which makes it closer to ink than to a slab — a deep green
+bar on `#0D0D0D` is nearly invisible. The rule that fell out of all of this is
+the one worth keeping:
+
+> A fill **with text on it** takes the solid step. A fill with **no** text — a
+> meter, a bar, a dot — keeps the bright step, because it has to be seen rather
+> than read.
+
+Verified by re-running the audit: zero hue-coloured text nodes remain on any of
+the five screens, and every filled control measures white-on-solid at 5.48:1 or
+better in both themes.
+
+### The action hue is maroon, in two steps
+
+Pink is gone. Maroon cannot be one value the way pink was, because the hue has
+two jobs that pull in opposite directions:
+
+| | job | dark | light |
+|---|---|---|---|
+| `--accent-action` | INK — text, icons, borders, what a wash is mixed from | `#D5639E` | `#96204A` |
+| `--accent-action-solid` | FILL — a surface with text on it | `#96204A` | `#96204A` |
+
+On a near-black page ink must clear 4.5:1 against grounds up to `#202020`, which
+puts a floor under how dark it can be — a burgundy dark enough to read as
+burgundy measures **2.3:1** there and is simply unreadable. A fill wants the
+opposite: dark enough to carry white, which `#96204A` does at **8.07:1** in both
+themes. Pink got away with a single step only because `--on-hue` (near-black on
+dark) was doing the reading; a maroon fill dark enough to *be* maroon needs white
+on it instead, so the fill and its text are their own pair. Thirteen filled
+primary buttons were repointed at the solid.
+
+**The first dark step was graded wrong, and "it looks dimmed, like the opacity
+dropped" was the symptom.** Measured in OKLCH, the four other dark hues sit at
+chroma 0.153–0.166; the first maroon came in at **0.121**, 22% under the band. It
+was not darker than its neighbours — it was less *saturated* than them, which on
+a dark ground reads as washed rather than deep. Lightness was never the problem,
+so lightness was not the fix: the step is now C 0.157, in band, at the same
+lightness.
+
+There is a hard limit underneath all of it: at the luminance dark-mode ink
+requires, a saturated red **is** a rose. The dark theme cannot hold
+"maroon-dark" and "as vivid as the rest" in one value. It gets vividness on the
+ink step, where the colour is small and has to be legible, and the true maroon on
+the fill step, which is where the large coloured surfaces actually are.
+
+Hue 350 on dark rather than the light step's 5, because maroon **is** a dark red
+and "the primary thing to click" must never read as "this will destroy
+something". Separation from the error red: **ΔE 10.6**, against 7.7 at hue 5 —
+where the old pink managed 9.7 and violet-vs-blue, two hues nobody confuses, is
+10.0.
+
+### Deck Analysis left the player sidebar
+
+`#/player/<tag>/decks` was only ever the placeholder shell — twelve grey bars and
+a note saying no data was wired up — and offering it beside five screens that do
+have data is offering a dead end. The **home** Deck Analysis is a real screen and
+stays. Both routes still render, so existing links keep working; neither dead end
+is advertised. Top Meta Decks is home-only for the opposite reason: it is about
+everybody rather than the loaded player.
+
+### The chart palette, and what actually failed the validator
+
+The matchup spread has three states — favourable, unfavourable, and *measured on
+too little to trust*. All three were chosen by running the palette validator on
+this app's own surfaces, and the first attempt got the diagnosis wrong.
+
+**It was not "red fails". It was that step of red.** The app's UI red on the
+dark ground (`#f87171`) is a bright pastel, and against the data green it
+separates by **ΔE 2.9 under protanopia** — under the floor, and under even the
+6–8 band a secondary encoding is allowed to rescue. That reads as "red and green
+cannot be a diverging pair", which is the folklore answer and is wrong here: a
+deeper red passes comfortably.
+
+| | light (surface `#f8f8fa`) | dark (surface `#141414`) |
+|---|---|---|
+| green `--c-win` | `#169b6b` | `#199e70` |
+| red `--c-loss` | `#c02618` — ΔE 9.6 deutan | `#d92d20` — ΔE 9.3 deutan |
+| amber `--c-thin` | `#a06a00` | `#c58200` |
+
+All clear the lightness band, the chroma floor and 3:1 against their surface.
+The chart red is a **re-stepped** red, not the UI's — which is the whole reason
+[the two systems are separate](#the-chart-and-data-colours--a-deliberately-separate-system).
+
+**The thin marker carries a hatch, and that is not decoration.** Red against
+amber is the pair deuteranopia collapses hardest. Measured across a dozen
+candidates, **no light-mode red/amber pair clears the CVD floor on hue alone**
+(best 4.9 against a floor of 6), and none clears the 15-point normal-vision
+floor either. Dark *does* pass — `#c58200` at ΔE 7.9 deutan and 16.7 normal —
+which is exactly the one-theme-only pass this project keeps getting burned by.
+So a thin row is amber **and** hatched at 45°: the hue is the quick read, and
+the hatch is what survives deuteranopia, a monochrome print and forced-colours
+mode, none of which a hue difference does.
+
+Every bar prints its own percentage and its battle count regardless, and on a
+thin row the count is the whole point — so the count stops being the quietest
+thing in the row.
+
+---
+
+## The landing screen, rebuilt
+
+A visual pass over the landing view: same routes, same store, same search, same
+five-hue palette. Four things are worth recording because they are the parts
+that were not just CSS.
+
+### The assets existed but nothing pointed at them
+
+`assets/background/` held `light_background.png`, `dark_background.png` and
+`king image.jpg` — a matched pair of castle backdrops plus a character — and
+**no file in `src/` referenced any of them.** They were staged, not wired. So
+"keep the existing backgrounds" meant connecting them for the first time, not
+preserving a working setup.
+
+`scripts/build-hero-art.py` turns the three masters into what `public/` serves.
+The masters stay untouched and the script is idempotent.
+
+| | before | after |
+|---|---:|---:|
+| character | 1.0 MB JPG, opaque | **99 kB** WebP, alpha |
+| light backdrop | 1.6 MB PNG | **35 kB** WebP |
+| dark backdrop | 1.6 MB PNG | **32 kB** WebP |
+| total | 4.2 MB | **166 kB** |
+
+### Cutting the character out is not a colour key
+
+The king ships on a flat `(247,247,247)` field: invisible on the light theme, a
+white box on the dark one. Two details decide whether the cutout survives both:
+
+* **Flood fill from the border, not a global near-white test.** He holds a pale
+  parchment report and the crown has white highlights — a global key punches
+  holes straight through them. Only background *connected to the edge* goes.
+* **Decontaminate the edge.** An antialiased boundary pixel is already mixed
+  with the backdrop (`C = aF + (1-a)BG`), so keying alone leaves a white halo
+  that is invisible on light and obvious on dark. Recovering
+  `F = (C - (1-a)BG) / a` is what makes one file work on both themes.
+
+### The global motion kill-switch
+
+`index.css` carried this, and it is why the nav had no hover motion and nothing
+in the app animated:
+
+```css
+*, *::before, *::after { animation: none !important; transition: none !important; }
+```
+
+It was written to be reversible — *"reinstating specific motion later is a
+decision made here"* — and a request for micro-interactions is that decision.
+What it was really protecting against was **continuous** motion: the old landing
+page animated `box-shadow` and `filter` in an infinite `alternate`, which
+repaints a blurred layer every frame and made the page stutter. Those loops are
+gone from the source, not merely suppressed. What the blanket was actually
+switching off was nine one-shot entrances and a few dozen hover transitions.
+
+It is now scoped to `prefers-reduced-motion: reduce` — same blanket, same one
+place, applied only when the reader has asked for it. The rules that keep it
+honest: one-shot only (no `infinite` anywhere), transform and opacity only (both
+composited), and short — `--dur-1..4` (140/200/320/560ms) and one `--ease`.
+
+### A reveal must not fight the thing it reveals
+
+The scroll reveal first set `transition: opacity, transform` on `.band > *`.
+That is a descendant selector, so it beat `.toolPanel`'s own rule and **silently
+replaced every card's hover transition** — the cards still lifted, but over
+560ms instead of 320ms, and their background and border stopped transitioning at
+all because those legs were no longer in the winning shorthand. Computed style
+said `0.56s, 0.56s` where it should have said `0.2s, 0.2s, 0.32s, 0.32s`.
+
+A keyframe animation never touches the `transition` property, so the fix is to
+reveal with `animation` and let each card keep its own timing. Fill mode is
+`backwards`, not `both`: `forwards` would pin `transform: none` as an
+animation-origin value, which outranks ordinary declarations and would have
+killed the hover lift on every card for the rest of the session.
+
+`useReveal` uses a **callback ref over a state node**, not `useRef` +
+`useEffect([])`. The bands live inside the home view, which unmounts whenever a
+tool opens and mounts again on return; an empty-dependency effect runs once per
+*Dashboard* mount, so on the second visit it had already fired and the fresh
+element never got its attribute.
+
+### Probe notes
+
+Three failures during verification were the probe's fault, not the product's:
+
+* The username input has **no `type` attribute**, so `input[type="text"]` never
+  matches — the DOM *property* reports `"text"` by default, which is what makes
+  dumping `n.type` misleading. Use `input:not([type="password"])`.
+* Playwright's `hover()` **scrolls the element into view first**, so comparing
+  `boundingBox` before/after measures the scroll. The first version of the lift
+  assertion "passed" on a 226px delta.
+* The mouse stays where the last click left it. After the SIGN IN click it sits
+  mid-screen, so a scrolled-to card is *already hovered* when the resting
+  baseline is measured — the lift then reads as 0px. Park it first.
+
+`fetchPriority` is React 19; on React 18 it falls through to the DOM and warns
+on every render. `loading="eager"` does the job here.
+
+### The landing screen has no rail
+
+Follow-up round. Three things were wrong and two of them were the same mistake.
+
+**The sidebar did not belong on the landing screen.** A rail of a player's
+analytics areas, rendered before there is a player, is navigation to seven
+screens that all say "search for someone first" — and it cost the hero a quarter
+of its width. The seven areas are now a grid of centred blocks under the search,
+where they can be sized and *described* rather than listed. The rail returns the
+moment there is a subject: opening an area, or loading a tag.
+
+`data-landing` on `.body` rather than reusing `data-rail='closed'`, because the
+rail's open/closed state is a remembered preference and the landing screen is
+not expressing a preference — it has no rail at all. Sharing the attribute would
+have meant coming back from a tool with the rail open reserved 236px for a
+sidebar that never rendered.
+
+The blocks also moved ABOVE the tool panels. They are the primary navigation of
+this screen now, so they cannot sit below three full-bleed slabs.
+
+**The scrim was erasing half the painting.** The backdrop is a matched pair with
+castles at BOTH edges, and the first scrim ramped from fully opaque `--glass-fill`
+at the left — so the left castle never appeared on the site at all. The artwork
+is already low-contrast where the copy sits (both files mist out toward the
+centre), so it does not need covering; it needs a floor under the text. The veil
+now tops out at 62% instead of 100%, and both castles read in both themes.
+
+The general version of that mistake: a scrim exists to protect legibility, and
+its correct strength is the least that achieves it. Starting at "opaque" and
+easing outward is how you end up shipping an asset nobody can see.
+
+### Glow, in dark mode only
+
+Requested, and compatible with the history here once one distinction is made.
+The lag that got all motion banned came from **animated** glow — `box-shadow`
+and `filter` in an infinite `alternate`, repainting a blurred layer every frame.
+A **static** glow is painted once and only crossfades on hover. Nothing added
+here loops, and a probe asserts it: zero animations with
+`iterations === Infinity` anywhere in the document.
+
+It also fills a real gap rather than being decoration. The dark theme sets
+
+```css
+--shadow: 0 0 0 0 transparent;   /* a black shadow on a near-black page is invisible */
+```
+
+which left dark mode with **no elevation cue at all** on hover — the cards lifted
+3px and nothing else changed. Light gets depth from a real shadow; dark now gets
+it from the surface appearing to emit its own hue.
+
+**One declaration serves both themes.** `--glow-core` / `--glow-halo` are
+*strengths*, mixed per hue at the point of use — the same trick `--edge-strength`
+already used:
+
+```css
+box-shadow: 0 5px 20px color-mix(in srgb, var(--tile-hue) var(--glow-core), transparent);
+```
+
+Light sets them to `0%`, and `color-mix(in srgb, <hue> 0%, transparent)` is
+simply transparent. So there is no `[data-theme]` branch per component and no
+second set of rules to drift out of step — verified by reading computed style in
+both themes: `color(srgb … / 0.3)` on dark, `/ 0)` on light, from the same rule.
+
+Glow is applied where an element already carries a hue — heading blocks, icon
+tiles, card hover, focus rings, the active sidebar row, the brand tile, the
+primary buttons — so it reinforces the existing identity colours rather than
+introducing a new palette. The one persistent glow in the chrome is the open
+sidebar row, because "you are here" is a state rather than a reaction; everything
+else lights only on hover or focus.
+
+**Grid note:** the seven analytics blocks moved off `auto-fit` to explicit column
+counts. Seven is prime, so the only tidy splits are 7 and 4+3, and `auto-fit`
+packed six at a lot of common widths — leaving one card marooned on its own row.
+
+### Painted headings, gate hues, and a font that could not go bold
+
+Four small things, three of which were one bug wearing different hats.
+
+**The gate wore two unrelated colours.** A Royal Pro card had a violet badge, a
+violet lock ring and a **maroon** CTA — the action colour, applied because it was
+a primary button, with no thought for what it was gating. So the colour you
+pressed on the home screen was not the colour you landed on. `ProLock` now takes
+a `hue` and every coloured part reads one `--gate-*` set, sourced from the same
+`SIDE_NAV` entry the block and the sidebar row use. Duel Zone is violet through;
+Coach Assist and Duel Analysis are green through. Asserted by comparing the CTA's
+computed background to the badge's, per gated area.
+
+**The tool panel headings** got the same painted treatment as the analytics
+blocks — white marker lettering on a solid block of the tool's own hue, from
+`--tool-solid`. `box-decoration-break: clone`, because these titles are long
+enough to wrap and the alternative is one L-shaped slab with a notch in it.
+
+**The display face could not be bolded, and nothing said so.** Every heading
+asked for `font-weight: 400`, and `:root` carried `font-synthesis: none`. Kids
+Word ships a single cut — so there was no bold file to load AND the browser was
+forbidden from making one. Requesting 600 would have changed precisely nothing.
+
+`font-synthesis: weight` re-enables exactly the half that was needed. Italic
+synthesis stays off, which is the reason the line was written in the first place:
+there is no italic cut either and a mechanically slanted marker face reads as a
+rendering fault. The 28 display-heading rules then went to 600. The `@font-face`
+block keeps `font-weight: 400` — that describes the FILE, and rewriting it would
+have told the browser the single cut was already bold.
+
+**One focus indicator per control.** The top-bar search drew a 3px ring on its
+wrapper AND the global `:focus-visible` outline on the input inside it, so
+clicking the field produced a visible box-inside-a-box. The wrapper's existing
+border now just changes colour, the glow carries it on dark, and the inner
+outline is suppressed on that one input. The hero field keeps its ring — it is
+the point of that screen — but lost its inner outline too. `:focus-visible`
+everywhere else is untouched.
+
+The `⌘K` hint chip in that field became the submit button it was sitting next to:
+one magnifier, pressable, opening the analysis for whatever is typed. The leading
+decorative magnifier went with it — two on one field, only one of them pressable,
+is worse than none. The shortcut still works and is named in the tooltip.
+
+### The closing band, and the scrollbar that went away
+
+**Nothing on the landing page is a written-down number.** The reference mock
+ends with "2.31M+ battles analysed" over a sparkline; this ends with a histogram
+of the real card list, counted from `CARDS` at render time. If a card is added
+the chart moves on its own. That restraint is the whole point of a trust
+section — one that opens with a fabricated figure is worse than none, and this
+one has to survive a reader checking it.
+
+The three claims beside it are properties of how the thing is built, each
+checkable in this repo: `mode=ro` on the database connection, the 8-deck /
+2-shell evidence floor, and evolved forms counted as their own cards.
+
+**The chart is a histogram, so height carries the value and colour carries
+nothing.** One flat hue, no legend (the title names the series), the count
+printed above the tallest bar only, and the whole column as the hit area rather
+than the 30px bar.
+
+**The scrollbar is hidden in both themes, and nothing replaces it.** There was
+briefly a travelling glow on dark, fed by a `--scroll-progress` custom property.
+It is gone, and `useScrollProgress` was deleted with it rather than left
+dangling: the page did not need it. The content is its own cue — panels are cut
+off mid-card at the fold — and a light tracking down the edge of a three-screen
+page is decoration pretending to be a control.
+
+### The ink/solid mix-up, for the third time
+
+"Open Duel Builder", "Open Deck Builder" and "Open Counter Palette" were
+`background: var(--tool-hue)` — the INK step, which on dark is the pastel. So
+each button became a mint or lilac slab that then needed *dark* text to be
+readable, which is precisely the "dim and opaque in dark mode" complaint this
+project keeps rediscovering. Measured:
+
+| | dark fill | white on it |
+|---|---|---:|
+| was `--tool-hue` | `#a78bfa` | **2.72:1** |
+| now `--tool-solid` | `#6d28d9` | **7.10:1** |
+
+**The chart bar is the exception, and it is worth knowing why.** It is also a
+fill, but it carries no text — and the solid ramp is graded to hold white, which
+makes it *dark*. On the dark card `--solid-blue` measures **2.60:1** against the
+surface where `--hue-blue` measures **5.39:1**. Applying the "fills use solid"
+rule there would have made the bars harder to see, not easier. The rule is
+really *fills that carry `--on-solid` text* use the solid ramp; a bare graphic
+mark takes whichever step actually contrasts with the surface it sits on.
+
+### A third blue, and the rule the ramps actually encode
+
+"Dominate." and the histogram both read as washed on dark, and the fix was not
+the solid ramp. Measured against the dark card:
+
+| blue | vs surface | verdict |
+|---|---:|---|
+| `--solid-blue` `#1d4ed8` (what light shows) | **2.60** | fails even the 3:1 floor |
+| **`--hue-blue-deep` `#2563eb`** | **3.37** | the deepest that clears it |
+| `--hue-blue` `#5b8def` | 5.39 | what was there — legible, but pastel |
+
+`--hue-blue` is graded to hold **4.5:1 at 14px**, which is why it is light. At
+57px that headroom is wasted: large text and graphic marks only need **3:1**, so
+they can spend the difference on saturation. Hence a third step, used only for
+24px+/bold type and bare marks — never body copy. Light sets it to `#1d4ed8`,
+the value light already showed, so the component needs no theme branch and the
+light theme is byte-identical.
+
+So the ramps encode a rule about *what the colour is doing*, not about theme:
+
+* **`--solid-*`** — fills that carry `--on-solid` text. Graded to hold white.
+* **`--hue-*`** — ink at body size. Graded to hold 4.5:1.
+* **`--hue-blue-deep`** — display type and graphic marks. Graded to hold 3:1.
+
+Reaching for the solid ramp because "it is a fill" is what would have made the
+bars *darker than the page*. The question is never which ramp is for fills; it
+is which contrast floor this element has to clear.
+
+---
+
 ## The revamp, in order, with the reasoning
 
 ### 1. Make it fast
@@ -602,8 +3192,8 @@ pulls the landing chunk, and showed −1% — worth knowing before quoting a
 number.)*
 
 The screens added since have grown the bundle again; the current build is
-330.5 kB JS / 92.1 kB CSS, with jsPDF kept as a dynamic import that is never
-fetched on load.
+414.9 kB JS / 149.9 kB CSS (123 kB / 24 kB gzipped), with jsPDF kept as a
+dynamic import that is never fetched on load.
 
 Also removed: the global aurora/particle layers, 29 `backdrop-filter` passes
 outside the (now deleted) landing, and multi-layer box-shadows. Motion removal
@@ -625,7 +3215,11 @@ navigating away, so the chrome stays put.
 
 Glass panels came back at the user's request, on both themes — which required a
 page wash behind them, because a `backdrop-filter` over a flat colour has
-nothing to refract and just looks like a flat colour.
+nothing to refract and just looks like a flat colour. They were later dropped
+again for solid surfaces, also at the user's request and for better reasons;
+see [step 11](#11-the-ui-pass--drop-the-glass-colour-the-rail-wire-the-nav).
+The page wash stayed — it now shows only in the gutters between panels, at half
+its old strength in light mode.
 
 ### 4. Connect the database
 
@@ -663,11 +3257,315 @@ hue, by choice, but as a level-2 tint rather than the solid slab it replaced.
 Then a visual pass, because tokens compiling is not the same as a page looking
 right — two things only showed up on screen and are recorded below.
 
+### 7. Duel Zone
+
+The `!duels` series log and the `!duelspdf` deck-sequence page, ported into two
+windows over one read. Building it turned up the splitter leaving two-game
+`1-1` fragments — a scoreline a duel cannot end on — which is where
+`_merge_unfinished` came from, and the measurement that says the reuse threshold
+itself must not move.
+
+### 8. Cards, and three sidebar sections that were really filters
+
+Use rate and win rate for all 122 cards per player, with the window and the game
+mode actually driving the query. Win Conditions, Champions and Evolutions moved
+out of the sidebar and became tabs on it.
+
+### 9. Colour corrections, all measured rather than eyeballed
+
+Analyze went green and Upgrade Now blue on request, which needed two new text
+tokens because the dark steps of green and blue cannot carry white. Then the two
+themes were sampled pixel-by-pixel and a real asymmetry came out of it — a
+selected control reading 2.4x louder in dark than in light. Both are below.
+
+### 10. Deck Counter, designed backwards from the data
+
+The brief came with a three-screen mock. Auditing the database against it first
+is what produced the screen that exists: two of the mock's promises could not be
+kept (an exact deck-vs-deck record, an average match time) and one of its
+implicit assumptions was actively wrong — the stored matchup table is biased
+towards whoever was being tracked, so read straight it says everything counters
+everything. The section above has the numbers; the point here is that the audit
+came before the layout, not after it.
+
+### 11. The UI pass — drop the glass, colour the rail, wire the nav
+
+A sweep rather than a feature: solid panels everywhere, a depth ladder that
+behaves the same in both themes, a sidebar that lights each section in its own
+colour and collapses out of the way, and Home and the brand actually returning
+home. Full reasoning in
+[The UI pass](#the-ui-pass--surfaces-selection-and-navigation).
+
+### 12. Deck Counter, rebuilt around the pasted deck
+
+The screen answered every question at archetype level, so the cards you pasted
+changed nothing. It now reads the exact list first and widens only as far as it
+must — exact pair, this deck, one card different, two cards different,
+archetype — and prints which rung answered. Duels were verified to be in the
+data already; the *suggested* deck moved to the same population so that it is.
+Pasted decks draw their evolutions on paste, every list pages, and the tables
+line up. Full reasoning in
+[Deck Counter](#deck-counter--what-beats-what).
+
+### 13. Read the level, not the art string
+
+Not a feature at all — a field. Every art lookup in the project read
+`player_evo`'s `art` string, which is a derivation that loses 16.1% of what it
+derives from; the LEVEL beside it is exact. Heroes stopped disappearing, three
+decks stopped claiming three evolutions, and a measurement this file had been
+quoting for weeks turned out to be backwards. Full reasoning in
+[the level says which form it is](#the-level-says-which-form-it-is-the-art-string-does-not).
+
+### 14. Coach Assist
+
+The bot's duel advisor, in two windows: what they will bring, and what you
+should answer with. Both are interviews rather than forms, because a duel has a
+state and the useful question is different at each one. Scored on the Deck
+Counter's evidence ladder rather than a trained model — card-sensitive, and it
+prints which rung answered. Under it sits the thing that is not a prediction at
+all: the real three-deck loadouts they have run containing the deck you pasted.
+Full reasoning in [Coach Assist](#coach-assist--mid-duel-help).
+
+---
+
+### 15. The deck builder, as two columns
+
+The card pool moved out of a drawer that covered the decks and into a column
+beside them, on all three deck screens at once. The filter and the deck panel's
+action row both had to shrink to pay for it, and the pool gained search and two
+value filters. Full reasoning in
+[The deck builder](#the-deck-builder--two-columns-instead-of-a-drawer).
+
+### 16. The home screen, and a gate
+
+Deck Analysis, Cards and Deck Counter became real screens; Duel Analysis, Duel
+Zone and Coach Assist went behind a Royal Pro gate that shows the feature
+blurred rather than an empty box. The global card board rides on the meta
+rollup's existing scan, and the matchup spread's diverging palette was re-poled
+to amber after the validator failed red/green in dark mode. Full reasoning in
+[The home screen](#the-home-screen--three-real-areas-three-behind-a-gate).
+
+### 17. Evolutions 0, and the message that was the bug
+
+A player showed zero evolution combos while their battle history plainly had
+evolutions. The counting was right both times; the explanation was wrong twice.
+`duel_decks()` gained a `span` so the tab can quote the dates it found nothing
+in, and the four stat tiles stopped saying "not enough duels" about a player
+with 96 of them. See
+["Why is Evolutions 0?"](#why-is-evolutions-0--two-emptinesses-that-shared-a-sentence).
+
+### 18. The landing screen
+
+The staged backdrop pair and the character were wired up for the first time, the
+hero became copy-left/character-right, and the rail left the landing screen for
+a grid of painted blocks under the search. The global `animation: none
+!important` kill-switch was narrowed to `prefers-reduced-motion`, which is what
+made every micro-interaction in the app possible. Then a static per-hue glow for
+dark mode, where `--shadow` is transparent by design and there was no elevation
+cue at all. Full reasoning in
+[The landing screen, rebuilt](#the-landing-screen-rebuilt).
+
+### 19. Painted headings, the gate hue, and a font that could not bold
+
+Analytics blocks and tool titles became white marker lettering on a solid block
+of their own hue. The Royal Pro gate stopped mixing a violet badge with a maroon
+CTA and now wears the hue of the area it gates. `font-synthesis: none` was
+narrowed to `weight`, which is what made `font-weight: 600` do anything at all
+on a single-cut display face. The ⌘K chip became the submit button, and the
+doubled focus box (wrapper ring + inner outline) collapsed to one indicator.
+
+### 20. A closing band, and three rounds of colour correction
+
+The page got an ending: three checkable claims and a histogram of the real card
+list, counted at render time — no invented "battles analysed" figure anywhere.
+The scrollbar was hidden, briefly replaced by a scroll-tracking glow, then the
+glow was removed too and its hook deleted. Colour was corrected three times over
+this stretch, each time the same underlying confusion between the ink and solid
+ramps, and it ended with a third blue step and a clearer statement of what the
+ramps actually encode.
+
+### 21. Both storage tiers moved to H:, and the site followed
+
+Not a feature — a path. The bot moved its operational database from
+`C:\ClashBot\data` to `H:\ClashBot\data` on 2026-08-17 (retention 60 → 150 days,
+which no longer fits an internal SSD), and this project's default still pointed
+at the old file. It would not have failed: that file was a valid database, so
+the site would have served a frozen snapshot indefinitely. One env-backed
+default changed, and the two READMEs stopped promising a local fallback that the
+migration had deleted. Full reasoning in
+[Where the data comes from](#where-the-data-comes-from).
+
+### 22. Copy and Open in Game, on every deck the site draws
+
+The duel builder had both actions; the nine analytics screens that draw decks
+had neither, so the deck that beats yours had to be rebuilt by hand. One shared
+component, an 8-card guard that keeps it off duel loadouts and partial card
+lists without any caller knowing why, and the server's own arrangement used as
+the link order. Full reasoning in
+[Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game).
+
 ---
 
 ## Things that went wrong and what fixed them
 
 Kept because each one cost time and each one can recur.
+
+**A test deleted the production shadow log — twice.**
+`test_ml_production.py` called `os.remove(shadow.LOG_PATH)` on the real path, so
+running the test suite destroyed 1,277 collected observations. It was diagnosed
+only after catching the log dropping from 79 records to 1 mid-session. The first
+hypothesis — concurrent multi-process appends — was wrong; `O_APPEND` was never
+the problem. `LOG_PATH` is now overridable via `CLASH_OIE_LOG`, and a guard test
+scans every `test_*.py` for anyone doing it again.
+
+**The WAL grew to 5.66 GB and no checkpoint could fold it.** Not a leaked
+connection — 28 call sites all close in `finally` blocks — but short read-only
+connections that *overlap* under load, leaving no gap for
+`wal_checkpoint(TRUNCATE)`. The fix is a scheduled gap: a `.maintenance` flag
+file the bot drops, which makes `resolve_db_path()` return `None` so the site
+lets go. See `server/README.md`.
+
+**Two performance "fixes" that measured as nothing.** A persistent SQLite
+connection with `mmap_size=1G` and a 64 MB cache looked like a **10x p50 win**
+(329 ms → 32 ms) when benchmarked across different tag slices. Paired on the same
+tags with alternating order it was faster on exactly **20 of 40** — mean
+**-8 ms, CI [-37, +21]**. Pure page-cache warming. Narrowing the history window
+from 60 to 20 days: rows returned fell 21%, time did not move (**+9 ms, CI
+[-29, +47]**), because `idx_battles_tag` is `(player_tag)` only, so every row for
+the tag is fetched and `battle_time` filtered afterwards.
+
+**"Duel is slow" was wrong for four phases.** Live shadow reported duel p95
+2588 ms against competitive 386 ms. The query never filtered by mode — both
+domains read the *same rows* — but the cache was keyed per domain, so every Coach
+read ran the identical expensive query twice. Whichever domain went first paid
+the cold disk; the second read its rows back from the OS page cache. Measured on
+disjoint tag sets, the asymmetry followed the **order**, not the domain, and
+inverted exactly when the order did.
+
+**A CSS token that does not exist, caught only by a screenshot.** Five new
+dim-text rules used `var(--text-dim)`; this project's token is `--text-muted`.
+They fell back to inheriting the block's violet hue. Every text-content assertion
+passed regardless — only looking at the rendered output found it, and then only
+after misreading a downscaled PNG and having to check computed styles to correct
+myself.
+
+**A verification that tested a paywall.** The "Coach Assist" tile on the
+analytics home grid is Pro-locked and renders a placeholder; the real interview
+only exists in *player* view. A browser check driving the home tile would have
+verified a locked panel. The tag matters too — the first one tried was
+competitive-only, so the duel Coach correctly had nothing to predict and no deck
+ever rendered.
+
+**A readiness check that contradicted its own reconciliation.** `frontier.py`
+first compared the global battle frontier against the newest *anchor* in the log
+and returned READY when reconciliation had just found zero outcomes. The newest
+anchor belongs to one player and the frontier to another, so the comparison was
+already true at freeze time. The correct baseline is the frontier as it stood
+when the observations were frozen. The disagreement between two checks is what
+exposed it.
+
+**The website was reading a database that had been deleted underneath it.** The
+bot moved both storage tiers to H: on 2026-08-17; `server/clash_data.py` still
+defaulted to `C:\ClashBot\data\battles.db`. The failure mode is the ugly one:
+for a while that file still existed and still carried a valid schema, so nothing
+raised and nothing 500'd — the site would simply have served a frozen snapshot
+forever, answering every question plausibly and none of them currently. It was
+only obvious once the file was deleted outright.
+
+The bot had already reasoned this through and built `storage_guard_check()`
+against exactly it, refusing to start against a database that has lost most of
+its rows. This project has no equivalent, and `/status` reporting the resolved
+path is the whole of its defence. **A stale database is more dangerous than a
+missing one**, which is why the dead C: file was deliberately NOT added to
+`DB_FALLBACKS` when the default moved.
+
+**A `<button>` inside a `<button>`, from adding a control to a row that was
+already one.** The Duel Zone's series row is a button that expands to reveal the
+opponent's deck, and the deck strip lives inside it — so putting copy/open
+buttons in the strip nested them. The browser closes the outer button early
+rather than erroring, so the symptom would have been the actions escaping the
+row AND the row no longer expanding, neither of which points at nesting. Caught
+by reading the JSX before running it. The general shape: adding an action inside
+a row means checking what the row itself already is.
+
+**A prop added to a type but not to the destructuring, which then resolved to a
+DOM global.** Three local `Strip` components got `name?: string` in their props
+type while `name` stayed out of the `{ cards, art, inferred }` list — so `name`
+inside the component silently referred to `lib.dom`'s `declare const name: void`.
+Three files, same slip, and it is only a type error because that global happens
+to be typed `void`; had it been `string` it would have compiled and rendered the
+window name in every tooltip. `tsc` caught all three, which is the argument for
+running it rather than trusting the edit.
+
+**A property that silently does nothing is the worst kind of bug.** Three
+separate instances this cycle, and none of them threw, logged, or failed a
+typecheck — each just produced an interface that ignored a correct-looking
+declaration:
+
+* `font-weight: 600` on a single-cut display face, under `font-synthesis: none`.
+  There is no bold file to load AND the browser is forbidden from making one.
+* `fetchPriority` on React 18. It is a React 19 prop; on 18 it falls through to
+  the DOM as an unknown attribute and warns on every render.
+* `transition` on `.band > *` quietly replacing `.toolPanel`'s own hover
+  transition, because a descendant selector outranks a class. The cards still
+  animated — at the wrong duration, missing two legs of the shorthand.
+
+The shared shape: CSS and JSX both accept a value, apply their own precedence,
+and say nothing. Reading *computed* style is what caught all three — `0.56s`
+where `0.2s, 0.2s, 0.32s, 0.32s` was expected is a fact; "the hover looks a bit
+slow" is not.
+
+**Fixing half of a wording bug is worse than not fixing it.** The empty
+Evolutions tab was corrected in the tab badge and the table while four stat
+tiles above it still said "not enough duels" about a player with 96 of them. The
+screen then contradicted itself, and the wrong half was in bigger type. When a
+message is wrong, grep for its siblings before declaring it fixed — the fix in
+that case was to derive the condition **once** and have all five readers share
+it.
+
+**A scrim's correct strength is the least that achieves legibility.** The hero
+backdrop is a matched pair with castles at *both* edges; the first scrim ramped
+from fully opaque and the left castle never appeared on the site at all.
+Starting at "opaque" and easing outward is how you ship an asset nobody sees.
+
+**A blurred sibling painted on top of the thing meant to be sharp.** The Royal
+Pro gate stacks two children in one grid cell: the real content with
+`filter: blur(7px)`, and the card that sells the subscription. The card came out
+washed — its Subscribe button rendered a pale pink — while `getComputedStyle`
+insisted it was an opaque white card carrying a `#c81e69` button. Both readings
+were right. **A `filter` makes an element paint as though it created a stacking
+context, which puts it in the positioned paint phase — after every in-flow
+sibling.** The veil had been `position: absolute`, which put it in that same
+late phase; moving it into the grid cell to stop the card being clipped quietly
+demoted it below the blur. `position: relative; z-index: 1` restores the order.
+
+The lesson is the one this project keeps relearning in a new costume:
+`getComputedStyle` hands back the declaration, never the composite. What caught
+it was a probe that screenshots the button and reads its actual pixels — and the
+first version of *that* failed too, because it averaged the white label running
+through the middle of the fill and reported a pale pink nothing on screen was.
+It samples the dominant colour now.
+
+**A grid row that collapsed to 4.5px, so every tile covered the next one.**
+The card grid moved from fixed 62px columns to `minmax(3.4rem, 1fr)` so the
+tiles could take whatever width the column had — and the explicit
+`grid-auto-rows: 75px` went with the fixed sizing, since row height should
+follow from the tile's `aspect-ratio: 302 / 363`. It does not. **An auto row
+sizes itself from its items, and an item whose only child is an `<img>` at
+`height: 100%` contributes almost nothing to that** — `aspect-ratio` is not
+consulted. Measured on the rendered page: rows resolved to **4.53px** while the
+tiles themselves were 71px, so each tile overflowed its row and painted over the
+one below. Nothing looked wrong, because the tiles were the right size and in
+the right places; what was wrong was that the top-left of every tile was covered
+by its neighbour, so **clicking Knight hit Dart Goblin**. `grid-auto-rows:
+max-content` asks for the item's own resolved height instead. `align-items:
+start` goes with it, since a stretched item takes its height from the row.
+
+Worth keeping as a shape: the bug was invisible to the eye and to every
+assertion about position or size — it was found because a browser probe tried to
+*click* a card and Playwright reported which element intercepted the pointer.
+The same trap was live on the deck slot grid and on the filter panel's chip grid,
+both of which pair a `1fr` column with an `aspect-ratio` child.
 
 **The archive double-counted every battle.** The archive holds every battle
 *including* the ones still sitting in the hot tier, so querying both over the
@@ -715,6 +3613,18 @@ in decks whose only hero-capable cards also evolve; and pooling a merged
 cluster's marks drew a deck with five evolutions. Only the first was visible
 from the code — the rest needed looking at the rendered page.
 
+**`arrange_deck` was not idempotent, and that is how the sequence board lost its
+art.** With two both-form cards in one deck (knight + musketeer), the hero slot
+went to `both[-1]` — the last one *as the list happened to arrive*. So arranging
+an already-arranged deck swapped the hero and the second evolution back again,
+and the same deck rendered one way in the series log and the other on the
+sequence board. The hero is now chosen from content (priciest, ties on the key),
+so a deck's rendering is a property of its cards and nothing else. The existing
+"arrangement is stable under input order" test passed throughout — its fixture
+had only one both-form card. Full order-independence is deliberately *not*
+asserted: with more evolution-capable cards than slots, which two get the art is
+read positionally out of payload order, and that is the documented heuristic.
+
 **A measurement that checked the wrong number of slots.** An early pass
 concluded the positional reading was invalid because only 63 of 391 decks had
 their marks in the first *two* slots. There are *three* special slots; on that
@@ -728,6 +3638,61 @@ selection means. Role identity went back to neutral; `--accent-cyan` and
 `--accent-orange` reverted for the same reason, with a separate `--drop-valid`
 (green) for a legal drop target. Only caught by looking at the builder.
 
+**A table of good news painted red.** The "bring this against them" rows show
+YOUR win rate against each archetype, which is `100 −` the player's. The figures
+were flipped for display but the colour still followed the player's own diff, so
+a matchup that is 16.9 points in your favour rendered in the error red. The rule
+that fixes it is worth stating generally: colour the number that is on screen,
+not the one it was derived from.
+
+**An unknown deck resolved to a card key, not an archetype.** `deck_counter`
+looks a pasted deck up in the `decks` table and falls back to deriving its
+archetype when the exact list has never been stored. The first fallback returned
+the priciest win-condition CARD — `hog-rider` — where the whole matchup
+vocabulary is archetype keys like `hog`. Every unknown deck therefore matched no
+row in the matrix and came back with zero counters, while still displaying a
+confident-looking target name. Fixed by carrying over the bot's own
+`WIN_CONDITION_MAP` and `WIN_CONDITION_PRIORITY` unchanged, since every stored
+`decks.win_condition` was written by the function that reads them.
+
+**A Python edit is not live until the API restarts.** Obvious in hindsight, and
+it still cost a debugging round: the fix above was made while `server/app.py`
+was already running, so the browser kept getting the old answer and the bug
+looked like it had survived the fix. Vite hot-reloads, the analytics API does
+not — restart it after touching anything under `server/`.
+
+**Two badges on a 92px tile read as one number.** The card tile carried the
+elixir cost pinned to one top corner and the rank to the other, both at
+`top: -4px` so they hung outside the tile and broke its border on all 122 cards.
+At that width the pair read as a single figure — "6 1", "4 2", "5 3" straight
+down the grid. The rank went (it IS the grid order, and it is in the tooltip),
+the elixir badge moved inside the art, and the tile got `overflow: hidden` so
+nothing can hang off it again. The "THIN" chip went too: a card under the
+evidence floor now prints its win rate in the muted neutral instead of the
+success hue, which says the same thing without asking for space.
+
+**A percentage overflowed every tile by 8px.** With the two rates on one line
+the tiles were pushed to 5.6rem to fit twelve per row — below what the two
+figures plus their glyphs actually need, so the win rate hung over the right
+edge on every card. 6.1rem is the floor, and it is written down as a floor
+rather than a preference; eleven per row is the honest number.
+
+**The elixir badge put the selection hue on 122 tiles at once.** The in-game
+elixir drop is purple, so the card tiles copied it — and violet is what
+"selected" means everywhere in this app, so every card on the board was wearing
+the one colour reserved for the thing you had clicked. It went neutral
+(`--overlay-chip`, which exists for a chip sitting on card art). Same class of
+mistake as the Evolution slot going violet, and caught the same way: by looking
+at the rendered page rather than the stylesheet.
+
+**The two themes disagreed about how loud "selected" is.** Not a hue problem —
+every hue was correct and every tint percentage was right. The bug was the mix
+GROUND: a level-2 fill mixed against the card, painted onto a control resting on
+`--surface-sunken`. See the colour section; the lesson is that a tint has to be
+mixed against the surface it lands on, and that this can only be caught by
+sampling composited pixels, because `getComputedStyle` hands back the declared
+value and every one of these declarations was correct.
+
 **Level 2 is too strong for a large surface.** The duel-analysis tabs are a
 third of the page wide, and a 14% fill on something that size reads as a colour
 panel rather than an accent. They dropped to level 1 and lean on the border and
@@ -740,6 +3705,193 @@ the buttons said nothing about which tool each opened. Each tool panel now wears
 its own identity hue. This deliberately bends "pink alone means primary action"
 — on those panels the hue reads as identity, and Analyze stays pink as the one
 genuine primary action on the page.
+
+**A white edge on a white panel.** Light mode's `--glass-stroke` was
+`rgba(255,255,255,0.85)` — literally white — so light-mode boxes had no visible
+border at all while dark's were crisp. It survived so long because the token
+name says "stroke" and the value was *deliberately* white back when the panel
+was frosted and floating over card art. Renaming nothing and reading the value
+is what found it.
+
+**Solid panels do not stack the way translucent ones did.** Making the glass
+solid instantly hid every nested box, because a translucent pane compounds when
+you put one on another and a flat colour does not — a deck panel inside the
+builder's panel had been getting its "raised" look for free from the blend. The
+fix is the ladder rule (nesting goes *down*), and the reason it has to go down
+rather than up is that light has nothing above `#FFFFFF` to raise into.
+
+**A bulk edit hit four things it should not have.** Reclassifying nested boxes
+onto the new `--surface-nested` rung was done with a scripted
+find-and-replace, which also caught two meter tracks, a date input and a code
+block — all genuine wells that belong at the bottom rung, a meter track most of
+all, since it is the groove a coloured fill runs in. Caught by having the script
+print a count per file and comparing it against what was expected; the one file
+whose count did not match was the one file with collateral damage.
+
+**Going home moved the URL and nothing else.** Which screen the home view shows
+lives in component state, not the route, so resetting the route left the old
+panel on screen. Half-wired navigation is worth watching for anywhere a screen
+is chosen by something the URL does not describe — and `location.hash = ''`
+strips the fragment rather than setting one, so the *second* attempt was a true
+no-op that fired no `hashchange` at all.
+
+**"The evolution and the normal card look the same."** True, and it was a wiring
+bug rather than an art one — the Evolutions tab listed the right 42 cards and
+asked for base art for every one of them. Worth recording because the report
+pointed at the assets and the assets were fine: measured afterwards, the closest
+pair of forms differs by 45.5 of 255. The lesson is that "these look identical"
+can mean "the same file twice" or "the same request twice", and only one of them
+is visible in the folder.
+
+**An argument that was accepted and ignored.** `arrange_deck(cards, marks)` took
+observed evidence as a parameter and never read it, deriving everything from
+card capability instead. Every caller was already doing its part — fetching the
+marks, passing them, flagging the case where it had none — so the whole pipeline
+*looked* right at every level except the one that mattered. Nothing failed, no
+test caught it, and the output was plausible; it was only wrong. What surfaced
+it was a human saying the decks looked alike, which is worth remembering: a
+signature that repeats across every row is a symptom of a rule being applied
+uniformly, not of the data being uniform. An unused parameter deserves the same
+suspicion as an unused variable.
+
+**One counter for two different things.** `_evo_marks` had returned
+`'evolution'` or `'hero'` since it was written, and `test_duel_combos.py` even
+asserted the distinction — then the card board summed both into `evoRate`. Real
+data caught it loudly: eleven cards reporting an evolution rate, Berserker at
+76.8%, none of which can evolve at all. A function keeping a distinction is
+worth nothing if its caller throws the distinction away, and the caller had no
+test of its own until now.
+
+**Two slices of one list, silently overlapping.** `matchups[:5]` and
+`matchups[-5:]` are the obvious way to get "worst" and "best", and they are the
+same rows whenever the list is shorter than ten. It went unnoticed because the
+test account has seventeen archetypes. Partitioning on a real predicate — above
+or below the player's own average — cannot overlap by construction.
+
+**Three left edges in one table.** Each row being its own grid means an `auto`
+track sized to its own content, so a chip reading "Low" instead of "Medium" on
+one row shifted the whole rest of that row by 20px. It is the kind of thing that
+looks like a rendering glitch and is really a layout rule: columns line up
+across independent grids only when every track has a definite size.
+
+**A scripted CSS edit needs a count per file.** Reclassifying nested boxes onto
+`--surface-nested` was a find-and-replace that also caught two meter tracks, a
+date input and a code block. The script printed a count per file and compared it
+with what was expected; the one file whose count did not match was the one file
+with collateral damage. Same technique caught nothing on the four files where
+the counts agreed, which is the point.
+
+**Whose data is it?** Two bugs in a row came from the same unasked question.
+`arrange_deck` preferred pooled marks over the link a person had just pasted —
+marks are aggregated across everyone running those eight cards, the link is the
+deck in front of you. And a slot-3 override worked on one code path out of three,
+so it silently did nothing for most decks. Both look like "the control is
+broken"; both were really "the code picked a different authority than the user
+did". When two sources disagree, say out loud which one wins and why.
+
+**One component instance, four different questions.** The Coach's interview
+asked for your game-1 deck, then theirs, then your game-2 deck, from the same
+`<PasteDeck>` element in the same slot — so React reused the instance and kept
+its state. Asked for *their* deck you were shown *yours*, already filled in, and
+Continue submitted it a second time. Reported as "it needs to ask what you
+played AND what they played", which is exactly what it looked like from outside.
+A `key` per question fixes it. The rule: when consecutive steps render the same
+component, the step identity has to be in the key, or the component is one
+long-lived form wearing different labels.
+
+**A grid row that shifted a whole column left.** Deck rows without a rank number
+rendered one fewer child, and a CSS grid places children in order — so the name
+went into the 1.6rem rank track, the eight cards into the 11rem name track, and
+the wide deck track sat empty. The cards drew at **19.4px**: (176px − 21px of
+gutters) / 8, exactly, which is how it was identified. Nothing was missing and
+nothing overflowed; one list was just quietly tiny. The empty cell is now always
+rendered. Grid children are positional, so an omitted one is not a gap — it is a
+shift.
+
+**A comment asserting a measurement nobody had taken.** `--accent-action-text`
+was `#ffffff` under a comment reading "both hues carry white text at >=4.5:1 in
+light AND dark". White on the dark pink is **2.65:1** — every filled primary
+button in the app, ten stylesheets' worth, failing since the dark palette was
+written. The comment is what kept it invisible: it reads like the measurement
+already happened, so nobody re-ran it, and a reviewer scanning for hardcoded
+colours sees a justification rather than a claim. A number written in prose is a
+claim; only a number a test or a probe produces is a measurement. This one was
+found by a browser sweep over a *new* screen that happened to include the old
+button in frame.
+
+**The right field was one index away, for the whole project.** `player_evo`
+stores `[card_key, level, art]`; every reader used `art` because it holds the
+words "evolution" and "hero" and clearly means to be the answer. It is a
+derivation, and it loses 16.1% of what it derives from — 9.2% of heroes come out
+labelled "evolution" and 6.9% of evolutions come out "unknown". `level` is
+exact: it partitions perfectly by slot and matches the 42 evolution-capable and
+16 hero-capable cards with zero exceptions over 162,919 marks. The bot's own
+docstring said "level 2 is served hero art" and had said it all along.
+
+Two things kept it hidden. The first is that the wrong reading was *plausible* —
+a deck that should have shown two evolutions and a hero showed three evolutions
+and no hero, which looks like a missing feature rather than a misread field. The
+second is worse: the measurement that blessed it reported all four both-form
+cards as evolutions **100% of the time**, and that unanimity was written down as
+the finding. A question with two real answers coming back unanimous is a fact
+about the reading, not about the world. Nothing surfaced it until someone read
+three specific decks off their own screen and said what the cards should be —
+three for three, all correct.
+
+**A cap that encoded the rule I had just measured, wrongly.** Having established
+that slot 3 is the wild slot and takes either form, I wrote the cap as "two
+evolutions and one hero" — which treats slot 3 as an evolution slot, the exact
+misreading the paragraph above it warns about. It made
+evolution / hero / hero undrawable: 9.25% of all battles, the third-commonest
+loadout in the game. Reported within minutes as *"why is it fixing one breaking
+another?"*, and correctly. The lesson is narrow and practical: a rule stated in
+prose and a rule expressed as constants are two different artefacts, and writing
+the prose does not check the constants. The constants needed their own
+measurement — one per slot, so two evolutions, two heroes, three in total.
+
+**A cap enforced against the wrong thing.** Both art lookups limited a deck to
+its three special slots by dropping any mark on a card outside the first three
+entries of the deck's stored order. The limit was right and the order was real
+data — but the order belongs to *one* player's copy while the marks are pooled
+across everyone running the list, so the two have no authority over each other.
+It deleted 23 real marks off 21 of the 50 meta decks, and the only visible
+symptom was decks quietly drawing a plain card in a special slot. Worth
+remembering as a shape: when a constraint is enforced by proxy, check that the
+proxy is measuring the same population the constraint is about. The cap now
+ranks the evidence and keeps the top two evolutions and top hero, and position
+is decided in the one function that owns positions.
+
+**A row that resizes its own contents.** Card art is not one aspect ratio — the
+evolution frames range from 287×384 to 553×793 against a plain card's 302×363 —
+and a flex row of images sized by width alone defaults to `align-items:
+stretch`. So a plain Arrows rendered 16.2% taller than its own artwork because
+of the Lumberjack evolution three cards along. The bug is invisible in any deck
+that happens to hold no evolution, and it is a property of the *row*, not of the
+card being drawn wrong: the same image was correct one row up. Assets from one
+source are not one shape, and a strip that draws mixed art needs a box, not a
+width.
+
+**One class, two meanings.** `.two` laid out both the worst/best matchup lists
+AND the Deck A / Deck B paste boxes. Stacking the lists to give them full width
+therefore stacked the two decks being compared as well — a head-to-head with one
+side above the other. The name described a *layout* ("two columns") rather than
+a *thing*, so it attracted a second caller whose requirements would later
+diverge. The paste boxes now have `.facing`, which describes what they are.
+
+**A number that ignored the input, and a measurement stretched to justify it.**
+Every Hog deck returned the same matchup, because everything was answered at
+archetype level. The measurement behind that (0.59% of stored pairings reach 8
+games) was sound — it just answers "deck vs *exact* deck", and was applied to
+"deck vs archetype", which the same table answers easily at 111,663 battles for
+one list. A correct measurement can still be the wrong measurement for the
+question in front of you.
+
+**Three passes to make one feature usable.** The exact-deck ladder was 15.2 s on
+first working version. No single change fixed it: one scan for both cluster
+levels instead of two (−1.6 s), a TEMP table instead of chunked `IN (...)`
+(4.4 s → 1.0 s), and one join filling both buckets instead of two passes.
+5.5 s cold, 2.1 s cached. Worth remembering that "it works, it is just slow" is
+usually three separate problems rather than one.
 
 **`better-sqlite3` could not be built** (no prebuild for Node 21, node-gyp
 fails) and `node:sqlite` needs Node 22. Hence Python for the data layer, which
@@ -756,12 +3908,30 @@ are in [Running it](#running-it).
 
 ## Testing and verification
 
+888 Python checks and 118 vitest tests, none of which open a database — every
+Python suite runs on synthetic data or a stubbed reader, so they pass on a
+machine with no Clash_Bot install and cannot be broken by whatever a real player
+did last week.
+
+**`npm run lint` reports 2 errors and 4 warnings, none of them actionable.**
+The errors are `react-hooks/rules-of-hooks` flagging `useFont(...)` inside
+`pdfRenderer.ts` — a plain helper whose name happens to start with "use", in a
+file with no React in it at all. The warnings are two `exhaustive-deps` on the
+`win` object in the analytics fetch effects (it is rebuilt every render; the
+effect keys on `win.from` / `win.to` deliberately) and two `react-refresh`
+notes on files that export a constant beside a component. All predate this work
+or are deliberate; there is nothing else.
+
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 95 tests — deck logic, deck links, PDF export
-python server/test_duel_combos.py # 34 checks — duel logic, no database needed
-python server/test_meta.py        # 23 checks — meta board rules, no database
-python server/test_card_art.py    # 39 checks — deck arrangement, evolution/hero art
+npm run test                      # 118 tests — deck logic, deck links, PDF export
+python server/test_duel_combos.py # 39 checks — duel logic, no database needed
+python server/test_meta.py        # 33 checks — meta board + card board, no database
+python server/test_card_art.py    # 110 checks — deck arrangement, evolution/hero art
+python server/test_duel_zone.py   # 88 checks — series rules, loadout legality, captions
+python server/test_player_cards.py # 60 checks — card rates, evidence floor, deltas
+python server/test_deck_counter.py # 58 checks — symmetrisation, floors, counters
+python server/test_coach.py       # 69 checks — duel legality, odds, the read, the loadouts
 npm run build
 ```
 
@@ -789,6 +3959,36 @@ reliable on this machine; WebKit is flaky.
 Verify scripts assert on *values*, not just on elements existing — the point is
 to catch a bar that renders at the wrong colour or a filter that changes nothing.
 
+**Assert against the token, not a literal.** The UI pass checked each sidebar
+section by reading `--hue-green` off `:root` at runtime and comparing the
+computed `backgroundColor` to it. Hardcoding `rgb(52, 211, 153)` would have
+passed just as well and would have started lying the moment the palette moved.
+
+**A failing assertion is not evidence until you have read why it failed.** Six
+of that run's failures were the probe's, not the product's — three screens wrap
+their panel in a transparent layout div and the selector grabbed the wrapper.
+
+Four more traps, each of which produced a confident wrong answer at least once:
+
+* **The username input has no `type` attribute.** `input[type="text"]` matches
+  the ATTRIBUTE and so never fires; the DOM *property* reports `"text"` by
+  default, which is exactly what makes dumping `n.type` misleading. Use
+  `input:not([type="password"])`.
+* **The login form mounts after the intro animation**, so `waitUntil:
+  'networkidle'` is not enough — wait for the selector.
+* **`hover()` scrolls the element into view first**, so comparing `boundingBox`
+  before and after measures the SCROLL. A card-lift assertion "passed" on a
+  226px delta this way.
+* **The mouse stays where the last click left it.** After the SIGN IN click it
+  sits mid-screen, so a scrolled-to card is *already hovered* when the resting
+  baseline is taken and the lift then measures as 0px. `page.mouse.move(2, 2)`
+  first.
+
+**Read computed style with the browser's own serialisation in mind.** Chrome
+returns `color(srgb 0 0 0 / 0)` for a `color-mix` result, not `rgba(0, 0, 0, 0)`
+— a glow probe matching only `rgba(...)` reported "no glow" on a glow that was
+plainly visible in the screenshot. Parse the alpha from either form.
+
 ### Verifying colour specifically
 
 Reading `getComputedStyle()` is the whole point: "the CSS compiles" says nothing
@@ -807,28 +4007,737 @@ assert in **both** `data-theme` values:
 
 ---
 
+## Tracking a new tag, and the live battlelog
+
+Searching a tag that nobody has ever tracked used to 404. The databases hold
+what the bot polled, so a first-time tag has nothing in them — while the game
+had been keeping that player's recent battles the whole time.
+
+Two things now happen on a search, and they are deliberately separate.
+
+**The tag is queued for collection, in a file this project owns.** The bot has a
+`tracked_players` table it polls, and the obvious implementation is to INSERT
+into it. `server/tracking.py` does not. Every connection this API opens to the
+bot's databases is `mode=ro`, and that is not a style choice — it is the reason
+a bug here cannot corrupt 43 GB of someone else's data, and it is stated as a
+guarantee in both READMEs. One read-write handle for one statement removes the
+guarantee for the whole process. So the queue is ours (`server/.tracking.db`,
+gitignored), the bot's databases stay read-only, and `status()` reports three
+distinct states the UI must not merge:
+
+| state | means |
+|---|---|
+| `tracked` | the bot is collecting; stored history will grow on its own |
+| `pending` | we have queued it; **nothing is being collected yet** |
+| `unknown` | never searched, never tracked |
+
+**The handoff is not built on the bot side.** A queued tag stays `pending` until
+someone adds the drain to the bot's own repository. That is a stated gap rather
+than an oversight: writing it from here means writing to the bot's database,
+which is the thing the design exists to avoid.
+
+**Meanwhile the screen is filled from the live Clash Royale API.**
+`clash_data.cr_battlelog` fetches the endpoint the game already exposes and
+`server/live_player.py` analyses it — win rate, decks with their evolution and
+hero art, per-card use and win rates, modes, crowns, trophy movement. Three
+things are shared with the stored path rather than rebuilt, because a second
+copy of any of them is a second source of truth: `mark_variant` decides
+evolution vs hero (the live payload carries the same `evolutionLevel` field the
+stored `player_evo` triple does), `arrange_deck` owns slot order and art, and
+`deck_name` names the deck.
+
+**It is not a second `player_report`, and the screen says so.** The response is
+stamped `basis: "live"` and the UI leads with it, because the two are different
+kinds of number:
+
+- the window is **fixed**. Supercell serves roughly the last 25 battles and does
+  not paginate, so a date control would be a control that changes nothing;
+- there is no previous window, so no movement, no deltas, no trends;
+- the sample is far under this project's own evidence floor of 8, so every rate
+  is an indication rather than a measurement.
+
+Battles the player did not choose the deck for — 2v2, draft, event decks — are
+dropped, the same rule the meta board applies, and the count that was dropped is
+printed rather than quietly absorbed.
+
+---
+
+## Duel Insights
+
+At the foot of Duel Analysis, and it reads the **series log**, not the page it
+sits on. `DuelReport` is the Pair Board — card combinations — and holds no
+series, no games, no results and no opponents, so none of these questions can be
+asked of it. `DuelInsights.tsx` loads `/api/analytics/duelzone/<tag>` itself, in
+its own effect with its own loading and failure state; the existing fetch, tabs,
+filters and table are untouched and lose nothing if it fails.
+
+### The split that shapes every figure
+
+A duel reaches the app in two forms carrying different amounts of information,
+and this is storage rather than a gap to be patched:
+
+| | native rows | reconstructed |
+|---|---|---|
+| what it is | one stored row with the whole loadout | rebuilt from consecutive friendly games |
+| per-game `result` | **absent** | present |
+| opponent deck | **absent** | present |
+| series outcome | present | present |
+
+Measured on a 96-duel player: all 114 native games came back with an empty
+result and a null opponent; all 133 reconstructed games had both. So **series
+outcomes use every duel, and everything game-level — game 1, deciders,
+adaptation, positions, opponents — uses the reconstructed subset only.** The
+footer states both counts, because a reader comparing "75 duels" at the top with
+"21 of 35" beside a game-1 figure is owed the reason.
+
+### Nothing is claimed below its floor
+
+`duelInsightRules.ts` returns `null` rather than a small-sample percentage, and
+the UI renders that as an explicit "Not enough data". Five series for a rate
+about series, five games for a rate about games, three uses before a deck can be
+called best in a position. A record — "3 of 9" — is always shown, because a
+count of things that happened is not an estimate and needs no sample size; only
+the percentage is withheld.
+
+The verdicts are the same discipline applied to prose. A 52% win rate produces
+no statement at all; the thresholds are what make a sentence worth printing. The
+predictability check is the clearest case: on the test player it found 25
+different openers with none above 9%, so it says **"hard to prepare for"** — the
+opposite of the example the feature was specified with, and the right answer for
+that player. A decider is the last game of a series that genuinely went the
+distance, so a 2-0 played out to 3-0 is excluded rather than counted as one.
+
+23 checks in `tests/duelInsights.test.ts` pin the native-row exclusion, every
+floor, the decider rule and the fact that a coin-flip record produces silence.
+
+---
+
+## The display face, and the dark ground
+
+**Headings are Arial**, a system font. They were Kids Word, a hand-drawn
+OpenType/CFF file served from `public/assets/fonts/`, and the swap settles three
+things that face was costing:
+
+- **nothing to load** — no webfont request, no `font-display: swap` reflow;
+- **real weights** — Kids Word ships ONE cut, which is why `font-synthesis:
+  weight` had to be on for `font-weight: 600` to do anything at all. Arial has a
+  drawn bold;
+- **the PDF matches the screen for free.** jsPDF's built-in Helvetica is
+  metrically compatible with Arial, so the export needs no embedded font, no
+  conversion step and no check that the embed worked — all three of which the
+  CFF face required, having silently failed at it (see below).
+
+Two patterns were in use across the stylesheets — a literal `'Kids Word', Inter,
+system-ui, sans-serif` stack and `var(--font-display, inherit)`, the second
+resolving to nothing because the variable was never defined. Both now read one
+token, `--font-display`, so the display face is a single edit.
+
+**The dark page is `#000`.** The palette notes argue against a pure-black ground
+and still do — the argument is about surfaces that carry body text, and the page
+carries none. Every surface that does moved up a rung with it (panel `#202020`,
+nested `#1A1A1A`, well `#141414`), so no small text is ever set on black, and
+page-to-panel went from 9 points of lightness to 32, which is what makes panels
+read as raised rather than as a slightly different shade of the background.
+
+---
+
+## Every deck can be copied and opened in the game
+
+The duel builder's deck panel has had **Copy Link** and **Open in Game** since
+early on. Every analytics screen drew decks you could only look at — the meta
+board, the player's top ten, the Duel Zone's series log, the Deck Counter's
+matchup rows, the Coach's recommendation. Finding the deck that beats yours and
+then having to rebuild it by hand is the whole feature falling one step short.
+
+`components/DeckActions/` is that pair, sized for a table row. It is wired into
+nine screens: Meta Decks, Player Analysis, Duel Zone (the player's deck, the
+opponent's, the sequence board and the openers), Deck Counter, Coach Assist,
+Counter Lab, Deck Lab, Duel Insights and Live Player.
+
+### The order is the server's, and that is the point
+
+`utils/deckLink.ts` grew `getDeckLinkFromKeys(keys)` beside the existing
+`getClashRoyaleDeckLink(deck)`. Analytics decks arrive as `cards: string[]`
+already put through `clash_data.arrange_deck`, so the three special slots are
+**already first and in slot order** — which is exactly what a `copyDeck` link
+encodes. They are passed straight through.
+
+Deriving an order here instead would be
+[the "whose data is it?" bug](#a-pasted-links-order-is-the-answer) a third
+time: the server has the marks and the slot rules, the component has neither.
+
+### The 8-card guard does the filtering
+
+`DeckActions` renders **nothing** unless there are exactly `DECK_SIZE` known
+cards. That one rule is what lets it be dropped into each screen's shared
+`Strip` without any caller reasoning about what it is being handed:
+
+* a **native duel row** carries the whole 16- or 24-card loadout in `cards`, so
+  those rows get no buttons — correctly, since a loadout is not a deck;
+* the Deck Counter's **card-difference columns** (only-in-A, shared, only-in-B)
+  are partial lists, and they opt out for free.
+
+A button that silently does nothing is worse than no button — the same rule
+that kept the mock's three decorative circles off the season control.
+
+### The row control and the actions cannot nest
+
+The Duel Zone's series row **is** a `<button>` — the whole row expands to show
+the opponent's deck — and its card strip is inside it. A `<button>` inside a
+`<button>` is invalid HTML: the browser closes the outer one early, so the
+actions would have landed outside the row and the row would have stopped
+expanding. The strip there takes `actions={false}` and the pair moved into a
+new `.gameRow` flex wrapper alongside the button.
+
+Every other strip on the site is inside an `<li>`, a `<td>` or a `<span>`, so
+this was the only one. Worth checking for whenever a control is added to a row
+that is itself a control.
+
+### Why the chips are neutral at rest
+
+They are square chips with their own border and sunken fill rather than bare
+glyphs that appear on hover — a deck row is a dense place, and a floating icon
+there reads as decoration while a framed one reads as something to press.
+
+The hue is the interesting restraint. These repeat **once per deck**, so a
+fifty-row meta board would put a coloured chip in fifty rows, which is the
+"large surfaces stay neutral, and the wider the surface the lower the level"
+rule broken fifty times over. So: neutral at rest, neutral on hover, and the
+action hue only on the launch chip — the one that leaves the app. The copy chip
+flashes green **and swaps its glyph to a tick**, so the confirmation survives a
+monochrome screenshot.
+
+`--accent-action-wash-sunken` was added to `index.css` rather than mixed inside
+the component, because the chips rest on `--surface-sunken` and a tint has to be
+[mixed against the ground it lands on](#the-five-hues). No component defines a
+colour of its own, and this one does not either.
+
+**Open in Game copies the link too**, exactly as the builder's footer button
+does. The deep link is also the shareable artifact, so the two actions overlap
+on purpose.
+
+---
+
+## Exporting a screen as a PDF
+
+"Export PDF" on the analytics screens. The Player Analysis screen already had an
+**Export Data** button with no handler behind it — the same decoration the
+sidebar's Upgrade Now was caught being — and it is now wired to the real thing.
+
+`analyticsReport.ts` defines one model every screen maps into (stat tiles,
+tables, bar charts, deck rows with art, notes) and `analyticsPdf.ts` is the only
+thing that draws one. Seven screens would otherwise mean seven copies of
+pagination and seven chances for one screen's PDF to drift from another's.
+Adding a screen is an adapter of about thirty lines in `reportAdapters.ts`.
+
+**The palette is read off the page, not declared in the renderer.** `index.css`
+is this project's single source of colour truth, and a PDF renderer is the most
+tempting place to break that rule because jsPDF wants numbers and CSS has
+strings — the deck report broke it and carries a hardcoded navy `INK` table that
+matches neither theme. This one reads the computed custom properties from
+`<html>` at export time through a probe element, so `color-mix` and `color(srgb
+…)` are parsed by the browser rather than by a regex. Three things follow: the
+report is drawn in the theme the reader currently has on, a palette change
+reaches the PDF with no edit, and the colours are exactly the screen's rather
+than hand-matched. `--c-use` / `--c-win` were declared on `.page` in four
+component modules — each with a comment saying one app should not encode "use
+rate" two ways — and are now hoisted to `:root` so that is structurally true.
+
+### The display face silently did not embed (fixed, then obsoleted)
+
+`KidsWord.otf` is OpenType with CFF outlines — file magic `OTTO`. jsPDF's parser
+only understands TrueType `glyf` outlines, and it does not say so: `addFont`
+succeeds and the failure surfaces once per glyph at draw time as a PubSub error
+jsPDF swallows (`Cannot use 'in' operator to search for '0' in undefined at
+glyphFor`). The export produced a perfectly valid PDF whose headings were
+quietly Helvetica. Measured, the same one-line document was **3,353 bytes with
+the OTF against 12,536 with a real TrueType file** — nothing was being embedded.
+
+`scripts/build-pdf-font.py` converts the outlines with cu2qu at one font unit of
+tolerance on a 1000-unit em, and the renderer *proved* the embed by measuring a
+string rather than trusting `addFont`.
+
+**The site then moved to Arial and all of that came out again** — Helvetica is
+built into jsPDF and metrically matches Arial, so there is no font to embed and
+nothing to verify. The script is kept, unreferenced: it is the record of how to
+bring a custom face back, which is the part that is hard to rediscover.
+
+### The second export: the page exactly as it looks
+
+The report above is a *designed* document — a model, a renderer, one adapter per
+screen. Alongside it there is now a second, blunter export: **Export PDF** in the
+analytics top bar, which prints the screen you are on, top to bottom, header
+included.
+
+It lives in the Dashboard shell rather than in each analytics component, so
+every section gets it from one place, in one position, with no chance of a
+screen being forgotten.
+
+**It uses the browser's own print engine, not a DOM rasteriser**, and that was a
+measured decision rather than a preference. This design uses **43
+`backdrop-filter` panels and 97 `color-mix()` values**; html2canvas ignores the
+first outright and barely supports the second, so a canvas screenshot would have
+rendered the glass flat and the colours wrong. The print engine composites the
+real page. The cost is one extra click — the browser dialog, where the
+destination is "Save as PDF" — and there is no way to skip that from a web page
+without giving up the fidelity that is the whole point.
+
+**The only thing that genuinely needed fixing was scrolling.** The app does not
+scroll the document: `.main` and `.body` are `overflow-y: auto` containers, so
+`document.body.scrollHeight` sits at the viewport height and a naive print
+captures the visible slice only. `src/print.css` unclips them. Measured on three
+sections:
+
+| section | on screen | printed | pages |
+|---|---|---|---|
+| Duel Analysis | 2,933 px | 2,948 px | 8 |
+| Cards | 1,170 px | 1,106 px | 3 |
+| Duel Zone | 44,822 px | 43,210 px | 79 |
+
+The sidebar is dropped, and that was found by looking at the output rather than
+by reasoning: un-pinning it collapsed the two-column layout into a stack, so the
+first sheet of every export was a page of navigation links and an "Upgrade Now"
+advert before any analysis appeared. Navigation is not content — nobody can
+click it in a PDF. The header is deliberately kept, because it carries the brand
+and the tag being analysed, which is what makes a printed page identifiable
+later.
+
+**The theme follows whatever the reader has on.** Print engines strip dark
+backgrounds by default to save ink, so this needed checking rather than
+assuming; `print-color-adjust: exact` prevents it, and both themes were verified
+to reach the PDF unchanged (`rgb(0,0,0)` stays `rgb(0,0,0)`).
+
+### Tabs, and why only one screen prints all of them
+
+A PDF cannot be clicked, so a tab bar in one is a dead control. Duel Analysis now
+prints **all three tabs stacked** — Win Conditions, Spells, Evolutions — each
+under its own heading, with every row shown rather than the on-screen top 8.
+
+CSS alone cannot do that: inactive panels are conditionally rendered, so they are
+not in the DOM for a stylesheet to reveal. `state/printMode.ts` is a flag the
+Export button raises; the component reads it and draws all three. It costs no
+extra fetch because `report.tabs` already holds all three — they are slices of
+one payload.
+
+Every per-tab value (`t`, `rows`, `slotScale`, `unmeasured`) is derived **inside**
+the loop. Leaving them outside would have printed the active tab's numbers under
+all three headings — right-looking output, wrong data.
+
+The other tabbed screens deliberately do **not** do this, because their tabs are
+not the same kind of thing:
+
+| screen | tabs | printed |
+|---|---|---|
+| Duel Analysis | three different combo tables from one payload | **all three** |
+| Cards | eight *filters* over one list, where "All" is the superset | active tab |
+| Deck Counter | three separate tools, two needing pasted decks | active tab |
+| Coach Assist | two stateful interviews | active tab |
+
+Printing all eight Cards tabs would repeat the same ~120 cards eight times;
+printing Deck Counter's would emit empty "paste a deck here" forms.
+
+### Rates are percent, and getting that wrong is invisible
+
+Every analytics endpoint reports rates on a **0-100 scale** — `/meta` sends
+`useRate: 2.13`, `/cards` sends `winRate: 75.0`, `/player` sends `useRate:
+19.2`. A `pct()` helper that multiplied by 100 printed a 73.5% win rate as
+**7350.0%** in a finished report. Both sides are `number`, so no type system
+catches it; only reading the real payload does. `pct()` formats and `frac()`
+converts, and the live endpoint was changed to match the convention rather than
+the four older endpoints being special-cased around it.
+
+---
+
+## The Opponent Intelligence Engine
+
+Nineteen phases of measurement, and the whole thing reduces to one sentence:
+
+> **The opponent's most recent deck is the prediction. Everything the engine
+> adds is a confidence band on that, and a short list of plausible
+> alternatives.**
+
+That is a smaller claim than the project started with, and every attempt to make
+a bigger one lost to a measurement. What follows is the record, because the
+negative results took the most work and are the easiest to accidentally redo.
+
+`CLASH_OIE` gates the whole thing and defaults to **`off`**. Nothing below is
+live.
+
+### What it does, and what it refuses to do
+
+| | |
+|---|---|
+| primary prediction | the most recent deck, **structurally impossible to replace** |
+| confidence | `high` / `medium` / `low`, calibrated against real outcomes |
+| alternatives | at most 2 / 1 / 0 by band, labelled "plausible configurations" |
+| never claims | that it knows the exact next deck |
+
+`ml/production/policy.py` enforces that with `enforce_primary()`, which runs
+**last** and unconditionally. Phases 4, 5, 6 and 7 each tried letting a model
+overrule the recent deck and each lost, so the production design makes that
+outcome unreachable rather than merely unlikely.
+
+### The phases, and what each one settled
+
+| phase | question | answer |
+|---|---|---|
+| 1 | is `recent` better than the shipped `modal`? | **yes**, +19.0 / +11.1 pts exact@1 (400 players) |
+| 2 | can we detect WHEN a deck changes? | **yes** — ROC-AUC 0.932 / 0.803 |
+| 3 | does knowing the outgoing card help? | **yes**, +6.9 / +5.0 pts top-1 |
+| 3 | does opponent archetype/deck help? | **no** — indistinguishable from zero |
+| 4 | chain change to exit to entry, end to end? | **worse than standing still** |
+| 5 | expected utility over the chain? | it correctly decides **never edit** |
+| 6 | can we rank how predictable an edit is? | yes, but the curve carried a selection oracle |
+| 7 | any oracle-free policy that beats Recent? | **no.** The truth was not in the candidate set 80-88% of the time |
+| 8-9 | widen candidate generation | shell pool to player-wide pool lifted 1-card recall to **85.8% / 88.6%** |
+| 10-11 | rank the candidates | pointwise **fails**, pairwise **fails** — a heuristic first pick is hard to beat |
+| 12 | would a hybrid help? | **no** — the rescue cell is 1.4-1.8% |
+| 13 | attack exit prediction | plateaus at ~45% / 53% top-1 |
+| 14 | what IS shippable? | Recent + confidence band + shortlist |
+| 15-16 | production integration + shadow | shipped behind a flag; shadow found 2 real bugs |
+| 17A | recalibrate on production semantics | duel `high` was 91% of reads at 70% accuracy — fixed |
+| 17B | is a switched-to deck one they have played? | **no** — 50% / 38% historical. Ceiling ~5% / 2% of steps |
+| 18 | can a novel deck be generated from history? | **no** — usable recall needs 10^8-10^10 candidates |
+| 19A | fix the latency | duplicate reads removed; the rest is disk |
+| 19B | UI | async, non-blocking, browser-verified |
+| 19C | validate against REAL outcomes | ordering holds, magnitudes wrong |
+| 20A | can Y's deck tell X what to bring? | **no** — the ORACLE arm loses to X's default |
+
+### The finding that reframed the product
+
+Phase 14 measured the shortlist adding **+8.4 points** of coverage. Phase 16C
+measured it adding **+0.5**. Both were correct, and the difference is the step
+definition:
+
+| truth in alternatives, on change steps | production semantics | `next-in-cluster` |
+|---|---|---|
+| duel | 2.9% | **20.0%** |
+| competitive | 7.7% | **40.0%** |
+
+Phases 8-14 stepped `next-in-cluster`, which by construction only ever scores
+steps where the player **stayed on the shell** — precisely the case a 1-card
+shortlist addresses. Production asks "what deck comes next", full stop. Under
+that question the change is usually a whole-deck switch:
+
+| cards shared with the previous deck | duel | competitive |
+|---|---|---|
+| 8 — no change | 74.2% | 79.1% |
+| 7 — the 1-card edit | **2.3%** | **1.8%** |
+| 0-3 — whole-deck switch | 22.1% | 15.9% |
+
+So the machinery from Phases 8-14 addresses ~2% of production steps. Not
+invalid — correct under its stated frame — but the frame was not the product's.
+
+### Why exact next-deck prediction was stopped
+
+Phases 17B and 18 closed it from both sides, and the numbers are ceilings rather
+than model failures:
+
+* **17B** — when a player switches, the deck is one they have played before only
+  **49.8%** (competitive) / **38.5%** (duel) of the time. Combined with retrieval
+  quality, a perfect historical ranker reaches **~5%** / **~2%** of all steps.
+  Retrieval also gets *worse* with more history: R@1 falls from 87.4% at 2-3
+  known decks to **24.8%** at 11+, because vocabulary grows faster than the
+  return rate.
+* **18** — when the deck is genuinely new, only **52.1%** / **61.7%** of them can
+  even be *built* from cards the player has fielded before. The one generator
+  with real recall (historical fragments, 38-59%) emits **509 million** /
+  **9.7 billion** candidates. The cheapest useful operating point still emits
+  ~0.9M / ~6.2M for 28-40% recall. For scale, Phases 9-11 already failed to beat
+  a heuristic over a pool of 228-495.
+
+More data will not fix this. It raises coverage slightly and the search space
+faster.
+
+### Setbacks worth not repeating
+
+* **Class weighting hurt every metric.** Shipped on by standard imbalance
+  reasoning; measured, it damaged PR-AUC, ROC-AUC, F1 *and* Brier. Default is
+  now off with the measurement in the docstring.
+* **A step definition that flattered the model.** See above. The single most
+  expensive mistake in the programme.
+* **Phase 6's "deployable" result was oracle-gated.** Candidates were only built
+  on steps that were genuinely edits, so the policy could only fire on a true
+  edit. Re-run honestly it went from +0.0029 Jaccard to **-0.0556**.
+* **Sparse data winning twice.** One observed transition scoring probability 1.0;
+  one edit outranking a card fielded in 1 of 20 outings. Shrinking the estimate
+  is not enough — the blend weights have to be commensurate too.
+* **Two bugs only shadow could find.** `cluster_containing()` returned the wrong
+  shell on 25% of live reads, and M2 features were computed over a player's
+  whole history rather than the shell, so live P(change) sat at **0.994** where
+  it should have been 0.020.
+* **A test destroyed the experiment.** `os.remove(shadow.LOG_PATH)` in
+  `test_ml_production.py` deleted the *production* log, so running the suite
+  wiped 1,277 collected observations. Twice. See `test_shadow_durability.py`.
+* **Two "fixes" that measured as nothing.** Persistent connections with mmap and
+  a bigger cache looked like a 10x win across tag slices; paired on the same
+  tags it was **-8 ms, CI [-37, +21]**. Narrowing the history window: **+9 ms,
+  CI [-29, +47]**. Both were page-cache warming artifacts.
+* **A single-sample latency claim.** 19B reported shadow observation costing
+  9.6s against 2.4s. Paired over 40 tags it is **-219 ms, CI [-1297, +859]** —
+  no effect at all. Withdrawn.
+
+### The first real accuracy, measured against battles that actually happened
+
+574 frozen predictions, reconciled against each player's first strictly later
+valid 8-card deck. Not a backtest — these were made before the outcomes existed.
+
+**COMPETITIVE — 192 players with outcomes (past the 100 gate)**
+
+| band | share | outcomes | accuracy | 17A claim |
+|---|---|---|---|---|
+| high | 94.9% | 179 | **71.5%** | 90.5% |
+| medium | 4.7% | 12 | 58.3% | 73.3% |
+| low | 0.4% | **1** | 0.0% | — |
+
+**DUEL — 73 players with outcomes (gate not met)**
+
+| band | share | outcomes | accuracy | 17A claim |
+|---|---|---|---|---|
+| high | 27.0% | 5 | **60.0%** | 92.1% |
+| medium | 43.4% | 31 | 32.3% | 75.8% |
+| low | 29.6% | 37 | 27.0% | 47.3% |
+
+**The ordering holds in both domains. Every single magnitude is below its
+published claim** — competitive `high` by 19 points, duel `high` by 32, duel
+`medium` by 43. That is systematic, not noise: the bands correctly *rank* how
+much to trust a prediction, and the numbers attached to them are wrong.
+
+Two things stop this being a verdict. Competitive `low` rests on **one player**,
+so the three-band ordering there is one observation from meaningless. Duel `high`
+rests on **five**. And competitive `high` contains 179 of 192 outcomes, so the
+band barely discriminates — it just holds nearly everyone.
+
+**Duel went 78 ripened to 73 reconciled**, which is not a contradiction:
+ripeness asks whether the player has played again, reconciliation additionally
+needs a valid 8-card deck to hash, and a few resolved to native duel loadouts
+that are not decks.
+
+### Why re-cutting the bands is not the fix
+
+Reliability on the competitive sample:
+
+| P(Recent correct) bin | outcomes | model claims | reality |
+|---|---|---|---|
+| 0.8-1.0 | **162 of 167** | 96.7% | **71.6%** |
+
+Brier 0.2588, **ECE 0.2470**. Almost every prediction lands in one bin, where the
+score claims 96.7% and delivers 71.6%. Moving thresholds *relabels* predictions;
+it cannot repair a score that is overconfident by 25 points. If the mature sample
+confirms this, the right lever is a **calibration map on the score** (Platt or
+isotonic), not another threshold move — and 167 players is too thin to fit one.
+
+### Why waiting for duel stopped being a plan
+
+The duel ripening rate collapsed rather than held:
+
+| window | duel ripened | rate |
+|---|---|---|
+| first day | 38 → 54 | ~3/h |
+| +6h | 54 → 68 | 0.8/h |
+| +20h overnight | 71 → 75 | 0.2/h |
+| +27h | 75 → 78 | **0.11/h** |
+
+That last window was the bot's most productive (+236,500 rows), so it is not a
+collection problem. The 257 duel anchors split into ~78 belonging to people who
+duel regularly — already counted — and ~179 belonging to people who duel
+occasionally, who will not produce an outcome on any timescale worth waiting
+for. Three successive "about a day away" estimates were all wrong in the same
+direction.
+
+### Wave 2 — complete, and what it can and cannot fix
+
+#### Wave 2, and why it is chosen on recency
+
+Re-deriving from current data found **7,006 players with recent duel activity**,
+only 169 of them already in the cohort — the pool is far larger than the 755
+found three days earlier, because the bot now tracks more tags.
+
+1,084 of them have **>= 10 duel rows in the recent tail**, and those are the ones
+collected. The selection is deliberately on RECENCY rather than lifetime volume:
+the first cohort proved that infrequent duellers never ripen, so adding players
+by raw duel count would mostly add dead anchors. A player with 50 recent duels is
+near-certain to duel again within a day; one with 5 may not.
+
+New anchors start unripened by construction, so wave-2 outcomes begin appearing
+about a day after collection, not immediately.
+
+### Phase 20A — could the OPPONENT tell X which deck to bring?
+
+A deliberately narrower question than Phases 1-18. Those asked "what deck will Y
+bring" and hit ceilings on an open construction problem. This asked: given Y,
+which of **X's own** decks should X play? That is a choice among 5-40 known
+objects, not a construction, so it had every reason to be easier.
+
+**It is not. The branch is closed.**
+
+| competitive, 76 players | games | win rate | player-macro |
+|---|---|---|---|
+| X plays their default deck | 2,777 | 58.9% | 58.5% |
+| the archetype pick | 1,849 | 60.0% | 62.7% |
+| **the exact-deck pick (ORACLE)** | 221 | **48.9%** | 56.4% |
+| every test game | 10,514 | 62.2% | 63.2% |
+
+Paired on players: archetype **+1.7 pts [-1.0, +4.6]**, exact-deck
+**-1.4 pts [-13.2, +10.8]**. Neither clears zero.
+
+**The oracle arm is what decides it.** Handed Y's TRUE deck — the strongest
+information this problem can ever have — the recommendation scored 48.9%, below
+X's own default at 58.9% and below the overall test rate of 62.2%. If knowing the
+opponent exactly does not beat "play your usual deck", then adding Y-prediction
+error on top cannot rescue it. The gate was written for precisely this case.
+
+**Coverage is the second problem.** A supported (deck, exact-opponent-deck) cell
+existed for only **5.5%** of competitive test games and **0.0%** of duel ones: a
+specific opponent deck rarely recurs often enough for X to have 5+ games against
+it. The oracle is not merely unhelpful, it is mostly absent.
+
+**Duels are structurally hostile.** 2.8% archetype coverage, and ZERO test games
+where X played the recommended deck. Two causes compound: a duel loadout forbids
+card reuse, so the legal set shrinks with every deck already played, and X's duel
+decks are card-disjoint by rule — so "X's best deck against golem" is frequently
+illegal by the time it would be offered.
+
+**Agreement is low, and that is itself a finding.** The matchup-optimal pick was
+what X actually played only 21.6% of the time (Recall@3 31.7%). Players are not
+choosing by matchup. That is consistent with the bot's counter-sniping result,
+which measured top-1 accuracy falling 8.3% -> 2.7% when it tried.
+
+**Two caveats kept deliberately.** The comparison is COUNTERFACTUAL — we only
+ever see the deck X actually played, so these arms compare games where X
+*happened* to play the recommendation against games where X played their default.
+That is observational and confounded upward: X may pick a deck precisely when the
+matchup already looks good. So +1.7 is an upper bound on a signal that already
+does not clear zero. And *every test game* (62.2%) beats all three arms, which is
+a selection artifact of the arms being subsets, but means no strategy here beats
+"whatever X did anyway".
+
+`ml/evaluation/phase20a.py`, `test_ml_20a.py` (22 contract tests). Measurement
+only; production, OIE, calibration and the active artifact were untouched.
+
+**Collected: 1,084 players in 67 minutes, zero errors.** The log went from 574 to
+**2,476 records**; duel players observed went 318 -> **1,367**, competitive
+256 -> **1,067**. Integrity clean, still ONE version stamp, so it remains a
+single interpretable experiment.
+
+**But the `high` band will still be short, and that is now measured rather than
+feared.** Duel bands across wave 2 came out low 257 / medium 582 / **high 43**
+— 4.9%. Even before ripening that is barely at the 30-player support floor, and
+only a fraction of anchors ripen within a day, so duel `high` will land around
+13-17 outcomes.
+
+The cause is a genuine tension in the selection, not a mistake in it. Anchors
+ripen only if the player plays again, so the cohort was chosen for FREQUENT
+duellers — and `high` means `P(change) < 0.0061`, a low-churn state that frequent
+duellers essentially never occupy. **The property that makes anchors ripen is the
+property that starves the top band.** Fixing it needs a third wave selected for
+LOW churn, which trades ripening speed for band coverage; it is a different
+query, not a different model.
+
+**Foreground latency, measured across 1,084 real requests:** `/coach/predict`
+p50 **2,737 ms**, p95 **7,095 ms**, p99 **15,182 ms**. That is the Coach's own
+database read on the spinning volume — the OIE engine inside the same requests
+ran 7-26 ms. Consistent with the 9.3 s p95 seen in 19B, and the clearest
+argument yet for moving to SSD.
+
+### Wave 2 worked, and it proved the diagnosis
+
+Six hours after collection, with the bot mid-pass:
+
+| domain | anchors | ripened | gate |
+|---|---|---|---|
+| competitive | 926 | **267** | REACHED |
+| duel | **1,124** | **156** | **REACHED** |
+
+Duel went from 78 ripened anchors to **156** — past 100 for the first time.
+
+The rate is the interesting part. The original cohort ripened at **0.11/hour**
+after four days; wave 2 ripened at roughly **13/hour**. That is a ~100x
+difference, and it settles what the earlier stall actually was: **not that
+outcomes are rare, but that those specific players had stopped duelling.**
+Selecting on recent activity rather than lifetime volume was the whole fix.
+
+It also retires three wrong estimates. "Roughly another day" was said three
+times about the original cohort and was wrong each time in the same direction,
+because it extrapolated a decaying rate as if it were linear. The lesson is not
+to forecast from a saturating curve — measure the population instead.
+
+### Future scope
+
+* **Finish 19D.** Wave 2 (1,084 duel-active players) is collecting. Targets:
+  >=200 duel players with outcomes, >=360 preferred. Then fit calibration on
+  held-out players and re-run the gate.
+* **Publishable bands need ~360 reconciled players per domain**, not 100. The
+  100 floor buys a verdict on *ordering*; 360 buys numbers worth showing a user.
+  That was not obvious until the 19D fit was run.
+* **A calibration map on the score** (Platt or isotonic) is probably the right
+  lever for the ECE, not more threshold moves — the raw score is overconfident
+  by ~25 points in its dominant bin, and no choice of cuts repairs that. 167
+  players is too thin to fit one; the mature sample decides it.
+* **Spell-conditioned behaviour** remains the one untested opponent-context
+  hypothesis: *opponent reveals spell X, this player changes specific cards*.
+  Phase 3 tested opponent archetype and deck as substitution context and found
+  nothing; Phase 20A has now tested opponent deck as a DECK-CHOICE signal and
+  found nothing either. Both were about which deck, not which card, so the
+  spell question is still open — but two adjacent negatives should temper the
+  prior. Measurement first, model only if the signal is real.
+* **Not planned:** the 122-card knowledge graph, Markov chains, elixir/cycle
+  models, or a neural ranker. Those are an eventual architecture, not the next
+  experiment, and nothing measured so far justifies them.
+
+---
+
 ## Project layout
 
 ```
 src/
   App.tsx                     hash routing -> one Dashboard shell
-  index.css                   ALL colour: neutral ladder, 5 hues, the three
-                              intensity levels, semantic roles, focus ring.
-                              The single source of truth — no component
-                              defines a colour of its own.
+  index.css                   ALL colour AND motion: neutral ladder, 5 hues in
+                              two ramps (ink + solid), the three intensity
+                              levels, semantic roles, focus ring, the glow
+                              strengths, the duration/easing tokens, and the
+                              reduced-motion switch. The single source of truth
+                              — no component defines a colour of its own.
+  hooks/
+    useReveal.ts              one-shot scroll reveal per section band
   components/
-    Dashboard/                top bar, sidebar, content panel
+    Dashboard/                top bar, sidebar, landing screen, content panel
+      Dashboard.tsx           the shell; `landing` decides whether a rail exists
+      ClosingBand.tsx         the page ending — three checkable claims plus a
+                              histogram counted from CARDS at render time
     Analytics/
       PlayerAnalysis.tsx      #/player/<tag>
       MetaDecks.tsx           #/player/<tag>/meta — the global leaderboard
       DuelAnalysis.tsx        #/player/<tag>/duels
+      DuelZone.tsx            #/player/<tag>/duelzone — series log + sequence
+      PlayerCards.tsx         #/player/<tag>/cards — every card, filtered
+      DeckCounter.tsx         #/player/<tag>/counter — three matchup tabs
+      CoachAssist.tsx         #/player/<tag>/coach — the two duel-coach windows
+      DeckLab.tsx             home Deck Analysis — paste a deck, measure it
+      CounterLab.tsx          home Deck Counter — three free rows, then the gate
+      GlobalCards.tsx         home Cards — every card, across the player base
+      ProLock.tsx             the Royal Pro gate: the real thing, behind glass
+      DuelInsights.tsx        the interpretation section under Duel Analysis —
+                              reads the SERIES log, not the pair board above it
+      duelInsightRules.ts     its pure calculations + evidence floors, no UI
+      LivePlayer.tsx          a never-tracked tag, from the live CR battlelog
+      SeasonMenu.tsx          the season control, as a glass dropdown
       CardArt.tsx             one card icon, evolution/hero art when fielded so
       TrendChart.tsx          inline SVG multi-series chart + crosshair
       playerData.ts           shapes, range presets, useDateWindow hook
+    DeckActions/              copy the deck link / open it in Clash Royale, on
+                              every screen that draws a deck. Renders nothing
+                              unless handed exactly 8 known cards, which is what
+                              keeps it off duel loadouts and partial card lists
+    DeckWorkspace/            the two-column shell all three deck screens share
     DuelDeckBuilder/          the 5-deck duel builder
     DecksHome/                unlimited single decks
     CounterPalette/           archetype folders
-    CardPicker/               the card drawer
+    CardPicker/               the card library column: filters, tabs, grid
+  utils/
+    analyticsReport.ts        the model every screen exports itself as
+    analyticsPdf.ts           draws one, in the palette read off the live page
+    reportAdapters.ts         one adapter per screen, pure, no layout
   state/
     store.ts                  builder store (zustand + persist, v9)
     deckUtils.ts              pure deck logic
@@ -839,20 +4748,81 @@ src/
 server/
   app.py                      stdlib HTTP API
   clash_data.py               read-only DB access, tier resolution, CR API
-  duel_combos.py              the Pair Board port
-  meta.py                     global meta rollup, background snapshot
-  test_duel_combos.py         34 checks, no DB
-  test_meta.py                23 checks, no DB
-  test_card_art.py            39 checks, no DB
+  duel_combos.py              the Pair Board port; owns the shared duel read
+  duel_zone.py                the series log and the deck-sequence port
+  player_cards.py             per-card use/win rates for one player
+  deck_counter.py             the symmetrised archetype matchup matrix
+  meta.py                     global meta rollup + the global card board
+  coach.py                    duel prediction + the next-deck recommendation
+  live_player.py              the live CR battlelog, analysed for a new tag
+  tracking.py                 the tag-enrolment queue — the ONLY file this API
+                              writes, and it is ours, not the bot's
+  test_duel_combos.py         39 checks, no DB
+  test_meta.py                33 checks, no DB
+  test_card_art.py            110 checks, no DB
+  test_duel_zone.py           88 checks, no DB
+  test_player_cards.py        60 checks, no DB
+  test_deck_counter.py        58 checks, no DB
+  test_coach.py               69 checks, no DB
+  test_live_player.py         23 checks, no DB and no network
   README.md                   API and storage detail
+
+scripts/
+  build-pdf-font.py           KidsWord.otf (CFF) -> a TrueType build jsPDF can
+                              actually embed. Run once; output is committed.
+  build-hero-art.py           masters in assets/ -> what public/ serves:
+                              keys the character to alpha, re-encodes to WebP
+                              (4.2 MB of PNG -> 166 kB). Idempotent.
+  generate-test-users.mjs     rebuilds src/data/users.json from TEST_ACCOUNTS.md
+
+assets/                       SOURCE art (masters, never served)
+  background/                 light_background.png, dark_background.png,
+                              "king image.jpg" — the hero backdrop pair and
+                              the character, all three 1.5 MB+ originals
+  fonts/                      display faces, incl. the unused trials
+
+public/assets/                what the app actually loads
+  background/                 light_background.webp, dark_background.webp,
+                              king.webp (alpha) — built by the script above
+  cards/ evolutions/ heroes/  card art, plain sRGB, no ICC profile
+  fonts/KidsWord.otf          the display face
 ```
 
 **`analyticsClient.ts` is the seam.** It only ever calls `/api/analytics/*`, so
 moving the service to a VPS is a proxy or base-URL change, not a code change.
 
-`useDateWindow` is shared between both analytics screens on purpose. Two copies
-drift — that is exactly how the season selector once shipped bound to state
-nobody read.
+`useDateWindow` is shared by every analytics screen on purpose — six of them
+now. Two copies drift, which is exactly how the season selector once shipped
+bound to state nobody read. The same rule sent `read_duel_rows` and
+`clash_data.tier_windows` to one place each: the pair board and the Duel Zone
+must agree about which duels exist, and three readers must agree about how the
+hot and archive tiers split a window.
+
+### Known, measured, and not yet fixed
+
+Two light-mode contrast failures found by the screen-wide sweep. Both predate
+the screens they sit on and neither is inside a feature that was being changed,
+so they are recorded rather than quietly restyled:
+
+| where | measured | what it is |
+|---|---:|---|
+| Cards board, the rate figures | **3.34–4.16:1** at 10.1px, 96 elements | `--c-use` (#2a78d6) on `--surface-nested` |
+| Duel Zone, the pane blurb | **4.19:1** at 12.5px | `--text-muted` on a violet fill |
+
+Both need 4.5:1. The fix in each case is a token, not a layout — but it is a
+token shared across screens, so it is a palette decision rather than a bug fix,
+and it belongs to whoever owns the palette. Dark mode is clean on all 11 screens.
+
+**The deck actions have not had a browser pass.** `npx tsc -b`, all 118 vitest
+tests and `npm run build` are green, and the risky shapes were checked by
+reading rather than running: no strip is a grid (so the chips cannot shift a
+column), every strip's card sizing is scoped to `img` / `.cardImg` / `.rowCard`
+(so the chips cannot be handed a `flex: 1 1 0` share), and the one nested-button
+case was found and restructured. None of that is a substitute for the
+convention — a green typecheck says nothing about whether a page renders, and
+the Duel Zone's `.gameRow` restructure is the piece most worth looking at. The
+verification also now needs `server/app.py` up against H:, where a cold meta
+rollup is ~166 s.
 
 ---
 
@@ -860,6 +4830,31 @@ nobody read.
 
 Recorded so they are not re-litigated as oversights:
 
+- **Exact next-deck prediction.** Closed by Phases 17B and 18 on ceilings, not
+  model quality: a switched-to deck is one the player has played only 50%/38% of
+  the time, and a genuinely new one can be *built* from their own cards only
+  52%/62% of the time, at 10^8-10^10 candidates. More data raises the search
+  space faster than the coverage.
+- **A bigger model for the OIE.** Pointwise ranking, pairwise ranking and a
+  hybrid were each measured and each lost to a heuristic first pick. Boosting and
+  neural rankers were explicitly not built, because the failure was the objective
+  and the candidate set, not nonlinearity.
+- **The 122-card knowledge graph, Markov chains, elixir and cycle models.** An
+  eventual architecture, not the next experiment. Nothing measured justifies them
+  yet.
+- **`CLASH_OIE=on` by default.** It stays `off` until the 19C checkpoint
+  validates High > Medium > Low against real outcomes.
+- **Printing every tab on every screen.** Only Duel Analysis prints all of its
+  tabs, because only there are they different views of one payload. Cards would
+  repeat the same list eight times; Deck Counter would emit empty forms.
+
+- **The Coach does not model counter-sniping.** "They just showed Hog, so they
+  will bring the anti-Hog deck" is the obvious feature and the bot measured it
+  on 3,569 leak-free trials: top-1 accuracy 8.3% → 2.7%, three times worse. The
+  deck a player actually brings scores 0.4856 against the opponent's last deck
+  versus 0.4961 for the average deck they could have brought. Recency weighting
+  and per-opponent tendency lost to plain usage the same way. The read narrates
+  evidence and invents no tendency.
 - **Chart palettes are not merged into the UI accent system.** They are already
   CVD-validated; re-encoding them for visual consistency would trade a real
   property for a cosmetic one. See the colour section.
@@ -875,6 +4870,48 @@ Recorded so they are not re-litigated as oversights:
 - **`--accent` stays neutral.** It is still correct for high-contrast neutral
   fills. Components opt into `--accent-select` / `--accent-action` / etc. rather
   than every `--accent` being globally swapped for a hue.
+- **The duel card-reuse threshold stays at one shared card.** Loosening it buys
+  a few points of coverage by inventing Bo5s — 1.1% of series over three games
+  becomes 25.3% at six. The table is in the Duel Zone section.
+- **A native duel's result is not attributed to its deck pairs.** Those rows
+  hold a 16- or 24-card loadout and the *series* outcome, so splitting them into
+  decks would manufacture four to nine pair results from one real one. The
+  8-card duel rows — 8,549 of 10,818 in a recent sample — are counted in full.
+- **Deck B's record is not a rung on the matchup ladder.** It was, briefly. The
+  ladder widens deck A instead (exact → 7 cards → 6 cards → archetype), which
+  covers strictly more cases and keeps one story: *this deck's evidence,
+  widening*. Consulting the other deck as well cost a second profile and made
+  the label "measured on" ambiguous about whose deck it meant.
+- **`_representatives` does not use the meta board's rankings.** The board
+  excludes duel and friendly modes by design; the Deck Counter's numbers do not.
+  Representatives come from the matchup table so both halves of a row describe
+  the same population. The board is still the source of *art*.
+- **The light level-2 fill stays at 14%.** Raising it to 17% would match dark's
+  selected-state strength on average, but it drops pink to 4.15:1 and green to
+  4.30:1, under the 4.5 floor. Re-grounding the tint fixed it properly instead.
+- **The duel series win/loss tints keep the plain wash.** Measured at 3.1 dE
+  dark against 3.3 light, they were already balanced; re-grounding them against
+  the panel pushed the green to 1.48x the light one.
+- **No synergy score**, and no lift metric on the pair board. Measured against a
+  permutation null and indistinguishable from chance — see the duel section.
+- **No exact deck-vs-deck record.** Only 0.59% of the 1.96M stored pairings
+  have 8 games, so a per-deck head-to-head would be invented for almost every
+  input. Matchups stay at archetype level, where all 289 cells clear 50 games.
+- **No "average match time" tile**, though the design has one: no duration is
+  stored in `battles`, in `pair_matchup_agg`, or in the raw payload.
+- **A counter list is not padded to five rows.** Ranking the field and taking
+  the top five returns a "counter" at 48.3%, which is the opposite of one. Only
+  archetypes over 50% are listed, and the screen says how many were weighed.
+- **No Grid/List/Compact toggle on the Cards board.** The reference design has
+  one; the dense grid is the view the data wants, and a second layout is a
+  second thing to keep correct for no question it answers better.
+
+---
+
+Both background rollups persist beside the code — `server/.meta_snapshot.json`
+and `server/.counter_snapshot.json` — so a restart serves the previous numbers
+immediately instead of a blank screen for a minute. Both are gitignored: they
+are derived data, and they are the only files the API writes.
 
 ---
 
@@ -887,3 +4924,5 @@ hotlinked.
 Card art must be **plain sRGB** — embedded lcms iCCP profiles made colours look
 washed out on wide-gamut phones, so the existing PNGs were normalised (profile
 stripped, pixels unchanged). Strip the ICC profile from any new art.
+
+---

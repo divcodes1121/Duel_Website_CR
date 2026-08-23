@@ -1,0 +1,63 @@
+{
+  "version": "band-calibration-v1",
+  "fitted": "2026-08-19",
+  "basis": "production-stack backtest, 797 seeded active players, real historical outcomes",
+  "method": "thresholds on P(change); fitted on half the players, figures below are HELD-OUT",
+  "step_definition": "next play (production semantics), NOT next-in-cluster",
+  "domains": {
+    "competitive": {
+      "high_below": 0.15,
+      "medium_below": 0.45,
+      "note": "UNCHANGED. Tertiles gave 93.3/92.4/82.3 - no separation - because competitive accuracy is uniformly high. Only the claimed accuracies moved.",
+      "measured": {
+        "high": 0.905,
+        "medium": 0.733,
+        "low": null
+      },
+      "measured_macro": {
+        "high": 0.886,
+        "medium": 0.667,
+        "low": null
+      },
+      "share": {
+        "high": 0.914,
+        "medium": 0.084,
+        "low": 0.002
+      }
+    },
+    "duel": {
+      "high_below": 0.0061,
+      "medium_below": 0.0339,
+      "note": "RECALIBRATED. The old 0.15/0.45 put 91.2% of reads in 'high' at 70.8% pooled / 61.2% macro - the label was lying. High is now rare and honest.",
+      "measured": {
+        "high": 0.921,
+        "medium": 0.758,
+        "low": 0.473
+      },
+      "measured_macro": {
+        "high": 0.904,
+        "medium": 0.637,
+        "low": 0.435
+      },
+      "share": {
+        "high": 0.049,
+        "medium": 0.647,
+        "low": 0.304
+      }
+    }
+  },
+  "verified_end_to_end": {
+    "duel": {
+      "high": 0.941,
+      "medium": 0.819,
+      "low": 0.564,
+      "note": "wired code on held-out players; every band beat its claim, i.e. the published figures are conservative"
+    },
+    "competitive": {
+      "high": 0.913,
+      "medium": 0.762,
+      "note": "competitive-only players. See subpopulation caveat."
+    }
+  },
+  "subpopulation_caveat": "Competitive accuracy depends on WHO the player is. Held-out competitive high-band accuracy is 91.3% for competitive-only players but 82.9% for duel-capable players scored on their competitive history. The published 0.905 describes the competitive population; it overstates the band for players who mainly play duels."
+}
