@@ -356,6 +356,12 @@ export function Dashboard({
 
   return (
     <div className={styles.shell}>
+      {/* The app-wide backdrop. Dark only: the page is true black there
+          (--bg-1: #000000) and the panels sit above it, so the fireflies drift
+          in the gutters around them. On light the page is white and additive
+          motes are invisible, so there is nothing to render. */}
+      {theme === 'dark' && <Fireflies fixed count={240} />}
+
       <header className={styles.topbar}>
         <button
           type="button"

@@ -14,7 +14,30 @@
 import { useEffect, useRef } from 'react';
 import { OVERLAY_STYLE, autoResize, isDark, loadThree, pixelRatio, reducedMotion, runLoop } from './runtime';
 
-const COUNT = 90;
+const DEFAULT_COUNT = 130;
+
+/**
+ * Per-theme colour, opacity and blend mode.
+ *
+ * ADDITIVE IS ONLY CORRECT ON BLACK. On the dark page (--bg-1 is true #000)
+ * adding warm gold reads as light. On the light page, colour + near-white
+ * clamps to white, so an additive mote is invisible no matter how bright it is
+ * turned up — light has to paint a warm amber over the page with normal
+ * blending instead.
+ */
+const PALETTE = {
+  dark: { color: '#ffdd94', opacity: 0.78 },
+  light: { color: '#d98a1f', opacity: 0.6 },
+} as const;
+
+interface Props {
+  /** How many motes. The app-wide layer covers far more area than a hero
+   *  panel does, so it wants more of them to read as anything at all. */
+  count?: number;
+  /** `fixed` pins the layer to the viewport instead of the parent box, for the
+   *  app-wide backdrop that has to sit behind a scrolling shell. */
+  fixed?: boolean;
+}
 
 const VERT = `
   attribute float aSize;
@@ -56,7 +79,7 @@ const FRAG = `
   }
 `;
 
-export function Fireflies() {
+export function Fireflies({ count = DEFAULT_COUNT, fixed = false }: Props = {}) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,15 +118,15 @@ export function Fireflies() {
       const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 20);
       camera.position.z = 3;
 
-      const positions = new Float32Array(COUNT * 3);
-      const sizes = new Float32Array(COUNT);
-      const phases = new Float32Array(COUNT);
-      const drifts = new Float32Array(COUNT);
-      for (let i = 0; i < COUNT; i++) {
+      const positions = new Float32Array(count * 3);
+      const sizes = new Float32Array(count);
+      const phases = new Float32Array(count);
+      const drifts = new Float32Array(count);
+      for (let i = 0; i < count; i++) {
         // Three depth bands. Far motes are smaller, slower and dimmer, which is
         // what makes the parallax legible instead of looking like noise.
         const band = i % 3;
-        positions[i * 3] = (Math.random() * 2 - 1) * 2.4;
+        positions[i * 3] = (Math.random() * 2 - 1) * (fixed ? 4.2 : 2.4);
         positions[i * 3 + 1] = Math.random() * 2.4 - 1.2;
         positions[i * 3 + 2] = -0.4 - band * 0.7;
         // Pixels, near band first. gl_PointSize divides by view depth, so
@@ -126,16 +149,12 @@ export function Fireflies() {
         fragmentShader: FRAG,
         transparent: true,
         depthWrite: false,
-        blending: THREE.AdditiveBlending,
+        blending: dark ? THREE.AdditiveBlending : THREE.NormalBlending,
         uniforms: {
           uTime: { value: 0 },
           uScale: { value: 10 },
-          // Warm gold catching torchlight in dark; in light the backdrop is
-          // pale and additive white would vanish, so it goes cooler and dimmer.
-          uColor: { value: new THREE.Color(dark ? '#ffd27a' : '#7ea6e8') },
-          // Additive on a near-black hero climbs fast -- this is deliberately
-          // low. Motes should be noticed on the second look, not the first.
-          uOpacity: { value: dark ? 0.42 : 0.3 },
+          uColor: { value: new THREE.Color(dark ? PALETTE.dark.color : PALETTE.light.color) },
+          uOpacity: { value: dark ? PALETTE.dark.opacity : PALETTE.light.opacity },
         },
       });
 
@@ -148,8 +167,13 @@ export function Fireflies() {
       // ended up cold blue on a dark hero the first time.
       const applyTheme = () => {
         const d = isDark();
-        (material.uniforms.uColor.value as import('three').Color).set(d ? '#ffd27a' : '#7ea6e8');
-        material.uniforms.uOpacity.value = d ? 0.42 : 0.3;
+        const pal = d ? PALETTE.dark : PALETTE.light;
+        (material.uniforms.uColor.value as import('three').Color).set(pal.color);
+        material.uniforms.uOpacity.value = pal.opacity;
+        // The blend mode is part of the palette, not a fixed choice -- see the
+        // note where it is first set.
+        material.blending = d ? THREE.AdditiveBlending : THREE.NormalBlending;
+        material.needsUpdate = true;
       };
       const themeWatch = new MutationObserver(applyTheme);
       themeWatch.observe(document.documentElement, {
@@ -189,13 +213,18 @@ export function Fireflies() {
       surface.removeEventListener('pointermove', onMove);
       cleanup ? cleanup() : (stopLoop?.(), stopResize?.());
     };
-  }, []);
+  }, [count]);
 
   return (
     <div
       ref={hostRef}
       aria-hidden="true"
-      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}
+      style={{
+        position: fixed ? 'fixed' : 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        zIndex: fixed ? 0 : 1,
+      }}
     />
   );
 }

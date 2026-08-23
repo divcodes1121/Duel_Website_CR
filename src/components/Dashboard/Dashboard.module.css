@@ -11,6 +11,9 @@
 /* ------------------------------------------------------------------ top bar */
 
 .topbar {
+  /* Above the app-wide fireflies layer, which is fixed at z-index 0. */
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -292,6 +295,9 @@
   --pad: 1rem;
 
   position: relative;
+  /* Same reason as .topbar. Without this the fixed layer, being positioned,
+     paints over the in-flow panels rather than behind them. */
+  z-index: 1;
   flex: 1;
   min-height: 0;
   display: grid;
