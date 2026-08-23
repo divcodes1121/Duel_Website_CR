@@ -85,7 +85,7 @@ Requires an elevated shell. The installer stores the token in
 | service | `cloudflared` |
 | startup | `Auto` — survives a reboot |
 | command | `cloudflared.exe tunnel run --token-file C:\ProgramData\cloudflared\token` |
-| account | `3dca00918865840a807d7bd2e2ce1bc3` |
+| account | *(the Cloudflare account the tunnel was created under — see the dashboard)* |
 | verified | four QUIC endpoints to the edge = connector registered |
 
 The token is **not** on the service command line, so it does not show up in a
