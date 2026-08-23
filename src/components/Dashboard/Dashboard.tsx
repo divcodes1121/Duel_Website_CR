@@ -47,6 +47,7 @@ import {
   SwordsIcon,
 } from './icons';
 import styles from './Dashboard.module.css';
+import { HeroMotes } from '../../three/HeroMotes';
 
 /* The post-login shell: top bar, a sidebar of analytics sections, and a panel
  * that swaps with whatever is open.
@@ -694,6 +695,8 @@ export function Dashboard({
                         </div>
                       </div>
                     </div>
+
+                    <HeroMotes />
 
                     <div className={styles.heroFigure} aria-hidden="true">
                       <img

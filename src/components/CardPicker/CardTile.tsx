@@ -1,5 +1,6 @@
 import type { Card } from '../../types/card';
 import { getCardIconUrl } from '../../data/cards';
+import { attachFoil, detachFoil, foilPointerMove } from '../../three/foil';
 import { startDrag, endDrag } from '../../state/dragContext';
 import { rectOf } from '../../state/flightStore';
 import styles from './CardPicker.module.css';
@@ -51,6 +52,14 @@ export function CardTile({
         if (disabled) return;
         onClick(e);
       }}
+      // Foil is hover-only and shares ONE renderer across the whole grid, so
+      // 122 tiles cost one WebGL context rather than 122. The <img> below stays
+      // put the entire time and is what shows if any of it is unavailable.
+      onPointerEnter={(e) => {
+        if (!disabled) attachFoil(e.currentTarget, iconSrc ?? getCardIconUrl(card.key));
+      }}
+      onPointerMove={foilPointerMove}
+      onPointerLeave={(e) => detachFoil(e.currentTarget)}
       draggable
       // Plain drag handlers now that this is a real <button> — the capture-phase
       // variants were only needed because framer's motion components claim

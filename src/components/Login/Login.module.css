@@ -151,6 +151,8 @@
 }
 
 .logoMark {
+  /* The 3D crown canvas is absolutely positioned inside this. */
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;

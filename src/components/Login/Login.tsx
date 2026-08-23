@@ -3,6 +3,7 @@ import { useAuthStore } from '../../state/authStore';
 import { useThemeStore } from '../../state/themeStore';
 import { getCardIconUrl } from '../../data/cards';
 import styles from './Login.module.css';
+import { CrownIntro } from '../../three/CrownIntro';
 
 function CrownIcon() {
   return (
@@ -66,7 +67,11 @@ export function Login() {
           <span className={styles.cardBorder} aria-hidden="true" />
 
           <span className={styles.logoMark} aria-hidden="true">
-            <CrownIcon />
+            {/* One-shot: it tumbles in, glints once and stops rendering for
+                good. The flat CrownIcon is underneath throughout. */}
+            <CrownIntro>
+              <CrownIcon />
+            </CrownIntro>
           </span>
 
           <h1 className={styles.title}>Royal Arena</h1>

@@ -3,6 +3,7 @@ import { getCycleCost, getElixirAverage } from '../../state/deckUtils';
 import { DECK_SIZE } from '../../types/deck';
 import type { Deck } from '../../types/deck';
 import { ElixirIcon, CycleIcon } from './icons';
+import { ElixirOrb } from '../../three/ElixirOrb';
 import styles from './DeckPanel.module.css';
 
 interface DeckStatsProps {
@@ -28,7 +29,11 @@ export function DeckStats({ deck }: DeckStatsProps) {
     <div className={styles.stats} data-complete={complete || undefined}>
       <span className={styles.stat} title="Average elixir cost across the cards placed so far">
         <span className={styles.statIcon} aria-hidden="true">
-          <ElixirIcon />
+          {/* The flat glyph stays as the child: it is what renders under the
+              orb, and all that renders without WebGL. */}
+          <ElixirOrb>
+            <ElixirIcon />
+          </ElixirOrb>
         </span>
         <span className={styles.statValue}>{elixirAverage ?? '–'}</span>
         <span className={styles.statLabel}>avg</span>
