@@ -53,8 +53,10 @@ bot's SQLite files read-only.
 | Phases 23 / 23B | hardened; **browser-verified in all three modes** (off 14/14, shadow 14/14, on 19/19) |
 | Phase 24A | local ON soak **PASS** — 80 tags, 0 invariant violations |
 | Phase 24B | hosting plan written; deployment **blocked on auth**, not on the model |
-| tests | **1,067 Python checks** across 20 suites, 118 vitest, `tsc -b` and `npm run build` clean |
-| preserved | `e696d8b` on `revamp`, pushed. `main` still runs `6ab701d` |
+| Phase 24C | boundary built: API authenticated, same-origin Vercel proxy, tunnel hop **verified for real** |
+| UI | WebGL fireflies on the landing hero, the login backdrop and the dark shell — see `docs/UI.md` |
+| tests | **1,236 Python checks** across 21 suites, 172 vitest, `tsc -b` and `npm run build` clean |
+| preserved | `revamp` pushed through `3bbc09b`. `main` still runs `6ab701d` |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
@@ -89,33 +91,34 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 2. [What the app is now](#what-the-app-is-now)
 3. [Where the data comes from](#where-the-data-comes-from)
 4. [The analytics API](#the-analytics-api)
-5. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
-6. [Deck rendering: the three special slots](#deck-rendering-the-three-special-slots)
-7. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
-8. [Duel Zone — the series log and the deck sequence](#duel-zone--the-series-log-and-the-deck-sequence)
-9. [Cards — one player's whole card pool](#cards--one-players-whole-card-pool)
-10. [Deck Counter — what beats what](#deck-counter--what-beats-what)
-11. [Coach Assist — mid-duel help](#coach-assist--mid-duel-help)
-12. [Colour: how it was chosen](#colour-how-it-was-chosen)
-13. [The UI pass — surfaces, selection and navigation](#the-ui-pass--surfaces-selection-and-navigation)
-14. [The display face, and the one property that decides it](#the-display-face-and-the-one-property-that-decides-it)
-15. ["Why is Evolutions 0?" — two emptinesses that shared a sentence](#why-is-evolutions-0--two-emptinesses-that-shared-a-sentence)
-16. [Duel Analysis, on the Dekkies light system](#duel-analysis-on-the-dekkies-light-system)
-17. [The Dekkies redesign — shell first](#the-dekkies-redesign--shell-first)
-18. [The deck builder — two columns instead of a drawer](#the-deck-builder--two-columns-instead-of-a-drawer)
-19. [The home screen — three real areas, three behind a gate](#the-home-screen--three-real-areas-three-behind-a-gate)
-20. [The landing screen, rebuilt](#the-landing-screen-rebuilt)
-21. [Tracking a new tag, and the live battlelog](#tracking-a-new-tag-and-the-live-battlelog)
-22. [Duel Insights](#duel-insights)
-23. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
-24. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
-25. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
-25b. [Closing the engine: phases 20B–24B](#closing-the-engine-phases-20b24b)
-26. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
-27. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
-28. [Testing and verification](#testing-and-verification)
-29. [Project layout](#project-layout)
-30. [Deliberately not done](#deliberately-not-done)
+5. [Reaching the analytics API from the hosted site](#reaching-the-analytics-api-from-the-hosted-site)
+6. [The tunnel, and what was actually proved](#the-tunnel-and-what-was-actually-proved)
+7. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
+8. [Deck rendering: the three special slots](#deck-rendering-the-three-special-slots)
+9. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
+10. [Duel Zone — the series log and the deck sequence](#duel-zone--the-series-log-and-the-deck-sequence)
+11. [Cards — one player's whole card pool](#cards--one-players-whole-card-pool)
+12. [Deck Counter — what beats what](#deck-counter--what-beats-what)
+13. [Coach Assist — mid-duel help](#coach-assist--mid-duel-help)
+14. [Colour: how it was chosen](#colour-how-it-was-chosen)
+15. [The UI pass — surfaces, selection and navigation](#the-ui-pass--surfaces-selection-and-navigation)
+16. [The display face, and the one property that decides it](#the-display-face-and-the-one-property-that-decides-it)
+17. ["Why is Evolutions 0?" — two emptinesses that shared a sentence](#why-is-evolutions-0--two-emptinesses-that-shared-a-sentence)
+18. [Duel Analysis, on the Dekkies light system](#duel-analysis-on-the-dekkies-light-system)
+19. [The Dekkies redesign — shell first](#the-dekkies-redesign--shell-first)
+20. [The deck builder — two columns instead of a drawer](#the-deck-builder--two-columns-instead-of-a-drawer)
+21. [The home screen — three real areas, three behind a gate](#the-home-screen--three-real-areas-three-behind-a-gate)
+22. [The landing screen, rebuilt](#the-landing-screen-rebuilt)
+23. [Tracking a new tag, and the live battlelog](#tracking-a-new-tag-and-the-live-battlelog)
+24. [Duel Insights](#duel-insights)
+25. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
+26. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
+27. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
+28. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
+29. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
+30. [Testing and verification](#testing-and-verification)
+31. [Project layout](#project-layout)
+32. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -482,6 +485,72 @@ the config, which runs in Node, so it never reaches the bundle) and rewrites
 `/api/analytics/opponent-read/` onto the Python route. That is what lets the
 client use one URL in both places: in production it hits the Vercel function,
 under `vite dev` it hits Python directly.
+
+
+## The tunnel, and what was actually proved
+
+Phase 24C step 4. The full runbook — named-tunnel config, Vercel variables,
+rollback — is `docs/analytics-tunnel-runbook.md`. The summary is that **half of
+this was verified against real infrastructure and half could not be.**
+
+`cloudflared` is installed and running as a Windows service (`Auto` start,
+token in `C:\ProgramData\cloudflared\token`, four QUIC connections to the
+edge). The tunnel→Python hop was then exercised over the public internet
+through a TryCloudflare quick tunnel, which needs no account:
+
+| | |
+|---|---|
+| TLS | ✅ valid certificate, QUIC to the `bom03` edge |
+| authentication through the tunnel | ✅ key accepted; missing and invalid both 401 |
+| leakage on the public surface | ✅ **9 routes scanned, 0 leaks** |
+| `opponent-read` contract end to end | ✅ approved fields only, no `changeProbability`, no percentage |
+| CORS through the tunnel | ✅ one origin echoed, foreign origin gets nothing |
+| Python stays loopback-only | ✅ bound `127.0.0.1:8787`; the LAN address refuses |
+| failure when Python stops | ✅ edge returns 502, the proxy answers `disabled` |
+
+**Not verified, and not claimed:** the Vercel half. There is no Vercel login on
+this machine and no linked project, so the environment variables, the preview
+deployment, and above all *whether Vercel resolves the `[tag]` dynamic segment*
+remain unproven. The end-to-end test simulates the platform's router, which is
+not the same thing as the platform.
+
+### Three things the real infrastructure taught
+
+**Cloudflare answers 502 with an HTML body** when the origin is down, not JSON.
+The proxy's `response.ok` check catches it before anything tries to parse it —
+correct by luck of ordering rather than by design, so it is now pinned by a test.
+
+**`/api/analytics/status` is not a transport probe.** It calls
+`os.path.getsize` on the spinning H: volume, so it times the *disk* (p50 166 ms
+locally) rather than the network, and the first overhead figure measured with it
+was meaningless. Timing an unauthenticated 401, which short-circuits before any
+disk access, gives the real number.
+
+| | p50 | p95 |
+|---|---:|---:|
+| `opponent-read`, direct `127.0.0.1` | 45.8 ms | 51.2 ms |
+| `opponent-read`, through the tunnel | 143.6 ms | 1118.8 ms |
+| Cloudflare round trip alone | **~119 ms** | |
+
+The engine is the smaller half of the total. The p95 near 1.1 s is transport
+variance on a home connection — the direct p95 never leaves 51 ms. **None of
+this may be compared with `/coach/predict`** (29–57 s), which is the Coach's own
+database read.
+
+**The Python rate limiter is service-wide, not per-user, behind a tunnel.**
+Demonstrated rather than assumed: 60 requests direct from localhost then 70
+through the tunnel gave **120 × 404 followed by 10 × 429** — one shared bucket,
+because `cloudflared` dials `127.0.0.1` and every remote caller therefore
+arrives with the same peer address. Per-user limiting is the Vercel proxy's job
+(30/minute per account). The Python limit is a backstop.
+
+### Rollback
+
+Six levels, none of which touches an ML artifact and none of which needs a
+deployment. Level 1 is emptying `OIE_ALLOWLIST`, which takes seconds and turns
+the feature off for everyone; level 6 is `git revert`. At every level Recent
+still renders, because the opponent read has always been a separate request that
+cannot block it.
 
 
 ## Top Meta Decks — why it is a snapshot
@@ -5199,7 +5268,16 @@ conclusions:
 ## Project layout
 
 ```
+docs/
+  UI.md                       the WebGL layer: what ships, what was removed,
+                              and the five things a browser had to catch
+  analytics-tunnel-runbook.md Cloudflare tunnel config, Vercel variables,
+                              measured latency, six-level rollback
+
 src/
+  three/                      three.js flourishes. Dynamically imported, gated
+                              on visibility and prefers-reduced-motion, never
+                              in the main bundle. See docs/UI.md
   App.tsx                     hash routing -> one Dashboard shell
   index.css                   ALL colour AND motion: neutral ladder, 5 hues in
                               two ramps (ink + solid), the three intensity
