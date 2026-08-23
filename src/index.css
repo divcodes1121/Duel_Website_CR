@@ -118,9 +118,25 @@
      shade of the background. Every rung moved together, so the ~6-point
      spacing and "nesting goes down, never up" are both intact:
      panel #202020 → nested #1A1A1A → well #141414, all still above the page. */
-  --surface: #202020;
+
+  /* TRANSLUCENT ON DARK, so the fireflies behind the shell are visible.
+     `Fireflies fixed` paints on the true-black page at z-index 0 and the
+     panels sit above it; fully opaque panels cover the entire viewport on a
+     tool screen, so the effect only ever showed in the 16px gutters.
+     90% lets it through as glints without turning panels into windows.
+
+     ONLY these three, which are the large content fills. The `-strong`,
+     `-sunken` and `slot` variants stay opaque on purpose: they back the portal
+     menus (ProfileMenu, SeasonMenu, WildVariantMenu) and dialogs, which float
+     over arbitrary content and have to be readable against it.
+
+     Elevation is unaffected in practice — #202020 at 90% over #000 composites
+     to ~#1D1D1D, so panel-to-page is 29 points of lightness instead of 32.
+     Light mode is untouched: the page there is white, there is no backdrop
+     layer, and a translucent panel would only mean a paler panel. */
+  --surface: rgba(32, 32, 32, 0.9);
   --surface-strong: #262626;
-  --surface-nested: #1a1a1a;
+  --surface-nested: rgba(26, 26, 26, 0.9);
   --surface-sunken: #141414;
 
   /* 6–8 borders. Two jobs, two contrast bars: --border is a decorative
@@ -154,7 +170,8 @@
      declarations still dotted around the components are inert. They are left
      in place rather than swept out of 21 files, because each one also creates
      the stacking context that portalled menus are already positioned against. */
-  --glass-fill: #202020;
+  /* Translucent for the same reason as --surface above. */
+  --glass-fill: rgba(32, 32, 32, 0.9);
   --glass-fill-strong: #262626;
   --glass-stroke: #383838;
   /* The lit top edge is the one part of the glass worth keeping: on a dark

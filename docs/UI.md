@@ -182,16 +182,36 @@ run order; this is the same trap from the other side.
 
 ---
 
-## Known limit
+## Making it visible on tool screens
 
-**On tool screens the app-wide layer is nearly invisible.** The panels are
-opaque and cover almost the whole viewport, so the fireflies only show in the
-~16 px gutters. It reads well on the landing page and is close to invisible in
-the builder.
+The app-wide layer was originally invisible everywhere but the landing page:
+the panels are opaque and cover almost the whole viewport, so the fireflies
+only showed in the ~16 px gutters.
 
-Making it visible there means taking the dark panels slightly translucent
-(roughly `--bg-3` at 92%) so the layer shows through. That is a real design
-change to every panel in the app and has **not** been done.
+The fix is three tokens in `index.css`, **dark theme only**:
+
+```css
+--surface:        rgba(32, 32, 32, 0.9);   /* was #202020 */
+--surface-nested: rgba(26, 26, 26, 0.9);   /* was #1a1a1a */
+--glass-fill:     rgba(32, 32, 32, 0.9);   /* was #202020 */
+```
+
+Only those three, which are the large content fills. **`--surface-strong`,
+`--surface-sunken`, `--glass-fill-strong` and `--slot-bg` stay opaque on
+purpose** — they back the portal menus (ProfileMenu, SeasonMenu,
+WildVariantMenu) and the export dialog, which float over arbitrary content and
+have to be readable against it. A translucent dropdown is a bug, not an effect.
+
+Nesting does not compound into mud: a nested box inside a translucent panel
+composites over that panel, so the fireflies reach it at 0.1 × 0.1 ≈ 1% and
+nested areas stay effectively solid. Only the top surface glints.
+
+Elevation survives. `#202020` at 90% over `#000` composites to about `#1D1D1D`,
+so panel-to-page is 29 points of 8-bit lightness instead of 32 — the README's
+surface-ladder argument is intact.
+
+**Light mode is untouched.** The page there is white, there is no backdrop
+layer, and a translucent panel would only mean a paler panel.
 
 ---
 
