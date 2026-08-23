@@ -56,7 +56,7 @@ bot's SQLite files read-only.
 | Phase 24C | boundary built: API authenticated, same-origin Vercel proxy, tunnel hop **verified for real** |
 | UI | WebGL fireflies behind the whole shell in **both themes**, the painted login backdrop — see `docs/UI.md` |
 | tests | **1,236 Python checks** across 21 suites, 172 vitest, `tsc -b` and `npm run build` clean |
-| preserved | `revamp` pushed through `1a707f2`; the analytics boundary and the UI work are **committed locally and not yet pushed**. `main` still runs `6ab701d` |
+| preserved | `revamp` pushed through `778fdde` — analytics boundary, tunnel verification and the UI pass all on the remote. `main` still runs `6ab701d` |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
