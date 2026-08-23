@@ -57,7 +57,21 @@ server/.tracking.db-shm
 server/ml/results/*.jsonl.gz
 
 # Phase 15 offline research artifacts (regenerable)
-server/ml/results/
+# NOTE THE TRAILING /* -- excluding the DIRECTORY would stop git
+# descending into it, and a negation below could never re-include
+# anything. Excluding its contents leaves the door open.
+server/ml/results/*
+
+# EXCEPT the cohort tag lists. These are NOT derived data: the shadow
+# log stores H(salt, tag) and cannot be reversed, so these 2,856 tags
+# are the only thing that can ever reconcile its 2,476 observations.
+# Re-deriving them would produce a DIFFERENT cohort, not the same one.
+# 66 KB of public game identifiers, no secrets.
+!server/ml/results/cohorts/
+# ...but the cohort directory holds one OUTPUT too. Inputs and the
+# runner are preserved; the checkpoint it produced is derived, and its
+# figures are written up in the README instead.
+server/ml/results/cohorts/checkpoint-*.json
 
 # Shadow-mode observation log (diagnostic, regenerable)
 server/ml/results/shadow-log.jsonl*
