@@ -67,11 +67,95 @@ migration seam — moving to a VPS means setting these, not editing code.
 | `CLASH_OIE_HISTORY_DAYS` | `60` |
 | `CLASH_OIE_CACHE_TTL` | `120` seconds |
 | `CLASH_DB_MAINTENANCE_FLAG` | `<db dir>/.maintenance` |
+| `CLASH_API_KEY` | *(unset — see below)* |
+| `CLASH_API_ALLOW_ANONYMOUS` | unset; `1` disables auth for local dev |
+| `CLASH_ALLOWED_ORIGIN` | *(unset — no CORS headers sent)* |
+| `CLASH_RATE_LIMIT` / `CLASH_RATE_WINDOW` | `120` requests / `60` s per client |
+| `CLASH_TRUSTED_PROXY` | unset; `1` believes `X-Forwarded-For` |
 
 Client side: `CLASH_API_URL` retargets the Vite proxy, and
 `VITE_ANALYTICS_BASE` points a built bundle straight at a remote host. The
 browser only ever calls `/api/analytics/*`, so neither the components nor the
 client module change when the service moves.
+
+### The security boundary
+
+Phase 24C step 2. The process still binds loopback and is still not exposed
+directly — this is the layer underneath whatever proxy eventually sits in
+front, not a replacement for it.
+
+**Authentication.** Every route except `/api/analytics/status` needs
+`CLASH_API_KEY`, sent as `X-Analytics-Key:` or `Authorization: Bearer`. The
+comparison is `hmac.compare_digest` on bytes — bytes because `compare_digest`
+refuses a non-ASCII `str`, so a key with an accent in it would raise rather
+than simply fail.
+
+A missing key **fails closed**: authenticated routes answer `503
+auth_not_configured` and the startup banner says so in six lines. No key is
+ever generated; a generated key is one nobody knows they depend on. For local
+development set `CLASH_API_ALLOW_ANONYMOUS=1`, which has to be typed — a
+developer who is merely inconvenienced invents a placeholder key instead, and a
+placeholder key looks like security from the outside while being none.
+
+**Loopback is not trusted, and this is the whole point.** `cloudflared` runs on
+this machine and dials `127.0.0.1`, so every tunnelled request arrives with a
+loopback peer address. An exemption for local clients would wave through
+precisely the traffic the key exists to authenticate. The process does refuse
+to *start* unauthenticated on a non-loopback `CLASH_API_HOST`, because that
+combination cannot be a deliberate local-dev choice.
+
+**CORS.** `_send` used to emit `Access-Control-Allow-Origin: *` on every
+response and `Allow-Headers: *` on every preflight. Now one exact origin from
+`CLASH_ALLOWED_ORIGIN` is echoed, with `Vary: Origin` so a shared cache cannot
+hand one origin's response to another, and the header allowlist is fixed. A
+preflight from an unknown origin is `403` with no CORS headers — there is
+nothing to reflect. Preflights themselves are unauthenticated on purpose: a
+browser never attaches credentials to one and it carries no data. The `GET`
+after it is authenticated normally. None of this affects `npm run dev`, where
+Vite proxies server-side and the browser never leaves its own origin.
+
+**Rate limiting.** Fixed window per client, `120 / 60 s`, `429` with
+`Retry-After` past it. Fixed windows rather than a sliding log because the
+state per client is one integer and the verdict for a given (client, clock) is
+deterministic, which is what makes it testable without sleeping. The table is
+capped at 4,096 clients and evicts finished windows first: a spray of one
+request each from many addresses is the normal shape of abuse here, and it is
+exactly the shape that grows an uncapped table until the process dies. `/status`
+is exempt so the health check answers while the service sheds load, and
+authentication runs *before* the limiter so a stranger cannot lock out the real
+caller by flooding the port with bad keys.
+
+`X-Forwarded-For` is ignored unless `CLASH_TRUSTED_PROXY=1`. Anyone who can
+reach the port can set that header, and honouring it by default hands the
+limiter's key to the caller it is meant to limit. Note that behind a tunnel
+every request shares one peer address, so per-user limiting belongs at the
+proxy; this limit is a backstop.
+
+**Errors say nothing.** The generic handler used to return
+`{"error": "server_error", "detail": str(exc)}`. For a database failure that
+detail is an absolute path to the `H:` volume; for a decode failure it is a
+slice of whatever was being parsed. The body is now the reason code alone and
+the traceback goes to stderr, where the operator is.
+
+Two related leaks were closed at the same time. `/api/analytics/status` — the
+one unauthenticated route — published the absolute path and exact byte size of
+both SQLite volumes, a free inventory of the host's drives to anyone who could
+reach the port; `_sources()` strips the paths, and since the UI only ever reads
+`available`, nothing downstream noticed. And `deck_counter` and `meta` both
+stored `str(exc)` in a `_state["error"]` that is served in a response body;
+they now store the exception *type*.
+
+**Metrics** are counted (`total`, `ok`, `auth_failed`, `rate_limited`,
+`client_error`, `server_error`, plus a bounded 512-sample latency percentile)
+and deliberately carry nothing per-player: a counter keyed by route would carry
+the tag in the path, and a tally of who was looked up is not a metric, it is a
+log of people. `metrics_snapshot()` exists; nothing surfaces it yet.
+
+`server/test_api_security.py` (73 checks) drives all of this over real HTTP
+against a server on an ephemeral port, because these controls are header- and
+status-level and a unit test calling `check_auth` directly would pass just as
+happily against a server that never called it.
+
 
 ## Endpoints
 

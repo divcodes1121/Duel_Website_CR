@@ -670,7 +670,10 @@ def refresh(force: bool = False) -> None:
         _save_snapshot(snap)
     except Exception as exc:  # noqa: BLE001
         with _lock:
-            _state["error"] = str(exc)
+            # The TYPE, not the message. This string is served in a
+            # response body, and a sqlite message can carry the database path.
+            # The full traceback still goes to stderr for the operator.
+            _state["error"] = type(exc).__name__
     finally:
         with _lock:
             _state["building"] = False
