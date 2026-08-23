@@ -54,9 +54,9 @@ bot's SQLite files read-only.
 | Phase 24A | local ON soak **PASS** — 80 tags, 0 invariant violations |
 | Phase 24B | hosting plan written; deployment **blocked on auth**, not on the model |
 | Phase 24C | boundary built: API authenticated, same-origin Vercel proxy, tunnel hop **verified for real** |
-| UI | WebGL fireflies on the landing hero, the login backdrop and the dark shell — see `docs/UI.md` |
+| UI | WebGL fireflies behind the whole shell in **both themes**, the painted login backdrop — see `docs/UI.md` |
 | tests | **1,236 Python checks** across 21 suites, 172 vitest, `tsc -b` and `npm run build` clean |
-| preserved | `revamp` pushed through `3bbc09b`. `main` still runs `6ab701d` |
+| preserved | `revamp` pushed through `1a707f2`; the analytics boundary and the UI work are **committed locally and not yet pushed**. `main` still runs `6ab701d` |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
@@ -115,10 +115,11 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 26. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
 27. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
 28. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
-29. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
-30. [Testing and verification](#testing-and-verification)
-31. [Project layout](#project-layout)
-32. [Deliberately not done](#deliberately-not-done)
+29. [The WebGL layer](#the-webgl-layer)
+30. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
+31. [Testing and verification](#testing-and-verification)
+32. [Project layout](#project-layout)
+33. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -3594,6 +3595,70 @@ the link order. Full reasoning in
 [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game).
 
 ---
+
+## The WebGL layer
+
+Full detail is in **`docs/UI.md`**. The short version:
+
+**What ships** is one component used twice — drifting fireflies over the
+landing hero, and the same thing pinned to the viewport behind the whole
+signed-in shell — plus the painted castle backdrop on the login page, the same
+light/dark pair the landing hero uses.
+
+**three.js is never in the main bundle.** It is a dynamic import, so it lands in
+its own 734 kB chunk (190 kB gzipped) and arrives only when something renders —
+exactly the treatment `jspdf` gets. The main bundle went 518 → 523 kB, and that
+is the components, not the library. Verified by grepping the built main chunk
+for three-internal strings: zero occurrences.
+
+**The motion ban still holds.** `CLAUDE.md` forbids infinite animation because
+the old CSS glow loops animated `box-shadow` and thrashed repaint. A WebGL
+canvas is GPU-side and never touches layout, so the reason does not apply — but
+a loop nobody can see is still waste, so every frame is gated on an
+`IntersectionObserver` and on `document.visibilitychange`.
+`prefers-reduced-motion` mounts **no canvas at all**, and every piece keeps the
+flat markup it decorates as the fallback.
+
+### The panels had to become translucent
+
+The layer paints on the page at `z-index: 0`, and opaque panels cover nearly the
+whole viewport on a tool screen — so at first it only showed in the 16 px
+gutters. Three tokens went translucent in both ladders: `--surface`,
+`--surface-nested`, `--glass-fill`. **`--surface-strong`, `--surface-sunken`,
+`--glass-fill-strong` and `--slot-bg` stay opaque**, because they back the
+portal menus and dialogs, which float over arbitrary content.
+
+Two things fell out of that and are worth knowing:
+
+* **A translucent panel over the true-black page composites DARKER than its own
+  colour** — 90% of `#202020` is `#1D1D1D`. So making dark panels *lighter*
+  meant raising the literal until the composite sat on the rung: panel 40,
+  nested 34, raised 46, sunken 28, border 58. `--surface-strong` and `--border`
+  both had to move too, or the raised rung would have read as a dent and a
+  border on it would have vanished entirely.
+* **Light needs a lower opacity than dark** (85% vs 90%). A green mote on a
+  near-white page is a far smaller colour difference than a gold one on true
+  black, and a tenth of it was invisible.
+
+### Two removed, deliberately
+
+A holographic **card foil** on the picker tiles and a glass **elixir orb** in
+the deck stats both worked and were both cut — the card screen read worse with
+them than without. A tumbling **login crown** was cut when the painted backdrop
+arrived behind it. All three are recoverable from `a452525`; `docs/UI.md` records
+what each did and why it went.
+
+### Five things a browser caught that reading did not
+
+Each was written confidently and was wrong: a uniform declared in both shader
+stages at different precisions never links; `gl_PointSize` divides by view
+depth, so sizes are pre-perspective units and mine rendered as ~600 px blobs
+that washed out the hero; translucent 3D over a flat fallback reads as two
+overlapping objects; a blanket `.page > *` collapses an absolutely-positioned
+layer to zero height; and **setting `data-theme` directly leaves the zustand
+store on its old value**, so a `theme === 'dark'` guard stays false, the layer
+never mounts, and the check passes against nothing.
+
 
 ## Things that went wrong and what fixed them
 
