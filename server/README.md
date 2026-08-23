@@ -599,6 +599,66 @@ enhancement. Now `GET /api/analytics/coach/opponent-read/<tag>` is its own
 request, and in `shadow` the observation runs on a daemon thread purely to fill
 the log.
 
+
+### The domain is `practice`, and it contains no duels
+
+PHASE 20D. `is_duel_like_mode` admits any mode containing "friendly" because
+the bot's DuelEngine reconstructs duels out of practice; `_rows_to_plays` drops
+any row that is not exactly 8 distinct cards because a native duel row is a
+16/24-card loadout. Both are right. Together they admit practice and discard
+every real duel -- of 1,238 native rows in one census, ZERO carry 8 cards.
+
+So the domain formerly called `duel` is `practice`, and every "duel" figure
+from Phase 14 onward describes friendly practice. The FROZEN calibration
+artifact still keys it `duel`; `calibration.ARTIFACT_DOMAIN` maps one to the
+other so stored observations stay attributable to the artifact that produced
+them. Do not rewrite the artifact.
+
+### What may be displayed
+
+`policy.BAND_SUPPORTED` decides, per domain, whether a confidence band may be
+SERIALISED at all:
+
+* **competitive** -- yes. Its ordering held against real outcomes
+  (68.2% > 55.0% > 0.0%, Phase 19D).
+* **practice** -- no. Measured over 11,152 historical steps with full support
+  in all three bands, player-macro runs high 65.4% < medium 69.7% > low 53.5%.
+  A band that does not rank is decoration. The alternatives are withheld with
+  it, because the 2/1/0 cap is justified by the bands meaning something.
+
+`policy.BAND_ACCURACY` and `calibration.expected_accuracy()` are INTERNAL
+DIAGNOSTICS. Both are disproved -- competitive `high` claims 90.5% and measured
+69.1% -- and neither may reach a response body or a screen. Confidence ships as
+a word.
+
+### `opponent-read-v2`
+
+    GET /api/analytics/coach/opponent-read/<tag>
+    -> {"enabled": bool, "read": null | {primary, alternatives, note,
+                                         degraded, bandShown}}
+
+`enabled` is false in every mode but `on`. `coach.SURFACED_DOMAIN` is
+**competitive** on a product decision: practice without a band carries nothing
+the Coach does not already show.
+
+Two invariants worth knowing before touching this:
+
+* **`degraded: true` implies `alternatives: []`**, enforced last in
+  `predict()` AND again in `as_dict()`. The counting-fallback path used to
+  break this and the UI hid it client-side; that stops working the moment a
+  second client exists.
+* **`changeProbability` is not in the payload.** It is a logistic score, and it
+  is the same score measured at ECE 0.2806 competitive / 0.6097 practice.
+
+### Native duels are readable, just not here
+
+`battle_raw.raw_json` carries `team[0].rounds` -- ordered per-game decks with
+per-game crowns, for BOTH sides, across ~50,000 native duel payloads. It is
+what makes real duel analysis possible and it is what `phase21a.py` reads. The
+production engine does NOT read it: `battles` flattens a duel to a 16/24-card
+loadout and the 8-card guard drops it. Measured on that substrate, the duel
+card-reuse rule is absolute -- 21,432 deck pairs, zero overlap.
+
 ### The shadow log, and how it was lost twice
 
 `ml/results/shadow-log.jsonl`. Salted tag hash, domain, history depth, cluster

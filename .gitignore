@@ -37,7 +37,11 @@ video/
 *.sw?
 
 # Local analytics API artefacts
-server/__pycache__/
+# Python bytecode, at ANY depth. The old rule only covered
+# server/__pycache__/, so ml/, ml/production/ and ml/evaluation/ leaked
+# 53 .pyc files into a commit.
+__pycache__/
+*.pyc
 
 .meta_snapshot.json
 .counter_snapshot.json

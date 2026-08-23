@@ -143,7 +143,11 @@ def predict(tag: str, domain: str, plays, cutoff_ts: str | None = None,
 
         result = policy.enforce_primary(result, recent_deck)
         result = policy.drop_alternatives_matching_primary(result)
-        return policy.cap_alternatives(result, max_alternatives)
+        result = policy.cap_alternatives(result, max_alternatives)
+        # LAST, so no earlier branch can leave alternatives on a degraded
+        # read. Phase 24A found the counting-fallback path doing exactly
+        # that.
+        return policy.enforce_degraded_has_no_alternatives(result)
     except Exception as exc:                      # never take a screen down
         try:
             deck = sorted(sorted(plays, key=lambda p: p.battle_time)[-1].cards)

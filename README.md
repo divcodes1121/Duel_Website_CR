@@ -46,30 +46,42 @@ bot's SQLite files read-only.
 |---|---|
 | deck tools + analytics screens | shipped |
 | Export PDF (print-exact, every section) | shipped |
-| Opponent Intelligence Engine | built, **flagged off** (`CLASH_OIE=off`) |
-| OIE live validation (Phase 19C) | **first real accuracy measured** — ordering holds, calibration does not |
-| OIE wave-2 collection (Phase 19D) | **complete** — 2,476 records, 1,367 duel / 1,067 competitive players |
-| **both 19C gates reached** | competitive 267, duel **156** anchors ripened |
-| next | reconcile once the bot finishes its pass |
-| Phase 20A (matchup response) | **closed** — oracle arm loses to X's default |
-| tests | 910 Python checks, 118 vitest, `tsc -b` and `npm run build` clean |
+| Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
+| OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
+| Phases 20A–21A | **all four branches closed on measurements**, not on effort |
+| Phase 22 | final production specification, frozen and tested |
+| Phases 23 / 23B | hardened; **browser-verified in all three modes** (off 14/14, shadow 14/14, on 19/19) |
+| Phase 24A | local ON soak **PASS** — 80 tags, 0 invariant violations |
+| Phase 24B | hosting plan written; deployment **blocked on auth**, not on the model |
+| tests | **1,067 Python checks** across 20 suites, 118 vitest, `tsc -b` and `npm run build` clean |
+| preserved | `e696d8b` on `revamp`, pushed. `main` still runs `6ab701d` |
 
-The engine is complete and cannot be reached by a user until `CLASH_OIE` is set.
-The first reconciliation against real subsequent battles is in:
-**the confidence ordering holds and the published magnitudes are wrong** —
-every band in both domains came in below its claim, competitive `high` by 19
-points and duel `high` by 32. Wave 2 is collecting the support needed to
-recalibrate properly.
-See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine).
+**The engine's conclusion is a small one, and that is the result.** Recent is
+the prediction; the model layer may add a confidence *word* and a short list of
+historical alternatives, and may never replace it. Four separate attempts to
+make a bigger claim — exact next-deck retrieval, novel-deck generation,
+matchup-response, spell-conditioning — were each measured and each closed.
+
+**Two published numbers are now known to be wrong and are no longer displayed
+anywhere.** Competitive `high` claimed 90.5% and measured **69.1%**; the
+practice bands do not even ORDER correctly (macro high 65.4% < medium 69.7%).
+Confidence therefore ships as High/Medium/Low with no percentage attached, and
+the practice domain ships no band at all.
+
+**The domain called `duel` for twenty phases contained no duels.** It is now
+`practice`. See [The domain that was never duels](#the-domain-that-was-never-duels).
+
+See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
+[Closing the engine: phases 20B–24B](#closing-the-engine-phases-20b24b).
 
 **Two operational notes before running anything:**
 
 - The website and the bot share `battles.db`. Overlapping readers stop the bot
-  folding its WAL — drop `H:\ClashBot\data\.maintenance` to make the site let
-  go, and delete it afterwards.
+  folding its WAL — it reached **5.66 GB** once. Drop
+  `H:\ClashBot\data\.maintenance` to make the site let go, and delete it
+  afterwards.
 - Do **not** repoint the site at `archive.db` to dodge that. It is two days
-  stale (`20260818T184047Z` vs `20260820T154231Z`) and would break the OIE
-  experiment outright.
+  stale and would break the OIE experiment outright.
 
 ## Table of contents
 
@@ -98,6 +110,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine).
 23. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
 24. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
 25. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
+25b. [Closing the engine: phases 20B–24B](#closing-the-engine-phases-20b24b)
 26. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
 27. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
 28. [Testing and verification](#testing-and-verification)
@@ -132,6 +145,9 @@ python server/test_player_cards.py # 60 checks over the card board
 python server/test_deck_counter.py # 58 checks over the matchup engine
 python server/test_coach.py       # 69 checks over the Coach Assist rules
 python server/test_live_player.py # 23 checks over the live battlelog reader
+python server/test_ml_22_final.py # 66 checks over the FROZEN production contract
+python server/test_ml_20d.py      # 27 checks that `practice` excludes real duels
+python server/test_ml_21a.py      # 32 checks over the spell feasibility harness
 npm run lint
 npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
@@ -3886,6 +3902,93 @@ games) was sound — it just answers "deck vs *exact* deck", and was applied to
 one list. A correct measurement can still be the wrong measurement for the
 question in front of you.
 
+### A measurement that could not fail, and therefore proved nothing
+
+Phase 20B set out to test whether duel legality forces deck changes. It
+reported that inside a run the previous deck retained **0.00 of its 8 cards**,
+which looked like a textbook confirmation and was written up as one.
+
+`used_before()` adds `plays[i-1]` to the used-card set whenever the two battles
+are linked. The previous deck is therefore always entirely inside it. Feed the
+function two linked battles on the SAME deck — a state the rule forbids — and
+it still answers 0.00 of 8.
+
+The circularity check had been done, on the wrong half. The run reconstruction
+genuinely never looks at a card; the legality step immediately after it puts
+the answer in by hand. **A derivation is only as checked as its least-checked
+step**, and "I verified this isn't circular" meant "I verified one of the two
+places it could be".
+
+It was caught because Phase 20C, built on top of it, produced a signal that
+agreed with reality 10.6% of the time. A result that is worse than chance is
+usually not a discovery about the world.
+
+### Twenty phases on a domain nobody had looked inside
+
+`is_duel_like_mode` admits any mode containing "friendly". The 8-card guard
+drops any row that is not exactly eight distinct cards. Both are correct and
+documented, and each was written for a good reason.
+
+Together they mean the engine's `duel` domain admitted friendly practice and
+discarded every native duel — 1,238 native rows in one census, of which **zero**
+carry 8 cards. Every "duel" number from Phase 14 onward, including the shipped
+band accuracies, described practice matches.
+
+No test asserted what the domain CONTAINED. There were tests that it partitioned
+correctly, that it dropped loadouts, that modes classified as expected — but
+none that looked at the resulting population and asked what was in it. The
+fix (`phase20d`) is one census query and a set of tests that pin the composition.
+
+**Test that a filter produces the right POPULATION, not just that it runs.**
+
+### A browser verification that passed against a blank page
+
+The first Phase 23 verify script reported six green checks in a row. The Coach
+screen renders nothing until its opening interview question is answered, and the
+selector guessed for "content" (`[class*="_block_"]`) matched nothing at that
+point — so every assertion was evaluated against an empty page and every one of
+them passed.
+
+It surfaced only because a later check needed a bounding box and timed out
+waiting for an element that was never going to exist. Dumping the DOM took
+thirty seconds and showed a single heading: *"Has the duel started?"*.
+
+**A green check is worthless until you have confirmed it is looking at the
+thing it claims to check.** The rewritten script answers the interview, waits
+for real blocks, and carries the trap list in its header.
+
+### The payload was wrong and the UI was hiding it
+
+The Phase 24A soak found `degraded: true` responses shipping alternatives. The
+spec says a degraded read carries none, and `safe_fallback` honours that — but
+the counting-fallback path (M2 artifact missing or feature-order mismatch) sets
+the flag and carries on with the list intact.
+
+Nothing was user-visible, because `CoachAssist` does
+`read.degraded ? [] : read.alternatives`. So the server contract and the client
+disagreed, and the client's compensation made the disagreement invisible.
+
+That arrangement holds exactly as long as there is one client. The service was
+about to be exposed to a second. Fixed at the source
+(`enforce_degraded_has_no_alternatives`, applied last) and again at
+serialisation, with a test that hands `as_dict()` a deliberately dirty object
+to prove the boundary holds even when the object does not.
+
+### Three latency claims, withdrawn
+
+The OIE was blamed for the Coach being slow. Measured in the same page loads:
+`/coach/predict` **29,042 / 56,744 / 31,209 ms**, `/coach/opponent-read`
+**14 / 31 / 15 ms**. The engine is ~2,000x cheaper than the request it was
+accused of slowing down; the cost is the database read on the spinning volume.
+
+Also withdrawn: 19B's "shadow observation costs 9.6s against 2.4s", which was a
+single sample and measured **-219 ms, CI [-1297, +859]** when paired over 40
+tags. And the two "optimisations" that measured as nothing — persistent
+connections with mmap (**-8 ms, CI [-37, +21]**) and a narrower history window
+(**+9 ms, CI [-29, +47]**), both page-cache warming artefacts.
+
+**A single-sample latency claim is a rumour.** Pair it or drop it.
+
 **Three passes to make one feature usable.** The exact-deck ladder was 15.2 s on
 first working version. No single change fixed it: one scan for both cluster
 levels instead of two (−1.6 s), a TEMP table instead of chunked `IN (...)`
@@ -3908,7 +4011,7 @@ are in [Running it](#running-it).
 
 ## Testing and verification
 
-888 Python checks and 118 vitest tests, none of which open a database — every
+1,067 Python checks across 20 suites and 118 vitest tests, none of which open a database — every
 Python suite runs on synthetic data or a stubbed reader, so they pass on a
 machine with no Clash_Bot install and cannot be broken by whatever a real player
 did last week.
@@ -4479,6 +4582,14 @@ faster.
 
 ### The first real accuracy, measured against battles that actually happened
 
+> **SUPERSEDED, AND THE LABEL IS WRONG.** Everything in this section says
+> "duel"; Phase 20D established that domain contains no duels and is
+> `practice`. The figures below are the FIRST reconciliation (574 predictions);
+> the mature one is in
+> [The 19D reconciliation, in full](#the-19d-reconciliation-in-full), and it
+> reproduced these values on roughly double the sample. Kept because the
+> reasoning that follows is still the reasoning that applies.
+
 574 frozen predictions, reconciled against each player's first strictly later
 valid 8-card deck. Not a backtest — these were made before the outcomes existed.
 
@@ -4662,28 +4773,322 @@ times about the original cohort and was wrong each time in the same direction,
 because it extrapolated a decaying rate as if it were linear. The lesson is not
 to forecast from a saturating curve — measure the population instead.
 
-### Future scope
+### The 19D reconciliation, in full
 
-* **Finish 19D.** Wave 2 (1,084 duel-active players) is collecting. Targets:
-  >=200 duel players with outcomes, >=360 preferred. Then fit calibration on
-  held-out players and re-run the gate.
-* **Publishable bands need ~360 reconciled players per domain**, not 100. The
-  100 floor buys a verdict on *ordering*; 360 buys numbers worth showing a user.
-  That was not obvious until the 19D fit was run.
-* **A calibration map on the score** (Platt or isotonic) is probably the right
-  lever for the ECE, not more threshold moves — the raw score is overconfident
-  by ~25 points in its dominant bin, and no choice of cuts repairs that. 167
-  players is too thin to fit one; the mature sample decides it.
-* **Spell-conditioned behaviour** remains the one untested opponent-context
-  hypothesis: *opponent reveals spell X, this player changes specific cards*.
-  Phase 3 tested opponent archetype and deck as substitution context and found
-  nothing; Phase 20A has now tested opponent deck as a DECK-CHOICE signal and
-  found nothing either. Both were about which deck, not which card, so the
-  spell question is still open — but two adjacent negatives should temper the
-  prior. Measurement first, model only if the signal is real.
-* **Not planned:** the 122-card knowledge graph, Markov chains, elixir/cycle
-  models, or a neural ranker. Those are an eventual architecture, not the next
-  experiment, and nothing measured so far justifies them.
+574 predictions grew to 2,476 after wave 2, and reconciling them against each
+player's first strictly-later valid deck gave the first honest read on the
+bands. Both gates were reached — 344 competitive and 148 practice players with
+outcomes, against a floor of 100.
+
+**COMPETITIVE — 364 reconciled**
+
+| band | share | n | pooled | player-macro | 17A claim |
+|---|---|---|---|---|---|
+| high | 95.7% | 343 | **69.1%** | 68.2% | 90.5% |
+| medium | 4.1% | 20 | 55.0% | 55.0% | 73.3% |
+| low | 0.2% | **1** | 0.0% | 0.0% | — |
+
+Brier 0.2897, **ECE 0.2806**. The dominant bin holds 356 of 364 predictions,
+claims 96.8% and delivers 68.5%.
+
+**PRACTICE — 151 reconciled**
+
+| band | share | n | pooled | 17A claim |
+|---|---|---|---|---|
+| high | 5.3% | **8** | 62.5% | 92.1% |
+| medium | 48.3% | 73 | 35.6% | 75.8% |
+| low | 46.4% | 70 | 21.4% | 47.3% |
+
+Brier 0.5723, **ECE 0.6097**.
+
+**The ordering holds and every magnitude is wrong.** That is systematic rather
+than noisy: the bands correctly RANK how much to trust a prediction and the
+numbers attached to them do not survive contact with reality. Wave 2 roughly
+doubled the sample and reproduced each value, so this is not a thin-sample
+artefact.
+
+---
+
+## Closing the engine: phases 20B–24B
+
+Four branches were still open after 20A. All four are now closed, and two of
+them closed because a measurement of MINE was wrong rather than because the
+world was uncooperative. Those are written up first, because they were the
+expensive lessons.
+
+### 20B: a mechanism that was a tautology
+
+Practice `high` was failing at ECE 0.6097 while competitive sat at 0.2806, and
+the obvious explanation was structural: a duel loadout may not reuse a card, so
+"they will bring the same deck" is forbidden by the rules inside a series.
+
+The measurement appeared to confirm it spectacularly — inside a reconstructed
+run the previous deck retained **0.00 of its 8 cards**, reported at the time as
+"exact disjointness, measured with a run definition that never looks at a card".
+
+**It was true by construction.** `used_before()` unions `plays[i-1]` whenever
+the link holds, so the previous deck is ALWAYS fully inside the used-card set.
+"C illegal" was the `same_run` flag wearing a different name. Handed two linked
+battles on the *identical* deck — which the rule forbids — it still reported
+0.00 of 8. The function could not observe a violation with one in front of it.
+
+The run reconstruction was checked for circularity and was clean; the legality
+step immediately after it was not. **Checking one half of a two-step derivation
+is not checking the derivation.**
+
+What survived: the ASSOCIATION is real. Consecutive same-opponent battles
+within 30 minutes change decks 78.4% against 16.5%, with ECE 0.6790 against
+0.1252. What did not survive: the stated cause. And 20D later showed the share
+itself is sampling-dependent — 20.3% under one sampling, 51.3% under another.
+
+Phase 20D then added the sharper correction: paired on the 203 players who
+experience both contexts, the effect is **0.013 [-0.038, 0.062]** — it does not
+clear zero. The huge pooled gap is BETWEEN players, not within them. The
+context identifies *who* cycles decks, which is a much weaker claim than the
+one originally made.
+
+### The domain that was never duels
+
+Phase 20C was meant to validate 20B. Its ex-ante legality signal agreed with
+reality **10.6%** of the time — worse than chance — and that is what forced the
+audit that found the real problem.
+
+Measured over 400 cohort tags in a 60-day window, the engine's `duel` domain is:
+
+| mode | rows | cards |
+|---|---:|---|
+| Friendly | 26,718 | 8 |
+| Showdown_Friendly | 8,186 | 8 |
+| Duel_1v1_Friendly | 404 | **16 / 24** |
+| CW_Duel_1v1 | 381 | **16 / 24** |
+
+Two correct decisions combine into a wrong one:
+
+* `duel_combos.is_duel_like_mode` admits any mode containing "friendly",
+  because the bot's DuelEngine RECONSTRUCTS duels out of friendly practice.
+* `source._rows_to_plays` drops any row that is not exactly 8 distinct cards,
+  because a native duel row carries a whole 16/24-card loadout and a loadout is
+  not a deck.
+
+Each is right alone. Together they admit practice and discard **every real
+duel**. Of 1,238 native duel rows seen in a later census, **zero** carry 8
+cards, so the exclusion is structural rather than incidental.
+
+**Every "duel" figure from Phase 14 onward — including 17A's calibration and
+19D's shipped band accuracies — describes friendly practice matches.** The
+measurements were sound; the label was not. Phase 20D renamed the domain to
+`practice` and re-ran the evaluation under it.
+
+The correction barely moved the numbers (ECE 0.6147 → 0.6097, 153 → 151
+reconciled) **and that is the point**: native rows were already being dropped,
+so relabelling removed only the minor friendly variants. What changed is not
+the measurement but what it is a measurement OF.
+
+No test had ever asserted what the domain CONTAINED. That is why it survived
+twenty phases.
+
+### 21A: spells, and a substrate nobody had read
+
+The spell hypothesis was the last open idea: after seeing an opponent's deck,
+do its SPELLS narrow what they bring next beyond their own history?
+
+Answering it honestly needed real duels, and 20D had just concluded those were
+unavailable. They were not. **`battle_raw.raw_json` keeps what `battles` throws
+away:**
+
+```
+team[0].rounds -> [{cards: [8], crowns, elixirLeaked, towerHitPoints}, ...]
+```
+
+Present for BOTH sides, round counts matching, 8 cards per round, each round
+carrying its own crowns — across **49,963 native duel payloads** spanning the
+full window. So a duel decomposes into ordered games with per-game decks and
+per-game results, for both players. 20D's "native duel needs a different
+representation" was too pessimistic and is withdrawn; the representation exists,
+in a table the OIE had never opened.
+
+That substrate also settles the question 20B botched, properly this time:
+
+> **12,000 loadouts, 21,432 deck pairs, card overlap ZERO in every single one.**
+> The duel card-reuse rule is absolute.
+
+**And the spell result is a clean null.** Over 41,980 transitions and 20,702
+players, with a 70/30 time split and legality-filtered candidates:
+
+| arm | top-1 | top-3 | MRR |
+|---|---|---|---|
+| A full (history + cards + spells) | 13.5% | 19.9% | 0.167 |
+| B no spells | 13.6% | 19.9% | 0.167 |
+| D history only | **13.9%** | 19.9% | 0.169 |
+| E spells only | 13.2% | 19.9% | 0.165 |
+
+Paired on players, **A − B = 0.000 [-0.001, 0.001]**. History alone is
+marginally the best arm. Spells are, if anything, slightly negative.
+
+Coverage was only 20.4%, which would dilute a real effect toward zero, so the
+gate was re-run restricted by candidate-pool size. Top-1 rises to 47.9% once
+empty pools are excluded — **and every paired interval still contains zero at
+every pool size**, with no trend as the pool grows.
+
+**A second finding matters more.** The right baseline for a ranker over a
+legality-filtered pool is not "guess an archetype" but "guess uniformly among
+the same legal candidates":
+
+| subset | mean pool | ranker | random-in-pool | delta |
+|---|---:|---:|---:|---|
+| pool >=1 | 1.89 | 47.9% | 46.2% | +1.7 pts |
+| pool >=2 | 2.62 | 37.7% | 34.7% | +3.0 pts |
+| pool >=3 | 3.76 | 28.8% | 23.9% | +4.9 pts |
+| pool >=5 | 5.84 | 11.7% | 14.5% | **-2.8 pts** |
+
+Almost all the apparent accuracy is the **legality filter**, not prediction.
+Once two decks are spent, what a player can legally bring is often one or two
+archetypes, and naming one is close to naming the only option. The ranker goes
+NEGATIVE at pool >=5 — exactly where ranking would have to do real work.
+
+There is a weak spell association (`earthquake` → goblin-barrel 1.51x,
+`goblin-barrel` → hog-rider 1.51x) but entropy barely moves: 4.158 bits
+unconditional against 4.109 at best. Real, and far too small to rank with.
+
+**SPELL MATCHUP SIGNAL: FAIL.** The branch is closed.
+
+### 22–23B: freezing it, then hardening it
+
+Phase 22 wrote the production contract down as a document and as tests, and
+recorded three known deviations as characterisation tests so the debt could not
+be forgotten. Phase 23 paid them:
+
+* **`changeProbability` removed from the payload.** A rounded logistic score is
+  a model internal, and it is the same score measured at ECE 0.2806 / 0.6097 —
+  both internal AND wrong. It stays in-process for band assignment and the log.
+* **`duel` renamed `practice`** without rewriting history: the frozen artifact
+  still keys it `duel` and one `ARTIFACT_DOMAIN` mapping absorbs the
+  difference, so stored observations remain attributable to the artifact that
+  produced them.
+* **Practice ships no band**, via `policy.BAND_SUPPORTED`. The alternatives go
+  with it, because the 2/1/0 cap is *justified* by the bands meaning
+  something — an unranked band cannot license a split.
+* **Stale justifications corrected.** `ALTERNATIVE_CAPS` cited "duel high
+  92.1%, low 47.3%" as measured fact. The rule is unchanged and still right; it
+  now rests on ordering alone.
+
+**23B took a product decision:** the surfaced domain is `competitive`, not
+practice. The Coach screen is about duels, so the duel-ish domain looks like the
+natural thing to show — but without a validated band, practice carries no
+confidence and no alternatives, so surfacing it would ship a panel holding the
+recent deck and nothing else. Technically "on", informationally empty. Practice
+is still observed and logged; it is simply never displayed. This is not a claim
+of native duel support.
+
+### The browser gate, and a verification that lied
+
+All three modes were driven through the real site with Playwright:
+
+| mode | result | panel | endpoint |
+|---|---|---|---|
+| off | 14/14 | absent | `{enabled:false, read:null}` |
+| shadow | 14/14 | absent | disabled; 12 observations recorded |
+| on | 19/19 | **present** | qualitative band, 2 alternatives |
+
+Shadow was pointed at a scratch log via `CLASH_OIE_LOG`, and the production log
+stayed **byte-identical** — 2,476 records, md5 `f8740be7…` before and after.
+That override exists because this log was destroyed twice; this is the first
+time it was used deliberately.
+
+**An earlier version of the script passed against an empty page.** The Coach
+opens as an INTERVIEW — nothing renders until "Has the duel started?" is
+answered — and the first selector guess matched nothing, so every check passed
+trivially. It was caught by dumping the DOM instead of trusting the green.
+A green verification proves nothing until you have confirmed it is looking at
+the thing it claims to check.
+
+**Latency, attributed correctly at last:** in the same page loads,
+`/coach/predict` took **29,042 / 56,744 / 31,209 ms** while
+`/coach/opponent-read` took **14 / 31 / 15 ms**. The engine is not the Coach's
+latency and never was; that cost is the database read on the spinning volume.
+Two earlier claims are formally withdrawn — that the OIE makes the Coach slow,
+and 19B's single-sample "9.6s vs 2.4s" (paired over 40 tags: -219 ms,
+CI [-1297, +859], no effect).
+
+### 24A: the local soak, and the bug it found
+
+80 real tags through `coach.opponent_read`, the function the endpoint calls:
+
+| | |
+|---|---|
+| requests / successful / failures | 80 / 80 / **0** |
+| degraded rate | 11.25% |
+| OIE latency | p50 **103 ms**, p95 **1,176 ms**, p99 **1,362 ms** |
+| confidence | high 78, medium 2 |
+| alternatives | 2→67, 1→2, 0→11 |
+| invariant violations | **0** |
+
+Five failure injections — missing artifact, model exception, empty history,
+malformed input, `observe` raising — all survived with Recent intact and no
+ML-generated primary.
+
+It also found a real contract inconsistency: **`degraded=true` could still
+carry alternatives** on the counting-fallback path (the one taken when the M2
+artifact is missing). Nothing was user-visible, because the Coach suppressed
+them client-side — which is exactly why it needed fixing before a second client
+exists. "The payload is wrong and the UI compensates" stops being true the
+moment someone writes another consumer. Fixed at the source and again at
+serialisation, with a test that hands `as_dict()` a deliberately dirty object.
+
+### 24B: what shipping actually requires
+
+The rollout that was requested could not be run, and the reason is worth
+stating plainly: **there is nothing to roll out to.** `main` runs `6ab701d` and
+contains **zero** `server/ml` files; `api/` holds only the Upstash deck-sync
+function; there is no `/api/analytics` handler, no `vercel.json`, and
+`CLASH_OIE` is an environment variable on a local Python process. A staged
+percentage rollout needs production traffic reaching a hosted analytics
+service, and neither exists.
+
+The full plan is in `server/ml/results/phase24b-hosting-plan.md`. Its
+conclusions:
+
+* **Do not move the database.** 69.4 GB growing by ~190k battles/day, over a
+  home upload link, with SQLite having no native replication. Run the service
+  beside the data and expose it through an authenticated tunnel.
+* **An OIE-only extract would be ~1.01 GB**, measured: the engine reads six
+  columns over 60 days, which is 6,806,514 rows x 160 bytes, against 17.7 GB
+  for `battles.db`. That is the path to an always-on OIE later; it does not
+  serve the Coach, the meta board, Deck Counter or Cards.
+* **The hard prerequisite is authentication.** `app.py` is a localhost service
+  and says so (`CLASH_API_HOST=127.0.0.1`). Exposed unchanged it would be
+  unauthenticated, `Access-Control-Allow-Origin: *`, unrate-limited, plaintext
+  — a free bulk export of ~3.8M battles of other people's data to anyone who
+  finds the hostname.
+* **Build an allowlist, not percentages.** The site has 20 fixed accounts; a
+  percentage of 20 is theatre.
+
+### What the engine actually is, in one table
+
+| | |
+|---|---|
+| primary | the most recent deck, **structurally unreplaceable** |
+| confidence | High / Medium / Low, **as words** — never a number |
+| practice confidence | **none** — its bands do not rank |
+| alternatives | <=2 / <=1 / 0 by band, competitive only, labelled "not forecasts" |
+| never claims | that it knows the exact next deck |
+
+### Future scope, honestly
+
+* **Deploy it, or do not.** The model work is finished. What remains is
+  authentication, a tunnel, a merge to `main`, and an allowlist — infrastructure,
+  not research.
+* **A calibration map on the competitive score** (Platt or isotonic) is the one
+  defensible remaining model change, and only on competitive: 364 reconciled
+  players is at the ~360 threshold where numbers become worth showing. It must
+  NOT be fitted on the practice sample, whose composition is an artefact of when
+  collection ran.
+* **Native duel prediction** is now a *possible* project rather than a blocked
+  one, because `battle_raw.rounds` exists. It needs a loadout representation and
+  it is a different research programme, not a fix to this one.
+* **Not planned, and now with evidence:** spell-conditioning (21A), matchup
+  response (20A), exact retrieval (17B), novel generation (18), the 122-card
+  knowledge graph, Markov chains, elixir/cycle models, neural rankers.
 
 ---
 
@@ -4767,6 +5172,29 @@ server/
   test_live_player.py         23 checks, no DB and no network
   README.md                   API and storage detail
 
+  ml/evaluation/              the phase harnesses. The ones from this round:
+    phase20b.py               duel legality as a mechanism -- WITHDRAWN, its
+                              central measurement was a tautology
+    phase20c.py               ex-ante legality; exposed 20B rather than
+                              confirming it
+    phase20d.py               the domain correction. `practice` is defined
+                              here, and a census proves no native duel row
+                              can enter it
+    phase21a.py               spell-conditioned feasibility. Reads
+                              `battle_raw.rounds`, the only module that does
+    phase22-final-spec.md     THE PRODUCTION CONTRACT. Read this before
+                              changing anything in ml/production/
+  ml/results/                 gitignored. Phase reports, the shadow log, and
+    cohorts/tags*.json        <- NOT derived. The ONLY thing that can
+                              reconcile the salted shadow log. 66 KB, and
+                              currently unbacked; see the plan below
+    phase24b-hosting-plan.md  what deploying actually requires
+
+  test_ml_20b/20c/20d/21a.py  127 checks over the four closed branches
+  test_ml_22_final.py         66 checks. The FROZEN CONTRACT, not the
+                              implementation -- a failure here means the
+                              contract moved
+
 scripts/
   build-pdf-font.py           KidsWord.otf (CFF) -> a TrueType build jsPDF can
                               actually embed. Run once; output is committed.
@@ -4829,6 +5257,54 @@ rollup is ~166 s.
 ## Deliberately not done
 
 Recorded so they are not re-litigated as oversights:
+
+- **Spell-conditioned prediction.** Phase 21A, on the largest population this
+  project has ever measured: 41,980 duel transitions across 20,702 players, on
+  real duel data rather than practice. Paired top-1 delta between the full arm
+  and the no-spells arm is **0.000 [-0.001, 0.001]**, and history-only is
+  marginally the BEST arm. Restricting to steps with a real candidate pool does
+  not rescue it at any pool size. A weak association exists (earthquake →
+  goblin-barrel at 1.51x) and moves entropy by 0.05 bits out of 4.16, which is
+  not enough to rank with. Do not reopen this without a different question.
+
+- **Ranking archetypes inside a legal duel pool.** Measured against the right
+  baseline — uniform choice among the SAME legal candidates — the ranker adds
+  1.7 to 4.9 points at small pools and goes **negative at pool >=5**, which is
+  exactly where ranking would have to work. Most of the apparent accuracy was
+  the legality filter. Any future duel work should beat random-in-pool before
+  it claims anything.
+
+- **Percentage-based rollout.** The site has 20 fixed test accounts. A
+  percentage of 20 is theatre. An allowlist (`CLASH_OIE_ALLOWLIST`) does the
+  same job honestly and is what the hosting plan specifies.
+
+- **Replicating the database to a VPS.** 69.4 GB growing by ~190,000
+  battles/day, and SQLite has no native replication. The archive is already two
+  days stale and the README records what that cost. Run the service beside the
+  data instead.
+
+- **Displaying any band accuracy percentage.** Competitive `high` claims 90.5%
+  and measured 69.1%; practice does not order at all. The numbers survive as
+  internal diagnostics in `policy.BAND_ACCURACY` and
+  `calibration.expected_accuracy()`, and neither may reach a response body or a
+  screen. Confidence ships as a word.
+
+- **A confidence band on the practice domain.** Its ordering fails on 11,152
+  historical steps with full support in all three bands: player-macro high
+  65.4% < medium 69.7% > low 53.5%. A band that does not rank cannot carry a
+  label, so `policy.BAND_SUPPORTED` withholds it — and the alternatives with
+  it, because the 2/1/0 cap is justified by the bands meaning something.
+
+- **Promoting `band-calibration-v2-candidate.json`.** It exists on disk and a
+  test asserts it stays inactive. Fitting a calibration map to the reconciled
+  sample would bake the timing of a collection run into shipped calibration.
+  Competitive is now at ~360 reconciled players and could support a proper
+  Platt/isotonic fit; practice cannot, and must not be pooled with it.
+
+- **Native duel prediction.** No longer blocked — `battle_raw.rounds` holds
+  ordered per-game decks and per-game crowns for both sides across ~50,000
+  payloads. But it needs a loadout representation rather than a deck one, so it
+  is a separate research programme and not a fix to this one.
 
 - **Exact next-deck prediction.** Closed by Phases 17B and 18 on ceilings, not
   model quality: a switched-to deck is one the player has played only 50%/38% of

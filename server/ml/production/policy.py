@@ -82,7 +82,10 @@ class PredictionResult:
         primary = {"cards": list(self.primary_deck), "basis": self.basis}
         if show_band:
             primary["confidence"] = self.primary_confidence
-        alternatives = self.alternatives if show_band else []
+        # Belt and braces for `enforce_degraded_has_no_alternatives`: whatever
+        # route built this object, a degraded payload leaves here empty.
+        alternatives = [] if self.degraded else (
+            self.alternatives if show_band else [])
         return {
             "primary": primary,
             "alternatives": [
@@ -158,6 +161,24 @@ def cap_alternatives(result: PredictionResult,
     """RULE 4. A low-confidence read shows fewer options, never more."""
     band_cap = ALTERNATIVE_CAPS.get(result.primary_confidence, 0)
     result.alternatives = result.alternatives[:max(0, min(limit, band_cap))]
+    return result
+
+
+def enforce_degraded_has_no_alternatives(result: PredictionResult) -> PredictionResult:
+    """A degraded read offers the deck and nothing else.
+
+    `safe_fallback` always did this. The COUNTING-FALLBACK path did not: when
+    the M2 artifact is missing or its feature order mismatches, `predict` sets
+    `degraded=True` and carries on, leaving the alternatives in place. The
+    Phase 24A soak caught a degraded response shipping two of them.
+
+    Nothing was user-visible, because the Coach suppresses alternatives on a
+    degraded read client-side — but "the payload is wrong and the UI
+    compensates" stops being true the moment a second client exists, and the
+    service is about to be exposed to one. Fixed at the source instead.
+    """
+    if result.degraded:
+        result.alternatives = []
     return result
 
 

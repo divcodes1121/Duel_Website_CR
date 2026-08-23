@@ -564,5 +564,82 @@ class TestSerializedResponseHasNoInternals(unittest.TestCase):
             self.assertNotIn(token, blob)
 
 
+
+# --------------------------------------------------------------------------
+# PHASE 24B - the degraded-response contract
+# --------------------------------------------------------------------------
+
+class TestDegradedCarriesNoAlternatives(unittest.TestCase):
+    """Spec 2.5. Found by the Phase 24A soak on the counting-fallback path.
+
+    The UI already suppressed these client-side, so nothing was user-visible -
+    which is exactly why it needed fixing before a second client exists.
+    """
+
+    def _degraded_with_alts(self, domain="competitive"):
+        return policy.PredictionResult(
+            primary_deck=list(RECENT), primary_confidence="high",
+            change_probability=0.01,
+            alternatives=[alt(OTHER), alt(OTHER)],
+            degraded=True, reason="change model artifact unavailable",
+            domain=domain)
+
+    def test_the_rule_clears_them_on_the_object(self):
+        r = policy.enforce_degraded_has_no_alternatives(self._degraded_with_alts())
+        self.assertEqual(r.alternatives, [])
+
+    def test_a_healthy_result_is_untouched(self):
+        r = policy.PredictionResult(
+            primary_deck=list(RECENT), primary_confidence="high",
+            change_probability=0.01, alternatives=[alt(OTHER)],
+            degraded=False, domain="competitive")
+        self.assertEqual(len(policy.enforce_degraded_has_no_alternatives(r)
+                             .alternatives), 1)
+
+    def test_NO_CLIENT_can_receive_them_even_if_the_object_is_wrong(self):
+        """The serialisation guard, tested WITHOUT calling the rule first.
+
+        This is the assertion that matters for a second client: the payload is
+        clean even when the object handed to it is not.
+        """
+        raw = self._degraded_with_alts()
+        self.assertEqual(len(raw.alternatives), 2)      # object still dirty
+        self.assertEqual(raw.as_dict()["alternatives"], [])
+
+    def test_holds_for_the_unsupported_domain_too(self):
+        self.assertEqual(
+            self._degraded_with_alts("practice").as_dict()["alternatives"], [])
+
+    def test_safe_fallback_was_already_correct(self):
+        self.assertEqual(policy.safe_fallback(RECENT, "x").as_dict()["alternatives"], [])
+
+    def test_every_degraded_path_through_predict_is_clean(self):
+        """The real pipeline, not a constructed object."""
+        cases = [
+            ("no plays", []),
+            ("thin history", [play("20260601T000000.000Z", RECENT)]),
+        ]
+        for name, plays in cases:
+            res = predictor.predict("#T", "competitive", plays)
+            self.assertTrue(res.degraded, name)
+            self.assertEqual(res.as_dict()["alternatives"], [], name)
+
+    def test_a_missing_artifact_degrades_without_alternatives(self):
+        """The exact path the soak caught."""
+        saved = predictor.ARTIFACT
+        try:
+            predictor.ARTIFACT = saved + ".missing"
+            predictor._loaded = False
+            predictor._model = None
+            plays = [play("20260601T00000%d.000Z" % i, RECENT) for i in range(8)]
+            res = predictor.predict("#T", "competitive", plays)
+            self.assertTrue(res.degraded)
+            self.assertEqual(res.as_dict()["alternatives"], [])
+        finally:
+            predictor.ARTIFACT = saved
+            predictor._loaded = False
+            predictor._model = None
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
