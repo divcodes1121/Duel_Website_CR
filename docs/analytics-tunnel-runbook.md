@@ -33,16 +33,21 @@ trusted — see `server/README.md`.
 | Python stays loopback-only | ✅ bound `127.0.0.1:8787`; LAN address refuses |
 | failure when Python stops | ✅ edge returns 502; the proxy answers `disabled` |
 | latency | ✅ measured, below |
+| named connector installed | ✅ service `cloudflared`, Auto-start, connector registered |
 
 **NOT verified — needs credentials this machine does not have:**
 
-- a **named** tunnel (needs a Cloudflare account and a zone)
+- a public **hostname** for the tunnel (needs a zone on the Cloudflare
+  account; the connector is installed and connected, but routes to nothing
+  until one is added in the dashboard)
 - **Vercel** environment variables and a preview deployment (needs a Vercel login)
 - therefore the **real `[tag]` dynamic-route resolution on Vercel**, and the
   full browser → Vercel → tunnel → Python chain
 
-Everything below the "Named tunnel" heading is written from the Cloudflare
-documentation and this project's needs. It has not been executed here.
+The **remotely-managed** section below describes what is actually installed on
+this machine and was executed. The **locally-managed** section after it is
+written from the Cloudflare documentation as an alternative and has NOT been
+executed — do not follow both.
 
 ---
 
@@ -59,7 +64,98 @@ at one and walk away.
 
 ---
 
-## Named tunnel — the real thing
+## Remotely-managed tunnel — what is actually installed
+
+**This is the one in use.** Created in the Cloudflare dashboard (Networks →
+Tunnels), which issues a connector token. Ingress lives in the dashboard, *not*
+in a local `config.yml` — the `config.yml` in the next section applies only to
+the locally-managed alternative, and is kept for reference.
+
+Installed on this machine, 2026-08-24:
+
+```bash
+cloudflared.exe service install <TOKEN>
+```
+
+Requires an elevated shell. The installer stores the token in
+`C:\ProgramData\cloudflared\token` and registers a Windows service:
+
+| | |
+|---|---|
+| service | `cloudflared` |
+| startup | `Auto` — survives a reboot |
+| command | `cloudflared.exe tunnel run --token-file C:\ProgramData\cloudflared\token` |
+| account | `3dca00918865840a807d7bd2e2ce1bc3` |
+| verified | four QUIC endpoints to the edge = connector registered |
+
+The token is **not** on the service command line, so it does not show up in a
+process listing. It is readable from `C:\ProgramData\cloudflared\token` by
+anyone who can read that directory.
+
+> **A connector token is a credential.** Anyone holding it can run a connector
+> for this tunnel. If it has ever been pasted somewhere it should not have been
+> — a chat window, a screenshot, a ticket — rotate it in the dashboard and
+> re-run `service install` with the new one.
+
+### Routing it (dashboard, not a file)
+
+Tunnel → **Public Hostname** → Add:
+
+| field | value |
+|---|---|
+| Subdomain | e.g. `analytics` |
+| Domain | a zone on this Cloudflare account |
+| Path | *(blank)* |
+| Type | `HTTP` |
+| URL | `127.0.0.1:8787` |
+
+`HTTP` and `127.0.0.1`, not HTTPS and not the LAN address: TLS is terminated at
+the Cloudflare edge and the last hop is loopback on this machine, which is the
+whole point of the arrangement.
+
+**This step needs a domain on the Cloudflare account.** Without a zone there is
+no public hostname to route to, and the tunnel — while connected — is reachable
+by nothing.
+
+Under *Additional application settings → Connection*, leave the defaults; the
+one worth setting is a connect timeout below the Vercel proxy's own 5 s, so the
+proxy is what gives up first and answers `disabled` cleanly rather than
+interpreting an edge 502.
+
+### Service management
+
+```bash
+sc.exe query cloudflared          # status
+sc.exe stop cloudflared           # rollback level 3
+sc.exe start cloudflared
+cloudflared.exe service uninstall # remove entirely (elevated)
+```
+
+### The reboot gap
+
+The tunnel is `Auto`-start. **The Python service is not.** After a reboot the
+tunnel comes up and finds nothing on 8787, the edge returns 502, and the proxy
+answers `disabled` — the site is fine, but the engine is silently off.
+
+Start it with the stored key:
+
+```bash
+CLASH_API_KEY=$(cat ~/.royal-analytics/api.key) \
+CLASH_ALLOWED_ORIGIN=https://royal-duels.vercel.app \
+python server/app.py
+```
+
+The key lives in `C:\Users\<you>\.royal-analytics\api.key`, outside the
+repository, and must match the `CLASH_API_KEY` set in Vercel. If persistence
+matters, register `app.py` as a scheduled task at logon; that is not done.
+
+---
+
+## Named tunnel — the locally-managed alternative
+
+Kept for reference. Use this only if you would rather hold ingress in a file
+than in the dashboard; do **not** mix it with the token-based install above.
+
 
 ### One-time setup
 
