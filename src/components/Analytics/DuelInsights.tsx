@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CardArt } from './CardArt';
+import { ReadingState } from './ReadingState';
 import { DeckActions } from '../DeckActions/DeckActions';
 import {
   fetchDuelZone,
@@ -183,7 +184,11 @@ export function DuelInsights({ tag, win }: { tag: string; win: DateWindow }) {
   if (failed) return null;
 
   if (loading) {
-    return <div className={styles.loading}>Reading the duel series log…</div>;
+    return (
+      <ReadingState className={styles.loading} hue="green">
+        Reading the duel series log…
+      </ReadingState>
+    );
   }
 
   const { all, perf, line, adapt, opp, rev } = calc;

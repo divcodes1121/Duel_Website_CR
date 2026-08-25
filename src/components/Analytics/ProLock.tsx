@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ProContact } from './ProContact';
+import { Fireflies } from '../../three/Fireflies';
 import styles from './ProLock.module.css';
 
 function LockIcon({ size = 20 }: { size?: number }) {
@@ -79,6 +80,19 @@ export function ProLock({
     <div className={`${styles.lock} ${variant === 'inline' ? styles.lockInline : ''}`}>
       <div ref={previewRef} className={styles.preview} aria-hidden="true">
         {children}
+      </div>
+
+      {/* Motes drifting over the blurred preview, in the gate's own hue.
+          A LAYER OF ITS OWN, not a child of `.preview` — that carries
+          `filter: blur(7px)`, so anything inside it is blurred too, and a
+          blurred mote is just a smudge. Out here they stay sharp against the
+          soft content, which is the contrast that makes the locked thing look
+          live rather than like a screenshot of itself.
+
+          Same `z-index: 1` the veil needs, and BEFORE it in the DOM, so the
+          card still paints over the motes. See the note on `.veil`. */}
+      <div className={styles.motes} aria-hidden="true">
+        <Fireflies count={70} hue={hue} intensity={0.75} />
       </div>
 
       <div className={styles.veil}>

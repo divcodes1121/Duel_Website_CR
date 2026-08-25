@@ -1,5 +1,6 @@
 import { MAX_CROWNS, type PlayerId } from '../../types/deck';
 import { GoldCrownIcon } from '../Dashboard/icons';
+import { fireDeckFx, fxRectOf } from '../../state/deckFx';
 import styles from './CrownCounter.module.css';
 
 /** An UNWON crown: the same shape, drawn as an empty seat rather than metal. */
@@ -80,7 +81,15 @@ export function CrownCounter({
               className={`${styles.pip} ${lit ? styles.pipLit : ''}`}
               aria-pressed={lit}
               title={`${n} crown${n === 1 ? '' : 's'}`}
-              onClick={() => onChange(n)}
+              onClick={(e) => {
+                /* Gold shards, but only when crowns are actually GAINED.
+                   Pressing crown 1 while on 3 is a correction downward, and
+                   celebrating a correction is how an effect stops meaning
+                   anything. Gold is legitimate here for the reason the icon is
+                   already gold: a crown goes gold only once it is won. */
+                if (n > crowns) fireDeckFx({ kind: 'burst', rect: fxRectOf(e.currentTarget), tone: 'gold' });
+                onChange(n);
+              }}
             >
               {/* Gold only once it is WON. An unlit crown drawn in metal would
                   say the player has it; the counter's whole job is which of the

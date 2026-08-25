@@ -1,0 +1,59 @@
+/* The shared loading state.
+ *
+ * Layout only — every colour and every box property belongs to the caller's own
+ * notice class, which is passed straight through. This file must not paint a
+ * background or a border, or twelve screens would suddenly agree about
+ * something they deliberately do not. */
+
+/* NOT a flex column, and that is the whole trick.
+ *
+ * The twelve call sites do not share an alignment: `.notice` centres its text
+ * on seven screens, while `.empty` on Deck Counter and `.loading` on Deck
+ * Analysis are left-aligned blocks sitting in a results flow. A flex column
+ * with `align-items: center` would centre the canvas over left-aligned copy on
+ * those three and read as a misalignment.
+ *
+ * An inline-block stage inside a plain block inherits the caller's own
+ * `text-align` instead, so it centres where the caller centres and sits left
+ * where the caller sits left, with no prop and no per-screen override. */
+.inner {
+  display: block;
+}
+
+/* The canvas's box. A fixed height rather than an aspect ratio: the fan is
+   framed by pulling the camera back (see ReadingDeck's autoResize), so the
+   stage can be any width and the cards stay whole — an aspect-ratio box would
+   instead grow to 400px tall on a wide panel and turn a loading state into the
+   largest thing on the screen.
+
+   `position: relative` is what the absolutely-positioned canvas inside it
+   resolves against; without it the canvas escapes to the nearest positioned
+   ancestor, which on most of these screens is the scrolling panel.
+
+   `line-height: 0` kills the descender gap an inline-block otherwise reserves
+   under itself, which would show up as a few stray pixels of padding. */
+.stage {
+  display: inline-block;
+  position: relative;
+  width: min(100%, 22rem);
+  height: 5.5rem;
+  margin-bottom: 0.9rem;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+/* Was the whole loading state, and is still the part that means anything — a
+   screen reader and a reduced-motion reader get exactly what they got before.
+   Colour, size and alignment all inherit from the caller. */
+.label {
+  margin: 0;
+}
+
+/* No canvas is mounted under reduced motion, so the empty stage would leave a
+   5.5rem hole above the copy. Collapse it and the state is verbatim what it was
+   before this component existed. */
+@media (prefers-reduced-motion: reduce) {
+  .stage {
+    display: none;
+  }
+}

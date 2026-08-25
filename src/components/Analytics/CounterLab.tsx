@@ -12,6 +12,7 @@ import { DeckActions } from '../DeckActions/DeckActions';
 import { ProLock } from './ProLock';
 import { ShieldIcon } from '../Dashboard/icons';
 import { PasteIntro, PasteHeader } from './PasteIntro';
+import { ReadingState } from './ReadingState';
 import styles from './CounterLab.module.css';
 
 const pct = (v: number) => `${v.toFixed(1)}%`;
@@ -179,7 +180,11 @@ export function CounterLab() {
         ))}
       </div>
 
-      {loading && <p className={styles.empty}>Walking the evidence ladder…</p>}
+      {loading && (
+        <ReadingState className={styles.empty} hue="pink">
+          Walking the evidence ladder…
+        </ReadingState>
+      )}
       {failed && (
         <p className={styles.error}>The analytics service is not running, so there is nothing to measure against.</p>
       )}
@@ -210,6 +215,14 @@ export function CounterLab() {
           {locked.length > 0 && (
             <ProLock
               variant="inline"
+              /* Deck Counter's own hue, per SIDE_NAV. This call site never
+                 passed one, so the gate fell back to the default violet and sat
+                 on a pink screen wearing the wrong colour — badge, lock ring,
+                 CTA and now its motes. That is the exact fault the `hue` prop
+                 was added to fix ("the colour you pressed is the colour you land
+                 on"); the sibling call site in Dashboard.tsx got it and this one
+                 was missed. */
+              hue="pink"
               title={`${locked.length} more counter${locked.length === 1 ? '' : 's'}`}
               blurb={`This deck has ${counters.length} archetypes that beat it. The top ${FREE_ROWS} are above — Royal Pro shows the rest, with the deck each one is actually running.`}
               perks={[

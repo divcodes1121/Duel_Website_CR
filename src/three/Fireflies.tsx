@@ -12,7 +12,16 @@
  * trick: parallax reads as depth far more cheaply than anything geometric.
  */
 import { useEffect, useRef } from 'react';
-import { OVERLAY_STYLE, autoResize, isDark, loadThree, pixelRatio, reducedMotion, runLoop } from './runtime';
+import {
+  OVERLAY_STYLE,
+  autoResize,
+  isDark,
+  loadThree,
+  pixelRatio,
+  readToken,
+  reducedMotion,
+  runLoop,
+} from './runtime';
 
 const DEFAULT_COUNT = 130;
 
@@ -34,6 +43,9 @@ const PALETTE = {
   light: { color: '#047857', opacity: 0.95 },
 } as const;
 
+/** The four identity hues a section can own, as they are named in `index.css`. */
+export type FireflyHue = 'violet' | 'blue' | 'green' | 'pink';
+
 interface Props {
   /** How many motes. The app-wide layer covers far more area than a hero
    *  panel does, so it wants more of them to read as anything at all. */
@@ -41,6 +53,21 @@ interface Props {
   /** `fixed` pins the layer to the viewport instead of the parent box, for the
    *  app-wide backdrop that has to sit behind a scrolling shell. */
   fixed?: boolean;
+  /**
+   * Tint the motes with a section's identity hue instead of the ambient
+   * gold/green pair.
+   *
+   * Resolved from `--hue-<name>` at runtime rather than taken as a hex, so the
+   * caller names a ROLE and the theme decides the value — and so this layer
+   * still defines no colour of its own. Both steps happen to suit their own
+   * blend mode: the dark `--hue-*` values are bright pastels, which is what
+   * additive on black wants, and the light ones are deep, which is what normal
+   * blending on white wants.
+   */
+  hue?: FireflyHue;
+  /** Scales the palette's opacity. A layer sitting behind blurred content can
+   *  afford less than one over a painted hero. */
+  intensity?: number;
 }
 
 const VERT = `
@@ -83,8 +110,28 @@ const FRAG = `
   }
 `;
 
-export function Fireflies({ count = DEFAULT_COUNT, fixed = false }: Props = {}) {
+export function Fireflies({ count = DEFAULT_COUNT, fixed = false, hue, intensity = 1 }: Props = {}) {
   const hostRef = useRef<HTMLDivElement>(null);
+
+  /* THE HUE IS READ THROUGH A REF, AND IT IS NOT A DEPENDENCY.
+   *
+   * The app-wide layer changes hue every time you open a different analytics
+   * area. If `hue` were in the effect's dependency list, each of those would
+   * dispose a WebGL context and build a new one — re-uploading the geometry,
+   * losing the motes' positions so the whole field restarts, and spending a
+   * context from the ~16 a document is allowed. The colour is one uniform;
+   * swapping it does not need any of that.
+   *
+   * So the effect below reads `hueRef` and the small effect here pokes the
+   * live material instead. `repaint` is null until `loadThree()` resolves,
+   * which is correct — `paletteNow()` reads the ref when it does. */
+  const hueRef = useRef(hue);
+  const repaint = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    hueRef.current = hue;
+    repaint.current?.();
+  }, [hue]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -147,18 +194,38 @@ export function Fireflies({ count = DEFAULT_COUNT, fixed = false }: Props = {}) 
       geom.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
       geom.setAttribute('aDrift', new THREE.BufferAttribute(drifts, 1));
 
-      const dark = isDark();
+      /* One place decides colour, opacity and blend mode, because all three are
+         per-theme and reading them apart is how the light layer ended up
+         additive and therefore invisible the first time. */
+      const paletteNow = () => {
+        const d = isDark();
+        const base = d ? PALETTE.dark : PALETTE.light;
+        const h = hueRef.current;
+        return {
+          dark: d,
+          color: h ? readToken(`--hue-${h}`, base.color) : base.color,
+          opacity: base.opacity * intensity,
+        };
+      };
+
+      const pal0 = paletteNow();
+      /* The colour the motes are easing TOWARD. Opacity and blend mode snap —
+         they only change with the theme, where everything else on screen snaps
+         too — but the hue changes on every navigation, and a whole field of
+         motes cutting from green to maroon in one frame reads as a glitch. The
+         loop below eases into it over about half a second. */
+      const target = new THREE.Color(pal0.color);
       const material = new THREE.ShaderMaterial({
         vertexShader: VERT,
         fragmentShader: FRAG,
         transparent: true,
         depthWrite: false,
-        blending: dark ? THREE.AdditiveBlending : THREE.NormalBlending,
+        blending: pal0.dark ? THREE.AdditiveBlending : THREE.NormalBlending,
         uniforms: {
           uTime: { value: 0 },
           uScale: { value: 10 },
-          uColor: { value: new THREE.Color(dark ? PALETTE.dark.color : PALETTE.light.color) },
-          uOpacity: { value: dark ? PALETTE.dark.opacity : PALETTE.light.opacity },
+          uColor: { value: new THREE.Color(pal0.color) },
+          uOpacity: { value: pal0.opacity },
         },
       });
 
@@ -169,17 +236,20 @@ export function Fireflies({ count = DEFAULT_COUNT, fixed = false }: Props = {}) 
       // mounted -- themeStore stamps `data-theme` on <html>. Without this the
       // motes keep whichever colour they were born with, which is how they
       // ended up cold blue on a dark hero the first time.
-      const applyTheme = () => {
-        const d = isDark();
-        const pal = d ? PALETTE.dark : PALETTE.light;
-        (material.uniforms.uColor.value as import('three').Color).set(pal.color);
+      /* Re-reads the palette and hands the loop a new target. Called by the
+         theme observer AND by the hue effect above, because both change the
+         same three things and neither should have its own copy of this. */
+      const applyPalette = () => {
+        const pal = paletteNow();
+        target.set(pal.color);
         material.uniforms.uOpacity.value = pal.opacity;
         // The blend mode is part of the palette, not a fixed choice -- see the
         // note where it is first set.
-        material.blending = d ? THREE.AdditiveBlending : THREE.NormalBlending;
+        material.blending = pal.dark ? THREE.AdditiveBlending : THREE.NormalBlending;
         material.needsUpdate = true;
       };
-      const themeWatch = new MutationObserver(applyTheme);
+      repaint.current = applyPalette;
+      const themeWatch = new MutationObserver(applyPalette);
       themeWatch.observe(document.documentElement, {
         attributes: true, attributeFilter: ['data-theme'],
       });
@@ -195,6 +265,12 @@ export function Fireflies({ count = DEFAULT_COUNT, fixed = false }: Props = {}) 
         eased.x += (pointer.x - eased.x) * Math.min(1, delta * 2.2);
         eased.y += (pointer.y - eased.y) * Math.min(1, delta * 2.2);
         material.uniforms.uTime.value = elapsed;
+        // Ease into the section's hue. `runLoop` clamps delta to 0.05, so this
+        // cannot overshoot after the loop has been paused off-screen.
+        (material.uniforms.uColor.value as import('three').Color).lerp(
+          target,
+          Math.min(1, delta * 5),
+        );
         camera.position.x = eased.x * 0.16;
         camera.position.y = -eased.y * 0.1;
         camera.lookAt(0, 0, 0);
@@ -202,6 +278,7 @@ export function Fireflies({ count = DEFAULT_COUNT, fixed = false }: Props = {}) 
       });
 
       cleanup = () => {
+        repaint.current = null;
         themeWatch.disconnect();
         stopLoop?.();
         stopResize?.();
@@ -217,7 +294,8 @@ export function Fireflies({ count = DEFAULT_COUNT, fixed = false }: Props = {}) 
       surface.removeEventListener('pointermove', onMove);
       cleanup ? cleanup() : (stopLoop?.(), stopResize?.());
     };
-  }, [count]);
+    // `hue` is deliberately absent — see the note beside `hueRef` above.
+  }, [count, fixed, intensity]);
 
   return (
     <div

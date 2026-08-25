@@ -54,7 +54,8 @@ bot's SQLite files read-only.
 | Phase 24A | local ON soak **PASS** — 80 tags, 0 invariant violations |
 | Phase 24B | hosting plan written; deployment **blocked on auth**, not on the model |
 | Phase 24C | boundary built: API authenticated, same-origin Vercel proxy, tunnel hop **verified for real** |
-| UI | WebGL fireflies behind the whole shell in **both themes**, the painted login backdrop — see `docs/UI.md` |
+| UI | WebGL fireflies behind the whole shell in **both themes**, wearing the open area's hue; the painted login backdrop — see `docs/UI.md` |
+| UI — motion pass | **shipped and browser-verified.** A reading state on all 12 slow loads, the deck column's aura + placement burst + completion sweep, a card ring on the empty paste screens. One canvas per screen plus the backdrop; three.js chunk unchanged |
 | tests | **1,236 Python checks** across 21 suites, 172 vitest, `tsc -b` and `npm run build` clean |
 | preserved | `revamp` pushed through `778fdde` — analytics boundary, tunnel verification and the UI pass all on the remote. `main` still runs `6ab701d` |
 
@@ -3600,16 +3601,60 @@ the link order. Full reasoning in
 
 Full detail is in **`docs/UI.md`**. The short version:
 
-**What ships** is one component used twice — drifting fireflies over the
-landing hero, and the same thing pinned to the viewport behind the whole
-signed-in shell — plus the painted castle backdrop on the login page, the same
-light/dark pair the landing hero uses.
+**What ships** is four components. Drifting **fireflies** — over the landing
+hero, and pinned to the viewport behind the whole signed-in shell — plus the
+painted castle backdrop on the login page. A **reading deck** of riffling cards
+on every slow read. A **deck-column layer** carrying three effects on one
+canvas. And a **card ring** behind the screens that are waiting to be given
+something.
+
+| | where | what it does |
+|---|---|---|
+| `Fireflies` | landing hero, app-wide backdrop, login, the Pro gate | ambient; takes the open area's hue everywhere but the landing |
+| `ReadingDeck` | 12 loading states across 9 files | a 30–166 s wait stops looking like a hang |
+| `DeckFx` | the deck column on all three deck screens | aura on empty special slots · burst on placement · sweep at 8/8 |
+| `DeckOrbit` | both paste screens, the empty palette gallery | gives an empty invitation a subject |
 
 **three.js is never in the main bundle.** It is a dynamic import, so it lands in
 its own 734 kB chunk (190 kB gzipped) and arrives only when something renders —
-exactly the treatment `jspdf` gets. The main bundle went 518 → 523 kB, and that
-is the components, not the library. Verified by grepping the built main chunk
-for three-internal strings: zero occurrences.
+exactly the treatment `jspdf` gets. That chunk is byte-identical across all four
+components; the main bundle went 518 → 543 kB, and that is the components, not
+the library. Verified by grepping the built main chunk for three-internal
+strings: zero occurrences.
+
+**One canvas per screen, plus the backdrop.** A browser allows about 16 WebGL
+contexts — the ceiling that forced the removed card foil onto a single shared
+renderer. `DeckFx` therefore hosts three behaviours rather than being three
+components: they already share a renderer, a resize observer, a rAF gate and the
+slot-rect scan the aura runs every frame. Measured on the builder: exactly two
+canvases.
+
+### The backdrop wears the section's colour
+
+Everywhere except the landing screen, the app-wide fireflies take the open
+area's identity hue — the same one its sidebar row and its block already wear.
+Measured against the tokens on the live page, all seven areas land within 4–11°
+of hue: Deck Analysis and Deck Counter maroon, Cards and Meta blue, Duel
+Analysis and Coach Assist green, Duel Zone violet. The deck tools take their own
+panel hues.
+
+**The landing stays on the ambient gold/green pair**, deliberately: it is the
+one screen with no subject — nothing open, no player loaded — so there is no
+identity to wear, and it is where the motes sit over the painted art the warm
+gold was chosen for.
+
+Two things make it cheap. The hue is read through a ref and **is not an effect
+dependency** — as a dependency, every navigation would dispose a WebGL context
+and build a new one, restarting the mote field and spending one of the sixteen.
+And the colour **eases** over ~500 ms in the existing loop, because a whole
+field cutting from green to maroon in one frame reads as a glitch.
+
+The hue is resolved from `--hue-<name>` at runtime rather than passed as a hex,
+so a caller names a role and the theme picks the value — which also keeps these
+layers honest about the rule that no component defines a colour of its own. It
+is the **ink** step, not the solid one: a mote is a bare graphic mark that has
+to be seen against the ground, and the solid ramp is graded to carry white *on*
+itself, which would make the motes darker than the dark page.
 
 **The motion ban still holds.** `CLAUDE.md` forbids infinite animation because
 the old CSS glow loops animated `box-shadow` and thrashed repaint. A WebGL
@@ -3618,6 +3663,93 @@ a loop nobody can see is still waste, so every frame is gated on an
 `IntersectionObserver` and on `document.visibilitychange`.
 `prefers-reduced-motion` mounts **no canvas at all**, and every piece keeps the
 flat markup it decorates as the fallback.
+
+### The loading states were the real gap
+
+Not a visual complaint. Twelve `Reading…` strings across nine files, each one
+line of `--text-muted` centred in an empty panel — against reads that take
+**29–57 s** for the Coach and **~166 s** for a cold meta rollup on the spinning
+H: volume. Captured in a browser, Player Analysis and Coach Assist were still
+showing that single line after nine seconds. A thirty-second wait with no
+feedback does not read as slow, it reads as hung, and that difference is the
+only thing `ReadingDeck` exists for.
+
+It draws what the server is doing: eight card plates riffling in a travelling
+wave, one instanced draw call, rounded corners from an SDF rather than a
+texture. All twelve call sites collapse onto one `ReadingState`, which takes the
+caller's own notice class so it changes what is *inside* the box and never the
+box — the nine screens keep the layouts they had.
+
+Two details that were not obvious:
+
+* **The stage is an `inline-block`, so it inherits the caller's `text-align`.**
+  Seven callers centre their notice; three are left-aligned blocks sitting in a
+  results flow. A flex column with `align-items: center` put a centred canvas
+  over left-aligned copy on those three and read as a misalignment. Measured
+  after: 455/455 px on a centred caller, `leftGap: 0` on a left one.
+* **The label is a `div`, not a `p`.** Four call sites were paragraphs, and the
+  meta board's cold start passes a heading plus two paragraphs plus an elapsed
+  counter. A `<p>` may not contain those — the browser closes it early and the
+  copy escapes the box.
+
+### The deck column: three effects, one canvas
+
+The builder's resting state is 24 empty boxes and nothing moving. `DeckFx` adds
+an **aura** (a slow breathing edge on empty special slots, violet on the
+selected one), a **burst** when a card lands, and a **sweep** across a deck's
+eight slots the moment it becomes legal.
+
+**Roles get no hue, and that is the rule rather than a preference.** The obvious
+design is violet Evolution / gold Hero / green Wild; `index.css` forbids it in
+as many words — *"if it were violet you could not tell the Evolution slot from
+the SELECTED slot, because violet is what selection means."* So empty specials
+breathe in neutral ink, only selection is violet, completion is `--success`
+green because a deck becoming legal is a positive outcome, and a crown burst is
+gold, which is the one place in this app gold is genuinely earned.
+
+**The burst is the only placement feedback that exists.** `useFlightStore.launch`
+is a no-op — the card-in-flight animation is disabled at the store — so nothing
+flew from the library to the slot. It also confirms *legality*: an illegal drop
+is silently rejected, and without this it looked identical to a legal one.
+
+Effects are fired through a **plain module emitter** (`state/deckFx.ts`), not the
+builder store. They are events, not state: nothing renders from them and nothing
+reads them back, so putting them in zustand would re-render every deck panel and
+all forty slots on each card drop, to move points on a canvas that is not in the
+React tree at all. `dragContext.ts` is the same shape for the same reason.
+
+Slots are found by **data attributes**, never by class name — CSS modules hash
+those, and `[class*="slot"]` would also catch `slotIcon`, `slotClear`,
+`slotStub` and `slotSelected`, which is the substring trap `CLAUDE.md` already
+records.
+
+### The sweep that issued its draw call and painted nothing
+
+Worth recording in full, because the diagnosis was expensive and the conclusion
+is unresolved.
+
+The sweep began as an instanced quad and never drew a pixel. Bisected all the
+way down: the event fired, the listener ran, the union rect was computed
+correctly, the program linked with no console error, and `renderer.info`
+reported the draw call **issued with its triangles counted**. Yet a hardcoded
+400 px quad with a flat opaque fragment was still invisible. Giving it its own
+`PlaneGeometry` instead of one shared with the aura, setting
+`frustumCulled = false`, and re-uploading its attributes every frame each
+changed nothing. The only reading left is that neither `aRect` nor `uv` reached
+that one geometry's shader, so every quad rasterised at zero size. **Why was
+never established.**
+
+So it was rebuilt on the burst pipeline, which was already measured working —
+27,046 changed pixels against a 26 px baseline. The sweep is now a line of
+points with **staggered births**: each is born at `clock + its share of the
+width × spread`, and the shader parks anything whose birth is still in the
+future, so the row lights up left to right with no travelling geometry and no
+per-frame work. It measures 272 changed pixels to the left of the burst's reach,
+where the quad measured none.
+
+The lesson is the cheap one: `renderer.info` distinguishes *not drawn* from
+*drawn and invisible*, and it should have been the first probe rather than the
+last.
 
 ### The panels had to become translucent
 
@@ -3663,6 +3795,41 @@ never mounts, and the check passes against nothing.
 ## Things that went wrong and what fixed them
 
 Kept because each one cost time and each one can recur.
+
+**A backtick inside a GLSL comment ended the shader string — twice.** The
+shaders are JS template literals, so a comment reading ``the `uv` attribute``
+terminates the string and Babel reports a missing semicolon dozens of lines
+away. It cost two debugging rounds because the second time it looked like the
+fix had failed rather than never having compiled. Both shader files now carry a
+no-backticks warning beside the comment block.
+
+**A probe that clicked disabled tiles and reported the product broken.** Cards
+already used in a duel collection render `aria-disabled="true"` and their click
+handler returns early. A verification filling a deck by clicking
+`[data-card-key]` blind therefore placed nothing, `filledCount` never moved 7 to
+8, no sweep was ever requested — and the probe concluded "the sweep did not
+render". Select `[data-card-key][aria-disabled="false"]` and assert the state
+transition *before* measuring anything.
+
+**Three ways to measure a one-shot effect, two of which lie.** Diffing
+consecutive frames catches a burst, but the burst and the sweep overlap almost
+exactly and the card art appearing underneath changes far more pixels than a
+translucent band ever will. Separating them in TIME does not fit either — the
+burst dies at 550 ms and the band leaves at 740 ms, a 190 ms window narrower
+than a Playwright screenshot. What worked was separating them in SPACE: the
+burst is thrown from the slot just filled, so anything changing in the left half
+of the row is the sweep and nothing else.
+
+**A shared `PlaneGeometry` between two InstancedBufferGeometries.** Assigning
+`geometry.attributes.position` from one plane into several geometries looks
+free. The second mesh built that way never drew. Not proven to be the cause —
+giving each its own plane did not fix it either — but it is now avoided.
+
+**`uLife` became a uniform and one material was left without it.** The point
+shader hardcoded its lifetime until the sweep needed to share it. Adding the
+uniform to the sweep and forgetting the burst left the burst dividing its age by
+an undefined uniform — i.e. by zero. `tsc` caught it only indirectly, as an
+unused constant.
 
 **A test deleted the production shadow log — twice.**
 `test_ml_production.py` called `os.remove(shadow.LOG_PATH)` on the real path, so
@@ -5343,6 +5510,18 @@ src/
   three/                      three.js flourishes. Dynamically imported, gated
                               on visibility and prefers-reduced-motion, never
                               in the main bundle. See docs/UI.md
+    runtime.ts                lazy loader, motion gate, DPR cap, resize, and
+                              `readToken` — the palette lives in index.css, so
+                              a shader resolves a token rather than carrying hex
+    Fireflies.tsx             ambient motes; `hue` takes a section's identity
+                              colour and eases into it without remounting
+    ReadingDeck.tsx           eight cards riffling, for the 12 slow reads
+    DeckFx.tsx                the deck column's canvas: slot aura + placement
+                              burst + completion sweep, three meshes in one
+                              context. Read the sweep note before touching it
+    DeckOrbit.tsx             a ring of card outlines behind an empty invitation
+  state/deckFx.ts             the fire-and-forget event channel for the above.
+                              A plain emitter, NOT zustand — see the note in it
   App.tsx                     hash routing -> one Dashboard shell
   index.css                   ALL colour AND motion: neutral ladder, 5 hues in
                               two ramps (ink + solid), the three intensity

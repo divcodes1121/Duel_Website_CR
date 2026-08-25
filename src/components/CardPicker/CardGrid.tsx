@@ -7,6 +7,7 @@ import {
 import { useBuilderStore } from '../../state/store';
 import { useFilteredCards } from './useFilteredCards';
 import { useFlightStore, rectOf } from '../../state/flightStore';
+import { fireDeckFx, fxRectOf } from '../../state/deckFx';
 import { canPlaceCardInSlot, getUsedCardKeys, MAX_CHAMPIONS_PER_DECK } from '../../state/deckUtils';
 import { CardTile } from './CardTile';
 import styles from './CardPicker.module.css';
@@ -112,6 +113,11 @@ export function CardGrid() {
                 launchFlight(getCardIconUrl(card.key), rectOf(tileEl), rectOf(slotEl));
               }
               assignCard(card.key);
+              // Same confirmation the drag path gets. Clicking a tile with a
+              // slot selected is the OTHER way a card lands, and it is the one
+              // most people use — leaving it unmarked would make the effect
+              // look intermittent rather than deliberate.
+              if (slotEl) fireDeckFx({ kind: 'burst', rect: fxRectOf(slotEl) });
             }}
           />
         );

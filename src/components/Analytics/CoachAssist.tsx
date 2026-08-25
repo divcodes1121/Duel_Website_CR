@@ -16,6 +16,7 @@ import {
   fetchOpponentRead,
   type OpponentReadOutcome,
 } from '../../state/analyticsClient';
+import { ReadingState } from './ReadingState';
 import { useAuthStore } from '../../state/authStore';
 import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
@@ -563,7 +564,12 @@ function DuelPrediction({ tag }: { tag: string }) {
     );
   }
 
-  if (busy) return <p className={styles.notice}>Reading their duel history…</p>;
+  if (busy)
+    return (
+      <ReadingState className={styles.notice} hue="green">
+        Reading their duel history…
+      </ReadingState>
+    );
 
   if (step.kind === 'started') {
     return (
@@ -982,7 +988,12 @@ function Suggestion({ tag }: { tag: string }) {
     );
   }
 
-  if (busy) return <p className={styles.notice}>Reading both players and scoring the matchups…</p>;
+  if (busy)
+    return (
+      <ReadingState className={styles.notice} hue="green">
+        Reading both players and scoring the matchups…
+      </ReadingState>
+    );
 
   if (step.kind === 'tags') {
     return (

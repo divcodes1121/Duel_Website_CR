@@ -6,6 +6,7 @@ import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
 import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { ProfileMenu } from '../Profile/ProfileMenu';
 import { WinConFilter, deckMatchesFilter, filterCardName } from '../WinConFilter/WinConFilter';
+import { DeckOrbit } from '../../three/DeckOrbit';
 import libStyles from '../Library/Library.module.css';
 import homeStyles from '../DecksHome/DecksHome.module.css';
 import styles from './CounterPalette.module.css';
@@ -64,10 +65,19 @@ function FolderGallery() {
       </h2>
 
       {folders.length === 0 && (
-        <p className={styles.emptyHint}>
-          Segregate your decks by archetype — Beatdown, Cycle, Bait, Siege — or by what they
-          counter. Create a folder and fill it with as many decks as you like.
-        </p>
+        /* The one genuinely blank screen in the app: no folders, one paragraph,
+           and nothing else. The ring gives the invitation a subject. Blue is
+           Counter Hub's own identity hue, the same one its tool panel and its
+           top-nav entry wear. Five cards rather than eight — this is inviting a
+           FOLDER, not a deck, so a full eight-card deck would be the wrong
+           promise. */
+        <div className={styles.emptyState}>
+          <DeckOrbit hue="blue" count={5} />
+          <p className={styles.emptyHint}>
+            Segregate your decks by archetype — Beatdown, Cycle, Bait, Siege — or by what they
+            counter. Create a folder and fill it with as many decks as you like.
+          </p>
+        </div>
       )}
 
       <div className={styles.folderGrid}>

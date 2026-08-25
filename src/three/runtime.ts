@@ -119,6 +119,26 @@ export function runLoop(
   };
 }
 
+/**
+ * Read a colour token off `<html>`.
+ *
+ * The whole palette lives in `index.css` and no component defines a colour of
+ * its own — a rule these WebGL layers were quietly breaking, because a shader
+ * cannot read a CSS variable and the first two of them therefore carried
+ * hardcoded hex. Resolving the token at runtime keeps that rule intact AND
+ * gets the per-theme value for free: `--hue-violet` is a pale `#a78bfa` on dark
+ * and a deep `#6d28d9` on light, which is exactly the difference an additive
+ * layer on black and a normal-blended one on white each need.
+ *
+ * `getPropertyValue` returns '' for a token that does not exist, so a typo
+ * falls back rather than painting transparent black.
+ */
+export function readToken(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
 /** Keep a renderer and camera matched to their container's box. */
 export function autoResize(
   el: HTMLElement,

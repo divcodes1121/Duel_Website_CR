@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { CardLibrary } from '../CardPicker/CardLibrary';
 import { FlightLayer } from '../FlightLayer/FlightLayer';
+import { DeckFx } from '../../three/DeckFx';
 import styles from './DeckWorkspace.module.css';
 
 interface DeckWorkspaceProps {
@@ -44,7 +45,15 @@ export function DeckWorkspace({ toolbar, children }: DeckWorkspaceProps) {
     <div className={styles.shell} data-library={collapsed ? 'closed' : 'open'}>
       {toolbar && <div className={styles.toolbar}>{toolbar}</div>}
 
-      <div className={styles.deckColumn}>{children}</div>
+      {/* The aura is pinned over the deck column's VIEWPORT, not placed inside
+          the scroller, so a slot scrolled out of sight is culled rather than
+          drawn sliding under the toolbar. That is what the wrapper is for —
+          `.deckColumn` owns the overflow and cannot also be the positioning
+          context for something that must not scroll with it. */}
+      <div className={styles.deckArea}>
+        <DeckFx />
+        <div className={styles.deckColumn}>{children}</div>
+      </div>
 
       <div className={styles.libraryCell}>
         <CardLibrary collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />

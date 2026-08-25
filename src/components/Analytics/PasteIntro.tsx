@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from 'react';
+import { DeckOrbit } from '../../three/DeckOrbit';
 import styles from './PasteIntro.module.css';
 
 interface PasteIntroProps {
@@ -31,6 +32,11 @@ interface PasteIntroProps {
 export function PasteIntro({ hue, icon: Icon, kicker, title, blurb, chips, children }: PasteIntroProps) {
   return (
     <div className={styles.intro} data-hue={hue}>
+      {/* Behind everything, in the section's own hue. The ask keeps roughly
+          500px of empty panel beneath it, and this gives that space a subject
+          without putting anything in front of the one thing being asked for. */}
+      <DeckOrbit hue={hue} />
+
       <span className={styles.mark} aria-hidden="true">
         <Icon size={26} />
       </span>

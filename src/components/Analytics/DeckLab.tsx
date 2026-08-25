@@ -13,6 +13,7 @@ import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { PieIcon } from '../Dashboard/icons';
 import { PasteIntro, PasteHeader } from './PasteIntro';
+import { ReadingState } from './ReadingState';
 import styles from './DeckLab.module.css';
 
 const pct = (v: number) => `${v.toFixed(1)}%`;
@@ -428,7 +429,11 @@ export function DeckLab() {
             </section>
           </div>
 
-          {loading && <p className={styles.loading}>Measuring it against the field…</p>}
+          {loading && (
+            <ReadingState className={styles.loading} hue="pink">
+              Measuring it against the field…
+            </ReadingState>
+          )}
           {failed && (
             <p className={styles.error}>
               The analytics service is not running, so only the card-derived half above is shown.

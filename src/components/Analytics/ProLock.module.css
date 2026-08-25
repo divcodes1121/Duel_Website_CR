@@ -42,6 +42,23 @@
   user-select: none;
 }
 
+/* The mote layer, between the blurred preview and the gate card.
+   `position: relative; z-index: 1` for exactly the reason the veil needs it —
+   `.preview` has a `filter`, which gives it a stacking context and paints it in
+   the positioned phase, after every in-flow sibling. Without this the motes
+   would be painted over by the very thing they are supposed to sit on top of.
+
+   `pointer-events: none` costs the pointer parallax, deliberately: the layer
+   spans the whole cell, and a decorative sheet that eats clicks anywhere near
+   the Subscribe button is a far worse trade than motes that drift without
+   tracking the cursor. */
+.motes {
+  grid-area: stack;
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
 /* `position: relative; z-index: 1` is LOAD-BEARING, not tidying.
    `filter` on the preview gives it a stacking context, and an element with one
    paints in the positioned phase — after every in-flow sibling. So once the

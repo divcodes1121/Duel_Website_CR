@@ -10,6 +10,7 @@ import {
   type CardBoard,
   type CardMode,
 } from '../../state/analyticsClient';
+import { ReadingState } from './ReadingState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './PlayerCards.module.css';
 
@@ -443,7 +444,9 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
   if (loading) {
     return (
       <div className={styles.page}>
-        <section className={styles.notice}>Reading card history…</section>
+        <ReadingState className={styles.notice} hue="blue">
+          Reading card history…
+        </ReadingState>
       </div>
     );
   }

@@ -9,6 +9,7 @@ import {
   type DuelReport,
   type TabId,
 } from '../../state/analyticsClient';
+import { ReadingState } from './ReadingState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DuelAnalysis.module.css';
 
@@ -221,7 +222,9 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
   if (loading) {
     return (
       <div className={styles.page}>
-        <section className={styles.notice}>Reading duel history…</section>
+        <ReadingState className={styles.notice} hue="green">
+          Reading duel history…
+        </ReadingState>
       </div>
     );
   }

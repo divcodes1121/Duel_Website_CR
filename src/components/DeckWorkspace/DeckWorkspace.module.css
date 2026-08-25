@@ -40,9 +40,22 @@
   min-width: 0;
 }
 
-.deckColumn {
+/* Holds the grid cell and gives `DeckFx` something to pin against.
+   The overflow stays on `.deckColumn` inside it — one element cannot be both
+   the scroller and the fixed frame an overlay is measured in. `min-height: 0`
+   is here for the same reason it is everywhere else in this file: without it
+   this wrapper grows to fit every deck and the inner scroller never scrolls. */
+.deckArea {
   grid-column: 1;
   grid-row: 2;
+  position: relative;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.deckColumn {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 1rem;

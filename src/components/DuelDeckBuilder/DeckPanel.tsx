@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Deck, DeckOwner } from '../../types/deck';
 import { DECK_SIZE } from '../../types/deck';
 import { useBuilderStore } from '../../state/store';
+import { fireDeckFx } from '../../state/deckFx';
 import { getClashRoyaleDeckLink, parseClashRoyaleDeckLink } from '../../utils/deckLink';
 import { DeckSlotGrid } from './DeckSlotGrid';
 import { DeckStats } from './DeckStats';
@@ -51,6 +52,25 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
   const [importOk, setImportOk] = useState(false);
 
   const filledCount = deck.slots.filter((s) => s !== null).length;
+
+  /* A light crosses the eight slots the moment the deck becomes legal.
+   *
+   * Completing a deck is this screen's whole goal, and until now it was
+   * announced by a small counter going 7/8 to 8/8. This marks it.
+   *
+   * ONLY ON THE TRANSITION, which is what the ref is for. Without it every
+   * mount of an already-full deck would sweep — so switching Solo/Versus,
+   * opening a palette folder, or loading a saved set would fire three to six
+   * sweeps at once for decks the reader did not just finish. `prev` starts
+   * undefined, so the first render never counts as a transition. */
+  const wasFull = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const before = wasFull.current;
+    wasFull.current = filledCount;
+    if (before !== undefined && before < DECK_SIZE && filledCount === DECK_SIZE) {
+      fireDeckFx({ kind: 'sweep', deck: `${owner}-${deckIndex}` });
+    }
+  }, [filledCount, owner, deckIndex]);
   const deckLink = getClashRoyaleDeckLink(deck);
   const [linkCopied, setLinkCopied] = useState(false);
   const [linkOnlyCopied, setLinkOnlyCopied] = useState(false);

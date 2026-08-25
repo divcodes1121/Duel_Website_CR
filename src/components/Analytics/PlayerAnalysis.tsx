@@ -4,6 +4,7 @@ import { DeckActions } from '../DeckActions/DeckActions';
 import { ChartLegend, TrendChart } from './TrendChart';
 import { LivePlayer } from './LivePlayer';
 import { ReportButton } from '../Export/ReportButton';
+import { ReadingState } from './ReadingState';
 import { playerReportDoc } from '../../utils/reportAdapters';
 import {
   AnalyticsError,
@@ -202,7 +203,9 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
   if (loading) {
     return (
       <div className={styles.page}>
-        <section className={styles.notice}>Reading the battle database…</section>
+        <ReadingState className={styles.notice} hue="violet">
+          Reading the battle database…
+        </ReadingState>
       </div>
     );
   }

@@ -47,7 +47,7 @@ import {
   SwordsIcon,
 } from './icons';
 import styles from './Dashboard.module.css';
-import { Fireflies } from '../../three/Fireflies';
+import { Fireflies, type FireflyHue } from '../../three/Fireflies';
 
 /* The post-login shell: top bar, a sidebar of analytics sections, and a panel
  * that swaps with whatever is open.
@@ -175,6 +175,16 @@ function go(hash: string) {
   if (window.location.hash !== next) window.location.hash = next;
 }
 
+/* The three deck tools are not analytics areas, so they are not in SIDE_NAV —
+   but they own identity hues too, on their landing-page panels. Same colours,
+   so the backdrop keeps meaning something on all eleven screens rather than
+   falling back to ambient on three of them. */
+const TOOL_HUE: Record<'builder' | 'decks' | 'palette', FireflyHue> = {
+  builder: 'violet',
+  decks: 'green',
+  palette: 'blue',
+};
+
 export function Dashboard({
   view = 'home',
   playerTag = '',
@@ -294,6 +304,28 @@ export function Dashboard({
    * leaving it. */
   const landing = view === 'home' && section === 'Search Player';
 
+  /* THE BACKDROP WEARS THE OPEN AREA'S HUE — the same one the sidebar row and
+   * the area's block already carry, so the whole page agrees about where you
+   * are instead of only a 26px icon tile saying so.
+   *
+   * The landing screen is the deliberate exception and stays on the ambient
+   * gold/green pair. It has no subject — no section is open and no player is
+   * loaded — so there is no identity for it to wear, and it is the one screen
+   * where the motes sit over painted art that the warm gold was chosen for.
+   *
+   * `--hue-*` is the INK step, which is the right one here: a mote is a bare
+   * graphic mark on the page, not a fill carrying text, so it needs to be seen
+   * against the ground rather than to hold white on top of itself. The solid
+   * ramp would make them darker than the dark page. */
+  const backdropHue: FireflyHue | undefined = landing
+    ? undefined
+    : view === 'player'
+      ? // A bare `#/player/<tag>` is the Search Player area, whose slug is ''.
+        SIDE_NAV.find((s) => s.slug === playerSection)?.hue
+      : view === 'home'
+        ? SIDE_NAV.find((s) => s.label === section)?.hue
+        : TOOL_HUE[view];
+
   /* "Go home" is two things, and only one of them was wired.
    *
    * Which screen the home view shows is `section`, a piece of component state
@@ -358,10 +390,14 @@ export function Dashboard({
     <div className={styles.shell}>
       {/* The app-wide backdrop, both themes. It paints on the page at
           z-index 0; the panel fills are 90% in both ladders, so it reads
-          through them rather than only in the gutters. Gold on the true-black
-          dark page, brand green on the light one -- see PALETTE in
-          Fireflies.tsx, which switches blend mode as well as colour. */}
-      <Fireflies fixed count={240} />
+          through them rather than only in the gutters.
+
+          On the landing screen it is the ambient pair -- gold on the true-black
+          dark page, brand green on the light one, see PALETTE in Fireflies.tsx,
+          which switches blend mode as well as colour. Everywhere else it takes
+          the open area's identity hue and eases into it; the swap is a uniform,
+          so nothing is rebuilt on navigation. */}
+      <Fireflies fixed count={240} hue={backdropHue} />
 
       <header className={styles.topbar}>
         <button

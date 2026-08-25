@@ -3,6 +3,7 @@ import { CARDS_BY_KEY, getCardIconUrl, getEvolutionIconUrl, getHeroIconUrl } fro
 import { useBuilderStore } from '../../state/store';
 import { useFlightStore, rectOf } from '../../state/flightStore';
 import { startDrag, getDrag, endDrag } from '../../state/dragContext';
+import { fireDeckFx, fxRectOf } from '../../state/deckFx';
 import {
   canAssignCardToSlot,
   canMoveCard,
@@ -186,6 +187,12 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
         { deckIndex, slotIndex },
       );
     }
+    /* Confirm the placement. This is the only feedback a legal drop gets:
+       `useFlightStore.launch` is a no-op — the card-in-flight animation is
+       disabled at the store — so without this the card simply appears, and an
+       ILLEGAL drop (rejected by `canAcceptDrag` above) looks exactly the same
+       as a legal one that happened to land where you already were. */
+    fireDeckFx({ kind: 'burst', rect: fxRectOf(e.currentTarget) });
     endDrag();
   }
 
@@ -198,6 +205,15 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
         } ${dropHover ? styles.slotDropHover : ''} ${isDuplicate ? styles.slotDuplicate : ''}`}
         data-rarity={card?.rarity}
         data-slot={`${owner}-${deckIndex}-${slotIndex}`}
+        /* Stable hooks for `DeckFx`, which has to find these slots from a
+           different stylesheet. It cannot match on the class names: CSS modules
+           hash them, and `[class*="slot"]` would also catch `slotIcon`,
+           `slotClear`, `slotStub` and `slotSelected` — the substring trap
+           CLAUDE.md already records costing an afternoon. Attributes say what
+           they mean and survive the hashing. */
+        data-role={role}
+        data-empty={card ? undefined : ''}
+        data-selected={isSelected ? '' : undefined}
         aria-haspopup={canSwitchVariant || undefined}
         aria-expanded={canSwitchVariant ? variantMenuAt !== null : undefined}
         onClick={(e) => {

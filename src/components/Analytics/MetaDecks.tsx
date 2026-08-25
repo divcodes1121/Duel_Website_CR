@@ -3,6 +3,7 @@ import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { ReportButton } from '../Export/ReportButton';
 import { metaBoardDoc } from '../../utils/reportAdapters';
+import { ReadingState } from './ReadingState';
 import {
   AnalyticsError,
   fetchMetaBoard,
@@ -89,7 +90,9 @@ export function MetaDecks() {
   if (loading && !board) {
     return (
       <section className={styles.panel}>
-        <p className={styles.notice}>Reading the meta snapshot…</p>
+        <ReadingState className={styles.notice} hue="blue">
+          Reading the meta snapshot…
+        </ReadingState>
       </section>
     );
   }
@@ -112,7 +115,10 @@ export function MetaDecks() {
   if (board?.building && !board.decks.length) {
     return (
       <section className={styles.panel}>
-        <div className={styles.notice}>
+        {/* The longest wait in the app — a cold rollup reads millions of rows
+            off the spinning volume. If any state has earned a visible sign of
+            life rather than a paragraph and a seconds counter, it is this one. */}
+        <ReadingState className={styles.notice} hue="blue">
           <h2 className={styles.noticeTitle}>Building the meta snapshot…</h2>
           <p>
             Ranking every deck across the whole database takes about 45 seconds — it reads
@@ -122,7 +128,7 @@ export function MetaDecks() {
           <p className={styles.noticeSub}>
             {board.elapsedSeconds ? `${Math.round(board.elapsedSeconds)}s elapsed` : 'starting…'}
           </p>
-        </div>
+        </ReadingState>
       </section>
     );
   }

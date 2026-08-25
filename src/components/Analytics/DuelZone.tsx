@@ -10,6 +10,7 @@ import {
   type SequenceDeck,
   type SequenceEntry,
 } from '../../state/analyticsClient';
+import { ReadingState } from './ReadingState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DuelZone.module.css';
 
@@ -379,7 +380,9 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
   if (loading) {
     return (
       <div className={styles.page}>
-        <section className={styles.notice}>Reading duel history…</section>
+        <ReadingState className={styles.notice} hue="violet">
+          Reading duel history…
+        </ReadingState>
       </div>
     );
   }

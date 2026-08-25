@@ -19,6 +19,7 @@ import {
   type PlayerMatchup,
   type RepDeck,
 } from '../../state/analyticsClient';
+import { ReadingState } from './ReadingState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DeckCounter.module.css';
 
@@ -442,7 +443,9 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
   if (loading) {
     return (
       <div className={styles.page}>
-        <section className={styles.notice}>Reading matchups…</section>
+        <ReadingState className={styles.notice} hue="pink">
+          Reading matchups…
+        </ReadingState>
       </div>
     );
   }

@@ -22,7 +22,21 @@
   padding-bottom: 1rem;
 }
 
+/* Holds the orbit ring behind the invitation. A minimum height, because the
+   paragraph alone is two lines tall and an absolutely-positioned canvas in a
+   box that short has nothing to draw in — the ring needs room to BE a ring. */
+.emptyState {
+  position: relative;
+  min-height: 16rem;
+  display: flex;
+  align-items: center;
+}
+
 .emptyHint {
+  /* Above the ring: the canvas is at z-index 0 and this is in flow, so without
+     a stacking order the copy would be drawn underneath it. */
+  position: relative;
+  z-index: 1;
   margin: 0;
   font-size: 0.85rem;
   font-weight: 500;

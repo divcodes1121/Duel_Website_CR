@@ -8,8 +8,12 @@
    the rule that keeps a neutral interface neutral while still reading as
    coloured; see index.css. */
 
+/* `position: relative` is the containing block for the orbit layer, which is
+   absolutely positioned and must fill this panel rather than escaping to
+   whatever positioned ancestor happens to be above it. */
 .intro {
   --tone: var(--accent-select);
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -203,4 +207,20 @@
 .headerForm {
   flex: 1;
   min-width: 16rem;
+}
+
+/* Every direct child of the intro sits ABOVE the orbit ring.
+   The ring is at z-index 0 and these are in flow, so without a stacking order
+   the painted heading block and the form would be drawn under it — the same
+   trap `docs/UI.md` records for the fireflies, where a blanket rule on
+   `.page > *` collapsed an absolutely-positioned layer instead. Targeting the
+   real children rather than the canvas keeps the canvas's own box intact. */
+.mark,
+.kicker,
+.title,
+.blurb,
+.form,
+.chips {
+  position: relative;
+  z-index: 1;
 }
