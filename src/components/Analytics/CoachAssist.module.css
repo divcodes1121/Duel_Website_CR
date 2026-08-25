@@ -164,6 +164,7 @@
    move that carries the interview forward; everything else is an outline, so
    there is never a screen with two things competing to be pressed. */
 .primary {
+  composes: cta from '../../styles/cta.module.css';
   padding: 0.62rem 1.15rem;
   border-radius: 10px;
   border: none;

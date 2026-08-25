@@ -23,6 +23,7 @@ import {
   type Verdict,
 } from './duelInsightRules';
 import styles from './DuelInsights.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 /* Duel Insights — the interpretation layer at the foot of Duel Analysis.
  *
@@ -143,6 +144,7 @@ export function DuelInsights({ tag, win }: { tag: string; win: DateWindow }) {
   const [report, setReport] = useState<DuelZoneReport | null>(null);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const reading = useHeldLoading(loading);
 
   useEffect(() => {
     let alive = true;
@@ -183,9 +185,9 @@ export function DuelInsights({ tag, win }: { tag: string; win: DateWindow }) {
 
   if (failed) return null;
 
-  if (loading) {
+  if (reading) {
     return (
-      <ReadingState className={styles.loading} hue="green">
+      <ReadingState k="duel-insights" hue="green">
         Reading the duel series log…
       </ReadingState>
     );

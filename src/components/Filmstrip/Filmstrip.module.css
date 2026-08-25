@@ -1,0 +1,417 @@
+/* The filmstrip.
+ *
+ * Adapted from ThreeUI's `CharacterCarousel` (Filmstrip). Its geometry and its
+ * card anatomy are kept almost exactly: a perspective stage, absolutely
+ * positioned cards pinned to the centre and pushed apart by transform, and a
+ * `--focus` custom property per card that drives shadow depth, inner border and
+ * media treatment together so the centred card reads as lifted and lit while
+ * its neighbours fall back.
+ *
+ * Its PALETTE is not kept. The reference is a single fixed editorial scheme —
+ * `#d8c9ad` paper, `#171612` footers, `#d86724` orange indices — which is one
+ * ground and one accent. This has two themes and per-section hues, so every
+ * value resolves from a token and the whole file works in both without a
+ * `[data-theme]` branch.
+ */
+
+.stage {
+  --card-w: clamp(148px, 15vw, 214px);
+  --gap: calc(var(--card-w) * 0.78);
+
+  position: relative;
+  width: 100%;
+  /* Tall enough for the card, its shadow, the control row AND the dots.
+     Measured: at 3.5rem the actions overlapped the card's bottom edge by about
+     17px, because the card is centred so only half the slack sits beneath it. */
+  height: calc(var(--card-w) / 0.72 + 7.5rem);
+  overflow: hidden;
+  isolation: isolate;
+  /* The one property that makes this a filmstrip rather than a row. */
+  perspective: 1450px;
+  cursor: ew-resize;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+/* The reference's vignette: cards fade out at both ends rather than being cut
+   off by a hard edge, which is what sells them as continuing past the frame.
+
+   A MASK ON THE CARDS, not a scrim over them. The first version painted a
+   `--surface` gradient across the ends, which silently assumed the strip was
+   sitting on a panel of that exact colour — true inside the Counter Hub, false
+   on the landing screen, where it drew a pale band over the page and its
+   fireflies. Masking the deck fades the cards themselves and is correct over
+   any background. */
+.deck {
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 12%,
+    #000 88%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 12%,
+    #000 88%,
+    transparent 100%
+  );
+}
+
+.deck {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.card {
+  --focus: 0;
+
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--card-w);
+  aspect-ratio: 0.72;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-nested);
+  /* Both the lift and its shadow scale with focus, so depth is one number. */
+  box-shadow:
+    0 calc(6px + var(--focus) * 20px) calc(12px + var(--focus) * 30px)
+      color-mix(in srgb, #000 calc(18% + var(--focus) * 24%), transparent),
+    inset 0 0 0 1px var(--glass-sheen);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+}
+
+/* The reference's inset hairline, which tightens as a card comes forward. */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  z-index: 3;
+  border: 1px solid
+    color-mix(in srgb, var(--text) calc(6% + var(--focus) * 10%), transparent);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.card:focus-visible {
+  border-color: var(--accent-select);
+}
+
+/* The centred card is the selected one, and violet is what selection means
+   here — the same rule the deck slots and the dock follow. */
+.card[data-current='true'] {
+  border-color: var(--accent-select-edge);
+}
+
+/* ── the media well ──────────────────────────────────────────────────── */
+
+.media {
+  position: absolute;
+  inset: 7px 7px 27%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 4px;
+  overflow: hidden;
+  border-radius: 7px;
+  padding: 5px;
+  background: var(--surface-sunken);
+}
+
+.media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* Off-centre cards desaturate and sit back, exactly as the reference's
+     portraits do — it is what makes the focused card read as the subject. */
+  filter: saturate(calc(0.55 + var(--focus) * 0.45));
+  transform: scale(calc(0.97 + var(--focus) * 0.03));
+}
+
+/* ── the footer: index, name, meta ───────────────────────────────────── */
+
+.footer {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  left: 7px;
+  height: calc(27% - 7px);
+  display: grid;
+  grid-template-columns: clamp(24px, 2.6vw, 34px) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 7px;
+  background: var(--surface-strong);
+}
+
+/* The reference's circled index. It takes the section hue rather than its
+   fixed orange, so a strip on Meta and a strip on the palette read as
+   belonging to their own screens. */
+.index {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--strip-hue, var(--accent-select)) 60%, transparent);
+  border-radius: 50%;
+  color: var(--strip-hue, var(--accent-select));
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.meta {
+  min-width: 0;
+}
+
+.name,
+.sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+
+.sub {
+  margin-top: 0.18rem;
+  color: var(--strip-hue, var(--text-muted));
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+/* ── controls ────────────────────────────────────────────────────────── */
+
+.rail {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 26%, transparent);
+  cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
+}
+
+.dot[data-on='true'] {
+  background: var(--strip-hue, var(--accent-select));
+  transform: scale(1.35);
+}
+
+.counter {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 7;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.1em;
+}
+
+/* Reduced motion keeps the strip and its layout — it is the content — and only
+   drops the eased travel, which the controller handles by snapping. */
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    will-change: auto;
+  }
+
+  .dot {
+    transition: none;
+  }
+}
+
+/* The reference switches to a taller stage and near-full-width cards on a
+   phone. Same idea: fewer neighbours visible, bigger subject. */
+@media (max-width: 650px) {
+  .stage {
+    --card-w: clamp(140px, 54vw, 190px);
+    --gap: calc(var(--card-w) * 0.92);
+  }
+}
+
+/* The centred item's controls, under the strip rather than inside the card —
+   see the note on `actions` in Filmstrip.tsx. One row for the whole strip, not
+   one per card. */
+.actions {
+  position: absolute;
+  right: 0;
+  bottom: 1.9rem;
+  left: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0 0.75rem;
+}
+
+/* The gap probe. It exists only so the browser resolves `var(--gap)` to a
+   pixel width the controller can read — a custom property read back through
+   getComputedStyle returns its literal calc() text, not a length. */
+.probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--gap);
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* HOVER IS A RESPONSE, NOT A MOVE. See the note in Filmstrip.tsx for why
+   centring on hover had to go. The transform is written inline by the
+   controller every frame, so a hover rule must not touch it — these are all
+   properties the controller never sets. */
+.card:hover {
+  border-color: var(--strip-hue, var(--accent-select));
+}
+
+.card:hover .media img {
+  filter: saturate(1);
+}
+
+.card:hover .name {
+  color: var(--strip-hue, var(--text));
+}
+
+/* ── prev / next ─────────────────────────────────────────────────────────
+   Round glass controls, one each side, vertically on the card's centre.
+
+   The metal look is layered rather than painted: a translucent fill, a
+   gradient EDGE masked to a 1px ring the way the primary buttons do it, and a
+   sheen across the top half. Every value is mixed from `--text` and
+   `--highlight`, both of which are theme-scoped, so one set of declarations
+   reads as brushed metal on the dark page and as frosted glass on the light
+   one. They also carry `data-metal`, so the WebGL layer adds its travelling
+   chromatic rim on hover on top of this. */
+.arrow {
+  position: absolute;
+  top: calc(50% - 1.4rem);
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text);
+  background:
+    linear-gradient(180deg, var(--highlight), transparent 55%),
+    color-mix(in srgb, var(--text) 10%, var(--surface-strong));
+  box-shadow:
+    0 4px 12px color-mix(in srgb, #000 26%, transparent),
+    inset 0 1px 0 var(--highlight);
+  backdrop-filter: blur(10px) saturate(130%);
+  cursor: pointer;
+  transition:
+    transform var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease),
+    opacity var(--dur-2) var(--ease);
+}
+
+/* The 1px gradient edge, masked out of its own content box — the same trick
+   the primary CTAs use, and the thing that reads as a machined rim. */
+.arrow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--text) 46%, transparent),
+    color-mix(in srgb, var(--text) 8%, transparent) 45%,
+    transparent 62%,
+    color-mix(in srgb, var(--text) 28%, transparent)
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+
+.arrowPrev { left: 0.35rem; }
+.arrowNext { right: 0.35rem; }
+
+.arrow svg {
+  width: 42%;
+  height: 42%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.arrow:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, var(--highlight), transparent 55%),
+    color-mix(in srgb, var(--text) 16%, var(--surface-strong));
+  transform: scale(1.06);
+}
+
+.arrow:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* At an end the control is dead, and dimming is how that is said — the same
+   convention every other disabled control in this app uses. */
+.arrow:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow {
+    transition: none;
+  }
+
+  .arrow:hover:not(:disabled),
+  .arrow:active:not(:disabled) {
+    transform: none;
+  }
+}

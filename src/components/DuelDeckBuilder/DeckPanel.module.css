@@ -294,7 +294,8 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   color: var(--text-muted);
-  opacity: 0.7;
+  /* Was dimmed with opacity, which composited the ink back to grey and so
+     undid the full-contrast text pass. Hierarchy here is size and weight. */
   pointer-events: none;
   user-select: none;
 }

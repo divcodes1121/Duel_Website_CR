@@ -20,6 +20,7 @@ import { ReadingState } from './ReadingState';
 import { useAuthStore } from '../../state/authStore';
 import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 /* Coach Assist — two windows over `server/coach.py`.
  *
@@ -525,6 +526,7 @@ function DuelPrediction({ tag }: { tag: string }) {
   const [data, setData] = useState<CoachPrediction | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [busy, setBusy] = useState(false);
+  const reading = useHeldLoading(busy);
 
   const run = useCallback(
     (decks: string[][]) => {
@@ -564,9 +566,9 @@ function DuelPrediction({ tag }: { tag: string }) {
     );
   }
 
-  if (busy)
+  if (reading)
     return (
-      <ReadingState className={styles.notice} hue="green">
+      <ReadingState k="coach-history" hue="green">
         Reading their duel history…
       </ReadingState>
     );
@@ -943,6 +945,7 @@ function Suggestion({ tag }: { tag: string }) {
   const [data, setData] = useState<CoachSuggestion | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [busy, setBusy] = useState(false);
+  const reading = useHeldLoading(busy);
 
   useEffect(() => setOpp(tag), [tag]);
 
@@ -988,9 +991,9 @@ function Suggestion({ tag }: { tag: string }) {
     );
   }
 
-  if (busy)
+  if (reading)
     return (
-      <ReadingState className={styles.notice} hue="green">
+      <ReadingState k="coach-matchups" hue="green">
         Reading both players and scoring the matchups…
       </ReadingState>
     );

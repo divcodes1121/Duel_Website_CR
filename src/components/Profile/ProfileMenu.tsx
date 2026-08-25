@@ -75,6 +75,7 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
         ref={triggerRef}
         type="button"
         className={triggerClassName}
+        data-metal
         data-open={open || undefined}
         title={`Signed in as ${authUser ?? 'guest'}`}
         aria-label="Profile menu"

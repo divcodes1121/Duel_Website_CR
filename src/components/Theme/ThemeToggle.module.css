@@ -1,0 +1,178 @@
+/* The theme switch, as a skeuomorphic toggle.
+ *
+ * Adapted from ThreeUI's `SkeuomorphicToggle`. Everything below is expressed in
+ * units of ONE KNOB — the track height — exactly as the reference does it, so a
+ * caller changes `--h` and the whole control scales without a second value
+ * needing to be kept in step.
+ *
+ * The reference's own proportions, preserved:
+ *
+ *   track   192 x 64      -> 3h wide
+ *   pad     6px           -> 0.094h
+ *   thumb   116px wide    -> 1.8125h
+ *   travel  64px          -> exactly 1h  (180 available - 116 thumb)
+ *
+ * ── WHERE THE DEPTH COMES FROM ───────────────────────────────────────────
+ *
+ * Skeuomorphism here is two opposed lighting stories on one control: the track
+ * is a groove, so it takes an inset shadow at the TOP and an inset highlight at
+ * the BOTTOM; the thumb is a cap sitting in it, so it takes the reverse — a
+ * highlight along its top edge and a cast shadow below.
+ *
+ * The reference hardcodes those as white and black at fixed alphas, which works
+ * because it ships two complete palettes and patches between them. This uses
+ * `--highlight`, which is ALREADY theme-scoped — white at 4.5% on dark and 90%
+ * on light — so the same declarations describe a lit groove in both themes with
+ * no `[data-theme]` branch of its own. That is the whole reason the depth
+ * survives the move onto this palette.
+ */
+
+.toggle {
+  /* The one knob. Callers override it; nothing else needs to change. */
+  --h: 1.85rem;
+  --w: calc(var(--h) * 3);
+  --edge: 1px;
+  --pad: calc(var(--h) * 0.094);
+  --thumb: calc(var(--h) * 1.8125);
+  /* DERIVED, never restated. Travel is whatever room is left once the padding
+     and the cap are taken out of the track, so changing the width or the cap
+     cannot leave the slide overshooting or stopping short. On the reference's
+     own numbers this comes out at 1h, which is what it hardcodes.
+     It cannot be a percentage: a percentage inside `translateX` resolves
+     against the THUMB's width, not the track's.
+     THE BORDER HAS TO COME OUT TOO. `--w` is a border-box width, but the thumb
+     is positioned inside the padding box, so a travel computed without the two
+     1px edges overshoots by exactly 2px — measured, the cap sat 2px past the
+     far pad instead of flush against it. */
+  --travel: calc(var(--w) - 2 * var(--edge) - 2 * var(--pad) - var(--thumb));
+
+  position: relative;
+  flex-shrink: 0;
+  display: block;
+  width: var(--w);
+  height: var(--h);
+  padding: 0;
+  border: var(--edge) solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  /* A GROOVE: dark at the top lip, lit along the bottom. The fine vertical
+     ribbing is the reference's, at a fraction of its alpha — at this size the
+     original 2px pitch reads as noise rather than as a machined surface. */
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 2px,
+      color-mix(in srgb, var(--text) 3%, transparent) 2px 4px
+    ),
+    var(--surface-sunken);
+  box-shadow:
+    inset 0 2px 5px color-mix(in srgb, #000 22%, transparent),
+    inset 0 -1px 2px var(--highlight);
+  transition:
+    background-color var(--dur-3) var(--ease),
+    border-color var(--dur-3) var(--ease),
+    box-shadow var(--dur-3) var(--ease);
+}
+
+/* ON is dark mode. The groove takes the selection hue, which is what this app
+   means by "this is the state you chose" everywhere else. */
+.toggle[aria-checked='true'] {
+  border-color: var(--accent-select-edge);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 2px,
+      color-mix(in srgb, var(--on-solid) 4%, transparent) 2px 4px
+    ),
+    color-mix(in srgb, var(--accent-select) 24%, var(--surface-sunken));
+  box-shadow:
+    inset 0 2px 5px color-mix(in srgb, #000 30%, transparent),
+    inset 0 -1px 2px var(--highlight),
+    /* The reference's outer bloom, at the ink step so it reads in both
+       themes — and gated on --glow-core, which light sets to 0%. */
+    0 0 14px 1px color-mix(in srgb, var(--accent-select) var(--glow-core), transparent);
+}
+
+/* ── the cap ─────────────────────────────────────────────────────────── */
+
+.thumb {
+  position: absolute;
+  top: var(--pad);
+  left: var(--pad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3em;
+  width: var(--thumb);
+  height: calc(100% - 2 * var(--pad));
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  /* A CAP, so the lighting is the groove's inverted: lit along the top, and
+     casting a shadow down onto the track it sits in. */
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--highlight) 60%, var(--surface-strong)),
+    var(--surface-strong)
+  );
+  box-shadow:
+    0 3px 6px -1px color-mix(in srgb, #000 28%, transparent),
+    0 1px 2px color-mix(in srgb, #000 18%, transparent),
+    inset 0 1px 1px var(--highlight);
+  /* TRANSFORM ONLY — the reference animates `left`, which is a layout property
+     and would relayout the track on every frame of the slide. */
+  transform: translateX(0);
+  transition:
+    transform var(--dur-3) var(--ease),
+    box-shadow var(--dur-3) var(--ease);
+}
+
+.toggle[aria-checked='true'] .thumb {
+  transform: translateX(var(--travel));
+}
+
+/* Pressed: the cap settles into the groove, so its cast shadow tightens. The
+   reference does the same on its plate. */
+.toggle:active .thumb {
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 30%, transparent),
+    inset 0 1px 1px var(--highlight);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  line-height: 0;
+}
+
+/* The word beside the icon. It is what makes the control legible as a SWITCH
+   rather than as a button that happens to slide, and the thumb is 1.8 track
+   heights wide precisely because the reference put a label in it. */
+.word {
+  font-size: calc(var(--h) * 0.36);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  line-height: 1;
+}
+
+/* Below this the word is dropped and the thumb shrinks to a disc — a 3h-wide
+   control does not fit a phone toolbar beside a search field. */
+@media (max-width: 720px) {
+  .toggle {
+    /* Only the two inputs change; --travel re-derives itself. */
+    --w: calc(var(--h) * 2);
+    --thumb: calc(var(--h) * 0.82);
+  }
+
+  .word {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle,
+  .thumb {
+    transition: none;
+  }
+}

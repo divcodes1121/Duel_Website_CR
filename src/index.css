@@ -223,9 +223,14 @@
     radial-gradient(54% 46% at 84% 80%, rgba(255, 255, 255, 0.045), transparent 70%),
     radial-gradient(46% 42% at 66% 26%, rgba(255, 255, 255, 0.03), transparent 70%);
 
-  /* 11–12 text */
-  --text: #ededed;
-  --text-muted: #a1a1a1;
+  /* TEXT IS PURE WHITE ON DARK, AND MUTED IS THE SAME WHITE.
+     Asked for directly: every grey font goes to full contrast so nothing is
+     hard to read. It costs the primary/secondary distinction — `--text-muted`
+     no longer reads as quieter than `--text`, because it is now the same
+     colour — so hierarchy has to come from size, weight and spacing instead.
+     Coloured ink (`--hue-*`, `--solid-*`, `--on-solid`) is untouched. */
+  --text: #ffffff;
+  --text-muted: #ffffff;
 
   /* 9–10 solid. On a neutral system the emphasis fill is simply the inverse of
      the page — a white button on black, the way Vercel and Linear do it. */
@@ -493,9 +498,10 @@
     radial-gradient(54% 46% at 84% 80%, rgba(0, 0, 0, 0.022), transparent 70%),
     radial-gradient(46% 42% at 66% 26%, rgba(0, 0, 0, 0.015), transparent 70%);
 
-  /* 11–12 text */
-  --text: #1a1a1a;
-  --text-muted: #646464;
+  /* Pure black on light, and muted is the same black. See the note on the
+     dark block above for what this trades away. */
+  --text: #000000;
+  --text-muted: #000000;
 
   /* 9–10 solid: inverted again — a black button on white. */
   --accent: #1a1a1a;

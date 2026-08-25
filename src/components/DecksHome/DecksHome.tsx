@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useBuilderStore } from '../../state/store';
-import { useThemeStore } from '../../state/themeStore';
 import { useAuthStore } from '../../state/authStore';
 import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
 import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
@@ -10,6 +9,7 @@ import { WinConFilter, deckMatchesFilter, filterCardName } from '../WinConFilter
 import { canExportDecks } from '../../utils/deckExport';
 import libStyles from '../Library/Library.module.css';
 import styles from './DecksHome.module.css';
+import { ThemeToggle } from '../Theme/ThemeToggle';
 
 function CrownIcon() {
   return (
@@ -21,8 +21,6 @@ function CrownIcon() {
 
 /** `embedded` renders without the page nav — the dashboard shell provides it. */
 export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const homeDecks = useBuilderStore((s) => s.sets.home.decks);
   const addHomeDeck = useBuilderStore((s) => s.addHomeDeck);
   const removeHomeDeck = useBuilderStore((s) => s.removeHomeDeck);
@@ -112,15 +110,7 @@ export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
           >
             Counter Palette →
           </button>
-          <button
-            type="button"
-            className={styles.themeButton}
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark' ? '☾' : '☀'}
-          </button>
+          <ThemeToggle size="1.8rem" />
           <ProfileMenu triggerClassName={styles.themeButton} />
         </div>
       </header>

@@ -1,0 +1,488 @@
+/* The loading rig.
+ *
+ * Adapted from ThreeUI's `UplinkLoader`. Its geometry is kept — the notched
+ * readout plate, the skewed tick bar with taller scale marks, the corner
+ * brackets, the scanline wash. Its palette is not: the reference is one fixed
+ * neon green on near-black (`#2fe07d` over `#030806`), and this has to wear
+ * four different section hues in two themes.
+ *
+ * So EVERY colour resolves from one local variable, `--rig`, which is set from
+ * `data-hue` below and is a `--hue-*` token in every case. That is the INK step
+ * on purpose: these are bare graphic marks that have to be seen against the
+ * panel, and `--solid-*` is graded to carry white ON itself, which on the dark
+ * page would put the lit ticks darker than the surface they sit on. It is the
+ * same reading recorded for the WebGL layers, and the same trap `CLAUDE.md`
+ * calls the recurring bug of this project.
+ *
+ * NO INFINITE ANIMATION ANYWHERE. The reference's grain, neon flicker, diamond
+ * pulse and cap pulse are all gone. `ignite` is one-shot, fired by a tick
+ * lighting. */
+
+.rig {
+  /* Neutral is the fallback when a caller passes no hue — a loader with no
+     section is still a loader, it just does not claim an identity. */
+  --rig: var(--text-muted);
+
+  position: relative;
+  display: block;
+  /* Sized like the reference's rig rather than like a notice: its bar is 604px
+     across a full-bleed stage, and the first pass squeezed the whole thing into
+     a 26rem card, which made the readout smaller than the sentence underneath
+     it. This is the panel's centrepiece while a read is in flight. */
+  /* AN EXPLICIT WIDTH, NOT `min(100%, 42rem)`, and the difference is the whole
+     reason this measured 331px on its first pass.
+     `PlayerAnalysis`'s `.notice` is a flex COLUMN with `align-items: center`,
+     which gives its children `fit-content` in the cross axis — so a percentage
+     resolves against a box that is itself sized to this element's content, and
+     the rig shrink-wrapped to the natural width of a flex row of 5px ticks.
+     A stated width makes `fit-content` compute to 42rem and the notice opens up
+     to hold it; `max-width` then clamps it on a panel too narrow to give it. */
+  width: 42rem;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 1.4rem 1.6rem 1.5rem;
+  /* NO SURFACE OF ITS OWN. It had a grey `--surface-nested` fill and a border,
+     which put a card inside the caller's card — two nested boxes for one piece
+     of state. Transparent, the rig sits directly on the panel and the app-wide
+     fireflies read through it exactly as they do everywhere else. The corner
+     brackets are what mark the region now, which is the reference's own idea. */
+  text-align: left;
+  background: none;
+}
+
+.rig[data-hue='violet'] { --rig: var(--hue-violet); }
+.rig[data-hue='blue'] { --rig: var(--hue-blue); }
+.rig[data-hue='green'] { --rig: var(--hue-green); }
+/* `pink` is the maroon one — Deck Analysis and Deck Counter. */
+.rig[data-hue='pink'] { --rig: var(--hue-pink); }
+
+/* Static, not animated. The reference scrolls nothing here either; it is a
+   fixed repeating gradient, which costs one paint and no frames. Tinted with
+   the hue so it belongs to the section rather than being generic CRT dressing. */
+.scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--rig) 7%, transparent) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* ── corner brackets ─────────────────────────────────────────────────────── */
+
+.frame {
+  position: absolute;
+  inset: 0.5rem;
+  pointer-events: none;
+}
+
+/* Each corner is one element drawing an L from its two pseudo-elements, so four
+   brackets cost four nodes rather than eight. */
+.corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  opacity: 0.72;
+}
+
+.corner::before,
+.corner::after {
+  content: '';
+  position: absolute;
+  background: var(--rig);
+}
+
+.corner::before { width: 14px; height: 1.2px; }
+.corner::after { width: 1.2px; height: 14px; }
+
+/* The reference's rotated diamond at each bracket. STATIC — the reference runs
+   `diaPulse` on a 3.2s infinite loop with staggered delays, which is precisely
+   the shape `CLAUDE.md` bans. A mark that is simply there reads as instrument
+   furniture; one that breathes reads as something waiting to be clicked. */
+.diamond {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 6px;
+  height: 6px;
+  background: var(--rig);
+  transform: rotate(45deg);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--rig) var(--glow-core), transparent);
+}
+
+.tr .diamond { left: auto; right: -2px; }
+.bl .diamond { top: auto; bottom: -2px; }
+.br .diamond { top: auto; left: auto; right: -2px; bottom: -2px; }
+
+.tl { top: 0; left: 0; }
+.tl::before, .tl::after { top: 0; left: 0; }
+.tr { top: 0; right: 0; }
+.tr::before, .tr::after { top: 0; right: 0; }
+.bl { bottom: 0; left: 0; }
+.bl::before, .bl::after { bottom: 0; left: 0; }
+.br { bottom: 0; right: 0; }
+.br::before, .br::after { bottom: 0; right: 0; }
+
+/* ── readout ─────────────────────────────────────────────────────────────── */
+
+.head {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.15rem;
+}
+
+/* The reference's cut corner, which is what stops the readout reading as a
+   plain rectangle. Two opposite corners only — clipping all four would just be
+   a rounded box. */
+.plate {
+  display: flex;
+  align-items: baseline;
+  gap: 0.12rem;
+  padding: 0.5rem 1rem 0.45rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--rig) 42%, transparent);
+  /* Mixed toward TRANSPARENT, not toward a surface token. Against a surface it
+     was a grey plate with a wash of hue over it; against transparent it is a
+     tint of the section's own colour and whatever is behind it shows through —
+     which is also what the reference does with its dark green fill. */
+  background: color-mix(in srgb, var(--rig) 12%, transparent);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+}
+
+/* One-shot, when the bar fills. The `data-full` attribute lands once, so this
+   plays once — there is no loop and nothing to tear down. */
+.plate[data-full] {
+  animation: plateHit var(--dur-3) var(--ease);
+}
+
+@keyframes plateHit {
+  from { background: color-mix(in srgb, var(--rig) 48%, transparent); }
+}
+
+.num {
+  /* TABULAR FIGURES ARE NOT DECORATION HERE. This counter changes several times
+     a second; with proportional digits a `1` is narrower than a `0` and the
+     whole plate twitches on every update. */
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display, inherit);
+  /* The reference sets this at 47px. Clamped rather than fixed because three of
+     the twelve callers are narrow result-flow blocks. */
+  font-size: clamp(2.4rem, 5.5vw, 3.1rem);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--rig);
+  /* Dark-only and static: `--glow-core`/`--glow-halo` are STRENGTHS that light
+     sets to 0%, so this one unconditional declaration is correct in both
+     themes and needs no `[data-theme]` branch. */
+  text-shadow:
+    0 0 10px color-mix(in srgb, var(--rig) var(--glow-core), transparent),
+    0 0 26px color-mix(in srgb, var(--rig) var(--glow-halo), transparent);
+}
+
+.unit {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--rig);
+  opacity: 0.62;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  padding-bottom: 0.15rem;
+  min-width: 0;
+}
+
+/* The app's existing technical-label idiom — small, heavy, widely tracked, the
+   same treatment the sidebar's section kicker wears. */
+.kicker {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--rig);
+  opacity: 0.85;
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── the bar ─────────────────────────────────────────────────────────────── */
+
+.bar {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 2.75rem;
+}
+
+.tick {
+  /* The reference's own numbers: 5.4px wide, 32px tall, 44px on a scale mark. */
+  width: 5px;
+  height: 2rem;
+  /* The reference's skew. It is what makes a row of rules read as a gauge
+     rather than as a barcode. */
+  transform: skewX(12deg);
+  /* THE UNLIT TICKS ARE DIM HUE, NOT GREY. The reference's `--green-dim` is its
+     own green at .26 alpha, and a neutral grey gauge under a coloured one read
+     as two unrelated objects rather than as one bar half lit. */
+  background: color-mix(in srgb, var(--rig) 24%, transparent);
+  /* Colour only — nothing here animates width or position. */
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+/* Every eighth is a scale mark. */
+.mark {
+  height: 2.75rem;
+}
+
+.tick[data-on] {
+  background: var(--rig);
+  box-shadow:
+    0 0 5px color-mix(in srgb, var(--rig) var(--glow-core), transparent),
+    0 0 14px color-mix(in srgb, var(--rig) var(--glow-halo), transparent);
+}
+
+/* THE ONE ANIMATION IN THIS FILE, and it is one-shot.
+   `data-lead` marks the newest lit tick. Because it lands on a DIFFERENT
+   element each time the bar advances, the animation starts fresh on that node —
+   no class removal, no `void offsetWidth` reflow to restart it, which is what
+   the reference needs from imperative JS. */
+.tick[data-lead] {
+  animation: ignite var(--dur-2) var(--ease);
+}
+
+@keyframes ignite {
+  from {
+    background: color-mix(in srgb, var(--rig) 55%, var(--text));
+    box-shadow:
+      0 0 12px color-mix(in srgb, var(--rig) var(--glow-core), transparent),
+      0 0 30px color-mix(in srgb, var(--rig) var(--glow-halo), transparent);
+  }
+}
+
+/* Progress is INFORMATION, not decoration, so unlike the card fan this replaced
+   it still renders under reduced motion — it simply stops flashing and stepping
+   in colour. The percentage and the tick count keep updating, because a reader
+   who does not want motion still wants to know how long is left. */
+@media (prefers-reduced-motion: reduce) {
+  /* THE SELECTORS HERE MUST CARRY THEIR ATTRIBUTES, and the first version of
+     this block did not. `.tick` is (0,1,0) and loses outright to
+     `.tick[data-lead]` at (0,2,0) — being inside a media query changes nothing,
+     since specificity is decided before source order. The rule was dead, and a
+     browser check caught it reporting `animation-name: _ignite_…` under
+     `reducedMotion: 'reduce'`.
+     `index.css` does clamp every animation to 0.01ms globally under this same
+     query, so the flash was already invisible; this makes the local rule mean
+     what it says rather than relying on that. */
+  .tick,
+  .tick[data-on],
+  .tick[data-lead],
+  .plate,
+  .plate[data-full] {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ── the side rails ──────────────────────────────────────────────────────
+   The reference's furniture, and the reason a 42rem rig does not read as a bar
+   floating in an empty box. A wire into two caps, then a module: hatch,
+   reticle, indicator, slab, four LEDs. All of it geometry — the reference
+   pulses the second cap and the indicator on infinite loops, and those are the
+   one thing this project will not take from it. */
+
+.deck {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.9rem;
+}
+
+.rail {
+  position: relative;
+  flex: none;
+  width: 3.1rem;
+  height: 2.75rem;
+}
+
+/* Mirrored, not re-offset — one transform against a second set of coordinates
+   that would have to be kept in step by hand. */
+.railRight {
+  transform: scaleX(-1);
+}
+
+.wire {
+  position: absolute;
+  left: 0;
+  bottom: 1.15rem;
+  width: 1.5rem;
+  height: 1px;
+  background: color-mix(in srgb, var(--rig) 34%, transparent);
+}
+
+.cap {
+  position: absolute;
+  bottom: 1.05rem;
+  height: 3px;
+  background: var(--rig);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--rig) var(--glow-core), transparent);
+}
+
+.capA { left: 0; width: 6px; }
+.capB { left: 0.85rem; width: 9px; opacity: 0.62; }
+
+.module {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1.5rem;
+  height: 2.75rem;
+}
+
+.module > * {
+  position: absolute;
+  left: 0;
+}
+
+.hatch {
+  top: 0;
+  width: 1.5rem;
+  height: 2px;
+  background: color-mix(in srgb, var(--rig) 72%, transparent);
+}
+
+/* The circle and its crosshair, from two pseudo-elements rather than three
+   nodes. */
+.reticle {
+  top: 0.35rem;
+  left: 0.15rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  border: 1.2px solid color-mix(in srgb, var(--rig) 58%, transparent);
+  border-radius: 50%;
+}
+
+.reticle::before,
+.reticle::after {
+  content: '';
+  position: absolute;
+  background: color-mix(in srgb, var(--rig) 38%, transparent);
+}
+
+.reticle::before {
+  left: -3px;
+  top: 50%;
+  width: calc(100% + 6px);
+  height: 1px;
+}
+
+.reticle::after {
+  top: -3px;
+  left: 50%;
+  width: 1px;
+  height: calc(100% + 6px);
+}
+
+.pip {
+  top: 0.83rem;
+  left: 0.63rem;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--rig);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--rig) var(--glow-core), transparent);
+}
+
+/* The reference's cut-cornered block. */
+.slab {
+  top: 1.9rem;
+  width: 1.5rem;
+  height: 4px;
+  background: color-mix(in srgb, var(--rig) 64%, transparent);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 4px 100%);
+}
+
+.led {
+  bottom: 0.15rem;
+  height: 2px;
+  background: color-mix(in srgb, var(--rig) 44%, transparent);
+}
+
+.led:nth-of-type(5) { left: 0; width: 3px; }
+.led:nth-of-type(6) { left: 4.5px; width: 4px; }
+.led:nth-of-type(7) { left: 15px; width: 4px; }
+.led:nth-of-type(8) { left: 20.5px; width: 3px; }
+
+/* ── the bar, and the pool of light under it ─────────────────────────── */
+
+.barWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Sized by `--lit`, written from React as the bar advances, so the glow tracks
+   the filled run rather than sitting under the whole gauge. One element and one
+   custom property — the reference keeps a separate blurred div and rewrites its
+   width in pixels every frame. `filter: blur()` is deliberately NOT used: it is
+   the property the old CSS loops thrashed, and a soft-stop gradient reads the
+   same here for nothing. */
+.haze {
+  position: absolute;
+  left: 0;
+  bottom: -0.35rem;
+  width: var(--lit, 0%);
+  height: 3.4rem;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 100% 62% at 50% 62%,
+    color-mix(in srgb, var(--rig) 26%, transparent) 0%,
+    color-mix(in srgb, var(--rig) 12%, transparent) 42%,
+    transparent 78%
+  );
+  transition: width var(--dur-2) var(--ease);
+}
+
+/* ── the status line ─────────────────────────────────────────────────── */
+
+.status {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.85rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid color-mix(in srgb, var(--rig) 18%, transparent);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.statusKey {
+  color: var(--text-muted);
+}
+
+.statusVal {
+  color: var(--rig);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .haze {
+    transition: none;
+  }
+}

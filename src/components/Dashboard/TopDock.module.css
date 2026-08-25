@@ -1,0 +1,162 @@
+/* The top navigation dock.
+ *
+ * Adapted from ThreeUI's `AnimatedTopDock`. The reference's geometry — a glass
+ * pill, one-sided downward growth, per-item layers that light on approach — is
+ * kept; every colour in it is replaced by a token, so this file declares no
+ * palette of its own and works in both themes without a `[data-theme]` branch.
+ *
+ * Widths, heights and the downward translate are written by
+ * `topDockController.ts` as inline styles while the pointer is on the dock, and
+ * REMOVED again once the springs settle flat. Everything below is therefore the
+ * resting state, and nothing here may fight those three properties. */
+
+.dock {
+  position: relative;
+  display: flex;
+  /* FLEX-START, not centre: the expansion is one-sided. The dock's top edge
+     stays a straight line and every item's growth hangs below it, which is what
+     makes it read as a dock rather than as a row that inflates. */
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  /* Fixed, so an item growing 11px taller does not push the whole topbar down
+     a frame at a time. The items overflow it, deliberately. */
+  height: 2.68rem;
+  padding: 0.29rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--glass-fill);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+  backdrop-filter: blur(18px) saturate(115%);
+  /* The dropped items hang past the shell and must not be clipped. */
+  overflow: visible;
+  isolation: isolate;
+}
+
+.item {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  height: 2.1rem;
+  min-width: 0;
+  padding: 0 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  /* The box grows from its TOP edge, so the label stays put against the dock's
+     rule while the padding opens up beneath it. */
+  transform-origin: 50% 0;
+  /* Declared because the controller writes exactly these three every frame. */
+  will-change: width, height, transform;
+  /* Colour only. Width, height and transform are the spring's, and a CSS
+     transition on them would fight the controller for the same properties. */
+  transition:
+    color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease);
+}
+
+/* `data-dock-near` is the controller's, set once influence passes 0.08 — so the
+   colour change lands with the growth instead of on raw hover, and the two
+   neighbours a focused item lifts get lit as well. Focus is folded in here so
+   the keyboard gets the same treatment as the pointer, which is the whole point
+   of the focus branch in the controller. */
+.item[data-dock-near='true'],
+.item:focus-visible {
+  z-index: 2;
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--neutral-wash);
+}
+
+/* THE ACTIVE INDICATOR IS THIS APP'S, NOT THE REFERENCE'S.
+   The reference inverts the current item into a solid white pill. Selection
+   here is violet and is carried by a rule, for the reason the old `.topNavItem`
+   spelled out: on an underline tab the coloured RULE is the indicator, and a
+   pastel label beside a solid sidebar row is what read as washed. The wash is
+   added so the item still reads as one object inside a glass shell; meaning
+   still does not rest on hue alone, since the active label is also brighter. */
+.itemActive,
+.itemActive[data-dock-near='true'] {
+  color: var(--text);
+  background: var(--accent-select-wash);
+  border-color: var(--accent-select-edge);
+}
+
+.itemActive::after {
+  content: '';
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.32rem;
+  left: 0.5rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-select);
+}
+
+/* Dimmed at rest and full on approach — the reference's one piece of internal
+   layering, and the cheapest way to make the field read on an item whose label
+   is already the same ink at both ends. */
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.62;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.item[data-dock-near='true'] .icon,
+.item:focus-visible .icon,
+.itemActive .icon {
+  opacity: 1;
+}
+
+.label {
+  min-width: 0;
+}
+
+/* Under 1000px the labels go and the dock is icons — six labelled items, a tag
+   search and four actions do not fit one bar. `aria-label` carries the name on
+   every item, so nothing is lost to a screen reader. */
+@media (max-width: 1000px) {
+  .label {
+    display: none;
+  }
+
+  .item {
+    padding: 0 0.62rem;
+  }
+}
+
+/* Below the controller's own 900px cut-off nothing animates, so the shell can
+   scroll again. Above it, `overflow: visible` is load-bearing — a scroll
+   container would clip the items as they drop. */
+@media (max-width: 900px) {
+  .dock {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .dock::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* The controller already refuses to run under reduced motion — this is the
+   belt-and-braces half, matching how every WebGL piece keeps its flat markup. */
+@media (prefers-reduced-motion: reduce) {
+  .item {
+    transform: none !important;
+    transition: none;
+  }
+}

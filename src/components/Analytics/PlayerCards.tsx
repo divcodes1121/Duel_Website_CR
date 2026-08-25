@@ -13,6 +13,7 @@ import {
 import { ReadingState } from './ReadingState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './PlayerCards.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 /* Cards — every card, as THIS player plays it.
  *
@@ -303,6 +304,7 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
   const [board, setBoard] = useState<CardBoard | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
+  const reading = useHeldLoading(loading);
 
   const [mode, setMode] = useState<CardMode>('all');
   const [tab, setTab] = useState<Tab>('all');
@@ -441,10 +443,10 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
     ...rows.map((r) => (art ? (r.forms?.[art]?.useRate ?? 0) : r.useRate)),
   );
 
-  if (loading) {
+  if (reading) {
     return (
       <div className={styles.page}>
-        <ReadingState className={styles.notice} hue="blue">
+        <ReadingState k="player-cards" hue="blue">
           Reading card history…
         </ReadingState>
       </div>

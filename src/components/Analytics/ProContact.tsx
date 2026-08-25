@@ -83,7 +83,7 @@ export function ProContact({ onClose }: { onClose: () => void }) {
         tabIndex={-1}
         ref={panelRef}
       >
-        <button type="button" className={styles.close} onClick={onClose} aria-label="Close">
+        <button type="button" className={styles.close} data-metal onClick={onClose} aria-label="Close">
           ×
         </button>
 

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useAuthStore } from '../../state/authStore';
-import { useThemeStore } from '../../state/themeStore';
 import { getCardIconUrl } from '../../data/cards';
 import styles from './Login.module.css';
 import { Fireflies } from '../../three/Fireflies';
+import { ThemeToggle } from '../Theme/ThemeToggle';
 
 function CrownIcon() {
   return (
@@ -15,8 +15,6 @@ function CrownIcon() {
 
 export function Login() {
   const login = useAuthStore((s) => s.login);
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -44,15 +42,9 @@ export function Login() {
 
   return (
     <div className={styles.page}>
-      <button
-        type="button"
-        className={styles.themeToggle}
-        onClick={toggleTheme}
-        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        aria-label="Toggle theme"
-      >
-        {theme === 'dark' ? '☾' : '☀'}
-      </button>
+      {/* The class is kept for its corner positioning only; the control's own
+          look is the shared toggle's. */}
+      <ThemeToggle size="1.95rem" className={styles.themeToggle} />
 
       <Fireflies />
 

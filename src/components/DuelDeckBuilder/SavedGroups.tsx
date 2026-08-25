@@ -1,24 +1,12 @@
 import { useState } from 'react';
 import { useBuilderStore } from '../../state/store';
-import {
-  CARDS_BY_KEY,
-  getCardIconUrl,
-  getEvolutionIconUrl,
-  getHeroIconUrl,
-} from '../../data/cards';
-import { getSlotVisualVariant } from '../../state/deckUtils';
+import { getCardIconUrl } from '../../data/cards';
+/* One implementation, three callers — see the note in the module. */
+import { previewIconFor } from '../../utils/deckPreview';
 import { deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import type { BuilderMode, Deck, PlayerId, SavedDeckSet } from '../../types/deck';
 import styles from './SavedGroups.module.css';
 
-/** Same evo/hero art selection the live deck slots use, so previews match. */
-function previewIconFor(deck: Deck, slotIndex: number, key: string): string {
-  const card = CARDS_BY_KEY.get(key);
-  const variant = getSlotVisualVariant(deck, slotIndex, CARDS_BY_KEY);
-  if (variant === 'evolution') return getEvolutionIconUrl(key);
-  if (variant === 'hero' && card && !card.isChampion) return getHeroIconUrl(key);
-  return getCardIconUrl(key);
-}
 
 /** Hidden/unused deck slots stay out of the preview; empty groups show deck 1. */
 function withCards(decks: Deck[]): Deck[] {

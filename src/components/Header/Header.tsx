@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useThemeStore } from '../../state/themeStore';
 import { useBuilderStore } from '../../state/store';
 import { useAuthStore } from '../../state/authStore';
 import { getTotalCardsUsed } from '../../state/deckUtils';
@@ -10,6 +9,7 @@ import { ExportDialog } from '../Export/ExportDialog';
 import { ProfileMenu } from '../Profile/ProfileMenu';
 import { canExportDecks } from '../../utils/deckExport';
 import styles from './Header.module.css';
+import { ThemeToggle } from '../Theme/ThemeToggle';
 
 /**
  * `embedded` drops the brand, theme toggle and profile menu — the dashboard
@@ -17,8 +17,6 @@ import styles from './Header.module.css';
  * the unique-card counters, Save, My Decks, Export PDF and Reset.
  */
 export function Header({ embedded = false }: { embedded?: boolean } = {}) {
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const sets = useBuilderStore((s) => s.sets);
   const mode = useBuilderStore((s) => s.mode);
   const deckSlotCount = useBuilderStore((s) => s.deckSlotCount);
@@ -129,20 +127,7 @@ export function Header({ embedded = false }: { embedded?: boolean } = {}) {
 
         {!embedded && (
           <>
-            <button
-              type="button"
-              className={styles.themeToggle}
-              onClick={toggleTheme}
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              aria-label="Toggle theme"
-            >
-              <span className={styles.themeIcon} data-active={theme === 'light'}>
-                ☀
-              </span>
-              <span className={styles.themeIcon} data-active={theme === 'dark'}>
-                ☾
-              </span>
-            </button>
+            <ThemeToggle size="1.8rem" />
 
             <ProfileMenu triggerClassName={styles.avatar} />
           </>

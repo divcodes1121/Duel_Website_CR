@@ -772,6 +772,7 @@
 }
 
 .rangeApply {
+  composes: cta from '../../styles/cta.module.css';
   padding: 0.48rem 0.95rem;
   border-radius: 9px;
   border: none;

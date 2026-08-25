@@ -10,6 +10,7 @@ import {
   type MetaBoard,
 } from '../../state/analyticsClient';
 import styles from './MetaDecks.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 /* Top Meta Decks — what the whole player base is running, ranked by use rate.
  *
@@ -58,6 +59,10 @@ export function MetaDecks() {
   const [board, setBoard] = useState<MetaBoard | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
+  /* THE WHOLE CONDITION, not the flag: `!board` flips at the same instant
+     the data lands, so holding a bare `loading` would let this guard fall
+     through anyway. See the hook. */
+  const reading = useHeldLoading(loading && !board);
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -87,10 +92,10 @@ export function MetaDecks() {
     };
   }, []);
 
-  if (loading && !board) {
+  if (reading) {
     return (
-      <section className={styles.panel}>
-        <ReadingState className={styles.notice} hue="blue">
+      <section className={styles.panelBare}>
+        <ReadingState k="meta" hue="blue">
           Reading the meta snapshot…
         </ReadingState>
       </section>
@@ -114,11 +119,11 @@ export function MetaDecks() {
 
   if (board?.building && !board.decks.length) {
     return (
-      <section className={styles.panel}>
+      <section className={styles.panelBare}>
         {/* The longest wait in the app — a cold rollup reads millions of rows
             off the spinning volume. If any state has earned a visible sign of
             life rather than a paragraph and a seconds counter, it is this one. */}
-        <ReadingState className={styles.notice} hue="blue">
+        <ReadingState k="meta-cold" hue="blue">
           <h2 className={styles.noticeTitle}>Building the meta snapshot…</h2>
           <p>
             Ranking every deck across the whole database takes about 45 seconds — it reads
@@ -126,7 +131,15 @@ export function MetaDecks() {
             it only happens on a cold start.
           </p>
           <p className={styles.noticeSub}>
-            {board.elapsedSeconds ? `${Math.round(board.elapsedSeconds)}s elapsed` : 'starting…'}
+            {/* DISAMBIGUATED, because the rig above now shows an elapsed
+                counter too and they are not the same number. That one is how
+                long YOU have been waiting; this is how long the background
+                rollup has been running, which may have started before this
+                screen was opened. Two bare "elapsed" figures disagreeing on
+                one panel reads as a bug. */}
+            {board.elapsedSeconds
+              ? `Rollup running ${Math.round(board.elapsedSeconds)}s`
+              : 'Rollup starting…'}
           </p>
         </ReadingState>
       </section>

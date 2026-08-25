@@ -15,6 +15,7 @@ import { PieIcon } from '../Dashboard/icons';
 import { PasteIntro, PasteHeader } from './PasteIntro';
 import { ReadingState } from './ReadingState';
 import styles from './DeckLab.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 const pct = (v: number) => `${v.toFixed(1)}%`;
 const num = (v: number) => v.toLocaleString();
@@ -195,6 +196,7 @@ export function DeckLab() {
   const [report, setReport] = useState<CountersReport | null>(null);
   const [meta, setMeta] = useState<MetaDeck | null>(null);
   const [loading, setLoading] = useState(false);
+  const reading = useHeldLoading(loading);
   const [failed, setFailed] = useState(false);
 
   /**
@@ -429,8 +431,8 @@ export function DeckLab() {
             </section>
           </div>
 
-          {loading && (
-            <ReadingState className={styles.loading} hue="pink">
+          {reading && (
+            <ReadingState k="deck-lab" hue="pink">
               Measuring it against the field…
             </ReadingState>
           )}

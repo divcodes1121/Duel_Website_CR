@@ -182,7 +182,7 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
         <div className={styles.actions}>
           <button
             type="button"
-            className={styles.iconButton}
+            className={styles.iconButton} data-metal
             title={
               deckLink
                 ? "Copy this deck's Clash Royale share link"
@@ -198,7 +198,7 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
 
           <button
             type="button"
-            className={styles.iconButton}
+            className={styles.iconButton} data-metal
             title="Paste a Clash Royale deck link to build this deck"
             aria-label="Import a deck link"
             aria-expanded={importOpen}
@@ -210,7 +210,7 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
 
           <button
             type="button"
-            className={styles.iconButton}
+            className={styles.iconButton} data-metal
             title="Rename this deck"
             aria-label="Rename this deck"
             onClick={startRename}
@@ -220,7 +220,7 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
 
           <button
             type="button"
-            className={styles.iconButton}
+            className={styles.iconButton} data-metal
             title="Clear every card from this deck"
             aria-label="Clear this deck"
             aria-disabled={filledCount === 0}

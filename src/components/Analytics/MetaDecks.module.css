@@ -267,14 +267,42 @@
 
 /* --------------------------------------------------------------- states */
 
+/* The loading and cold-start states use this INSTEAD of `.panel`.
+ *
+ * `.panel` is a glass surface — border, fill, backdrop-filter — and wrapping a
+ * loading state in it produced a grey card holding the rig's own frame, with
+ * the app-wide fireflies stopping dead at its edge. This keeps the flex layout
+ * that makes the section fill its column and paints nothing at all, so the
+ * backdrop runs behind the wait unbroken. Same reasoning as `ReadingState`,
+ * which stopped taking the caller's notice class for exactly this. */
+.panelBare {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
 .notice {
   margin: auto;
   padding: 2.5rem 1.6rem;
-  max-width: 56ch;
+  /* WAS `max-width: 56ch`, AND THAT CAP IS A PROSE MEASURE.
+     56 characters is the right line length for the cold-start paragraph and the
+     wrong width for the loading gauge — measured, it squeezed the rig to 393px
+     here while every other screen gave it 672px. So the measure moved onto the
+     copy itself, below, and the box is now wide enough to hold the rig at full
+     size while the sentences keep exactly the line length they had. */
+  max-width: 46rem;
   text-align: center;
   color: var(--text-muted);
   font-size: 0.92rem;
   line-height: 1.6;
+}
+
+/* The measure, now on the text rather than on the box that contains it.
+   Centred, so widening the box did not move the copy off the panel's axis. */
+.notice p {
+  max-width: 56ch;
+  margin-inline: auto;
 }
 
 .noticeTitle {

@@ -13,6 +13,7 @@ import {
 import { ReadingState } from './ReadingState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DuelZone.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 /* Duel Zone — two windows over the same duels.
  *
@@ -338,6 +339,7 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
   const [report, setReport] = useState<DuelZoneReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
+  const reading = useHeldLoading(loading);
 
   const { win, preset, setPreset, custom, setCustom } = useDateWindow(
     season,
@@ -377,10 +379,10 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
     return () => window.removeEventListener('keydown', onKey);
   }, [pickerOpen]);
 
-  if (loading) {
+  if (reading) {
     return (
       <div className={styles.page}>
-        <ReadingState className={styles.notice} hue="violet">
+        <ReadingState k="duel-zone" hue="violet">
           Reading duel history…
         </ReadingState>
       </div>

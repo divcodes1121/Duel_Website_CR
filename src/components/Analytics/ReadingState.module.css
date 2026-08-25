@@ -1,59 +1,106 @@
 /* The shared loading state.
  *
- * Layout only — every colour and every box property belongs to the caller's own
- * notice class, which is passed straight through. This file must not paint a
- * background or a border, or twelve screens would suddenly agree about
- * something they deliberately do not. */
+ * IT PAINTS NOTHING. No background, no border, no blur — see the header of
+ * `ReadingState.tsx` for why the `className` prop that used to bring the
+ * caller's glass panel in here was removed. A loading state sits directly on
+ * the page, so the app-wide fireflies run behind it unbroken instead of
+ * stopping dead at a grey card's edge.
+ *
+ * That means this file owns the copy's colour and size, which used to be
+ * inherited from whichever `.notice` was handed over. */
 
-/* NOT a flex column, and that is the whole trick.
+/* Centres the wait BOTH WAYS, which took two mechanisms because the callers
+   disagree about what they are.
+
+   `flex: 1` handles the ones that are already flex columns — the meta board's
+   section fills its column, so the loader takes the whole of it. `min-height`
+   handles the rest, which are plain blocks that would otherwise collapse to the
+   rig's own height and leave it sitting under the header. `justify-content`
+   then puts it on the vertical middle of whichever of the two won.
+
+   Still paints nothing: no background, no border. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+  /* SIZED SO THE MIDDLE OF THIS BOX IS THE MIDDLE OF THE SCREEN.
+     `flex: 1` only bites where the caller is already a flex column; most are
+     plain blocks, where this number alone decides. The content area starts just
+     under the topbar, so a box that is only half the viewport tall is centred
+     within itself and still sits in the upper third of the page — which is what
+     52vh looked like. Roughly twice the distance from the topbar to the middle
+     puts the centre of the box on the centre of the screen. */
+  min-height: 78vh;
+  width: 100%;
+  padding: 2rem 1.25rem;
+  background: none;
+  border: 0;
+}
+
+/* THIS BLOCK CENTRES ITSELF, and it did not always.
  *
- * The twelve call sites do not share an alignment: `.notice` centres its text
- * on seven screens, while `.empty` on Deck Counter and `.loading` on Deck
- * Analysis are left-aligned blocks sitting in a results flow. A flex column
- * with `align-items: center` would centre the canvas over left-aligned copy on
- * those three and read as a misalignment.
+ * The twelve call sites did not share an alignment: `.notice` centred its text
+ * on seven screens, while `.empty` on Deck Counter, `.loading` on Deck Analysis
+ * and Duel Insights' were left-aligned blocks in a results flow. The first
+ * version therefore used an inline-block stage, which inherits the caller's own
+ * `text-align` and so sat left where the caller sat left.
  *
- * An inline-block stage inside a plain block inherits the caller's own
- * `text-align` instead, so it centres where the caller centres and sits left
- * where the caller sits left, with no prop and no per-screen override. */
+ * That reasoning was correct for a small card and is wrong for what is here
+ * now. The rig is 42rem and is the largest thing on the panel while a read
+ * runs; pinned to the left margin it read as having come loose. The whole block
+ * — rig AND sentence — is centred on all twelve, which keeps the two on one
+ * axis. That is what the inline-block trick was protecting in the first place;
+ * only the way to get it has changed. */
+/* Full width inside the flex column, so `.stage` below still has 42rem of room
+   to claim. Without it the flex parent would hand this `fit-content` and the
+   rig would shrink-wrap again — the same trap that measured 331px. */
 .inner {
   display: block;
+  width: 100%;
+  text-align: center;
 }
 
-/* The canvas's box. A fixed height rather than an aspect ratio: the fan is
-   framed by pulling the camera back (see ReadingDeck's autoResize), so the
-   stage can be any width and the cards stay whole — an aspect-ratio box would
-   instead grow to 400px tall on a wide panel and turn a loading state into the
-   largest thing on the screen.
-
-   `position: relative` is what the absolutely-positioned canvas inside it
-   resolves against; without it the canvas escapes to the nearest positioned
-   ancestor, which on most of these screens is the scrolling panel.
-
-   `line-height: 0` kills the descender gap an inline-block otherwise reserves
-   under itself, which would show up as a few stray pixels of padding. */
+/* The rig's box.
+ *
+ * No fixed height. The WebGL fan this replaced needed one — its canvas was
+ * absolutely positioned and would have collapsed the stage to nothing — but the
+ * loader is ordinary flow content that sizes itself.
+ *
+ * The width is STATED rather than a percentage, for the reason set out in
+ * `UplinkLoader.module.css`: several callers put this inside a flex column with
+ * `align-items: center`, which hands its children `fit-content`, and a
+ * percentage there resolves against a box sized to this element's own content. */
 .stage {
-  display: inline-block;
+  display: block;
   position: relative;
-  width: min(100%, 22rem);
-  height: 5.5rem;
-  margin-bottom: 0.9rem;
-  line-height: 0;
-  vertical-align: middle;
+  width: 42rem;
+  max-width: 100%;
+  margin: 0 auto 1.1rem;
 }
 
-/* Was the whole loading state, and is still the part that means anything — a
-   screen reader and a reduced-motion reader get exactly what they got before.
-   Colour, size and alignment all inherit from the caller. */
+/* Was the whole loading state, and is still the part that means anything — the
+   rig itself is `aria-hidden`, so this sentence is the accessible name of the
+   wait. Colour and size are set here now; they used to be inherited from the
+   caller's notice class, which is no longer applied. A caller that passes its
+   own headings (the meta board sends an `h2` and two paragraphs) still styles
+   those itself.
+
+   The 56ch measure is the one thing kept from those notice classes: it is the
+   right line length for a sentence, and it belongs on the SENTENCE rather than
+   on a box that also has to hold a 42rem gauge — which is exactly the mistake
+   that squeezed the rig to 393px on the meta board. */
 .label {
-  margin: 0;
+  margin: 0 auto;
+  max-width: 56ch;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
 }
 
-/* No canvas is mounted under reduced motion, so the empty stage would leave a
-   5.5rem hole above the copy. Collapse it and the state is verbatim what it was
-   before this component existed. */
-@media (prefers-reduced-motion: reduce) {
-  .stage {
-    display: none;
-  }
-}
+/* NOTE: there is deliberately no `prefers-reduced-motion` rule hiding the stage
+   here, and there used to be. The card fan was decoration, so collapsing it left
+   the state verbatim what it had been. A progress readout is information — a
+   reader who does not want motion still wants to know how far along the read
+   is — so the rig stays, and `UplinkLoader.module.css` drops its flashes
+   instead. */

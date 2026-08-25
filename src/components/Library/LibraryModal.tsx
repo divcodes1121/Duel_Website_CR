@@ -80,7 +80,7 @@ export function LibraryModal({ onClose }: LibraryModalProps) {
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h2 className={styles.dialogTitle}>My Decks</h2>
-          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Close">
+          <button type="button" className={styles.closeButton} data-metal onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>

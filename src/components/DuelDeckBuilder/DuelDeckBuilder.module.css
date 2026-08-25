@@ -235,7 +235,8 @@
   font-size: 0.7rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  opacity: 0.8;
+  /* Was dimmed with opacity, which composited the ink back to grey and so
+     undid the full-contrast text pass. Hierarchy here is size and weight. */
 }
 
 @media (max-width: 62rem) {

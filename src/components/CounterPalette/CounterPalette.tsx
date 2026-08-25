@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DuelDeckSet } from '../../types/deck';
 import { useBuilderStore } from '../../state/store';
-import { useThemeStore } from '../../state/themeStore';
 import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
 import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { ProfileMenu } from '../Profile/ProfileMenu';
@@ -10,6 +9,9 @@ import { DeckOrbit } from '../../three/DeckOrbit';
 import libStyles from '../Library/Library.module.css';
 import homeStyles from '../DecksHome/DecksHome.module.css';
 import styles from './CounterPalette.module.css';
+import { ThemeToggle } from '../Theme/ThemeToggle';
+import { Filmstrip } from '../Filmstrip/Filmstrip';
+import { previewIconFor } from '../../utils/deckPreview';
 
 function PaletteIcon({ size = 16 }: { size?: number }) {
   return (
@@ -81,58 +83,59 @@ function FolderGallery() {
       )}
 
       <div className={styles.folderGrid}>
-        {folders.map((folder) => (
-          <div key={folder.id} className={styles.folderCard}>
-            <button
-              type="button"
-              className={styles.folderBody}
-              onClick={() => openPaletteFolder(folder.id)}
-              title={`Open "${folder.name}"`}
-            >
-              <span className={styles.folderIcon}>
-                <PaletteIcon size={22} />
-              </span>
-              {renamingId === folder.id ? (
-                <input
-                  className={styles.renameInput}
-                  value={renameDraft}
-                  autoFocus
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => setRenameDraft(e.target.value)}
-                  onBlur={() => commitRename(folder.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') commitRename(folder.id);
-                    if (e.key === 'Escape') setRenamingId(null);
-                  }}
-                />
-              ) : (
-                <span className={styles.folderName}>{folder.name}</span>
-              )}
-              <span className={styles.folderMeta}>
-                {folder.decks.length} deck{folder.decks.length === 1 ? '' : 's'}
-              </span>
-            </button>
-            <div className={styles.folderActions}>
-              <button
-                type="button"
-                className={styles.folderAction}
-                onClick={() => {
-                  setRenameDraft(folder.name);
-                  setRenamingId(folder.id);
+      {/* THE FOLDER GALLERY IS A FILMSTRIP.
+          Each folder is a card showing the first four decks it holds, so the
+          thing you are choosing between is visible rather than a name and a
+          count. Rename and Delete moved to the strip's `actions` slot, which
+          renders them under the CENTRED folder only — they cannot live inside
+          the card, because the card is a button and a button may not contain
+          buttons. */}
+      <Filmstrip
+        label="Counter folders"
+        hue="blue"
+        items={folders.map((folder, i) => ({
+          key: folder.id,
+          index: i + 1,
+          title: folder.name,
+          subtitle: `${folder.decks.length} deck${folder.decks.length === 1 ? '' : 's'}`,
+          media: <FolderPreview folder={folder} />,
+          onOpen: () => openPaletteFolder(folder.id),
+          actions:
+            renamingId === folder.id ? (
+              <input
+                className={styles.renameInput}
+                value={renameDraft}
+                autoFocus
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onBlur={() => commitRename(folder.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitRename(folder.id);
+                  if (e.key === 'Escape') setRenamingId(null);
                 }}
-              >
-                Rename
-              </button>
-              <button
-                type="button"
-                className={`${styles.folderAction} ${styles.folderActionDanger}`}
-                onClick={() => handleDelete(folder)}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
+              />
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={styles.folderAction}
+                  onClick={() => {
+                    setRenameDraft(folder.name);
+                    setRenamingId(folder.id);
+                  }}
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.folderAction} ${styles.folderActionDanger}`}
+                  onClick={() => handleDelete(folder)}
+                >
+                  Delete
+                </button>
+              </>
+            ),
+        }))}
+      />
 
         <button type="button" className={styles.addFolder} onClick={addPaletteFolder}>
           <span className={homeStyles.addDeckPlus}>+</span>
@@ -262,9 +265,43 @@ function FolderView({ folder }: { folder: DuelDeckSet }) {
 }
 
 /** `embedded` renders without the page nav — the dashboard shell provides it. */
+/** A folder's face in the filmstrip: one icon per deck it holds, up to four.
+ *
+ *  It uses the SAME art selection the live slots use, through the deck's own
+ *  first filled slot, so a folder's face matches what is inside it rather than
+ *  being a generic glyph. An empty folder keeps the palette mark. */
+function FolderPreview({ folder }: { folder: DuelDeckSet }) {
+  /* THE FIRST FILLED SLOT OF EACH DECK, WITH ITS REAL ART.
+     This asked `getCardIconUrl` directly at first, which draws the BASE card —
+     so a folder holding an evolution or a hero deck showed the plain version,
+     which is the one thing a preview must not do. `previewIconFor` makes the
+     same choice the live slots make. */
+  const faces = folder.decks
+    .map((deck) => {
+      const i = deck.slots.findIndex((k) => k !== null);
+      const key = i >= 0 ? deck.slots[i] : null;
+      return key ? { key: `${key}-${i}`, src: previewIconFor(deck, i, key) } : null;
+    })
+    .filter((f): f is { key: string; src: string } => f !== null)
+    .slice(0, 4);
+
+  if (faces.length === 0) {
+    return (
+      <span className={styles.folderEmptyFace}>
+        <PaletteIcon size={26} />
+      </span>
+    );
+  }
+  return (
+    <>
+      {faces.map((f) => (
+        <img key={f.key} src={f.src} alt="" draggable={false} />
+      ))}
+    </>
+  );
+}
+
 export function CounterPalette({ embedded = false }: { embedded?: boolean } = {}) {
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const folders = useBuilderStore((s) => s.paletteFolders);
   const activeId = useBuilderStore((s) => s.activePaletteFolderId);
   const clearSelection = useBuilderStore((s) => s.clearSelection);
@@ -320,15 +357,7 @@ export function CounterPalette({ embedded = false }: { embedded?: boolean } = {}
           >
             Deck&apos;s Home →
           </button>
-          <button
-            type="button"
-            className={homeStyles.themeButton}
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark' ? '☾' : '☀'}
-          </button>
+          <ThemeToggle size="1.8rem" />
           <ProfileMenu triggerClassName={homeStyles.themeButton} />
         </div>
       </header>

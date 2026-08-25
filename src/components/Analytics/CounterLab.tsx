@@ -14,6 +14,7 @@ import { ShieldIcon } from '../Dashboard/icons';
 import { PasteIntro, PasteHeader } from './PasteIntro';
 import { ReadingState } from './ReadingState';
 import styles from './CounterLab.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 const pct = (v: number) => `${v.toFixed(1)}%`;
 const num = (v: number) => v.toLocaleString();
@@ -76,6 +77,7 @@ export function CounterLab() {
   const [drawn, setDrawn] = useState<DrawnDeck | null>(null);
   const [report, setReport] = useState<CountersReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const reading = useHeldLoading(loading);
   const [failed, setFailed] = useState(false);
 
   /** Paste, press Find counters, THEN the results — and the box empties as they
@@ -180,8 +182,8 @@ export function CounterLab() {
         ))}
       </div>
 
-      {loading && (
-        <ReadingState className={styles.empty} hue="pink">
+      {reading && (
+        <ReadingState k="counter-lab" hue="pink">
           Walking the evidence ladder…
         </ReadingState>
       )}

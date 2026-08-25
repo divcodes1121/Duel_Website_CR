@@ -97,10 +97,12 @@
      values, because the brief is a light-mode system and an auto-flip of it
      would be exactly the one-theme-only pass this project keeps being caught
      by. */
-  --text: #111318;
-  --text-secondary: #6b6f78;
-  --text-muted: #6b6f78;
-  --text-faint: #969aa3;
+  /* Flattened with the app ladder — see the note in index.css. All four steps
+     are the same black now; separation is size and weight. */
+  --text: #000000;
+  --text-secondary: #000000;
+  --text-muted: #000000;
+  --text-faint: #000000;
 
   --surface: #ffffff;
   --surface-nested: #fcfcfc;
@@ -148,10 +150,10 @@
   --pri-border: #33285a;
 
   /* Back to the app's dark ladder — the brief specifies light only. */
-  --text: #ededed;
-  --text-secondary: #a1a1a1;
-  --text-muted: #a1a1a1;
-  --text-faint: #8a8a8a;
+  --text: #ffffff;
+  --text-secondary: #ffffff;
+  --text-muted: #ffffff;
+  --text-faint: #ffffff;
 
   --surface: #1a1a1a;
   --surface-nested: #141414;
@@ -369,6 +371,7 @@
 }
 
 .rangeApply {
+  composes: cta from '../../styles/cta.module.css';
   grid-column: 1 / -1;
   padding: 0.45rem;
   border-radius: 9px;

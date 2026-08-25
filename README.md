@@ -55,7 +55,14 @@ bot's SQLite files read-only.
 | Phase 24B | hosting plan written; deployment **blocked on auth**, not on the model |
 | Phase 24C | boundary built: API authenticated, same-origin Vercel proxy, tunnel hop **verified for real** |
 | UI | WebGL fireflies behind the whole shell in **both themes**, wearing the open area's hue; the painted login backdrop — see `docs/UI.md` |
-| UI — motion pass | **shipped and browser-verified.** A reading state on all 12 slow loads, the deck column's aura + placement burst + completion sweep, a card ring on the empty paste screens. One canvas per screen plus the backdrop; three.js chunk unchanged |
+| UI — motion pass | **shipped and browser-verified.** The deck column's aura + placement burst + completion sweep, a card ring on the empty paste screens. One canvas per screen plus the backdrop; three.js chunk unchanged |
+| UI — top dock | **shipped, 33/33 browser checks.** The top nav is a proximity dock: items expand downward on a spring toward the pointer, and answer keyboard focus with the same field |
+| UI — filmstrip | **shipped on the landing screen's seven analytics areas and the Counter Hub folder gallery, 10/10 browser checks.** **Not applied to the meta board or the saved decks** — both would remove function; see the section |
+| UI — text contrast | **shipped, swept in a browser.** Every neutral font is now pure white on dark and pure black on light. Coloured ink untouched. 10 screen/theme sweeps report no grey text left |
+| UI — theme switch | **shipped, 16/16 browser checks.** Five separate theme buttons became one skeuomorphic toggle: a recessed groove, a raised cap that slides, and `role="switch"` semantics they never had |
+| UI — circular buttons | **shipped, verified in a browser.** The 14 circular icon controls take a travelling chromatic rim and a press ripple, adapted from ThreeUI's liquid-metal button. One shared canvas, idle until you touch it |
+| UI — primary buttons | **shipped, 14/14 browser checks.** The twelve rectangular solid CTAs share one treatment: a masked gradient edge and a sheen that sweeps on hover, both mixed from `--on-solid` so the file names no colour |
+| UI — loading states | **shipped, 23/23 then 16/16 browser checks.** The WebGL card fan is **deleted**; all 12 slow loads now show a measured progress rig that paces itself from how long the screen actually took before |
 | tests | **1,236 Python checks** across 21 suites, 172 vitest, `tsc -b` and `npm run build` clean |
 | preserved | `revamp` pushed through `778fdde` — analytics boundary, tunnel verification and the UI pass all on the remote. `main` still runs `6ab701d` |
 
@@ -117,10 +124,14 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
 28. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
 29. [The WebGL layer](#the-webgl-layer)
-30. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
-31. [Testing and verification](#testing-and-verification)
-32. [Project layout](#project-layout)
-33. [Deliberately not done](#deliberately-not-done)
+30. [The top navigation dock](#the-top-navigation-dock)
+31. [The primary buttons](#the-primary-buttons)
+32. [The theme switch](#the-theme-switch)
+33. [The filmstrip](#the-filmstrip)
+34. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
+35. [Testing and verification](#testing-and-verification)
+36. [Project layout](#project-layout)
+37. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -3603,17 +3614,56 @@ Full detail is in **`docs/UI.md`**. The short version:
 
 **What ships** is four components. Drifting **fireflies** — over the landing
 hero, and pinned to the viewport behind the whole signed-in shell — plus the
-painted castle backdrop on the login page. A **reading deck** of riffling cards
-on every slow read. A **deck-column layer** carrying three effects on one
-canvas. And a **card ring** behind the screens that are waiting to be given
-something.
+painted castle backdrop on the login page. A **deck-column layer** carrying
+three effects on one canvas. A **card ring** behind the screens that are waiting
+to be given something. And **liquid metal** on the circular icon controls.
 
 | | where | what it does |
 |---|---|---|
 | `Fireflies` | landing hero, app-wide backdrop, login, the Pro gate | ambient; takes the open area's hue everywhere but the landing |
-| `ReadingDeck` | 12 loading states across 9 files | a 30–166 s wait stops looking like a hang |
 | `DeckFx` | the deck column on all three deck screens | aura on empty special slots · burst on placement · sweep at 8/8 |
 | `DeckOrbit` | both paste screens, the empty palette gallery | gives an empty invitation a subject |
+| `LiquidMetal` | every circular icon control, app-wide | a travelling chromatic rim on hover and a ripple on press |
+
+`LiquidMetal` is the one piece here that is **raw WebGL2 rather than three.js** —
+the reference is, there is no library to defer, and the whole thing is ~10 kB in
+the main bundle. `three.module` is unchanged and still absent from it.
+
+**There was a fourth, and it is gone.** `ReadingDeck` drew eight card plates
+riffling in a WebGL fan on every slow read. It is deleted, replaced by
+`UplinkLoader`, which is DOM and CSS — see
+[The loading states](#the-loading-states-were-the-real-gap). The loading screens
+therefore pull no three.js at all now and spend none of the ~16 WebGL contexts
+a document is allowed.
+
+### The motes reach the foot of the page, and did not used to
+
+The app-wide layer widened its **horizontal** spread for covering a whole
+viewport — `4.2` against a hero panel's `2.4` — but its **vertical** span was
+left at the panel value, hardcoded in two places: the position buffer and the
+shader's `mod`. Motes lived in `y ±1.2` and the edge fade
+`smoothstep(1.2, 0.75, …)` reached *zero* at exactly `±1.2`, while the camera
+sees `±1.41` at the near depth band and `±1.99` at the far one. The bottom of
+every page was simply outside the field.
+
+Measured by diffing consecutive frames, per fifth of the viewport, averaged
+over five pairs — changed pixels per 10,000:
+
+| band | before | after |
+|---|---:|---:|
+| 1 (top) | 26.6 | 21.3 |
+| 2 | 36.0 | 38.1 |
+| 3 | 50.8 | 30.0 |
+| 4 | 21.3 | 38.3 |
+| **5 (foot)** | **8.9** | **42.2** |
+| foot ÷ page mean | **0.31×** | **1.24×** |
+
+The span is now **one value** feeding both the buffer and the shader — those
+two disagreeing is how the bug happened — and the fade is a *fraction* of it
+rather than two literals, so widening the band can never leave the fade
+behind. `5.6` covers the far band with the fade still ~86% open at the very
+edge. The count rose 240 → 520 with it, or the same motes would just be spread
+thinner over 2.33× the height. Still one draw call.
 
 **three.js is never in the main bundle.** It is a dynamic import, so it lands in
 its own 734 kB chunk (190 kB gzipped) and arrives only when something renders —
@@ -3664,6 +3714,82 @@ a loop nobody can see is still waste, so every frame is gated on an
 `prefers-reduced-motion` mounts **no canvas at all**, and every piece keeps the
 flat markup it decorates as the fallback.
 
+### Liquid metal on the circular controls
+
+The 14 circular icon buttons — theme, notifications, the avatar, the rail
+toggle, the search submit, the library toggle, the modal closes — take a
+travelling chromatic rim on hover and a faceted ripple on press, adapted from
+ThreeUI's `LiquidMetalButton` (Play Circle).
+
+**Most of the reference could not come across, and the reason is size.** It is a
+hero control: its diameter clamps to 72–160px, and the bulk of the effect is an
+interior dispersion field — a scalar field painted through a soft plateau once
+per wavelength — softened by a half-res gaussian and bloomed through four more
+blur passes. Twelve passes a frame.
+
+Every circular button in this app is between 1.1rem and 2.2rem. **18 to 35
+pixels.** The interior ribbons would be sub-pixel and the bloom would be
+blurring something invisible. What survives the shrink is the part that is a
+thin *stroke* rather than an area:
+
+| kept | dropped |
+|---|---|
+| the travelling chromatic rim, with offsets both across the stroke and along it | the interior dispersion field |
+| the faceted press ripple, crest as a cusp rather than a swell | the half-res softening pass |
+| the hover / press easing, asymmetric as in the source | the four-pass bloom chain |
+
+**One canvas, not one per button.** The reference gives each button its own
+iframe with its own WebGL2 context. A browser allows about 16 per document, and
+this project has already paid for that once — the removed card foil had to be
+rebuilt onto a single shared renderer because the picker draws 122 tiles. So
+this is one canvas that finds every `[data-metal]` control and draws them
+instanced, in a single call. Exactly the shape `DeckFx` uses for slot rects.
+
+**It is idle until you touch it, and that came free.** `CLAUDE.md` bans loops
+nobody can see; the reference is already built that way, its scene shader
+opening with `if(uHover <= 0.0015 …){ o = vec4(0.); return; }`. So the rAF only
+spins while something is hovered, pressed, or carrying a live ripple. Measured:
+**0 changed pixels** between the resting frame and the frame 1.6 s after the
+pointer leaves, with the loop torn down.
+
+**The blend mode is per theme**, the same lesson the fireflies already record:
+additive is only correct on black. On a near-white page colour + white clamps to
+white and the rim is invisible however far it is turned up, so light paints a
+muted rim with normal blending instead. The tint is read from `--text` on dark
+and `--text-muted` on light rather than carried as a hex.
+
+Verified by pixel counts, and the isolation matters: comparing two frames **both
+under CSS `:hover`** shows 92 changed pixels, which can only be the shader, since
+the CSS state is identical in both. A press changes 795 (peak 206) and decays
+over the following frames.
+
+#### Four bugs, and one of them made the effect look like it worked
+
+**A `dt` of zero freezes every ease, and the loop then judged itself finished.**
+All the easing here is `1 - pow(k, dt)`, and `pow(k, 0)` is 1 — so a first frame
+with `dt = 0` produces a step of exactly zero. Nothing eased, so nothing was
+drawn, so the liveness test saw an empty draw list and tore the loop down after
+a single frame. Measured: **1 frame in 500 ms of hovering.** The fix is a
+nominal first `dt` *and* deciding liveness from the input targets rather than
+from the eased values — asking "is anything lit yet?" can never start a
+fade-in, because on the frame the pointer arrives nothing is lit yet.
+
+**And it looked like it was working the whole time.** The first check compared a
+resting frame with a hovered one, saw 3,926 changed pixels, and passed. Those
+pixels were the button's own CSS `:hover` background. A verification that
+straddles a state change measures everything that changed, not the thing under
+test.
+
+**`bindAttribLocation` after `linkProgram` is a silent no-op.** It only takes
+effect before linking, so the buffers were pointed at locations 0/1/2 on faith
+while the driver assigned whatever it liked. Declare `layout(location = N)` in
+the shader instead.
+
+**A backtick inside a GLSL comment ended the shader string — a fourth time**, in
+the comment written to explain the fix above, three lines below a warning about
+exactly that. Both shaders now carry an assertion in the verification that they
+contain no backtick at all.
+
 ### The loading states were the real gap
 
 Not a visual complaint. Twelve `Reading…` strings across nine files, each one
@@ -3671,26 +3797,150 @@ line of `--text-muted` centred in an empty panel — against reads that take
 **29–57 s** for the Coach and **~166 s** for a cold meta rollup on the spinning
 H: volume. Captured in a browser, Player Analysis and Coach Assist were still
 showing that single line after nine seconds. A thirty-second wait with no
-feedback does not read as slow, it reads as hung, and that difference is the
-only thing `ReadingDeck` exists for.
+feedback does not read as slow, it reads as hung.
 
-It draws what the server is doing: eight card plates riffling in a travelling
-wave, one instanced draw call, rounded corners from an SDF rather than a
-texture. All twelve call sites collapse onto one `ReadingState`, which takes the
-caller's own notice class so it changes what is *inside* the box and never the
-box — the nine screens keep the layouts they had.
+That was first answered with a WebGL card fan. It proved the tab had not hung
+and could say nothing else — and **what a reader wants at second forty is how
+much longer**. So the fan was deleted and `UplinkLoader` took its place: a
+stepped gauge, a percentage, an elapsed clock and a remaining estimate, adapted
+from ThreeUI's `UplinkLoader`. All twelve call sites still collapse onto one
+`ReadingState`.
 
-Two details that were not obvious:
+#### The progress is measured, not scripted
 
-* **The stage is an `inline-block`, so it inherits the caller's `text-align`.**
-  Seven callers centre their notice; three are left-aligned blocks sitting in a
-  results flow. A flex column with `align-items: center` put a centred canvas
-  over left-aligned copy on those three and read as a misalignment. Measured
-  after: 455/455 px on a centred caller, `leftGap: 0` on a left one.
-* **The label is a `div`, not a `p`.** Four call sites were paragraphs, and the
-  meta board's cold start passes a heading plus two paragraphs plus an elapsed
-  counter. A `<p>` may not contain those — the browser closes it early and the
-  copy escapes the box.
+The reference drives its bar from a hardcoded keyframe timeline and **loops
+forever**: 8.6 s of scripted fill, a hold at 100%, a blank, then round again.
+Dropped in unchanged that would have been worse than the fan it replaced — a bar
+reaching 100% and restarting while the server is still reading states the
+opposite of the truth.
+
+`fetch` reports no progress for these calls; the API answers with one JSON body
+at the end. So there are exactly three honest inputs, and the loader uses all
+three:
+
+| | |
+|---|---|
+| **elapsed** | real, from `performance.now()` |
+| **expected** | `state/loadTiming.ts` — the **median of how long this screen actually took on this browser**, last five samples, seeded from the figures above |
+| **completion** | the component unmounting, which records the sample that sharpens the next estimate |
+
+Measured live: a 6 s stalled load stored **6914 ms** against an observed
+**6866 ms**. Loads are keyed per wait, not per screen — the Coach's history read
+and its matchup scoring are different costs, and the meta board's cold rollup is
+nothing like its warm read.
+
+The curve is **linear across the expected duration then easing**, never reaching
+100%: 100 would mean the data is here, and if it were, this component would be
+unmounted. A single exponential was tried first and front-loaded badly — the
+first second ate a third of the bar. Verified monotonic across twelve samples
+(`1 6 11 15 21 25 29 33 37 40 43 46`), never decreasing, never wrapping.
+
+The median is deliberate rather than a mean: a sample is recorded on unmount,
+and unmount also happens when a read fails fast or the user navigates away
+mid-load. Those land as short outliers that a median of five ignores and a mean
+would let drag the whole estimate down.
+
+#### Two floors, from one constant
+
+`MIN_LOADING_MS` is **3 s**, exported by `hooks/useHeldLoading.ts` and imported
+by the loader's ramp, so the bar reaches the top of its travel exactly as the
+hold expires. Declared separately they would drift, and a bar that leaves at 70%
+reads as broken. At that floor the ramp is ~31% a second.
+
+`useHeldLoading` keeps the loading state on screen for that minimum, which
+**does delay data that has already arrived**. That is a real cost, taken
+deliberately: a loading state that flashes and vanishes reads as a glitch — the
+eye registers that *something* happened and cannot tell what. The floor almost
+never binds against a 10–160 s read; it binds on a warm cache, which is exactly
+the case that looked broken. Measured on an instantly-aborted fetch: **3446 ms**.
+
+The hook takes **the whole guard expression, not a flag**. The meta board's is
+`loading && !board`, because it refreshes in the background and must not blank a
+populated screen — and `!board` flips at the same instant the data lands, so
+holding a bare `loading` would have let the guard fall through anyway.
+
+The one guard deliberately **not** held is the meta board's cold rollup
+(`board.building`): a server-side build over millions of rows that reports its
+own elapsed seconds, so a 3 s floor there is meaningless.
+
+#### It paints nothing
+
+There was a `className` prop, and every call site handed over its own `.notice`
+/ `.empty` / `.loading` — glass surfaces with a border, a fill and a
+`backdrop-filter`. The idea was that the component changed what was *inside* the
+box and never the box. What it produced was a grey card holding the rig's own
+frame, in the middle of an otherwise empty screen, with the app-wide fireflies
+stopping dead at its edge.
+
+The prop is gone. `MetaDecks` uses a `.panelBare` for its two loading branches,
+and the whole chain from the rig up to `<body>` is transparent — verified
+element by element, including that no `backdrop-filter` survives anywhere in it.
+The rig is 42 rem, centred horizontally and vertically in the content area
+(measured 20 px and 38 px off the middle), and the backdrop runs behind it
+unbroken. That is the whole reason `--surface`, `--surface-nested` and
+`--glass-fill` were made translucent in the first place.
+
+Vertical centring needed two mechanisms, because the callers disagree about what
+they are: `flex: 1` for the ones already flex columns, `min-height: 78vh` for
+the plain blocks that would otherwise collapse to the rig's own height. 52vh was
+tried and was not enough — the content area starts below the topbar, so a
+half-viewport box is centred within itself and still sits in the upper third.
+
+#### The furniture
+
+The reference's rig is more than a bar, and a 42 rem gauge alone read as
+floating in an empty box. What is kept: **corner brackets with rotated
+diamonds**, **mirrored side rails** — a wire into two caps, then a module with a
+hatch, a reticle, an indicator, a slab and four LEDs — a **haze** pooling under
+the lit run only, a static **scanline** wash, and a **status line** across the
+foot. The right rail is the left one under a single `scaleX(-1)`, exactly as the
+reference does it, rather than a second set of offsets to keep in step.
+
+**Every infinite animation was dropped.** The reference runs a procedural film
+grain regenerating on a 0.6 s step loop, a neon flicker, a diamond pulse and a
+cap pulse. `index.css` bans infinite animation project-wide and is specific
+about why — the old CSS glow loops animated `box-shadow` and `filter`, and that
+is what made the app lag. A full-viewport animated grain is the worst case of
+exactly that class. What survives is one-shot: a tick igniting as it lights, and
+the plate flashing when the bar fills. The haze is a gradient sized by a custom
+property rather than a blurred div, because `filter: blur()` is the property
+those old loops thrashed.
+
+**The status line quotes something true.** The reference prints scripted phases
+("SYNCHRONIZING NODE ARRAY"); inventing stages for a database read would be
+theatre. It shows the screen's own name and what is left of the measured
+estimate, and says `ESTIMATE EXCEEDED` once there is no estimate left to quote.
+
+#### Four things that were not obvious
+
+* **The colour is `--hue-*`, the ink step, never `--solid-*`.** These are bare
+  graphic marks that must be seen *against* the panel; the solid ramp is graded
+  to carry white *on* itself and would put the lit ticks darker than the dark
+  page. All four verified — violet, blue, green, and pink for the maroon
+  screens — and re-measured across a theme toggle.
+* **Unlit ticks are dim hue, not grey.** A neutral gauge under a coloured one
+  read as two unrelated objects. The reference does the same with `--green-dim`.
+* **A percentage width cannot size this.** Several callers put the loading state
+  inside a flex column with `align-items: center`, which hands children
+  `fit-content` — so `min(100%, 42rem)` resolved against a box sized to the
+  rig's own content and it shrink-wrapped to **331 px**. The width is stated,
+  with `max-width: 100%` to clamp it.
+* **A prose measure is not a layout measure.** `MetaDecks`' notice carried
+  `max-width: 56ch`, right for its cold-start paragraph and wrong for a gauge:
+  it squeezed the rig to **393 px** there while every other screen gave it 672.
+  The measure moved onto the copy itself.
+
+**The label is still a `div`, not a `p`.** Four call sites were paragraphs, and
+the meta board's cold start passes a heading plus two paragraphs plus a counter.
+A `<p>` may not contain those — the browser closes it early and the copy escapes
+the box. That counter now reads "Rollup running 48s" rather than "48s elapsed",
+because the rig shows an elapsed figure too and the two are different numbers:
+one is how long *you* have waited, the other how long the background rollup has
+been running.
+
+**It renders under reduced motion**, where the fan did not. The fan was
+decoration and hiding it lost nothing; a progress readout is information, and a
+reader who does not want animation still wants the number. Only the flashes go.
 
 ### The deck column: three effects, one canvas
 
@@ -3792,9 +4042,495 @@ store on its old value**, so a `theme === 'dark'` guard stays false, the layer
 never mounts, and the check passes against nothing.
 
 
+## The top navigation dock
+
+The six top-level items — Home, Analytics, Deck Vault, Duel Builder, Counter
+Hub, Meta — sit in a glass pill and **expand downward on a spring as the pointer
+nears them**, adapted from ThreeUI's `AnimatedTopDock`. Keyboard focus drives the
+same field, lighting the focused item fully and its immediate neighbours faintly,
+so tabbing through reads as the dock rather than as a separate highlight.
+
+`components/Dashboard/TopDock.tsx` is the markup; `topDockController.ts` is the
+physics. They are split because the controller is plain DOM — it measures and
+writes boxes every frame, which is not something React should re-render its way
+through — and because the controller is built **once** and never rebuilt when the
+items change. It re-queries `[data-dock-item]` on every measure and its
+`ResizeObserver` catches the rest, so a route change does not reset every spring
+to zero velocity at exactly the moment the pointer is most likely to be on it.
+Same reasoning as the hue ref in `three/Fireflies.tsx`.
+
+**Three things changed from the reference, and each is a rule this project
+already held.**
+
+**The loop stops.** The reference runs `requestAnimationFrame` forever and checks
+a dirty flag inside it. That is the shape `index.css` bans, and the reason
+`three/runtime.ts` gates every WebGL frame on visibility. Here the rAF is started
+by an interaction and tears itself down the moment every spring settles — then it
+clears the inline geometry, so a resting dock is pure stylesheet and a later media
+query is not fighting stale pixel widths. Verified: **0 style writes in 600 ms at
+rest.** The springs snap and zero their velocity inside a threshold, because a
+spring converging asymptotically never reaches a frame it can call finished,
+which is precisely how the reference ends up needing a permanent loop.
+
+**No `keydown` handler.** The reference intercepts Enter and Space and calls
+`item.click()`. These are real `<button>` elements, which already fire `click` on
+both — keeping it would have fired every nav handler twice.
+
+**Every colour is a token.** The reference hardcodes its palette; the dock is
+built from `--glass-fill`, `--border`, `--text-muted` and the selection tokens,
+so it works in both themes with no `[data-theme]` branch of its own.
+
+**The active indicator stayed this app's.** The reference inverts the current
+item into a solid white pill. Selection here is violet and is carried by a rule,
+for the reason the old `.topNavItem` spelled out — on an underline tab the
+coloured *rule* is the indicator, and a pastel label beside a solid sidebar row
+is what read as washed. The dock keeps the rule and adds a wash so the item still
+reads as one object inside a glass shell. `aria-current="page"` replaced
+`aria-pressed`: these are destinations, not toggles.
+
+**The proximity field had to be retuned, and reading the code would not have
+caught it.** Proximity is measured centre to centre, so the reference's `122`
+cannot be copied: its items are 94 px wide and ours run 87–127 px. At `122` the
+falloff measured **0.17 px** on the nearest neighbour — one item moving alone,
+which is not a dock. At `210` the profile is **4.17 / 10.98 / 3.66 px** across
+three items.
+
+**One deliberate deviation.** It writes `width` and `height` per frame, against
+the transform-and-opacity-only rule. The magnification *is* neighbours being
+pushed aside and a transform cannot push a sibling; `scale` was the alternative
+and it distorts the label text, which is the entire content of these items. What
+made the banned CSS loops expensive was being *infinite* and animating
+`box-shadow`/`filter` across the whole page. This relayouts six flex children
+inside one bar, only while the pointer is physically on the dock.
+
+`.topbar` went to `z-index: 2` for this. It and `.body` were both at `1`, and
+with `.body` later in the DOM the content panel painted over the bar — so items
+dropping below the topbar's edge were occluded by the page they hang over.
+
+**Below 900 px it is a plain scrolling nav.** A coarse pointer has no hover
+position to measure, `prefers-reduced-motion` disables it outright, and under
+1000 px the labels go and the dock is icons, with `aria-label` carrying the name
+on every item. Verified in all three states.
+
+## The primary buttons
+
+Twelve buttons across the app wear a solid fill and carry `--on-solid` text —
+Search, Analyze, the three tool CTAs, Apply on four date pickers, and the paste
+and action buttons on the analytics screens. They now share one treatment,
+adapted from ThreeUI's `RectangleButtons` family, in
+`src/styles/cta.module.css`. Each button opts in with
+`composes: cta from '../../styles/cta.module.css'` and keeps everything else it
+had.
+
+Two of the family's treatments carry the whole idea:
+
+| | from | what it does |
+|---|---|---|
+| **the lit edge** | `aster-glass` | a 1px gradient border, bright where light would fall and near-gone on the opposite side |
+| **the sheen** | `trochil-signal` | a diagonal wash parked off the left edge that slides across on hover |
+
+Plus the family's lift on hover and return on press.
+
+**The edge is a real gradient border, which is why it is masked.** A
+gradient-filled box is clipped against its own content box with
+`mask-composite: exclude`, leaving exactly the 1px ring. `border-image` cannot
+do this with a border radius. Safari still needs the `-webkit-` pair, and its
+keyword is `xor` rather than `exclude`.
+
+### It defines no colour, and that is what let it go on twelve buttons
+
+The reference hardcodes white for both layers — `rgba(255,255,255,.72)` — which
+is fine because every one of its variants sits on a dark ground. These buttons
+do not agree on a ground: they wear `--solid-maroon`, `--solid-green`,
+`--solid-violet` and whatever `--tool-solid` a panel sets, in two themes.
+
+So both layers are mixed from **`--on-solid`**, the token already guaranteed to
+read against whichever fill the button wears — and which is theme-scoped
+precisely because white is wrong on light-mode green. The edge and the sheen are
+the button's own ink at low alpha. No per-button branch, no hue argument, no
+`[data-theme]` rule. Shape is inherited the same way: every layer is
+`border-radius: inherit`, so a 9px button and a 14px one both get a correct edge
+with nothing passed in.
+
+### The stacking is the fiddly part
+
+Both layers are `z-index: -1` under `isolation: isolate`. Within a stacking
+context the paint order is: the element's own background, then negative-z
+descendants, then inline content — so a negative-z pseudo-element lands **above
+the fill and below the label**. That is what makes this work on buttons whose
+label is a bare text node.
+
+The obvious alternative — a positive z-index plus `.cta > * { position: relative }`
+— silently paints the sheen *over* the text on every button that does not wrap
+its label in an element, and half of these do not.
+
+### Two things the browser caught
+
+**A local `:hover` transform quietly overrode the shared one, including under
+reduced motion.** `.analyzeButton:hover` restated `transform: translateY(-1px)`,
+which beat the shared `-2px` and — because the shared rule drops the lift under
+`prefers-reduced-motion` and the local one did not — kept lifting for readers who
+had asked for no motion. Measured: the button still moved 364.48 → 363.48 with
+`reducedMotion: 'reduce'`. The local transform is gone; colour and glow stay,
+since those are the button's identity rather than motion.
+
+**One of the twelve is a `span`, and its hover target is its parent.**
+`.toolCta` is a label inside a clickable panel, so the shared `:hover` never
+fires for it — the pointer is on `.toolPanel`. Three rules forward the panel's
+hover onto the composed pseudo-elements by hand, including the reduced-motion
+case. Without them that button had an edge and a dead sheen.
+
+**Four pill-shaped CTAs were deliberately left out** — the Pro gate's Upgrade
+Now, the deck panel's launch chip, the library's primary and the login submit.
+The brief was rectangles, and a 999px radius is a different shape decision; the
+treatment would apply to them unchanged if that is wanted.
+
+## The theme switch
+
+There were **five** theme toggles: a circular icon button in the topbar, a
+two-glyph button in the builder header, and three more that were a bare `☾`/`☀`
+in a round button. Same job, five shapes, five subscriptions to the theme store.
+They are now one `ThemeToggle`, adapted from ThreeUI's `SkeuomorphicToggle`, and
+the only thing that differs between call sites is a `size`.
+
+### One knob, and the reference's own proportions
+
+Everything is expressed in units of the track height, exactly as the reference
+does it, so a caller sets `--h` and nothing else has to be kept in step:
+
+| | reference | here |
+|---|---|---|
+| track | 192 × 64 | `3h` wide |
+| padding | 6px | `0.094h` |
+| cap | 116px | `1.8125h` |
+| travel | 64px | **derived**, not restated |
+
+Travel is `--w - 2·--edge - 2·--pad - --thumb`. Deriving it is the point: the
+reference hardcodes 64px, and a hardcoded travel silently breaks the moment the
+width or the cap changes. Measured on the shipped control: **near gap 3.80px,
+far gap 3.80px** — flush at both ends.
+
+It cannot be a percentage. A percentage inside `translateX` resolves against the
+**thumb's** width, not the track's.
+
+### Where the depth comes from
+
+Skeuomorphism here is two opposed lighting stories on one control. The track is
+a **groove**: shadow inset at the top lip, highlight inset along the bottom. The
+cap is a **cap**: highlight along its top edge, shadow cast downward onto the
+track it sits in. Pressing tightens the cap's cast shadow, so it settles into
+the groove.
+
+The reference hardcodes those as white and black at fixed alphas and ships a
+whole second palette to patch between light and dark. This uses **`--highlight`,
+which is already theme-scoped** — white at 4.5% on dark, 90% on light — so the
+same declarations describe a lit groove in both themes with no `[data-theme]`
+branch of its own. That is the single thing that let the depth survive the move
+onto this palette.
+
+Checked takes `--accent-select`, because violet is what this app means by "the
+state you chose" everywhere else. Its outer bloom is gated on `--glow-core`,
+which light sets to 0%.
+
+### It is a switch, and it says so
+
+`role="switch"` with `aria-checked`, which the reference uses and the five old
+buttons did not have. Not pedantry: a button announces "Toggle theme" and tells
+you nothing about where you are, while a switch announces its state — which for
+a control whose whole job is to be in one of two states is the entire message.
+
+**Checked means dark, and the face reads state rather than action.** The toggle
+shows DARK when dark mode is on, where the old buttons showed a sun to mean
+"clicking gives you light". Both conventions exist in the wild; a switch has to
+use the first, or `aria-checked` and the label contradict each other.
+
+Native button keyboard handling is kept rather than reimplemented — Enter and
+Space already activate it, and the reference's own `keydown` handler would
+double-fire on a real button. The same reasoning as the top dock.
+
+Two consequences worth recording. **The five callers lost their store
+subscriptions**, since the toggle subscribes for itself — `tsc` found all ten
+dead bindings and the now-unused icon imports. And **the topbar one dropped
+`data-metal`**: it had liquid metal while it was a circle, and a 3:1 track is
+not one. Verified: no overflow at 1500px or 1180px.
+
+Below 720px the word is dropped and the cap shrinks to a disc — only `--w` and
+`--thumb` change and travel re-derives itself.
+
+### Every neutral font is at full contrast now
+
+Asked for directly: **grey text is gone.** `--text` and `--text-muted` are pure
+`#ffffff` on dark and pure `#000000` on light. Coloured ink — `--hue-*`,
+`--solid-*`, `--on-solid`, the chart series — is untouched.
+
+It was a four-line change because the ink is fully tokenised: a sweep for
+hardcoded greys across every module found exactly one `color: #ffffff`, on a
+painted tile. The only other place carrying its own ladder was Duel Analysis,
+which defines a scoped `--text` / `--text-secondary` / `--text-muted` /
+`--text-faint` set for its light brief — all four are flattened to match, or
+that one screen would have stayed grey while every other went to full contrast.
+
+**What it costs, stated plainly: `--text-muted` is now the same colour as
+`--text`, so the primary/secondary distinction in ink is gone.** Hierarchy has
+to come from size, weight and spacing instead. That is the trade the request
+makes, not a side effect — and it is worth knowing before someone "fixes" the
+muted token back.
+
+**It also closes both of the known contrast failures** recorded under
+[Known, measured, and not yet fixed](#known-measured-and-not-yet-fixed): the
+Duel Zone pane blurb at 4.19:1 was `--text-muted` on a violet fill, and it is
+now black or white on that fill.
+
+#### Opacity is the other way text goes grey
+
+Setting the token is only half of it. Text that is pure white inside a container
+at `opacity: 0.7` composites back to grey, and a sweep of the `color` property
+alone reports it clean — which the first pass did. A second sweep walking the
+ancestor chain and multiplying the effective opacity found five more:
+
+| | | |
+|---|---|---|
+| `.slotStub` | 0.7 | the EVO / HERO / WILD labels — **raised** |
+| `.addDeckCount` | 0.8 | a plain count label — **raised** |
+| `.statusKey` | 0.75 | the loader's status label — **raised** |
+| `.launch[aria-disabled]` | 0.4 | **left alone** |
+| `.reset[aria-disabled]`, `.tileDisabled` | 0.45 | **left alone** |
+
+The last two are deliberate. **On a disabled control the dimming IS the
+affordance** — taking it to full contrast would make a dead button look live,
+which is a functional regression dressed as a legibility win. Those three are
+the only neutral text left below full opacity anywhere in the app.
+
+## The filmstrip
+
+`components/Filmstrip/` is a browsable strip of cards adapted from ThreeUI's
+`CharacterCarousel`. A perspective stage, cards pinned to the centre and pushed
+apart by transform, and a `--focus` custom property per card driving shadow
+depth, inner hairline and media saturation together, so the centred card reads
+as the subject and its neighbours fall back. Drag, horizontal wheel, arrow keys,
+click-to-centre, position dots.
+
+**The delivery mechanism did not come across.** The reference ships as an iframe
+running its own document with its own rAF and a `postMessage` control channel —
+a shape that exists so a gallery site can drop an authored page into a box. Here
+the cards are this app's own data and have to open this app's own screens, so
+there is no iframe, no bridge and no second document. Its palette did not come
+across either: the reference is one fixed editorial scheme (`#d8c9ad` paper,
+orange indices), and this has two themes and per-section hues, so every value
+resolves from a token.
+
+**The loop stops**, like the dock and the metal: the rAF starts on an
+interaction and tears itself down once the strip settles on an index. Under
+`prefers-reduced-motion` the position snaps instead of easing — the strip is
+content, so it still renders and still browses.
+
+**Position is a float in a ref, not in state.** It changes every frame while the
+strip moves and every card's transform is written from it directly; in state it
+would re-render the strip sixty times a second. `current` *is* state, because it
+is what the rest of the UI reads and it changes once per card.
+
+### Where it is used
+
+**The landing screen's seven analytics areas.** They were a seven-across grid,
+which on a wide screen made each block a narrow column of clipped blurb and on a
+narrow one stacked into a long scroll. As a strip each area is one card at
+readable size, wearing its own hue — the same one its sidebar row and its
+section carry — through the per-item `hue`, so seven identities are not
+flattened into one.
+
+**It opens on Duel Zone**, which is the middle of the seven, so cards fan to
+*both* sides and the strip reads as something you are standing in. It carries no
+`n / 7` readout — the dot rail already says where you are, and two indicators of
+the same thing is one too many. Opening on
+the first piled every other card off to one side. The index is found by label
+rather than written as a literal, so reordering `SIDE_NAV` cannot silently move
+it to an end. The default with no `start` is the middle item, for the same
+reason.
+
+**The Counter Hub's folder gallery.** Each card shows the faces of up to four
+decks the folder holds, so what you choose between is visible rather than a name
+and a count.
+
+**Meta and the saved decks were deliberately left alone, because on both the
+carousel would remove function rather than re-skin it:**
+
+* **The meta board is a ranked comparison table.** Its content is read *down*
+  the columns — rank, use rate, win rate, across dozens of decks at once. A
+  carousel shows one deck at a time, which is the one presentation that makes
+  that comparison impossible.
+* **The saved decks are editable panels.** `DeckPanel` is where a deck is built
+  — cards drag in and out of its slots, and it carries rename, clear, import and
+  Open in Game. Collapsing one into a filmstrip card turns an editor into a
+  thumbnail.
+
+Both are one call away if browsing matters more than comparing or editing on
+those screens, and the component is already general enough to take them.
+
+### Prev / next, and why activation left the click event
+
+Two round glass controls flank the strip: a translucent fill, a 1px gradient
+edge masked out of its own content box the way the primary CTAs do it, and a
+sheen across the top. Every value is mixed from `--text` and `--highlight`,
+both theme-scoped, so the same declarations read as brushed metal on the dark
+page and frosted glass on the light one. They carry `data-metal`, so the WebGL
+layer adds its travelling chromatic rim on hover on top. Disabled at the ends
+rather than wrapping.
+
+They also close a real gap: **only two neighbours a side are drawn**, so the
+outermost cards are reached by the arrows or the dots rather than by clicking
+something that is not on screen.
+
+**Activation does not use the click event, and that took three attempts to get
+right.**
+
+1. The card was a `<button>` with `onClick`. Real clicks did nothing, because
+   the stage calls `setPointerCapture` on `pointerdown` to track a drag — and a
+   capture retargets the later `pointerup`, so the browser synthesises `click`
+   on the stage rather than on the card. **The check passed 7/7 against this**,
+   because it used `element.click()`, a synthetic dispatch that skips the
+   pointer sequence entirely. A carousel check that never presses a real mouse
+   button is testing nothing.
+2. Capture was deferred until the pointer had travelled 4px, so a click never
+   captures. That fixed five cards of seven. The two furthest still failed:
+   a card rotated under perspective projects to a **trapezoid**, and past about
+   30 degrees that trapezoid stops containing the centre of its own bounding
+   box. Measured with `elementFromPoint` over a grid, the last card had no
+   hittable point anywhere inside its box.
+3. So activation moved off the click entirely. `pointerdown` lands on the card
+   every time; the index is recorded there and acted on at `pointerup` if the
+   pointer never travelled. The keyboard gets its own explicit `keydown` for
+   Enter and Space. Verified with real `mouse.down()`/`up()`: **5/5 rendered
+   cards open, a drag still browses, and a drag opens nothing.**
+
+The fan was softened with it — 11 degrees a step capped at 26, depth 140 — so
+every drawn card stays a comfortable target.
+
+### Hover responds, click opens, and hover-to-centre had to be removed
+
+Clicking any card opens it. The reference centres a card on click and opens
+nothing, because its cards are portraits with nowhere to go; these are
+destinations, so a click that only re-centred left the strip a dead end.
+
+**Centring on hover was built and then taken out, because it walks the strip
+along by itself.** Centring the card under the pointer slides that card out from
+under the pointer, the next one slides in, its own `pointerenter` fires, and the
+strip keeps stepping. Measured: hovering card 2 left the strip resting on card 1.
+Hover is now a visual response only — border, name and media saturation, none of
+which the controller writes — and browsing is drag, wheel, arrows and the dots.
+Keyboard focus *does* centre, because focus does not follow the pointer and
+therefore cannot feed back.
+
+### One structural constraint worth knowing
+
+**Items' own controls render UNDER the strip, for the centred item only.** The
+card is a `<button>`, and a button may not contain buttons — the browser closes
+the outer one early and the whole card stops working, which is exactly the trap
+the Duel Zone's series row already hit. So `FilmstripItem.actions` is a slot
+below the stage rather than inside the card. It also means one control row
+instead of one per card, which is what makes a strip of forty tractable.
+
+The stage is sized `card + 7.5rem`, not `+ 3.5rem`: the card is centred, so only
+half the slack sits beneath it, and at 3.5rem the control row overlapped the
+card's bottom edge by about 17px.
+
+**And those controls did not work at all at first.** The stage calls
+`setPointerCapture` to track a drag, and a pointer capture retargets every later
+pointer event — including the `pointerup` that completes a click — at the
+capturing element. So Rename, Delete and the position dots received `pointerdown`
+and then never saw their own click. The drag now refuses to start on anything
+inside `[data-filmstrip-controls]`.
+
 ## Things that went wrong and what fixed them
 
 Kept because each one cost time and each one can recur.
+
+**A fade painted in a surface colour assumes it knows what is behind it.** The
+filmstrip's end vignette was a `--surface` gradient laid over the strip, which
+is invisible inside a panel of that exact colour and a pale band anywhere else —
+on the landing screen it drew over the page and its fireflies. Masking the cards
+instead (`mask-image` on the deck) fades them whatever they sit on.
+
+**`element.click()` is not a click.** It dispatches a click event and skips
+`pointerdown`, `pointermove` and `pointerup` altogether — so it sails straight
+past pointer capture, hit-testing and any drag/click disambiguation. It reported
+7/7 on a filmstrip whose cards could not actually be clicked at all. Anything
+that involves dragging must be checked with `mouse.down()` / `mouse.up()` at
+real coordinates.
+
+**A 3D-rotated element's bounding box is not its hit area.** Under perspective a
+rotated card projects to a trapezoid; past roughly 30 degrees the centre of its
+axis-aligned bounding box falls outside that trapezoid, and `elementFromPoint`
+there returns whatever is behind it. Both the product (which cards to draw) and
+the test (where to click) have to account for it.
+
+**A custom property read back through `getComputedStyle` is TEXT, not a
+length.** The filmstrip's spacing lives in CSS as `--gap: calc(var(--card-w) *
+0.78)`, and `getPropertyValue('--gap')` returns that literal `calc(...)` string
+— an unregistered custom property is never resolved. `parseFloat` gave `NaN`,
+the `|| 150` fallback swallowed it, and every card was spaced by a hardcoded
+150px that silently ignored the phone breakpoint. The fix is a zero-height probe
+element with `width: var(--gap)`, whose measured width is the real number.
+
+**A deck preview that calls `getCardIconUrl` directly is wrong for two slots in
+every deck.** Slot 0 is Evolution and slot 1 is Hero, and a card in one of them
+is drawn with that form's art — which is what `getSlotVisualVariant` decides and
+what the live slots use. The filmstrip's folder faces asked for the base icon,
+so a folder holding an evolution deck previewed the plain card. The selection
+had been a private helper inside `SavedGroups`; it is now
+`utils/deckPreview.previewIconFor` with three callers and one implementation.
+
+**A border-box width is not the room a child has to move in.** The theme
+toggle's slide overshot its far pad by exactly 2px, because the travel was
+computed from the track's width without subtracting the 1px border on each side
+— the cap is positioned inside the padding box, the width is a border-box
+figure, and the difference is precisely the two edges. It looked almost right,
+which is the kind of wrong that ships.
+
+**`composes` is legal only on a rule whose selector is a single local class.**
+A script inserted it into `.toolPanel:hover .toolCta { … }` — because it located
+the rule with the *first* occurrence of `.toolCta {`, and that is where the first
+one is. PostCSS is explicit about it (*"composition is only allowed when selector
+is single :local class name"*), but the error names the file with
+`undefined:NaN` for a line number, so anchor the search to column 0 and check
+the selector before writing.
+
+**Scoping an "already done?" check to the file instead of the rule silently
+skips work.** The same script asked whether the file already contained the
+`composes:` line. The moment one rule in a file composed, every later rule in
+that file matched the identical line and was reported as already done — three
+buttons were quietly missed and it read as success.
+
+**A backtick inside a GLSL comment ended the shader string — a third time.**
+It is recorded below and in `docs/UI.md`, and it still happened: a comment
+reading ``NOT `half` `` (`half` is reserved in GLSL ES, hence `hSpan`) closed the
+template literal and `tsc` reported a missing comma dozens of lines away. The
+comment now spells the word out and says why there are no backticks in it.
+
+**A CSS rule inside a media query still loses on specificity.** The loader's
+`prefers-reduced-motion` block styled `.tick` at (0,1,0) and was silently beaten
+by `.tick[data-lead]` at (0,2,0) — being in a media query changes nothing, since
+specificity is decided before source order. The rule was dead code for its whole
+life. `index.css` clamps every animation to `0.01ms !important` under the same
+query so the behaviour was right anyway, which is exactly why nobody would have
+noticed. A browser check caught it reporting `animation-name: _ignite_…` under
+`reducedMotion: 'reduce'`.
+
+**A flex column with `align-items: center` hands its children `fit-content`.**
+So `width: min(100%, 42rem)` on the loading rig resolved against a box sized to
+the rig's own content, and it shrink-wrapped to 331 px. A *stated* width makes
+`fit-content` compute to 42 rem and the container opens up to hold it.
+
+**A prose measure is not a layout measure.** `MetaDecks`' notice capped itself at
+`56ch` — correct for its cold-start paragraph, and it squeezed the loading gauge
+to 393 px where every other screen gave it 672. Measure the copy, not the box
+that also has to hold a graphic.
+
+**Two loops in one script must not advance the cursor past the wrong thing.**
+Twice while scripting these edits, a loop that replaced a guard *before* a tag
+then advanced its cursor past the guard — so it found the same tag again, looked
+backwards, and failed on text it had just rewritten. Advance past the thing you
+searched for, adjusted by the length delta, and make the pass idempotent so a
+re-run after a crash is safe.
 
 **A backtick inside a GLSL comment ended the shader string — twice.** The
 shaders are JS template literals, so a comment reading ``the `uv` attribute``
@@ -5515,11 +6251,20 @@ src/
                               a shader resolves a token rather than carrying hex
     Fireflies.tsx             ambient motes; `hue` takes a section's identity
                               colour and eases into it without remounting
-    ReadingDeck.tsx           eight cards riffling, for the 12 slow reads
     DeckFx.tsx                the deck column's canvas: slot aura + placement
                               burst + completion sweep, three meshes in one
                               context. Read the sweep note before touching it
     DeckOrbit.tsx             a ring of card outlines behind an empty invitation
+    LiquidMetal.tsx           the circular icon controls: a chromatic rim and a
+                              press ripple. RAW WebGL2, one canvas for all of
+                              them, and no frames at all until something is hot
+  styles/cta.module.css       the shared primary-button treatment: a masked
+                              gradient edge and a hover sheen, both mixed from
+                              --on-solid so it names no colour. 12 buttons
+                              `composes` it and keep everything else they had
+  state/loadTiming.ts         how long each slow screen actually takes on this
+                              browser — a median of the last five, seeded from
+                              the measured figures. What paces the loader
   state/deckFx.ts             the fire-and-forget event channel for the above.
                               A plain emitter, NOT zustand — see the note in it
   App.tsx                     hash routing -> one Dashboard shell
@@ -5532,11 +6277,26 @@ src/
   hooks/
     useReveal.ts              one-shot scroll reveal per section band
   components/
+  utils/deckPreview.ts        the icon a deck slot SHOWS — evolution and hero
+                              art for slots 0 and 1. One implementation; three
+                              callers, one of which used to get it wrong
+    Filmstrip/                a browsable 3D strip of cards. Items' own controls
+                              render UNDER it, for the centred item only — a
+                              button may not contain buttons
+    Theme/ThemeToggle.tsx     the light/dark switch, shared by all five screens
+                              that used to own a copy. One size knob; the rest
+                              of the geometry derives from it
     Dashboard/                top bar, sidebar, landing screen, content panel
       Dashboard.tsx           the shell; `landing` decides whether a rail exists
+      TopDock.tsx             the top nav as a proximity dock — markup only
+      topDockController.ts    its springs. Plain DOM, and the rAF STOPS when
+                              they settle; see the note at the top of it
       ClosingBand.tsx         the page ending — three checkable claims plus a
                               histogram counted from CARDS at render time
     Analytics/
+      ReadingState.tsx        the one loading state all 12 slow reads share
+      UplinkLoader.tsx        the progress rig inside it. Paced from MEASURED
+                              load times, never scripted, never reaches 100%
       PlayerAnalysis.tsx      #/player/<tag>
       MetaDecks.tsx           #/player/<tag>/meta — the global leaderboard
       DuelAnalysis.tsx        #/player/<tag>/duels
@@ -5661,13 +6421,15 @@ so they are recorded rather than quietly restyled:
 | where | measured | what it is |
 |---|---:|---|
 | Cards board, the rate figures | **3.34–4.16:1** at 10.1px, 96 elements | `--c-use` (#2a78d6) on `--surface-nested` |
-| Duel Zone, the pane blurb | **4.19:1** at 12.5px | `--text-muted` on a violet fill |
+| ~~Duel Zone, the pane blurb~~ | ~~4.19:1~~ | **closed.** It was `--text-muted` on a violet fill; that token is pure white / pure black now — see [Every neutral font is at full contrast now](#every-neutral-font-is-at-full-contrast-now) |
 
-Both need 4.5:1. The fix in each case is a token, not a layout — but it is a
+The remaining one needs 4.5:1. The fix is a token, not a layout — but it is a
 token shared across screens, so it is a palette decision rather than a bug fix,
-and it belongs to whoever owns the palette. Dark mode is clean on all 11 screens.
+and it belongs to whoever owns the palette. It is a **coloured** figure, which
+is why the full-contrast text pass did not touch it. Dark mode is clean on all
+11 screens.
 
-**The deck actions have not had a browser pass.** `npx tsc -b`, all 118 vitest
+**The deck actions have not had a browser pass.** `npx tsc -b`, all 172 vitest
 tests and `npm run build` are green, and the risky shapes were checked by
 reading rather than running: no strip is a grid (so the chips cannot shift a
 column), every strip's card sizing is scoped to `img` / `.cardImg` / `.rowCard`
@@ -5766,9 +6528,12 @@ Recorded so they are not re-litigated as oversights:
 - **Versus-mode side colours** (`--player-blue` / `--player-red`) stay neutral
   greys separated by lightness. Making the red side actually red would collide
   with red meaning "negative", which a duel side is not.
-- **Motion stays off.** Hover changes colour and nothing else; the global
-  `animation/transition: none` switch in `index.css` is intact and
-  `document.getAnimations()` is asserted to stay at `0`.
+- ~~**Motion stays off.**~~ **No longer true, and kept as a record of when it
+  changed.** The blanket `animation/transition: none` switch in `index.css`
+  now lives inside `@media (prefers-reduced-motion: reduce)`. Motion is on and
+  scoped: one-shot only, transform and opacity, on the `--dur-1..4` tokens.
+  There is still no `infinite` anywhere — that is what the ban was actually
+  for, since the old glow loops animated `box-shadow` and `filter`.
 - **`--accent` stays neutral.** It is still correct for high-contrast neutral
   fills. Components opt into `--accent-select` / `--accent-action` / etc. rather
   than every `--accent` being globally swapped for a hue.

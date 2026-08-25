@@ -48,8 +48,11 @@
 /* --- Folder gallery ----------------------------------------------------- */
 
 .folderGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  /* WAS A GRID OF CARDS. The folders are a filmstrip now, so this only has to
+     stack the strip above the add-folder button and give them room. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 1rem;
 }
 
@@ -201,4 +204,14 @@
   color: var(--text);
   outline: none;
   max-width: 20rem;
+}
+
+/* An empty folder's face in the filmstrip: the palette mark, centred across the
+   whole media well rather than sitting in one of its four cells. */
+.folderEmptyFace {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  display: grid;
+  place-items: center;
+  color: var(--hue-blue);
 }

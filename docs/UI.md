@@ -17,22 +17,24 @@ three.js work.
 | **Fireflies, app-wide** | fixed behind the whole signed-in shell, in the open area's hue | both themes |
 | **Fireflies, gated** | drifting over the Royal Pro gate's blurred preview | both themes |
 | **Login backdrop** | the painted castle pair behind the sign-in card | both themes |
-| **Reading deck** | the 12 slow loading states | both themes |
 | **Slot aura** | empty special slots and the selected slot, on all three deck screens | both themes |
 | **Placement burst** | a card landing in a slot; a crown pip being taken | one-shot |
 | **Completion sweep** | a deck reaching 8/8 | one-shot |
 | **Card ring** | both paste screens, the empty palette gallery | both themes |
+| **Liquid metal** | every circular icon control, app-wide | on hover / press only |
 
 ```
 src/three/
   runtime.ts      lazy loader, motion gating, DPR cap, resize, loop control,
                   and readToken() — a shader resolves a CSS token instead of
                   carrying a hex, so the palette stays in index.css
-  Fireflies.tsx   drifting motes, three depth bands, pointer parallax, and an
-                  optional identity hue it eases into without remounting
-  ReadingDeck.tsx eight card plates riffling in a travelling wave
+  Fireflies.tsx   drifting motes, three depth bands, pointer parallax, an
+                  optional identity hue it eases into without remounting, and
+                  a vertical span that widens for the app-wide layer
   DeckFx.tsx      the deck column: aura + burst + sweep, three meshes, ONE canvas
   DeckOrbit.tsx   card outlines orbiting a tilted ellipse, behind an empty ask
+  LiquidMetal.tsx a chromatic rim and press ripple on the circular controls.
+                  RAW WebGL2, not three.js — one canvas draws all of them
 src/state/
   deckFx.ts       the event channel DeckFx listens on. A plain module emitter,
                   not a store — these are events, and routing them through
@@ -109,7 +111,7 @@ re-render painted art in WebGL would lose everything that makes it look painted.
 | prop | default | why |
 |---|---|---|
 | `count` | `130` | the app-wide layer covers far more area, so it asks for `240` |
-| `fixed` | `false` | pins to the viewport instead of the parent box, and widens the x spread, for the shell backdrop |
+| `fixed` | `false` | pins to the viewport instead of the parent box, and widens **both** spreads — x to 4.2 and the vertical span to 5.6 — for the shell backdrop |
 | `hue` | — | a section's identity colour, resolved from `--hue-<name>`. Absent = the ambient gold/green pair. See below |
 | `intensity` | `1` | scales the palette's opacity; the Pro gate asks for `0.75`, sitting over blurred content |
 
@@ -136,6 +138,43 @@ The theme can change while the layer is mounted, so a `MutationObserver` on
 `<html data-theme>` re-applies colour, opacity *and* blending — and so does a
 hue change, through the same one function, because both alter the same three
 things and neither should have its own copy of that.
+
+### The vertical span, and the bug the footer had
+
+The `fixed` layer widened its **horizontal** spread from the start — 4.2 against
+a hero panel's 2.4 — because it covers a whole viewport rather than a banner. Its
+**vertical** span was left at the panel's value, hardcoded in two places that had
+to agree and did not have to be kept in step: the position buffer in JS, and the
+shader's `mod`.
+
+So motes lived in `y ±1.2`, and the edge fade `smoothstep(1.2, 0.75, …)` reached
+zero at exactly `±1.2`. The camera sees `±1.41` at the near depth band and
+`±1.99` at the far one. The bottom of every page was outside the field entirely.
+
+Measured by diffing consecutive frames per fifth of the viewport, averaged over
+five pairs — changed pixels per 10,000:
+
+| band | before | after |
+|---|---:|---:|
+| 1 (top) | 26.6 | 21.3 |
+| 2 | 36.0 | 38.1 |
+| 3 | 50.8 | 30.0 |
+| 4 | 21.3 | 38.3 |
+| **5 (foot)** | **8.9** | **42.2** |
+| foot ÷ page mean | **0.31×** | **1.24×** |
+
+The fix is one value, `fixed ? 5.6 : 2.4`, feeding both the buffer and the
+shader — and the fade expressed as a *fraction* of it
+(`smoothstep(hSpan, hSpan * 0.62, …)`) rather than two literals, so widening the
+band can never leave the fade behind again. 5.6 covers the far band's ±1.99 with
+the fade still ~86% open at the very edge.
+
+The count rose 240 → 520 with it. Density scales with the span, so the same motes
+over 2.33× the height would simply be a thinner field everywhere. It is still one
+draw call; points are the cheapest thing a GPU does.
+
+**Non-fixed layers were not touched.** The hero, the login backdrop and the Pro
+gate sit in bounded panels where 2.4 was tuned and is correct.
 
 ### The hue follows the open section
 
@@ -179,37 +218,33 @@ page they sit on.
 
 ---
 
-## The reading deck
+## The reading deck, and why it is gone
 
-The one piece here that fixes a functional complaint rather than a visual one.
+`ReadingDeck.tsx` is **deleted**. It drew eight card plates riffling in a
+travelling wave — one instanced draw call, rounded corners from an SDF rather
+than a texture — behind all twelve slow loading states.
 
-Twelve `Reading…` strings across nine files, each a single line of
-`--text-muted` in an empty panel — against reads of **29–57 s** for the Coach
-and **~166 s** for a cold meta rollup on the spinning H: volume. Captured in a
-browser, two screens were still showing that line after nine seconds. Thirty
-seconds of it does not read as slow; it reads as hung.
+It was not removed for being wrong. It did what it was built to do: a
+thirty-second wait with no feedback reads as hung, and the fan proved the tab was
+alive. What it could never do is answer the question a reader actually has at
+second forty, which is *how much longer*. A sign of life is a lower bar than a
+progress readout, and once the readout existed there was no argument for keeping
+both.
 
-Eight card plates riffling in a wave that travels along the fan, one instanced
-draw call, rounded corners from an SDF rather than a texture. It draws what the
-server is actually doing: reading decks.
+Its replacement, `UplinkLoader`, is **DOM and CSS**, so it is documented in the
+main `README.md` rather than here — this file covers only the three.js work. Two
+consequences belong on this page though:
 
-**The amplitude is legibility, not taste.** At the 60° turn it started on, no
-card ever got thin enough to open a gap and the whole fan read as one solid
-slab. It is 77° now, with the spread widened to match.
+* **The loading screens now pull no three.js at all.** They spend none of the
+  ~16 WebGL contexts a document is allowed, which puts the budget back where the
+  card foil once exhausted it.
+* **The rule about reduced motion flipped for that one piece.** Every component
+  in this directory keeps the flat markup it decorates and mounts no canvas
+  under `prefers-reduced-motion`. That was right for the fan, which was
+  decoration. A progress readout is information, so its replacement renders
+  under reduced motion and drops only its flashes.
 
-`ReadingState` wraps it and takes the **caller's own notice class**, so it
-changes what is inside the box and never the box — nine screens keep the
-layouts they already had. Two details that were not obvious:
-
-* **The stage is an `inline-block`**, so it inherits the caller's `text-align`.
-  Seven callers centre their notice; three are left-aligned blocks in a results
-  flow, where a centred canvas over left-aligned copy read as a misalignment.
-  Measured: 455/455 px centred, `leftGap: 0` left-aligned.
-* **The label is a `div`.** Four call sites were `<p>`, and the meta board's
-  cold start passes a heading plus two paragraphs plus an elapsed counter — a
-  `<p>` may not contain those, and the browser closes it early.
-
----
+Recoverable from `e183bdb`, along with the `ReadingState` that wrapped it.
 
 ## The deck column, and the sweep that would not draw
 
@@ -338,7 +373,14 @@ run order; this is the same trap from the other side.
 
 ## Five more, from the motion pass
 
-**6. A backtick inside a GLSL comment ends the shader string.** These shaders
+**6. A backtick inside a GLSL comment ends the shader string.** *(This has
+now happened FOUR times — the fourth inside `LiquidMetal.tsx`, in the very
+comment written to explain a different fix, three lines under a warning about
+this exact trap. Its verification now asserts both shader sources contain no
+backtick at all, which is the only thing that has actually stopped it. The third was a comment reading ``NOT `half` `` —
+`half` being reserved in GLSL ES, hence `hSpan` — while widening the mote
+span. `tsc` reported a missing comma dozens of lines away, as it always does.
+The comment now spells the word out and states why it carries no backticks.)* These shaders
 are JS template literals, so a comment reading ``the `uv` attribute`` terminates
 it and Babel reports a missing semicolon dozens of lines away. It cost two
 rounds, because the second time it looked like the fix had failed rather than

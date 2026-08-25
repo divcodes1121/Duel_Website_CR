@@ -77,7 +77,7 @@ export function CardLibrary({ collapsed, onToggle }: CardLibraryProps) {
         <span className={styles.libraryCount}>{cards.length}</span>
         <button
           type="button"
-          className={styles.libraryToggle}
+          className={styles.libraryToggle} data-metal
           onClick={onToggle}
           title="Hide the card library"
           aria-label="Hide the card library"

@@ -22,6 +22,7 @@ import {
 import { ReadingState } from './ReadingState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DeckCounter.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 /* Deck Counter — three questions about what beats what.
  *
@@ -394,6 +395,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
   const [report, setReport] = useState<PlayerCounterReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
+  const reading = useHeldLoading(loading);
 
   const [deckA, setDeckA] = useState<string[]>([]);
   const [deckB, setDeckB] = useState<string[]>([]);
@@ -440,10 +442,10 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
     };
   }, [deckA, deckB]);
 
-  if (loading) {
+  if (reading) {
     return (
       <div className={styles.page}>
-        <ReadingState className={styles.notice} hue="pink">
+        <ReadingState k="deck-counter" hue="pink">
           Reading matchups…
         </ReadingState>
       </div>

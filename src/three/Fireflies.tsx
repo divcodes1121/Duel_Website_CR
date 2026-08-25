@@ -76,21 +76,32 @@ const VERT = `
   attribute float aDrift;
   uniform float uTime;
   uniform float uScale;
+  uniform float uSpan;
   varying float vAlpha;
 
   void main() {
     vec3 p = position;
+    // Named hSpan, NOT the obvious spelling: h-a-l-f is a reserved word in
+    // GLSL ES and the program will not compile with it.
+    // (And note there are no backticks in this comment. These shaders are JS
+    //  template literals, so one would end the string here and the error would
+    //  be reported dozens of lines away. This file already warns about that
+    //  below; it caught me again anyway.)
+    float hSpan = uSpan * 0.5;
     // Slow vertical rise with a lateral sway; motes wrap rather than respawn,
     // so there is no popping and no allocation per frame.
-    p.y = mod(p.y + uTime * aDrift + aPhase, 2.4) - 1.2;
+    p.y = mod(p.y + uTime * aDrift + aPhase, uSpan) - hSpan;
     p.x += sin(uTime * 0.35 + aPhase * 6.28) * 0.06;
 
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
     gl_PointSize = aSize * uScale / -mv.z;
 
-    // Fade at the top and bottom of the band so nothing has a hard edge.
-    vAlpha = smoothstep(1.2, 0.75, abs(p.y)) * (0.35 + 0.65 * fract(aPhase * 3.7));
+    // Fade at the top and bottom of the band so nothing has a hard edge. It is
+    // a FRACTION of the span, not a fixed 1.2/0.75: hardcoding it meant that
+    // widening the band for the app-wide layer would have moved the mote field
+    // out but left the fade where it was, which is the same bug in reverse.
+    vAlpha = smoothstep(hSpan, hSpan * 0.62, abs(p.y)) * (0.35 + 0.65 * fract(aPhase * 3.7));
   }
 `;
 
@@ -169,6 +180,23 @@ export function Fireflies({ count = DEFAULT_COUNT, fixed = false, hue, intensity
       const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 20);
       camera.position.z = 3;
 
+      /* THE VERTICAL SPAN, AND WHY THE FIXED LAYER NEEDS ITS OWN.
+       *
+       * The x spread has always widened for `fixed` (4.2 against 2.4) because
+       * that layer covers the whole viewport rather than a hero panel. The Y
+       * spread was left at 2.4 — motes lived in y +/-1.2, faded to nothing by
+       * +/-1.2, and the camera sees +/-1.41 at the near depth band and +/-1.99
+       * at the far one. So the bottom of the page had no motes in it at all:
+       * measured, the lowest fifth of the viewport changed 8.9 pixels per 10k
+       * between frames against 36-51 in the middle.
+       *
+       * 5.6 covers the far band's +/-1.99 with the fade still ~86% open at the
+       * very edge, so the footer gets motes at close to full strength.
+       *
+       * It is ONE number feeding both the buffer below and the shader's `mod`,
+       * because those two disagreeing is exactly how this bug happened. */
+      const ySpan = fixed ? 5.6 : 2.4;
+
       const positions = new Float32Array(count * 3);
       const sizes = new Float32Array(count);
       const phases = new Float32Array(count);
@@ -178,7 +206,7 @@ export function Fireflies({ count = DEFAULT_COUNT, fixed = false, hue, intensity
         // what makes the parallax legible instead of looking like noise.
         const band = i % 3;
         positions[i * 3] = (Math.random() * 2 - 1) * (fixed ? 4.2 : 2.4);
-        positions[i * 3 + 1] = Math.random() * 2.4 - 1.2;
+        positions[i * 3 + 1] = Math.random() * ySpan - ySpan * 0.5;
         positions[i * 3 + 2] = -0.4 - band * 0.7;
         // Pixels, near band first. gl_PointSize divides by view depth, so
         // these are pre-perspective units: keep them near 1 and let uScale do
@@ -224,6 +252,7 @@ export function Fireflies({ count = DEFAULT_COUNT, fixed = false, hue, intensity
         uniforms: {
           uTime: { value: 0 },
           uScale: { value: 10 },
+          uSpan: { value: ySpan },
           uColor: { value: new THREE.Color(pal0.color) },
           uOpacity: { value: pal0.opacity },
         },

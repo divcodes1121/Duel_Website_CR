@@ -22,6 +22,7 @@ import {
   type TrendData,
 } from './playerData';
 import styles from './PlayerAnalysis.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 /* Player analysis — the screen the Analyze button lands on.
  *
@@ -167,6 +168,7 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
   const [report, setReport] = useState<PlayerReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
+  const reading = useHeldLoading(loading);
 
   // Shared with Duel Analysis so the two screens cannot disagree about what
   // "Last Season" or "Last 60 Days" means.
@@ -200,10 +202,10 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
     };
   }, [tag, preset, custom.from, custom.to]);
 
-  if (loading) {
+  if (reading) {
     return (
       <div className={styles.page}>
-        <ReadingState className={styles.notice} hue="violet">
+        <ReadingState k="player" hue="violet">
           Reading the battle database…
         </ReadingState>
       </div>

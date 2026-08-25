@@ -1,0 +1,155 @@
+/* The shared treatment for the app's rectangular primary buttons.
+ *
+ * Adapted from ThreeUI's `RectangleButtons` family. Two of its treatments carry
+ * the whole idea and both survive being moved onto this palette:
+ *
+ *   THE LIT EDGE   `aster-glass` draws a 1px gradient border by masking a
+ *                  gradient-filled box against its own content box, so the
+ *                  border is a *gradient* rather than a flat colour — bright
+ *                  where the light would fall, near-gone on the opposite side.
+ *   THE SHEEN      `trochil-signal` parks a diagonal wash off the left edge and
+ *                  slides it across on hover.
+ *
+ * ── WHY IT DEFINES NO COLOUR ──────────────────────────────────────────────
+ *
+ * The reference hardcodes white for both (`rgba(255,255,255,.72)`), which works
+ * because every one of its variants sits on a dark ground. These buttons do not
+ * agree on a ground: they wear `--solid-maroon`, `--solid-green`,
+ * `--solid-violet`, and whatever `--tool-solid` a panel sets, in two themes.
+ *
+ * So both layers are mixed from **`--on-solid`** — the token that is already
+ * guaranteed to read against whichever solid fill the button is wearing, and
+ * which is theme-scoped precisely because white is wrong on light-mode green
+ * (see the note on `.analyzeButton`). The edge and the sheen are therefore the
+ * button's own ink at low alpha, and this file needs no per-button branch, no
+ * hue argument and no `[data-theme]` rule. It inherits the shape too: every
+ * layer is `border-radius: inherit`, so a 9px button and a 14px one both get a
+ * correct edge with nothing passed in.
+ *
+ * ── THE STACKING, WHICH IS THE ONE FIDDLY PART ────────────────────────────
+ *
+ * Both layers are `z-index: -1` under `isolation: isolate`, which is the
+ * reference's own trick and is load-bearing here for a reason it is not there.
+ * Within a stacking context the paint order is: the element's own background,
+ * then negative-z descendants, then inline content. So a negative-z pseudo
+ * lands ABOVE the button's fill and BELOW its label — which is what lets this
+ * work on buttons whose label is a bare text node with no element to lift. The
+ * obvious alternative, a positive z-index plus `.cta > * { position: relative }`,
+ * silently paints the sheen over the text on every button that does not wrap its
+ * label in a span, and half of these do not.
+ *
+ * `isolation: isolate` is what stops the negative-z layers escaping behind the
+ * button entirely.
+ */
+
+.cta {
+  position: relative;
+  isolation: isolate;
+  /* Clips the sheen to the button. Without it the wash slides out across
+     whatever sits beside the button. */
+  overflow: hidden;
+  transition: transform var(--dur-2) var(--ease);
+}
+
+/* The lit edge. `padding: 1px` plus the exclude mask leaves exactly the 1px
+   ring between the border box and the content box — a real gradient border,
+   which `border-image` cannot do with a radius. */
+.cta::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    148deg,
+    color-mix(in srgb, var(--on-solid) 42%, transparent),
+    color-mix(in srgb, var(--on-solid) 10%, transparent) 36%,
+    transparent 62%,
+    color-mix(in srgb, var(--on-solid) 26%, transparent)
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  /* Safari still needs the prefixed pair, and its keyword is `xor`. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+  transition: filter var(--dur-2) var(--ease);
+}
+
+/* The sheen, parked off the left edge until hover. */
+.cta::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    transparent 18%,
+    color-mix(in srgb, var(--on-solid) 24%, transparent) 48%,
+    transparent 76%
+  );
+  transform: translateX(-125%);
+  pointer-events: none;
+  /* --dur-4 (560ms) rather than the hover default: a sweep that crosses in
+     200ms reads as a flicker instead of as light moving. */
+  transition: transform var(--dur-4) var(--ease);
+}
+
+.cta:hover {
+  transform: translateY(-2px);
+}
+
+.cta:hover::after {
+  transform: translateX(125%);
+}
+
+.cta:hover::before {
+  filter: brightness(1.35);
+}
+
+/* Press returns it to the resting plane. The reference's own `:active`. */
+.cta:active {
+  transform: translateY(0);
+}
+
+/* A disabled button must not lift, sweep or light up — several of these are
+   `Apply` buttons that stay disabled until both date fields are filled, and a
+   dead control that still animates is worse than one that does nothing. */
+.cta:disabled,
+.cta[aria-disabled='true'] {
+  transform: none;
+}
+
+.cta:disabled::after,
+.cta[aria-disabled='true']::after {
+  transform: translateX(-125%);
+}
+
+.cta:disabled::before,
+.cta[aria-disabled='true']::before {
+  filter: none;
+}
+
+/* The edge stays — it is geometry, not motion — and everything that moves
+   stops. Matching how every other piece in this project degrades. */
+@media (prefers-reduced-motion: reduce) {
+  .cta,
+  .cta::before,
+  .cta::after {
+    transition: none;
+  }
+
+  .cta:hover {
+    transform: none;
+  }
+
+  .cta:hover::after {
+    transform: translateX(-125%);
+  }
+}

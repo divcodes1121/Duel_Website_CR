@@ -12,6 +12,7 @@ import {
 import { ReadingState } from './ReadingState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DuelAnalysis.module.css';
+import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 /* Duel Analysis — card COMBINATIONS in duel play.
  *
@@ -183,6 +184,7 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
   const [report, setReport] = useState<DuelReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
+  const reading = useHeldLoading(loading);
 
   const { win, preset, setPreset, custom, setCustom } = useDateWindow(
     season,
@@ -219,10 +221,10 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
     setShowAll(false);
   }, [tab]);
 
-  if (loading) {
+  if (reading) {
     return (
       <div className={styles.page}>
-        <ReadingState className={styles.notice} hue="green">
+        <ReadingState k="duel-analysis" hue="green">
           Reading duel history…
         </ReadingState>
       </div>

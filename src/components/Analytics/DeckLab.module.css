@@ -109,6 +109,7 @@
 }
 
 .pasteButton {
+  composes: cta from '../../styles/cta.module.css';
   border: none;
   border-radius: 10px;
   padding: 0.6rem 1.3rem;

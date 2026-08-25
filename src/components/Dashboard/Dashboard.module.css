@@ -11,9 +11,13 @@
 /* ------------------------------------------------------------------ top bar */
 
 .topbar {
-  /* Above the app-wide fireflies layer, which is fixed at z-index 0. */
+  /* Above the app-wide fireflies layer (fixed at z-index 0) AND above `.body`,
+     which is also positioned at z-index 1 and comes LATER in the DOM — so at
+     equal z-index the content panel wins and paints over the bar. The dock's
+     items hang below the topbar's own box as they expand, and this is what
+     keeps them in front of the panel they hang over. */
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -64,85 +68,9 @@
   box-shadow: 0 0 22px color-mix(in srgb, var(--solid-violet) var(--glow-core), transparent);
 }
 
-.topNav {
-  display: flex;
-  align-items: center;
-  gap: 0.15rem;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.topNav::-webkit-scrollbar {
-  display: none;
-}
-
-/* `position: relative` for the indicator; the rounded hover fill is a separate
-   layer from the rule so the two can move independently. */
-.topNavItem {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  white-space: nowrap;
-  padding: 0.5rem 0.85rem;
-  border: none;
-  border-radius: 9px 9px 0 0;
-  background: none;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    color var(--dur-2) var(--ease),
-    background-color var(--dur-2) var(--ease);
-}
-
-.topNavItem:hover {
-  color: var(--text);
-  background: var(--neutral-wash);
-}
-
-/* The icon leads the label by a pixel on hover. Small enough to register as
-   responsiveness rather than as movement. */
-.topNavItem svg {
-  transition: transform var(--dur-1) var(--ease);
-}
-
-.topNavItem:hover svg {
-  transform: translateY(-1px);
-}
-
-/* THE RULE IS A PSEUDO-ELEMENT, not `border-bottom`, so it can grow from the
-   centre instead of appearing all at once. A border can only pop; this scales.
-   `transform` only — no width animation, which would be a layout pass a frame. */
-.topNavItem::after {
-  content: '';
-  position: absolute;
-  left: 0.55rem;
-  right: 0.55rem;
-  bottom: 0;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--accent-select);
-  transform: scaleX(0);
-  transition: transform var(--dur-3) var(--ease);
-}
-
-/* Underline, the way the reference marks the current top-level section —
-   violet for the same reason the sidebar is. */
-/* The label takes the app's ink, not the hue. On an underline tab the coloured
-   RULE is the indicator — the text does not also need to be violet, and a
-   pastel label beside a solid sidebar row is what read as washed. Meaning still
-   does not rest on hue alone: the label is brighter AND heavier AND ruled. */
-.topNavItemActive,
-.topNavItemActive:hover {
-  color: var(--text);
-}
-
-.topNavItemActive::after {
-  transform: scaleX(1);
-}
+/* The top-level nav is `TopDock` now — a proximity dock, in its own module.
+   The underline-tab rules that lived here went with it; the dock keeps the
+   violet rule as its active indicator, for the reason recorded there. */
 
 .topActions {
   display: flex;
@@ -947,6 +875,7 @@
 }
 
 .analyzeButton {
+  composes: cta from '../../styles/cta.module.css';
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
@@ -969,9 +898,14 @@
     box-shadow var(--dur-2) var(--ease);
 }
 
+/* NO `transform` HERE ANY MORE. The lift belongs to the shared CTA treatment
+   this button composes, and restating it locally did two things wrong: it
+   overrode the shared -2px with -1px, and — because the shared rule turns the
+   lift off under `prefers-reduced-motion` and this one did not — it kept
+   lifting for readers who had asked for no motion. Colour and glow stay; those
+   are this button's identity, not motion. */
 .analyzeButton:hover {
   background: color-mix(in srgb, var(--solid-green) 85%, var(--text));
-  transform: translateY(-1px);
   box-shadow:
     0 6px 16px color-mix(in srgb, var(--solid-green) 35%, transparent),
     0 0 34px color-mix(in srgb, var(--solid-green) var(--glow-core), transparent);
@@ -1235,8 +1169,33 @@
 }
 
 
+/* THE HOVER TARGET IS THE PANEL, NOT THE CHIP.
+   `.toolCta` is a `span` inside a clickable panel, so the shared treatment's
+   own `:hover` never fires for it — the pointer is on the parent. These forward
+   the panel's hover onto the composed pseudo-elements by hand: the sheen sweeps
+   and the edge brightens exactly as they do on a real button. The nudge is
+   translateX rather than the shared translateY, which is this panel's existing
+   language and worth keeping. */
 .toolPanel:hover .toolCta {
   transform: translateX(2px);
+}
+
+.toolPanel:hover .toolCta::after {
+  transform: translateX(125%);
+}
+
+.toolPanel:hover .toolCta::before {
+  filter: brightness(1.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolPanel:hover .toolCta {
+    transform: none;
+  }
+
+  .toolPanel:hover .toolCta::after {
+    transform: translateX(-125%);
+  }
 }
 
 .toolCta svg {
@@ -1335,6 +1294,7 @@
 }
 
 .toolCta {
+  composes: cta from '../../styles/cta.module.css';
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
@@ -1404,30 +1364,17 @@
    card marooned on a row of its own. Seven is prime, so the only tidy splits are
    7 and 4+3; the counts below step between those two and then halve. */
 .areaGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: 1fr;
-  gap: 0.85rem;
-  padding-bottom: 0.4rem;
+  /* WAS A SEVEN-COLUMN GRID. It holds one filmstrip now, so all this has to do
+     is give the strip its width; the strip does its own centring. The
+     breakpoints that used to reflow 7 -> 2 -> 1 columns went with it — a strip
+     is already one card wide at any size. */
+  width: 100%;
 }
 
-@media (min-width: 1500px) {
-  .areaGrid {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1000px) {
-  .areaGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 520px) {
-  .areaGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
+/* The three `.areaGrid` breakpoints that reflowed this 7 -> 2 -> 1 columns are
+   gone with the grid. `grid-template-columns` on a container holding one
+   filmstrip does nothing, and leaving dead rules that LOOK like they still
+   control the layout is how the next person wastes an hour. */
 
 /* Centred, like the reference's tiles: icon over title over blurb, with the
    arrow pinned to the bottom so it lines up across a row of unequal blurbs. */
@@ -1578,6 +1525,7 @@
   .heroKing {
     max-width: clamp(12rem, 26vw, 18rem);
   }
+
 }
 
 /* THE MOBILE HERO IS A DIFFERENT COMPOSITION, not the desktop one scaled down.
@@ -1620,6 +1568,7 @@
     max-width: min(20rem, 68vw);
   }
 
+
   /* Centred copy wants the rule on both sides again, or neither. */
   .popularLabel::before {
     content: '';
@@ -1661,6 +1610,7 @@
   .heroKing {
     max-width: min(15rem, 60vw);
   }
+
 
   .searchRow {
     flex-wrap: wrap;
@@ -1787,6 +1737,7 @@
 }
 
 .topSearchButton {
+  composes: cta from '../../styles/cta.module.css';
   flex-shrink: 0;
   padding: 0.48rem 1.15rem;
   border-radius: 9px;
@@ -1811,4 +1762,50 @@
   .topSeason {
     display: none;
   }
+}
+
+
+/* An analytics area's face in the filmstrip: its icon over its blurb, spanning
+   the whole media well rather than sitting in one of the four deck cells. */
+.areaFace {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 0.9rem 0.8rem;
+  text-align: center;
+}
+
+.areaFaceIcon {
+  display: grid;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+  flex: none;
+  border-radius: 13px;
+  color: var(--on-solid);
+  background: var(--area-solid, var(--solid-violet));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--area-solid, var(--solid-violet)) var(--glow-core), transparent);
+}
+
+/* The identity hue, per area — the same one its sidebar row wears. */
+.areaFace[data-hue='violet'] { --area-solid: var(--solid-violet); }
+.areaFace[data-hue='blue'] { --area-solid: var(--solid-blue); }
+.areaFace[data-hue='green'] { --area-solid: var(--solid-green); }
+.areaFace[data-hue='pink'] { --area-solid: var(--solid-pink); }
+
+.areaFaceBody {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.45;
+  /* The blurbs run to three lines at this width; past that they are clipped
+     rather than allowed to push the icon out of the well. */
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useThemeStore } from '../../state/themeStore';
 import { getCardIconUrl } from '../../data/cards';
 import { ProfileMenu } from '../Profile/ProfileMenu';
+import { TopDock } from './TopDock';
 import { Header } from '../Header/Header';
 import { DuelDeckBuilder } from '../DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from '../DecksHome/DecksHome';
@@ -36,18 +36,19 @@ import {
   DeckIcon,
   HomeIcon,
   LoadoutIcon,
-  MoonIcon,
   PaletteIcon,
   PieIcon,
   SearchIcon,
   ShieldIcon,
   CoachIcon,
   StarIcon,
-  SunIcon,
   SwordsIcon,
 } from './icons';
 import styles from './Dashboard.module.css';
 import { Fireflies, type FireflyHue } from '../../three/Fireflies';
+import { LiquidMetal } from '../../three/LiquidMetal';
+import { ThemeToggle } from '../Theme/ThemeToggle';
+import { Filmstrip } from '../Filmstrip/Filmstrip';
 
 /* The post-login shell: top bar, a sidebar of analytics sections, and a panel
  * that swaps with whatever is open.
@@ -109,6 +110,13 @@ const SIDE_NAV = [
   { label: 'Deck Counter', icon: ShieldIcon, slug: 'counter', hue: 'pink' },
   { label: 'Coach Assist', icon: CoachIcon, slug: 'coach', hue: 'green' },
 ] as const;
+
+/* The seven analytics areas as the landing screen lists them — SIDE_NAV minus
+   Search Player, which is the search itself rather than an area. Hoisted so the
+   filmstrip's start index and its items are computed from ONE list; deriving
+   them from two copies of the same filter is how an index drifts off the item
+   it was meant to name. */
+const AREAS = SIDE_NAV.filter((s) => s.label !== 'Search Player');
 
 /* Win Conditions, Champions and Evolutions were sidebar sections and are now
    TABS on the Cards screen. They were never separate screens — each is a way of
@@ -195,8 +203,6 @@ export function Dashboard({
   /** Slug from the URL — which analytics screen is open for the loaded tag. */
   playerSection?: string;
 }) {
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggleTheme);
 
   /* The analytics rail collapses.
    *
@@ -397,7 +403,19 @@ export function Dashboard({
           which switches blend mode as well as colour. Everywhere else it takes
           the open area's identity hue and eases into it; the swap is a uniform,
           so nothing is rebuilt on navigation. */}
-      <Fireflies fixed count={240} hue={backdropHue} />
+      {/* 240 was tuned for a mote band that covered rather less than the
+          viewport. The band is 2.33x taller now so that it reaches the foot
+          of the page, and the count rises with it or the same motes would
+          simply be spread thinner over more of the screen. Still one draw
+          call — points are the cheapest thing a GPU does. */}
+      <Fireflies fixed count={520} hue={backdropHue} />
+
+      {/* ONE canvas for every circular control on the page, not one per button.
+          The reference gives each button its own iframe and its own WebGL2
+          context; a browser allows about 16 per document, and the builder alone
+          puts dozens of circles on screen. Same reason DeckFx is one canvas.
+          It draws nothing and runs no frames until something is hovered. */}
+      <LiquidMetal />
 
       <header className={styles.topbar}>
         <button
@@ -417,30 +435,21 @@ export function Dashboard({
             Deck Vault, Duel Builder or Counter Hub without going home first —
             the same half-wired navigation the Home button was caught by. The
             query row moved into the panel, where the thing it queries is. */}
-        <nav className={styles.topNav}>
-          {TOP_NAV.map((item) => {
-            const Icon = item.icon;
-            const active = topNav === item.label;
-            return (
-              <button
-                key={item.label}
-                type="button"
-                className={`${styles.topNavItem} ${active ? styles.topNavItemActive : ''}`}
-                onClick={() => {
-                  if ('scrollTo' in item) return goAnalytics();
-                  if ('section' in item) {
-                    setSection(item.section);
-                    return go(HOME);
-                  }
-                  return item.home ? goHome() : go(item.hash);
-                }}
-              >
-                <Icon />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
+        <TopDock
+          items={TOP_NAV.map((item) => ({
+            label: item.label,
+            icon: item.icon,
+            active: topNav === item.label,
+            onSelect: () => {
+              if ('scrollTo' in item) return goAnalytics();
+              if ('section' in item) {
+                setSection(item.section);
+                return go(HOME);
+              }
+              return item.home ? goHome() : go(item.hash);
+            },
+          }))}
+        />
 
         <div className={styles.topActions}>
           {/* The tag search lives in the CHROME now, not only on the landing
@@ -474,7 +483,7 @@ export function Dashboard({
                 is named in the tooltip rather than printed in the field. */}
             <button
               type="submit"
-              className={styles.topFindGo}
+              className={styles.topFindGo} data-metal
               aria-label="Analyze this player tag"
               title="Analyze this player tag  (⌘K / Ctrl-K to focus)"
             >
@@ -482,16 +491,11 @@ export function Dashboard({
             </button>
           </form>
 
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
-          </button>
-          <button type="button" className={styles.iconButton} aria-label="Notifications">
+          {/* Was a 2.15rem circular icon button. It kept `data-metal` while it
+              was a circle; as a 3:1 track that no longer applies, so the
+              attribute went with the shape. */}
+          <ThemeToggle size="1.85rem" />
+          <button type="button" className={styles.iconButton} data-metal aria-label="Notifications">
             <BellIcon />
           </button>
           <ProfileMenu triggerClassName={styles.avatar} />
@@ -517,7 +521,7 @@ export function Dashboard({
                 thing it hides is a control you cannot undo. */}
             <button
               type="button"
-              className={styles.railToggle}
+              className={styles.railToggle} data-metal
               onClick={() => setRailOpen((o) => !o)}
               aria-expanded={railOpen}
               aria-label={railOpen ? 'Hide the sidebar' : 'Show the sidebar'}
@@ -783,31 +787,57 @@ export function Dashboard({
                   the top bar's Analytics item, and deleting the element that
                   carried it would have quietly turned that control back into
                   the no-op it used to be. */}
+              {/* THE SEVEN ANALYTICS AREAS ARE A FILMSTRIP.
+                  They were a seven-across grid, which on a wide screen made
+                  each block a narrow column of truncated blurb and on a narrow
+                  one stacked into a long scroll. As a strip each area is one
+                  card at readable size, and browsing between them is the
+                  gesture rather than the scroll.
+
+                  Each card keeps its OWN hue — the same one its sidebar row
+                  and its section wear — through the per-item `hue`, so the
+                  strip does not flatten seven identities into one. */}
               <div className={styles.areaGrid} id="analytics-areas">
-                {SIDE_NAV.filter((s) => s.label !== 'Search Player').map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.label}
-                      type="button"
-                      className={styles.areaCard}
-                      data-hue={item.hue}
-                      onClick={() => setSection(item.label)}
-                    >
-                      <span className={styles.areaIcon}>
-                        <Icon size={19} />
-                      </span>
-                      <span className={styles.areaTitle}>{item.label}</span>
-                      <span className={styles.areaBody}>{SECTION_BLURB[item.label]}</span>
-                      {/* Its own row at the foot of the block rather than
-                          trailing the title, so a row of blocks lands its
-                          arrows on one baseline whatever the blurb runs to. */}
-                      <span className={styles.areaArrow} aria-hidden="true">
-                        <ArrowRightIcon size={15} />
-                      </span>
-                    </button>
-                  );
-                })}
+                <Filmstrip
+                  label="Analytics areas"
+                  /* OPENS ON DUEL ZONE, which is the middle of the seven — so
+                     the strip has cards fanning to BOTH sides and reads as
+                     something you are standing in. Opening on the first one
+                     piled every other card off to the right. Found by label
+                     rather than a literal index, so reordering SIDE_NAV cannot
+                     silently move it to an end. */
+                  start={AREAS.findIndex((a) => a.label === 'Duel Zone')}
+                  /* No `n / 7` here — the dot rail underneath already says
+                     where you are, and two readouts of the same thing is one
+                     too many on a landing screen. */
+                  counter={false}
+                  items={AREAS.map(
+                    (item, i) => {
+                      const Icon = item.icon;
+                      return {
+                        key: item.label,
+                        index: i + 1,
+                        title: item.label,
+                        hue: item.hue,
+                        onOpen: () => setSection(item.label),
+                        media: (
+                          <span className={styles.areaFace} data-hue={item.hue}>
+                            <span className={styles.areaFaceIcon}>
+                              <Icon size={26} />
+                            </span>
+                            {/* The blurb is the content, so it lives in the
+                                face where it has room to wrap. The footer's
+                                subtitle is one nowrap line and would have
+                                clipped every one of these to an ellipsis. */}
+                            <span className={styles.areaFaceBody}>
+                              {SECTION_BLURB[item.label]}
+                            </span>
+                          </span>
+                        ),
+                      };
+                    },
+                  )}
+                />
               </div>
               </div>
 
