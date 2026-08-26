@@ -3986,9 +3986,19 @@ the chart moves on its own. That restraint is the whole point of a trust
 section — one that opens with a fabricated figure is worse than none, and this
 one has to survive a reader checking it.
 
-The three claims beside it are properties of how the thing is built, each
-checkable in this repo: `mode=ro` on the database connection, the 8-deck /
-2-shell evidence floor, and evolved forms counted as their own cards.
+**The three claims beside it are gone.** They were properties of how the thing
+is built — "read-only", "measured, or blank", "every card" — each true and each
+checkable, and together they read as a compliance notice at the foot of a page
+about Clash Royale. A trust badge is the least interesting thing you can put
+there.
+
+What replaced them is **card facts**: ten of them, three shown, shuffled per
+visit, and every one *counted* from the shipped card list rather than written
+down. That is the same rule the band always had, applied to something worth
+reading. Three drafts ended on a sentence that was not counted from anything
+("heavier than almost anyone plays", "most cycle decks are built around one");
+those stop at the count now, because a fun fact that turns out to be wrong is
+worse than no fun fact.
 
 **The chart is a histogram, so height carries the value and colour carries
 nothing.** One flat hue, no legend (the title names the series), the count
@@ -7366,6 +7376,31 @@ filled the row and pushed itself apart. From a zero basis the two take an equal
 share of real space and a long name is something that ellipsises inside it. A
 name is not a reason for a deck to move.
 
+**The decks sit out at the edges**, `space-between`, with the VS in the middle
+at 1.45rem. Tracks (`1fr auto 1fr`) were tried for this and push the decks
+apart correctly but leave the VS marooned: a track's own alignment decides
+where a width-capped deck sits inside it, and neither deck was aiming at the
+middle. `space-between` puts the free space in **one** place, under the VS,
+which makes it a gap with something in it rather than a hole.
+
+### It says who played, not what their tag is
+
+A tag identifies a player to the API. It does not tell a reader who they
+played, and a battle log full of `#Y022GRCJQ` is a log you have to decode.
+Both sides are labelled by **name**; the Duel Zone's series header lost its
+opponent tag chip for the same reason.
+
+The tag is not thrown away — it is the element's `title`, so it can still be
+read off and searched, and it is the fallback when no name has ever been
+stored. `clash_data.player_name()` is the lookup, added as a shared helper
+because two inline copies of that `SELECT` already existed and a third would
+have been the drift.
+
+The report carries `player: {tag, name}` with **`name` null rather than the
+tag** when nothing is stored. That keeps "unknown player" and "player called
+#ABC123" distinguishable, and leaves the choice of fallback to the client
+instead of burying it in a helper.
+
 Below 56rem there is no room for two blocks abreast, so they stack and the VS
 becomes a divider rather than a centrepiece. Measured 390–1440px: parallel down
 to 1100, **0px overflow at every width**, tiles never below 66px.
@@ -7720,8 +7755,8 @@ src/
       TopDock.tsx             the top nav as a proximity dock — markup only
       topDockController.ts    its springs. Plain DOM, and the rAF STOPS when
                               they settle; see the note at the top of it
-      ClosingBand.tsx         the page ending — three checkable claims plus a
-                              histogram counted from CARDS at render time
+      ClosingBand.tsx         the page ending — ten card facts, three shown
+                              shuffled, all counted from CARDS at render time
     Analytics/
       ReadingState.tsx        the one loading state all 12 slow reads share
       UplinkLoader.tsx        the progress rig inside it. Paced from MEASURED
