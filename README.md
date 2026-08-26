@@ -6174,32 +6174,74 @@ website writes and the bot reads; the bot's own databases stay `mode=ro` to the
 website, which is what keeps a web request from ever touching the collector's
 storage.
 
-**A hundred tags at once is fine. The two-hundredth over a month was not.**
+### Enrolling a burst: what the limits actually are
 
-The bot drains `SELECT tag FROM tag_requests ORDER BY requested_at LIMIT 200`,
+Asked whether a hundred people searching a hundred new tags at once would all
+land as `pending` and all be enrolled on the next drain. They would. Checking it
+found two separate ceilings, only one of which the question was about.
+
+| limit | was | now | why it matters |
+|---|---|---|---|
+| bot drain batch (`CLASH_TAG_DRAIN_BATCH`) | 200 per 2h cycle | **2000** | 1,000 queued tags would have taken **ten hours** to all be picked up, 200 at a time |
+| queue pruning | none | `prune_enrolled()` | without it the queue eventually **freezes enrolment entirely** — see below |
+| prune cost per search | full scan of `tracked_players` | **once per 60 s** | 1,000 concurrent searches were 1,000 full scans of a growing table |
+
+**Raising the batch is cheap and the arithmetic says so.** Enrolling is an
+`INSERT` into `tracked_players`, not an API call. What the newly enrolled
+players then cost is one battlelog fetch each on the next poll pass, and that
+pass already runs at ~8.6 players/sec — so a thousand extra adds roughly two
+minutes to a pass that takes about forty.
+
+**The prune had to be throttled, and it was my own doing.** `prune_enrolled()`
+reads every row of `tracked_players` to find which queued tags are finished.
+Firing that from `request()` on every search means a thousand simultaneous
+searches perform a thousand full scans of a table with thousands of rows —
+housekeeping becoming the slowest thing on the path. Once a minute is ample: the
+queue only has to stay under the drain batch, and the drain runs every two
+hours. The work is idempotent, so a skipped run costs nothing.
+
+### The freeze the question uncovered
+
+The bot drains `SELECT tag FROM tag_requests ORDER BY requested_at LIMIT n`,
 skipping tags already in `tracked_players` — and nothing deleted the rows it had
-finished with. So once 200 lifetime requests had accumulated, every drain read
-the same 200 already-enrolled rows, skipped all of them, and **never saw a newer
-request**. Enrolment would freeze permanently while the site went on answering
-"pending".
+finished with. Once a full batch of lifetime requests had accumulated, all long
+since enrolled, **every drain read the same batch of skips and never reached a
+newer request.** Enrolment stops permanently, with no error anywhere, while the
+site goes on answering "pending" to everybody.
 
-Demonstrated before fixing: 250 queued, oldest 240 enrolled → **0 new tags
-reachable by the drain**. After pruning the enrolled rows → all 10 visible.
+Demonstrated before fixing: 250 queued with the oldest 240 enrolled leaves
+**zero** new tags reachable. Pruning the enrolled rows makes all ten visible.
 
-The failure is **cumulative, not concurrent**, which is what makes it nasty. A
-hundred people searching a hundred new tags at once was always inside one batch
-and always worked; the queue simply had to get long enough, at which point
-enrolment stops with no error anywhere.
+**Cumulative, not concurrent** — which is what makes it nasty. The
+hundred-at-once case was always inside one batch and always worked. The queue
+merely had to get long enough, and on a public site that is weeks.
 
-`prune_enrolled()` in `server/tracking.py` deletes queue rows the bot has
-already picked up, triggered from `request()` once the queue passes
-`PRUNE_ABOVE = 100` — below the bot's batch of 200, because pruning only after
-the queue already exceeds a batch would be too late. It still writes nowhere but
-its own file: `tracked_players` is read through the same read-only path
-`bot_tracked()` uses. `server/test_tracking.py` (8 checks) pins the freeze and
-the fix, and deliberately hardcodes the bot's `200` rather than importing it —
-the suite exists to check that two projects agree, so reading the bot's value
-would defeat it.
+`prune_enrolled()` fires from `request()` past `PRUNE_ABOVE = 100`, deliberately
+below the bot's batch: pruning only after the queue already exceeds a batch
+would be too late to help. It writes nowhere but its own file —
+`tracked_players` is read through the same read-only path `bot_tracked()` uses —
+and returns 0 rather than raising when no database resolves.
+
+`server/test_tracking.py` (8 checks) pins both the freeze and the fix, and
+**hardcodes the bot's 200 rather than importing it**: the suite exists to check
+that two separate projects agree about a number, so reading the bot's own value
+would defeat the point.
+
+### Still open: the two-hour wait itself
+
+Raising the batch fixes *throughput*, not *latency*. A searched tag still waits
+up to two hours, because `drain_tag_requests()` is only called from the
+2-hourly poll loop.
+
+The fix is written and not applied: a separate 5-minute loop that drains the
+queue and immediately calls `sync_player_safe()` on whatever it just enrolled,
+capped per cycle so website traffic cannot run away with the CR API budget. The
+bot already has `sync_player_safe(tag, track=False)` for exactly this — it is
+documented as the one place every command routes through, and it never raises.
+
+It needs an edit to `bot.py` on the VPS, which is a different project and a
+running production process. `bot.py` is backed up (`bot.py.bak-20260826`),
+unchanged and verified running.
 
 **`trackedPlayers` is on `/coverage`, not `/status`.** `/status` is the one
 route that answers without a key, and how many players the service collects is
@@ -7493,6 +7535,10 @@ yet, or does in a way that is fine now and will not be later.
 | **`OIE_ALLOWLIST`** | unset, so the Coach's opponent read degrades to `{enabled:false}` for everyone. Designed behaviour, but the engine half is dark in production |
 | **Staging** | there is none. `main` deploys to production, and every fix in this pass was verified against production after the fact |
 | **A maintenance screen** | not built. Nothing to show while a deploy is mid-flight |
+| **Enrolment latency** | a searched tag waits up to **2 hours** to be collected, because `drain_tag_requests()` only runs inside the 2-hourly poll. The fix — a 5-minute loop that drains and immediately `sync_player_safe()`s what it enrolled — is designed and **not applied**: it needs an edit to `bot.py`, a different project and a live process. `bot.py.bak-20260826` exists; the file is unchanged and running |
+| **Thin tags read as broken** | a new player with a handful of battles clears no evidence floor, so Duel Analysis and Deck Counter are correctly empty and *look* faulty. The Deck Counter now says why in its own numbers; Duel Analysis does not yet |
+| **The site cannot enforce analytics tiers** | `api.deckkies.com` answers anyone. Making the gate real means routing those calls through a Vercel function that checks the tier, as the Coach's opponent read already does |
+| **Signed-in mobile** | unverified. The mobile pass was run signed out, so Cards, Duel Analysis and Duel Zone showed the gate card and their phone layouts have never actually been looked at |
 | **No backup of the VPS database** | **the largest single exposure.** No backup directory, no cron, no timer; `deploy/backup_db.py` sits at `/opt/clashbot/deploy/` unscheduled. Cutover checklist item 11 is unmet, and the migration doc says outright there is "no second copy of the active database anywhere" |
 | **H:** | unplugged 2026-08-26 with contents intact, and still the only rollback. Frozen at that date, so its value decays daily — which is the argument for the row above. Must not be wiped: `archive.db` holds 1 May – 1 Jun, a month in no other copy |
 | **Deploying `server/`** | nothing enforces that `src/data/` goes with it. That omission emptied three screens silently; it is now merely *visible* (a console tile), not prevented |

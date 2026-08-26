@@ -156,6 +156,24 @@ def bot_tracked(tag: str) -> bool:
 #: the one thing here that already writes to it.
 PRUNE_ABOVE = 100
 
+#: Seconds between prunes, however many searches arrive.
+#:
+#: THE PRUNE IS CHEAP PER RUN AND EXPENSIVE PER REQUEST. It reads every row of
+#: `tracked_players` -- thousands, and growing -- to find out which queued tags
+#: are done. Firing that from `request()` unconditionally means a thousand
+#: people searching at once perform a thousand full scans of the bot's table,
+#: which turns a housekeeping job into the slowest thing on the path.
+#:
+#: Once a minute is plenty: the queue only has to stay under the bot's drain
+#: batch of 200, and it is drained every two hours. The work is idempotent, so
+#: a skipped run costs nothing.
+PRUNE_EVERY_S = 60.0
+
+#: Monotonic stamp of the last prune. Process-local on purpose — the API runs
+#: as one process, and a shared clock for a job this cheap would be a database
+#: write to save a database read.
+_last_prune = 0.0
+
 
 def prune_enrolled() -> int:
     """Drop queue rows the bot has already picked up. Returns rows removed.
@@ -233,8 +251,14 @@ def request(tag: str, source: str = "search") -> dict:
 
     # Outside the connection above: prune_enrolled opens its own, and holding
     # two writers on one SQLite file is how this project earned its WAL notes.
+    #
+    # THROTTLED, because this is on the path of every search. See PRUNE_EVERY_S.
+    global _last_prune
     if queued > PRUNE_ABOVE:
-        prune_enrolled()
+        now_m = time.monotonic()
+        if now_m - _last_prune >= PRUNE_EVERY_S:
+            _last_prune = now_m
+            prune_enrolled()
     return out
 
 
