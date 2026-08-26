@@ -898,9 +898,20 @@ async function hydrateFromRemote(userId: string) {
     // (pre-palette remote blobs have no `sets.palette` at all).
     const activeId = useBuilderStore.getState().activePaletteFolderId;
     const activeFolder = activeId ? paletteFolders.find((f) => f.id === activeId) : undefined;
+    /* MERGED OVER DEFAULTS, not spread on its own. A blob missing a collection
+       — an older format, a partial write, anything hand-made — would otherwise
+       leave `sets.home` undefined, and the first screen that reads
+       `sets.home.decks` throws and React unmounts the whole app. A blank page
+       is the worst possible response to slightly wrong stored data, and the
+       code already knows remote blobs vary: pre-palette ones have no
+       `sets.palette` at all. */
     useBuilderStore.setState({
-      sets: { ...remote.sets, palette: activeFolder ?? createPaletteWorkshop() },
-      library: remote.library,
+      sets: {
+        ...createDefaultSets(),
+        ...remote.sets,
+        palette: activeFolder ?? createPaletteWorkshop(),
+      },
+      library: remote.library ?? [],
       deckSlotCount: remote.deckSlotCount ?? deriveDeckSlotCounts(remote.sets),
       paletteFolders,
       activePaletteFolderId: activeFolder ? activeId : null,
