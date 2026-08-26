@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
+import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
+import { useBuilderStore } from '../../state/store';
+import { duelPairs, type DuelSaveOutcome } from '../../state/duelImport';
 import {
   AnalyticsError,
   fetchDuelZone,
@@ -85,6 +88,12 @@ const ICONS = {
   crown: (
     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
       <path d="M4 18h16l1.2-9-4.7 3.2L12 5l-4.5 7.2L2.8 9z" />
+    </svg>
+  ),
+  save: (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <path d="M17 21v-8H7v8M7 3v5h8" />
     </svg>
   ),
 };
@@ -249,6 +258,58 @@ function GameRow({ game, scoreKnown }: { game: DuelGame; scoreKnown: boolean }) 
   );
 }
 
+/* Save this duel into the Versus builder.
+ *
+ * A duel already IS a versus set: one player's decks against another's, game
+ * by game. The button only translates it — blue takes the searched player's
+ * decks, red takes the opponent's, and a three-game duel becomes three decks a
+ * side. The rules that decide what a real deck is and whether these decks are
+ * already saved live in state/duelImport.ts.
+ *
+ * It is DISABLED, not hidden, when a duel has nothing to save. A native duel
+ * row stores one whole 16- or 24-card loadout and no opponent, so there are no
+ * per-game pairs to build from — and a button that silently vanishes on some
+ * rows reads as a bug, where one that says why does not. */
+function SaveDuelButton({ series }: { series: DuelSeries }) {
+  const saveDuelPlayed = useBuilderStore((s) => s.saveDuelPlayed);
+  const [done, setDone] = useState<DuelSaveOutcome | null>(null);
+
+  const pairs = duelPairs(series.games);
+  const can = pairs.length > 0;
+
+  if (done?.ok) {
+    return (
+      <span className={styles.savedNote} data-state="new">
+        Saved as {done.name}
+      </span>
+    );
+  }
+  if (done && done.reason === 'duplicate') {
+    return (
+      <span className={styles.savedNote} data-state="dupe">
+        Already saved as {done.name}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={styles.saveBtn}
+      disabled={!can}
+      onClick={() => setDone(saveDuelPlayed(series.games))}
+      title={
+        can
+          ? `Save as a Versus set: ${pairs.length} decks each side`
+          : 'This duel is stored as one loadout with no per-game opponent, so there is no versus pair to build'
+      }
+    >
+      {ICONS.save}
+      Save duel
+    </button>
+  );
+}
+
 function SeriesCard({ series }: { series: DuelSeries }) {
   const score = series.scoreKnown ? `${series.playerWins}–${series.opponentWins}` : null;
   return (
@@ -267,6 +328,8 @@ function SeriesCard({ series }: { series: DuelSeries }) {
         </span>
 
         <span className={styles.seriesWhen}>{stamp(series.startTime)}</span>
+
+        <SaveDuelButton series={series} />
       </header>
 
       <ol className={styles.games}>
@@ -336,6 +399,8 @@ function SequenceRow({ entry }: { entry: SequenceEntry }) {
 export function DuelZone({ tag, season = 'Current Season' }: { tag: string; season?: Season }) {
   const [pane, setPane] = useState<WindowId>('series');
   const [pickerOpen, setPickerOpen] = useState(false);
+  /* Cards both windows are narrowed to. Empty means every duel. */
+  const [cardFilter, setCardFilter] = useState<string[]>([]);
   const [report, setReport] = useState<DuelZoneReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -408,11 +473,42 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
     );
   }
 
-  const { summary, sequence, series } = report;
+  const { summary, sequence, series: allSeries } = report;
   const winRate = summary.games ? (summary.wins / summary.games) * 100 : 0;
+
+  /* NARROWED BY THE PLAYER'S OWN DECKS, not the opponent's.
+     This is that player's screen: every row is a deck they brought, and the
+     opponent's list is a panel you open on one of them. Matching their decks
+     answers "which duels did they bring Hog Rider to"; matching both sides
+     would make a hit mean two different things in the same list.
+
+     A native duel row holds the whole 16- or 24-card loadout, so it matches
+     when the card is anywhere in that loadout — which is true, and is what the
+     row shows. */
+  const filtering = cardFilter.length > 0;
+  const series = filtering
+    ? allSeries.filter((s) => s.games.some((g) => deckMatchesFilter(g.cards, cardFilter)))
+    : allSeries;
+
+  /* An opener leads to its companions, so an entry survives if the card is
+     anywhere in that loadout — otherwise filtering to a G2 card would hide the
+     very sequence that predicts it. */
+  const allEntries = sequence.entries;
+  const entries = filtering
+    ? allEntries.filter(
+        (e) =>
+          deckMatchesFilter(e.opener.cards, cardFilter) ||
+          e.next.some((d) => deckMatchesFilter(d.cards, cardFilter)),
+      )
+    : allEntries;
+
   const counts: Record<WindowId, string> = {
-    series: `${nf.format(summary.duels)} duels`,
-    sequence: `${sequence.entries.length} openers`,
+    series: filtering
+      ? `${series.length} of ${allSeries.length}`
+      : `${nf.format(summary.duels)} duels`,
+    sequence: filtering
+      ? `${entries.length} of ${allEntries.length}`
+      : `${allEntries.length} openers`,
   };
 
   return (
@@ -427,6 +523,20 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
               {winRate.toFixed(1)}% won
               {summary.native > 0 && ` · ${nf.format(summary.native)} native`}
             </p>
+          </div>
+
+          {/* One control, both windows. The date range says WHEN, this says
+              WHICH — keeping them on the same row is what makes it obvious the
+              two compose rather than replace each other. */}
+          <div className={styles.filterSlot}>
+            <WinConFilter
+              align="end"
+              selected={cardFilter}
+              onToggle={(key) =>
+                setCardFilter((f) => (f.includes(key) ? f.filter((k) => k !== key) : [...f, key]))
+              }
+              onClear={() => setCardFilter([])}
+            />
           </div>
 
           <div className={styles.range}>
@@ -543,14 +653,21 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
           <section className={styles.body}>
             {series.length === 0 ? (
               <p className={styles.empty}>
-                No duels in this window. Widen the range, or try a player who plays clan wars.
+                {filtering
+                  ? `No duel in this window was played with ${
+                      cardFilter.length === 1 ? 'that card' : 'all those cards together'
+                    }.`
+                  : 'No duels in this window. Widen the range, or try a player who plays clan wars.'}
               </p>
             ) : (
               <>
                 {series.map((s) => (
                   <SeriesCard key={s.id} series={s} />
                 ))}
-                {summary.duels > summary.shown && (
+                {/* Only meaningful unfiltered: the server capped what it sent,
+                    and "the N most recent of M" would be counting a different
+                    M than the one on screen once a filter is on. */}
+                {!filtering && summary.duels > summary.shown && (
                   <p className={styles.more}>
                     Showing the {summary.shown} most recent of {nf.format(summary.duels)} duels in
                     this window.
@@ -561,9 +678,11 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
           </section>
         ) : (
           <section className={styles.body}>
-            {sequence.entries.length === 0 ? (
+            {entries.length === 0 ? (
               <p className={styles.empty}>
-                Not enough duel series to read a deck sequence yet.
+                {filtering
+                  ? 'No opener or companion in this window holds that.'
+                  : 'Not enough duel series to read a deck sequence yet.'}
               </p>
             ) : (
               <>
@@ -573,7 +692,7 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
                   shares one is impossible and is never shown.
                   {sequence.lowConfidence && ' Thin history: read these as a hint, not a read.'}
                 </p>
-                {sequence.entries.map((e) => (
+                {entries.map((e) => (
                   <SequenceRow key={e.opener.cards.join(',')} entry={e} />
                 ))}
               </>

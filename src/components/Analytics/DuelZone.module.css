@@ -113,6 +113,13 @@
   color: var(--text-muted);
 }
 
+/* The card filter. `position: relative` is what its dropdown anchors to, and
+   `flex: none` keeps it at its own size beside a `flex: 1` title block. */
+.filterSlot {
+  position: relative;
+  flex: none;
+}
+
 .range {
   display: flex;
   gap: 0.3rem;
@@ -463,6 +470,62 @@
   font-size: 0.75rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Save this duel as a Versus set. Quiet at rest: it repeats on every duel in
+   the log, so a coloured chip per row would turn the list into a column of
+   buttons. It takes the accent only on hover, when it is the thing being
+   reached for. */
+.saveBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  flex: none;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+
+.saveBtn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--accent-action-wash-sunken);
+}
+
+.saveBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* What happened, in the button's place. Replacing it rather than sitting
+   beside it is deliberate — the answer is the whole point, and a duel already
+   saved has nothing left to press. */
+.savedNote {
+  flex: none;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.savedNote[data-state='new'] {
+  color: var(--hue-green);
+  border-color: var(--green-edge);
+  background: var(--green-wash);
+}
+
+.savedNote[data-state='dupe'] {
+  color: var(--text-muted);
+  background: var(--surface-sunken);
 }
 
 .games {

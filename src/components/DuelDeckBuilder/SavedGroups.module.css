@@ -227,19 +227,27 @@
   --row-name: 3.6rem;
 }
 
+/* PLAIN INK, both sides.
+   These used to take --player-blue / --player-red, which are not a blue and a
+   red: the palette resolves them to #e0e0e0 and #8a8a8a in dark, #1a1a1a and
+   #8a8a8a in light. So one heading read as text and the other as a disabled
+   grey label, which is not a distinction either of them means. The side is
+   already said by the word and by which column it is over. */
 .groupSideLabel {
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  color: var(--text);
 }
 
-.groupSideLabel[data-owner='blue'] {
-  color: var(--player-blue);
-}
-
+/* Red is the right-hand column, so its heading belongs on the right edge.
+   Left-aligned it landed against the middle of the card, reading as a caption
+   for the gap between the two sides rather than for the decks under it. The
+   deck rows in this column are already mirrored the same way — the crown sits
+   on their left where blue's sits on its right. */
 .groupSideLabel[data-owner='red'] {
-  color: var(--player-red);
+  text-align: right;
 }
 
 @media (max-width: 900px) {

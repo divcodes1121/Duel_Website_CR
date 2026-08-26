@@ -375,7 +375,6 @@ export function DeckFx() {
         auraMat.uniforms.uOpacity.value = pal.opacity;
         burstMat.uniforms.uOpacity.value = pal.fx;
         sweepMat.uniforms.uOpacity.value = pal.fx;
-        (sweepMat.uniforms.uColor.value as import('three').Color).copy(pal.success);
         for (const m of [auraMat, burstMat, sweepMat]) {
           m.blending = blendNow();
           m.needsUpdate = true;

@@ -40,6 +40,10 @@ interface AccountState {
  * behaviour. Fingerprinting would be harder to shake off and is not something
  * to build into a deck site.
  */
+// NOT renamed with the brand. This key is how a browser proves it is a device
+// this account already registered; changing it makes every signed-in device
+// look new and burns a slot against the device limit. Same reasoning as the
+// `royal-` persistence keys.
 const DEVICE_KEY = 'dekkies-device-id';
 
 export function deviceId(): string {

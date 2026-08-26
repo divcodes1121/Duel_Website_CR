@@ -35,11 +35,13 @@ bot's SQLite files read-only.
 > Coach's proxy) all gone.
 > See [Accounts, tiers and the gate](#accounts-tiers-and-the-gate).
 >
-> **The rename is all but finished.** The shell, the landing page and the login
-> screen all wear **DEKKIES**. What still says `royal-` is the persistence keys
-> (`royal-duels-builder`, `royal-duels-theme`, `royal-rail`), left alone
-> deliberately: renaming them orphans every saved deck in every browser unless a
-> migration reads the old keys first.
+> **The rename is finished, with two keys left behind on purpose.** The shell,
+> the landing page, the sign-in card, the browser tab and the PDF export all
+> wear **DECKKIES**, matching the domain. What still says `royal-` is the
+> persistence keys (`royal-duels-builder`, `royal-duels-theme`, `royal-rail`),
+> and `dekkies-device-id` keeps its old spelling for the same reason: renaming
+> a storage key orphans what it addresses — every saved deck in every browser,
+> or every registered device — unless a migration reads the old key first.
 
 ---
 
@@ -158,8 +160,11 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 36. [The filmstrip](#the-filmstrip)
 37. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
 38. [Testing and verification](#testing-and-verification)
-39. [Project layout](#project-layout)
-40. [Deliberately not done](#deliberately-not-done)
+39. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
+40. [Two filters and a heading](#two-filters-and-a-heading)
+41. [DEKKIES is DECKKIES](#dekkies-is-deckkies)
+42. [Project layout](#project-layout)
+43. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -180,7 +185,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 221 tests over the deck, duel, export and admin logic
+npm run test                      # 239 tests over the deck, duel, export and admin logic
 python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
@@ -3243,7 +3248,7 @@ The product is **Dekkies** now, and the shell was rebuilt to the new design:
 
 | | before | after |
 |---|---|---|
-| brand | "Royal Arena", gold crown on a sunken tile | **DEKKIES**, white crown on a solid violet tile |
+| brand | "Royal Arena", gold crown on a sunken tile | **DECKKIES** (was DEKKIES until 26 Aug), white crown on a solid violet tile |
 | nav | Home · Analytics · Deck Builder · Duel Builder · Counter Palette · About | Home · Analytics · **Deck Vault** · Duel Builder · **Counter Hub** · **Meta** |
 | tag search | on the landing section, and a row that replaced the nav | always in the chrome, ⌘K from anywhere |
 | sidebar selection | a solid slab in the row's own hue | a violet tint with a 3px leading bar |
@@ -7273,6 +7278,159 @@ conclusions:
 
 ---
 
+## Saving a duel you actually played
+
+The Duel Zone already knows both loadouts of a duel, game by game: the searched
+player's decks, and — where the row stores them — the opponent's. That is
+exactly the shape of a Versus save. So each duel in the log now carries a
+**Save duel** button that writes the whole thing into the builder's library as
+one group, blue for the player and red for whoever they were up against.
+
+A three-game duel becomes three decks a side. Four becomes four. Five becomes
+five — and five is where it stops, because a duel collection holds
+`DUEL_DECK_COUNT` decks and there is nowhere to put a sixth.
+
+| games in the duel | decks written |
+|---|---|
+| 3 | 3 blue + 3 red = 6 |
+| 4 | 4 + 4 = 8 |
+| 5 | 5 + 5 = 10 |
+
+The decks are named `G1…Gn` rather than `Deck 1…n`, because in a duel the game
+a deck was fielded in is the useful fact about it. Crowns travel too: a game
+whose result is known writes `playerCrowns` and `opponentCrowns` onto the two
+decks, so the saved group carries the real scoreline rather than a blank one.
+
+### What counts as a deck
+
+Eight cards, every one of them known. That is the same guard `DeckActions`
+uses, and it is what keeps native duel rows out without this code having to
+know what a native duel row is.
+
+A native row is one stored row holding a whole 16- or 24-card loadout and no
+per-game opponent at all. Its cards fail the count, its opponent is `null`, and
+it produces no pair — which is right, because the alternative is a deck built
+from the first eight cards of a loadout, and that would look entirely plausible
+and be wrong.
+
+Those rows keep the button, **disabled**, saying why. A control that silently
+vanishes on some rows and not others reads as a bug; one that explains itself
+does not. It is the same call the row expansion already makes — a native row
+does not open onto an empty opponent panel either.
+
+### "It already exists"
+
+Pressing Save twice must not quietly add a second copy. A group is the same
+group when **every deck on both sides is the same deck**, so the check is a
+signature: each deck reduced to its sorted card keys, each side reduced to its
+sorted list of those, empty padding contributing nothing.
+
+Three consequences, all deliberate:
+
+* **Game order does not matter.** The same duel re-saved is the same set of
+  decks whether or not G1 and G2 come out in the same order.
+* **Padding does not matter.** Three real decks in a five-slot collection
+  compare equal to three real decks, so a slot count cannot change the answer.
+* **The sides are not interchangeable.** The same eight decks with blue and red
+  swapped is a different duel — two different people — not a re-save of this
+  one.
+
+The refusal names the group that already holds it ("Already saved as Duel Deck
+2"), because "it already exists" without saying where is a dead end.
+
+### Naming
+
+`Duel Deck n`, where *n* succeeds the highest number already in the library —
+counted from the names, not from the library's length. Counting the length
+means deleting group 2 of three hands the next save a name that is already
+taken. Groups named some other way are ignored; they are not part of this
+sequence.
+
+### Where the logic lives
+
+`src/state/duelImport.ts`, pure, with `tests/duelImport.test.ts` (18 checks)
+over it. The store action is four lines and does nothing but call it and
+prepend the result. Both rules that carry the feature — what a real deck is,
+and what the same duel twice is — fail *quietly* when they are wrong, which is
+the argument for testing them away from a component.
+
+---
+
+## Two filters and a heading
+
+### The Meta board's card filter moved to the middle
+
+It was in the top-right stack with the report button and the freshness chip,
+and its dropdown is 30rem wide and hung from its own left edge — so opening it
+at the right-hand end of a panel header sent it straight off the side of the
+screen.
+
+The header is now a `1fr auto 1fr` **grid** rather than a flex row. That is
+what actually centres the control: with flex and auto margins it could only be
+centred in whatever space the title and the stats happened to leave over, which
+moves every time the date range or the battle count changes width. Measured at
+seven widths from 1440 down to 390, the trigger's centre and the header's
+centre agree to the pixel, with no overflow anywhere. Below 68rem the header
+becomes two rows and the filter spans underneath, still centred.
+
+`WinConFilter` grew an `align` prop for this — `start` (the default, and still
+right on the deck screens where the bar begins at the left margin), `center`,
+and `end`. The panel is the only thing it changes.
+
+### The Duel Zone got the same filter
+
+Both of its windows narrow to the cards you pick, on the same control and the
+same `deckMatchesFilter` predicate as everywhere else.
+
+**It matches the player's own decks, not the opponent's.** This is that
+player's screen: every row is a deck they brought, and the opponent's list is a
+panel you open on one of them. Matching their decks answers "which duels did
+they bring Hog Rider to". Matching both sides would make a hit mean two
+different things in the same list.
+
+The Deck Sequence window matches an opener **or any of its companions**,
+because an opener leads to its companions — filtering to a G2 card and hiding
+the very sequence that predicts it would be backwards.
+
+One thing had to be withheld while a filter is on: "Showing the N most recent
+of M duels". The server capped what it sent, so that M counts a different set
+than the one on screen.
+
+### The versus headings
+
+`BLUE PLAYER` and `RED PLAYER` in a saved group took `--player-blue` and
+`--player-red`. Those are not a blue and a red — the palette resolves them to
+`#e0e0e0` and `#8a8a8a` in dark, `#1a1a1a` and `#8a8a8a` in light. So one
+heading read as text and the other as a disabled grey label, which is not a
+distinction either of them means. Both are `--text` now: white on dark, black
+on light.
+
+The red heading is also right-aligned. It is a block that fills its column, so
+left-aligned its text landed against the middle of the card and read as a
+caption for the gap between the two sides rather than for the decks under it.
+The deck rows in that column are already mirrored the same way — red's crown
+sits to the left of its cards where blue's sits to the right.
+
+**Measure the text, not the box.** The heading's rectangle sits at its column's
+edge whatever the text inside it does, which is exactly the bug being checked;
+a `Range` over the element's contents gives the glyphs.
+
+---
+
+## DEKKIES is DECKKIES
+
+The domain has always been `deckkies.com`. The brand in the shell, the sign-in
+card, the PDF footer and cover, the exported filename prefix and the browser
+tab title all said DEKKIES. They now say DECKKIES.
+
+**One thing deliberately did not change:** `DEVICE_KEY = 'dekkies-device-id'`
+in `accountStore.ts`. That key is how a browser proves it is a device the
+account already registered. Renaming it makes every signed-in device look new
+and burns a slot against the device limit — the same reasoning that keeps the
+`royal-` persistence keys as they are.
+
+---
+
 ## Project layout
 
 ```
@@ -7335,6 +7493,9 @@ src/
   state/gate.ts               who may open what. `anon` and `free` are the same
   state/adminStore.ts         the console's three sources, none allowed to sink
                               the others
+  state/duelImport.ts         a played duel -> a Versus group. What counts as a
+                              real deck, and what counts as the same set twice.
+                              Pure, so both can be tested without a store
   utils/format.ts             ago / until / bytes. NO imports, deliberately —
                               importing the store to test a date formatter
                               constructs a Supabase client

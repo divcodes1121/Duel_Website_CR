@@ -179,28 +179,37 @@ export function MetaDecks() {
   return (
     <section className={styles.panel}>
       <header className={styles.head}>
-        <span className={styles.headIcon}>{ICONS.trophy}</span>
-        <div className={styles.headText}>
-          <h1 className={styles.title}>Top Meta Decks</h1>
-          <p className={styles.blurb}>
-            What the whole player base is running, ranked by use rate — last {win.days} days
-            {win.from ? `, ${shortDay(win.from)} – ${shortDay(win.to)}` : ''}.
-          </p>
+        <div className={styles.headLead}>
+          <span className={styles.headIcon}>{ICONS.trophy}</span>
+          <div className={styles.headText}>
+            <h1 className={styles.title}>Top Meta Decks</h1>
+            <p className={styles.blurb}>
+              What the whole player base is running, ranked by use rate — last {win.days} days
+              {win.from ? `, ${shortDay(win.from)} – ${shortDay(win.to)}` : ''}.
+            </p>
+          </div>
+        </div>
+
+        {/* THE MIDDLE COLUMN, not a third thing pushed onto the right edge.
+            The header is a grid of 1fr / auto / 1fr precisely so this sits in
+            the centre of the panel however wide the title and the stats turn
+            out to be - flex auto-margins would only centre it in the space
+            those two happened to leave over. */}
+        <div className={styles.filterSlot}>
+          <WinConFilter
+            align="center"
+            selected={cardFilter}
+            onToggle={(key) =>
+              setCardFilter((f) => (f.includes(key) ? f.filter((k) => k !== key) : [...f, key]))
+            }
+            onClear={() => setCardFilter([])}
+          />
         </div>
 
         <div className={styles.headStats}>
           {/* A thunk, not a built document — the report describes the board as
               it stands when the button is pressed, including how stale the
               snapshot has become by then. */}
-          <div className={styles.filterSlot}>
-            <WinConFilter
-              selected={cardFilter}
-              onToggle={(key) =>
-                setCardFilter((f) => (f.includes(key) ? f.filter((k) => k !== key) : [...f, key]))
-              }
-              onClear={() => setCardFilter([])}
-            />
-          </div>
           <ReportButton build={() => metaBoardDoc(board)} />
           <span className={styles.stat}>
             {cardFilter.length ? (

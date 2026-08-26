@@ -151,7 +151,7 @@ export function AuthScreen() {
             <CrownIcon />
           </span>
 
-          <h1 className={loginStyles.title}>Dekkies</h1>
+          <h1 className={loginStyles.title}>Deckkies</h1>
           <p className={loginStyles.subtitle}>
             {mode === 'reset'
               ? 'We will email you a link to set a new password'

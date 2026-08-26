@@ -22,7 +22,7 @@
  */
 
 /** Matches the other persisted keys — see the note in README about why the
- *  `royal-` prefix stays even though the product is DEKKIES now. */
+ *  `royal-` prefix stays even though the product is DECKKIES now. */
 const STORE_KEY = 'royal-load-timing';
 
 /** Samples kept per screen. Five is enough for a median to be stable and short

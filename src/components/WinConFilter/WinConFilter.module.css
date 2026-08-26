@@ -122,6 +122,19 @@
   box-shadow: var(--shadow-float);
 }
 
+/* Where the panel hangs from. `left: 0` is only right when the bar itself is
+   at the left of the page; anywhere else a 30rem panel runs off the edge, and
+   the header of a panel is exactly "anywhere else". */
+.panel[data-align='center'] {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.panel[data-align='end'] {
+  left: auto;
+  right: 0;
+}
+
 .panelScroll {
   display: flex;
   flex-direction: column;

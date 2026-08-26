@@ -178,5 +178,5 @@ export function reportFilename(doc: ReportDoc): string {
       .replace(/^-|-$/g, '');
   const day = new Date().toISOString().slice(0, 10);
   const who = doc.subject ? `-${slug(doc.subject)}` : '';
-  return `dekkies-${slug(doc.screen)}${who}-${day}.pdf`;
+  return `deckkies-${slug(doc.screen)}${who}-${day}.pdf`;
 }

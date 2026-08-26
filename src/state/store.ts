@@ -29,6 +29,7 @@ import {
   type UniquenessScope,
 } from './deckUtils';
 import { CARDS_BY_KEY } from '../data/cards';
+import { buildDuelImport, type DuelSaveOutcome, type PlayedGame } from './duelImport';
 import { pullRemoteDecks, pushRemoteDecks, type SyncPayload } from './syncClient';
 import { useAccountStore } from './accountStore';
 
@@ -133,6 +134,12 @@ interface BuilderState extends PersistedSlice {
   updateSaved: () => void;
   /** Restore a library entry into its tab (switching tabs if needed); becomes active. */
   loadSaved: (id: string) => void;
+  /**
+   * Save a duel that was actually played (from the Duel Zone) as a Versus
+   * group: the searched player's decks on blue, their opponent's on red.
+   * Refuses when the same decks are already saved — see `duelImport`.
+   */
+  saveDuelPlayed: (games: PlayedGame[]) => DuelSaveOutcome;
   renameSaved: (id: string, name: string) => void;
   deleteSaved: (id: string) => void;
   /** Reveal the next hidden duel deck slot (up to DUEL_DECK_COUNT). */
@@ -542,6 +549,16 @@ export const useBuilderStore = create<BuilderState>()(
             activeSavedId: entry.id,
           };
         }),
+
+      // Returns rather than only mutating, because the answer the caller has to
+      // show ("saved as X" / "already saved as Y") is decided here.
+      saveDuelPlayed: (games) => {
+        const { outcome, entry } = buildDuelImport(games, get().library);
+        // A new entry is never the "loaded" one: this saves a duel from another
+        // screen entirely and must not arm the builder's update-vs-new prompt.
+        if (entry) set((state) => ({ library: [entry, ...state.library] }));
+        return outcome;
+      },
 
       renameSaved: (id, name) =>
         set((state) => ({

@@ -364,7 +364,7 @@ function footer(ctx: Ctx, total: number) {
   setFont(doc, 'sans');
   doc.setFontSize(7.5);
   ink(doc, p.muted);
-  doc.text('Dekkies', MARGIN, FOOTER_Y);
+  doc.text('Deckkies', MARGIN, FOOTER_Y);
   doc.text(`${ctx.page} / ${total}`, PAGE_W - MARGIN, FOOTER_Y, { align: 'right' });
 }
 
@@ -659,13 +659,13 @@ function drawCover(ctx: Ctx) {
   setFont(doc, 'sans', true);
   doc.setFontSize(11);
   alpha(doc, 0.85, () => {
-    doc.text(docModel.subject ?? 'Dekkies analytics', MARGIN, 41);
+    doc.text(docModel.subject ?? 'Deckkies analytics', MARGIN, 41);
   });
 
   setFont(doc, 'display');
   doc.setFontSize(11);
   ink(doc, p.onSolid);
-  alpha(doc, 0.8, () => doc.text('DEKKIES', PAGE_W - MARGIN, 30, { align: 'right' }));
+  alpha(doc, 0.8, () => doc.text('DECKKIES', PAGE_W - MARGIN, 30, { align: 'right' }));
 
   // The query. Every one of these is needed to interpret the figures, which is
   // why the cover states them rather than leaving them implicit.

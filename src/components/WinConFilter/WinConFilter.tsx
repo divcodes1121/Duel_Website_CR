@@ -54,6 +54,14 @@ interface WinConFilterProps {
   selected: string[];
   onToggle: (key: string) => void;
   onClear: () => void;
+  /**
+   * Which edge the dropdown hangs from. The panel is 30rem wide, so a trigger
+   * that is not at the left of its container opens it straight off the side of
+   * the screen — which is what happened when this control moved into a panel
+   * header. Left is still the default: on the deck screens the bar starts at
+   * the left margin and there is nothing to correct.
+   */
+  align?: 'start' | 'center' | 'end';
   /** Optional trailing content (e.g. a "2 of 5 decks" counter). */
   children?: React.ReactNode;
 }
@@ -72,7 +80,13 @@ interface WinConFilterProps {
  * the search that was already there. Whatever IS selected stays out on the bar
  * as a chip, because a filter you cannot see is a filter you cannot undo.
  */
-export function WinConFilter({ selected, onToggle, onClear, children }: WinConFilterProps) {
+export function WinConFilter({
+  selected,
+  onToggle,
+  onClear,
+  align = 'start',
+  children,
+}: WinConFilterProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -138,7 +152,7 @@ export function WinConFilter({ selected, onToggle, onClear, children }: WinConFi
       </div>
 
       {open && (
-        <div className={styles.panel}>
+        <div className={styles.panel} data-align={align}>
           <input
             className={styles.search}
             value={query}

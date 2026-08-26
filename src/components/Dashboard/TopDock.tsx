@@ -25,7 +25,7 @@
  * re-invent the indicator.
  *
  * **The logo is not a dock item.** In the reference the wordmark is the first
- * item in the field. DEKKIES sits outside the nav in its own topbar cell, and
+ * item in the field. DECKKIES sits outside the nav in its own topbar cell, and
  * pulling it in would have restructured the bar's three-column layout to buy a
  * mark that grows.
  */

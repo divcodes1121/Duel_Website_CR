@@ -450,7 +450,7 @@ export function Dashboard({
           <span className={styles.brandMark}>
             <CrownIcon size={17} />
           </span>
-          DEKKIES
+          DECKKIES
         </button>
 
         {/* The nav NEVER goes away. It used to be swapped out for the player
@@ -542,7 +542,7 @@ export function Dashboard({
                 </span>
               )}
               {access === 'pro' && (
-                <span className={styles.proBadge} title="Dekkies Pro">
+                <span className={styles.proBadge} title="Deckkies Pro">
                   PRO
                 </span>
               )}
@@ -625,7 +625,7 @@ export function Dashboard({
               <span className={styles.proMark}>
                 <CrownIcon size={14} />
               </span>
-              Dekkies Pro
+              Deckkies Pro
             </span>
             {access === 'pro' || access === 'admin' ? (
               <p className={styles.proBody}>
