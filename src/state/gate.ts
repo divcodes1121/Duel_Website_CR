@@ -1,5 +1,6 @@
 import { useAccountStore } from './accountStore';
-import { FREE_SECTIONS, isSupabaseConfigured, type Tier } from './supabase';
+import { isSupabaseConfigured } from './supabase';
+import type { Access } from './tiers';
 
 /**
  * Who may open what.
@@ -16,7 +17,7 @@ import { FREE_SECTIONS, isSupabaseConfigured, type Tier } from './supabase';
  * not really public.
  */
 
-export type Access = 'anon' | Tier;
+export type { Access } from './tiers';
 
 export function useAccess(): Access {
   const ready = useAccountStore((s) => s.ready);
@@ -30,25 +31,13 @@ export function useAccess(): Access {
   return tier;
 }
 
-/** True when this access level may open the named analytics area. */
-export function sectionAllowed(access: Access, section: string): boolean {
-  if (access === 'anon' || access === 'free') {
-    return (FREE_SECTIONS as readonly string[]).includes(section);
-  }
-  return true;
-}
-
-/**
- * Why a section is closed, which decides what the gate card offers.
- *
- * The two are genuinely different asks — one is "make an account, it is free
- * for three days", the other is "your three days are up". Showing a stranger an
- * upgrade prompt, or a lapsed user a sign-up prompt, is the kind of wrong-footed
- * message that reads as the site not knowing who you are.
- */
-export function gateReason(access: Access): 'signin' | 'upgrade' {
-  return access === 'anon' ? 'signin' : 'upgrade';
-}
-
-/** Sections everyone can open, for rendering a lock next to the rest. */
-export { FREE_SECTIONS };
+/* The pure rules live in `tiers.ts` and are re-exported so every call site
+   here is unchanged. Only `useAccess` needs the store, which is the whole
+   reason for the split: a component can ask "may this tier open X" without
+   pulling a Supabase client into a test. */
+export {
+  FREE_SECTIONS,
+  gateReason,
+  isEntitled,
+  sectionAllowed,
+} from './tiers';

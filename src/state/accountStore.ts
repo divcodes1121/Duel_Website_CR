@@ -111,7 +111,20 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
        that a shared account is unusable and long enough to be free, and the
        focus listener means the common case — someone comes back to a tab —
        is checked immediately rather than up to a minute later. */
-    const beat = () => void get().checkDevice();
+    const beat = () => {
+      void get().checkDevice();
+      /* A TRIAL HAS TO EXPIRE WHILE YOU ARE LOOKING AT THE PAGE.
+         `tier` is derived from `trial_ends_at`, but it was derived ONCE, when
+         the profile loaded — so a tab left open across the expiry kept every
+         paid screen until someone happened to refresh. Recomputing it on the
+         beat costs nothing and needs no network: the timestamp is already in
+         hand, and `tierOf` is a comparison against the clock.
+         Only written when it actually changes, so this does not re-render the
+         app every sixty seconds. */
+      const { profile, tier } = get();
+      const now = tierOf(profile);
+      if (now !== tier) set({ tier: now });
+    };
     setInterval(beat, 60_000);
     window.addEventListener('focus', beat);
   },

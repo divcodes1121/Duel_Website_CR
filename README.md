@@ -77,7 +77,7 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,252 Python checks** across **34 suites** (496 check-style + 756 unittest), **179 vitest**, `tsc -b` and `npm run build` clean |
+| tests | **1,252 Python checks** across **34 suites** (496 check-style + 756 unittest), **214 vitest**, `tsc -b` and `npm run build` clean |
 | shipped from | `main` at `6bedee0`. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -179,7 +179,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 179 tests over the deck, duel, export and admin logic
+npm run test                      # 214 tests over the deck, duel, export and admin logic
 python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
@@ -369,6 +369,66 @@ Analysis, Duel Analysis, Duel Zone, Cards, Coach Assist) are what a trial is for
 A closed section renders a `GateCard`, and it asks the right question: `anon`
 sees "make an account, three days free", `free` sees "your three days are up".
 Showing a stranger an upgrade prompt reads as the site not knowing who you are.
+
+### Two gates predated the tier system and did not consult it
+
+"Pro and admin unlock everything" was true of the routing gate and false in two
+other places, both written before tiers existed:
+
+* **The Deck Counter hid every counter past the third from everyone.**
+  `CounterLab` sliced its list at `FREE_ROWS = 3` and wrapped the rest in the
+  Royal Pro wall — unconditionally. Deck Counter is a *free* section, so every
+  tier reaches that screen, which means a trial, pro or admin account was shown
+  a paywall over data it already had. Exactly the fault that took the ProLock
+  off the home screen, in a second place.
+* **The rail asked paying readers to upgrade.** The "Dekkies Pro — Unlock
+  exclusive analytics / Upgrade Now" card sat in the sidebar on every screen,
+  for every tier. Pro and admin now get a status line and nothing to buy; a
+  trial keeps a CTA, because there genuinely is something to do and the
+  countdown is the reason to do it.
+
+Both are now `isEntitled(access)` — **one predicate**, because the alternative
+is what shipped: three places each deciding for themselves what "has Pro" means,
+and two of them not deciding at all.
+
+### A trial has to expire while you are looking at the page
+
+`tier` is derived from `trial_ends_at`, but it was derived *once*, when the
+profile loaded. A tab left open across the expiry kept every paid screen until
+someone happened to refresh.
+
+The device heartbeat already runs every 60 seconds and on window focus, so it
+recomputes the tier too. That costs nothing and needs no network — the timestamp
+is already in hand and `tierOf` is a comparison against the clock — and it only
+writes when the answer changes, so it does not re-render the app every minute.
+
+### The rules live in `tiers.ts`, with no imports at all
+
+They were in `supabase.ts`, which constructs a Supabase client at module load.
+So importing a pure rule to check it dragged in a client that wants a native
+WebSocket, and Node 21 does not have one — meaning **the single thing most worth
+testing exhaustively could not be imported by a test**. Same extraction, and the
+same reason, as `utils/format.ts`. Both modules re-export, so no call site
+changed.
+
+`tests/entitlement.test.ts` is now the whole matrix: every tier against all
+eight sections, the export gate, both expiry directions, the exact expiry
+instant, and that a paid role outranks the clock (a pro whose old trial lapsed
+is still pro — the trial is a grant to a *free* account, not a component of a
+paid one). 35 checks.
+
+**The TypeScript and the SQL agree, and that was checked rather than assumed.**
+`public.effective_tier()` tests `role in ('pro','admin')` before
+`trial_ends_at > now()`, and `tierOf()` tests admin, then pro, then the clock —
+same order, same semantics.
+
+**The database is still the only real boundary.** Everything above decides what
+to *draw*. `api.deckkies.com` serves the shareable analytics to anyone who
+calls it — Caddy injects the key, so there is no per-user check on that hop —
+which means the analytics gate is a UI affordance, not access control. What IS
+enforced server-side: deck sync (Supabase JWT, keyed on the user id), every
+`profiles` write (RLS plus column grants), and the Coach's opponent read
+(`OIE_ALLOWLIST`, per account, in a Vercel function).
 
 ### The trial expires with nothing running
 
@@ -5860,7 +5920,7 @@ are in [Running it](#running-it).
 
 ## Testing and verification
 
-1,252 Python checks across 34 suites and 179 vitest tests, none of which open a
+1,252 Python checks across 34 suites and 214 vitest tests, none of which open a
 database — every Python suite runs on synthetic data or a stubbed reader, so
 they pass on a machine with no Clash_Bot install and cannot be broken by
 whatever a real player did last week. The vitest side gained the analytics-proxy

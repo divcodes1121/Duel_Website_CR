@@ -597,22 +597,43 @@ export function Dashboard({
             })}
           </nav>
 
-          <div className={styles.proCard}>
+          {/* DO NOT ASK A PAYING READER TO UPGRADE. This card sat in the rail
+              on every screen, unconditionally, so a pro or admin account was
+              shown "Unlock exclusive analytics" and an Upgrade Now button for
+              features it already had — the same fault as the ProLock over the
+              counters, in the one place it is visible on every single page.
+
+              Pro and admin get a status line instead: the crown they have
+              earned, and nothing to buy. A trial keeps the CTA, because there
+              IS something to do — the countdown is the reason to do it. */}
+          <div className={styles.proCard} data-state={access}>
             <span className={styles.proTitle}>
               <span className={styles.proMark}>
                 <CrownIcon size={14} />
               </span>
               Dekkies Pro
             </span>
-            <p className={styles.proBody}>Unlock exclusive analytics &amp; advanced features.</p>
-            <button
-              type="button"
-              className={styles.proButton}
-              onClick={() => setProContact(true)}
-            >
-              Upgrade Now
-              <StarIcon />
-            </button>
+            {access === 'pro' || access === 'admin' ? (
+              <p className={styles.proBody}>
+                {access === 'admin' ? 'Admin — everything unlocked.' : 'Active. Everything unlocked.'}
+              </p>
+            ) : (
+              <>
+                <p className={styles.proBody}>
+                  {access === 'trial'
+                    ? `Trial — ${trialLeft} day${trialLeft === 1 ? '' : 's'} left, everything unlocked.`
+                    : 'Unlock exclusive analytics & advanced features.'}
+                </p>
+                <button
+                  type="button"
+                  className={styles.proButton}
+                  onClick={() => setProContact(true)}
+                >
+                  {access === 'trial' ? 'Keep Pro' : 'Upgrade Now'}
+                  <StarIcon />
+                </button>
+              </>
+            )}
           </div>
             </aside>
           </>
@@ -952,14 +973,15 @@ export function Dashboard({
   );
 }
 
-/* The three areas that need a loaded player to say anything at all. They are
- * ALSO the three behind the Royal Pro gate on the home screen, and that is not
- * a coincidence — a duel series log, a combination board and a mid-duel coach
- * are the deep end of this product, and they are what a subscription is for.
+/* The three areas that need a loaded player to say anything at all: a duel
+ * series log, a combination board and a mid-duel coach.
  *
- * The gate is on the home screen only. `#/player/<tag>/duels` and friends still
- * render in full, so nothing that already worked stopped working. */
-/* WAS `PRO_SECTIONS`. Same three areas, different question: these are the ones
+ * They used to be described here as "the three behind the Royal Pro gate", and
+ * that is no longer true of this constant — entitlement is decided by
+ * `sectionAllowed()` before any of this runs. What these three share now is
+ * that they need a TAG, which is a different problem with a different answer.
+ *
+ * WAS `PRO_SECTIONS`. Same three areas, different question: these are the ones
    that need a player tag, not the ones that need a subscription. The blurbs are
    unchanged — they always described what the area does, which is exactly what
    someone deciding whose tag to type needs to read. */

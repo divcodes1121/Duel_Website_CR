@@ -10,6 +10,7 @@ import {
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { ProLock } from './ProLock';
+import { isEntitled, useAccess } from '../../state/gate';
 import { ShieldIcon } from '../Dashboard/icons';
 import { PasteIntro, PasteHeader } from './PasteIntro';
 import { ReadingState } from './ReadingState';
@@ -110,9 +111,20 @@ export function CounterLab() {
     };
   }, [cards]);
 
+  /* ENTITLEMENT IS CHECKED HERE, and it was not before.
+     Deck Counter is a FREE section, so every tier reaches this screen — which
+     means a trial, pro or admin account also reached the "Royal Pro shows the
+     rest" wall over the counters beyond the third, and was asked to buy
+     something it already had. Same fault as the home screen's ProLock, which
+     was removed for the same reason: a gate written before the tier system
+     existed does not consult it.
+     `entitled` splits the list instead of a constant, so a paying reader sees
+     every counter and a free one still sees three. */
+  const access = useAccess();
+  const entitled = isEntitled(access);
   const counters = report?.counters ?? [];
-  const free = counters.slice(0, FREE_ROWS);
-  const locked = counters.slice(FREE_ROWS);
+  const free = entitled ? counters : counters.slice(0, FREE_ROWS);
+  const locked = entitled ? [] : counters.slice(FREE_ROWS);
 
   const form = (
     <>

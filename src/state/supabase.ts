@@ -39,65 +39,21 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
     })
   : null;
 
-/** Tiers, in the order they unlock things. See `effective_tier()` in the SQL. */
-export type Tier = 'free' | 'trial' | 'pro' | 'admin';
+/* THE ENTITLEMENT RULES LIVE IN `tiers.ts`, NOT HERE, and re-export from it
+   so every existing import keeps working.
 
-export interface Profile {
-  id: string;
-  display_name: string | null;
-  country: string | null;
-  player_tag: string | null;
-  role: 'free' | 'pro' | 'admin';
-  trial_ends_at: string | null;
-  onboarded_at: string | null;
-  created_at: string;
-}
-
-/**
- * The tier a profile is actually on, right now.
- *
- * DERIVED, NEVER STORED. Item 1 wants the account to "switch automatically"
- * when the three days are up, and the way to make that reliable is to have
- * nothing switch: the answer is computed from `trial_ends_at` at the moment it
- * is asked, so it changes exactly on time even if no job ever runs.
- *
- * Mirrors `public.effective_tier()` in the database on purpose. The database
- * copy is the one that guards data; this one only decides what to draw, and a
- * client that lies to itself about the tier gets a nicer-looking screen and no
- * extra access.
- */
-export function tierOf(profile: Profile | null, now: number = Date.now()): Tier {
-  if (!profile) return 'free';
-  if (profile.role === 'admin') return 'admin';
-  if (profile.role === 'pro') return 'pro';
-  if (profile.trial_ends_at && Date.parse(profile.trial_ends_at) > now) return 'trial';
-  return 'free';
-}
-
-/** Whole days left on a trial, or 0. Used for the countdown in the header. */
-export function trialDaysLeft(profile: Profile | null, now: number = Date.now()): number {
-  if (!profile?.trial_ends_at) return 0;
-  const ms = Date.parse(profile.trial_ends_at) - now;
-  return ms <= 0 ? 0 : Math.ceil(ms / 86_400_000);
-}
-
-/**
- * What a tier may open.
- *
- * Item 1: after the three-day trial an account drops to the normal version and
- * keeps "meta and Evo counter" — Top Meta Decks and Deck Counter.
- *
- * SEARCH PLAYER IS FREE TOO, and that is a judgement rather than a reading of
- * the brief. It is the tag overview behind the hero's search field, which is
- * the landing page's entire call to action. Gating it would mean a stranger
- * types their tag into the biggest control on a public page and is handed a
- * paywall — the search would be a tease rather than a demonstration. The five
- * deeper areas (Deck Analysis, Duel Analysis, Duel Zone, Cards, Coach Assist)
- * are what a trial is for.
- */
-export const FREE_SECTIONS = ['Search Player', 'Top Meta Decks', 'Deck Counter'] as const;
-
-export function canOpenSection(tier: Tier, section: string): boolean {
-  if (tier !== 'free') return true;
-  return (FREE_SECTIONS as readonly string[]).includes(section);
-}
+   They were moved because this module constructs a Supabase client at load, so
+   importing a pure rule to check it dragged in a client that wants a native
+   WebSocket -- which Node 21 does not have. The tier matrix is the single thing
+   most worth testing exhaustively, and it could not be imported by a test at
+   all. Same extraction, and the same reason, as `utils/format.ts`. */
+export {
+  FREE_SECTIONS,
+  canOpenSection,
+  gateReason,
+  isEntitled,
+  sectionAllowed,
+  tierOf,
+  trialDaysLeft,
+} from './tiers';
+export type { Access, Profile, Tier } from './tiers';
