@@ -329,22 +329,3 @@
   font-size: 0.85rem;
 }
 
-/* --------------------------------------------------------------- footer */
-
-.foot {
-  flex-shrink: 0;
-  padding: 0.8rem 1.4rem;
-  border-top: 1px solid var(--border);
-  font-size: 0.76rem;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-
-.foot p {
-  margin: 0;
-}
-
-.footNote {
-  margin-top: 0.3rem !important;
-  opacity: 0.85;
-}

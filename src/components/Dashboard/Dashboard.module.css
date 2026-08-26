@@ -175,6 +175,47 @@
   }
 }
 
+/* --- the top bar on a phone ----------------------------------------------
+ *
+ * THE CONTROLS RAN OFF THE EDGE. `.topbar` is a flex row and `.topActions` had
+ * `flex-shrink: 0`, so on a narrow screen the row simply became wider than the
+ * viewport and the last things in it — the theme switch and the account menu —
+ * went past the right edge with no way to reach them. Nothing scrolled, because
+ * `.topbar` does not scroll and the page deliberately never scrolls sideways.
+ *
+ * So the ACTIONS scroll, inside themselves. The brand stays put on the left as
+ * the anchor, and everything else can be swiped to. */
+@media (max-width: 860px) {
+  .topbar {
+    gap: 0.6rem;
+    padding: 0.6rem 0.7rem;
+  }
+
+  .topActions {
+    /* Take the leftover width and scroll within it. `min-width: 0` is what
+       lets a flex item shrink below its content at all — without it this keeps
+       its full width and pushes the row wide again, which is the bug. */
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    /* Room for the scroll without clipping a focus ring. */
+    padding: 0.15rem 0.1rem;
+  }
+
+  .topActions::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* NOTHING INSIDE MAY SHRINK. A scrolling row whose children shrink to fit is
+     not a scrolling row — it is the squashed one it replaced. */
+  .topActions > * {
+    flex: none;
+  }
+}
+
 .iconButton {
   display: flex;
   align-items: center;

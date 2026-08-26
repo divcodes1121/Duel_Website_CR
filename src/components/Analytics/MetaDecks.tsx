@@ -262,21 +262,6 @@ export function MetaDecks() {
         </table>
       </div>
 
-      <footer className={styles.foot}>
-        <p>
-          {nf.format(board.distinctDecks ?? decks.length)} decks shown from{' '}
-          {nf.format(board.totalBattles ?? 0)} competitive battles. Use rate is a deck&rsquo;s
-          share of every battle in the window.
-        </p>
-        <p className={styles.footNote}>
-          Counts ladder and ranked 1v1, clan-war 1v1 and tournaments. 2v2, friendlies and
-          event modes that hand you a deck are excluded — they would measure Supercell&rsquo;s
-          choices rather than the player base&rsquo;s. A deck also needs{' '}
-          {board.minPlayers ?? 25}+ different players before it counts as meta rather than
-          one person&rsquo;s habit
-          {board.excludedByFloor ? ` (${nf.format(board.excludedByFloor)} decks did not clear it)` : ''}.
-        </p>
-      </footer>
     </section>
   );
 }
