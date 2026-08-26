@@ -523,6 +523,62 @@ below: **match the hashed prefix, never a bare substring.**
 
 ---
 
+## Water under the closing band
+
+Adapted from ThreeUI's `ElementsCollection` / Water. What came across is the
+technique: a ping-pong wave equation on a float target, then a pass that reads
+the height field's gradient to refract, shade crests and strike a specular
+glint. Two things did not.
+
+**Not an iframe.** The reference renders a whole HTML document into a sandboxed
+`iframe` via `srcDoc`, string-patches its shader source, and drives it with
+`postMessage`. That is a gallery's answer to running unrelated demos side by
+side. Here it would mean a second document, a second WebGL context, and a
+shader this project cannot typecheck, theme, or read a token from. This app
+already writes raw WebGL2 directly — `LiquidMetal` does — so the effect is
+written the same way, in one canvas, in this bundle.
+
+**No mark, so no SDF.** The reference refracts a rasterised brand logo held in
+a signed distance field. There is nothing to put there: the band's own text
+sits above the canvas and has to stay legible. Dropping it removes the SDF
+build, the chamfer pass and the contour extraction — most of the reference's
+CPU work — and leaves the part that reads as water.
+
+**It follows the house rules rather than the reference's.** `runLoop` keeps it
+off screen and off hidden tabs; `reducedMotion` draws one still frame and
+stops; the tint comes from `readToken` so it follows the theme, where the
+reference is hard-coded to a near-black ground that would be a hole in the page
+in light mode. Light mode also takes a much lower gain: on near-black a bright
+crest is a highlight, on a pale card the same value is a smear.
+
+**Additive over a transparent clear**, so the card's background shows through
+and `.copy` / `.figure` only need `z-index: 1` to stay on top. A negative
+z-index on the canvas would have put it behind the card's own background, where
+it would not be seen at all.
+
+Lazy-loaded like everything else in `src/three/` — 6.6 kB, 2.8 kB gzipped, in
+its own chunk. It is at the very foot of the landing page and most visitors
+never scroll to it.
+
+### Verifying a WebGL effect: screenshots, not `readPixels`
+
+The first probe read the canvas back with `gl.readPixels` and reported every
+sampled pixel as zero, including straight after a swipe. That was the probe
+lying, not the effect failing: without `preserveDrawingBuffer: true` the
+drawing buffer is **undefined after compositing**, so reading it outside the
+rAF proves nothing either way.
+
+Comparing consecutive element screenshots is what actually settles it — the
+compositor's output is what a screenshot captures. Rippling frames came back
+70464 → 60134 → 49020 bytes; still water drifts a little from the periodic
+auto-drops, which is the intended behaviour and not noise.
+
+One more trap in the same probe: comparing two PNGs by byte LENGTH and calling
+a length mismatch "inconclusive". Different content compresses differently, so
+a differing length is evidence of change, not the absence of it.
+
+---
+
 ## Every route owns its scroll, and that is a trap worth stating once
 
 `body` is `overflow: hidden`. **The page never scrolls.** Each route mounts a

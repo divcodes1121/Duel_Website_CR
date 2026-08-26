@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { Suspense, lazy, useMemo } from 'react';
 import { CARDS } from '../../data/cards';
 import { useReveal } from '../../hooks/useReveal';
 import styles from './ClosingBand.module.css';
@@ -50,24 +50,31 @@ const CLAIMS = [
   {
     hue: 'blue',
     icon: ShieldIcon,
-    title: 'Read-only, by construction',
+    title: 'Read-only',
     /* No backticks: this is rendered text, not markdown, and they showed up as
        literal characters on the page. */
-    body: 'The analytics service opens the battle database in SQLite’s read-only mode. Nothing this site can do writes to it — that is a property of how it connects, not a promise.',
+    body: 'The database opens in SQLite read-only mode. This site cannot write to it.',
   },
   {
     hue: 'green',
     icon: ScaleIcon,
-    title: 'Measured, or not shown',
-    body: 'A percentage appears only once it clears an evidence floor — eight decks and two different shells — with Wilson confidence on every row. Thin samples say they are thin instead of guessing.',
+    title: 'Measured, or blank',
+    body: 'A rate needs eight games behind it before we print it. Thin samples say so.',
   },
   {
     hue: 'violet',
     icon: StackIcon,
-    title: 'The whole card set',
-    body: 'Every card in the game, and an evolved or hero form counted as its own card rather than folded into the base one, because they do not play the same.',
+    title: 'Every card',
+    body: 'All of them. Evolutions and heroes counted separately, because they play differently.',
   },
 ] as const;
+
+/* LAZY, like every other piece in `src/three/`. This is a WebGL simulation at
+   the very foot of the page; loading it in the main bundle would make the
+   landing screen pay for something most visitors never scroll to. */
+const WaterBand = lazy(() =>
+  import('../../three/WaterBand').then((m) => ({ default: m.WaterBand })),
+);
 
 export function ClosingBand() {
   const reveal = useReveal<HTMLDivElement>();
@@ -85,12 +92,17 @@ export function ClosingBand() {
   return (
     <div className={styles.band} ref={reveal}>
       <section className={styles.card}>
+        {/* The water sits UNDER the card's content and over its background, so
+            the claims stay legible. `Suspense` with no fallback: an effect that
+            has not loaded should leave the band exactly as it was, not flash a
+            placeholder into the layout. */}
+        <Suspense fallback={null}>
+          <WaterBand hue="--hue-blue" />
+        </Suspense>
         <div className={styles.copy}>
           <h2 className={styles.title}>Nothing here is a round number</h2>
           <p className={styles.lede}>
-            Every figure on this site is counted from real battles in a local database, under rules
-            that are written down. Where the evidence is thin, the screen says so rather than
-            filling the gap.
+            Every figure is counted from real battles. Nothing is estimated.
           </p>
 
           <ul className={styles.claims}>
@@ -114,9 +126,7 @@ export function ClosingBand() {
         <figure className={styles.figure}>
           <figcaption className={styles.figHead}>
             <span className={styles.figTitle}>All {total} cards, by elixir cost</span>
-            <span className={styles.figSub}>
-              Counted from the card list this app ships — not a sample, not an estimate.
-            </span>
+            <span className={styles.figSub}>Counted at render time, not hardcoded.</span>
           </figcaption>
 
           {/* A histogram: magnitude across ordered bins, so height carries the

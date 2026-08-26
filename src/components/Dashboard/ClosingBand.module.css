@@ -9,6 +9,14 @@
 }
 
 .card {
+  /* THE WATER'S HOST. `relative` is what its absolutely-positioned canvas
+     resolves against, and `overflow: hidden` is what keeps the surface inside
+     the rounded corners instead of squaring them off.
+     `isolation: isolate` so the two z-indexes below are scoped to this card
+     and cannot fight the page's own layers. */
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   gap: clamp(1.5rem, 4vw, 3.5rem);
@@ -18,6 +26,15 @@
   border: 1px solid var(--glass-stroke);
   background: var(--glass-fill);
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+}
+
+/* Content ABOVE the water. Both grid children are lifted rather than the
+   canvas pushed down, because a negative z-index would put it behind the
+   card's own background and it would not be seen at all. */
+.copy,
+.figure {
+  position: relative;
+  z-index: 1;
 }
 
 .copy {
