@@ -26,6 +26,8 @@ interface AccountState {
 
   init: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  claimDevice: () => Promise<void>;
+  checkDevice: () => Promise<void>;
   saveProfile: (patch: Partial<Profile>) => Promise<string | null>;
   signOut: () => Promise<void>;
 }
@@ -90,12 +92,79 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
     set({ userId: user?.id ?? null, email: user?.email ?? null, ready: true });
     if (user) await get().refreshProfile();
 
+    if (user) await get().claimDevice();
+
     supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
-      set({ userId: u?.id ?? null, email: u?.email ?? null, evicted: false });
-      if (u) void get().refreshProfile();
-      else set({ profile: null, tier: 'free' });
+      set({ userId: u?.id ?? null, email: u?.email ?? null });
+      if (u) {
+        set({ evicted: false });
+        void get().refreshProfile();
+        void get().claimDevice();
+      } else {
+        set({ profile: null, tier: 'free' });
+      }
     });
+
+    /* ITEM 7, THE OTHER HALF. The database enforces one row per (user, kind);
+       this is how the LOSER of that contest finds out. A minute is short enough
+       that a shared account is unusable and long enough to be free, and the
+       focus listener means the common case — someone comes back to a tab —
+       is checked immediately rather than up to a minute later. */
+    const beat = () => void get().checkDevice();
+    setInterval(beat, 60_000);
+    window.addEventListener('focus', beat);
+  },
+
+  /**
+   * Take this device's slot, evicting whatever held it.
+   *
+   * An upsert on the primary key `(user_id, kind)`: there is no "how many
+   * devices are signed in" query and no counting, because counting races. The
+   * table simply cannot hold two desktops for one account.
+   */
+  async claimDevice() {
+    const id = get().userId;
+    if (!supabase || !id) return;
+    await supabase.from('device_sessions').upsert(
+      {
+        user_id: id,
+        kind: deviceKind(),
+        device_id: deviceId(),
+        /* Truncated: it is for showing "Chrome on Windows" in the admin list,
+           not for fingerprinting, and a full UA string is 200+ characters of
+           noise in every row. */
+        user_agent: navigator.userAgent.slice(0, 180),
+        last_seen_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,kind' },
+    );
+  },
+
+  /**
+   * Have we been evicted by a newer login of the same kind?
+   *
+   * Reads the row rather than trusting local state: the eviction happened on
+   * ANOTHER device, so nothing here could know about it otherwise.
+   */
+  async checkDevice() {
+    const id = get().userId;
+    if (!supabase || !id || get().evicted) return;
+    const { data, error } = await supabase
+      .from('device_sessions')
+      .select('device_id')
+      .eq('user_id', id)
+      .eq('kind', deviceKind())
+      .maybeSingle();
+    /* A network failure must NOT sign anyone out. Being offline is not the
+       same as having lost your slot, and treating it as such would log people
+       out of a working app every time their connection blinked. */
+    if (error || !data) return;
+    if (data.device_id !== deviceId()) {
+      set({ evicted: true });
+      await supabase.auth.signOut();
+      set({ userId: null, email: null, profile: null, tier: 'free' });
+    }
   },
 
   async refreshProfile() {

@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 import { Fireflies } from '../../three/Fireflies';
 import { supabase } from '../../state/supabase';
+import { deviceKind, useAccountStore } from '../../state/accountStore';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import loginStyles from '../Login/Login.module.css';
 import styles from './AuthScreen.module.css';
@@ -49,6 +50,9 @@ export function AuthScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [google, setGoogle] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
+  /* Item 7: this device lost its slot to a newer login of the same kind. Being
+     silently signed out reads as a bug; saying so reads as the rule working. */
+  const evicted = useAccountStore((s) => s.evicted);
 
   useEffect(() => {
     let live = true;
@@ -209,6 +213,13 @@ export function AuthScreen() {
               </label>
             )}
 
+            {evicted && (
+              <p className={styles.evicted}>
+                You were signed out because this account signed in on another{' '}
+                {deviceKind() === 'mobile' ? 'phone' : 'computer'}. One computer
+                and one phone at a time.
+              </p>
+            )}
             {error && <p className={loginStyles.error}>{error}</p>}
             {notice && <p className={styles.notice}>{notice}</p>}
 

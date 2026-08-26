@@ -158,3 +158,19 @@
     transform: none;
   }
 }
+
+/* Item 7. Not an error — the person did nothing wrong and the rule worked, so
+   it must not wear the error colour. Amber is the "something happened that you
+   should know about" step between a notice and a failure. */
+.evicted {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--hue-amber, var(--hue-pink)) 45%, transparent);
+  background: color-mix(in srgb, var(--hue-amber, var(--hue-pink)) 12%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text);
+}

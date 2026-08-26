@@ -64,6 +64,7 @@ function App() {
   const accountId = useAccountStore((s) => s.userId);
   const profile = useAccountStore((s) => s.profile);
   const initAccount = useAccountStore((s) => s.init);
+  const evicted = useAccountStore((s) => s.evicted);
 
   useEffect(() => {
     void initAccount();
@@ -74,6 +75,18 @@ function App() {
        on the actual product and only meets the auth card when they reach for
        something the free tier does not include. The first build of this gated
        everything, which asked people to commit before seeing anything. */
+    /* AN EVICTED DEVICE IS SHOWN THE DOOR, not quietly demoted. The account is
+       already signed out by the time this renders, so without this the person
+       would simply find themselves anonymous mid-session with no explanation —
+       which reads as the site logging them out at random. */
+    if (evicted) {
+      return (
+        <div className={styles.app}>
+          <AuthScreen />
+        </div>
+      );
+    }
+
     if (route.startsWith('#/signin')) {
       if (accountReady && accountId) {
         /* Already signed in and asking for the sign-in page: send them home
