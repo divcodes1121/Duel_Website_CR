@@ -5159,6 +5159,49 @@ inside `[data-filmstrip-controls]`.
 
 Kept because each one cost time and each one can recur.
 
+**IF AN ELEMENT IN A FLEX COLUMN SCROLLS, IT NEEDS `flex: none`.** Stated as a
+rule because it has now been fixed three times in one day, in three files, and
+knowing the mechanism did not stop the third.
+
+A flex item will not shrink below its automatic minimum size — normally its
+content — but **any `overflow` other than `visible` sets that minimum to zero**.
+So the one child that scrolls is the one child the flexbox is free to crush, and
+it crushes it to whatever is left over. Every time, the content was present,
+correct, and invisible:
+
+| where | scrolled for | crushed to |
+|---|---|---|
+| admin console, accounts table | `overflow-x` on a wide table | the height of its own `<th>` |
+| admin console, storage meter | `overflow: hidden` to clip a ripple | nothing at all |
+| dashboard, phone nav strip | `overflow-x` to scroll sideways | 11px, around 38px chips |
+
+The first two were reported by a person looking at the screen. The third was
+caught by a browser probe before it shipped, which is the whole argument for the
+verification convention.
+
+**The Deck Counter drew no decks on any screen under 1150px.** The rule said
+`display: none` on the deck column while the comment directly above it said the
+deck "spans the row on its own line rather than squeezing the figures" — it
+never did. Measured on an iPhone 13 against production: 120 card images loaded,
+**zero rendered**. A comment describing an intention the code does not implement
+is worse than no comment, because it stops the next reader looking.
+
+It also silently took the per-player faced-deck labels with it, so the feature
+built the day before was invisible on every phone and tablet.
+
+**Below 860px the site had no navigation at all.** `.sidebar` and `.topNav` are
+both `display: none` there and nothing replaced them, so once a phone reader was
+inside an analytics area the only way to another was the browser's back button.
+Nothing errored, nothing looked broken, and the seven areas were simply
+unreachable.
+
+**"Not loaded" and "not drawn" are different measurements.** The first probe
+counted `img.complete && naturalWidth > 0` and reported `0/10` on the landing,
+which looked like broken images and was not — the check ran before the images
+finished. What actually mattered was the **rendered box**: `getBoundingClientRect()`
+width and height, which found 120 loaded images sitting at 0×0. An image can be
+perfectly loaded and perfectly invisible.
+
 **A missing directory broke three screens and nothing reported a fault.** The
 worst bug in this project so far, measured by how confident the wrong answers
 looked.
