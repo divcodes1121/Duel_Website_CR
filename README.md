@@ -160,11 +160,12 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 36. [The filmstrip](#the-filmstrip)
 37. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
 38. [Testing and verification](#testing-and-verification)
-39. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
-40. [Two filters and a heading](#two-filters-and-a-heading)
-41. [DEKKIES is DECKKIES](#dekkies-is-deckkies)
-42. [Project layout](#project-layout)
-43. [Deliberately not done](#deliberately-not-done)
+39. [Recent Battles — the raw log](#recent-battles--the-raw-log)
+40. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
+41. [Two filters and a heading](#two-filters-and-a-heading)
+42. [DEKKIES is DECKKIES](#dekkies-is-deckkies)
+43. [Project layout](#project-layout)
+44. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -7278,6 +7279,140 @@ conclusions:
 
 ---
 
+## Recent Battles — the raw log
+
+A new area directly under Search Player, and the only analytics screen that
+does not aggregate. Every other one counts something: the pair board counts
+pairings, the meta board ranks decks, the Duel Zone reconstructs series. This
+one lists what happened — their deck, the deck they faced, the crowns, the
+mode, newest first.
+
+It exists for the reader who does not yet trust an aggregate. A win rate is an
+argument; a battle is a fact, and this is the page that shows the facts the
+arguments were computed from.
+
+### The row is the design
+
+A battle is a **comparison**, so the two decks sit parallel with the VS between
+them, each a 4×2 block in the in-game loadout shape. A comparison you have to
+scroll between is not one you can make.
+
+Two things had to be right for that to hold, and both were wrong first.
+
+**The pair is centred as a group, not laid out in `1fr` tracks.** Tracks are the
+obvious answer. They are also wrong: the decks are capped in width, so each one
+aligned to the outside of its own track and the row opened a 250px hole down
+the middle with the VS marooned in it. Three content-sized items centred as a
+group put the slack on the *outside*, where it reads as margin.
+
+**A side takes `flex: 1 1 0`, and the zero is the point.** With `auto` the
+basis is max-content — which for this block is the longest line of *text* in
+it, not the card grid. An opponent called "A Rather Long Opponent Name" made
+the side **538px against a 280px deck**, and because both sides did it the pair
+filled the row and pushed itself apart. From a zero basis the two take an equal
+share of real space and a long name is something that ellipsises inside it. A
+name is not a reason for a deck to move.
+
+Below 56rem there is no room for two blocks abreast, so they stack and the VS
+becomes a divider rather than a centrepiece. Measured 390–1440px: parallel down
+to 1100, **0px overflow at every width**, tiles never below 66px.
+
+Colour stays off the decks entirely. The outcome lives on a 3px leading edge
+and a badge, because a battle row is a large surface and a green one would
+drown the two decks it exists to show — the same call the Duel Zone's series
+cards make.
+
+### Paged on the server
+
+Ten to a page, under the same date control as every other screen. The window
+picks the pool, the page picks what crosses the wire: an active player has
+hundreds of battles in thirty days (a real tag returned **666 in 30 days, 67
+pages**) and each row carries two decks with their art. Sending all of them to
+render ten is megabytes for nothing.
+
+Three rules the paging has to keep, each of which fails quietly rather than
+loudly:
+
+* **A page past the end clamps, it does not error.** Narrowing the date range
+  with page 9 open is the ordinary way to get there, and answering that with an
+  error would make the date control able to break the screen. The client adopts
+  whatever page the server answered with, so the pager cannot highlight a page
+  that does not exist.
+* **The summary counts the window, never the page.** A win rate that changed as
+  you turned pages would be describing ten battles while sitting under a
+  control that says thirty days.
+* **Rows are dropped before they are counted.** A deckless row is left out of
+  the total as well as the page — otherwise "page 4 of 12" renders empty.
+
+### What it deliberately does not reuse
+
+`duel_combos.read_duel_rows` already reads battles for a tag, and this does not
+call it. That function scopes to duel-like modes, which is right for the duel
+screens and wrong here: "recent battles" with every ladder game silently
+missing is not a battle log.
+
+It *does* reuse `duel_zone._deck_view`, and that is not an accident either.
+That function runs `arrange_deck`, which decides slot order as well as
+evolution and hero art; a screen that draws a deck without it renders the same
+cards in a different order with no art, which is exactly how the sequence board
+and the series log once ended up disagreeing about one deck.
+
+A native duel row stays **one row** here rather than being split into games.
+The Duel Zone is where a duel becomes a series, and doing it in two places is
+how the two would eventually disagree.
+
+### One label that looks like a bug and is not
+
+An unrecognised mode whose name contains "duel" is labelled **"Battle"**, not
+"Duel". `is_native_duel` is an allowlist of two verified strings (`cw_duel_1v1`,
+`duel_1v1_friendly`) that deliberately fails safe, and a row labelled Duel here
+that the Duel Zone does not list would be two screens contradicting each other
+over one database row. The raw mode string rides along in `mode` for anyone
+checking.
+
+### Free, like the search above it
+
+`Recent Battles` joins `FREE_SECTIONS`. This is the rawest thing the database
+holds, and a visitor who types a tag and is told the tag buys them nothing has
+been shown a paywall, not a product. What costs money is the *reading* of those
+rows, which is every other area.
+
+### Two tripwires fired, and both were meant to
+
+Adding this tripped two tests that exist to be tripped, and both were bumped in
+the same commit as the change rather than worked around:
+
+* `server/test_api_security.py` pins the number of routes in `_route`, so a new
+  endpoint cannot be added without someone consciously reviewing whether it is
+  authenticated. 19 → 20, plus a new line in
+  `test_every_other_route_requires_a_key` asserting the new one 401s.
+* `tests/entitlement.test.ts` pins exactly which areas are free, so an area
+  changing tier is a decision made in a commit rather than inherited from
+  wherever someone appended a constant.
+
+### The date presets are the app's, not the ones asked for
+
+The request named 10 / 15 / 30 days. The screen ships the ladder every other
+analytics screen already uses — **7 / 14 / 30 / 60 / 90 / All / Custom** —
+because two screens disagreeing about "the last two weeks" is a worse problem
+than the exact numbers, and the custom picker covers any window either way.
+Easy to change if the literal numbers are wanted.
+
+### Deploying it took two pushes, not one
+
+Worth recording because it is a property of this project rather than of this
+feature: **the Python API does not ship with the frontend.** Vercel builds from
+GitHub; `server/` runs on the Contabo VPS at `/opt/royalweb/` behind
+`royalweb.service`. A new analytics screen needs both, and the API has to land
+*first* — otherwise the area appears in the rail and every request 404s, which
+is worse than not shipping it.
+
+Verified against the real database before the frontend went out: 666 battles,
+67 pages, 395W/265L/6D, real deck names, evolution art resolved on both sides,
+and 401 without a key.
+
+---
+
 ## Saving a duel you actually played
 
 The Duel Zone already knows both loadouts of a duel, game by game: the searched
@@ -7493,6 +7628,9 @@ src/
   state/gate.ts               who may open what. `anon` and `free` are the same
   state/adminStore.ts         the console's three sources, none allowed to sink
                               the others
+  components/Analytics/RecentBattles.tsx
+                              the raw battle log. The only analytics screen
+                              that lists rather than aggregates
   state/duelImport.ts         a played duel -> a Versus group. What counts as a
                               real deck, and what counts as the same set twice.
                               Pure, so both can be tested without a store
