@@ -20,12 +20,25 @@ only thing that writes anywhere:
 
 The bot picks tags up from there and enrols them in its own table on its own
 terms. Until it does, `status()` reports the request as `pending`, and the
-screen says so rather than implying collection has begun. THE HANDOFF IS NOT
-BUILT ON THE BOT SIDE YET — a tag is queued here and stays `pending` until
-someone adds the ~5-line drain to the bot. That is a known, stated gap, not an
-oversight: it is the bot's repository's change to make, and inventing it from
-here would mean writing to the bot's database, which is the thing this file
-exists to avoid.
+screen says so rather than implying collection has begun.
+
+THE BOT SIDE IS BUILT. `drain_tag_requests()` (`Clash_Bot/bot.py:5030`) opens
+this file `mode=ro`, takes up to `CLASH_TAG_DRAIN_BATCH` tags oldest-first and
+runs each through `clashdb.add_tracked_player` — the same door a Discord command
+goes through, so it validates against `TAG_CHARS` and a junk tag from a URL
+cannot get in. This docstring said the handoff did not exist for long enough
+that `CLOUD_MIGRATION.md` had to warn readers it was lying.
+
+**It is gated on the bot's `CLASH_TRACKING_DB` pointing here.** Unset, the drain
+returns `(0, 0)` silently — no error, no log line — and every tag queued here
+stays `pending` forever. That is the failure mode to check first if enrolment
+appears to have stopped, and it becomes the ONLY enrolment path once Discord is
+retired: the other two (auto-tracking a `#TAG` pasted in chat, and
+`sync_player_safe(track=True)` on every command) die with the commands.
+
+Writing to the bot's database from here is still off the table — that is the
+thing this file exists to avoid, and it is why the handoff is a queue rather
+than a direct insert.
 
 Reads of `tracked_players` are still just reads, so those go through the normal
 read-only path and are exact.

@@ -1,6 +1,82 @@
-# Analytics tunnel — configuration and runbook
+# Analytics transport — configuration and runbook
 
-Phase 24C, step 4. How the hosted site reaches the analytics service running on
+## THE TUNNEL IS SUPERSEDED (2026-08-26)
+
+The analytics service no longer runs at home behind a Cloudflare tunnel. It runs
+on a **Contabo VPS** behind **Caddy**, on a domain we own. Everything below the
+next section is the tunnel's record, kept because most of what it proved still
+holds — the auth gate, the CORS rule, the leakage audit and the rate-limit
+behaviour are properties of `server/app.py`, not of the transport.
+
+```
+browser
+  → api.deckkies.com                    Caddy, TLS from Let's Encrypt
+  → header_up X-Analytics-Key           the edge authenticates to the origin
+  → 127.0.0.1:8787                      server/app.py (systemd: royalweb)
+  → /var/clashbot/battles.db            SQLite, mode=ro
+
+browser                                 (the Coach's opponent read only)
+  → Vercel /api/analytics/opponent-read/<tag>    same origin, no key
+  → Vercel function                              adds X-Analytics-Key
+  → ANALYTICS_ORIGIN = https://api.deckkies.com
+  → the same Caddy → app.py path
+```
+
+**Why the edge injects the key.** The browser calls `api.deckkies.com` directly
+for the shareable analytics and sends no headers, so something has to
+authenticate to the origin. That is only safe because the origin is unreachable
+any other way: `app.py` binds `127.0.0.1:8787` and `ufw` allows nothing but
+22/80/443. The key protects the origin; the rate limiter is what protects the
+service from the public.
+
+**`CLASH_TRUSTED_PROXY=1` is required here, and it was not under the tunnel.**
+The limiter keys on the client address, and behind any reverse proxy every
+request arrives from loopback — one shared bucket for the whole internet, which
+is the failure the tunnel section documents below. With the flag set, `app.py`
+reads the first entry of `X-Forwarded-For`, which Caddy sets. Spoofing it would
+mean reaching 8787 directly, which the firewall and the loopback bind prevent.
+
+### Where things live on the VPS
+
+| | |
+|---|---|
+| host | `169.58.237.142` (Contabo Cloud VPS 6, Ubuntu 24.04, EU) |
+| bot code | `/opt/clashbot` — venv at `/opt/clashbot/venv` |
+| API code | `/opt/royalweb/server` — **no venv, `app.py` is pure stdlib** |
+| data | `/var/clashbot/battles.db` |
+| API env | `/etc/royalweb.env` (root-only; holds `CLASH_API_KEY`) |
+| bot env | `/opt/clashbot/.env` (loaded by `load_dotenv()`, NOT by systemd) |
+| units | `clashbot.service`, `royalweb.service`, `caddy.service` |
+| logs | `/var/log/clashbot/{bot,api}.log` |
+
+**The bot unit must not use `EnvironmentFile`.** `/opt/clashbot/.env` is written
+`KEY = value` with spaces around the `=`; python-dotenv accepts that and systemd
+does not — systemd would take the name as `KEY ` and pass nothing, silently.
+`WorkingDirectory=/opt/clashbot` is what lets `load_dotenv()` find it.
+
+**`CLASH_ARCHIVE_DB_PATH` is set explicitly empty.** `clash_data.py` defaults it
+to `H:\ClashArchive\archive.db`, and the startup banner prints whatever it
+resolves — on Linux that is a path that cannot exist, pointing at a volume
+nobody should go looking for. There is no archive tier on the VPS by design.
+
+### Reading the API key back
+
+It is generated on the box and deliberately never leaves it in plain sight:
+
+```bash
+ssh -i ~/.ssh/clashbot root@169.58.237.142 'grep CLASH_API_KEY /etc/royalweb.env'
+```
+
+That value is what `CLASH_API_KEY` must be set to in Vercel's environment, next
+to `ANALYTICS_ORIGIN=https://api.deckkies.com`. Neither may ever be renamed to
+`VITE_*` — Vite inlines any `VITE_` variable into the browser bundle at build
+time, so the naming convention IS the boundary.
+
+---
+
+## The tunnel, as it was (historical)
+
+Phase 24C, step 4. How the hosted site reached the analytics service running on
 a machine at home, and how to take it away again.
 
 ```
