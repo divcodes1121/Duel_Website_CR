@@ -52,6 +52,7 @@ interface AdminState {
 
   load: () => Promise<void>;
   setRole: (id: string, role: AdminUser['role']) => Promise<string | null>;
+  endTrial: (id: string) => Promise<string | null>;
 }
 
 export const useAdminStore = create<AdminState>()((set, get) => ({
@@ -99,6 +100,15 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
     }
 
     set(next);
+  },
+
+  /** Item: end someone's trial now. Not a role change — see the SQL. */
+  async endTrial(id) {
+    if (!supabase) return 'Not configured.';
+    const { error } = await supabase.rpc('admin_end_trial', { target: id });
+    if (error) return error.message;
+    await get().load();
+    return null;
   },
 
   async setRole(id, role) {

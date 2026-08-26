@@ -233,6 +233,31 @@ end;
 $$;
 
 -- Only signed-in callers may even attempt these; the definer body then decides.
+-- Ending someone's trial on the spot. Separate from admin_set_role because it
+-- is not a role change: a lapsed trial user is still `free`, and conflating the
+-- two would mean "end the trial" had to guess what role to leave them on.
+create or replace function public.admin_end_trial(target uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if coalesce(public.effective_tier(auth.uid()), 'free') <> 'admin' then
+    raise exception 'not authorised';
+  end if;
+  -- now(), NOT null. Null reads as "never had a trial", which makes the person
+  -- indistinguishable from a fresh account that has not started one -- and
+  -- would let a later change hand them three more days.
+  update public.profiles
+     set trial_ends_at = now(), updated_at = now()
+   where id = target;
+end;
+$$;
+
+revoke all on function public.admin_end_trial(uuid) from public, anon;
+grant execute on function public.admin_end_trial(uuid) to authenticated;
+
 revoke all on function public.admin_list_users() from public, anon;
 revoke all on function public.admin_set_role(uuid, text) from public, anon;
 grant execute on function public.admin_list_users() to authenticated;

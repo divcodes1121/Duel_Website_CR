@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { type AdminUser, ago, bytes, useAdminStore } from '../../state/adminStore';
 import { useAccess } from '../../state/gate';
+import { ThemeToggle } from '../Theme/ThemeToggle';
 import styles from './AdminConsole.module.css';
 
 /** Contabo Cloud VPS 6 root volume, from `df -h /` on the box. */
@@ -60,7 +61,8 @@ function Meter({ used, total, label }: { used: number; total: number; label: str
  */
 export function AdminConsole() {
   const access = useAccess();
-  const { users, health, analytics, analyticsMs, loading, error, load, setRole } = useAdminStore();
+  const { users, health, analytics, analyticsMs, loading, error, load, setRole, endTrial } =
+    useAdminStore();
   const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -102,9 +104,12 @@ export function AdminConsole() {
     );
   }
 
-  async function change(u: AdminUser, role: AdminUser['role']) {
+  async function change(u: AdminUser, value: string) {
     setBusyId(u.id);
-    const err = await setRole(u.id, role);
+    const err =
+      value === '__end_trial'
+        ? await endTrial(u.id)
+        : await setRole(u.id, value as AdminUser['role']);
     setBusyId(null);
     if (err) alert(err);
   }
@@ -112,10 +117,29 @@ export function AdminConsole() {
   return (
     <section className={styles.wrap}>
       <header className={styles.head}>
+        {/* A WAY BACK. The console is its own route outside the Dashboard, so
+            it inherits none of the app's navigation — without this the only
+            exit is the browser's back button, and there is none at all for
+            someone who arrived by typing the URL. */}
+        <a className={styles.back} href="#/">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+               strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          Home
+        </a>
+
         <h2 className={styles.title}>Console</h2>
-        <button type="button" className={styles.refresh} onClick={() => void load()} disabled={loading}>
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
+
+        <div className={styles.headActions}>
+          {/* Every colour here is already a token, so the console follows the
+              theme — but the control to CHANGE it lives in the Dashboard header
+              this route does not render. */}
+          <ThemeToggle size="1.8rem" />
+          <button type="button" className={styles.refresh} onClick={() => void load()} disabled={loading}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </header>
 
       {error && <p className={styles.error}>{error}</p>}
@@ -189,7 +213,8 @@ export function AdminConsole() {
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Account</th>
+              <th>Name</th>
+              <th>Email</th>
               <th>Tier</th>
               <th>Country</th>
               <th>Player tag</th>
@@ -201,10 +226,8 @@ export function AdminConsole() {
           <tbody>
             {shown.map((u) => (
               <tr key={u.id}>
-                <td>
-                  <span className={styles.name}>{u.display_name ?? '—'}</span>
-                  <span className={styles.email}>{u.email}</span>
-                </td>
+                <td className={styles.name}>{u.display_name ?? '—'}</td>
+                <td className={styles.email}>{u.email ?? '—'}</td>
                 <td>
                   <span className={styles.tier} data-tier={u.tier}>
                     {u.tier}
@@ -222,18 +245,25 @@ export function AdminConsole() {
                     className={styles.roleSelect}
                     value={u.role}
                     disabled={busyId === u.id}
-                    onChange={(e) => void change(u, e.target.value as AdminUser['role'])}
+                    onChange={(e) => void change(u, e.target.value)}
                   >
                     <option value="free">free</option>
                     <option value="pro">pro</option>
                     <option value="admin">admin</option>
+                    {/* An ACTION in a list of states, which is a compromise:
+                        it is where you already are when you want it. Disabled
+                        unless there is a trial to end, so it never looks like a
+                        fourth role someone could be left on. */}
+                    <option value="__end_trial" disabled={u.tier !== 'trial'}>
+                      end trial now
+                    </option>
                   </select>
                 </td>
               </tr>
             ))}
             {shown.length === 0 && (
               <tr>
-                <td colSpan={7} className={styles.empty}>
+                <td colSpan={8} className={styles.empty}>
                   {loading ? 'Loading…' : users.length ? 'Nothing matches that.' : 'No accounts yet.'}
                 </td>
               </tr>
