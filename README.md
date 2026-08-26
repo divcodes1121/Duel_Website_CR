@@ -616,13 +616,28 @@ others. The accounts table, the deployment's configuration and the VPS's storage
 are independent things, and a console that shows nothing because one of them is
 down is worse than one that shows two thirds and says so.
 
-**"End trial now" is an option in the role select, not a fourth role.** It is an
-action sitting in a list of states, which is a compromise — but it is where you
-already are when you want it, and it is disabled unless there is a trial to end,
-so it never looks like a state someone could be left on. It sets
-`trial_ends_at = now()`, **not null**: null reads as "never had a trial", which
-makes the person indistinguishable from a fresh account and would let a later
-change hand them three more days.
+**Access and End trial are two controls, and they were one.** "End trial now"
+used to be a fourth `<option>` in the role select, disabled unless the account
+was mid-trial — which made the control an admin reaches for most the one thing
+they could not click. It is also not a role: a lapsed trial user is still
+`free`, so putting it in a list of roles meant choosing it had to leave them on
+something.
+
+It is a button now, and **always enabled**. Ending a trial that has already
+ended is a no-op — `trial_ends_at = now()` twice is the same answer — and
+refusing a click to prevent a harmless no-op is what made it feel blocked. On an
+account with no trial running it still does something worth having: it stamps
+the trial as spent, so a later role change cannot hand them a fresh three days.
+
+It sets `trial_ends_at = now()`, **not null**: null reads as "never had a
+trial", which makes the person indistinguishable from a fresh account. The SQL
+needed no change for any of this — `admin_end_trial` never had a guard on the
+target.
+
+**The role select says `pro — paid`**, and the tiles say what the two tiers
+differ on: a trial is "no Coach Assist", Pro is "paid · full access". Since the
+carve-out landed those are not the same product, and an admin granting access
+has to be able to see which one they are granting.
 
 Changing a role takes effect on that account's next profile read — a sign-in or
 a refresh — and the console says so, because a control that looks instant and is

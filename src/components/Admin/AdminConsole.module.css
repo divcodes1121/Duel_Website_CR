@@ -451,8 +451,11 @@
 .tier[data-tier='trial'] { background: var(--solid-green);  color: var(--on-solid); }
 .tier[data-tier='free']  { border: 1px solid var(--border-strong); color: var(--text-muted); }
 
+/* The two controls sit on one line and wrap together, so a narrow screen drops
+   the button under the select rather than shearing the column. */
 .roleSelect {
   padding: 0.3rem 0.5rem;
+  margin-right: 0.35rem;
   border-radius: 9px;
   border: 1px solid var(--border-strong);
   background: var(--surface);
@@ -460,6 +463,39 @@
   font-size: 0.8rem;
   color: var(--text);
   cursor: pointer;
+}
+
+/* QUIETER THAN THE ROLE SELECT, deliberately. Ending a trial is destructive in
+   a small way — it cannot be undone by setting the role back, because the trial
+   timestamp is spent — so it should not be the loudest thing in the row. An
+   outline, and the maroon ink step only on hover, which is the moment it is
+   actually about to happen. */
+.endTrial {
+  padding: 0.3rem 0.6rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease);
+}
+
+/* `--hue-pink` is the INK step and holds 4.5:1 at this size; `--solid-maroon`
+   is a fill and is not graded for text. */
+.endTrial:hover:not(:disabled) {
+  color: var(--hue-pink);
+  border-color: color-mix(in srgb, var(--hue-pink) 55%, transparent);
+}
+
+.endTrial:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .empty {
@@ -512,11 +548,6 @@
 .wrap {
   background: var(--page-wash), var(--bg-1);
   color: var(--text);
-}
-
-/* An option that is an action, greyed when there is no trial to end. */
-.roleSelect option:disabled {
-  color: var(--text-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -209,8 +209,11 @@ export function AdminConsole() {
       {/* --- accounts ------------------------------------------------------ */}
       <div className={styles.stats}>
         <Stat label="Accounts" value={String(users.length)} />
-        <Stat label="On trial" value={String(counts.trial)} tone="good" />
-        <Stat label="Pro" value={String(counts.pro)} tone="good" />
+        {/* The two are no longer the same product, so the tiles say so. A
+            trial is everything for three days EXCEPT Coach Assist; paid Pro is
+            the only tier that opens it. */}
+        <Stat label="On trial" value={String(counts.trial)} note="no Coach Assist" tone="good" />
+        <Stat label="Pro" value={String(counts.pro)} note="paid · full access" tone="good" />
         <Stat label="Free" value={String(counts.free)} />
         <Stat
           label="Signed in today"
@@ -313,7 +316,7 @@ export function AdminConsole() {
               <th>Player tag</th>
               <th>Last sign-in</th>
               <th>Devices</th>
-              <th>Set role</th>
+              <th>Access</th>
             </tr>
           </thead>
           <tbody>
@@ -339,18 +342,38 @@ export function AdminConsole() {
                     value={u.role}
                     disabled={busyId === u.id}
                     onChange={(e) => void change(u, e.target.value)}
+                    title="Grant paid Pro, make an admin, or drop back to free"
                   >
                     <option value="free">free</option>
-                    <option value="pro">pro</option>
+                    <option value="pro">pro — paid</option>
                     <option value="admin">admin</option>
-                    {/* An ACTION in a list of states, which is a compromise:
-                        it is where you already are when you want it. Disabled
-                        unless there is a trial to end, so it never looks like a
-                        fourth role someone could be left on. */}
-                    <option value="__end_trial" disabled={u.tier !== 'trial'}>
-                      end trial now
-                    </option>
                   </select>
+
+                  {/* ENDING A TRIAL IS AN ACTION, SO IT IS A BUTTON.
+                      It used to be a fourth <option> in the select above,
+                      disabled unless the account was mid-trial — which made the
+                      one control an admin reaches for most the one thing they
+                      could not click. It is also not a role: a lapsed trial
+                      user is still `free`, so putting it in a list of roles
+                      meant choosing it had to leave them on something.
+
+                      ALWAYS ENABLED. Ending a trial that has already ended is a
+                      no-op (`trial_ends_at = now()` twice is the same answer),
+                      and refusing the click to prevent a harmless no-op is what
+                      made this feel blocked. */}
+                  <button
+                    type="button"
+                    className={styles.endTrial}
+                    disabled={busyId === u.id}
+                    onClick={() => void change(u, '__end_trial')}
+                    title={
+                      u.tier === 'trial'
+                        ? 'End this trial now — they drop to their role immediately'
+                        : 'No trial running. This stamps the trial as spent so a later role change cannot hand them another one'
+                    }
+                  >
+                    End trial
+                  </button>
                 </td>
               </tr>
             ))}
@@ -366,10 +389,22 @@ export function AdminConsole() {
       </div>
 
       <p className={styles.hint}>
-        Changing a role takes effect on that account's next profile read — a
-        sign-in, or a refresh. There is no way to create a password from here:
-        people sign themselves up, and you promote them. Handing out passwords
-        would mean storing one somewhere you could read it back.
+        <strong>Access</strong> grants the role. <em>pro</em> is paid Pro — full
+        access including Coach Assist, which a trial does not open.{' '}
+        <em>admin</em> adds this console. Changing it takes effect on that
+        account&rsquo;s next profile read — a sign-in, or a refresh.
+      </p>
+      <p className={styles.hint}>
+        <strong>End trial</strong> is separate because it is not a role: a
+        lapsed trial user is still <em>free</em>. It stamps the trial as spent
+        immediately, and it cannot be undone by setting the role back — the
+        timestamp is gone. On an account with no trial running it is a harmless
+        no-op that stops a later role change handing them a fresh three days.
+      </p>
+      <p className={styles.hint}>
+        There is no way to create a password from here: people sign themselves
+        up, and you promote them. Handing out passwords would mean storing one
+        somewhere you could read it back.
       </p>
     </section>
   );
