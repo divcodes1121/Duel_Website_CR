@@ -520,7 +520,7 @@ type PredictStep =
   | { kind: 'paste'; game: 1 | 2; want: 1 | 2 }
   | { kind: 'result' };
 
-function DuelPrediction({ tag }: { tag: string }) {
+function DuelPrediction({ tag, days }: { tag: string; days: number }) {
   const [step, setStep] = useState<PredictStep>({ kind: 'started' });
   const [revealed, setRevealed] = useState<string[][]>([]);
   const [data, setData] = useState<CoachPrediction | null>(null);
@@ -532,7 +532,7 @@ function DuelPrediction({ tag }: { tag: string }) {
     (decks: string[][]) => {
       setBusy(true);
       setError(null);
-      fetchCoachPrediction(tag, decks)
+      fetchCoachPrediction(tag, decks, { days })
         .then((d) => {
           setData(d);
           setRevealed(decks);
@@ -541,8 +541,20 @@ function DuelPrediction({ tag }: { tag: string }) {
         .catch((e) => setError(e as AnalyticsError))
         .finally(() => setBusy(false));
     },
-    [tag],
+    [tag, days],
   );
+
+  /* CHANGING THE WINDOW REFRESHES THE ANSWER, it does not restart the
+     interview. The reader has already told us which decks were revealed;
+     asking again because they widened the history would be punishing them for
+     using the control. Only fires once there is something to refresh. */
+  const shown = step.kind === 'result';
+  useEffect(() => {
+    if (shown) run(revealed);
+    // `revealed` is deliberately absent: it changes only via `run`, and
+    // including it would re-fetch immediately after every answer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]);
 
   const reset = () => {
     setStep({ kind: 'started' });
@@ -939,7 +951,7 @@ type SuggestStep =
   | { kind: 'paste'; side: 'mine' | 'theirs'; game: 1 | 2 }
   | { kind: 'result' };
 
-function Suggestion({ tag }: { tag: string }) {
+function Suggestion({ tag, days }: { tag: string; days: number }) {
   // The tag already in the analysis IS the opponent — that is who the coach
   // has been studying. The player being coached is the one we still need.
   const [me, setMe] = useState('');
@@ -959,7 +971,7 @@ function Suggestion({ tag }: { tag: string }) {
     (mine: string[][], theirs: string[][]) => {
       setBusy(true);
       setError(null);
-      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs)
+      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs, { days })
         .then((d) => {
           setData(d);
           setStep({ kind: 'result' });
@@ -967,8 +979,15 @@ function Suggestion({ tag }: { tag: string }) {
         .catch((e) => setError(e as AnalyticsError))
         .finally(() => setBusy(false));
     },
-    [me, opp],
+    [me, opp, days],
   );
+
+  /* As in Window 1: refresh the answer, keep the interview. */
+  const answered = step.kind === 'result';
+  useEffect(() => {
+    if (answered) run(myPlayed, oppPlayed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]);
 
   const reset = () => {
     setStep({ kind: 'tags' });
@@ -1241,8 +1260,22 @@ function Suggestion({ tag }: { tag: string }) {
 
 /* ───────────────────────────────────────────────────────────── the shell */
 
+/* HOW FAR BACK THE DUEL HISTORY IS READ.
+ *
+ * Both windows used to read EVERYTHING stored for a player, which quietly
+ * answers a different question from the one a duel asks: a deck they ran daily
+ * six weeks ago counted exactly as much as the one they ran this morning.
+ *
+ * `days` counts back from that player's LAST STORED BATTLE, not from today —
+ * the site-wide convention, and the reason someone who stopped playing a month
+ * ago still gets a populated screen. In Window 2 it is resolved separately for
+ * each of the two tags, so this is thirty days of EACH player's play rather
+ * than one calendar range that may be empty for whichever stopped sooner. */
+const HISTORY_DAYS = [15, 30, 45, 60] as const;
+
 export function CoachAssist({ tag }: { tag: string }) {
   const [win, setWin] = useState<'predict' | 'suggest'>('predict');
+  const [days, setDays] = useState<number>(30);
   const blurb = useMemo(() => WINDOWS.find((w) => w.id === win)?.blurb ?? '', [win]);
 
   return (
@@ -1252,6 +1285,24 @@ export function CoachAssist({ tag }: { tag: string }) {
         <div className={styles.headText}>
           <h1 className={styles.title}>Coach Assist</h1>
           <p className={styles.blurb}>{blurb}</p>
+        </div>
+
+        {/* ONE CONTROL FOR BOTH WINDOWS. The prediction and the suggestion read
+            the same history, so letting them disagree about how far back it
+            goes would mean the screen contradicted itself. */}
+        <div className={styles.daysRow} role="group" aria-label="History window">
+          <span className={styles.daysLabel}>History</span>
+          {HISTORY_DAYS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={`${styles.dayChip} ${days === d ? styles.dayChipOn : ''}`}
+              aria-pressed={days === d}
+              onClick={() => setDays(d)}
+            >
+              {d}d
+            </button>
+          ))}
         </div>
       </header>
 
@@ -1272,10 +1323,13 @@ export function CoachAssist({ tag }: { tag: string }) {
 
       {/* Keyed on the window so switching tabs starts a clean interview rather
           than resuming the other one's half-answered questions. */}
+      {/* `days` is NOT in the key. Changing the window must refresh the answer,
+          not throw away the interview the reader has already sat through —
+          each child re-runs its own fetch instead. */}
       {win === 'predict' ? (
-        <DuelPrediction key={`p-${tag}`} tag={tag} />
+        <DuelPrediction key={`p-${tag}`} tag={tag} days={days} />
       ) : (
-        <Suggestion key={`s-${tag}`} tag={tag} />
+        <Suggestion key={`s-${tag}`} tag={tag} days={days} />
       )}
     </section>
   );

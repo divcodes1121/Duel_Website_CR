@@ -2299,6 +2299,51 @@ Two windows over `server/coach.py`, ported from the bot's duel advisor:
 | **Duel Prediction** | `!predict` / `!predict2` / `!predict3` | one tag | which decks they open with, and what is still legal after each reveal |
 | **Suggestion** | `!suggestion #YOU [#THEM]` | your tag; the opponent comes from the route | the same read, then YOUR still-legal decks ranked by expected win rate |
 
+### The history is windowed — 15, 30, 45 or 60 days
+
+Both windows used to read **everything** stored for a player, which quietly
+answers a different question from the one a duel asks: a deck they ran daily six
+weeks ago counted exactly as much as the one they ran this morning.
+
+One control in the header governs both, because the prediction and the
+suggestion read the same history and letting them disagree about its span would
+mean the screen contradicted itself. Default 30 days, matching every other
+player screen.
+
+**`days` counts back from that player's last stored battle, not from today** —
+the site-wide convention, and the reason someone who stopped a month ago still
+gets a populated screen instead of an empty one with no explanation. In Window 2
+it is resolved **separately for each of the two tags**, so one "30 days" means
+thirty days of *each* player's play rather than one calendar range that may be
+empty for whichever of them stopped sooner. Measured on a real pair: at 15 days
+the spans came out `08-12 → 08-26` for one player and `08-11 → 08-25` for the
+other.
+
+**It changes the answer, which is the point.** For one tracked player:
+
+| window | series | games | top predicted deck |
+|---|---:|---:|---|
+| 15d | 45 | 132 | mortar / goblinstein / elite-barbarians |
+| 30d | 90 | 271 | elite-barbarians / valkyrie / battle-ram |
+| 45d | 122 | 357 | baby-dragon / berserker / royal-hogs |
+| 60d | 139 | 407 | baby-dragon / berserker / royal-hogs |
+
+**The decks stay the player's own.** Meta filler was already flagged `fill` by
+the server and labelled "meta deck" in the UI, and across all four windows above
+the fill count was **zero** — these are decks that player actually ran. A
+narrower window has less history and so will reach for filler sooner; that stays
+visible rather than being smuggled in as a personal read.
+
+**Nothing widens itself.** A 15-day window can legitimately come back thin, and
+`summary` (Window 1) and `evidence` (Window 2) report what it actually held, so
+a thin answer is visibly thin. There is deliberately no automatic fallback to a
+longer span here — unlike Duel Analysis, where the widening is the answer to a
+different question. The cap is the control, and silently ignoring it would make
+the control a lie.
+
+**A window is not a second database read.** `_history` already cached per
+`(tag, since, until)`, so this cost nothing but the plumbing.
+
 ### The rule the whole feature rests on
 
 A duel loadout is three decks that **cannot share a card**. That is what makes

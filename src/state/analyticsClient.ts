@@ -1014,6 +1014,8 @@ export interface CoachPrediction {
   name: string;
   stage: number;
   summary: { series: number; games: number; orderedSeries: number; archiveUsed: boolean };
+  /** What the figures were computed over. Absent on an older deployment. */
+  window?: { from: string | null; to: string | null };
   decks: CoachDeck[];
   /** Opening only: whether the ranking is game-1 history or overall play rate. */
   basis?: string | null;
@@ -1037,6 +1039,13 @@ export interface CoachSuggestion {
   oppTag: string;
   myName: string;
   oppName: string;
+  /** Two spans, because each is counted from that player's own last battle. */
+  window?: {
+    mine: { from: string | null; to: string | null };
+    opponent: { from: string | null; to: string | null };
+  };
+  /** How much play each window actually held — a thin cap must look thin. */
+  evidence?: { mySeries: number; myGames: number; oppSeries: number; oppGames: number };
   opponent: { decks: CoachDeck[]; source: string; nCandidates: number };
   recommendations: CoachDeck[];
   best: CoachDeck | null;
@@ -1053,9 +1062,14 @@ export interface CoachSuggestion {
 /** Window 1 — which decks this player will bring. No revealed decks asks about
  *  the opening; one or two asks what is left for game 2 or 3. */
 export function fetchCoachPrediction(
-  tag: string, revealed: string[][],
+  tag: string, revealed: string[][], win?: DateWindow,
 ): Promise<CoachPrediction> {
-  const q = new URLSearchParams();
+  /* WINDOWED. This read the player's whole stored history, which answers a
+     different question from the one a duel asks: what someone ran daily six
+     weeks ago counted exactly as much as what they ran this morning. The
+     window is optional so the signature stays compatible; the server defaults
+     to 30 days, the same as every other player screen. */
+  const q = new URLSearchParams(win ? windowQuery(win) : undefined);
   revealed.forEach((d, i) => q.set(`r${i + 1}`, d.join(',')));
   const qs = q.toString();
   return get<CoachPrediction>(
@@ -1067,8 +1081,14 @@ export function fetchCoachPrediction(
  *  to meta decks and says so, which is a weaker answer rather than none. */
 export function fetchCoachSuggestion(
   me: string, opp: string, myPlayed: string[][], oppPlayed: string[][],
+  win?: DateWindow,
 ): Promise<CoachSuggestion> {
-  const q = new URLSearchParams({ me });
+  /* ONE `days` covers BOTH players, and the server resolves it separately
+     against each one's own coverage — so this is thirty days of each player's
+     play, not one calendar range that may be empty for whichever of them
+     stopped sooner. */
+  const q = new URLSearchParams(win ? windowQuery(win) : undefined);
+  q.set('me', me);
   if (opp) q.set('opp', opp);
   myPlayed.forEach((d, i) => q.set(`m${i + 1}`, d.join(',')));
   oppPlayed.forEach((d, i) => q.set(`o${i + 1}`, d.join(',')));

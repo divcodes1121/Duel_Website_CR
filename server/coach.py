@@ -757,7 +757,9 @@ def _expected(mine: list[str], opp_decks: list[dict], snap) -> dict | None:
 
 
 def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
-            opp_played: list[list[str]]) -> dict:
+            opp_played: list[list[str]],
+            my_since: str | None = None, my_until: str | None = None,
+            opp_since: str | None = None, opp_until: str | None = None) -> dict:
     """What to play next, and why.
 
     `my_played` / `opp_played` are the decks already used this duel, in order.
@@ -772,8 +774,14 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     used_mine = set().union(*[set(d) for d in my_played]) if my_played else set()
     snap = counter._snap()
 
-    mine_hist = _history(my_tag) if my_tag else None
-    opp_hist = _history(opp_tag) if opp_tag else None
+    # A WINDOW EACH, and they are not the same dates. `days` counts back from
+    # the last battle stored for THAT player -- the site-wide convention, so a
+    # player who stopped a month ago still gets a populated screen instead of an
+    # empty one and no explanation. Two players with different last-seen dates
+    # therefore get two different calendar spans from one "30 days", which is
+    # the intended reading of the control: thirty days of THEIR play, each.
+    mine_hist = _history(my_tag, my_since, my_until) if my_tag else None
+    opp_hist = _history(opp_tag, opp_since, opp_until) if opp_tag else None
 
     # What they will bring.
     opp = opponent_next(opp_tag, opp_played, opp_hist)
@@ -827,6 +835,20 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         "stage": stage,
         "myTag": my_tag,
         "oppTag": opp_tag,
+        # TWO WINDOWS, reported separately because they are separate spans --
+        # each is counted back from that player's own last stored battle.
+        "window": {
+            "mine": {"from": my_since, "to": my_until},
+            "opponent": {"from": opp_since, "to": opp_until},
+        },
+        # How much play each window actually held. A cap that leaves someone
+        # with three games must not look like a cap that left them with ninety.
+        "evidence": {
+            "mySeries": len(mine_hist["series"]) if mine_hist else 0,
+            "myGames": len(mine_hist["allDecks"]) if mine_hist else 0,
+            "oppSeries": len(opp_hist["series"]) if opp_hist else 0,
+            "oppGames": len(opp_hist["allDecks"]) if opp_hist else 0,
+        },
         "myName": _player_name(my_tag) if my_tag else "",
         "oppName": _player_name(opp_tag) if opp_tag else "Opponent",
         "opponent": opp,
@@ -942,13 +964,31 @@ def _read(stage, best, opp, my_played, opp_played, observed) -> list[str]:
 
 # ── THE TWO ENTRY POINTS THE API CALLS ─────────────────────────────────────
 
-def predict(tag: str, revealed: list[list[str]]) -> dict:
-    """Window 1. No reveals = the opening; one or two = what is left."""
-    hist = _history(tag)
+def predict(tag: str, revealed: list[list[str]],
+            since: str | None = None, until: str | None = None) -> dict:
+    """Window 1. No reveals = the opening; one or two = what is left.
+
+    THE HISTORY IS WINDOWED. It used to read everything stored for the player,
+    which quietly answered a different question from the one being asked: a
+    duel is decided by what someone is playing NOW, and a deck they ran daily
+    six weeks ago carries the same weight as one they ran this morning. The
+    caller picks the window; `_history` already caches per `(tag, since,
+    until)`, so a window is not a second database read for the same span.
+
+    A NARROW WINDOW CAN LEGITIMATELY BE EMPTY, and nothing here pretends
+    otherwise — `summary.series` and `summary.games` report what the window
+    actually held, so a thin answer is visibly thin rather than confidently
+    wrong. There is deliberately no automatic widening: the cap is the control,
+    and silently ignoring it would make the control a lie.
+    """
+    hist = _history(tag, since, until)
     out = {
         "tag": tag,
         "name": _player_name(tag),
         "stage": len(revealed),
+        # What the figures below were computed over, so the screen can state it
+        # rather than the reader having to trust the control they set.
+        "window": {"from": since, "to": until},
         "summary": {
             "series": len(hist["series"]),
             "games": len(hist["allDecks"]),

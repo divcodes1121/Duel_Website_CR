@@ -232,8 +232,8 @@ happily against a server that never called it.
 | `GET /api/analytics/deck?cards=&wild=` | how one pasted deck draws — slots + art (`wild=evolution` or `wild=hero` picks slot 3) |
 | `GET /api/analytics/matchup?a=&b=` | head-to-head for two decks (comma-separated keys) |
 | `GET /api/analytics/counters?deck=` | what beats a deck |
-| `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2` |
-| `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2` |
+| `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
+| `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
 
 Both `player` and `duels` take the same window: `?days=N`, or `?from=&to=` as

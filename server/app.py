@@ -563,7 +563,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
                 q = parse_qs(parsed.query)
                 revealed = _decks(q, ("r1", "r2"))
-                out = coach.predict(tag, revealed)
+                # WINDOWED like every other player screen, and through the same
+                # `_window` helper -- so `days` counts back from this player's
+                # last stored battle rather than from today, and one convention
+                # covers the whole API.
+                since, until = _window(q, cd.coverage(tag))
+                out = coach.predict(tag, revealed, since, until)
                 out["sources"] = _sources()
                 return self._send(out)
 
@@ -590,8 +595,16 @@ class Handler(BaseHTTPRequestHandler):
                 # meta decks and says so, which is a weaker answer rather than
                 # no answer.
                 opp = cd.normalize_tag((q.get("opp") or [""])[0]) or ""
+                # ONE `days`, TWO WINDOWS. The span is resolved per tag against
+                # that player's own coverage, so "30 days" means thirty days of
+                # each player's play rather than one calendar range that may be
+                # empty for whichever of them stopped playing sooner.
+                my_since, my_until = _window(q, cd.coverage(me))
+                opp_since, opp_until = (_window(q, cd.coverage(opp)) if opp
+                                        else (None, None))
                 out = coach.suggest(me, opp, _decks(q, ("m1", "m2")),
-                                    _decks(q, ("o1", "o2")))
+                                    _decks(q, ("o1", "o2")),
+                                    my_since, my_until, opp_since, opp_until)
                 out["sources"] = _sources()
                 return self._send(out)
 

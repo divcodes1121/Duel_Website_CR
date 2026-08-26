@@ -39,6 +39,58 @@
   flex-wrap: wrap;
 }
 
+/* HOW FAR BACK THE HISTORY GOES — one control for both windows, sitting in the
+   header rather than inside either tab, because it governs both and a copy per
+   tab could disagree.
+
+   `margin-left: auto` pushes it to the trailing edge; the header already wraps,
+   so on a narrow screen it drops to its own line instead of crushing the
+   title. */
+.daysRow {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.daysLabel {
+  margin-right: 0.15rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.dayChip {
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+}
+
+.dayChip:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+/* The SELECTED step, not an identity hue: this is a chosen state, and violet
+   is what "selected" means everywhere else in this app. `--on-solid` is what
+   `--solid-*` is graded to carry. */
+.dayChipOn {
+  background: var(--solid-violet);
+  border-color: var(--solid-violet);
+  color: var(--on-solid);
+}
+
 .headIcon {
   display: grid;
   place-items: center;
