@@ -251,6 +251,11 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
   }
 
   const { duels } = report;
+  /* Whether these rows have a loadout position at all. False when the server
+     widened to non-duel battles, where there is no G1/G2/G3 to belong to.
+     `!== false` so an older deployment that sends neither field keeps the
+     duel behaviour it has always had. */
+  const hasSlots = report.hasSlots !== false;
 
   // WHICH TABS TO DRAW. On screen, the one you picked. On paper, all of them —
   // the three tabs are slices of ONE payload (`report.tabs`), so drawing the
@@ -271,7 +276,20 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
           <span className={styles.headIcon}>{ICONS.swords}</span>
           <div className={styles.headText}>
             <h1 className={styles.title}>Duel Analysis</h1>
-            <p className={styles.blurb}>Analyze combinations used in duels.</p>
+            {/* THE BLURB STATES THE POPULATION, because it is no longer always
+                duels. A player with two duels cannot clear the 8-game floor, so
+                the server widens to their other battles and stamps `basis`.
+                Saying which battles these are is the whole point of widening
+                rather than blending: an unlabelled fallback is a wrong answer
+                that looks right. */}
+            {report.basis === 'all' ? (
+              <p className={styles.blurb}>
+                Not enough duels to measure — showing combinations from this
+                player&rsquo;s other battles instead.
+              </p>
+            ) : (
+              <p className={styles.blurb}>Analyze combinations used in duels.</p>
+            )}
           </div>
 
           <div className={styles.headTools}>
@@ -421,7 +439,9 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
               <span className={styles.tileSub}>
                 {unmeasured
                   ? `no evolution slots stored for these ${nf.format(duels.decks)} decks`
-                  : `from ${nf.format(duels.total)} duels · ${nf.format(duels.decks)} decks`}
+                  : hasSlots
+                    ? `from ${nf.format(duels.total)} duels · ${nf.format(duels.decks)} decks`
+                    : `from ${nf.format(report.battles ?? duels.decks)} non-duel battles`}
               </span>
             </span>
           </div>
@@ -432,18 +452,27 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
             unmeasured={unmeasured}
             caption={(c) => `Use Rate ${pct(c.useRate)}`}
           />
-          <TileCombo
-            label="Top G2 Combo"
-            combo={t.perSlot[1] ?? null}
-            unmeasured={unmeasured}
-            caption={(c) => `Use Rate ${pct(c.slotShare[1])}`}
-          />
-          <TileCombo
-            label="Top G3 Combo"
-            combo={t.perSlot[2] ?? null}
-            unmeasured={unmeasured}
-            caption={(c) => `Use Rate ${pct(c.slotShare[2])}`}
-          />
+          {/* G2/G3 ARE LOADOUT POSITIONS AND ONLY A DUEL HAS THEM. When the
+              figures come from ordinary battles the server sets `slot: -1`, so
+              every slot total is legitimately 0 and these tiles would render
+              two empty boxes captioned "Use Rate 0%" — a measurement of
+              nothing, presented as a measurement. Withheld instead. */}
+          {hasSlots && (
+            <>
+              <TileCombo
+                label="Top G2 Combo"
+                combo={t.perSlot[1] ?? null}
+                unmeasured={unmeasured}
+                caption={(c) => `Use Rate ${pct(c.slotShare[1])}`}
+              />
+              <TileCombo
+                label="Top G3 Combo"
+                combo={t.perSlot[2] ?? null}
+                unmeasured={unmeasured}
+                caption={(c) => `Use Rate ${pct(c.slotShare[2])}`}
+              />
+            </>
+          )}
         </div>
 
         <section className={styles.tablePanel}>
@@ -459,14 +488,17 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
               <span className={styles.legendItem}>
                 <i className={styles.legendDot} data-key="win" /> Win Rate
               </span>
-              {SLOT_NAMES.map((n, i) => (
-                <span key={n} className={styles.legendItem}>
-                  <i className={styles.legendDot} data-slot={i + 1} /> {n}
+              {hasSlots &&
+                SLOT_NAMES.map((n, i) => (
+                  <span key={n} className={styles.legendItem}>
+                    <i className={styles.legendDot} data-slot={i + 1} /> {n}
+                  </span>
+                ))}
+              {hasSlots && (
+                <span className={styles.legendNote} title={`Full bar = ${slotScale.toFixed(1)}%`}>
+                  G-bars share one scale
                 </span>
-              ))}
-              <span className={styles.legendNote} title={`Full bar = ${slotScale.toFixed(1)}%`}>
-                G-bars share one scale
-              </span>
+              )}
             </div>
           </header>
 
@@ -524,7 +556,7 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
                     <th>Combo</th>
                     <th className={styles.thMeter}>Use Rate</th>
                     <th className={styles.thMeter}>Win Rate</th>
-                    {SLOT_NAMES.map((n) => (
+                    {hasSlots && SLOT_NAMES.map((n) => (
                       <th key={n} className={styles.thSlot}>
                         {n}
                       </th>
@@ -578,11 +610,12 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
                             />
                           </span>
                         </td>
-                        {c.slotShare.map((share, s) => (
-                          <td key={s}>
-                            <SlotCell slot={s} share={share} decks={c.slots[s]} scale={slotScale} />
-                          </td>
-                        ))}
+                        {hasSlots &&
+                          c.slotShare.map((share, s) => (
+                            <td key={s}>
+                              <SlotCell slot={s} share={share} decks={c.slots[s]} scale={slotScale} />
+                            </td>
+                          ))}
                         <td className={styles.chevCell}>
                           <span className={styles.chev} data-open={open || undefined}>
                             {ICONS.chevron}
@@ -591,10 +624,10 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
                       </tr>,
                       open ? (
                         <tr key={`${key}-d`} className={styles.detailRow}>
-                          <td colSpan={8}>
+                          <td colSpan={hasSlots ? 8 : 5}>
                             <div className={styles.detail}>
                               <Fact
-                                label="Duel decks together"
+                                label={hasSlots ? 'Duel decks together' : 'Decks together'}
                                 value={nf.format(c.games)}
                                 note={`${nf.format(c.wins)} won`}
                               />
@@ -622,13 +655,18 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
                                 value={pct(c.topShare)}
                                 note="of this pairing's games come from one deck"
                               />
-                              <Fact
-                                label="By loadout slot"
-                                value={c.slots.map((n, s) => `${SLOT_NAMES[s]} ${n}`).join(' · ')}
-                                note={c.slotShare
-                                  .map((s, n) => `${pct(s)} of ${SLOT_NAMES[n]}`)
-                                  .join(' · ')}
-                              />
+                              {/* Withheld, not zeroed: a non-duel battle has no
+                                  loadout slot, so "G1 0 · G2 0 · G3 0" would be
+                                  a fact about nothing. */}
+                              {hasSlots && (
+                                <Fact
+                                  label="By loadout slot"
+                                  value={c.slots.map((n, s) => `${SLOT_NAMES[s]} ${n}`).join(' · ')}
+                                  note={c.slotShare
+                                    .map((s, n) => `${pct(s)} of ${SLOT_NAMES[n]}`)
+                                    .join(' · ')}
+                                />
+                              )}
                             </div>
                           </td>
                         </tr>

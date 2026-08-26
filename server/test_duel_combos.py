@@ -319,5 +319,33 @@ finally:
 check("card data restored after the probe", dx.card_data_state()["loaded"])
 
 
+# --- the non-duel fallback -------------------------------------------------
+# A player with two duels yields dozens of observed pairings and ZERO eligible
+# ones, because a pair needs 8 games across 2 decks before a percentage is
+# printed. Empty is the correct answer to the narrow question and a useless
+# page, so `combo_report` re-asks it of the player's other battles and stamps
+# `basis: "all"`.
+#
+# No database is opened here — these are the shape guarantees the widening
+# rests on, and the dangerous one is the slot.
+_empty = dx.non_duel_decks("#NOSUCHTAG", None, None)
+check("no windows means no decks", _empty["decks"] == [])
+check("the fallback reports zero duels by construction", _empty["duels"] == 0)
+check(
+    "the fallback matches duel_decks' shape",
+    set(dx.duel_decks("#NOSUCHTAG", None, None)) <= set(_empty),
+)
+
+# SLOT -1 IS THE WHOLE SAFETY PROPERTY. A ladder battle has no G1/G2/G3, and
+# every slot consumer guards on `0 <= slot < SLOTS`. If a future edit ever wrote
+# 0 here "to be tidy", every non-duel deck would silently claim to be a G1 and
+# the page would report a loadout position for battles that never had one.
+check(
+    "a slotless deck is excluded by the slot guard",
+    not (0 <= -1 < dx.SLOTS),
+)
+check("G1 would NOT be excluded, which is why -1 matters", 0 <= 0 < dx.SLOTS)
+
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

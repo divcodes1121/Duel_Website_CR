@@ -499,6 +499,114 @@ def read_duel_rows(tag: str, since: str | None,
     return raw_rows, archive_used
 
 
+def non_duel_decks(tag: str, since: str | None, until: str | None) -> dict:
+    """The player's decks from everything that is NOT a duel, same shape as
+    `duel_decks()`.
+
+    WHY THIS EXISTS. A player with two duels can never fill this page: a pair
+    needs `PAIR_MIN_GAMES` (8) games and `PAIR_MIN_DECKS` (2) decks behind it
+    before a percentage is printed, so 84 observed pairings can yield 0 eligible
+    ones and all three tabs come back empty. Empty is CORRECT for a duel
+    question, and it is also useless — the same person has hundreds of ladder
+    battles, and "which two cards do you actually rebuild around" is answerable
+    from those.
+
+    So this is a deliberate widening of the population, exactly like the Deck
+    Counter's matchup ladder: the same question, asked of more battles, and
+    SAID OUT LOUD rather than blended in. `combo_report` only reaches for it
+    when the duel population produced nothing, and stamps `basis: "all"` on the
+    result so the page can say which battles it is describing.
+
+    `slot` IS -1, AND THAT IS THE POINT. A ladder battle has no position in a
+    loadout; there is no G1, G2 or G3 to belong to. Everything downstream
+    already guards on `0 <= slot < SLOTS`, so slot totals stay zero, `perSlot`
+    comes back `[None, None, None]` and every `slotShare` is 0.0 — the split
+    disappears instead of being invented. Writing 0 or 1 here would have
+    manufactured a loadout position out of a ladder match.
+
+    THE 8-CARD GUARD IS NOT OPTIONAL. Some modes store a 16- or 24-card loadout
+    in one row; expanding pairs across that would pair cards from decks that
+    never shared a board. Only exact 8-card rows are kept, which is the same
+    guard the deck-actions component and the OIE both apply.
+    """
+    windows = cd.tier_windows(tag, since, until)
+    if not windows:
+        return {"decks": [], "duels": 0, "native": 0, "reconstructed": 0,
+                "evoCovered": 0, "span": ("", ""), "archiveUsed": False,
+                "battles": 0}
+
+    decks: list[dict] = []
+    evo_covered = 0
+    archive_used = False
+    first = last = ""
+
+    for idx, (path, w_lo, w_hi) in enumerate(windows):
+        try:
+            con = cd.connect(path)
+        except Exception:
+            continue
+        try:
+            rows = con.execute(
+                "SELECT battle_time, game_mode, result, player_card_keys, player_evo "
+                "FROM battles "
+                "WHERE player_tag = ? AND battle_time >= ? AND battle_time <= ? "
+                "ORDER BY battle_time",
+                (tag, w_lo, w_hi),
+            ).fetchall()
+        except Exception:
+            rows = []
+        finally:
+            con.close()
+
+        kept = 0
+        for r in rows:
+            mode = r["game_mode"] or ""
+            # The complement of the duel read, using the SAME predicate rather
+            # than a second definition of what a duel is.
+            if is_duel_like_mode(mode):
+                continue
+            try:
+                cards = json.loads(r["player_card_keys"] or "[]")
+            except Exception:
+                continue
+            if len(cards) != DECK_SIZE:
+                continue
+            marks = _evo_marks(r["player_evo"], cards)
+            if marks:
+                evo_covered += 1
+            stamp = r["battle_time"] or ""
+            if stamp:
+                first = stamp if not first else min(first, stamp)
+                last = stamp if not last else max(last, stamp)
+            kept += 1
+            decks.append(
+                {
+                    "cards": cards,
+                    "hash": ",".join(sorted(cards)),
+                    "slot": -1,
+                    "won": (r["result"] or "") == "win",
+                    "evo": marks,
+                }
+            )
+        if kept and idx > 0:
+            archive_used = True
+
+    return {
+        "decks": decks,
+        # No duels by construction. The caller keeps the DUEL counts from the
+        # duel read for the page's header — the point of the fallback is that
+        # the duel history is thin, so reporting it as zero would erase the
+        # very fact that explains why this widening happened.
+        "duels": 0,
+        "native": 0,
+        "reconstructed": 0,
+        "evoCovered": evo_covered,
+        "span": (first, last),
+        "archiveUsed": archive_used,
+        "battles": len(decks),
+    }
+
+
 def group_chunks(rows: list[dict]) -> list[list[dict]]:
     """Consecutive same-opponent practice rows, as `duel_split.group` does it.
 
@@ -847,11 +955,49 @@ def _combo_json(r: dict, total: int, slot_totals: list[int], art: dict | None = 
 
 
 def combo_report(tag: str, since: str | None = None, until: str | None = None) -> dict | None:
-    """The Duel Analysis page: three tabs of card combinations."""
-    src = duel_decks(tag, since, until)
+    """The Duel Analysis page: three tabs of card combinations.
+
+    TWO POPULATIONS, TRIED IN ORDER, AND THE ANSWER SAYS WHICH ONE IT USED.
+
+    Duels first, always -- this is the duel page and a duel answer is the one
+    being asked for. But a pair must clear 8 games across 2 decks before a
+    percentage is printed, so a player with two duels produces 84 observed
+    pairings and 0 eligible ones, and all three tabs come back empty. That is
+    the correct answer to the narrow question and a useless page.
+
+    So when the duel population yields nothing, the same question is asked of
+    the player's other battles and the result is stamped `basis: "all"`. The
+    widening is the Deck Counter's ladder idea applied here: never silently
+    blended, always narrower-first, and always named in the payload so the page
+    can tell the reader which battles it is describing.
+
+    THE DUEL COUNTS SURVIVE THE WIDENING. `duels` still reports the real duel
+    history -- 2 duels, not 0 -- because "you have barely any duels" is the
+    reason the page widened, and overwriting it with the fallback's own zeros
+    would erase the explanation.
+    """
+    duel_src = duel_decks(tag, since, until)
+    narrow = _report_from(tag, duel_src, "duel") if duel_src["decks"] else None
+    if narrow and narrow["pairs"]["eligible"] > 0:
+        return narrow
+
+    wide_src = non_duel_decks(tag, since, until)
+    if not wide_src["decks"]:
+        return narrow
+    wide = _report_from(tag, wide_src, "all")
+    if wide["pairs"]["eligible"] <= 0:
+        # Neither population fills the page. Prefer the duel answer when there
+        # was one: the page is about duels, and an empty duel report at least
+        # quotes the duel span that explains the emptiness.
+        return narrow or wide
+    if narrow:
+        wide["duels"] = narrow["duels"]
+    return wide
+
+
+def _report_from(tag: str, src: dict, basis: str) -> dict:
+    """Build the page from one population of decks. See `combo_report`."""
     decks = src["decks"]
-    if not decks:
-        return None
 
     # Group identical decks first. This is the bot's ordering — pairs come from
     # decks, and a deck's whole record travels with every pair it contains.
@@ -1024,4 +1170,15 @@ def combo_report(tag: str, since: str | None = None, until: str | None = None) -
         "floors": {"minGames": PAIR_MIN_GAMES, "minDecks": PAIR_MIN_DECKS},
         "tabs": tabs,
         "archiveUsed": src["archiveUsed"],
+        # WHICH BATTLES THESE FIGURES DESCRIBE. "duel" is the page's own
+        # question; "all" means the duel population could not fill it and these
+        # pairs come from the player's other battles instead. The client must
+        # say so -- an unlabelled widening is the same class of mistake as the
+        # card metadata that silently defaulted to "not a win condition".
+        "basis": basis,
+        # Non-duel decks have no loadout position, so the G1/G2/G3 split is
+        # absent rather than zeroed-by-coincidence. Stated explicitly so the UI
+        # does not have to infer it from three empty columns.
+        "hasSlots": basis == "duel",
+        "battles": src.get("battles", 0),
     }

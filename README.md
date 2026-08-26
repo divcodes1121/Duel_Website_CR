@@ -72,7 +72,7 @@ bot's SQLite files read-only.
 | hosting | **the analytics service left the home machine.** `battles.db`, `server/app.py` and the bot all run on a Contabo VPS behind Caddy at `api.deckkies.com` |
 | domain | **`deckkies.com` live**, Vercel apex + `www`, `api.` pointing at the VPS |
 | deck sync | **re-keyed to the Supabase user id.** A cross-account leak on shared browsers was found and closed |
-| tests | **1,247 Python checks** across 21 suites, **179 vitest**, `tsc -b` and `npm run build` clean |
+| tests | **1,252 Python checks** across 21 suites, **179 vitest**, `tsc -b` and `npm run build` clean |
 | shipped from | `main` at `02b7618`. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -5823,7 +5823,7 @@ are in [Running it](#running-it).
 
 ## Testing and verification
 
-1,247 Python checks across 21 suites and 179 vitest tests, none of which open a
+1,252 Python checks across 21 suites and 179 vitest tests, none of which open a
 database — every Python suite runs on synthetic data or a stubbed reader, so
 they pass on a machine with no Clash_Bot install and cannot be broken by
 whatever a real player did last week. The vitest side gained the analytics-proxy
@@ -5990,6 +5990,46 @@ kinds of number:
 Battles the player did not choose the deck for — 2v2, draft, event decks — are
 dropped, the same rule the meta board applies, and the count that was dropped is
 printed rather than quietly absorbed.
+
+---
+
+## When the duel population cannot fill the page
+
+A pair needs **8 games across 2 decks** before Duel Analysis prints a
+percentage — the same floor every other win-rate claim on the site clears. A
+player with two duels produces 84 observed pairings and **zero** eligible ones,
+so all three tabs come back empty.
+
+That is the correct answer to the narrow question and a useless page. The same
+person has 2,212 ordinary battles, and "which two cards do you actually rebuild
+around" is answerable from those.
+
+So `combo_report` asks twice: **duels first, always**, and only when that
+yields nothing does it re-ask over the player's non-duel battles. The result is
+stamped `basis: "duel" | "all"` and the page says which it is showing.
+
+**Never blended.** The two populations are never mixed into one figure — a
+widened answer is a different answer, not a better-powered version of the same
+one. This is the Deck Counter's matchup ladder applied to a second screen:
+narrowest first, widen only on failure, and name the rung.
+
+**`slot` is `-1`, and that is the safety property.** A ladder battle has no
+position in a loadout; there is no G1, G2 or G3 for it to belong to. Every slot
+consumer already guards on `0 <= slot < SLOTS`, so the split *disappears*
+rather than being invented — slot totals stay 0, `perSlot` comes back
+`[null, null, null]`, and the client drops the three G-columns, both G-tiles,
+the legend dots and the per-slot detail line rather than rendering "G1 0 · G2 0
+· G3 0". Writing `0` there instead of `-1` would have manufactured a loadout
+position for every ladder match, and it would have looked completely normal.
+
+**The duel counts survive the widening.** `duels` still reports 2, not 0,
+because "you have barely any duels" is the *reason* the page widened;
+overwriting it with the fallback's own zeros would erase the explanation.
+
+**The 8-card guard is not optional.** Some modes store a 16- or 24-card loadout
+in a single row, and expanding pairs across that would pair cards from decks
+that never shared a board. Only exact 8-card rows are read — the same guard the
+deck-actions component and the OIE both apply.
 
 ---
 

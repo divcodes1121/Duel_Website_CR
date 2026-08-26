@@ -331,6 +331,28 @@ export interface DuelReport {
   floors: { minGames: number; minDecks: number };
   tabs: Record<TabId, ApiComboTab>;
   archiveUsed: boolean;
+  /**
+   * WHICH BATTLES THESE PAIRS CAME FROM.
+   *
+   * `'duel'` is the page's own question. `'all'` means the duel population
+   * could not clear the evidence floor — a player with two duels yields dozens
+   * of observed pairings and zero eligible ones — so the same question was
+   * asked of their other battles instead. The screen MUST say so: an unlabelled
+   * widening is the same class of mistake as card metadata silently defaulting
+   * to "not a win condition".
+   *
+   * Optional because an older deployment does not send it; absent reads as
+   * `'duel'`, which is what every previous response meant.
+   */
+  basis?: 'duel' | 'all';
+  /**
+   * False when the rows carry no loadout position. A ladder battle has no G1,
+   * G2 or G3, so the split is withheld rather than zeroed — the server sets
+   * `slot: -1` and every slot total legitimately stays 0.
+   */
+  hasSlots?: boolean;
+  /** Decks behind the figures when `basis` is `'all'`. */
+  battles?: number;
   coverage: ApiCoverage;
   window: { from: string | null; to: string | null };
   sources: ApiSources;
