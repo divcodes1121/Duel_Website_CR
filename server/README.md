@@ -43,9 +43,13 @@ Mirrors the bot's own model (`Clash_Bot/clashdb.py`, `Clash_Bot/archive.py`):
 | Hot (local default) | `H:\ClashBot\data\battles.db` | rolling window (150 days), ~11.5 GB |
 | Archive (local only) | `H:\ClashArchive\archive.db` | every battle ever, ~46 GB |
 
-**The H: copies are the rollback and must not be touched during the soak.**
-Nothing has run long enough on the VPS to retire them, and they are the only way
-back if the migrated copy turns out to be wrong.
+**The H: copies are the rollback. The drive was unplugged on 2026-08-26 with its
+contents intact** — local collection stopped, both Windows scheduled tasks
+disabled — and it must not be wiped or reused. It is the only way back if the
+migrated copy turns out wrong, and `archive.db` holds 1 May – 1 Jun, a month
+that exists in no other copy. The archive was deliberately never migrated (it
+grows 480 GB/year at 10,000 players); that is a reason it stays on the drive,
+not a reason the drive is disposable.
 
 **Both tiers moved to H: on 2026-08-17**, along with the bot's `RETENTION_DAYS`
 going 60 → 150: a five-month window is ~28.5M battles and does not fit on the

@@ -102,10 +102,15 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 - Do **not** repoint the site at `archive.db` to dodge that. It is two days
   stale and would break the OIE experiment outright. There is no archive tier on
   the VPS at all — `CLASH_ARCHIVE_DB_PATH` is set explicitly empty there.
-- **H: is the rollback and must not be touched during the soak.** The local
-  copies of `battles.db` and `archive.db` are the only way back if the VPS copy
-  turns out to be wrong, and nothing has yet run long enough on the VPS to
-  retire them.
+- **H: is shelved, not retired (2026-08-26).** The drive was unplugged with its
+  contents intact once the VPS took over: the two local scheduled tasks
+  (`ClashBot`, which triggers at LOGON, and `ClashBot-Maintenance`, daily at
+  04:00) are **disabled**, and the local `server/app.py` stopped. Disabled
+  rather than deleted — re-enabling them is the first move in a rollback.
+  `archive.db` and the untouched source `battles.db` are still the only way back
+  if the VPS copy turns out wrong, and they hold the **1 May – 1 Jun window that
+  exists in no other place** (archive spans 2026-05-01 → 2026-08-25; the VPS hot
+  tier starts 2026-06-01). Do not wipe or reuse that drive.
 
 ## Table of contents
 
@@ -1046,9 +1051,14 @@ one of those two columns turns a one-off into a trend.
 
 ### Still open on the hosting side
 
-- **H: is the rollback and must not be touched.** The local `battles.db` and
-  `archive.db` are the only way back. Nothing has run long enough on the VPS to
-  retire them.
+- **H: is unplugged and must not be wiped.** The local `battles.db` and
+  `archive.db` are the only way back, and the archive holds a month of battles
+  that exists nowhere else. Not migrating the archive was deliberate — it grows
+  480 GB/year at 10,000 players — which is not the same as not needing it.
+- **There is no backup of the VPS database.** No backup directory, no cron, no
+  timer; `deploy/backup_db.py` sits at `/opt/clashbot/deploy/` unscheduled.
+  Until it runs, the VPS is a single copy whose only fallback is a drive frozen
+  at 26 August.
 - **`OIE_ALLOWLIST` is unset**, so the Coach's opponent read degrades to
   `{enabled: false}` for everyone. That is the designed answer, not an error —
   but it means the Coach's engine half is dark in production.
