@@ -7358,9 +7358,11 @@ problems, and `scripts/build-logo.py` exists to solve them. **The master in
 | the D is black, so it vanishes on dark | two variants — `logo-light` keeps the letter, `logo-dark` lifts it and leaves the crown |
 | a favicon has no theme | it ships on a dark tile: the browser draws the tab strip in the OS theme and the page cannot influence it, so a transparent icon is a coin flip |
 
-Plus `logo-mask.png`, a flat silhouette, which is the input to the lightning
-mark's distance field — the shader needs the SHAPE and would otherwise
-threshold the artwork at runtime and get a different answer per browser.
+A `logo-mask.png` silhouette shipped briefly as the input to the lightning
+effect's distance field. **The VS between two decks is the WORD now, not the
+logo** — a logo in the place a reader looks for the score says whose site it is
+rather than what the row means — so that field is rasterised from text at
+runtime and the mask has no reader.
 
 **There was no favicon at all**, so every browser drew its own placeholder.
 There is now an `.ico`, five PNGs and a webmanifest, and the topbar mark is the
@@ -7374,10 +7376,10 @@ completely and the mark was a floating crown. CSS picks the variant, in all
 three theme states — an explicit `data-theme` either way, and
 `prefers-color-scheme` for the default where nothing is stamped.
 
-The mark also carries lightning crawling its contour, in Recent Battles and on
-the builder's Versus board. That is `src/three/LightningMarks.tsx` and the whole
-account of it — including three separate ways it was invisible while working
-correctly — is in [docs/UI.md](docs/UI.md#lightning-on-the-mark).
+The lightning that crawls the VS in Recent Battles and on the builder's Versus
+board is `src/three/LightningMarks.tsx`, and the whole account of it — including
+FOUR separate ways it was invisible while working correctly — is in
+[docs/UI.md](docs/UI.md#lightning-on-the-mark).
 
 ---
 

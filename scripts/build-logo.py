@@ -28,10 +28,11 @@ below exists to solve one of them.
    ships on a dark rounded tile with the white-D variant — gold and white on
    near-black reads on any tab strip either theme can produce.
 
-Plus one non-visual output: `logo-mask.png`, a flat white silhouette on
-transparent. That is the input to the lightning mark's signed-distance field
-(`src/three/LightningMark.tsx`), which needs the SHAPE and would otherwise have
-to threshold the artwork at runtime and get a different answer per browser.
+It briefly emitted a `logo-mask.png` silhouette too, as the input to the
+lightning effect's signed-distance field. The VS between two decks is the WORD
+now rather than the logo, and that field is rasterised from text at runtime —
+so the mask has no reader and is not written. `silhouette()` stays because it
+is the part that would be hard to rediscover if the mark ever needs a field.
 
 Run: python scripts/build-logo.py     (needs Pillow)
 """
@@ -203,7 +204,6 @@ def main() -> None:
 
     light.save(os.path.join(OUT_ASSETS, "logo-light.png"), optimize=True)
     dark.save(os.path.join(OUT_ASSETS, "logo-dark.png"), optimize=True)
-    silhouette(keyed).save(os.path.join(OUT_ASSETS, "logo-mask.png"), optimize=True)
 
     for s in FAVICON_SIZES:
         favicon(dark, s).save(os.path.join(OUT_ROOT, f"favicon-{s}.png"), optimize=True)
@@ -214,7 +214,7 @@ def main() -> None:
         sizes=[(16, 16), (32, 32), (48, 48), (64, 64)],
     )
 
-    for name in ("logo-light.png", "logo-dark.png", "logo-mask.png"):
+    for name in ("logo-light.png", "logo-dark.png"):
         p = os.path.join(OUT_ASSETS, name)
         print(f"  {name:<16} {os.path.getsize(p) / 1024:6.1f} kB")
     for s in (32, 180, 512):

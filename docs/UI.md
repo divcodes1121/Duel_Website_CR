@@ -322,7 +322,7 @@ materials across 3 files, no other undeclared reads.
 ## Lightning on the mark
 
 The VS between two decks — in Recent Battles and on the builder's Versus board
-— is the Deckkies logo with lightning crawling its contour. Adapted from
+— is the word itself with lightning crawling the letters. Adapted from
 ThreeUI's `ElementsCollection` / Lightning; the technique that came across is
 rasterise a logo, chamfer it into a signed distance field, then walk
 fBm-displaced arcs along the `|d| = 0` contour so the bolts trace the shape
@@ -334,11 +334,18 @@ sixteen WebGL contexts per document. `LightningMarks` finds every `[data-bolt]`
 element and draws them instanced — the same shape `LiquidMetal` and `DeckFx`
 already use, for the same reason.
 
+**The field is two letters, not a logo.** It drew the brand mark for one
+build, and that was the wrong object: the space between two decks is where a
+reader looks to find out what happened between them, and a logo there says
+whose site it is. The field is rasterised from the word with Canvas 2D at load
+— the display face is Arial, a system font, so there is no webfont to wait on
+and no PNG to keep in step with the CSS.
+
 **No storm backdrop.** The reference paints an opaque near-black sky and lights
 the mark inside it; dropped into a battle row that is a black rectangle. Only
-the bolts are drawn, premultiplied over a transparent clear, with the logo
-underneath as a real `<img>` — crisper than an SDF fill, and still there when
-WebGL is refused or `prefers-reduced-motion` is set.
+the bolts are drawn, premultiplied over a transparent clear, with the letters
+underneath as real text — crisper than an SDF fill, and still there when WebGL
+is refused or `prefers-reduced-motion` is set.
 
 **The tint is a token, which is what makes light mode work.** Additive light on
 white is white. `readToken` resolves `--hue-blue` on dark (pale, reads as
@@ -355,7 +362,7 @@ one mattered:
 | one flash per layer per frame | lit the whole contour at once — a second jagged D |
 | a low-frequency mask along the contour | only stretches light, so the arcs have ends |
 
-### Three ways it was invisible while working
+### Four ways it was invisible while working
 
 Worth writing down because none of them produced an error.
 
@@ -369,6 +376,16 @@ body is `z-index: 1` and the panels carry `backdrop-filter`, so the shader ran,
 found its marks, and drew every bolt behind the content. It sits at 20 now:
 above the content, below the popovers (the range picker is 60, the profile menu
 300).
+
+**The field was sampled upside down.** The vertex shader negates `clip.y` so
+`vUv.y = 0` is the top of the element, and `texImage2D` uploads the canvas top
+row first, so `v = 0` is the top of the field too — and `sdf()` flipped it
+again. With the logo, whose silhouette is a blob, an upside-down field looked
+entirely plausible and the bolts traced something reasonable. The moment the
+field became two letters it rendered a clear upside-down "VS" and the bug was
+obvious. **A probe that paints the field is worth writing before a shader
+misbehaves, not after**: one temporary `frag = mix(red, green, inside)` showed
+in a single screenshot what an hour of reading the maths had not.
 
 **Backticks inside the GLSL, three times** — twice inside the comment warning
 about backticks. The shaders are template literals, so one ends the string and

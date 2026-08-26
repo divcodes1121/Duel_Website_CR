@@ -1,5 +1,5 @@
 /**
- * Lightning crawling the Deckkies mark — the VS between two decks.
+ * Lightning crawling the VS between two decks.
  *
  * Adapted from ThreeUI's `ElementsCollection` / Lightning. What came across is
  * the TECHNIQUE: rasterise a logo, chamfer it into a signed distance field,
@@ -15,13 +15,25 @@
  * ONE fixed canvas that finds every `[data-bolt]` element and draws all of them
  * instanced, which is the shape `LiquidMetal` and `DeckFx` already use here.
  *
+ * ── THE FIELD IS TWO LETTERS, NOT A LOGO ─────────────────────────────────
+ *
+ * This drew the brand mark first. It was the wrong object for the job: the
+ * place between two decks is where a reader looks for the SCORE, and a logo
+ * there says whose site it is rather than what the row means. The field is
+ * rasterised from the word itself now, so the arcs trace the V and the S.
+ *
+ * Drawn with Canvas 2D at load, not shipped as an asset. The display face is
+ * Arial — a system font with nothing to download — so there is no webfont to
+ * wait on and no PNG to keep in step with the CSS.
+ *
  * ── NO STORM BACKDROP ────────────────────────────────────────────────────
  *
  * The reference paints an opaque near-black sky and lights the mark inside it.
  * Dropped into a battle row that is a black rectangle, and in the light theme
  * a black rectangle with the row showing nowhere. This draws ONLY the bolts,
- * premultiplied over a transparent clear, and the logo underneath is a real
- * `<img>` — crisper than an SDF fill and free.
+ * premultiplied over a transparent clear, and the letters underneath are real
+ * text — crisper than an SDF fill, selectable, and still there when WebGL is
+ * refused or `prefers-reduced-motion` is set.
  *
  * ── THE TINT IS A TOKEN, WHICH IS WHAT MAKES LIGHT MODE WORK ─────────────
  *
@@ -46,8 +58,12 @@ import { useEffect, useRef } from 'react';
 
 import { isDark, pixelRatio, readToken, reducedMotion } from './runtime';
 
-/** The silhouette the field is built from — written by scripts/build-logo.py. */
-const MASK_URL = `${import.meta.env.BASE_URL}assets/brand/logo-mask.png`;
+/** The word the field is built from. Matches what `VsMark` renders. */
+const WORD = 'VS';
+
+/** The face it is rasterised in — the same stack `--font-display` resolves to,
+ *  so the bolts trace the letterforms actually on screen. */
+const FACE = "800 {px}px Arial, Helvetica, 'Liberation Sans', sans-serif";
 
 /**
  * Field resolution, and how far either side of the edge it measures.
@@ -120,7 +136,7 @@ float fbm(vec2 p){
 float sdf(vec2 uv){
   vec2 m = 0.5 + (uv - 0.5) * 1.18;
   vec2 mc = clamp(m, 0.0, 1.0);
-  float d = (texture(uSDF, vec2(mc.x, 1.0 - mc.y)).r - 0.5) * ${D_RANGE.toFixed(4)};
+  float d = (texture(uSDF, mc).r - 0.5) * ${D_RANGE.toFixed(4)};
   return d + length(m - mc);
 }
 
@@ -254,52 +270,54 @@ function chamfer(d: Float32Array, n: number) {
   }
 }
 
-let fieldPromise: Promise<Uint8Array> | null = null;
+let field: Uint8Array | null = null;
 
-/** The mark's signed distance field, built once and shared by every mount. */
-function loadField(): Promise<Uint8Array> {
-  if (fieldPromise) return fieldPromise;
-  fieldPromise = new Promise<Uint8Array>((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = c.height = SDF_SIZE;
-      const ctx = c.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return reject(new Error('no 2d context'));
-      // Inset, so the outline has field on both sides of it at the border.
-      const pad = SDF_SIZE * 0.1;
-      ctx.drawImage(img, pad, pad, SDF_SIZE - pad * 2, SDF_SIZE - pad * 2);
-      const data = ctx.getImageData(0, 0, SDF_SIZE, SDF_SIZE).data;
+/**
+ * The word's signed distance field, built once and shared by every mount.
+ *
+ * The glyphs are drawn into the square at the same fraction of it that the
+ * live text occupies of its box, so the field and the letters on screen line
+ * up without the shader having to know either size.
+ */
+function buildField(): Uint8Array | null {
+  if (field) return field;
 
-      const n = SDF_SIZE * SDF_SIZE;
-      const out = new Float32Array(n);
-      const inn = new Float32Array(n);
-      for (let i = 0; i < n; i++) {
-        const inside = data[i * 4 + 3] > 127;
-        out[i] = inside ? 0 : 1e9;
-        inn[i] = inside ? 1e9 : 0;
-      }
-      chamfer(out, SDF_SIZE);
-      chamfer(inn, SDF_SIZE);
+  const c = document.createElement('canvas');
+  c.width = c.height = SDF_SIZE;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
 
-      const enc = new Uint8Array(n);
-      for (let i = 0; i < n; i++) {
-        const d = out[i] - inn[i]; // positive outside, negative inside
-        enc[i] = Math.max(0, Math.min(255, Math.round((0.5 + (0.5 * d) / SDF_SPREAD) * 255)));
-      }
-      resolve(enc);
-    };
-    img.onerror = () => reject(new Error('mask failed to load'));
-    img.src = MASK_URL;
-  });
-  return fieldPromise;
+  ctx.font = FACE.replace('{px}', String(Math.round(SDF_SIZE * 0.42)));
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(WORD, SDF_SIZE / 2, SDF_SIZE / 2);
+  const data = ctx.getImageData(0, 0, SDF_SIZE, SDF_SIZE).data;
+
+  const n = SDF_SIZE * SDF_SIZE;
+  const out = new Float32Array(n);
+  const inn = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const inside = data[i * 4 + 3] > 127;
+    out[i] = inside ? 0 : 1e9;
+    inn[i] = inside ? 1e9 : 0;
+  }
+  chamfer(out, SDF_SIZE);
+  chamfer(inn, SDF_SIZE);
+
+  const enc = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const d = out[i] - inn[i]; // positive outside, negative inside
+    enc[i] = Math.max(0, Math.min(255, Math.round((0.5 + (0.5 * d) / SDF_SPREAD) * 255)));
+  }
+  field = enc;
+  return enc;
 }
 
 /**
  * Mount once per route. Every `[data-bolt]` element on the page gets lightning
- * drawn over it; nothing else is touched, and nothing runs when none is on
- * screen.
+ * drawn around its box; nothing else is touched, and nothing runs when none is
+ * on screen.
  */
 export function LightningMarks() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -310,22 +328,10 @@ export function LightningMarks() {
     // storm is still a storm.
     if (!host || reducedMotion()) return;
 
-    let disposed = false;
-    let cleanup = () => {};
-
-    loadField()
-      .then((field) => {
-        if (disposed || !hostRef.current) return;
-        cleanup = start(hostRef.current, field);
-      })
-      .catch(() => {
-        /* No mask, no lightning. The logo is already drawn in the DOM. */
-      });
-
-    return () => {
-      disposed = true;
-      cleanup();
-    };
+    const built = buildField();
+    // No 2D context, no lightning. The letters are already drawn in the DOM.
+    if (!built) return;
+    return start(host, built);
   }, []);
 
   return <div ref={hostRef} aria-hidden="true" />;
