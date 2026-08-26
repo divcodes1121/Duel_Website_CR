@@ -264,14 +264,28 @@ export function AdminConsole() {
           />
         )}
         {health &&
-          Object.entries(health.configured).map(([k, v]) => (
-            <Stat
-              key={k}
-              label={k.replace(/([A-Z])/g, ' $1').toLowerCase()}
-              value={v ? 'set' : 'not set'}
-              tone={v ? 'good' : 'warn'}
-            />
-          ))}
+          (() => {
+            /* ONE TILE, NOT SEVEN SAYING "set".
+               These are `/api/health`'s configured booleans — whether this
+               deployment can reach each integration. As a tile each they were
+               six identical "set"s and one "not set", which buries the only one
+               worth reading in six that are not. Same rule as the tone borders
+               a few lines up: the point of a signal is the one that is NOT
+               fine, and a wall of green is a dashboard shouting.
+               So the tile answers "is anything missing" and NAMES what, which
+               is the whole question these ever answered. */
+            const entries = Object.entries(health.configured);
+            const missing = entries.filter(([, v]) => !v).map(([k]) => k);
+            const pretty = (k: string) => k.replace(/([A-Z])/g, ' $1').toLowerCase();
+            return (
+              <Stat
+                label="Integrations"
+                value={`${entries.length - missing.length} / ${entries.length}`}
+                note={missing.length ? `missing: ${missing.map(pretty).join(', ')}` : 'all configured'}
+                tone={missing.length ? 'warn' : 'good'}
+              />
+            );
+          })()}
       </div>
 
       {/* --- storage -------------------------------------------------------- */}
