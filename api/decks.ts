@@ -1,10 +1,58 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Redis } from '@upstash/redis';
 import { createHash } from 'node:crypto';
-
-import { callerFrom } from './_auth';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 const MAX_BODY_BYTES = 250_000;
+
+/* ---------------------------------------------------------------- auth ----
+ *
+ * INLINED, NOT IMPORTED FROM `./_auth`, and this cost a broken production
+ * deploy to learn. package.json is `"type": "module"`, so Vercel runs these
+ * functions as ESM -- and Node ESM does NOT resolve extensionless relative
+ * imports. `import { callerFrom } from './_auth'` typechecks perfectly, because
+ * tsconfig.api.json uses `moduleResolution: "Bundler"`, and then fails at
+ * module load with an uncatchable FUNCTION_INVOCATION_FAILED. Same class of
+ * trap as the JSON-import one already recorded in CLAUDE.md, and the reason
+ * `api/analytics/opponent-read/[tag].ts` keeps everything in one file too.
+ *
+ * REPLACES `sha256(username:password)`. That worked while there were twenty
+ * fixed accounts whose hashes could be inlined here, and stopped working the
+ * moment real signup existed -- there is no list to check a new user against.
+ * It was also poor on its own terms: a password derivative used as a bearer
+ * credential never expires and cannot be revoked.
+ */
+
+const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? '';
+
+/* Module scope so a warm container reuses it: the JWKS is then fetched once per
+   container rather than once per request, and re-fetched only when a token
+   arrives bearing an unseen `kid` -- which is what lets Supabase rotate keys
+   without a redeploy here. */
+const jwks = SUPABASE_URL
+  ? createRemoteJWKSet(new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`))
+  : null;
+
+async function callerFrom(req: VercelRequest): Promise<string | null> {
+  if (!jwks) return null;
+  const header = req.headers?.authorization;
+  if (typeof header !== 'string' || !header.startsWith('Bearer ')) return null;
+  const token = header.slice('Bearer '.length).trim();
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: `${SUPABASE_URL}/auth/v1`,
+      /* Supabase puts `authenticated` in `aud` for a signed-in user. Pinning it
+         stops a token minted for another audience being replayed here. */
+      audience: 'authenticated',
+    });
+    return typeof payload.sub === 'string' ? payload.sub : null;
+  } catch {
+    /* Expired, wrong signature, wrong issuer, malformed -- all one answer. The
+       difference is only useful to someone probing. */
+    return null;
+  }
+}
 
 /**
  * Cross-device deck sync.
@@ -59,12 +107,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const caller = await callerFrom(req);
-    if (!caller) {
+    const userId = await callerFrom(req);
+    if (!userId) {
       res.status(401).json({ error: 'Invalid credential' });
       return;
     }
-    const key = keyFor(caller.id);
+    const key = keyFor(userId);
 
     if (req.method === 'GET') {
       const data = await getRedis().get(key);
