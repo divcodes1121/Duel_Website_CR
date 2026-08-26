@@ -8,6 +8,9 @@ import { useAccess } from '../../state/gate';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import styles from './AdminConsole.module.css';
 
+/** Thousands separators, so 3278 reads as 3,278 at a glance. */
+const nf = new Intl.NumberFormat();
+
 /** Contabo Cloud VPS 6 root volume, from `df -h /` on the box. */
 const VPS_DISK_BYTES = 387 * 1024 ** 3;
 
@@ -120,7 +123,7 @@ export function AdminConsole() {
      outright, so this only stops you discovering that by being told no — the
      database is the rule, this is the courtesy. */
   const meId = useAccountStore((s) => s.userId);
-  const { users, health, analytics, analyticsMs, loading, error, load, setRole, endTrial } =
+  const { users, health, analytics, analyticsMs, collection, loading, error, load, setRole, endTrial } =
     useAdminStore();
   const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -229,6 +232,22 @@ export function AdminConsole() {
           note="last sign-in, not presence"
         />
         <Stat label="Device slots held" value={String(counts.devices)} note="max 2 per account" />
+        {/* THE COLLECTION, not the accounts. Everything else on this row counts
+            people who signed up; this counts the players the bot is polling,
+            which is what the whole analytics half is built on and is a far
+            bigger number. Searching an untracked tag enrols it here, so it is
+            also the figure that moves when the site is used. */}
+        {collection && (
+          <Stat
+            label="Tracked players"
+            value={nf.format(collection.trackedPlayers)}
+            note={
+              collection.global?.days
+                ? `${collection.global.days} days of battles stored`
+                : 'collected by the bot'
+            }
+          />
+        )}
       </div>
 
       {/* --- what this deployment can reach -------------------------------- */}

@@ -50,11 +50,18 @@ export interface AnalyticsStatus {
   cardData?: { loaded: boolean; count: number; error: string | null };
 }
 
+/** What the bot is collecting, from the authenticated coverage route. */
+export interface Collection {
+  trackedPlayers: number;
+  global: { start: string | null; end: string | null; days: number } | null;
+}
+
 interface AdminState {
   users: AdminUser[];
   health: Health | null;
   analytics: AnalyticsStatus | null;
   analyticsMs: number | null;
+  collection: Collection | null;
   loading: boolean;
   error: string | null;
 
@@ -68,6 +75,7 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
   health: null,
   analytics: null,
   analyticsMs: null,
+  collection: null,
   loading: false,
   error: null,
 
@@ -78,7 +86,7 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
        table, the deployment's config and the VPS's storage are three
        independent things, and a console that shows nothing because one of them
        is down is worse than one that shows two thirds and says so. */
-    const [users, health, analytics] = await Promise.allSettled([
+    const [users, health, analytics, collection] = await Promise.allSettled([
       supabase
         ? supabase.rpc('admin_list_users')
         : Promise.reject(new Error('not configured')),
@@ -89,6 +97,18 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
         const res = await fetch(`${base}/api/analytics/status`);
         const body = await res.json();
         return { body, ms: Math.round(performance.now() - t0) };
+      })(),
+      /* How many players the bot is collecting. A FOURTH independent source,
+         and like the other three it may fail without taking the console with
+         it — the tracked count is context, not a health signal. It comes from
+         `coverage` rather than `status` because `status` answers without a key
+         and a population figure is not something to publish to anyone who
+         curls it. */
+      (async () => {
+        const base = import.meta.env.VITE_ANALYTICS_BASE ?? '';
+        const res = await fetch(`${base}/api/analytics/coverage`);
+        if (!res.ok) throw new Error(String(res.status));
+        return (await res.json()) as Collection;
       })(),
     ]);
 
@@ -106,6 +126,7 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
       next.analytics = analytics.value.body as AnalyticsStatus;
       next.analyticsMs = analytics.value.ms;
     }
+    if (collection.status === 'fulfilled') next.collection = collection.value;
 
     set(next);
   },

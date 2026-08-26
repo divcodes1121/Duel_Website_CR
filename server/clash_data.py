@@ -366,6 +366,32 @@ def tier_windows(tag: str, since: str | None,
     return out
 
 
+def tracked_player_count() -> int:
+    """How many players the bot is actually collecting.
+
+    Read from the HOT tier only. The archive carries its own copy of
+    `tracked_players` and merging the two would double-count everyone, since a
+    tracked player appears in both — this is a population, not a span.
+
+    Returns 0 rather than raising when no database resolves: an absent drive is
+    a normal state here, and every other reader in this module treats it that
+    way.
+    """
+    for path in _tier_paths():
+        try:
+            con = connect(path)
+            try:
+                row = con.execute("SELECT count(*) FROM tracked_players").fetchone()
+                if row:
+                    return int(row[0])
+            finally:
+                con.close()
+        except Exception:
+            continue
+        break
+    return 0
+
+
 def coverage(tag: str | None = None) -> dict:
     """Earliest and latest battle date actually stored, as 'YYYY-MM-DD'.
 

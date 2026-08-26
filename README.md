@@ -6158,6 +6158,31 @@ assert in **both** `data-theme` values:
 
 ## Tracking a new tag, and the live battlelog
 
+**Verified end to end on production, 2026-08-26**, because "I think we built
+that" is not the same as knowing:
+
+| step | evidence |
+|---|---|
+| searching an untracked tag enrols it | `/track/#8L8QQRL28` → `requested: true`, `state: "pending"`, stamped that second |
+| it answers immediately, from the CR API | `/player/#8L8QQRL28` → `basis: "live"`, 2 decks — the ~25-battle log, no stored history needed |
+| the bot picks the queue up | every tag in `tag_requests` is now in `tracked_players` — "queued but NOT yet tracked: []" |
+| the drain is real | `bot.py:5030 drain_tag_requests()`, called at 5076; `CLASH_TRACKING_DB` points at the website's queue |
+
+So the chain a new player actually walks — search a tag, see something at once,
+be collected from then on — works. The queue is one small SQLite file the
+website writes and the bot reads; the bot's own databases stay `mode=ro` to the
+website, which is what keeps a web request from ever touching the collector's
+storage.
+
+**`trackedPlayers` is on `/coverage`, not `/status`.** `/status` is the one
+route that answers without a key, and how many players the service collects is
+a scale figure about the business rather than a health signal — the same
+reasoning that took the volume paths and byte sizes out of it. The admin console
+reads it as a fourth independent source, allowed to fail without taking the rest
+of the console down.
+
+
+
 Searching a tag that nobody has ever tracked used to 404. The databases hold
 what the bot polled, so a first-time tag has nothing in them — while the game
 had been keeping that player's recent battles the whole time.

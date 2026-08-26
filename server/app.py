@@ -481,8 +481,18 @@ class Handler(BaseHTTPRequestHandler):
                 q = parse_qs(parsed.query)
                 raw = (q.get("tag") or [""])[0]
                 tag = cd.normalize_tag(raw) if raw else None
+                # HOW MANY PLAYERS THE BOT IS COLLECTING. It rides here rather
+                # than on `/status` because `/status` is the one route that
+                # answers without a key, and the size of the collection is a
+                # scale figure about the service rather than a health signal --
+                # the same reason the volume paths and byte sizes were taken
+                # out of it. This route needs the key.
                 return self._send(
-                    {"global": cd.coverage(), "player": cd.coverage(tag) if tag else None}
+                    {
+                        "global": cd.coverage(),
+                        "player": cd.coverage(tag) if tag else None,
+                        "trackedPlayers": cd.tracked_player_count(),
+                    }
                 )
 
             if path.startswith("/api/analytics/duels/"):
