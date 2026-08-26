@@ -160,12 +160,13 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 36. [The filmstrip](#the-filmstrip)
 37. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
 38. [Testing and verification](#testing-and-verification)
-39. [Recent Battles — the raw log](#recent-battles--the-raw-log)
-40. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
-41. [Two filters and a heading](#two-filters-and-a-heading)
-42. [DEKKIES is DECKKIES](#dekkies-is-deckkies)
-43. [Project layout](#project-layout)
-44. [Deliberately not done](#deliberately-not-done)
+39. [The logo, and where it goes](#the-logo-and-where-it-goes)
+40. [Recent Battles — the raw log](#recent-battles--the-raw-log)
+41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
+42. [Two filters and a heading](#two-filters-and-a-heading)
+43. [DEKKIES is DECKKIES](#dekkies-is-deckkies)
+44. [Project layout](#project-layout)
+45. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -186,7 +187,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 239 tests over the deck, duel, export and admin logic
+npm run test                      # 270 tests over the deck, duel, export, admin and shader logic
 python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
@@ -7342,6 +7343,44 @@ conclusions:
 
 ---
 
+## The logo, and where it goes
+
+There is a real mark now: a gold crown over a black D. It arrives as a
+1254px RGB square on a near-white field with no alpha channel, which is four
+problems, and `scripts/build-logo.py` exists to solve them. **The master in
+`assets/` is never touched and the outputs in `public/` are never hand-edited**
+— re-run the script.
+
+| problem | what the script does |
+|---|---|
+| the background is baked in | flood fill from the border, not a global near-white key: the D has a counter and the crown has highlights, and a global key punches through both |
+| the antialiased edge is mixed with that white | decontaminate by recovering `F = (C - (1-a)BG) / a`, or it haloes on the dark theme |
+| the D is black, so it vanishes on dark | two variants — `logo-light` keeps the letter, `logo-dark` lifts it and leaves the crown |
+| a favicon has no theme | it ships on a dark tile: the browser draws the tab strip in the OS theme and the page cannot influence it, so a transparent icon is a coin flip |
+
+Plus `logo-mask.png`, a flat silhouette, which is the input to the lightning
+mark's distance field — the shader needs the SHAPE and would otherwise
+threshold the artwork at runtime and get a different answer per browser.
+
+**There was no favicon at all**, so every browser drew its own placeholder.
+There is now an `.ico`, five PNGs and a webmanifest, and the topbar mark is the
+same artwork on the same dark tile — the thing in the tab and the thing in the
+chrome should be one object.
+
+**Both variants ship for the VS mark, and that was a correction.** The first
+build used the dark one everywhere, reasoning that gold and off-white read on
+any surface. They do not: on a light battle row the near-white D disappeared
+completely and the mark was a floating crown. CSS picks the variant, in all
+three theme states — an explicit `data-theme` either way, and
+`prefers-color-scheme` for the default where nothing is stamped.
+
+The mark also carries lightning crawling its contour, in Recent Battles and on
+the builder's Versus board. That is `src/three/LightningMarks.tsx` and the whole
+account of it — including three separate ways it was invisible while working
+correctly — is in [docs/UI.md](docs/UI.md#lightning-on-the-mark).
+
+---
+
 ## Recent Battles — the raw log
 
 A new area directly under Search Player, and the only analytics screen that
@@ -7755,6 +7794,8 @@ src/
       TopDock.tsx             the top nav as a proximity dock — markup only
       topDockController.ts    its springs. Plain DOM, and the rAF STOPS when
                               they settle; see the note at the top of it
+          VsMark/VsMark.tsx       the logo standing between two decks. `data-bolt` is
+                              the whole contract with LightningMarks
       ClosingBand.tsx         the page ending — ten card facts, three shown
                               shuffled, all counted from CARDS at render time
     Analytics/
