@@ -88,3 +88,6 @@ server/ml/results/shadow-log.jsonl*
 verify*.mjs
 probe*.mjs
 shot-*.png
+
+# Cygwin/MSYS crash dumps
+*.stackdump
