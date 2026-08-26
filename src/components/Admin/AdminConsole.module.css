@@ -6,6 +6,18 @@
   flex-direction: column;
   gap: 0.9rem;
   padding: 1.4rem clamp(1rem, 3vw, 2rem) 3rem;
+
+  /* THIS SCREEN OWNS ITS OWN SCROLL, because `body` is `overflow: hidden` —
+     the app never scrolls the page, every route manages its own region. With
+     `min-height: 100vh` inside a `height: 100%` shell the console simply
+     overflowed and was clipped: the accounts table was there, and unreachable.
+     `min-height: 0` is what lets a flex child actually shrink and scroll; a
+     flex item's automatic minimum is its content, so without it this grows to
+     fit the table and clips again. */
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .head {
@@ -204,8 +216,11 @@
 }
 
 .table th {
+  /* Sticky against THIS scroll region. It needs an opaque background or the
+     rows show through it as they pass underneath. */
   position: sticky;
   top: 0;
+  z-index: 1;
   padding: 0.6rem 0.8rem;
   background: var(--surface-sunken);
   font-size: 0.7rem;
@@ -320,12 +335,11 @@
 /* The console renders outside the Dashboard, so nothing else on the route sets
    a page background — without this it inherits whatever the body happens to be
    and the light theme shows a dark gap under the content. */
+/* The same pair `body` uses. `var(--bg, …)` was wrong — there is no `--bg`
+   token in this project, only `--bg-1..3`, so it fell through to the fallback
+   and would have given the console a different ground from every other screen
+   in both themes. */
 .wrap {
-  min-height: 100vh;
-  /* The same pair `body` uses. `var(--bg, …)` was wrong -- there is no `--bg`
-     token in this project, only `--bg-1..3`, so it silently fell through to the
-     fallback and the console would have had a subtly different ground from
-     every other screen in both themes. */
   background: var(--page-wash), var(--bg-1);
   color: var(--text);
 }

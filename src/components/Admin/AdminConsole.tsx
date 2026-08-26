@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { type AdminUser, ago, bytes, useAdminStore } from '../../state/adminStore';
+import { type AdminUser, useAdminStore } from '../../state/adminStore';
+import { ago, bytes, until } from '../../utils/format';
 import { useAccess } from '../../state/gate';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import styles from './AdminConsole.module.css';
@@ -233,7 +234,7 @@ export function AdminConsole() {
                     {u.tier}
                   </span>
                   {u.tier === 'trial' && u.trial_ends_at && (
-                    <span className={styles.sub}>ends {ago(u.trial_ends_at).replace(' ago', '')}</span>
+                    <span className={styles.sub}>ends {until(u.trial_ends_at)}</span>
                   )}
                 </td>
                 <td>{u.country ?? '—'}</td>
