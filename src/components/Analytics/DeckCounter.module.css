@@ -583,12 +583,69 @@
     grid-template-columns: minmax(6rem, 10rem) 3.4rem minmax(2.5rem, 1fr) 3.4rem 3rem 3.6rem;
   }
 
-  /* The deck spans the row on its own line rather than squeezing the figures
-     into unreadable columns. */
+  /* The deck column is dropped between 560px and 1150px — too narrow for eight
+     cards beside the figures, too wide to need its own line. Below 560px it
+     comes BACK on a line of its own; see the phone block at the end. */
   .rowDeck,
   .rowDeckEmpty,
   .rowHead span:nth-child(2) {
     display: none;
+  }
+}
+
+/* --- phones ---------------------------------------------------------------
+ *
+ * TWO BUGS LIVED HERE, and they were the same bug seen from two sides.
+ *
+ * The comment above used to say the deck "spans the row on its own line rather
+ * than squeezing the figures" — it did not. It said `display: none`, so on
+ * EVERY screen under 1150px the Deck Counter drew no decks at all: 120 card
+ * images loaded and none of them rendered. Measured on an iPhone 13 against
+ * production. That is what "the cards do not load" was.
+ *
+ * And the six-column grid it fell back to needs ~394px of track plus 45px of
+ * panel padding, so on a 391px viewport the panel came out 449px wide and the
+ * row was clipped rather than merely cramped.
+ *
+ * So below 560px the row becomes two lines: identity and figures across the
+ * top, the deck strip full width beneath. The deck is the thing this screen is
+ * FOR — it is the deck you keep losing to — and it is the last thing that
+ * should have been dropped to save space.
+ *
+ * MUST STAY AFTER the 1150px block: media queries add no specificity, so this
+ * only wins on source order. */
+@media (max-width: 560px) {
+  /* Column headers describe columns. Once the row stacks there are none. */
+  .rowHead {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    row-gap: 0.5rem;
+    padding: 0.6rem 0;
+  }
+
+  .rowDeck,
+  .rowDeckEmpty {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  /* The bar and the delta are both re-encodings of the figure beside them, and
+     the figure survives. The GAMES count does not get dropped — it is the
+     evidence behind the percentage, and a rate with no sample size is the kind
+     of confident-looking number this project keeps refusing to print. */
+  .meter,
+  .rowDiff {
+    display: none;
+  }
+
+  /* Reclaim the panel's side padding: at this width it was costing 45px of the
+     391 available, which is most of what pushed the row over. */
+  .panel {
+    padding: 1rem 0.8rem 0.9rem;
   }
 }
 

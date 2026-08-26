@@ -349,6 +349,22 @@ export function Dashboard({
    *
    * Resetting the section is therefore part of going home, not a side effect of
    * it, and both the brand and the Home item call the same function. */
+  /* ONE navigation action for both rails. The sidebar and the phone strip must
+     not drift about what tapping an area does — the sidebar had this inline,
+     and a second copy in the phone rail is exactly how two navigations end up
+     disagreeing about whether a tag is loaded. */
+  const openArea = (item: { label: string; slug: string | null }) => {
+    // With a tag loaded a rail is navigation, so it moves the URL; without one
+    // it just picks which area the home screen shows.
+    if (view === 'player' && item.slug !== null) {
+      const base = `#/player/${encodeURIComponent(playerTag)}`;
+      go(item.slug ? `${base}/${item.slug}` : base);
+    } else {
+      setSection(item.label);
+      if (view !== 'home') go(HOME);
+    }
+  };
+
   const goHome = () => {
     setSection(SIDE_NAV[0].label);
     go(HOME);
@@ -584,18 +600,7 @@ export function Dashboard({
                   className={`${styles.sideItem} ${active ? styles.sideItemActive : ''}`}
                   data-hue={item.hue}
                   aria-current={active || undefined}
-                  onClick={() => {
-                    // With a tag loaded the sidebar is navigation, so it moves
-                    // the URL; without one it just picks which area the home
-                    // screen shows.
-                    if (view === 'player' && item.slug !== null) {
-                      const base = `#/player/${encodeURIComponent(playerTag)}`;
-                      go(item.slug ? `${base}/${item.slug}` : base);
-                    } else {
-                      setSection(item.label);
-                      if (view !== 'home') go(HOME);
-                    }
-                  }}
+                  onClick={() => openArea(item)}
                 >
                   <span className={styles.sideIcon}>
                     <Icon />
@@ -654,6 +659,42 @@ export function Dashboard({
         )}
 
         <main className={styles.main}>
+          {/* THE PHONE'S ONLY WAY BETWEEN AREAS.
+              Below 860px the sidebar AND the top nav are both `display: none`
+              with nothing replacing them, so once you were inside an analytics
+              area on a phone the only way to another was the browser's back
+              button. Measured on an iPhone 13 against production: one `.sidebar`
+              in the DOM, `display: none`, and no substitute anywhere.
+
+              A SCROLLING STRIP RATHER THAN A DRAWER. A drawer needs a trigger,
+              an overlay, a focus trap and an escape key — four things to get
+              right so that a tap can reach seven links. A strip is always
+              visible, needs none of them, and shows you where you are without
+              being opened. It carries the same items through the same
+              `openArea`, so it cannot disagree with the sidebar. */}
+          {!landing && (
+            <nav className={styles.phoneNav} aria-label="Analytics areas">
+              {sideNav.map((item) => {
+                const Icon = item.icon;
+                const active =
+                  view === 'player' ? item.slug === playerSection : section === item.label;
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className={`${styles.phoneNavItem} ${active ? styles.phoneNavItemOn : ''}`}
+                    data-hue={item.hue}
+                    aria-current={active || undefined}
+                    onClick={() => openArea(item)}
+                  >
+                    <Icon size={14} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
+
           {/* The query row: the tag, the season and the panel actions, sitting
               directly above the screen they drive rather than up in the chrome. */}
           {view === 'player' && (

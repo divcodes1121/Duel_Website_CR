@@ -1633,6 +1633,12 @@
   }
 }
 
+/* HIDDEN UNTIL THE SIDEBAR IS. Above 860px the rail does this job and a second
+   copy of it would be noise; below, it is the only way between areas. */
+.phoneNav {
+  display: none;
+}
+
 @media (max-width: 860px) {
   .body,
   .body[data-rail='closed'] {
@@ -1646,6 +1652,65 @@
      do nothing on press. */
   .railToggle {
     display: none;
+  }
+
+  /* Scrolls sideways INSIDE ITSELF, which is the one place horizontal scroll is
+     allowed here — the page itself must never move sideways. `overscroll-behavior`
+     stops a flick at the end of the strip turning into a page swipe. */
+  .phoneNav {
+    display: flex;
+    gap: 0.4rem;
+    margin: 0 -1rem 0.15rem;
+    padding: 0.15rem 1rem 0.55rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    /* The active chip lands on a natural stop when it is scrolled into view. */
+    scroll-snap-type: x proximity;
+  }
+
+  .phoneNav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .phoneNavItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+    flex: none;
+    scroll-snap-align: start;
+    padding: 0.42rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 650;
+    white-space: nowrap;
+    color: var(--text-muted);
+    cursor: pointer;
+    /* 40px of touch target on a 0.42rem chip, without changing how it looks. */
+    min-height: 2.35rem;
+  }
+
+  /* The icon takes the area's identity hue, exactly as the sidebar tile does,
+     so a phone reader learns the same colour for the same area. `--hue-*` is
+     the INK step — these are 14px marks on a surface, not fills. */
+  .phoneNavItem[data-hue='violet'] svg { color: var(--hue-violet); }
+  .phoneNavItem[data-hue='blue'] svg { color: var(--hue-blue); }
+  .phoneNavItem[data-hue='green'] svg { color: var(--hue-green); }
+  .phoneNavItem[data-hue='pink'] svg { color: var(--hue-pink); }
+
+  /* Violet is "selected" everywhere in this app regardless of the row's own
+     identity hue — the same rule the sidebar's open row follows. */
+  .phoneNavItemOn {
+    background: var(--solid-violet);
+    border-color: var(--solid-violet);
+    color: var(--on-solid);
+  }
+
+  .phoneNavItemOn svg {
+    color: var(--on-solid);
   }
 }
 
