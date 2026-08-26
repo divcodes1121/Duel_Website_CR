@@ -185,7 +185,7 @@
    than its own track. */
 .meterFill[data-tone='good'] { background: var(--solid-green); }
 .meterFill[data-tone='warn'] { background: var(--solid-blue); }
-.meterFill[data-tone='bad']  { background: var(--solid-pink); }
+.meterFill[data-tone='bad']  { background: var(--solid-red); }
 
 /* --- accounts ------------------------------------------------------------- */
 
@@ -312,7 +312,7 @@
 
 /* `--solid-*` for the three that carry `--on-solid`; free is a plain outline
    because it is the default state and should not look like a badge. */
-.tier[data-tier='admin'] { background: var(--solid-pink);   color: var(--on-solid); }
+.tier[data-tier='admin'] { background: var(--solid-maroon); color: var(--on-solid); }
 .tier[data-tier='pro']   { background: var(--solid-violet); color: var(--on-solid); }
 .tier[data-tier='trial'] { background: var(--solid-green);  color: var(--on-solid); }
 .tier[data-tier='free']  { border: 1px solid var(--border-strong); color: var(--text-muted); }

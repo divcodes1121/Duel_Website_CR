@@ -1795,7 +1795,14 @@
 .areaFace[data-hue='violet'] { --area-solid: var(--solid-violet); }
 .areaFace[data-hue='blue'] { --area-solid: var(--solid-blue); }
 .areaFace[data-hue='green'] { --area-solid: var(--solid-green); }
-.areaFace[data-hue='pink'] { --area-solid: var(--solid-pink); }
+/* MAROON, not `--solid-pink`, WHICH IS NOT A TOKEN IN THIS PROJECT. The five
+   hues name their pink step `--solid-maroon`, and every other surface that
+   wears this hue -- the sidebar row, the area tile, the tool panel -- already
+   said so. An undefined var() makes the whole declaration invalid at
+   computed-value time, so `var(--area-solid, var(--solid-violet))` fell
+   through to its fallback and this card came out VIOLET: the one place on
+   the landing page whose colour disagreed with its own sidebar row. */
+.areaFace[data-hue='pink'] { --area-solid: var(--solid-maroon); }
 
 .areaFaceBody {
   color: var(--text-muted);

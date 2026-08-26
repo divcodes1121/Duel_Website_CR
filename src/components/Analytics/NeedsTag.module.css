@@ -1,0 +1,180 @@
+/* The "give me a tag" prompt for the three areas that describe one player.
+ *
+ * It reads as an INVITATION rather than an error, which is the same call the
+ * empty paste screens make: nothing has gone wrong here, the screen simply has
+ * one question to ask before it can show anything. */
+
+.wrap {
+  /* Owns its scroll like every other route — `body` is `overflow: hidden`, so a
+     panel that does not say this clips instead of scrolling. `min-height: 0` is
+     what lets a flex child shrink far enough to scroll at all. */
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 4vw, 3rem);
+}
+
+/* The hue steps, per area. `--solid-*` for the fill that carries `--on-solid`,
+   `--hue-*` for ink at body size — the two are graded to different contrast
+   floors and are not interchangeable. Pink's solid step is called MAROON; there
+   is no `--solid-pink` in this project. */
+.wrap[data-hue='violet'] { --tone: var(--hue-violet); --tone-solid: var(--solid-violet); }
+.wrap[data-hue='blue']   { --tone: var(--hue-blue);   --tone-solid: var(--solid-blue); }
+.wrap[data-hue='green']  { --tone: var(--hue-green);  --tone-solid: var(--solid-green); }
+.wrap[data-hue='pink']   { --tone: var(--hue-pink);   --tone-solid: var(--solid-maroon); }
+
+.card {
+  width: min(100%, 34rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: clamp(1.4rem, 4vw, 2.2rem);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: center;
+  align-items: center;
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.24rem 0.7rem;
+  border-radius: 999px;
+  background: var(--tone-solid);
+  color: var(--on-solid);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  /* 24px+, so this may spend the headroom on saturation — display type only
+     needs 3:1 where the small coloured copy below needs 4.5:1. */
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0;
+  max-width: 30rem;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.form {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 26rem;
+  margin-top: 0.3rem;
+}
+
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.62rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--tone);
+  outline-offset: 2px;
+}
+
+.go {
+  flex: none;
+  padding: 0.62rem 1.3rem;
+  border-radius: 12px;
+  border: none;
+  background: var(--tone-solid);
+  color: var(--on-solid);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.go:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+/* Disabled rather than hidden: an empty field is the resting state of this
+   screen, and a button that appears on the first keystroke moves the layout
+   under the cursor at exactly the wrong moment. */
+.go:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.suggestLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.chip {
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease);
+}
+
+.chip:hover {
+  border-color: var(--tone);
+}
+
+.perks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 1rem;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.78rem;
+  color: var(--tone);
+}
+
+.perks li::before {
+  content: '';
+  display: inline-block;
+  width: 0.34rem;
+  height: 0.34rem;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .go:hover:not(:disabled) {
+    transform: none;
+  }
+}

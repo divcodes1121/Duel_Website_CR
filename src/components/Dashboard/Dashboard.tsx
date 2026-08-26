@@ -10,13 +10,13 @@ import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
 import { DuelAnalysis } from '../Analytics/DuelAnalysis';
 import { DuelZone } from '../Analytics/DuelZone';
 import { MetaDecks } from '../Analytics/MetaDecks';
+import { NeedsTag } from '../Analytics/NeedsTag';
 import { CoachAssist } from '../Analytics/CoachAssist';
 import { PlayerCards } from '../Analytics/PlayerCards';
 import { DeckCounter } from '../Analytics/DeckCounter';
 import { DeckLab } from '../Analytics/DeckLab';
 import { CounterLab } from '../Analytics/CounterLab';
 import { GlobalCards } from '../Analytics/GlobalCards';
-import { ProLock } from '../Analytics/ProLock';
 import { PrintButton } from '../Export/PrintButton';
 import { ProContact } from '../Analytics/ProContact';
 import { SEASONS, type Season } from '../Analytics/playerData';
@@ -702,7 +702,7 @@ export function Dashboard({
                would have to be dismissed before anything else could be reached,
                which turns "this one needs an account" into "you are stuck". */
             sectionAllowed(access, section) ? (
-              <HomeSection name={section} />
+              <HomeSection name={section} suggestions={popular} />
             ) : (
               <GateCard access={access} section={section} />
             )
@@ -959,7 +959,11 @@ export function Dashboard({
  *
  * The gate is on the home screen only. `#/player/<tag>/duels` and friends still
  * render in full, so nothing that already worked stopped working. */
-const PRO_SECTIONS: Record<string, { blurb: string; perks: string[] }> = {
+/* WAS `PRO_SECTIONS`. Same three areas, different question: these are the ones
+   that need a player tag, not the ones that need a subscription. The blurbs are
+   unchanged — they always described what the area does, which is exactly what
+   someone deciding whose tag to type needs to read. */
+const TAG_SECTIONS: Record<string, { blurb: string; perks: string[] }> = {
   'Duel Analysis': {
     blurb:
       'Which card pairings actually carry a player’s duel play, split by game 1, 2 and 3 — with the evidence floors that stop one heavily-played deck being sliced twenty-four ways.',
@@ -977,27 +981,40 @@ const PRO_SECTIONS: Record<string, { blurb: string; perks: string[] }> = {
   },
 };
 
-/** What a home-screen analytics area renders. */
-function HomeSection({ name }: { name: string }) {
+/**
+ * What a home-screen analytics area renders.
+ *
+ * THE PRO WALL THAT USED TO BE HERE WAS UNREACHABLE BY ANYONE IT WAS FOR.
+ * `sectionAllowed()` above sends an anonymous or free visitor to `GateCard`
+ * before this function is ever called, so the only people who reached the
+ * "subscribe to Royal Pro" gate were the ones who already had it — a trial, pro
+ * or admin account, pressing a landing block it had paid for and being asked to
+ * pay again. The gate was written before the gate existed, and the real gate
+ * overtook it.
+ *
+ * What those three areas actually lack on this route is a PLAYER TAG. They read
+ * one player's history and the home route has no player, so they are asked for
+ * one, wearing the area's own hue — the colour you pressed is the colour you
+ * land on.
+ */
+function HomeSection({ name, suggestions }: { name: string; suggestions: string[] }) {
   if (name === 'Top Meta Decks') return <MetaDecks />;
   if (name === 'Deck Analysis') return <DeckLab />;
   if (name === 'Deck Counter') return <CounterLab />;
   if (name === 'Cards') return <GlobalCards />;
 
-  const pro = PRO_SECTIONS[name];
-  if (pro) {
+  const needs = TAG_SECTIONS[name];
+  if (needs) {
+    const item = SIDE_NAV.find((s) => s.label === name);
     return (
-      /* The gate wears the area's own hue — the same one its block on the home
-         screen and its row in the sidebar wear — so the colour you pressed is
-         the colour you land on. */
-      <ProLock
-        title={name}
-        blurb={pro.blurb}
-        perks={pro.perks}
-        hue={SIDE_NAV.find((s) => s.label === name)?.hue}
-      >
-        <SectionPanel name={name} />
-      </ProLock>
+      <NeedsTag
+        name={name}
+        blurb={needs.blurb}
+        perks={needs.perks}
+        slug={item?.slug ?? ''}
+        hue={item?.hue}
+        suggestions={suggestions}
+      />
     );
   }
   return <SectionPanel name={name} />;

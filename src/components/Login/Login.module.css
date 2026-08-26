@@ -33,15 +33,22 @@
 }
 
 /* A floor under the card, not a cover over the painting. Radial so it is
- * strongest behind the form and fades out before it reaches either castle. */
+ * strongest behind the form and fades out before it reaches either castle.
+ *
+ * `--bg-1`, NOT `--bg`, which is not a token in this project — the neutral
+ * ground is `--bg-1..3`. An undefined var() inside `color-mix` invalidates the
+ * whole `background` at computed-value time, so this scrim was not merely the
+ * wrong colour: it did not render AT ALL, and the sign-in card sat straight on
+ * the painted backdrop it exists to lift off. Invisible in exactly the way a
+ * missing background is. */
 .page::after {
   content: '';
   position: absolute;
   inset: 0;
   background: radial-gradient(
     ellipse 46% 60% at 50% 50%,
-    color-mix(in srgb, var(--bg) 72%, transparent),
-    color-mix(in srgb, var(--bg) 30%, transparent) 62%,
+    color-mix(in srgb, var(--bg-1) 72%, transparent),
+    color-mix(in srgb, var(--bg-1) 30%, transparent) 62%,
     transparent 100%
   );
   z-index: 0;
