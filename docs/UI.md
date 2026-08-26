@@ -297,6 +297,26 @@ measured none.
 should be the first probe rather than the last.** It would have ruled out half
 the hypotheses immediately.
 
+### The sweep material threw on every theme change
+
+`applyPalette` runs from a `MutationObserver` on `data-theme` and wrote
+`sweepMat.uniforms.uColor.value`. **There is no `uColor` on that material** —
+the sweep is drawn with the burst's shaders, which take their colour from the
+per-point `aTint` attribute, so the uniform was never declared. Every theme
+toggle threw `Cannot read properties of undefined (reading 'value')` inside the
+observer, which aborted the rest of the function and took the blend-mode update
+below it down too.
+
+One dead line, deleted. Worth recording for two reasons: an exception inside a
+`MutationObserver` callback does **not** unmount React or show anything on
+screen, so it survived until a browser probe happened to toggle the theme with
+`pageerror` wired up; and the actual visible symptom was the wrong blend mode
+after a theme switch, which looks like a colour bug rather than a crash.
+
+The rest of `src/three/` was swept for the same shape — every `ShaderMaterial`
+cross-checked against every `<mat>.uniforms.<name>` read in its file. 5
+materials across 3 files, no other undeclared reads.
+
 ---
 
 ## The login backdrop

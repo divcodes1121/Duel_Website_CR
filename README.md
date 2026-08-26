@@ -6043,6 +6043,59 @@ file" above.
 so a new one moves to 5174 while the browser keeps loading the old bundle. Both
 are in [Running it](#running-it).
 
+### This pass: what blocked, what fixed it, what came of it
+
+Seven things stopped progress long enough to be worth writing down. Every one
+of them looked like something other than what it was.
+
+| deadlock | why it blocked | fix | result |
+|---|---|---|---|
+| Versus decks overlapped and spilled past their card | each side needs ~390px hard minimum (name + crown + eight 30px tiles) inside `1fr 1fr` tracks; at a 1000px viewport each side had ~190px | stop insisting on two columns — `repeat(auto-fit, minmax(min(390px,100%),1fr))` drops to one full-width column | 0px overflow 760–1440px, tiles 24–30px. **The first fix made it worse**: flexing the cards removed the overflow and shrank them to **1.7px** |
+| Seeding a saved group blanked the whole app | a persisted blob missing one of the five collections; the crash guard was written in `migrate`, which zustand only calls when the **stored version differs** | move the guard to `merge`, which runs on every rehydrate | a partial blob now hydrates instead of crashing. The `migrate`/`merge` distinction is the whole lesson |
+| The meta filter's dropdown opened off the side of the screen | the panel is 30rem and hangs from `left: 0`; the trigger sat at the right-hand end of a panel header | `align` prop on `WinConFilter` (`start`/`center`/`end`), and the header became a `1fr auto 1fr` **grid** | centred to the pixel at seven widths, 1440 → 390, no overflow. Flex auto-margins were tried first and only centre in the space the neighbours happen to leave |
+| One versus heading read as text, the other as a disabled label | `--player-blue` / `--player-red` are not a blue and a red — the palette resolves them to `#e0e0e0` and `#8a8a8a` | both take `--text`; red is right-aligned to its own column | white on dark, black on light. Left-aligned, the red heading's text landed mid-card and captioned the gap between the sides |
+| A theme toggle threw on every switch | `DeckFx` wrote `sweepMat.uniforms.uColor.value` and that uniform does not exist; the throw was inside a `MutationObserver`, so nothing unmounted and nothing appeared on screen | delete the dead line | the visible symptom had been the wrong blend mode after a theme change — a colour bug, not a crash. Found only because a probe had `pageerror` wired up |
+| "Recent Battles" opened a 250px hole down its own middle | `1fr auto 1fr` tracks with width-capped decks align each deck to the outside of its track | centre the three items as one group instead of laying out tracks | the pair sits together with the VS between them |
+| …and then a long opponent name pushed the two decks apart again | a flex item's `auto` basis is max-content, which for that block is the longest **line of text**, not the card grid: "A Rather Long Opponent Name" made the side **538px against a 280px deck** | `flex: 1 1 0` — from a zero basis both sides take an equal share of real space | a name ellipsises inside the block instead of moving the deck |
+
+**Two tripwires fired, and both were supposed to.**
+`server/test_api_security.py` pins the number of routes in `_route` so a new
+endpoint cannot be added without someone consciously deciding whether it is
+authenticated (19 → 20, plus a line asserting the new one 401s), and
+`tests/entitlement.test.ts` pins exactly which areas are free. Both were bumped
+in the same commit as the change they were guarding, never worked around.
+
+**One deploy trap, and it is structural rather than a mistake.** The Python API
+does not ship with the frontend: Vercel builds from GitHub, `server/` runs on
+the VPS under `royalweb.service`. A new analytics screen needs both, **and the
+API has to land first** — otherwise the area appears in the rail and every
+request 404s, which is worse than not shipping it. The order used here was:
+back up `app.py`, md5-compare the VPS copy against `git show HEAD~1` to prove
+no drift, deploy, restart, verify against the live database, *then* push the
+frontend.
+
+**Three verification lessons**, all of which produced a confident wrong answer
+first:
+
+* **Measure the text, not the box.** A block-level heading fills its column, so
+  its rectangle sits at the column edge whatever the text inside it does —
+  which was exactly the thing being tested. A `Range` over the contents gives
+  the glyphs.
+* **Scope every probe selector.** `input[placeholder^="Search"]` also matches
+  the top bar's tag field, and its parent reports a perfectly plausible
+  rectangle 193px from where the real panel was. `[aria-current="page"]` also
+  matches the top nav, which is earlier in the DOM.
+* **A hash-only `page.goto` is a fragment navigation, not a reload.** Seeding
+  `localStorage` and then "navigating" to `#/builder` leaves the live store in
+  memory, and its next write overwrites the seed. A seeded persist blob also
+  needs `version: 9` — without one, zustand runs `migrate` and discards it.
+
+**Result.** Everything above is on `deckkies.com`: the duel-to-builder save,
+both card filters, the centred meta control, the versus headings, and Recent
+Battles. 239 JS tests and 598 Python checks green, `tsc` and `build` clean, and
+each change confirmed against the live bundle rather than against a successful
+push.
+
 ---
 
 ## Testing and verification
