@@ -75,3 +75,9 @@ server/ml/results/cohorts/checkpoint-*.json
 
 # Shadow-mode observation log (diagnostic, regenerable)
 server/ml/results/shadow-log.jsonl*
+
+# Local environment. The Supabase URL and publishable key are public by design,
+# but a .env file is exactly where a secret ends up by accident one day.
+.env
+.env.*
+!.env.example

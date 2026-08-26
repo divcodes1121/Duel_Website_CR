@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Dashboard, type DashboardView } from './components/Dashboard/Dashboard';
 import { Login } from './components/Login/Login';
+import { AuthScreen } from './components/Auth/AuthScreen';
+import { Onboarding } from './components/Auth/Onboarding';
 import { useAuthStore } from './state/authStore';
+import { useAccountStore } from './state/accountStore';
+import { isSupabaseConfigured } from './state/supabase';
 import styles from './App.module.css';
 
 /* One shell for every signed-in route. The builder, Deck's Home and Counter
@@ -50,7 +54,47 @@ function App() {
   const route = useHashRoute();
   const user = useAuthStore((s) => s.user);
 
-  if (!user) {
+  /* TWO GATES, ONE AT A TIME.
+     `accountStore` is real Supabase accounts; `authStore` is the 20-account
+     test gate. Which one applies is decided by whether Supabase is configured
+     at all, so a checkout without the environment variables — every clone, and
+     the deployment until the variables were set — keeps the behaviour it had
+     rather than failing to mount. */
+  const accountReady = useAccountStore((s) => s.ready);
+  const accountId = useAccountStore((s) => s.userId);
+  const profile = useAccountStore((s) => s.profile);
+  const initAccount = useAccountStore((s) => s.init);
+
+  useEffect(() => {
+    void initAccount();
+  }, [initAccount]);
+
+  if (isSupabaseConfigured) {
+    /* Nothing is drawn until the session is known. Rendering the sign-in card
+       first would flash it at every signed-in visitor on every reload, because
+       reading a persisted session is asynchronous. */
+    if (!accountReady) return <div className={styles.app} />;
+
+    if (!accountId) {
+      return (
+        <div className={styles.app}>
+          <AuthScreen />
+        </div>
+      );
+    }
+
+    /* Asked once, on `onboarded_at` rather than on whether the fields are
+       filled — skipping is allowed, and someone who skipped must not be asked
+       again on every visit. A null profile here means the row has not arrived
+       yet, which is a moment, not a state to route on. */
+    if (profile && !profile.onboarded_at) {
+      return (
+        <div className={styles.app}>
+          <Onboarding />
+        </div>
+      );
+    }
+  } else if (!user) {
     return (
       <div className={styles.app}>
         <Login />

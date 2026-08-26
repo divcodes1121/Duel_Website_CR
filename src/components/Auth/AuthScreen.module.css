@@ -1,0 +1,160 @@
+/* The real sign-in card. Shape, border, entrance and field styling all come
+ * from `Login.module.css` — this file is only what the test gate never needed:
+ * a mode switch, a provider button, and the small print under them. */
+
+.card {
+  /* Taller than the test gate's card: two tabs, an optional provider button and
+     a link row live below the same two fields. */
+  gap: 0.15rem;
+}
+
+/* --- sign in / create account ---------------------------------------------
+ *
+ * A segmented control rather than a link, because the two are equals — someone
+ * arriving cold is as likely to want one as the other, and a link buried under
+ * the form makes creating an account feel like the exception. */
+
+.tabs {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+  width: 100%;
+  margin: 0.9rem 0 1.1rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.tab {
+  padding: 0.5rem 0.4rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tabOn {
+  /* `--solid-*` because this fill carries `--on-solid` text and has to hold it
+     at 5.48:1. `--hue-*` here would be the recurring mistake of this project:
+     it is graded for 14px ink, not for a fill. */
+  background: var(--solid-blue);
+  color: var(--on-solid);
+}
+
+/* --- the other way in ----------------------------------------------------- */
+
+.or {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  margin: 0.9rem 0 0.75rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.or::before,
+.or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Google's own mark on a neutral surface. Deliberately NOT painted in a brand
+   colour: their guidelines allow a neutral button, and a blue or red fill here
+   would compete with the primary action directly above it. */
+.google {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.68rem 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
+}
+
+.google:hover {
+  border-color: var(--text-muted);
+  transform: translateY(-1px);
+}
+
+.google:active {
+  transform: none;
+}
+
+/* --- small print ---------------------------------------------------------- */
+
+.links {
+  position: relative;
+  z-index: 1;
+  margin: 1rem 0 0;
+  text-align: center;
+}
+
+.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--text);
+}
+
+/* A confirmation prompt or a reset acknowledgement — information, not failure,
+   so it must not borrow the error colour. */
+.notice {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--hue-green) 40%, transparent);
+  background: color-mix(in srgb, var(--hue-green) 12%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .google:hover {
+    transform: none;
+  }
+}

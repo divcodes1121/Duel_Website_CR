@@ -1,0 +1,123 @@
+/* The three-step account form. Card, fields and primary button are the login
+ * card's; this is the step furniture around them. */
+
+.card {
+  gap: 0.2rem;
+}
+
+.eyebrow {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 0.15rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* --- progress ------------------------------------------------------------- */
+
+.pips {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0.85rem 0 1.15rem;
+  padding: 0;
+  list-style: none;
+}
+
+/* Bars rather than dots, and they FILL rather than light up. A row of three
+   dots says "three steps"; a row of three bars where one is filling says how
+   much of this is left, which is the question someone actually has. */
+.pip {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background var(--dur-2) var(--ease);
+}
+
+.pip[data-state='done'] {
+  background: color-mix(in srgb, var(--solid-green) 70%, transparent);
+}
+
+.pip[data-state='now'] {
+  background: var(--solid-green);
+}
+
+/* --- controls ------------------------------------------------------------- */
+
+.select {
+  /* The shared `.input` is styled for a text field; a select needs its own
+     arrow room and must not inherit the platform's default font. */
+  appearance: none;
+  padding-right: 2.2rem;
+  font: inherit;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.1rem) calc(50% + 2px),
+    calc(100% - 0.75rem) calc(50% + 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+/* `.submit` from the login card is `width: 100%`, so it takes the rest of the
+   row on its own once Back is beside it. */
+.back {
+  flex: 0 0 auto;
+  padding: 0 1.1rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+}
+
+.back:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.help {
+  display: block;
+  margin-top: 0.45rem;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* Quiet on purpose. Skipping is allowed and should not feel like a mistake,
+   but it should not compete with finishing either. */
+.skip {
+  align-self: center;
+  margin-top: 0.15rem;
+  border: 0;
+  background: none;
+  padding: 0.3rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.skip:hover {
+  color: var(--text);
+}

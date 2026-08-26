@@ -12,6 +12,7 @@
     "update:cards": "node scripts/fetch-card-data.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
     "@upstash/redis": "^1.38.0",
     "jspdf": "^4.2.1",
     "react": "^18.3.1",
