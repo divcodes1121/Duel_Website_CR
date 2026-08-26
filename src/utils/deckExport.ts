@@ -9,10 +9,20 @@ import type { Deck, DuelDeckSet, SavedDeckSet } from '../types/deck';
  * accounts see the button. Kept as a list so widening the roll-out is a
  * one-line change.
  */
-export const PDF_EXPORT_USERS = ['royal20'];
-
-export function canExportDecks(user: string | null | undefined): boolean {
-  return !!user && PDF_EXPORT_USERS.includes(user.trim().toLowerCase());
+/**
+ * Who may export a PDF report.
+ *
+ * KEYED ON THE TIER, NOT ON A USERNAME. This used to be a hardcoded
+ * `['royal20']` checked against the test gate's username -- which quietly
+ * became "nobody" the moment real accounts landed, because that store stopped
+ * being read and the username was always null. A silent regression: the button
+ * simply stopped existing, for everyone, with nothing to notice.
+ *
+ * Trial counts. The three days are meant to be the whole product, and an
+ * export someone cannot try is an export they will not pay for.
+ */
+export function canExportDecks(tier: string | null | undefined): boolean {
+  return tier === 'trial' || tier === 'pro' || tier === 'admin';
 }
 
 /* ------------------------------------------------------------------- model */

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useBuilderStore } from '../../state/store';
-import { useAuthStore } from '../../state/authStore';
+import { useAccess } from '../../state/gate';
 import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
 import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { ProfileMenu } from '../Profile/ProfileMenu';
@@ -26,10 +26,11 @@ export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
   const addHomeDeck = useBuilderStore((s) => s.addHomeDeck);
   const removeHomeDeck = useBuilderStore((s) => s.removeHomeDeck);
   const clearSelection = useBuilderStore((s) => s.clearSelection);
-  const authUser = useAuthStore((s) => s.user);
+  /* Tier, not username: the export gate moved off the retired test store. */
+  const access = useAccess();
   const [winFilter, setWinFilter] = useState<string[]>([]);
   const [exportOpen, setExportOpen] = useState(false);
-  const canExport = canExportDecks(authUser);
+  const canExport = canExportDecks(access);
 
   function toggleWinCon(key: string) {
     setWinFilter((prev) =>

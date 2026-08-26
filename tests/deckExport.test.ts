@@ -32,20 +32,28 @@ function setOf(name: string, decks: Deck[]): DuelDeckSet {
 }
 
 describe('canExportDecks', () => {
-  it('allows royal20 only', () => {
-    expect(canExportDecks('royal20')).toBe(true);
-    expect(canExportDecks('royal01')).toBe(false);
-    expect(canExportDecks('royal2')).toBe(false);
+  /* Keyed on the TIER now, not a hardcoded username. The old gate was
+     `['royal20']` checked against the test store, which silently became
+     "nobody" when real accounts landed and that store stopped being read. */
+  it('allows paid tiers', () => {
+    expect(canExportDecks('pro')).toBe(true);
+    expect(canExportDecks('admin')).toBe(true);
   });
 
-  it('is case and whitespace tolerant', () => {
-    expect(canExportDecks(' Royal20 ')).toBe(true);
+  it('allows the trial, because three days is meant to be the whole product', () => {
+    expect(canExportDecks('trial')).toBe(true);
   });
 
-  it('rejects signed-out users', () => {
+  it('refuses free and signed-out visitors', () => {
+    expect(canExportDecks('free')).toBe(false);
+    expect(canExportDecks('anon')).toBe(false);
     expect(canExportDecks(null)).toBe(false);
     expect(canExportDecks(undefined)).toBe(false);
     expect(canExportDecks('')).toBe(false);
+  });
+
+  it('does not accept an old username as a tier', () => {
+    expect(canExportDecks('royal20')).toBe(false);
   });
 });
 

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useAuthStore } from '../../state/authStore';
+import { useAccountStore } from '../../state/accountStore';
 import { useBuilderStore } from '../../state/store';
 import {
   buildHomeSections,
@@ -31,13 +31,18 @@ function sectionCount(section: ExportSection): number {
 }
 
 export function ExportDialog({ source, onClose }: ExportDialogProps) {
-  const authUser = useAuthStore((s) => s.user);
+  /* The @handle printed on the report. It was the test gate's username, which
+     is always null now — so the field defaulted to "@royal" for everyone and
+     quietly stopped being the person's own name. */
+  const handleName = useAccountStore(
+    (st) => st.profile?.display_name ?? st.profile?.player_tag ?? st.email?.split('@')[0] ?? null,
+  );
   const sets = useBuilderStore((s) => s.sets);
   const mode = useBuilderStore((s) => s.mode);
   const deckSlotCount = useBuilderStore((s) => s.deckSlotCount);
   const library = useBuilderStore((s) => s.library);
 
-  const [handle, setHandle] = useState(`@${authUser ?? 'royal'}`);
+  const [handle, setHandle] = useState(`@${handleName ?? 'royal'}`);
   const [includeSaved, setIncludeSaved] = useState(true);
   const [exportAll, setExportAll] = useState(true);
   /** Kept as text so the field can be cleared mid-typing without snapping back. */
@@ -97,7 +102,7 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
     const request: ExportRequest = {
       title,
       subtitle,
-      handle: handle.trim() || `@${authUser ?? 'royal'}`,
+      handle: handle.trim() || `@${handleName ?? 'royal'}`,
       sections,
       fileName: exportFileName(scope),
     };

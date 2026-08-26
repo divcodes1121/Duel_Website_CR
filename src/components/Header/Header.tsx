@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useBuilderStore } from '../../state/store';
-import { useAuthStore } from '../../state/authStore';
+import { useAccess } from '../../state/gate';
 import { getTotalCardsUsed } from '../../state/deckUtils';
 import { DECK_SIZE } from '../../types/deck';
 import { SaveDialog } from '../Library/SaveDialog';
@@ -21,13 +21,14 @@ export function Header({ embedded = false }: { embedded?: boolean } = {}) {
   const mode = useBuilderStore((s) => s.mode);
   const deckSlotCount = useBuilderStore((s) => s.deckSlotCount);
   const resetAll = useBuilderStore((s) => s.resetAll);
-  const authUser = useAuthStore((s) => s.user);
+  /* Tier, not username: the export gate moved off the retired test store. */
+  const access = useAccess();
   const maxFor = (owner: 'solo' | 'blue' | 'red') => deckSlotCount[owner] * DECK_SIZE;
   const [justSaved, setJustSaved] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const canExport = canExportDecks(authUser);
+  const canExport = canExportDecks(access);
 
   function flashSaved() {
     setJustSaved(true);
