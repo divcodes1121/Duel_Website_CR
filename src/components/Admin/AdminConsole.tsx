@@ -195,13 +195,13 @@ export function AdminConsole() {
             label="battles.db on the Contabo volume"
           />
           <p className={styles.hint}>
-            Retention is capped at 365 days, so this plateaus rather than growing
-            forever — but the window is only about a quarter full, so today's
-            figure is not the steady state. Measured on 2026-08-26: 7.24M
-            battles over 86 days at ~1.4&nbsp;KB each, ~158k battles/day, which
-            projects to roughly 120&nbsp;GB once the full year is held. That
-            assumes the tracked-player count stays where it is — battle volume
-            scales with it, and so does everything here.
+            Retention is capped at 304 days (10 months), so this plateaus rather
+            than growing forever — but the window is only about a quarter full,
+            so today's figure is not the steady state. Measured on 2026-08-26:
+            7.24M battles over 86 days at ~1.4&nbsp;KB each, ~158k battles/day,
+            which projects to roughly 105&nbsp;GB once the full window is held.
+            That assumes the tracked-player count stays where it is — battle
+            volume scales with it, and so does everything here.
           </p>
         </>
       )}

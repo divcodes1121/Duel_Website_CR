@@ -943,9 +943,11 @@ What changed is that **the bot moved too**. Nothing is replicated: there is one
 database, on the VPS, with the bot writing to it and the API reading it
 `mode=ro` beside it. The rejected design was two copies and a sync; the built
 design is the same "run the service beside the data" the entry recommended, with
-the data relocated. Retention is capped at 365 days, so it plateaus — the sizing
-put the ceiling near 266 GB against a 387 GB volume, and the console's meter is
-there to catch that being wrong.
+the data relocated. Retention is capped at **304 days — 10 months**, set on
+2026-08-26 (it was 365 for one day, and 150 before the migration), so it
+plateaus. The bot's own sizing put the ceiling near 266 GB at 365 days and
+10,000 players; the measurement below is against the 3,278 actually tracked, and
+the console's meter is there to catch either being wrong.
 
 There is **no archive tier on the VPS at all**. `CLASH_ARCHIVE_DB_PATH` is set
 explicitly empty, because `clash_data.py` defaults it to a Windows path that
@@ -1014,7 +1016,7 @@ box, 2026-08-26:
 |---|---|
 | file | 17.2 GiB — 562,353 pages at 32 KB |
 | battles | 7,236,808 rows spanning **86 days** (2026-06-01 → 2026-08-26) |
-| retention | **365 days**, so the window is about a quarter full |
+| retention | **304 days** (10 months), so the window is about a quarter full |
 | recent volume | ~158,000 battles/day (five-day mean of complete days) |
 | volume | 387 GB, 25 GB used, 363 GB free |
 | tracked players | 3,278 |
@@ -1024,9 +1026,9 @@ The heaviest tables are `battles` (4.37 GB), `battle_raw` (2.99 GB) and
 file.
 
 **Today's figure is not the steady state.** The battle-linear part costs about
-1.4 KB per battle, so a full 365-day window at the current rate is ~79 GB, plus
+1.4 KB per battle, so a full 304-day window at the current rate is ~66 GB, plus
 a capped 25 GB of raw payloads and perhaps 15 GB of aggregates — call it
-**~120 GB**, a third of the volume, reached in roughly nine months. The console
+**~105 GB**, a quarter of the volume, reached in roughly seven months. The console
 said 266 GB before this was measured; that was an estimate and it was high.
 
 **The figure that scales is the tracked-player count, not time.** Battle volume

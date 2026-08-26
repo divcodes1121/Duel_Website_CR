@@ -39,7 +39,7 @@ Mirrors the bot's own model (`Clash_Bot/clashdb.py`, `Clash_Bot/archive.py`):
 
 | Tier | Path | Role |
 |------|------|------|
-| Hot (production) | `/var/clashbot/battles.db` | what the VPS reads. ~17 GB |
+| Hot (production) | `/var/clashbot/battles.db` | what the VPS reads. ~18 GB, **304-day (10-month) window** set 2026-08-26 |
 | Hot (local default) | `H:\ClashBot\data\battles.db` | rolling window (150 days), ~11.5 GB |
 | Archive (local only) | `H:\ClashArchive\archive.db` | every battle ever, ~46 GB |
 
