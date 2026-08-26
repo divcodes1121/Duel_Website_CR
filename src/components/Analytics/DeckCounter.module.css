@@ -1066,16 +1066,3 @@
   font-size: 0.82rem;
   color: var(--text-muted);
 }
-
-.foot {
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--border);
-  font-size: 0.72rem;
-  line-height: 1.55;
-  color: var(--text-muted);
-}
-
-.foot svg {
-  vertical-align: -2px;
-  margin-right: 0.2rem;
-}

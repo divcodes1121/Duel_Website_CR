@@ -655,30 +655,6 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
           );
         })}
 
-        <footer className={styles.foot}>
-          <p>
-            A combo is two cards fielded in the same deck in a duel.{' '}
-            <strong>G1/G2/G3</strong> is the deck&rsquo;s position in the loadout, so a combo that
-            leans on G3 is one you hold back.
-          </p>
-          <p>
-            {nf.format(duels.total)} duels in this window
-            {duels.native > 0 && duels.reconstructed > 0
-              ? ` — ${nf.format(duels.native)} native duel rows plus ${nf.format(duels.reconstructed)} rebuilt from friendly series`
-              : duels.native > 0
-                ? ` — all native duel rows`
-                : ` — all rebuilt from consecutive friendly matches, since this player has no clan-war duels stored`}
-            . {nf.format(report.pairs.observed)} pairings observed,{' '}
-            {nf.format(report.pairs.eligible)} clear the {report.floors.minGames}-deck and{' '}
-            {report.floors.minDecks}-shell floors.
-          </p>
-          <p className={styles.footNote}>
-            No synergy score is shown, and that is deliberate: a pair inherits the record of whole
-            decks, so a &ldquo;lift over each card apart&rdquo; figure measures deck clustering
-            rather than the two cards. Tested against a permutation null and indistinguishable from
-            chance. This page reports what it can count.
-          </p>
-        </footer>
       </section>
 
       {/* DUEL INSIGHTS — appended below everything above, and self-contained.

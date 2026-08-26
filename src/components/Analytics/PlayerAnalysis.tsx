@@ -241,7 +241,7 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
     return <LivePlayer report={report} tag={tag} />;
   }
 
-  const { player, decks: apiDecks, trends, sources, profile } = report;
+  const { player, decks: apiDecks, trends, profile } = report;
 
   // Series are keyed by deck hash, so re-sorting the table never repaints the
   // charts — colour follows the deck, not its row position.
@@ -563,7 +563,6 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
       </div>
 
       <footer className={styles.foot}>
-        <p>All data is based on the battles we have stored and analyzed.</p>
         {decks.some((d) => d.artInferred) && (
           <p>
             Cards are shown in deck order — the first three are the evolution, hero and
@@ -572,14 +571,6 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
             its position (marked with a dotted underline).
           </p>
         )}
-        <p>
-          Reading {sources.hot.available ? 'the local database' : 'no local database'}
-          {sources.archive.available
-            ? trends.archiveUsed
-              ? ' plus the archive drive.'
-              : ' — archive connected, not needed for this window.'
-            : ' — archive drive not connected, showing the recent window only.'}
-        </p>
       </footer>
     </div>
   );

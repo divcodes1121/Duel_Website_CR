@@ -449,11 +449,6 @@ export function DuelInsights({ tag, win }: { tag: string; win: DateWindow }) {
         </div>
       )}
 
-      <p className={styles.foot}>
-        Series outcomes use all {all.length} duels in this window. Game-level figures — game 1,
-        deciders, adaptation, positions and opponents — use the {detail} rebuilt from consecutive
-        matches, because a native duel row stores the series result rather than each game&rsquo;s.
-      </p>
     </section>
   );
 }

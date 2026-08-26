@@ -946,21 +946,6 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
           </>
         )}
 
-        <footer className={styles.foot}>
-          {ICONS.crown} <strong>Duels and ladder both count.</strong> The stored matchup table
-          carries no game-mode filter, so a deck&rsquo;s record here pools every 1v1 it has played
-          — measured, duel battles are present at 72.7% against 61.3% for ladder ones. The one
-          thing that cannot be counted is a native duel row: it stores a 16- or 24-card loadout
-          and the series result, with no per-game scoreline to attribute to a deck.{' '}
-          Every figure is <strong>symmetrised</strong> — the table is recorded from the tracked
-          player&rsquo;s side and tracked players win{' '}
-          {st.rawBias != null ? pct(st.rawBias) : '58.6%'} of everything, so read raw every deck
-          counters every deck. Combining each pairing with its reverse cancels that, which is why
-          a mirror comes out at exactly 50%. Two exact lists are only reported against each other
-          when they have really met: 99.4% of the 1.98M stored pairings have fewer than 8 games,
-          which is what the wider rungs are for.
-          {st.ageSeconds != null && ` Matrix computed ${Math.round(st.ageSeconds / 60)} min ago.`}
-        </footer>
       </section>
     </div>
   );

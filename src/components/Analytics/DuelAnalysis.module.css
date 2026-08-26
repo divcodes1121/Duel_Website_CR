@@ -953,25 +953,6 @@
 
 /* ---------------------------------------------------------------- footer */
 
-.foot {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  font-size: 0.78rem;
-  line-height: 1.55;
-  color: var(--text-muted);
-}
-
-.foot p {
-  margin: 0;
-}
-
-.footNote {
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--border);
-  max-width: 92ch;
-}
-
 /* Stacked tab blocks — only ever more than one when printing, where each needs
    naming because the tab bar that would have identified it is a dead control
    on paper. */

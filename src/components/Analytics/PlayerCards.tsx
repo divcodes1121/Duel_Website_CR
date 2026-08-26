@@ -687,21 +687,24 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
           </>
         )}
 
+        {/* THE FOOTER IS NOW ONLY THE PER-FORM NOTE, and it renders only on the
+            two tabs that need it. The basis sentence that used to lead it — the
+            evidence floor, how many cards cleared it, and which window movement
+            was measured against — was removed on request along with the same
+            kind of blurb on four other screens.
+
+            This half stays because it is not a basis note: it says the figures
+            above belong to the EVOLVED card rather than the card, which changes
+            what the number means rather than explaining where it came from. */}
+        {art && (
         <footer className={styles.foot}>
-          A win rate is ranked only once a card has {totals.minBattles}+ battles behind it —{' '}
-          {totals.ranked} of {totals.played} played cards clear that here, and the rest are marked
-          “thin”. Movement is against the {board.previous ? 'equally long window before this one' : 'previous window'}
-          {board.previous ? ` (${shortDay(board.previous.from)} – ${shortDay(board.previous.to)})` : ''}.
-          {totals.archiveUsed && ' Archive tier included.'}
           {/* Said out loud on the two tabs where it matters: the art is the
               special form, but the FIGURES are the card's whole record. There
               is no separate win rate for an evolved Knight — the stored row
               records which cards were fielded specially, not a per-form
               result — and implying otherwise would be the more useful claim
               and the false one. */}
-          {art && (
             <>
-              {' '}
               <strong>These figures are the {art} form&rsquo;s own</strong>, not the
               card&rsquo;s — an {art === 'hero' ? 'Hero' : 'evolved'} Knight is scored
               separately from a plain one. Hover a card for the same card&rsquo;s plain
@@ -715,8 +718,8 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
               the only battles where the two forms can be told apart at all. The use rate is a
               share of those, so it is not comparable with the other tabs&rsquo;.
             </>
-          )}
         </footer>
+        )}
       </section>
     </div>
   );
