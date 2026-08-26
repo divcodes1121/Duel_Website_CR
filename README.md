@@ -1000,6 +1000,50 @@ read direct p50 46 ms / p95 51 ms, through the tunnel p50 144 ms / p95 1119 ms.
 The p95 spike was home-connection variance, and it is the clearest single
 argument for the box the service now runs on.
 
+### How fast the database actually grows, measured
+
+Asked, and worth answering with numbers rather than a feeling. Measured on the
+box, 2026-08-26:
+
+| | |
+|---|---|
+| file | 17.2 GiB — 562,353 pages at 32 KB |
+| battles | 7,236,808 rows spanning **86 days** (2026-06-01 → 2026-08-26) |
+| retention | **365 days**, so the window is about a quarter full |
+| recent volume | ~158,000 battles/day (five-day mean of complete days) |
+| volume | 387 GB, 25 GB used, 363 GB free |
+| tracked players | 3,278 |
+
+The heaviest tables are `battles` (4.37 GB), `battle_raw` (2.99 GB) and
+`deck_card` with its two indexes (3.94 GB); indexes are roughly a third of the
+file.
+
+**Today's figure is not the steady state.** The battle-linear part costs about
+1.4 KB per battle, so a full 365-day window at the current rate is ~79 GB, plus
+a capped 25 GB of raw payloads and perhaps 15 GB of aggregates — call it
+**~120 GB**, a third of the volume, reached in roughly nine months. The console
+said 266 GB before this was measured; that was an estimate and it was high.
+
+**The figure that scales is the tracked-player count, not time.** Battle volume
+is a function of how many tags are enrolled. Doubling 3,278 roughly doubles
+everything above, and enrolment is a feature the site offers.
+
+**`battle_raw` is the part that would run away, and it is valved rather than
+solved.** Its two pruning paths — `trim_local_raw` and `purge_non_duel_raw` —
+both refuse to delete anything without the archive's confirmed insert cursor,
+which is correct (rows do not arrive in `battle_time` order, and assuming they
+do once left 172,414 battles unarchived). But there is no archive on the VPS, so
+there is no cursor, so neither ever runs and raw payloads accumulate at ~0.79
+GB/day. `CLASH_RAW_CAP_BYTES=25 GB` catches it: `run_two_tier_maintenance` falls
+into a size-bounding branch when the cursor is absent. That is a valve on a pipe
+nobody is draining — fine, deliberate, and worth remembering is not the same as
+retention working.
+
+A one-day reading of `battle_raw` looks alarming and is not: 183,331 rows landed
+on migration day against ~1,000–2,400 on every day before it. That is the
+backfill, visible in `stored_at` but not in `battle_time`, and reading the wrong
+one of those two columns turns a one-off into a trend.
+
 ### Still open on the hosting side
 
 - **H: is the rollback and must not be touched.** The local `battles.db` and
@@ -4927,6 +4971,41 @@ inside `[data-filmstrip-controls]`.
 ## Things that went wrong and what fixed them
 
 Kept because each one cost time and each one can recur.
+
+**An undefined custom property does not fall back to something sensible — it
+deletes the declaration.** `var(--solid-pink)` where no `--solid-pink` exists is
+invalid at computed-value time, and the whole property goes with it. Four
+declarations across three files were referencing tokens this project has never
+defined, and not one of them looked broken in the source:
+
+| where | wrote | actually rendered |
+|---|---|---|
+| landing area card, pink | `--area-solid: var(--solid-pink)` | **violet** — the custom property went guaranteed-invalid, so `var(--area-solid, var(--solid-violet))` used its fallback |
+| admin console, admin badge | `background: var(--solid-pink)` | **no background**, so `--on-solid` white text sat on the page ground and vanished in light mode |
+| admin console, storage bar at >90% | `background: var(--solid-pink)` | **nothing**, at the one fill level the bar exists to warn about |
+| sign-in scrim | `color-mix(in srgb, var(--bg) …)` | **nothing** — the card has been sitting straight on the painted backdrop the scrim exists to lift it off |
+
+The pink step in this palette is called `--solid-maroon`, and the neutral ground
+is `--bg-1..3` with no bare `--bg`. Both facts were already written down — the
+Dashboard's own stylesheet carries a comment saying "`var(--bg, …)` was wrong,
+there is no `--bg` token" — and were re-broken anyway, twice, because nothing
+enforces them.
+
+Nothing does now either, but the sweep is three lines and worth running after
+any palette work: collect every `(--x)` defined by a `:` in `src/**/*.css`,
+collect every `var(--x)` used **without** a fallback, and subtract. A fallback
+is the difference between a typo and a silent deletion, which is why
+`var(--hue-amber, var(--hue-blue))` in the same file is merely odd rather than
+broken.
+
+**A gate written before the gate existed will be overtaken by it.** `HomeSection`
+wrapped Duel Analysis, Duel Zone and Coach Assist in the Royal Pro upsell. Once
+`sectionAllowed()` shipped, anon and free visitors were routed to `GateCard`
+*before* that code ran — so the only people who could still reach the "subscribe"
+wall were accounts that already had a subscription, pressing a block they had
+paid for. It was not a wrong message to the wrong audience; it was a message
+that had become impossible to show to its audience. What those screens actually
+lack on the home route is a player tag, and `NeedsTag` asks for that instead.
 
 **A flex child with any `overflow` can be crushed to nothing.** The automatic
 minimum size of a flex item is its content — *unless* `overflow` is anything but
