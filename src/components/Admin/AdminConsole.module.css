@@ -110,7 +110,20 @@
   gap: 0.6rem;
 }
 
+/* LIQUID GLASS, IN CSS RATHER THAN WEBGL — and the choice is forced, not
+   lazy. `LiquidMetal`'s shader is a CIRCLE signed-distance field; its rim walk
+   is plain angle "because for a circle the pill perimeter collapses to that".
+   Pointed at a rectangular tile it would draw a circular rim across a rectangle.
+   So the round controls in the header get the real thing via `[data-metal]`,
+   and these tiles get a treatment built for their own shape.
+
+   Three layers, all transform/opacity or a gradient position — nothing that
+   animates `box-shadow` or `filter`, which is what made this project's earlier
+   effects lag and is why `CLAUDE.md` bans looping glow outright. */
 .stat {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -118,6 +131,80 @@
   border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--surface-sunken);
+  /* Where the pointer is, written straight onto the node by the component.
+     The fallback centres the highlight so a tile that has never been touched
+     is not a dark corner. */
+  --mx: 50%;
+  --my: 50%;
+  transition:
+    transform var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease);
+}
+
+/* The specular: a soft highlight that follows the cursor. `::before` so it sits
+   under the text but over the surface, and `opacity` is the only animated
+   property — the gradient's POSITION changes without a transition, because a
+   lagging highlight reads as broken rather than smooth. */
+.stat::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      22rem circle at var(--mx) var(--my),
+      color-mix(in srgb, var(--text) 12%, transparent),
+      transparent 42%
+    );
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.stat:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+}
+
+.stat:hover::before { opacity: 1; }
+
+/* Pressing pushes it back down past its resting place, so a tile with no action
+   still answers the click. */
+.stat:active {
+  transform: translateY(0) scale(0.985);
+}
+
+/* The ripple: one shot from the press point, removed on animationend so it
+   re-arms. A separate layer from the specular because they overlap. */
+.stat::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: var(--mx);
+  top: var(--my);
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--text) 34%, transparent),
+    transparent 70%
+  );
+}
+
+.rippling::after {
+  animation: statRipple var(--dur-4) var(--ease);
+}
+
+.meter.rippling::after {
+  animation: statRipple var(--dur-4) var(--ease);
+}
+
+@keyframes statRipple {
+  from { transform: scale(0.4); opacity: 0.85; }
+  to { transform: scale(34); opacity: 0; }
 }
 
 .statLabel {
@@ -147,10 +234,57 @@
 
 /* --- capacity ------------------------------------------------------------- */
 
+/* The meter is pokeable too, sharing the tiles' specular and ripple through
+   the same custom properties — but it is NOT a raised card, so it does not
+   lift on hover. The effect belongs to the surface, not to a card shape. */
 .meter {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  padding: 0.55rem 0.65rem;
+  margin: -0.55rem -0.65rem;
+  border-radius: 14px;
+  --mx: 50%;
+  --my: 50%;
+}
+
+.meter::before,
+.meter::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  border-radius: inherit;
+}
+
+.meter::before {
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(
+    22rem circle at var(--mx) var(--my),
+    color-mix(in srgb, var(--text) 10%, transparent),
+    transparent 42%
+  );
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.meter:hover::before { opacity: 1; }
+
+.meter::after {
+  left: var(--mx);
+  top: var(--my);
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--text) 30%, transparent),
+    transparent 70%
+  );
 }
 
 .meterHead {
@@ -388,5 +522,21 @@
 @media (prefers-reduced-motion: reduce) {
   .back:hover {
     transform: none;
+  }
+}
+
+/* The toy is the first thing to go. Someone who has asked for less motion is
+   not asking for a tile that leaps and ripples under the cursor; the tone
+   border and the hover contrast still do the informational work. */
+@media (prefers-reduced-motion: reduce) {
+  .stat,
+  .stat:hover,
+  .stat:active {
+    transform: none;
+  }
+
+  .rippling::after,
+  .meter.rippling::after {
+    animation: none;
   }
 }

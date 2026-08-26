@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { type AdminUser, useAdminStore } from '../../state/adminStore';
+import { LiquidMetal } from '../../three/LiquidMetal';
 import { ago, bytes, until } from '../../utils/format';
 import { useAccess } from '../../state/gate';
 import { ThemeToggle } from '../Theme/ThemeToggle';
@@ -8,6 +9,55 @@ import styles from './AdminConsole.module.css';
 
 /** Contabo Cloud VPS 6 root volume, from `df -h /` on the box. */
 const VPS_DISK_BYTES = 387 * 1024 ** 3;
+
+/**
+ * A tile you can poke.
+ *
+ * IT IS A `div`, NOT A `button`, AND THAT IS THE POINT. These carry no action —
+ * the brief was explicitly "clickable even where there is no click function,
+ * just as a playing feature". A `<button>` would put every one of them in the
+ * tab order and announce an actionable control to a screen reader that does
+ * nothing when activated, which is a worse lie than a tile that simply looks
+ * nice under the cursor. Pointer handlers give the toy to people using a
+ * pointer and promise nothing to anyone else.
+ *
+ * THE HIGHLIGHT IS TWO CUSTOM PROPERTIES, NOT A RE-RENDER. `--mx`/`--my` are
+ * written straight onto the node's style, so tracking the pointer never touches
+ * React — sixty state updates a second across fifteen tiles is exactly the kind
+ * of thing that made this project's earlier effects lag.
+ *
+ * The ripple is a class toggled off on `animationend`, so it is ONE-SHOT and
+ * re-arms on the next press. `CLAUDE.md` bans `infinite` outright; the old glow
+ * loops animating box-shadow are what that ban is for.
+ */
+function usePoke<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+
+  const track = (e: ReactPointerEvent<T>) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', `${((e.clientX - r.left) / r.width) * 100}%`);
+    el.style.setProperty('--my', `${((e.clientY - r.top) / r.height) * 100}%`);
+  };
+
+  const press = (e: ReactPointerEvent<T>) => {
+    const el = ref.current;
+    if (!el) return;
+    track(e);
+    // Restart even mid-flight: remove, force a reflow, re-add.
+    el.classList.remove(styles.rippling);
+    void el.offsetWidth;
+    el.classList.add(styles.rippling);
+  };
+
+  return {
+    ref,
+    onPointerMove: track,
+    onPointerDown: press,
+    onAnimationEnd: () => ref.current?.classList.remove(styles.rippling),
+  };
+}
 
 function Stat({
   label,
@@ -20,8 +70,10 @@ function Stat({
   note?: string;
   tone?: 'good' | 'warn' | 'bad';
 }) {
+  const poke = usePoke<HTMLDivElement>();
+
   return (
-    <div className={styles.stat} data-tone={tone}>
+    <div className={styles.stat} data-tone={tone} {...poke}>
       <span className={styles.statLabel}>{label}</span>
       <strong className={styles.statValue}>{value}</strong>
       {note && <span className={styles.statNote}>{note}</span>}
@@ -33,8 +85,9 @@ function Stat({
 function Meter({ used, total, label }: { used: number; total: number; label: string }) {
   const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
   const tone = pct > 90 ? 'bad' : pct > 75 ? 'warn' : 'good';
+  const poke = usePoke<HTMLDivElement>();
   return (
-    <div className={styles.meter}>
+    <div className={styles.meter} {...poke}>
       <div className={styles.meterHead}>
         <span>{label}</span>
         <span className={styles.meterFigure}>
@@ -117,6 +170,10 @@ export function AdminConsole() {
 
   return (
     <section className={styles.wrap}>
+      {/* ONE canvas for every `[data-metal]` control on this route. Idle until
+          something is hovered, pressed or carrying a live ripple, and it tears
+          the rAF down when the last of those settles. */}
+      <LiquidMetal />
       <header className={styles.head}>
         {/* A WAY BACK. The console is its own route outside the Dashboard, so
             it inherits none of the app's navigation — without this the only
@@ -137,7 +194,11 @@ export function AdminConsole() {
               theme — but the control to CHANGE it lives in the Dashboard header
               this route does not render. */}
           <ThemeToggle size="1.8rem" />
-          <button type="button" className={styles.refresh} onClick={() => void load()} disabled={loading}>
+          {/* The same travelling chromatic rim the app's other round controls
+              wear. It needs the canvas below — the console renders outside the
+              Dashboard, so it does not inherit the one mounted there. */}
+          <button type="button" className={styles.refresh} data-metal
+                  onClick={() => void load()} disabled={loading}>
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
