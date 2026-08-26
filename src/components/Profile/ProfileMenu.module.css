@@ -68,33 +68,6 @@
   white-space: nowrap;
 }
 
-.accountKind {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-/* The tier earns a colour; free stays muted, because "free" is the default
-   state and colouring it would make the absence of a thing look like a badge.
-   `--hue-*` is the INK step — this is 9.9px text and has to hold 4.5:1, which
-   the fill step is not graded for. */
-.accountKind[data-tier='admin'] { color: var(--hue-pink); }
-.accountKind[data-tier='pro'] { color: var(--hue-violet); }
-.accountKind[data-tier='trial'] { color: var(--hue-green); }
-
-/* NOT uppercase and NOT letter-spaced: an email is a string someone has to
-   read character by character to confirm it is theirs, and both of those
-   treatments actively hurt that. Wraps rather than truncating for the same
-   reason — a clipped address cannot be checked. */
-.accountEmail {
-  margin-top: 0.15rem;
-  font-size: 0.68rem;
-  line-height: 1.35;
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
 
 /* --- stats ------------------------------------------------------------ */
 

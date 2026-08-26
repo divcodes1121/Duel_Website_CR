@@ -1854,6 +1854,21 @@
   letter-spacing: 0.09em;
 }
 
+/* MAROON, and the token is `--solid-maroon` -- there is no `--solid-pink` in
+   this project, and referencing one makes the whole declaration invalid at
+   computed-value time, which is how the admin tier badge in the console ended
+   up with no background at all. Same colour as that badge, deliberately: one
+   role, one colour, wherever it appears. */
+.adminBadge {
+  padding: 0.26rem 0.6rem;
+  border-radius: 999px;
+  background: var(--solid-maroon);
+  color: var(--on-solid);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
 /* Quieter than PRO on purpose: a countdown is information, not status, and it
    should not look like a thing you have earned. */
 .trialBadge {

@@ -514,9 +514,18 @@ export function Dashboard({
             </a>
           ) : (
             <>
-              {(access === 'pro' || access === 'admin') && (
-                /* Item 3. On the tier rather than on `role`, so an admin wears
-                   it too and nobody has to remember to set both. */
+              {/* ADMIN IS ITS OWN TAG, not a PRO badge worn by an admin.
+                  An admin does have everything Pro has, which is why one badge
+                  covered both at first — but the badge answers "what am I",
+                  and "the owner" and "a subscriber" are not the same answer.
+                  Maroon, which is this palette's pink SOLID step and already
+                  what the admin tier wears in the console's accounts table. */}
+              {access === 'admin' && (
+                <span className={styles.adminBadge} title="Administrator">
+                  ADMIN
+                </span>
+              )}
+              {access === 'pro' && (
                 <span className={styles.proBadge} title="Dekkies Pro">
                   PRO
                 </span>
