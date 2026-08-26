@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAccountStore } from '../../state/accountStore';
+import { trialDaysLeft } from '../../state/tiers';
 import { useThemeStore } from '../../state/themeStore';
 import { useBuilderStore } from '../../state/store';
 import styles from './ProfileMenu.module.css';
@@ -111,7 +112,24 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                 </span>
                 <div className={styles.identityText}>
                   <span className={styles.username}>{authUser}</span>
-                  <span className={styles.accountKind}>Test account</span>
+                  {/* WAS THE LITERAL STRING "Test account", left from the
+                      twenty-account gate that no longer exists. These are real
+                      accounts, so this says what the account actually IS. */}
+                  <span className={styles.accountKind} data-tier={tier}>
+                    {tier === 'trial'
+                      ? `Trial · ${trialDaysLeft(account)} day${
+                          trialDaysLeft(account) === 1 ? '' : 's'
+                        } left`
+                      : tier}
+                  </span>
+                  {/* WHICH ACCOUNT AM I IN — the question this panel exists to
+                      answer, and it could not. `authUser` prefers the display
+                      name, so once someone sets one their email appeared
+                      nowhere in the menu at all. Shown only when it is not
+                      already the line above it. */}
+                  {accountEmail && accountEmail !== authUser && (
+                    <span className={styles.accountEmail}>{accountEmail}</span>
+                  )}
                 </div>
               </div>
 
