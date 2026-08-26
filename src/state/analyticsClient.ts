@@ -828,6 +828,72 @@ export function fetchDuelZone(
   );
 }
 
+/* --------------------------------------------------------- recent battles */
+
+/** One side of a battle, drawn the way every other deck on the site is. */
+export interface BattleSide {
+  cards: string[];
+  art?: Record<string, 'evolution' | 'hero'>;
+  artInferred?: boolean;
+  avgElixir: number;
+  archetype: string;
+  deckName: string;
+}
+
+export interface RecentBattle {
+  id: string;
+  /** Supercell's stamp: `20260824T104652.000Z`. */
+  battleTime: string;
+  /** The raw stored mode string, kept so a reader can check the label. */
+  mode: string;
+  /** Ladder / Duel / Friendly / Tournament / Challenge / 2v2 / Battle. */
+  modeLabel: string;
+  result: 'win' | 'loss' | 'draw';
+  crowns: number;
+  opponentCrowns: number;
+  player: BattleSide;
+  opponent: BattleSide & { tag: string; name: string };
+}
+
+export interface RecentBattlesReport {
+  battles: RecentBattle[];
+  page: number;
+  pages: number;
+  perPage: number;
+  total: number;
+  summary: {
+    battles: number;
+    wins: number;
+    losses: number;
+    draws: number;
+    crowns: number;
+    opponentCrowns: number;
+    archiveUsed: boolean;
+  };
+  coverage: ApiCoverage;
+  window: { from: string | null; to: string | null };
+  sources: ApiSources;
+}
+
+/**
+ * One page of a player's battle log.
+ *
+ * PAGED ON THE SERVER, unlike every other screen here, because this one does
+ * not aggregate: an active player has hundreds of battles in a thirty-day
+ * window and each row carries two decks. The window decides the pool, the page
+ * decides what crosses the wire.
+ */
+export function fetchRecentBattles(
+  tag: string,
+  win: DateWindow = {},
+  page = 1,
+  per = 10,
+): Promise<RecentBattlesReport> {
+  return get<RecentBattlesReport>(
+    `/api/analytics/battles/${encodeURIComponent(tag)}?${windowQuery(win)}&page=${page}&per=${per}`,
+  );
+}
+
 /** Every card, as one player actually plays it — the Cards screen. */
 export function fetchCardBoard(
   tag: string,

@@ -84,7 +84,17 @@ export function trialDaysLeft(profile: Profile | null, now: number = Date.now())
  * paywall — the search would be a tease rather than a demonstration. The five
  * deeper areas are what a trial is for.
  */
-export const FREE_SECTIONS = ['Search Player', 'Top Meta Decks', 'Deck Counter'] as const;
+export const FREE_SECTIONS = [
+  'Search Player',
+  /* FREE, and it sits directly under the search for the same reason. This is
+     the rawest thing the database holds — a list of battles that happened —
+     and putting the plainest answer behind the gate would mean a visitor who
+     types a tag is told the tag is worth nothing to them. What costs money is
+     the reading of those rows, which is every other area. */
+  'Recent Battles',
+  'Top Meta Decks',
+  'Deck Counter',
+] as const;
 
 /**
  * Areas a TRIAL does not open. Paid Pro or admin only.

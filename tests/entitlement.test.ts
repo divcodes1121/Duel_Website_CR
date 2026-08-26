@@ -35,6 +35,7 @@ import { canExportDecks } from '../src/utils/deckExport';
 
 const ALL_SECTIONS = [
   'Search Player',
+  'Recent Battles',
   'Top Meta Decks',
   'Deck Analysis',
   'Duel Analysis',
@@ -133,7 +134,7 @@ describe('a trial opens everything EXCEPT the pro-only areas', () => {
   });
 });
 
-describe('an unpaid tier opens exactly the free three', () => {
+describe('an unpaid tier opens exactly the free sections', () => {
   for (const access of UNPAID) {
     it(`${access} may open the free sections and no others`, () => {
       const allowed = ALL_SECTIONS.filter((s) => sectionAllowed(access, s));
@@ -151,13 +152,20 @@ describe('an unpaid tier opens exactly the free three', () => {
     }
   });
 
-  /* Not an arbitrary three. Meta and Deck Counter are what the brief keeps for
+  /* Not an arbitrary set. Meta and Deck Counter are what the brief keeps for
      a lapsed account; Search Player is the landing page's own call to action,
      and gating it would hand a stranger a paywall for using the biggest control
-     on a public page. */
-  it('the free sections are the three that were chosen', () => {
+     on a public page. Recent Battles joined them for the same reason: it is
+     the rawest thing stored — a list of battles that happened — and a visitor
+     who types a tag and is told the tag buys them nothing has been shown a
+     paywall, not a product.
+
+     THIS LIST IS A TRIPWIRE. It fails whenever an area changes tier, which is
+     the point: that decision should be made in a commit, not inherited from
+     whatever order someone appended a constant in. */
+  it('the free sections are the ones that were chosen', () => {
     expect([...FREE_SECTIONS].sort()).toEqual(
-      ['Deck Counter', 'Search Player', 'Top Meta Decks'].sort(),
+      ['Deck Counter', 'Recent Battles', 'Search Player', 'Top Meta Decks'].sort(),
     );
   });
 });

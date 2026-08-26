@@ -159,6 +159,7 @@ class Authentication(unittest.TestCase):
                   "/api/analytics/coach/predict/%23Y022GRCJQ",
                   "/api/analytics/coach/opponent-read/%23Y022GRCJQ",
                   "/api/analytics/track/pending",
+                  "/api/analytics/battles/%23Y022GRCJQ",
                   "/api/analytics/deck?cards=knight"]
         with configured(CLASH_API_KEY=KEY) as mod, serving(mod) as base:
             for path in routes:
@@ -688,7 +689,11 @@ class RoutingUnchanged(unittest.TestCase):
         src = inspect.getsource(app_module.Handler._route)
         routes = [l.strip() for l in src.split("\n")
                   if l.strip().startswith(("if path ==", "if path.startswith("))]
-        self.assertEqual(len(routes), 19)
+        # 20 since 26 Aug 2026: `/api/analytics/battles/<tag>` (Recent
+        # Battles). Bumping this number is the POINT of the test rather than a
+        # chore around it - it is a tripwire, so the bump belongs in the same
+        # commit as the route, beside a new line in the auth test above.
+        self.assertEqual(len(routes), 20)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]

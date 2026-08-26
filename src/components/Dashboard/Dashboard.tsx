@@ -24,6 +24,7 @@ import { SeasonMenu } from '../Analytics/SeasonMenu';
 import { fetchSuggestedTags } from '../../state/analyticsClient';
 import { useReveal } from '../../hooks/useReveal';
 import { ClosingBand } from './ClosingBand';
+import { RecentBattles } from '../Analytics/RecentBattles';
 import {
   AnalyticsIcon,
   ArrowRightIcon,
@@ -36,6 +37,7 @@ import {
   DeckIcon,
   HomeIcon,
   LoadoutIcon,
+  LogIcon,
   PaletteIcon,
   PieIcon,
   SearchIcon,
@@ -106,6 +108,10 @@ const TOP_NAV = [
  * violet regardless of the row's identity hue. */
 const SIDE_NAV = [
   { label: 'Search Player', icon: SearchIcon, slug: '', hue: 'violet' },
+  /* Directly under the search, because it is what a search is FOR: the rawest
+     answer to "what has this player been doing", and the rows every screen
+     below it aggregates. */
+  { label: 'Recent Battles', icon: LogIcon, slug: 'battles', hue: 'green' },
   { label: 'Top Meta Decks', icon: BarsIcon, slug: 'meta', hue: 'blue' },
   { label: 'Deck Analysis', icon: PieIcon, slug: 'decks', hue: 'pink' },
   { label: 'Duel Analysis', icon: SwordsIcon, slug: 'duels', hue: 'green' },
@@ -115,7 +121,7 @@ const SIDE_NAV = [
   { label: 'Coach Assist', icon: CoachIcon, slug: 'coach', hue: 'green' },
 ] as const;
 
-/* The seven analytics areas as the landing screen lists them — SIDE_NAV minus
+/* The eight analytics areas as the landing screen lists them — SIDE_NAV minus
    Search Player, which is the search itself rather than an area. Hoisted so the
    filmstrip's start index and its items are computed from ONE list; deriving
    them from two copies of the same filter is how an index drifts off the item
@@ -128,6 +134,7 @@ const AREAS = SIDE_NAV.filter((s) => s.label !== 'Search Player');
    same board with one filter pre-applied is three places to keep in step. */
 
 const SECTION_BLURB: Record<string, string> = {
+  'Recent Battles': 'Every stored battle, newest first — their deck against the one they faced.',
   'Top Meta Decks': 'What the whole player base is running, ranked by use rate.',
   'Deck Analysis': 'Break a deck down: elixir curve, cycle, role coverage and matchups.',
   'Duel Analysis': 'How a five-deck duel collection holds up across the field.',
@@ -564,8 +571,8 @@ export function Dashboard({
       >
         {/* THE RAIL IS NOT PART OF THE LANDING SCREEN.
             A sidebar of a player's analytics areas before there is a player is
-            navigation to seven screens that all say "search for someone first",
-            and it costs the hero a quarter of its width. The same seven areas
+            navigation to eight screens that all say "search for someone first",
+            and it costs the hero a quarter of its width. The same eight areas
             are on the landing as a grid of blocks under the search, which is
             where they can be sized and described; the rail comes back the
             moment a tag is loaded, where it is genuinely navigation. */}
@@ -668,7 +675,7 @@ export function Dashboard({
 
               A SCROLLING STRIP RATHER THAN A DRAWER. A drawer needs a trigger,
               an overlay, a focus trap and an escape key — four things to get
-              right so that a tap can reach seven links. A strip is always
+              right so that a tap can reach every link. A strip is always
               visible, needs none of them, and shows you where you are without
               being opened. It carries the same items through the same
               `openArea`, so it cannot disagree with the sidebar. */}
@@ -740,7 +747,7 @@ export function Dashboard({
           )}
 
           {view === 'player' ? (
-            /* The same seven areas, reached by tag instead of by the sidebar.
+            /* The same eight areas, reached by tag instead of by the sidebar.
                Gating one route and not the other is not a gate — anyone who
                noticed the URL shape would walk straight past it. The slug is
                mapped back to the label so both paths consult one rule. */
@@ -752,6 +759,8 @@ export function Dashboard({
                 access={access}
                 section={SIDE_NAV.find((n) => n.slug === playerSection)?.label ?? 'This area'}
               />
+            ) : playerSection === 'battles' ? (
+              <RecentBattles tag={playerTag} season={season as Season} />
             ) : playerSection === 'duels' ? (
               <DuelAnalysis tag={playerTag} season={season as Season} />
             ) : playerSection === 'duelzone' ? (
@@ -903,7 +912,7 @@ export function Dashboard({
                   carries the same gap `.main` does, so wrapping changes the
                   grouping without changing the spacing. */}
               <div className={styles.band} ref={areasReveal}>
-              {/* NO HEADING. The seven blocks below each carry their own name on
+              {/* NO HEADING. The blocks below each carry their own name on
                   a painted tile and a sentence saying what they do, so a heading
                   reading "Analytics" above them and a line telling the reader to
                   pick one restated what the grid already showed.
@@ -912,7 +921,7 @@ export function Dashboard({
                   the top bar's Analytics item, and deleting the element that
                   carried it would have quietly turned that control back into
                   the no-op it used to be. */}
-              {/* THE SEVEN ANALYTICS AREAS ARE A FILMSTRIP.
+              {/* THE ANALYTICS AREAS ARE A FILMSTRIP.
                   They were a seven-across grid, which on a wide screen made
                   each block a narrow column of truncated blurb and on a narrow
                   one stacked into a long scroll. As a strip each area is one
@@ -921,18 +930,18 @@ export function Dashboard({
 
                   Each card keeps its OWN hue — the same one its sidebar row
                   and its section wear — through the per-item `hue`, so the
-                  strip does not flatten seven identities into one. */}
+                  strip does not flatten eight identities into one. */}
               <div className={styles.areaGrid} id="analytics-areas">
                 <Filmstrip
                   label="Analytics areas"
-                  /* OPENS ON DUEL ZONE, which is the middle of the seven — so
+                  /* OPENS ON DUEL ZONE, which is the middle of them — so
                      the strip has cards fanning to BOTH sides and reads as
                      something you are standing in. Opening on the first one
                      piled every other card off to the right. Found by label
                      rather than a literal index, so reordering SIDE_NAV cannot
                      silently move it to an end. */
                   start={AREAS.findIndex((a) => a.label === 'Duel Zone')}
-                  /* No `n / 7` here — the dot rail underneath already says
+                  /* No `n / 8` here — the dot rail underneath already says
                      where you are, and two readouts of the same thing is one
                      too many on a landing screen. */
                   counter={false}
@@ -1041,6 +1050,11 @@ export function Dashboard({
    unchanged — they always described what the area does, which is exactly what
    someone deciding whose tag to type needs to read. */
 const TAG_SECTIONS: Record<string, { blurb: string; perks: string[] }> = {
+  'Recent Battles': {
+    blurb:
+      'Every battle we hold for a player, newest first — the deck they brought beside the one they faced, with the crowns and the mode, ten to a page.',
+    perks: ['Both decks, side by side', 'Ladder, duels, friendlies and challenges', 'Any date range you like'],
+  },
   'Duel Analysis': {
     blurb:
       'Which card pairings actually carry a player’s duel play, split by game 1, 2 and 3 — with the evidence floors that stop one heavily-played deck being sliced twenty-four ways.',

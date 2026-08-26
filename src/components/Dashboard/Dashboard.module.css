@@ -387,7 +387,7 @@
 }
 
 /* FULL-STRENGTH TEXT, not the muted step. These are the rail's primary
-   navigation — seven destinations, each one a thing you click — and drawing
+   navigation — eight destinations, each one a thing you click — and drawing
    them all in `--text-muted` made the whole column read as secondary against
    the panel beside it. Muted is for supporting copy, which a nav label is not. */
 .sideItem {
@@ -464,7 +464,7 @@
 
 /* Section identity. A small hue tile per area, which is where the reference
    gets most of its richness — and because the label sits right beside it,
-   repeating four hues across seven sections costs nothing so long as no two
+   repeating four hues across eight sections costs nothing so long as no two
    NEIGHBOURS share one, which the cycle guarantees. Level 1 background with a
    level 3 icon: an accent, never a colour block. */
 .sideIcon {

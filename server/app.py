@@ -52,6 +52,7 @@ import deck_counter as counter  # noqa: E402
 import meta as meta_board  # noqa: E402
 import coach  # noqa: E402
 import live_player as live  # noqa: E402
+import recent_battles as battles  # noqa: E402
 import tracking  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
@@ -531,6 +532,35 @@ class Handler(BaseHTTPRequestHandler):
                 report["sources"] = _sources()
                 # A player with no duels is a real answer, not a 404 — the
                 # screen says "no duels in this window" rather than erroring.
+                return self._send(report)
+
+            if path.startswith("/api/analytics/battles/"):
+                raw = unquote(path[len("/api/analytics/battles/"):])
+                tag = cd.normalize_tag(raw)
+                if not tag:
+                    return self._send({"error": "invalid_tag", "input": raw}, 400)
+
+                q = parse_qs(parsed.query)
+                cov = cd.coverage(tag)
+                since, until = _window(q, cov)
+                # Paged on the server: the window decides the pool, the page
+                # decides what crosses the wire. Non-numeric input falls back
+                # to the defaults rather than erroring — the page number comes
+                # from a URL a reader can edit.
+                raw_page = (q.get("page") or [""])[0]
+                raw_per = (q.get("per") or [""])[0]
+                report = battles.report(
+                    tag,
+                    since,
+                    until,
+                    int(raw_page) if raw_page.isdigit() else 1,
+                    int(raw_per) if raw_per.isdigit() else battles.PER_PAGE,
+                )
+                report["coverage"] = cov
+                report["window"] = {"from": since, "to": until}
+                report["sources"] = _sources()
+                # A player with no battles in the window is a real answer, not
+                # a 404 — the screen says so and keeps its date control.
                 return self._send(report)
 
             if path == "/api/analytics/matchup":

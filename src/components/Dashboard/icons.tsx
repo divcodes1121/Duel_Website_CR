@@ -131,6 +131,18 @@ export function SearchIcon({ size = 17 }: P) {
   );
 }
 
+/* A log with a time marker — a list of things that happened, in order.
+   Deliberately not the bars (that is the meta ranking) and not the swords
+   (Duel Analysis): this row lists battles rather than measuring them. */
+export function LogIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <path d="M4 5h16M4 12h16M4 19h9" />
+      <circle cx="18.5" cy="18.5" r="2.5" />
+    </svg>
+  );
+}
+
 export function BarsIcon({ size = 17 }: P) {
   return (
     <svg {...base(size)}>

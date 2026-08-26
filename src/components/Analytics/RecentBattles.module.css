@@ -1,0 +1,600 @@
+/* Recent Battles — the raw log.
+ *
+ * THE ROW IS THE WHOLE DESIGN. A battle is a comparison, so the two decks sit
+ * side by side as equal blocks with the score between them; anything that made
+ * one side louder than the other would be reading the result into the layout.
+ * Colour therefore stays off the decks entirely and lives on the row's leading
+ * edge and its outcome badge, where green/red mean won/lost as they do
+ * everywhere else in the app.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.glass {
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+}
+
+.panel {
+  composes: glass;
+  padding: 1.25rem 1.4rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.notice {
+  composes: glass;
+  padding: 2.25rem 1.6rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.noticeTitle {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display, inherit);
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.noticeBody {
+  margin: 0 auto;
+  max-width: 46ch;
+  line-height: 1.55;
+}
+
+.noticeCode {
+  display: inline-block;
+  margin: 0.9rem 0 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------- panel header */
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  /* The range popover escapes this row, and every panel below carries a
+     backdrop-filter — which creates a stacking context, so a later panel
+     paints over the popover whatever its own z-index says. */
+  position: relative;
+  z-index: 40;
+}
+
+.panelIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.panelHeadText {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.32rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.15rem 0 0;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------- date control */
+
+.range {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.rangeChip {
+  padding: 0.34rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rangeChip:hover {
+  background: var(--neutral-wash);
+  color: var(--text);
+}
+
+.rangeChipOn,
+.rangeChipOn:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
+  opacity: 1;
+}
+
+.rangeChip[data-beyond] {
+  opacity: 0.55;
+}
+
+.customWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.customWrap .rangeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+}
+
+.customPop {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 15rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  box-shadow: var(--shadow-float);
+}
+
+.customLabel {
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.customField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.customField input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.32rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.customApply {
+  composes: cta from '../../styles/cta.module.css';
+  padding: 0.42rem;
+  border-radius: 9px;
+  border: none;
+  background: var(--accent-action-solid);
+  color: var(--accent-action-text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customApply:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.customNote {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+/* ----------------------------------------------------------------- rows */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  /* One-shot, transform/opacity only: the rows dim while a page loads rather
+     than being replaced by a loader, so turning a page reads as a control
+     rather than as navigating away. */
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.body[data-busy] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.empty {
+  margin: 0;
+  padding: 2rem 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.battle {
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+/* The outcome lives on a 3px leading edge, not on the card's fill. A battle
+   row is a large surface and a green one would drown the two decks it exists
+   to show — the same call the Duel Zone's series cards make. */
+.battle[data-outcome='win'] {
+  border-left: 3px solid var(--hue-green);
+}
+
+.battle[data-outcome='loss'] {
+  border-left: 3px solid var(--hue-red);
+}
+
+.battle[data-outcome='draw'] {
+  border-left: 3px solid var(--border-strong);
+}
+
+/* --------------------------------------------------------------- header */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.mode {
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.score {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.crown {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  color: var(--text-muted);
+}
+
+.crown[data-side='mine'] {
+  color: var(--hue-blue);
+}
+
+.crown[data-side='theirs'] {
+  color: var(--hue-red);
+}
+
+.dash {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.outcome {
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.outcome[data-outcome='win'] {
+  color: var(--hue-green);
+  background: var(--green-wash);
+  border: 1px solid var(--green-edge);
+}
+
+.outcome[data-outcome='loss'] {
+  color: var(--hue-red);
+  background: var(--red-wash);
+  border: 1px solid var(--red-edge);
+}
+
+.outcome[data-outcome='draw'] {
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.when {
+  margin-left: auto;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ the pair */
+
+/* PARALLEL, NOT STACKED, AND CENTRED AS ONE GROUP.
+   A battle reads as one comparison rather than as two decks that happen to be
+   near each other, so the pair has to sit TOGETHER around the VS.
+
+   This was `1fr auto 1fr` first, which is the obvious answer and the wrong
+   one: the decks are capped in width, so each one aligned to the outside of
+   its own track and the row opened a 250px hole down the middle with the VS
+   marooned in it. Three content-sized items centred as a group put the gap
+   on the OUTSIDE, where it is margin instead of a gulf. */
+.versus {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1.15rem;
+  padding: 0.85rem;
+}
+
+.vs {
+  align-self: center;
+  flex: none;
+  padding: 0.3rem 0.15rem;
+  font-family: var(--font-display, inherit);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* A SIDE IS EXACTLY AS WIDE AS ITS DECK, and that width is declared once.
+   Left to `width: auto`, a flex item sizes to its max-content — which here is
+   the widest LINE OF TEXT in it, not the card grid. An opponent called "A
+   Rather Long Opponent Name" made the block 538px against a 280px deck, and
+   since both blocks did it the pair filled the row and opened a hole down the
+   middle where the VS sat alone. A name is not a reason for a deck to move. */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  /* `flex: 1 1 0`, and the ZERO is the whole point. With `auto` the basis is
+     max-content, which is the longest line of TEXT in the block rather than
+     the deck: an opponent called "A Rather Long Opponent Name" made the side
+     538px against a 280px grid, and since both sides did it the pair filled
+     the row and left the VS alone in a hole down the middle. From a zero
+     basis the two sides take an equal share of real space and the name is
+     something that ellipsises inside it.
+
+     Capped, because four card tiles stop being a deck and start being
+     wallpaper somewhere past 90px each; the slack past the cap goes to the
+     outside as margin, which `justify-content: center` puts there. */
+  flex: 1 1 0;
+  max-width: 22rem;
+  min-width: 0;
+}
+
+/* The right-hand side mirrors, so the two blocks read outward from the score
+   in the middle rather than both running left-to-right past it. */
+.side[data-align='right'] {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.sideHead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sideName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.sideTag {
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* FOUR ACROSS, TWO DOWN — the in-game loadout shape, which is what makes a
+   deck recognisable at a glance rather than a row of sixteen thumbnails. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.card {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 302 / 363;
+  border-radius: 6px;
+  display: block;
+}
+
+.sideFoot {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.side[data-align='right'] .sideFoot {
+  justify-content: flex-end;
+}
+
+.deckName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18ch;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.elixir {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Below this there is no room for two blocks abreast. They stack, and the VS
+   becomes a divider between them instead of a centrepiece — so the row still
+   says which two decks met, without either of them being crushed. */
+@media (max-width: 56rem) {
+  .versus {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .vs {
+    align-self: center;
+    padding: 0;
+  }
+
+  .side[data-align='right'] {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .side[data-align='right'] .sideFoot {
+    justify-content: flex-start;
+  }
+
+  /* Stacked. `flex: none` because in a COLUMN the flex axis is vertical, and
+     `1 1 0` would hand the two sides equal heights rather than equal widths. */
+  .side {
+    flex: none;
+    width: 100%;
+    max-width: none;
+  }
+
+  .grid {
+    width: min(19rem, 100%);
+  }
+}
+
+/* ---------------------------------------------------------------- pager */
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-top: 0.2rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  padding-top: 0.6rem;
+}
+
+.pageStep,
+.pageNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9rem;
+  height: 1.9rem;
+  padding: 0 0.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.pageStep:hover:not(:disabled),
+.pageNum:hover:not(:disabled) {
+  background: var(--neutral-wash);
+  color: var(--text);
+}
+
+.pageStep:disabled,
+.pageNum:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Violet, because this is selection and selection is violet everywhere in the
+   app — the current page is chosen, not highlighted. */
+.pageNumOn,
+.pageNumOn:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
+  opacity: 1;
+}
+
+.pageGap {
+  padding: 0 0.15rem;
+  color: var(--text-muted);
+}
+
+.count {
+  padding-top: 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
