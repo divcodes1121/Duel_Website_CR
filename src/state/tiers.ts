@@ -86,9 +86,30 @@ export function trialDaysLeft(profile: Profile | null, now: number = Date.now())
  */
 export const FREE_SECTIONS = ['Search Player', 'Top Meta Decks', 'Deck Counter'] as const;
 
+/**
+ * Areas a TRIAL does not open. Paid Pro or admin only.
+ *
+ * The trial is otherwise "everything, for three days", so this is a deliberate
+ * carve-out rather than a tier: Coach Assist is the deep end — a mid-duel read
+ * of an opponent's next deck, ranked against yours — and it is the reason to
+ * subscribe rather than a sample of what subscribing is like. A three-day trial
+ * that includes it has already given away the thing it exists to sell.
+ *
+ * THE GATE CARD ALREADY KNEW ABOUT THIS CASE before the rule did: it has
+ * carried the sentence "Your trial has N days left, but this area needs Pro"
+ * since it was written, and until now no combination of tier and section could
+ * produce it. That copy is what this makes true.
+ */
+export const PRO_ONLY_SECTIONS = ['Coach Assist'] as const;
+
+function proOnly(section: string): boolean {
+  return (PRO_ONLY_SECTIONS as readonly string[]).includes(section);
+}
+
 /** True when this tier may open the named analytics area. */
 export function canOpenSection(tier: Tier, section: string): boolean {
-  if (tier !== 'free') return true;
+  if (tier === 'pro' || tier === 'admin') return true;
+  if (tier === 'trial') return !proOnly(section);
   return (FREE_SECTIONS as readonly string[]).includes(section);
 }
 
@@ -103,6 +124,8 @@ export function sectionAllowed(access: Access, section: string): boolean {
   if (access === 'anon' || access === 'free') {
     return (FREE_SECTIONS as readonly string[]).includes(section);
   }
+  // A trial opens everything EXCEPT the pro-only carve-out.
+  if (access === 'trial') return !proOnly(section);
   return true;
 }
 
@@ -117,6 +140,18 @@ export function sectionAllowed(access: Access, section: string): boolean {
  */
 export function isEntitled(access: Access): boolean {
   return access === 'trial' || access === 'pro' || access === 'admin';
+}
+
+/**
+ * Paid Pro or admin — NOT a trial.
+ *
+ * Deliberately separate from `isEntitled`, which a trial does satisfy. The two
+ * answer different questions: `isEntitled` is "has this reader got the product"
+ * (the full counter list, the export, no upgrade nag), and this is "has this
+ * reader PAID", which only the pro-only carve-out cares about.
+ */
+export function isPaid(access: Access): boolean {
+  return access === 'pro' || access === 'admin';
 }
 
 /**

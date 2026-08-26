@@ -37,7 +37,9 @@ export function useAccess(): Access {
    pulling a Supabase client into a test. */
 export {
   FREE_SECTIONS,
+  PRO_ONLY_SECTIONS,
   gateReason,
   isEntitled,
+  isPaid,
   sectionAllowed,
 } from './tiers';

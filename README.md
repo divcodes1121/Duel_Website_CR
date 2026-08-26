@@ -78,7 +78,7 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,252 Python checks** across **34 suites** (496 check-style + 756 unittest), **214 vitest**, `tsc -b` and `npm run build` clean |
+| tests | **1,252 Python checks** across **34 suites** (496 check-style + 756 unittest), **221 vitest**, `tsc -b` and `npm run build` clean |
 | shipped from | `main` at `6bedee0`. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -180,7 +180,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 214 tests over the deck, duel, export and admin logic
+npm run test                      # 221 tests over the deck, duel, export and admin logic
 python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
@@ -352,9 +352,26 @@ for something their tier does not include.
 |---|---|
 | `anon` — never signed in | Search Player, Top Meta Decks, Deck Counter |
 | `free` — signed up, trial spent | the same three |
-| `trial` — first three days | everything |
+| `trial` — first three days | everything **except Coach Assist** |
 | `pro` | everything |
 | `admin` | everything, plus `#/admin` |
+
+**Coach Assist is the one carve-out from the trial.** A trial is otherwise
+"everything, for three days" — but Coach Assist is the deep end (a mid-duel read
+of the opponent's next deck, ranked against yours) and it is the reason to
+subscribe rather than a sample of what subscribing is like. A trial that
+includes it has already given away the thing it exists to sell.
+`PRO_ONLY_SECTIONS` holds it, and `isPaid()` is deliberately separate from
+`isEntitled()`: a trial HAS the product — the full counter list, the export, no
+upgrade nag — without having PAID, and only the carve-out cares about the
+difference.
+
+**Two pieces of copy became lies the moment this rule existed, and both were
+fixed with it.** The rail told a trial "everything unlocked"; the gate card told
+a signed-out visitor that an account opens "{section} — and every other area —
+for three days", which for Coach Assist is a promise the product breaks the
+moment they take it. A promise the product breaks is worse than a smaller one it
+keeps.
 
 `anon` and `free` get the **same** sections deliberately. A lapsed account keeps
 "meta and Evo counter"; a visitor who has not signed up has no claim to more
@@ -5966,7 +5983,7 @@ are in [Running it](#running-it).
 
 ## Testing and verification
 
-1,252 Python checks across 34 suites and 214 vitest tests, none of which open a
+1,252 Python checks across 34 suites and 221 vitest tests, none of which open a
 database — every Python suite runs on synthetic data or a stubbed reader, so
 they pass on a machine with no Clash_Bot install and cannot be broken by
 whatever a real player did last week. The vitest side gained the analytics-proxy

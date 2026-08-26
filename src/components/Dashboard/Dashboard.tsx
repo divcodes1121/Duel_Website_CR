@@ -629,8 +629,13 @@ export function Dashboard({
             ) : (
               <>
                 <p className={styles.proBody}>
+                  {/* NOT "everything unlocked" any more. Coach Assist is
+                      pro-only, so a trial that claimed everything would be
+                      contradicted by the gate card the moment they opened it —
+                      and a promise the product breaks is worse than a smaller
+                      promise it keeps. */}
                   {access === 'trial'
-                    ? `Trial — ${trialLeft} day${trialLeft === 1 ? '' : 's'} left, everything unlocked.`
+                    ? `Trial — ${trialLeft} day${trialLeft === 1 ? '' : 's'} left. Coach Assist needs Pro.`
                     : 'Unlock exclusive analytics & advanced features.'}
                 </p>
                 <button

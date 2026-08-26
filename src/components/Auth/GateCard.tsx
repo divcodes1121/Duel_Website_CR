@@ -1,4 +1,4 @@
-import { type Access, gateReason } from '../../state/gate';
+import { type Access, PRO_ONLY_SECTIONS, gateReason } from '../../state/gate';
 import { useAccountStore } from '../../state/accountStore';
 import { trialDaysLeft } from '../../state/supabase';
 import styles from './GateCard.module.css';
@@ -25,6 +25,10 @@ export function GateCard({ access, section }: { access: Access; section: string 
   const profile = useAccountStore((s) => s.profile);
   const reason = gateReason(access);
   const left = trialDaysLeft(profile);
+  /* Whether the TRIAL would open this one. Coach Assist is pro-only, so telling
+     a signed-out visitor that an account opens "every other area for three
+     days" is a promise the product breaks the moment they take it. */
+  const needsPaid = (PRO_ONLY_SECTIONS as readonly string[]).includes(section);
 
   return (
     <section className={styles.card}>
@@ -37,8 +41,17 @@ export function GateCard({ access, section }: { access: Access; section: string 
       {reason === 'signin' ? (
         <>
           <p className={styles.body}>
-            Create a free account to open {section} — and every other area — for
-            three days. No card, nothing to cancel.
+            {needsPaid ? (
+              <>
+                {section} needs Pro. A free account opens every other area for
+                three days — no card, nothing to cancel.
+              </>
+            ) : (
+              <>
+                Create a free account to open {section} — and every other area —
+                for three days. No card, nothing to cancel.
+              </>
+            )}
           </p>
           <div className={styles.actions}>
             <a className={styles.primary} href="#/signin">

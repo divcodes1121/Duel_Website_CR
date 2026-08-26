@@ -6,9 +6,11 @@ import { describe, expect, it } from 'vitest';
    test of a pure rule must not need a network stack. */
 import {
   FREE_SECTIONS,
+  PRO_ONLY_SECTIONS,
   canOpenSection,
   gateReason,
   isEntitled,
+  isPaid,
   sectionAllowed,
   tierOf,
   trialDaysLeft,
@@ -61,18 +63,74 @@ function profile(over: Partial<Profile> = {}): Profile {
   };
 }
 
-describe('a paid tier opens everything', () => {
-  for (const access of PAID) {
+describe('paid Pro and admin open everything', () => {
+  for (const access of ['pro', 'admin'] as Access[]) {
     it(`${access} may open all ${ALL_SECTIONS.length} sections`, () => {
       for (const section of ALL_SECTIONS) {
         expect(sectionAllowed(access, section), section).toBe(true);
       }
     });
+  }
 
+  for (const access of PAID) {
     it(`${access} may export decks`, () => {
       expect(canExportDecks(access)).toBe(true);
     });
   }
+});
+
+describe('a trial opens everything EXCEPT the pro-only areas', () => {
+  /* The carve-out. A trial is otherwise "everything for three days"; Coach
+     Assist is the thing a subscription is FOR, and a trial that includes it has
+     given away what it exists to sell. */
+  it('Coach Assist is the pro-only area', () => {
+    expect([...PRO_ONLY_SECTIONS]).toEqual(['Coach Assist']);
+  });
+
+  it('a trial is refused every pro-only area', () => {
+    for (const section of PRO_ONLY_SECTIONS) {
+      expect(sectionAllowed('trial', section), section).toBe(false);
+    }
+  });
+
+  it('a trial still opens everything else', () => {
+    const rest = ALL_SECTIONS.filter(
+      (x) => !(PRO_ONLY_SECTIONS as readonly string[]).includes(x),
+    );
+    for (const section of rest) {
+      expect(sectionAllowed('trial', section), section).toBe(true);
+    }
+  });
+
+  /* The two questions are different and must not be conflated: a trial HAS the
+     product (full counter list, export, no upgrade nag) without having PAID. */
+  it('a trial is entitled but not paid', () => {
+    expect(isEntitled('trial')).toBe(true);
+    expect(isPaid('trial')).toBe(false);
+  });
+
+  it('pro and admin are both', () => {
+    for (const a of ['pro', 'admin'] as Access[]) {
+      expect(isEntitled(a)).toBe(true);
+      expect(isPaid(a)).toBe(true);
+    }
+  });
+
+  it('anon and free are neither', () => {
+    for (const a of UNPAID) {
+      expect(isPaid(a)).toBe(false);
+    }
+  });
+
+  /* A pro-only area is closed to the unpaid tiers too — the carve-out must not
+     accidentally OPEN anything. */
+  it('a pro-only area is still closed to anon and free', () => {
+    for (const a of UNPAID) {
+      for (const section of PRO_ONLY_SECTIONS) {
+        expect(sectionAllowed(a, section), `${a}/${section}`).toBe(false);
+      }
+    }
+  });
 });
 
 describe('an unpaid tier opens exactly the free three', () => {

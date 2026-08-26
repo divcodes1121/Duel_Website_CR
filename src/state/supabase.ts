@@ -49,9 +49,11 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
    all. Same extraction, and the same reason, as `utils/format.ts`. */
 export {
   FREE_SECTIONS,
+  PRO_ONLY_SECTIONS,
   canOpenSection,
   gateReason,
   isEntitled,
+  isPaid,
   sectionAllowed,
   tierOf,
   trialDaysLeft,
