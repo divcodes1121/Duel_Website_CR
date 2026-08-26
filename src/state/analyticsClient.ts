@@ -857,6 +857,10 @@ export interface RecentBattle {
 
 export interface RecentBattlesReport {
   battles: RecentBattle[];
+  /** Who the log belongs to. `name` is null when no name has ever been seen
+   *  for the tag — the caller decides what to show, so that "unknown player"
+   *  and "player called #ABC123" stay distinguishable. */
+  player: { tag: string; name: string | null };
   page: number;
   pages: number;
   perPage: number;

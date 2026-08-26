@@ -322,9 +322,15 @@ function SeriesCard({ series }: { series: DuelSeries }) {
           {series.caption && <span className={styles.caption}>{series.caption}</span>}
         </span>
 
-        <span className={styles.seriesOpp}>
-          vs <strong>{series.opponentName}</strong>
-          <span className={styles.seriesTag}>{series.opponentTag}</span>
+        {/* THE NAME, NOT THE TAG. A tag identifies a player to the API; it
+            does not tell a reader who they played. It stays as the tooltip so
+            it can still be read off and searched, and it is the fallback when
+            no name was ever stored — the one identifier that always exists. */}
+        <span
+          className={styles.seriesOpp}
+          title={series.opponentName ? `${series.opponentName} · ${series.opponentTag}` : series.opponentTag}
+        >
+          vs <strong>{series.opponentName || series.opponentTag || 'Unknown'}</strong>
         </span>
 
         <span className={styles.seriesWhen}>{stamp(series.startTime)}</span>

@@ -366,6 +366,42 @@ def tier_windows(tag: str, since: str | None,
     return out
 
 
+def player_name(tag: str) -> str | None:
+    """The in-game name behind a tag, or None if we have never seen one.
+
+    The bot writes `player_names` on every sync, so this is the name as of the
+    last time that player was polled rather than right now. That is the same
+    freshness every other figure on the site has.
+
+    Returns None rather than the tag: the CALLER decides what to show when
+    there is no name, and a helper that quietly hands back a tag makes
+    "unknown player" indistinguishable from "player called #ABC123".
+    """
+    if not tag:
+        return None
+    for path, _lo, _hi in _tier_paths_all():
+        try:
+            con = connect(path)
+        except Exception:
+            continue
+        try:
+            row = con.execute(
+                "SELECT name FROM player_names WHERE tag = ?", (tag,)
+            ).fetchone()
+            if row and row["name"]:
+                return row["name"]
+        except Exception:
+            pass
+        finally:
+            con.close()
+    return None
+
+
+def _tier_paths_all() -> list[tuple[str, str, str]]:
+    """Every storage tier, unbounded — for lookups that are not time-scoped."""
+    return [(p, "", "￿") for p in _tier_paths()]
+
+
 def tracked_player_count() -> int:
     """How many players the bot is actually collecting.
 

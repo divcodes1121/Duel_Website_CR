@@ -364,28 +364,37 @@
    A battle reads as one comparison rather than as two decks that happen to be
    near each other, so the pair has to sit TOGETHER around the VS.
 
-   This was `1fr auto 1fr` first, which is the obvious answer and the wrong
-   one: the decks are capped in width, so each one aligned to the outside of
-   its own track and the row opened a 250px hole down the middle with the VS
-   marooned in it. Three content-sized items centred as a group put the gap
-   on the OUTSIDE, where it is margin instead of a gulf. */
+   THE DECKS SIT OUT AT THE EDGES with the VS between them, which is the
+   shape the in-game end screen uses and the one a reader already knows. It
+   took two goes: `1fr auto 1fr` tracks pushed the two apart but left the VS
+   marooned in a 250px hole, because a track's own alignment decides where a
+   capped deck sits inside it and neither deck was aiming at the middle. Doing
+   it with `space-between` instead puts the free space in ONE place, under the
+   VS, which is a gap with something in it rather than a hole. */
 .versus {
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: space-between;
   gap: 1.15rem;
-  padding: 0.85rem;
+  padding: 0.85rem 1rem;
 }
 
+/* Bigger, now that it has the middle of the row to itself — but display type,
+   not a headline: it is the joint between the two decks, and a VS that shouts
+   competes with the thing it is separating. `--hue-blue-deep` is the step for
+   bare graphic marks at this size, which only need 3:1 and can spend the
+   headroom on saturation. */
 .vs {
   align-self: center;
   flex: none;
   padding: 0.3rem 0.15rem;
   font-family: var(--font-display, inherit);
-  font-size: 0.82rem;
+  font-size: 1.45rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--hue-blue-deep);
+  opacity: 0.75;
 }
 
 /* A SIDE IS EXACTLY AS WIDE AS ITS DECK, and that width is declared once.
@@ -407,10 +416,10 @@
      something that ellipsises inside it.
 
      Capped, because four card tiles stop being a deck and start being
-     wallpaper somewhere past 90px each; the slack past the cap goes to the
-     outside as margin, which `justify-content: center` puts there. */
+     wallpaper somewhere past 90px each; past the cap the slack collects in
+     the middle, under the VS. */
   flex: 1 1 0;
-  max-width: 22rem;
+  max-width: 21rem;
   min-width: 0;
 }
 
@@ -433,16 +442,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   font-weight: 750;
   color: var(--text);
-}
-
-.sideTag {
-  flex: none;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
 }
 
 /* FOUR ACROSS, TWO DOWN — the in-game loadout shape, which is what makes a
@@ -497,11 +499,13 @@
   .versus {
     flex-direction: column;
     align-items: flex-start;
+    justify-content: flex-start;
   }
 
   .vs {
     align-self: center;
     padding: 0;
+    font-size: 1.15rem;
   }
 
   .side[data-align='right'] {

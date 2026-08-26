@@ -232,6 +232,10 @@ def report(tag: str, since: str | None = None, until: str | None = None,
 
     return {
         "battles": [_battle(r) for r in rows[start:start + per]],
+        # THE NAME, so the row can say who played rather than printing a tag at
+        # someone. `None` when we have never seen one — the client falls back
+        # to the tag, which is the only identifier that always exists.
+        "player": {"tag": tag, "name": cd.player_name(tag)},
         "page": page,
         "pages": pages,
         "perPage": per,

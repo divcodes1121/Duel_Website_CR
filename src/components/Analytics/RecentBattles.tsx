@@ -90,10 +90,16 @@ function shortDay(iso: string | null): string {
     : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
-/* One player's eight cards as a 4x2 block, with their name above and their
+/* One player's eight cards as a 4x2 block, with their NAME above and their
  * deck below. The two of these in a row are deliberately identical components:
  * rendering the opponent plainer than the player would make the two strips
- * incomparable, which is the one thing the row exists to let you do. */
+ * incomparable, which is the one thing the row exists to let you do.
+ *
+ * THE NAME, NOT THE TAG. A tag identifies a player to the API; it does not
+ * tell a reader who they played. The tag is still on the element as a
+ * tooltip, so it can be read off and searched, but it is not what the row
+ * says. When no name has ever been stored the tag is the fallback — it is the
+ * only identifier that always exists. */
 function Side({
   side,
   name,
@@ -108,10 +114,9 @@ function Side({
   return (
     <div className={styles.side} data-align={align}>
       <div className={styles.sideHead}>
-        <span className={styles.sideName} title={name}>
+        <span className={styles.sideName} title={tag ? `${name} · ${tag}` : name}>
           {name}
         </span>
-        {tag && <span className={styles.sideTag}>{tag}</span>}
       </div>
 
       <div className={styles.grid}>
@@ -139,7 +144,7 @@ function Side({
   );
 }
 
-function BattleRow({ battle, you }: { battle: RecentBattle; you: string }) {
+function BattleRow({ battle, you, youTag }: { battle: RecentBattle; you: string; youTag: string }) {
   const won = battle.result === 'win';
   const lost = battle.result === 'loss';
   return (
@@ -170,13 +175,13 @@ function BattleRow({ battle, you }: { battle: RecentBattle; you: string }) {
           it can carry the divider on a narrow screen without the two blocks
           having to know which of them is on top. */}
       <div className={styles.versus}>
-        <Side side={battle.player} name={you} align="left" />
+        <Side side={battle.player} name={you} tag={youTag} align="left" />
         <span className={styles.vs} aria-hidden="true">
           VS
         </span>
         <Side
           side={battle.opponent}
-          name={battle.opponent.name || 'Unknown'}
+          name={battle.opponent.name || battle.opponent.tag || 'Unknown'}
           tag={battle.opponent.tag}
           align="right"
         />
@@ -258,16 +263,7 @@ function Pager({
   );
 }
 
-export function RecentBattles({
-  tag,
-  season = 'Current Season',
-  name,
-}: {
-  tag: string;
-  season?: Season;
-  /** The player's own name, for the left-hand side. Falls back to the tag. */
-  name?: string;
-}) {
+export function RecentBattles({ tag, season = 'Current Season' }: { tag: string; season?: Season }) {
   const [report, setReport] = useState<RecentBattlesReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -352,7 +348,9 @@ export function RecentBattles({
   const { summary } = report;
   const decided = summary.wins + summary.losses;
   const winRate = decided ? (summary.wins / decided) * 100 : 0;
-  const you = name || tag;
+  /* The searched player's own name, from the report. Falls back to the tag
+     when we have never seen one — better a tag than an empty label. */
+  const you = report.player?.name || tag;
 
   return (
     <div className={styles.page}>
@@ -452,7 +450,7 @@ export function RecentBattles({
               collection pass.
             </p>
           ) : (
-            report.battles.map((b) => <BattleRow key={b.id} battle={b} you={you} />)
+            report.battles.map((b) => <BattleRow key={b.id} battle={b} you={you} youTag={tag} />)
           )}
         </section>
 

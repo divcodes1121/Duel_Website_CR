@@ -152,6 +152,22 @@ check("the summary counts the whole window", s["battles"] == 25, str(s["battles"
 check("...even from page 2", s["wins"] == 25 and s["losses"] == 0, f"{s['wins']}W {s['losses']}L")
 
 
+# --- who played --------------------------------------------------------------
+
+who = rb.report(TAG)["player"]
+check("the report carries the tag it was asked about", who["tag"] == TAG, str(who))
+check(
+    "...and a name field even when no name is stored",
+    "name" in who and who["name"] is None,
+    "None, not the tag - the CLIENT decides what to show, or 'unknown player' "
+    "and 'player called #ABC123' become the same thing",
+)
+
+cd.player_name = lambda t: "Pedro"
+check("a stored name is carried through", rb.report(TAG)["player"]["name"] == "Pedro")
+cd.player_name = lambda t: None
+
+
 # --- what counts as an outcome ---------------------------------------------
 
 check("a stored win is a win", rb._outcome("win", 0, 0) == "win")
