@@ -64,6 +64,26 @@ create policy "update own profile" on public.profiles
 -- which runs as the definer. A client that could insert its own row could
 -- insert one with role = 'admin'.
 
+-- COLUMN-LEVEL UPDATE, AND THIS IS NOT OPTIONAL.
+--
+-- The policy above says "you may update your own row", and `role` is a column
+-- ON that row -- so with a plain table-level UPDATE grant, any signed-in user
+-- could PATCH themselves to role = 'admin' with one request. That was not a
+-- theory: it was tried against this project with a real account's token and it
+-- WORKED, and it was only found because the check was run instead of assumed.
+--
+-- Leaving `role` out of the client's saveProfile() is NOT a fix. That stops our
+-- code from doing it; the REST endpoint is public and anyone can call it with
+-- their own token.
+--
+-- RLS decides WHICH ROWS may be written. Only a column grant decides WHICH
+-- COLUMNS. An update touching `role` or `trial_ends_at` is now refused by
+-- Postgres before any policy is consulted, so both move only through
+-- admin_set_role(), which checks the caller.
+revoke update on public.profiles from authenticated;
+grant update (display_name, country, player_tag, onboarded_at, updated_at)
+  on public.profiles to authenticated;
+
 -- ------------------------------------------------------------------ tiers --
 
 -- The tier a user actually has right now. One definition, used by the app, by
