@@ -140,10 +140,14 @@
   display: flex;
   align-items: center;
   gap: 0.7rem;
+  /* Without this the row keeps its content width and pushes out of its grid
+     track — which in versus mode meant blue's strip shoving red's label and
+     crown sideways until the cards ran off the card entirely. */
+  min-width: 0;
 }
 
 .deckRowName {
-  width: 5.4rem;
+  width: var(--row-name, 5.4rem);
   flex-shrink: 0;
   font-size: 0.72rem;
   font-weight: 700;
@@ -153,9 +157,20 @@
   white-space: nowrap;
 }
 
+/* THE STRIP GIVES, THE LABEL AND CROWN DO NOT.
+   A versus group puts two of these rows in `1fr 1fr` tracks, and each row was
+   rigid: a 5.4rem name that cannot shrink, a 2.5rem crown that cannot shrink,
+   and eight fixed 30px cards. That is ~420px of hard minimum per side, so the
+   moment the panel was narrower than about 880px the two sides overlapped and
+   the second strip ran past the card's edge.
+   The cards are the only part that can lose a pixel each without becoming
+   unreadable, so they are the part that flexes. Same approach the Deck
+   Counter's rows already use. */
 .deckRowCards {
   display: flex;
   gap: 0.28rem;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* `object-fit` matters on the previews too: these rows draw evolution and hero
@@ -163,7 +178,13 @@
    say, 553x793), so the default `fill` squashed it into the box. */
 .deckRowCards img,
 .emptyMini {
-  width: 30px;
+  /* `1 1 0` so all eight share the space equally and shrink together; the
+     max-width keeps them from growing past their natural size when there is
+     room to spare, which is what the fixed width used to guarantee. */
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  max-width: 30px;
   height: auto;
   aspect-ratio: 302 / 363;
   object-fit: contain;
@@ -178,9 +199,20 @@
 
 /* --- versus layout ------------------------------------------------------- */
 
+/* TWO COLUMNS ONLY WHEN TWO WILL FIT, decided by the CARD's width rather than
+   the viewport's.
+   A side needs about 390px: a 3.6rem name, a 2.5rem crown, and eight 30px
+   cards with their gaps. At `1fr 1fr` it got half of whatever the card was, and
+   the card is narrower than the window by a sidebar and two lots of padding —
+   so at a 1000px viewport each side had 190px and the eight cards were squeezed
+   to 1.7px each. Legible at neither end: rigid cards overflowed the card, and
+   flexible ones vanished.
+   `auto-fit` + `minmax` drops to a single full-width column the moment two
+   would not fit, which is the honest answer — one row of readable cards beats
+   two rows of specks. */
 .groupVersus {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(390px, 100%), 1fr));
   gap: 1rem;
 }
 
@@ -189,6 +221,10 @@
   flex-direction: column;
   gap: 0.45rem;
   min-width: 0;
+  /* Half the width means half the room for a name. It still cannot shrink to
+     nothing — the ellipsis needs something to clip — but 5.4rem of "Deck 1" in
+     a split column is width the cards need more. */
+  --row-name: 3.6rem;
 }
 
 .groupSideLabel {

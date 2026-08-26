@@ -717,6 +717,10 @@ export const useBuilderStore = create<BuilderState>()(
         // v9 added Counter Palette. Older payloads funnel through their
         // original migration chain to the v8 shape, then gain the (empty)
         // palette slice via withPalette below.
+        // A current-version blob needs no migration. The shape is defended in
+        // `merge` below, which runs for EVERY rehydrate — `migrate` only runs
+        // when the stored version differs, so a guard here could never fire
+        // for the case that actually broke.
         if (version === 9) return persisted as PersistedSlice;
         const v8Slice = ((): PersistedSliceV8 => {
         // v7: duel collections grew from 4 to 5 decks; v8 added per-collection
@@ -791,6 +795,33 @@ export const useBuilderStore = create<BuilderState>()(
         };
         })();
         return withPalette(v8Slice);
+      },
+
+      /**
+       * EVERY REHYDRATE PASSES THROUGH HERE, which is why the shape is defended
+       * here rather than in `migrate`.
+       *
+       * A localStorage payload missing one of the five collections left
+       * `sets.home` undefined, the first screen reading `sets.home.decks` threw,
+       * and React unmounted the whole app — a blank `#root` with no page error.
+       * The obvious place to catch that looks like `migrate`, and it is the
+       * wrong one: zustand only calls `migrate` when the STORED VERSION DIFFERS
+       * from the current one, so a same-version blob sails straight past it.
+       *
+       * This is the same fault already fixed on the remote hydrate path. Local
+       * storage can be just as partial — a quota failure mid-write, a blob from
+       * a build that predates a collection, anything hand-edited — and a blank
+       * page is the worst possible answer to slightly-wrong stored data.
+       */
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<PersistedSlice>;
+        return {
+          ...current,
+          ...p,
+          sets: { ...createDefaultSets(), ...(p.sets ?? {}) },
+          library: p.library ?? [],
+          paletteFolders: p.paletteFolders ?? [],
+        };
       },
     },
   ),
