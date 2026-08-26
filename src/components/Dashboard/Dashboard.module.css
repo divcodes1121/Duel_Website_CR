@@ -1658,6 +1658,14 @@
      allowed here — the page itself must never move sideways. `overscroll-behavior`
      stops a flick at the end of the strip turning into a page swipe. */
   .phoneNav {
+    /* `flex: none` FOR THE THIRD TIME TODAY, and the browser caught this one.
+       `.main` is a flex column, and any `overflow` other than `visible` sets a
+       flex item's automatic minimum size to ZERO — so this strip, which needs
+       `overflow-x` to scroll, was crushed to 11px around 38px chips. Measured:
+       nav box 390x11, items 38 tall.
+       Same trap as the accounts table and the storage meter in the admin
+       console. If an element in a flex column scrolls, it needs this line. */
+    flex: none;
     display: flex;
     gap: 0.4rem;
     margin: 0 -1rem 0.15rem;
