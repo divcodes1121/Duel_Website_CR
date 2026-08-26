@@ -81,3 +81,10 @@ server/ml/results/shadow-log.jsonl*
 .env
 .env.*
 !.env.example
+
+# Browser verification scripts and their screenshots. Written per-task, run,
+# then deleted -- they are never a committed dependency, and playwright is
+# never a committed devDependency. One slipped in once.
+verify*.mjs
+probe*.mjs
+shot-*.png
