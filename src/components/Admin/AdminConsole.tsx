@@ -2,6 +2,7 @@ import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, use
 
 import { type AdminUser, useAdminStore } from '../../state/adminStore';
 import { LiquidMetal } from '../../three/LiquidMetal';
+import { useAccountStore } from '../../state/accountStore';
 import { ago, bytes, until } from '../../utils/format';
 import { useAccess } from '../../state/gate';
 import { ThemeToggle } from '../Theme/ThemeToggle';
@@ -115,10 +116,17 @@ function Meter({ used, total, label }: { used: number; total: number; label: str
  */
 export function AdminConsole() {
   const access = useAccess();
+  /* YOUR OWN ROW IS READ-ONLY. `admin_set_role` refuses `target = auth.uid()`
+     outright, so this only stops you discovering that by being told no — the
+     database is the rule, this is the courtesy. */
+  const meId = useAccountStore((s) => s.userId);
   const { users, health, analytics, analyticsMs, loading, error, load, setRole, endTrial } =
     useAdminStore();
   const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  /* Closed by default. Opening the console is usually a health check, not a
+     hunt for one person. */
+  const [accountsOpen, setAccountsOpen] = useState(false);
 
   useEffect(() => {
     if (access === 'admin') void load();
@@ -288,7 +296,34 @@ export function AdminConsole() {
       )}
 
       {/* --- the accounts themselves --------------------------------------- */}
-      <h3 className={styles.section}>Accounts</h3>
+      {/* THE ACCOUNTS LIST IS COLLAPSED UNTIL ASKED FOR.
+          It is the longest thing on the page by far and the least often the
+          reason for opening the console — the tiles above answer "is anything
+          wrong" at a glance, and the table answers "who exactly", which is a
+          second question. Closed, the whole console fits without scrolling.
+
+          UNMOUNTED, not hidden with CSS: a closed table should not be building
+          rows, and it must not leave its cells in the tab order for a keyboard
+          user who cannot see them. */}
+      <button
+        type="button"
+        className={styles.sectionToggle}
+        aria-expanded={accountsOpen}
+        onClick={() => setAccountsOpen((o) => !o)}
+      >
+        <svg className={styles.sectionChev} viewBox="0 0 24 24" width="13" height="13"
+             fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"
+             strokeLinejoin="round" aria-hidden="true" data-open={accountsOpen || undefined}>
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+        Accounts
+        <span className={styles.sectionCount}>
+          {users.length}
+        </span>
+      </button>
+
+      {accountsOpen && (
+        <>
       <div className={styles.searchRow}>
         <input
           className={styles.search}
@@ -322,7 +357,12 @@ export function AdminConsole() {
           <tbody>
             {shown.map((u) => (
               <tr key={u.id}>
-                <td className={styles.name}>{u.display_name ?? '—'}</td>
+                <td className={styles.name}>
+                  {u.display_name ?? '—'}
+                  {/* Says WHY the controls in this row are dead. A disabled
+                      control with no explanation reads as a bug. */}
+                  {u.id === meId && <span className={styles.you}>you</span>}
+                </td>
                 <td className={styles.email}>{u.email ?? '—'}</td>
                 <td>
                   <span className={styles.tier} data-tier={u.tier}>
@@ -340,9 +380,13 @@ export function AdminConsole() {
                   <select
                     className={styles.roleSelect}
                     value={u.role}
-                    disabled={busyId === u.id}
+                    disabled={busyId === u.id || u.id === meId}
                     onChange={(e) => void change(u, e.target.value)}
-                    title="Grant paid Pro, make an admin, or drop back to free"
+                    title={
+                      u.id === meId
+                        ? 'You cannot change your own role — the database refuses it, so a misclick cannot lock you out of this console'
+                        : 'Grant paid Pro, make an admin, or drop back to free'
+                    }
                   >
                     <option value="free">free</option>
                     <option value="pro">pro — paid</option>
@@ -364,7 +408,7 @@ export function AdminConsole() {
                   <button
                     type="button"
                     className={styles.endTrial}
-                    disabled={busyId === u.id}
+                    disabled={busyId === u.id || u.id === meId}
                     onClick={() => void change(u, '__end_trial')}
                     title={
                       u.tier === 'trial'
@@ -387,25 +431,9 @@ export function AdminConsole() {
           </tbody>
         </table>
       </div>
+        </>
+      )}
 
-      <p className={styles.hint}>
-        <strong>Access</strong> grants the role. <em>pro</em> is paid Pro — full
-        access including Coach Assist, which a trial does not open.{' '}
-        <em>admin</em> adds this console. Changing it takes effect on that
-        account&rsquo;s next profile read — a sign-in, or a refresh.
-      </p>
-      <p className={styles.hint}>
-        <strong>End trial</strong> is separate because it is not a role: a
-        lapsed trial user is still <em>free</em>. It stamps the trial as spent
-        immediately, and it cannot be undone by setting the role back — the
-        timestamp is gone. On an account with no trial running it is a harmless
-        no-op that stops a later role change handing them a fresh three days.
-      </p>
-      <p className={styles.hint}>
-        There is no way to create a password from here: people sign themselves
-        up, and you promote them. Handing out passwords would mean storing one
-        somewhere you could read it back.
-      </p>
     </section>
   );
 }

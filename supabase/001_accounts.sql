@@ -226,6 +226,24 @@ begin
   if new_role not in ('free', 'pro', 'admin') then
     raise exception 'bad role';
   end if;
+  -- YOU CANNOT CHANGE YOUR OWN ROLE.
+  --
+  -- Two things this prevents, and only one of them is a mistake. The obvious
+  -- one is an admin demoting themselves by misclicking their own row -- which
+  -- is unrecoverable from inside the product, because the console that could
+  -- put it back is the thing they just locked themselves out of. The other is
+  -- that a compromised admin session cannot quietly hand the role around and
+  -- then drop its own to look ordinary.
+  --
+  -- IT IS ENFORCED HERE, NOT IN THE UI, for the reason this schema already
+  -- learned the hard way: the REST endpoint is public, and a guard that lives
+  -- only in our own JavaScript stops our code and nobody else's. The disabled
+  -- control in the console is a courtesy on top of this, not the rule.
+  --
+  -- The way back is deliberately out-of-band: another admin, or the SQL editor.
+  if target = auth.uid() then
+    raise exception 'cannot change your own role';
+  end if;
   update public.profiles
      set role = new_role, updated_at = now()
    where id = target;

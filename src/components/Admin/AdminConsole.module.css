@@ -92,6 +92,57 @@
   color: var(--text-muted);
 }
 
+/* The Accounts heading, but a control. It keeps `.section`'s type treatment so
+   the page still reads as one set of headings rather than one heading and one
+   button that happens to be near it. */
+.sectionToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  align-self: flex-start;
+  margin: 1.1rem 0 0;
+  padding: 0.3rem 0.55rem 0.3rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+
+.sectionToggle:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* Rotation rather than two icons: one element, and the turn IS the state
+   change, so nothing has to swap mid-animation. */
+.sectionChev {
+  flex: none;
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.sectionChev[data-open] {
+  transform: rotate(90deg);
+}
+
+/* The count is the reason to open it, so it is legible at rest rather than
+   another muted label. Tabular so it does not shift as the number grows. */
+.sectionCount {
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--text);
+}
+
 .error {
   margin: 0;
   padding: 0.65rem 0.85rem;
@@ -427,6 +478,21 @@
 .name {
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* Marks your own row, so its dead controls read as deliberate rather than
+   broken. `--hue-pink` is the ink step and holds 4.5:1 at this size. */
+.you {
+  margin-left: 0.4rem;
+  padding: 0.08rem 0.36rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--hue-pink) 45%, transparent);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hue-pink);
+  vertical-align: 1px;
 }
 
 .email {
