@@ -29,6 +29,7 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
   const testUser = useAuthStore((s) => s.user);
   const testLogout = useAuthStore((s) => s.logout);
   const account = useAccountStore((s) => s.profile);
+  const tier = useAccountStore((s) => s.tier);
   const accountEmail = useAccountStore((s) => s.email);
   const accountSignOut = useAccountStore((s) => s.signOut);
 
@@ -193,6 +194,28 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                 <span className={styles.itemIcon}>{theme === 'dark' ? '☀' : '☾'}</span>
                 {theme === 'dark' ? 'Light mode' : 'Dark mode'}
               </button>
+
+              {/* Only admins are offered it. The route and the database both
+                  refuse everyone else anyway — this just avoids showing a
+                  door that does not open. */}
+              {tier === 'admin' && (
+                <>
+                  <div className={styles.divider} />
+                  <a
+                    className={styles.item}
+                    role="menuitem"
+                    href="#/admin"
+                    onClick={() => setPos(null)}
+                  >
+                    <span className={styles.itemIcon}>
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+                        <path d="M4 5h16v2H4zm0 6h16v2H4zm0 6h10v2H4z" />
+                      </svg>
+                    </span>
+                    Console
+                  </a>
+                </>
+              )}
 
               <div className={styles.divider} />
 

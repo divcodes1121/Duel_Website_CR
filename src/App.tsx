@@ -7,6 +7,7 @@ import { useAuthStore } from './state/authStore';
 import { useAccountStore } from './state/accountStore';
 import { isSupabaseConfigured } from './state/supabase';
 import styles from './App.module.css';
+import { AdminConsole } from './components/Admin/AdminConsole';
 
 /* One shell for every signed-in route. The builder, Deck's Home and Counter
  * Palette used to be separate full pages, each with its own nav bar; they now
@@ -83,6 +84,18 @@ function App() {
       return (
         <div className={styles.app}>
           <AuthScreen />
+        </div>
+      );
+    }
+
+    /* The console is its own route, deliberately not a Dashboard section: it
+       is not analytics, it does not belong in the sidebar of seven areas, and
+       an admin reaches it by knowing the URL. The component refuses non-admins
+       itself, and the database refuses them again underneath. */
+    if (route.startsWith('#/admin')) {
+      return (
+        <div className={styles.app}>
+          <AdminConsole />
         </div>
       );
     }

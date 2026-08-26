@@ -1,0 +1,253 @@
+import { useEffect, useMemo, useState } from 'react';
+
+import { type AdminUser, ago, bytes, useAdminStore } from '../../state/adminStore';
+import { useAccess } from '../../state/gate';
+import styles from './AdminConsole.module.css';
+
+/** Contabo Cloud VPS 6 root volume, from `df -h /` on the box. */
+const VPS_DISK_BYTES = 387 * 1024 ** 3;
+
+function Stat({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  tone?: 'good' | 'warn' | 'bad';
+}) {
+  return (
+    <div className={styles.stat} data-tone={tone}>
+      <span className={styles.statLabel}>{label}</span>
+      <strong className={styles.statValue}>{value}</strong>
+      {note && <span className={styles.statNote}>{note}</span>}
+    </div>
+  );
+}
+
+/** A capacity bar. Colour is a FUNCTION of the fill, so it cannot disagree. */
+function Meter({ used, total, label }: { used: number; total: number; label: string }) {
+  const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+  const tone = pct > 90 ? 'bad' : pct > 75 ? 'warn' : 'good';
+  return (
+    <div className={styles.meter}>
+      <div className={styles.meterHead}>
+        <span>{label}</span>
+        <span className={styles.meterFigure}>
+          {bytes(used)} / {bytes(total)} · {pct.toFixed(1)}%
+        </span>
+      </div>
+      <div className={styles.meterTrack}>
+        <div className={styles.meterFill} data-tone={tone} style={{ scale: `${pct / 100} 1` }} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Items 4, 5 and 6: every account, their tier, and what the deployment can reach.
+ *
+ * ONE SCREEN, because they are one question — "what is going on" — and splitting
+ * it into three would mean checking three places to answer it.
+ *
+ * WHAT IT DOES NOT CLAIM. "Users currently online" is not a number this can
+ * honestly report: there is no socket, and a JWT is valid for an hour whether
+ * or not its owner is looking at the page. What IS knowable is when each
+ * account last signed in and how many device slots it holds, so that is what is
+ * shown — and it is labelled as such rather than dressed up as presence.
+ */
+export function AdminConsole() {
+  const access = useAccess();
+  const { users, health, analytics, analyticsMs, loading, error, load, setRole } = useAdminStore();
+  const [query, setQuery] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (access === 'admin') void load();
+  }, [access, load]);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) =>
+      [u.email, u.display_name, u.player_tag, u.country, u.role]
+        .filter(Boolean)
+        .some((f) => String(f).toLowerCase().includes(q)),
+    );
+  }, [users, query]);
+
+  const counts = useMemo(() => {
+    const c = { free: 0, trial: 0, pro: 0, admin: 0, devices: 0, recent: 0 };
+    const dayAgo = Date.now() - 86_400_000;
+    for (const u of users) {
+      c[u.tier] += 1;
+      c.devices += u.devices;
+      if (u.last_sign_in_at && Date.parse(u.last_sign_in_at) > dayAgo) c.recent += 1;
+    }
+    return c;
+  }, [users]);
+
+  if (access !== 'admin') {
+    return (
+      <section className={styles.denied}>
+        <h2>Not your console</h2>
+        <p>
+          This screen is for administrators. Hiding it is a courtesy — the data
+          behind it is refused by the database itself, so there is nothing here
+          to find.
+        </p>
+      </section>
+    );
+  }
+
+  async function change(u: AdminUser, role: AdminUser['role']) {
+    setBusyId(u.id);
+    const err = await setRole(u.id, role);
+    setBusyId(null);
+    if (err) alert(err);
+  }
+
+  return (
+    <section className={styles.wrap}>
+      <header className={styles.head}>
+        <h2 className={styles.title}>Console</h2>
+        <button type="button" className={styles.refresh} onClick={() => void load()} disabled={loading}>
+          {loading ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </header>
+
+      {error && <p className={styles.error}>{error}</p>}
+
+      {/* --- accounts ------------------------------------------------------ */}
+      <div className={styles.stats}>
+        <Stat label="Accounts" value={String(users.length)} />
+        <Stat label="On trial" value={String(counts.trial)} tone="good" />
+        <Stat label="Pro" value={String(counts.pro)} tone="good" />
+        <Stat label="Free" value={String(counts.free)} />
+        <Stat
+          label="Signed in today"
+          value={String(counts.recent)}
+          note="last sign-in, not presence"
+        />
+        <Stat label="Device slots held" value={String(counts.devices)} note="max 2 per account" />
+      </div>
+
+      {/* --- what this deployment can reach -------------------------------- */}
+      <h3 className={styles.section}>Health</h3>
+      <div className={styles.stats}>
+        <Stat
+          label="Deployment"
+          value={health?.commit ?? '—'}
+          note={health ? `${health.env} · ${health.region ?? '?'}` : 'unreachable'}
+          tone={health ? 'good' : 'bad'}
+        />
+        <Stat
+          label="Analytics API"
+          value={analytics ? `${analyticsMs} ms` : 'down'}
+          note={analytics?.hot.available ? 'database attached' : 'no database'}
+          tone={analytics?.hot.available ? 'good' : 'bad'}
+        />
+        {health &&
+          Object.entries(health.configured).map(([k, v]) => (
+            <Stat
+              key={k}
+              label={k.replace(/([A-Z])/g, ' $1').toLowerCase()}
+              value={v ? 'set' : 'not set'}
+              tone={v ? 'good' : 'warn'}
+            />
+          ))}
+      </div>
+
+      {/* --- storage -------------------------------------------------------- */}
+      {analytics?.hot.available && (
+        <>
+          <h3 className={styles.section}>Storage</h3>
+          <Meter
+            used={analytics.hot.sizeBytes}
+            total={VPS_DISK_BYTES}
+            label="battles.db on the Contabo volume"
+          />
+          <p className={styles.hint}>
+            Retention is capped at 365 days, so this plateaus rather than growing
+            forever — the sizing calculation put the ceiling near 266 GB.
+          </p>
+        </>
+      )}
+
+      {/* --- the accounts themselves --------------------------------------- */}
+      <h3 className={styles.section}>Accounts</h3>
+      <input
+        className={styles.search}
+        value={query}
+        placeholder="Filter by email, name, tag or country…"
+        onChange={(e) => setQuery(e.target.value)}
+      />
+
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Tier</th>
+              <th>Country</th>
+              <th>Player tag</th>
+              <th>Last sign-in</th>
+              <th>Devices</th>
+              <th>Set role</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((u) => (
+              <tr key={u.id}>
+                <td>
+                  <span className={styles.name}>{u.display_name ?? '—'}</span>
+                  <span className={styles.email}>{u.email}</span>
+                </td>
+                <td>
+                  <span className={styles.tier} data-tier={u.tier}>
+                    {u.tier}
+                  </span>
+                  {u.tier === 'trial' && u.trial_ends_at && (
+                    <span className={styles.sub}>ends {ago(u.trial_ends_at).replace(' ago', '')}</span>
+                  )}
+                </td>
+                <td>{u.country ?? '—'}</td>
+                <td className={styles.mono}>{u.player_tag ?? '—'}</td>
+                <td>{ago(u.last_sign_in_at)}</td>
+                <td>{u.devices}</td>
+                <td>
+                  <select
+                    className={styles.roleSelect}
+                    value={u.role}
+                    disabled={busyId === u.id}
+                    onChange={(e) => void change(u, e.target.value as AdminUser['role'])}
+                  >
+                    <option value="free">free</option>
+                    <option value="pro">pro</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+            {shown.length === 0 && (
+              <tr>
+                <td colSpan={7} className={styles.empty}>
+                  {loading ? 'Loading…' : users.length ? 'Nothing matches that.' : 'No accounts yet.'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <p className={styles.hint}>
+        Changing a role takes effect on that account's next profile read — a
+        sign-in, or a refresh. There is no way to create a password from here:
+        people sign themselves up, and you promote them. Handing out passwords
+        would mean storing one somewhere you could read it back.
+      </p>
+    </section>
+  );
+}
