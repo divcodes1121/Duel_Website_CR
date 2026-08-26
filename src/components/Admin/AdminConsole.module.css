@@ -189,8 +189,21 @@
 
 /* --- accounts ------------------------------------------------------------- */
 
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.count {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
 .search {
-  width: 100%;
+  flex: 1 1 16rem;
   max-width: 26rem;
   padding: 0.55rem 0.9rem;
   border-radius: 12px;
@@ -201,12 +214,32 @@
   color: var(--text);
 }
 
-/* The table scrolls INSIDE this, so a wide table never makes the page scroll
-   sideways. */
+/* THE TABLE DOES NOT SCROLL. The page does — one scroll region for the whole
+   console, which is what makes the accounts reachable by scrolling down from
+   the tiles rather than hunting for a second scrollbar inside a 40px box.
+ *
+ * `flex: none` is the whole fix, and the reason is worth writing down: a flex
+ * child shrinks no further than its automatic minimum size, which is normally
+ * its CONTENT — that is why the stat tiles and the meter above kept their
+ * height. But `overflow` other than `visible` sets that automatic minimum to
+ * ZERO. This box was the only child in the column that could be crushed, so
+ * the flexbox gave it whatever was left over: the height of the header row.
+ * Every account was rendered, inside a box one row tall. */
 .tableWrap {
-  overflow-x: auto;
+  flex: none;
   border-radius: 14px;
   border: 1px solid var(--border);
+}
+
+/* Sideways scroll ONLY where eight columns genuinely do not fit. It has to be
+   conditional: an `overflow` here makes this a scroll container, and a sticky
+   `<th>` pins to its nearest scrolling ancestor — so declaring it
+   unconditionally would silently kill the sticky header on the wide screens
+   where the header is worth having. */
+@media (max-width: 60rem) {
+  .tableWrap {
+    overflow-x: auto;
+  }
 }
 
 .table {
@@ -216,8 +249,11 @@
 }
 
 .table th {
-  /* Sticky against THIS scroll region. It needs an opaque background or the
-     rows show through it as they pass underneath. */
+  /* Sticky against the CONSOLE's scroll region, not the table's — the table
+     is no longer a scroll container on wide screens, so the nearest scrolling
+     ancestor is `.wrap` and the header holds its place while you scroll a long
+     list of accounts. It needs an opaque background or the rows show through
+     it as they pass underneath. */
   position: sticky;
   top: 0;
   z-index: 1;

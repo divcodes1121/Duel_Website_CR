@@ -203,12 +203,21 @@ export function AdminConsole() {
 
       {/* --- the accounts themselves --------------------------------------- */}
       <h3 className={styles.section}>Accounts</h3>
-      <input
-        className={styles.search}
-        value={query}
-        placeholder="Filter by email, name, tag or country…"
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      <div className={styles.searchRow}>
+        <input
+          className={styles.search}
+          value={query}
+          placeholder="Filter by email, name, tag or country…"
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {/* The filter hides rows, so say how many. Without this a typo in the
+            box and an account that genuinely does not exist look identical. */}
+        <span className={styles.count}>
+          {query.trim() && shown.length !== users.length
+            ? `${shown.length} of ${users.length}`
+            : `${users.length} account${users.length === 1 ? '' : 's'}`}
+        </span>
+      </div>
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
