@@ -70,24 +70,29 @@ function App() {
   }, [initAccount]);
 
   if (isSupabaseConfigured) {
-    /* Nothing is drawn until the session is known. Rendering the sign-in card
-       first would flash it at every signed-in visitor on every reload, because
-       reading a persisted session is asynchronous. */
-    if (!accountReady) return <div className={styles.app} />;
-
-    if (!accountId) {
-      return (
-        <div className={styles.app}>
-          <AuthScreen />
-        </div>
-      );
+    /* THE SITE IS PUBLIC. Signing in is a ROUTE, not a wall — a stranger lands
+       on the actual product and only meets the auth card when they reach for
+       something the free tier does not include. The first build of this gated
+       everything, which asked people to commit before seeing anything. */
+    if (route.startsWith('#/signin')) {
+      if (accountReady && accountId) {
+        /* Already signed in and asking for the sign-in page: send them home
+           rather than showing a form they do not need. */
+        window.location.hash = '#/';
+      } else {
+        return (
+          <div className={styles.app}>
+            <AuthScreen />
+          </div>
+        );
+      }
     }
 
     /* Asked once, on `onboarded_at` rather than on whether the fields are
        filled — skipping is allowed, and someone who skipped must not be asked
-       again on every visit. A null profile here means the row has not arrived
-       yet, which is a moment, not a state to route on. */
-    if (profile && !profile.onboarded_at) {
+       again on every visit. A null profile means the row has not arrived yet,
+       which is a moment rather than a state to route on. */
+    if (accountReady && accountId && profile && !profile.onboarded_at) {
       return (
         <div className={styles.app}>
           <Onboarding />
@@ -95,6 +100,8 @@ function App() {
       );
     }
   } else if (!user) {
+    /* No Supabase configured: the 20-account test gate still applies, and it
+       is still a wall, because that build has no public tier to show. */
     return (
       <div className={styles.app}>
         <Login />

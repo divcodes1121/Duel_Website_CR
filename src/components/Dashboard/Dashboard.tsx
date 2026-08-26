@@ -49,6 +49,10 @@ import { Fireflies, type FireflyHue } from '../../three/Fireflies';
 import { LiquidMetal } from '../../three/LiquidMetal';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import { Filmstrip } from '../Filmstrip/Filmstrip';
+import { GateCard } from '../Auth/GateCard';
+import { sectionAllowed, useAccess } from '../../state/gate';
+import { useAccountStore } from '../../state/accountStore';
+import { trialDaysLeft } from '../../state/supabase';
 
 /* The post-login shell: top bar, a sidebar of analytics sections, and a panel
  * that swaps with whatever is open.
@@ -240,6 +244,9 @@ export function Dashboard({
   const toolsReveal = useReveal<HTMLDivElement>();
   const areasReveal = useReveal<HTMLDivElement>();
   const [section, setSection] = useState<string>(SIDE_NAV[0].label);
+  /* Anon, free, trial, pro or admin — decides which areas open. */
+  const access = useAccess();
+  const trialLeft = trialDaysLeft(useAccountStore((st) => st.profile));
   const [tag, setTag] = useState('');
   // The analysis screen carries the query in the top bar, seeded from the URL.
   const [topTag, setTopTag] = useState(playerTag);
@@ -498,7 +505,30 @@ export function Dashboard({
           <button type="button" className={styles.iconButton} data-metal aria-label="Notifications">
             <BellIcon />
           </button>
-          <ProfileMenu triggerClassName={styles.avatar} />
+          {/* A SIGNED-OUT VISITOR NEEDS A WAY IN that is not a gate card. The
+              profile menu assumes an account exists, so it would be a menu of
+              things a stranger cannot do. */}
+          {access === 'anon' ? (
+            <a className={styles.signIn} href="#/signin">
+              Sign in
+            </a>
+          ) : (
+            <>
+              {(access === 'pro' || access === 'admin') && (
+                /* Item 3. On the tier rather than on `role`, so an admin wears
+                   it too and nobody has to remember to set both. */
+                <span className={styles.proBadge} title="Dekkies Pro">
+                  PRO
+                </span>
+              )}
+              {access === 'trial' && trialLeft > 0 && (
+                <span className={styles.trialBadge} title="Free trial">
+                  {trialLeft}d left
+                </span>
+              )}
+              <ProfileMenu triggerClassName={styles.avatar} />
+            </>
+          )}
         </div>
       </header>
 
@@ -634,7 +664,19 @@ export function Dashboard({
           )}
 
           {view === 'player' ? (
-            playerSection === 'duels' ? (
+            /* The same seven areas, reached by tag instead of by the sidebar.
+               Gating one route and not the other is not a gate — anyone who
+               noticed the URL shape would walk straight past it. The slug is
+               mapped back to the label so both paths consult one rule. */
+            !sectionAllowed(
+              access,
+              SIDE_NAV.find((n) => n.slug === playerSection)?.label ?? 'Search Player',
+            ) ? (
+              <GateCard
+                access={access}
+                section={SIDE_NAV.find((n) => n.slug === playerSection)?.label ?? 'This area'}
+              />
+            ) : playerSection === 'duels' ? (
               <DuelAnalysis tag={playerTag} season={season as Season} />
             ) : playerSection === 'duelzone' ? (
               <DuelZone tag={playerTag} season={season as Season} />
@@ -656,7 +698,14 @@ export function Dashboard({
               <PlayerAnalysis tag={playerTag} season={season as Season} />
             )
           ) : view === 'home' && section !== 'Search Player' ? (
-            <HomeSection name={section} />
+            /* THE GATE, in place of the content rather than over it. A modal
+               would have to be dismissed before anything else could be reached,
+               which turns "this one needs an account" into "you are stuck". */
+            sectionAllowed(access, section) ? (
+              <HomeSection name={section} />
+            ) : (
+              <GateCard access={access} section={section} />
+            )
           ) : view !== 'home' ? (
             /* A built tool, hosted in the panel. `.tool` gives it the same
                raised surface as everything else and clips its own scrolling

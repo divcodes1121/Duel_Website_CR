@@ -85,10 +85,17 @@ export function trialDaysLeft(profile: Profile | null, now: number = Date.now())
  * What a tier may open.
  *
  * Item 1: after the three-day trial an account drops to the normal version and
- * keeps "meta and Evo counter". Those are the two areas listed here; the other
- * five need a paid tier.
+ * keeps "meta and Evo counter" — Top Meta Decks and Deck Counter.
+ *
+ * SEARCH PLAYER IS FREE TOO, and that is a judgement rather than a reading of
+ * the brief. It is the tag overview behind the hero's search field, which is
+ * the landing page's entire call to action. Gating it would mean a stranger
+ * types their tag into the biggest control on a public page and is handed a
+ * paywall — the search would be a tease rather than a demonstration. The five
+ * deeper areas (Deck Analysis, Duel Analysis, Duel Zone, Cards, Coach Assist)
+ * are what a trial is for.
  */
-export const FREE_SECTIONS = ['Top Meta Decks', 'Deck Counter'] as const;
+export const FREE_SECTIONS = ['Search Player', 'Top Meta Decks', 'Deck Counter'] as const;
 
 export function canOpenSection(tier: Tier, section: string): boolean {
   if (tier !== 'free') return true;

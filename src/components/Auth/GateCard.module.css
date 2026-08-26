@@ -1,0 +1,109 @@
+/* The panel a locked area shows instead of its content.
+ *
+ * Sized and surfaced like the analytics panels it replaces, so the layout does
+ * not jump when someone moves between a free area and a locked one. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  min-height: 62vh;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 3.1rem;
+  height: 3.1rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.title {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  font-weight: 700;
+  letter-spacing: 0.005em;
+  color: var(--text);
+}
+
+.body {
+  max-width: 34rem;
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  margin-top: 0.5rem;
+}
+
+/* `--solid-*`, because this fill carries `--on-solid` text and is graded to
+   hold it. `--hue-green` here is the recurring mistake of this project: it is
+   pastel by design, because it is graded for 14px ink rather than for a fill. */
+.primary {
+  padding: 0.72rem 1.5rem;
+  border-radius: 14px;
+  background: var(--solid-green);
+  color: var(--on-solid);
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.primary:hover {
+  transform: translateY(-2px);
+}
+
+.secondary {
+  padding: 0.72rem 1.3rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
+}
+
+.secondary:hover {
+  border-color: var(--text-muted);
+  transform: translateY(-2px);
+}
+
+/* Says what is NOT locked. A gate that only lists what you cannot have reads
+   as a paywall on the whole site; naming the two free areas is the difference
+   between "this part costs" and "everything costs". */
+.free {
+  margin: 0.9rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.free strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary:hover,
+  .secondary:hover {
+    transform: none;
+  }
+}
