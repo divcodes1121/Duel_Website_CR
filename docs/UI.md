@@ -473,6 +473,55 @@ panels still read as white and only the motes come through.
 
 ---
 
+## Filtering a deck list — the rows close, they do not vanish
+
+`WinConFilter` already picked cards and matched decks; what it did with the
+non-matching ones was drop them out of the rendered array. That unmounts them,
+so they disappeared between two frames and everything below jumped up the page.
+Nothing said which decks had left or where the survivors went — the list simply
+became a different list.
+
+`WinConFilter/FilterSlot.tsx` wraps each row and collapses it instead. Every
+deck stays mounted with a `matches` flag; the slot animates `max-height`,
+`margin-bottom`, `opacity` and `transform` together.
+
+**The height is MEASURED, and it has to be.** A CSS transition needs two
+lengths and `auto` is not one — `max-height: 0 -> auto` does not animate at all,
+and the usual bodge of a large fixed `max-height` makes the close look stalled
+because most of the duration is spent crossing empty space. The inner element's
+real height goes into `--h`, and a `ResizeObserver` keeps it current because
+deck panels change height on their own. Measure the INNER element: the outer one
+is what is being collapsed, so reading it while closed returns zero and the row
+could never reopen.
+
+**The gap moved onto the row.** A flex `gap` is charged for every child,
+including one collapsed to zero height, so a filtered-out deck would leave its
+gap behind and the list would close to a ladder of blank rungs. `.deckGrid` has
+no `gap`; each row carries `margin-bottom` and animates it away with its height.
+
+**The duel builder deliberately does NOT do this.** It dims non-matching decks
+instead, because a duel collection is a run of POSITIONAL slots — deck 2 is
+deck 2, and collapsing one would renumber the rest and change what the layout
+means. Its transition lives on `.deckWrap` rather than on `.deckDim` so it runs
+in both directions; on the dim class alone there is nothing to animate on the
+way back and a deck snaps to full strength when the filter clears.
+
+**`inert` is set on the node, not passed as a prop.** It only entered React's
+DOM typings in React 19; on React 18 it falls through as an unrecognised
+attribute and warns on every render. `toggleAttribute` in an effect keeps a
+collapsed row out of the tab order without the warning.
+
+### The trap this one cost
+
+The class is `filterRow`, not `slot`. CSS modules hash to `_name_hash`, and this
+project already has `DeckSlot`'s `.slot` and `DecksHome`'s `.filterSlot` — so
+the verification's `[class*="_slot_"]` matched all three, reported "1 of 9 rows
+measured a height", and sent me looking for a bug in a component that was
+working perfectly. Same shape as the `[class*="bar"]` trap already recorded
+below: **match the hashed prefix, never a bare substring.**
+
+---
+
 ## Working on this
 
 ```bash

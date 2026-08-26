@@ -103,7 +103,10 @@
 .deckGrid {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  /* NO `gap`. A flex gap is charged for every child including one collapsed to
+     zero height, so a filtered-out deck would leave its gap behind and the
+     list would close to a ladder of blank rungs. Each `FilterSlot` carries its
+     own bottom margin and animates it away with its height. */
 }
 
 .filterSlot {

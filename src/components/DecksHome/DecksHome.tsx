@@ -6,6 +6,7 @@ import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { ProfileMenu } from '../Profile/ProfileMenu';
 import { ExportDialog } from '../Export/ExportDialog';
 import { WinConFilter, deckMatchesFilter, filterCardName } from '../WinConFilter/WinConFilter';
+import { FilterSlot } from '../WinConFilter/FilterSlot';
 import { canExportDecks } from '../../utils/deckExport';
 import libStyles from '../Library/Library.module.css';
 import styles from './DecksHome.module.css';
@@ -36,10 +37,17 @@ export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
     );
   }
 
-  // Multi-select is an AND: a deck must hold every selected card.
-  const visibleDecks = homeDecks
-    .map((deck, index) => ({ deck, index }))
-    .filter(({ deck }) => deckMatchesFilter(deck.slots, winFilter));
+  /* Multi-select is an AND: a deck must hold every selected card.
+     EVERY deck is kept in the list with a `matches` flag rather than being
+     filtered out of it. Dropping non-matching decks from the array unmounts
+     them, and an unmounted element cannot animate away — it is simply gone on
+     the next frame, taking its space with it. `FilterSlot` collapses instead. */
+  const marked = homeDecks.map((deck, index) => ({
+    deck,
+    index,
+    matches: deckMatchesFilter(deck.slots, winFilter),
+  }));
+  const visibleDecks = marked.filter((d) => d.matches);
 
   // Selections made on other pages must not leak into this picker context.
   useEffect(() => {
@@ -159,14 +167,15 @@ export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
             reach the fifth — so they lay out at as many columns as the deck
             column can give an eight-card row. */}
         <div className={styles.deckGrid}>
-          {visibleDecks.map(({ deck, index }) => (
-            <DeckPanel
-              key={deck.id}
-              owner="home"
-              deckIndex={index}
-              deck={deck}
-              onDelete={() => handleDelete(index)}
-            />
+          {marked.map(({ deck, index, matches }) => (
+            <FilterSlot key={deck.id} show={matches}>
+              <DeckPanel
+                owner="home"
+                deckIndex={index}
+                deck={deck}
+                onDelete={() => handleDelete(index)}
+              />
+            </FilterSlot>
           ))}
 
           {winFilter.length === 0 && (

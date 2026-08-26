@@ -188,10 +188,24 @@
   flex-direction: column;
   gap: 0.4rem;
   align-items: stretch;
+  transition:
+    opacity var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
 }
 
+/* A DUEL DECK RECEDES, IT DOES NOT COLLAPSE — and that is the difference from
+   Deck's Home and the Counter Hub, where `FilterSlot` closes a filtered row
+   away entirely. A duel collection is a fixed run of POSITIONAL slots: deck 2
+   is deck 2, and removing it from the row would renumber everything after it
+   and change what the layout means. So the filter answers "which of these
+   five" by pushing the rest back, not by taking them away.
+
+   The transition lives on `.deckWrap` rather than here so it runs in BOTH
+   directions; on the dim class alone there is nothing to animate on the way
+   back and a deck would snap to full strength when the filter clears. */
 .deckDim {
   opacity: 0.35;
+  transform: scale(0.985);
 }
 
 /* --- Add a deck slot ----------------------------------------------------- */

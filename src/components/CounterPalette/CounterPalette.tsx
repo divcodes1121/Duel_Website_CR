@@ -5,6 +5,7 @@ import { DeckPanel } from '../DuelDeckBuilder/DeckPanel';
 import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { ProfileMenu } from '../Profile/ProfileMenu';
 import { WinConFilter, deckMatchesFilter, filterCardName } from '../WinConFilter/WinConFilter';
+import { FilterSlot } from '../WinConFilter/FilterSlot';
 import { DeckOrbit } from '../../three/DeckOrbit';
 import libStyles from '../Library/Library.module.css';
 import homeStyles from '../DecksHome/DecksHome.module.css';
@@ -168,9 +169,14 @@ function FolderView({ folder }: { folder: DuelDeckSet }) {
   }
 
   // Multi-select is an AND: a deck must hold every selected card.
-  const visibleDecks = folder.decks
-    .map((deck, index) => ({ deck, index }))
-    .filter(({ deck }) => deckMatchesFilter(deck.slots, winFilter));
+  /* Marked, not filtered — see DecksHome. A deck dropped from the array
+     unmounts, and an unmounted element cannot animate out. */
+  const marked = folder.decks.map((deck, index) => ({
+    deck,
+    index,
+    matches: deckMatchesFilter(deck.slots, winFilter),
+  }));
+  const visibleDecks = marked.filter((d) => d.matches);
 
   function handleDeleteDeck(deckIndex: number) {
     const deck = folder.decks[deckIndex];
@@ -237,14 +243,15 @@ function FolderView({ folder }: { folder: DuelDeckSet }) {
   return (
     <DeckWorkspace toolbar={toolbar}>
       <div className={homeStyles.deckGrid}>
-        {visibleDecks.map(({ deck, index }) => (
-          <DeckPanel
-            key={deck.id}
-            owner="palette"
-            deckIndex={index}
-            deck={deck}
-            onDelete={() => handleDeleteDeck(index)}
-          />
+        {marked.map(({ deck, index, matches }) => (
+          <FilterSlot key={deck.id} show={matches}>
+            <DeckPanel
+              owner="palette"
+              deckIndex={index}
+              deck={deck}
+              onDelete={() => handleDeleteDeck(index)}
+            />
+          </FilterSlot>
         ))}
 
         {winFilter.length === 0 && (

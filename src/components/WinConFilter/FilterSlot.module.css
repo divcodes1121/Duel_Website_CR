@@ -1,0 +1,51 @@
+/* A filtered row, closing and opening.
+ *
+ * NAMED `filterRow`, NOT `slot`. CSS modules hash to `_name_hash`, and this
+ * project already has `DeckSlot`'s `.slot` and `DecksHome`'s `.filterSlot` —
+ * so a `[class*="_slot_"]` query matches all three and a verification script
+ * silently reports on the wrong elements. That happened while building this.
+ *
+ * Transform and opacity carry the character; height and margin carry the
+ * layout. That split matters: height is not a compositor property and cannot
+ * be cheap, so it is the only expensive thing here and everything else rides
+ * on the GPU alongside it. */
+
+.filterRow {
+  /* Set from JS with the inner element's measured height. The fallback keeps
+     a row open if the measurement has not run yet — failing OPEN, because a
+     deck you cannot see is worse than a row sized a little wrong. */
+  --h: none;
+
+  max-height: var(--h);
+  margin-bottom: 0.85rem;
+  overflow: hidden;
+  transition:
+    max-height var(--dur-3) var(--ease),
+    margin-bottom var(--dur-3) var(--ease),
+    opacity var(--dur-2) var(--ease),
+    transform var(--dur-3) var(--ease);
+}
+
+.filterRow[data-out] {
+  max-height: 0;
+  margin-bottom: 0;
+  opacity: 0;
+  /* Up and slightly back, so a row reads as being withdrawn rather than
+     merely fading. Scale stays close to 1 — a filtered list re-flows several
+     rows at once, and a large scale on each turns that into a lurch. */
+  transform: scale(0.97) translateY(-6px);
+  pointer-events: none;
+}
+
+/* The row is one-shot per filter change, so there is nothing looping here to
+   disable — but a list that reflows under someone who asked for less motion
+   should still just be the new list. */
+@media (prefers-reduced-motion: reduce) {
+  .filterRow {
+    transition: none;
+  }
+
+  .filterRow[data-out] {
+    transform: none;
+  }
+}
