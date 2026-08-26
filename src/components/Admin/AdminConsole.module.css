@@ -238,6 +238,18 @@
    the same custom properties — but it is NOT a raised card, so it does not
    lift on hover. The effect belongs to the surface, not to a card shape. */
 .meter {
+  /* `flex: none` IS LOAD-BEARING, and this is the SECOND time this exact bug
+     has been fixed in this file.
+     `.wrap` is a flex column. A flex item will not shrink below its automatic
+     minimum size -- normally its content -- but ANY `overflow` other than
+     `visible` sets that minimum to ZERO. The `overflow: hidden` below exists to
+     clip the press ripple, and it cost the whole Storage block: the meter was a
+     direct child of the column, so it was the one thing the flexbox could crush,
+     and it collapsed to nothing while the text stayed in the DOM.
+     The stat tiles have the same `overflow: hidden` and were fine, because they
+     sit inside `.stats`, a grid -- they are not flex items of the column at all.
+     That is the whole difference, and it is why only this one vanished. */
+  flex: none;
   position: relative;
   isolation: isolate;
   overflow: hidden;
