@@ -329,3 +329,17 @@
   font-size: 0.85rem;
 }
 
+/* The card filter sits with the header's other controls. `position: relative`
+   is what its dropdown panel anchors to, and `flex: none` keeps it from being
+   squeezed by the stat and freshness chips beside it. */
+.filterSlot {
+  position: relative;
+  flex: none;
+}
+
+.noMatch {
+  padding: 1.6rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

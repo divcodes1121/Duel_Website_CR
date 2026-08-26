@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { ReportButton } from '../Export/ReportButton';
@@ -59,6 +60,8 @@ export function MetaDecks() {
   const [board, setBoard] = useState<MetaBoard | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
+  /* Cards the board is filtered to. Empty means the whole top 50. */
+  const [cardFilter, setCardFilter] = useState<string[]>([]);
   /* THE WHOLE CONDITION, not the flag: `!board` flips at the same instant
      the data lands, so holding a bare `loading` would let this guard fall
      through anyway. See the hook. */
@@ -154,10 +157,24 @@ export function MetaDecks() {
     );
   }
 
-  const { decks, window: win } = board;
-  // A shared ruler so the bars are comparable down the whole board rather than
-  // each row being scaled to itself.
-  const topUse = Math.max(...decks.map((d) => d.useRate), 0.01);
+  const { decks: allDecks, window: win } = board;
+
+  /* PICK CARDS, KEEP THE DECKS THAT HOLD THEM ALL.
+     The same control and the same predicate as Deck's Home and the Counter Hub
+     — `deckMatchesFilter` is multi-select AND — so "decks with Hog Rider and
+     Fireball" means the same thing on every screen that offers it. A second
+     implementation here would eventually disagree with those two about what a
+     match is. */
+  const decks = cardFilter.length
+    ? allDecks.filter((d) => deckMatchesFilter(d.cards, cardFilter))
+    : allDecks;
+
+  /* THE RULER STAYS THE WHOLE BOARD'S, not the filtered subset's.
+     Use rate is a deck's share of every battle in the window, so rescaling the
+     bars to the survivors would make a 0.4% deck look like the most-played in
+     the game the moment you filtered down to it. The number beside the bar
+     would then disagree with the bar. */
+  const topUse = Math.max(...allDecks.map((d) => d.useRate), 0.01);
 
   return (
     <section className={styles.panel}>
@@ -175,10 +192,30 @@ export function MetaDecks() {
           {/* A thunk, not a built document — the report describes the board as
               it stands when the button is pressed, including how stale the
               snapshot has become by then. */}
+          <div className={styles.filterSlot}>
+            <WinConFilter
+              selected={cardFilter}
+              onToggle={(key) =>
+                setCardFilter((f) => (f.includes(key) ? f.filter((k) => k !== key) : [...f, key]))
+              }
+              onClear={() => setCardFilter([])}
+            />
+          </div>
           <ReportButton build={() => metaBoardDoc(board)} />
           <span className={styles.stat}>
-            <span className={styles.statValue}>{nf.format(board.totalBattles ?? 0)}</span>
-            <span className={styles.statLabel}>battles ranked</span>
+            {cardFilter.length ? (
+              <>
+                <span className={styles.statValue}>
+                  {decks.length} / {allDecks.length}
+                </span>
+                <span className={styles.statLabel}>decks match</span>
+              </>
+            ) : (
+              <>
+                <span className={styles.statValue}>{nf.format(board.totalBattles ?? 0)}</span>
+                <span className={styles.statLabel}>battles ranked</span>
+              </>
+            )}
           </span>
           {/* Honest about freshness: this is a snapshot, not a live query. */}
           <span className={styles.freshness} title={`Recomputed every ${Math.round((board.refreshSeconds ?? 1800) / 60)} min`}>
@@ -258,6 +295,17 @@ export function MetaDecks() {
                 <td className={styles.num}>{d.avgElixir ? d.avgElixir.toFixed(1) : '—'}</td>
               </tr>
             ))}
+            {/* A filter that matches nothing must say so. An empty table reads
+                as a broken board, and the fix is one sentence naming what was
+                asked for and what was searched. */}
+            {decks.length === 0 && (
+              <tr>
+                <td colSpan={7} className={styles.noMatch}>
+                  No deck in the top {allDecks.length} runs{' '}
+                  {cardFilter.length === 1 ? 'that card' : 'all those cards together'}.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
