@@ -497,6 +497,20 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
   }
 
   const st = report.status;
+
+  /* WHY THE LISTS ARE EMPTY, in the screen's own numbers.
+     "Not enough battles yet" is true and useless: it does not say how many are
+     needed, how many there are, or that the count is PER ARCHETYPE rather than
+     overall — which is the part that surprises people, because a player with
+     30 battles spread over a dozen archetypes clears the floor in none of them.
+     A newly searched tag lands here every time, so this is the first thing the
+     site says to someone scouting a new player. */
+  const thinReason =
+    report.player.battles > 0
+      ? `${nf.format(report.player.battles)} battle${report.player.battles === 1 ? '' : 's'} stored so far. ` +
+        `A matchup is only reported once ONE archetype has ${report.minBattles}+ of them behind it — ` +
+        `spread thin, no single archetype clears that yet.`
+      : 'No battles stored for this player yet.';
   const building = st.building;
 
   return (
@@ -580,7 +594,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
                   <span className={styles.blockCount}>{report.worst.length}</span>
                 </h2>
                 <p className={styles.blockNote}>Below this player&rsquo;s own average.</p>
-                <MatchupList rows={report.worst} empty="Not enough battles yet." />
+                <MatchupList rows={report.worst} empty={thinReason} />
               </section>
 
               <section className={styles.block}>
@@ -589,7 +603,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
                   <span className={styles.blockCount}>{report.best.length}</span>
                 </h2>
                 <p className={styles.blockNote}>At or above their own average.</p>
-                <MatchupList rows={report.best} empty="Not enough battles yet." />
+                <MatchupList rows={report.best} empty={thinReason} />
               </section>
             </div>
 
@@ -601,7 +615,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
               <p className={styles.blockNote}>
                 The archetypes this player does worst against, stated from your side of the board.
               </p>
-              <MatchupList rows={report.recommended} showYours empty="Not enough battles yet." />
+              <MatchupList rows={report.recommended} showYours empty={thinReason} />
             </section>
           </>
         )}
