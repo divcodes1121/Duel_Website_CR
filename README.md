@@ -72,8 +72,13 @@ bot's SQLite files read-only.
 | hosting | **the analytics service left the home machine.** `battles.db`, `server/app.py` and the bot all run on a Contabo VPS behind Caddy at `api.deckkies.com` |
 | domain | **`deckkies.com` live**, Vercel apex + `www`, `api.` pointing at the VPS |
 | deck sync | **re-keyed to the Supabase user id.** A cross-account leak on shared browsers was found and closed |
-| tests | **1,252 Python checks** across 21 suites, **179 vitest**, `tsc -b` and `npm run build` clean |
-| shipped from | `main` at `02b7618`. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
+| card reference data | **was missing on the VPS and failing silently**, which emptied Win Conditions and Spells, blanked the Cards board and made every Deck Counter row generic. Deployed, and the failure is now reportable: stderr, `/status` `cardData`, and a console tile |
+| Duel Analysis | **widens to non-duel battles** when the duel population cannot clear the 8-game floor, stamped `basis: "all"` and with the G1/G2/G3 split withheld rather than zeroed |
+| Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
+| retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
+| H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
+| tests | **1,252 Python checks** across **34 suites** (496 check-style + 756 unittest), **179 vitest**, `tsc -b` and `npm run build` clean |
+| shipped from | `main` at `6bedee0`. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
@@ -5855,7 +5860,7 @@ are in [Running it](#running-it).
 
 ## Testing and verification
 
-1,252 Python checks across 21 suites and 179 vitest tests, none of which open a
+1,252 Python checks across 34 suites and 179 vitest tests, none of which open a
 database — every Python suite runs on synthetic data or a stubbed reader, so
 they pass on a machine with no Clash_Bot install and cannot be broken by
 whatever a real player did last week. The vitest side gained the analytics-proxy
@@ -7255,7 +7260,10 @@ yet, or does in a way that is fine now and will not be later.
 | **`OIE_ALLOWLIST`** | unset, so the Coach's opponent read degrades to `{enabled:false}` for everyone. Designed behaviour, but the engine half is dark in production |
 | **Staging** | there is none. `main` deploys to production, and every fix in this pass was verified against production after the fact |
 | **A maintenance screen** | not built. Nothing to show while a deploy is mid-flight |
-| **H:** | still the only rollback for the database. Nothing has run long enough on the VPS to retire it |
+| **No backup of the VPS database** | **the largest single exposure.** No backup directory, no cron, no timer; `deploy/backup_db.py` sits at `/opt/clashbot/deploy/` unscheduled. Cutover checklist item 11 is unmet, and the migration doc says outright there is "no second copy of the active database anywhere" |
+| **H:** | unplugged 2026-08-26 with contents intact, and still the only rollback. Frozen at that date, so its value decays daily — which is the argument for the row above. Must not be wiped: `archive.db` holds 1 May – 1 Jun, a month in no other copy |
+| **Deploying `server/`** | nothing enforces that `src/data/` goes with it. That omission emptied three screens silently; it is now merely *visible* (a console tile), not prevented |
+| **The admin console** | no browser pass. It needs an admin session, and minting one means promoting an account in the live database — so its three layout bugs were all found by a person looking at the screen |
 | **Test accounts** | **cleaned up.** ~30 `dekkies.*@gmail.com` accounts from verification runs were deleted by email prefix; the `on delete cascade` took their profiles and device rows with them. The habit that created them is the thing to fix, not the rows |
 
 **The admin console has not had a Playwright pass.** It cannot get one the usual

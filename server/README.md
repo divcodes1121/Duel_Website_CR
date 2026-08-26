@@ -221,7 +221,7 @@ happily against a server that never called it.
 
 | Route | Returns |
 |-------|---------|
-| `GET /api/analytics/status` | which tiers are readable, and their sizes |
+| `GET /api/analytics/status` | which tiers are readable and their sizes, plus `cardData {loaded, count, error}` — **the only unauthenticated route, and the one place that says whether the service can actually answer.** Check it after every deploy |
 | `GET /api/analytics/suggest` | a few real tags with the most stored battles |
 | `GET /api/analytics/coverage?tag=` | earliest/latest stored day, globally and per player |
 | `GET /api/analytics/player/<tag>` | summary, top decks, per-day trends |
@@ -252,8 +252,19 @@ its Wilson confidence tiers, and its card/deck budgets — without those a table
 is one heavily-played deck sliced twenty-four ways, because a pair inherits the
 record of whole decks.
 
-Two things to know before changing it:
+Three things to know before changing it:
 
+* **It answers from two populations, and says which.** Duels first, always. But
+  a pair needs 8 games across 2 decks, so a player with two duels yields dozens
+  of observed pairings and ZERO eligible ones — correct, and a useless page. On
+  that failure `combo_report` re-asks over the player's non-duel battles
+  (`non_duel_decks`) and stamps `basis: "all"`. **Never blended:** a widened
+  answer is a different answer, not a better-powered version of the same one.
+  Those decks carry `slot: -1`, so the G1/G2/G3 split disappears through the
+  existing `0 <= slot < SLOTS` guards rather than being invented — writing `0`
+  there would give every ladder match a loadout position, and it would look
+  entirely normal. `duels` still reports the real duel count, because that is
+  the reason the widening happened.
 * **There is no synergy score, and its absence is a measured result.** The
   obvious observed-versus-expected lift was built and tested against a
   permutation null across 14 player shapes in the bot project and came out
@@ -576,6 +587,18 @@ what counters a given deck. Three measurements shaped all of it.
   module — never report a raw cell.
 * **No match duration exists** in `battles`, `pair_matchup_agg` or the stored
   payload, so there is no "average match time" anywhere.
+
+**The deck beside a player's matchup row is the one THEY face.** The rows were
+always personal — the player's own battles grouped by `opponent_win_condition` —
+but the deck came from `_representatives()`, the archetype's most-observed deck
+across the whole database, so every account saw the same eight cards for
+"X-Bow". `opponent_card_keys` is in the same query, so the list they have
+personally met most costs one JSON parse per row. `FACED_MIN_SIGHTINGS` (3)
+guards it: below that the "most common" deck is whichever single opponent turned
+up twice, and the representative stands in with `deckBasis: "typical"` instead
+of `"faced"`. Exactly 8 cards, and an explicit key tiebreak because sighting
+counts tie constantly and dict order would reshuffle the drawn deck between two
+identical requests.
 
 The matrix costs ~60 s (1.96M pairings joined to a 1.05M-row deck table) and is
 a background snapshot on meta.py's pattern, persisted to
