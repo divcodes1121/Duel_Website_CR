@@ -195,9 +195,17 @@
     /* Take the leftover width and scroll within it. `min-width: 0` is what
        lets a flex item shrink below its content at all — without it this keeps
        its full width and pushes the row wide again, which is the bug. */
-    flex: 1 1 auto;
+    /* `0 1 auto`, NOT `1 1 auto`, and NO `justify-content: flex-end`.
+       Both matter, and the second is a real trap: content that overflows a
+       `flex-end` container spills past its START edge, and overflow towards the
+       start is not scrollable and is not even counted in `scrollWidth`. The
+       controls would have been pushed off the LEFT and been unreachable in the
+       one direction a swipe cannot follow.
+       Sized to content and allowed to shrink, the box sits right anyway —
+       `.topbar` is `space-between` — and when it does overflow, it overflows to
+       the right, where a swipe can get it. */
+    flex: 0 1 auto;
     min-width: 0;
-    justify-content: flex-end;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
