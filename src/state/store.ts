@@ -833,7 +833,61 @@ function schedulePush() {
   }, 1500);
 }
 
-async function hydrateFromRemote() {
+/**
+ * Which account the decks currently in localStorage belong to.
+ *
+ * THE PERSISTED STORE IS PER-BROWSER, NOT PER-ACCOUNT. `royal-duels-builder`
+ * survives a sign-out, so without this the next person to sign in on the same
+ * browser sees the previous person's decks — and worse, if that new account has
+ * no remote data yet, the "first sync ever" branch below would push the
+ * PREVIOUS user's decks up as theirs. That is a cross-account leak, not just a
+ * confusing screen, and it is the one thing a shared or handed-over laptop
+ * makes routine.
+ */
+const OWNER_KEY = 'royal-duels-deck-owner';
+
+function localOwner(): string | null {
+  try {
+    return localStorage.getItem(OWNER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setLocalOwner(id: string | null) {
+  try {
+    if (id) localStorage.setItem(OWNER_KEY, id);
+    else localStorage.removeItem(OWNER_KEY);
+  } catch {
+    /* Storage disabled. The reset below still runs for this session, which is
+       the part that matters; only the "remember whose these are" hint is lost,
+       and its absence makes the next check reset rather than trust. */
+  }
+}
+
+/** Wipe the local decks back to an empty collection. */
+function resetLocalDecks() {
+  suppressNextPush = true;
+  useBuilderStore.setState({
+    sets: createDefaultSets(),
+    library: [],
+    deckSlotCount: { solo: 3, blue: 3, red: 3 },
+    paletteFolders: [],
+    activePaletteFolderId: null,
+    activeSavedId: null,
+    selectedSlot: null,
+  });
+}
+
+async function hydrateFromRemote(userId: string) {
+  /* CLEAR BEFORE FETCHING, not after. The pull is a round trip, and for that
+     whole window the previous account's decks are on screen and editable — an
+     edit during it would be pushed to the NEW account. */
+  if (localOwner() !== userId) {
+    resetLocalDecks();
+    setLocalOwner(userId);
+  }
+
   const remote = await pullRemoteDecks();
   if (remote) {
     // A pull-driven update shouldn't immediately bounce back up as a push.
@@ -852,7 +906,10 @@ async function hydrateFromRemote() {
       activePaletteFolderId: activeFolder ? activeId : null,
     });
   } else {
-    // First sync ever for this account — seed remote storage from local state.
+    /* First sync ever for this account. Safe to seed from local state ONLY
+       because the owner check above has already reset it if it belonged to
+       anyone else — otherwise this is the line that copies one person's decks
+       into another person's cloud storage. */
     void pushRemoteDecks(currentSyncPayload());
   }
 }
@@ -860,7 +917,14 @@ async function hydrateFromRemote() {
 // Pull whenever a sign-in completes.
 useAccountStore.subscribe((state, prevState) => {
   if (state.userId && state.userId !== prevState.userId) {
-    void hydrateFromRemote();
+    void hydrateFromRemote(state.userId);
+  }
+  /* SIGNING OUT CLEARS THE DECKS FROM THIS BROWSER. Leaving them would show
+     the next person what the last person built, on any shared or handed-over
+     machine. The remote copy is untouched — signing back in restores it. */
+  if (!state.userId && prevState.userId) {
+    resetLocalDecks();
+    setLocalOwner(null);
   }
 });
 
@@ -871,7 +935,13 @@ useAccountStore.subscribe((state, prevState) => {
 const stopWaitingForSession = useAccountStore.subscribe((state) => {
   if (state.ready) {
     stopWaitingForSession();
-    if (state.userId) void hydrateFromRemote();
+    if (state.userId) void hydrateFromRemote(state.userId);
+    else if (localOwner()) {
+      /* A persisted session that is gone — expired, revoked, or signed out in
+         another tab — must not leave the decks behind either. */
+      resetLocalDecks();
+      setLocalOwner(null);
+    }
   }
 });
 
