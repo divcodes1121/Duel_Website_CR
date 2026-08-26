@@ -1912,6 +1912,38 @@ And the counters it finds move with it too — the base list's worst matchup is
 Goblin Drill at 73.8% over 3,684 battles; swap Ice Golem for Knight and
 Graveyard takes over at 76.3% over 93.
 
+### The deck beside a matchup row is the one THIS player faces
+
+The rows were always personal — they are the player's own battles, grouped by
+what they ran into, so "62.5% over 40 battles against Balloon" is theirs. The
+DECK drawn beside each row was not. It came from `_representatives()`: the
+most-observed deck of that archetype across the whole database. Every account
+was shown the same eight cards for "X-Bow", which is what made these rows read
+as generic and look interchangeable between players, even though the numbers
+never were.
+
+`opponent_card_keys` sits in the same table and the same query, so the deck a
+player has personally met most is nearly free. Counting it per archetype gives a
+strictly better answer to "what beats me": it is theirs, it is what they will
+meet again, and it is the thing the win rate above it was actually measured on.
+Two players now see different Golem decks — 13 sightings of one list against 14
+of a completely different one.
+
+**Three sightings before it is named** (`FACED_MIN_SIGHTINGS`). Below that, the
+"most common" deck is whichever single opponent happened to appear twice, which
+is noise wearing the authority of a recommendation. The archetype's
+representative stands in there, and the row says `typical` rather than
+`faced Nx` — the two are different claims and must not look alike.
+
+**Exactly eight cards.** A 16- or 24-card duel loadout is three decks end to
+end, and counting one as "a deck they faced" would draw a deck that never
+existed.
+
+**The key tiebreak is not decoration.** Opponent decks tie on sighting count
+constantly, and falling through to dict order would reshuffle the drawn deck
+between two identical requests — the reshuffle-on-identical-data bug this
+project has already shipped twice.
+
 ### A floor on rates is not a reason to hide a game
 
 Reported: a Log Bait list that had just lost 0–3 to a specific Lava Hound deck,

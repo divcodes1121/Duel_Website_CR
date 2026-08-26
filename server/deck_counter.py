@@ -1232,6 +1232,51 @@ def _avg_elixir(cards: list[str]) -> float:
     return round(sum(dx.card_info(c).get("elixir") or 0 for c in cards) / len(cards), 1)
 
 
+#: How many times this player must have met one exact list before it is named
+#: as the deck they face. Below this, the "most common" deck is whichever
+#: single opponent happened to appear twice, which is noise wearing the
+#: authority of a recommendation. The archetype's representative is the honest
+#: answer there -- it is at least the most-played version of the thing.
+FACED_MIN_SIGHTINGS = 3
+
+
+def _faced_deck(seen: dict | None, rep: dict | None,
+                archetype: str) -> tuple[dict | None, str, int]:
+    """The deck to draw beside a matchup row: theirs if they have met it enough.
+
+    Returns `(deck, basis, sightings)` where basis is "faced" or "typical".
+    """
+    best_n, best_cards = 0, None
+    for _hash, (count, cards) in (seen or {}).items():
+        if count > best_n or (count == best_n and best_cards
+                              and ",".join(sorted(cards)) < ",".join(sorted(best_cards))):
+            # The key tiebreak is not decoration: opponent decks tie on count
+            # constantly, and falling through to dict order would reshuffle the
+            # drawn deck between two identical requests.
+            best_n, best_cards = count, cards
+    if best_n < FACED_MIN_SIGHTINGS or not best_cards:
+        return rep, "typical", 0
+
+    observed = _board_art().get(",".join(sorted(best_cards)), {})
+    try:
+        order, art = cd.arrange_deck(list(best_cards), observed)
+    except Exception:
+        order, art = list(best_cards), {}
+    return (
+        {
+            "cards": order,
+            "art": art,
+            "inferredArt": not observed,
+            "name": _label(archetype),
+            "useRate": None,
+            "winRate": None,
+            "avgElixir": _avg_elixir(best_cards),
+        },
+        "faced",
+        best_n,
+    )
+
+
 def player_counter(tag: str, since: str | None = None,
                    until: str | None = None) -> dict:
     """How this player fares against each archetype, and what to bring.
@@ -1240,6 +1285,20 @@ def player_counter(tag: str, since: str | None = None,
     populated, so no join and no snapshot are needed here.
     """
     per: dict[str, list[int]] = {}
+    # THE DECK THIS PLAYER ACTUALLY FACES, per archetype.
+    #
+    # The rows below were always personal — they are this player's own battles,
+    # grouped by what they ran into. The DECK beside each row was not: it came
+    # from `_representatives()`, which is the most-observed deck of that
+    # archetype across the whole database. So every player was shown the same
+    # eight cards for "X-Bow", which is what made these rows read as generic and
+    # look interchangeable between accounts.
+    #
+    # `opponent_card_keys` is in the same table and the same query, so the deck
+    # they have personally run into most is nearly free. That is a strictly
+    # better answer to "what beats me": it is theirs, it is what they will meet
+    # again, and it is the thing the win rate above it was actually measured on.
+    faced: dict[str, dict[str, list]] = {}
     total = wins = 0
     archive_used = False
 
@@ -1251,7 +1310,7 @@ def player_counter(tag: str, since: str | None = None,
         try:
             rows = con.execute(
                 "SELECT opponent_win_condition wc, result, player_crowns, "
-                "       opponent_crowns "
+                "       opponent_crowns, opponent_card_keys "
                 "FROM battles "
                 "WHERE player_tag = ? AND battle_time >= ? AND battle_time <= ?",
                 (tag, lo, hi),
@@ -1273,6 +1332,19 @@ def player_counter(tag: str, since: str | None = None,
             e[2] += r["player_crowns"] or 0
             e[3] += r["opponent_crowns"] or 0
 
+            # EXACTLY EIGHT CARDS. A 16- or 24-card duel loadout is three decks
+            # end to end; counting it as "a deck they faced" would draw a deck
+            # that never existed. Same guard as everywhere else.
+            try:
+                opp = json.loads(r["opponent_card_keys"] or "[]")
+            except Exception:
+                continue
+            if len(opp) != 8:
+                continue
+            seen = faced.setdefault(wc, {})
+            slot = seen.setdefault(",".join(sorted(opp)), [0, opp])
+            slot[0] += 1
+
     overall = round(100 * wins / total, 1) if total else 0.0
     reps = _representatives()
     matchups = []
@@ -1281,10 +1353,19 @@ def player_counter(tag: str, since: str | None = None,
             continue
         wr = round(100 * w / n, 1)
         tier, interval = dx.confidence_tier(w, n)
+        deck, deck_basis, deck_seen = _faced_deck(faced.get(wc), reps.get(wc), wc)
         matchups.append({
             "archetype": wc, "name": _label(wc), "style": style_of(wc),
             # The deck a reader can actually act on, not just its label.
-            "deck": reps.get(wc),
+            "deck": deck,
+            # WHOSE DECK THIS IS. "faced" means they have personally run into
+            # this exact list and `deckSeen` says how often; "typical" means
+            # they have not met one list often enough to name, so the
+            # archetype's most-observed deck stands in. The screen must say
+            # which -- an example deck presented as the one they keep losing to
+            # is a different claim.
+            "deckBasis": deck_basis,
+            "deckSeen": deck_seen,
             "battles": n, "wins": w, "winRate": wr,
             # Against this player's OWN average, which is what makes a matchup
             # a weakness rather than just a number.

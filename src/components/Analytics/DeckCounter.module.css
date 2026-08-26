@@ -644,6 +644,27 @@
 .rowDeck {
   min-width: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* WHOSE DECK THIS IS, in one word. A deck the player has personally run into
+   and an illustrative example of the archetype are different claims, and the
+   strip alone cannot tell them apart — which is exactly why these rows read as
+   generic before: the same eight cards appeared for every account. */
+.deckBasis {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* `--hue-*`, the INK step: this is 9.6px text and has to hold 4.5:1. The solid
+   step is a fill colour and would not. */
+.rowDeck[data-basis='faced'] .deckBasis {
+  color: var(--hue-green);
 }
 
 .rowDeckEmpty {

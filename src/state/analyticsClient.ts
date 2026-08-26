@@ -704,6 +704,22 @@ export interface PlayerMatchup {
   interval: string | null;
   yourWinRate?: number;
   deck?: RepDeck | null;
+  /**
+   * WHOSE DECK `deck` IS.
+   *
+   * `'faced'` — this player has personally met this exact eight-card list,
+   * `deckSeen` times. It is the deck the win rate above it was measured on.
+   *
+   * `'typical'` — they have not met any one list often enough to name, so the
+   * archetype's most-observed deck across the whole database stands in. That
+   * was the ONLY behaviour before, which is why these rows looked identical
+   * between accounts: every player was shown the same eight cards for "X-Bow".
+   *
+   * Optional; absent reads as `'typical'`, which is what older responses were.
+   */
+  deckBasis?: 'faced' | 'typical';
+  /** How many times they met that exact list. 0 when `deckBasis` is typical. */
+  deckSeen?: number;
 }
 
 export interface PlayerCounterReport {

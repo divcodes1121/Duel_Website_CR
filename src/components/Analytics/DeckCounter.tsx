@@ -129,11 +129,40 @@ function PastedDeck({ side, size = 'md' }: { side: CounterDeckSide; size?: 'sm' 
  * A row that names "Graveyard" and shows nothing is a row you cannot act on,
  * which is why every table in the design carries the eight cards. Absent only
  * while the meta snapshot is still building. */
-function RowDeck({ deck }: { deck?: RepDeck | null }) {
+/**
+ * The deck drawn beside a matchup row.
+ *
+ * TWO DIFFERENT CLAIMS, AND THEY MUST NOT LOOK ALIKE. `faced` is the exact
+ * eight-card list this player has personally run into, and how many times — it
+ * is the deck the win rate beside it was measured on. `typical` is the
+ * archetype's most-observed deck across the whole database, shown only when the
+ * player has not met any one list often enough to name.
+ *
+ * `typical` used to be the only behaviour, which is why these rows read as
+ * generic: every account was shown the same eight cards for "X-Bow", so the
+ * screen looked the same for everyone even though the NUMBERS were always
+ * personal.
+ */
+function RowDeck({ deck, basis, seen }: {
+  deck?: RepDeck | null;
+  basis?: 'faced' | 'typical';
+  seen?: number;
+}) {
   if (!deck) return <span className={styles.rowDeckEmpty}>—</span>;
+  const faced = basis === 'faced' && (seen ?? 0) > 0;
+  const elixir = deck.avgElixir ? ` · ${deck.avgElixir} elixir` : '';
   return (
-    <span className={styles.rowDeck} title={`${deck.name}${deck.avgElixir ? ` · ${deck.avgElixir} elixir` : ''}`}>
+    <span
+      className={styles.rowDeck}
+      data-basis={faced ? 'faced' : 'typical'}
+      title={
+        faced
+          ? `You have faced this exact deck ${seen} times${elixir}`
+          : `A typical ${deck.name} deck — you have not met one list often enough to name${elixir}`
+      }
+    >
       <Strip cards={deck.cards} art={deck.art} inferred={deck.inferredArt} name={deck.name} size="sm" />
+      <span className={styles.deckBasis}>{faced ? `faced ${seen}x` : 'typical'}</span>
     </span>
   );
 }
@@ -169,7 +198,7 @@ function MatchupRow({ m, showYours }: { m: PlayerMatchup; showYours?: boolean })
         {m.name}
         <span className={styles.rowStyle}>{m.style}</span>
       </span>
-      <RowDeck deck={m.deck} />
+      <RowDeck deck={m.deck} basis={m.deckBasis} seen={m.deckSeen} />
       <span className={styles.rowFig} data-kind={kind}>
         {pct(showYours ? (m.yourWinRate ?? 100 - m.winRate) : m.winRate)}
       </span>
