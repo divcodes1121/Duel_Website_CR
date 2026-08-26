@@ -30,8 +30,9 @@ bot's SQLite files read-only.
 >
 > **Accounts are real.** Sign-up, sign-in, a three-day trial, per-feature gating,
 > one desktop and one mobile per account, and an admin console — on Supabase,
-> with Row Level Security. The twenty-account SHA-256 test gate is retired
-> everywhere except the Coach's proxy, which is the last thing still keyed on it.
+> with Row Level Security. The twenty-account SHA-256 test gate is **deleted** —
+> store, bundled hashes, generator, login screen and the last consumer (the
+> Coach's proxy) all gone.
 > See [Accounts, tiers and the gate](#accounts-tiers-and-the-gate).
 >
 > **The rename is all but finished.** The shell, the landing page and the login
@@ -309,7 +310,7 @@ and only the content scrolls.
 Player, Top Meta Decks and Deck Counter are open to everybody; the five deeper
 analytics areas are what signing up buys, free for three days. Accounts are real
 — Supabase, with Row Level Security — and the twenty-account SHA-256 test gate
-that used to stand in front of everything is retired. See
+that used to stand in front of everything is deleted outright. See
 [Accounts, tiers and the gate](#accounts-tiers-and-the-gate).
 
 Deck lists can be **filtered by card**. Pick any cards — win conditions lead the
@@ -7025,7 +7026,8 @@ conclusions:
   unauthenticated, `Access-Control-Allow-Origin: *`, unrate-limited, plaintext
   — a free bulk export of ~3.8M battles of other people's data to anyone who
   finds the hostname.
-* **Build an allowlist, not percentages.** The site has 20 fixed accounts; a
+* **Build an allowlist, not percentages.** Written when the site had 20 fixed
+  accounts (long since deleted); a
   percentage of 20 is theatre.
 
 ### What the engine actually is, in one table
@@ -7248,7 +7250,6 @@ scripts/
   build-hero-art.py           masters in assets/ -> what public/ serves:
                               keys the character to alpha, re-encodes to WebP
                               (4.2 MB of PNG -> 166 kB). Idempotent.
-  generate-test-users.mjs     rebuilds src/data/users.json from TEST_ACCOUNTS.md
 
 assets/                       SOURCE art (masters, never served)
   background/                 light_background.png, dark_background.png,

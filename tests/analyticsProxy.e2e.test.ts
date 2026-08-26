@@ -13,14 +13,29 @@
  * architecture rests on: the key is attached on the way OUT, and nothing about
  * the upstream comes back IN.
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { AddressInfo } from 'node:net';
 import handler from '../api/analytics/opponent-read/[tag]';
 
 const KEY = 'e2e-upstream-key-4f2a9c';
-const CRED = '0f9473eb049cd9abafd1dcd6fc4df45437dc33498ecd48ebac1742618394bdb5'; // royal01
+
+/* A SUPABASE TOKEN, not the retired sha256(username:password). The signature
+   check is mocked because verifying a real ES256 token would be testing `jose`
+   rather than this proxy; what these tests exercise is the hop itself — what
+   the proxy forwards, what it attaches, and what it refuses. */
+const CRED = 'e2e-valid-token';
+const USER = '33333333-3333-4333-8333-333333333333';
+const USER20 = '44444444-4444-4444-8444-444444444444';
 const TAG = 'Y022GRCJQ';
+
+vi.mock('jose', () => ({
+  createRemoteJWKSet: () => ({}),
+  jwtVerify: async (token: string) => {
+    if (token === 'e2e-valid-token') return { payload: { sub: '33333333-3333-4333-8333-333333333333' } };
+    throw new Error('bad token');
+  },
+}));
 
 /** Every request the fake upstream received, for inspection afterwards. */
 const seenUpstream: { url: string; headers: Record<string, string | string[] | undefined> }[] = [];
@@ -95,7 +110,8 @@ beforeAll(async () => {
 
   process.env.ANALYTICS_ORIGIN = `http://127.0.0.1:${upstreamPort}`;
   process.env.CLASH_API_KEY = KEY;
-  process.env.OIE_ALLOWLIST = 'royal01';
+  process.env.OIE_ALLOWLIST = USER;
+  process.env.SUPABASE_URL = 'https://proj.supabase.test';
   delete process.env.KV_REST_API_URL;
   delete process.env.KV_REST_API_TOKEN;
 });
@@ -173,12 +189,12 @@ describe('browser → proxy → upstream, over real sockets', () => {
   });
 
   it('is disabled for an account off the allowlist', async () => {
-    process.env.OIE_ALLOWLIST = 'royal20';
+    process.env.OIE_ALLOWLIST = USER20;
     seenUpstream.length = 0;
     const res = await browserFetch();
     expect(await res.json()).toEqual({ enabled: false, read: null });
     expect(seenUpstream).toHaveLength(0);
-    process.env.OIE_ALLOWLIST = 'royal01';
+    process.env.OIE_ALLOWLIST = USER;
   });
 
   it('degrades to disabled when upstream rejects the key', async () => {

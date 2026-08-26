@@ -17,7 +17,7 @@ import {
   type OpponentReadOutcome,
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
-import { useAuthStore } from '../../state/authStore';
+import { supabase } from '../../state/supabase';
 import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
@@ -821,8 +821,11 @@ function recordOpponentReadMetric(o: OpponentReadOutcome, ms: number) {
 }
 
 function OpponentReadPanel({ tag }: { tag: string }) {
-  // The proxy needs to know WHICH account is asking, to check the allowlist.
-  const credential = useAuthStore((s) => s.credential);
+  /* The proxy needs to know WHICH account is asking, to check the allowlist.
+     A SUPABASE ACCESS TOKEN now, not the retired sha256(username:password).
+     Read at fetch time rather than held in state, because the token is
+     short-lived and refreshed in the background — a copy captured on mount
+     would be the one thing here that goes stale. */
   const [outcome, setOutcome] = useState<OpponentReadOutcome | null>(null);
   // The skeleton is DELAYED. When the engine is switched off the endpoint
   // answers instantly, so showing a skeleton immediately would flash
@@ -834,18 +837,21 @@ function OpponentReadPanel({ tag }: { tag: string }) {
     let alive = true;
     const started = performance.now();
     const timer = window.setTimeout(() => alive && setShowSkeleton(true), 250);
-    fetchOpponentRead(tag, credential).then((o) => {
+    void (async () => {
+      const token =
+        (await supabase?.auth.getSession())?.data.session?.access_token ?? null;
+      const o = await fetchOpponentRead(tag, token);
       if (!alive) return;
       window.clearTimeout(timer);
       setOutcome(o);
       setShowSkeleton(false);
       recordOpponentReadMetric(o, performance.now() - started);
-    });
+    })();
     return () => {
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [tag, credential]);
+  }, [tag]);
 
   // Disabled, timed out or failed — the Coach is complete without this, so it
   // says nothing rather than apologising for a feature the reader never saw.

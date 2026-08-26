@@ -21,9 +21,28 @@ import handler, {
 
 const KEY = 'upstream-secret-do-not-leak';
 const ORIGIN = 'https://analytics.example.test';
-// royal01's credential, from src/data/users.json.
-const CRED = '0f9473eb049cd9abafd1dcd6fc4df45437dc33498ecd48ebac1742618394bdb5';
-const CRED20 = 'c97204571a25f62d4426a502425998c2c81867c6e2363875f0683814f4bb8a92';
+
+/* THE TWENTY TEST ACCOUNTS ARE GONE. This used to authenticate with
+   sha256(username:password) taken from `src/data/users.json`; the proxy now
+   verifies a Supabase JWT, so the fixtures are user ids and the signature
+   check is mocked -- verifying a real ES256 token here would be testing
+   `jose`, not this file. What IS this file's job, and is still tested below:
+   that a missing or malformed Authorization header is refused, that a verified
+   identity is matched against the allowlist, and that nothing on the failure
+   path leaks. */
+const CRED = 'valid-token-user-1';
+const CRED20 = 'valid-token-user-20';
+const USER = '11111111-1111-4111-8111-111111111111';
+const USER20 = '22222222-2222-4222-8222-222222222222';
+
+vi.mock('jose', () => ({
+  createRemoteJWKSet: () => ({}),
+  jwtVerify: async (token: string) => {
+    if (token === CRED) return { payload: { sub: USER } };
+    if (token === CRED20) return { payload: { sub: USER20 } };
+    throw new Error('bad token');
+  },
+}));
 const TAG = 'Y022GRCJQ';
 
 /** A well-formed upstream read, matching `opponent-read-v2`. */
@@ -89,7 +108,8 @@ beforeEach(() => {
   resetRateLimiter();
   process.env.ANALYTICS_ORIGIN = ORIGIN;
   process.env.CLASH_API_KEY = KEY;
-  process.env.OIE_ALLOWLIST = 'royal01';
+  process.env.OIE_ALLOWLIST = USER;
+  process.env.SUPABASE_URL = 'https://proj.supabase.test';
   delete process.env.KV_REST_API_URL;
   delete process.env.KV_REST_API_TOKEN;
   delete process.env.UPSTASH_REDIS_REST_URL;
@@ -104,30 +124,44 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('accounts and the allowlist', () => {
-  it('maps a known credential to its account', () => {
-    expect(accountFor({ headers: { authorization: `Bearer ${CRED}` } })).toBe('royal01');
-    expect(accountFor({ headers: { authorization: `Bearer ${CRED20}` } })).toBe('royal20');
+  it('maps a verified token to its Supabase user id', async () => {
+    expect(await accountFor({ headers: { authorization: `Bearer ${CRED}` } })).toBe(USER);
+    expect(await accountFor({ headers: { authorization: `Bearer ${CRED20}` } })).toBe(USER20);
   });
 
-  it('rejects an unknown, malformed or missing credential', () => {
-    expect(accountFor({ headers: {} })).toBeNull();
-    expect(accountFor({ headers: { authorization: 'Bearer ' + 'a'.repeat(64) } })).toBeNull();
-    expect(accountFor({ headers: { authorization: 'Bearer nope' } })).toBeNull();
-    expect(accountFor({ headers: { authorization: CRED } })).toBeNull();
+  it('rejects an unverifiable, malformed or missing token', async () => {
+    expect(await accountFor({ headers: {} })).toBeNull();
+    expect(await accountFor({ headers: { authorization: 'Bearer nope' } })).toBeNull();
+    // The scheme matters: a bare token with no "Bearer " prefix is not a
+    // credential, and must not be read as one.
+    expect(await accountFor({ headers: { authorization: CRED } })).toBeNull();
+    expect(await accountFor({ headers: { authorization: 'Bearer ' } })).toBeNull();
+  });
+
+  it('refuses everything when Supabase is not configured', async () => {
+    const saved = process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_URL;
+    // Fail CLOSED. With no issuer to verify against there is no way to know
+    // who is calling, and "unknown" must never mean "allowed".
+    expect(await accountFor({ headers: { authorization: `Bearer ${CRED}` } })).toBeNull();
+    process.env.SUPABASE_URL = saved;
   });
 
   it('allows only listed accounts, case-insensitively', () => {
-    process.env.OIE_ALLOWLIST = 'royal01, ROYAL20 ';
-    expect(isAllowed('royal01')).toBe(true);
-    expect(isAllowed('royal20')).toBe(true);
-    expect(isAllowed('royal02')).toBe(false);
+    process.env.OIE_ALLOWLIST = `${USER}, ME@EXAMPLE.TEST `;
+    expect(isAllowed(USER)).toBe(true);
+    // Emails are accepted alongside ids: a uuid is what the system knows, an
+    // email is what a person can actually paste into Vercel.
+    expect(isAllowed('me@example.test')).toBe(true);
+    expect(isAllowed(USER20)).toBe(false);
   });
 
   it('defaults to nobody', () => {
     delete process.env.OIE_ALLOWLIST;
-    expect(isAllowed('royal01')).toBe(false);
+    expect(isAllowed(USER)).toBe(false);
     process.env.OIE_ALLOWLIST = '';
-    expect(isAllowed('royal01')).toBe(false);
+    expect(isAllowed(USER)).toBe(false);
     expect(isAllowed(null)).toBe(false);
   });
 
@@ -139,7 +173,7 @@ describe('accounts and the allowlist', () => {
   });
 
   it('answers a non-allowlisted account with enabled:false and calls nothing', async () => {
-    process.env.OIE_ALLOWLIST = 'royal20';
+    process.env.OIE_ALLOWLIST = USER20;
     const { res, spy } = await call();
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ enabled: false, read: null });

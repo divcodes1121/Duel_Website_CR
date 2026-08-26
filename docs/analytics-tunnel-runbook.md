@@ -319,7 +319,7 @@ time, so the naming convention is the boundary.
 |---|---|---|
 | `ANALYTICS_ORIGIN` | `https://analytics.<your-domain>` | origin only, no path |
 | `CLASH_API_KEY` | the same secret `server/app.py` runs with | 32+ random bytes |
-| `OIE_ALLOWLIST` | one username, e.g. `royal20` | empty means nobody |
+| `OIE_ALLOWLIST` | Supabase user ids or emails, comma-separated | empty means nobody |
 | `OIE_RATE_LIMIT` | optional, default `30` | per account per minute |
 
 Generate the key with `python -c "import secrets;print(secrets.token_urlsafe(32))"`.
@@ -420,5 +420,6 @@ turning it on is not part of any step here.
    platform. **This is the one thing the local tests cannot establish**, because
    the dynamic-segment binding is the platform's behaviour, not this code's.
 
-Then the one-account rollout is `OIE_ALLOWLIST=royal20`, sign in as royal20,
+Then the one-account rollout is `OIE_ALLOWLIST=<your supabase user id or
+email>`, sign in as that account,
 open the Coach, and watch.

@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useAuthStore } from '../../state/authStore';
 import { useAccountStore } from '../../state/accountStore';
-import { isSupabaseConfigured } from '../../state/supabase';
 import { useThemeStore } from '../../state/themeStore';
 import { useBuilderStore } from '../../state/store';
 import styles from './ProfileMenu.module.css';
@@ -22,24 +20,18 @@ interface MenuPos {
 
 export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) {
   /* TWO STORES, AND THE MENU MUST FOLLOW THE ONE IN CHARGE.
-     `authStore` is the retired 20-account test gate; `accountStore` is real
-     Supabase accounts. When Supabase is configured the app routes entirely on
-     the latter — so a Log out wired to the former cleared a store nothing reads
-     and the click did visibly nothing, which is exactly what happened. */
-  const testUser = useAuthStore((s) => s.user);
-  const testLogout = useAuthStore((s) => s.logout);
+     There is ONE store now. `authStore` and its twenty bundled accounts are
+     deleted; this used to read both, and a Log out wired to the retired one
+     cleared a store nothing read, so the click did visibly nothing. */
   const account = useAccountStore((s) => s.profile);
   const tier = useAccountStore((s) => s.tier);
   const accountEmail = useAccountStore((s) => s.email);
   const accountSignOut = useAccountStore((s) => s.signOut);
 
-  const authUser = isSupabaseConfigured
-    ? (account?.display_name ?? accountEmail ?? null)
-    : testUser;
+  const authUser = account?.display_name ?? accountEmail ?? null;
 
   function logout() {
-    if (isSupabaseConfigured) void accountSignOut();
-    else testLogout();
+    void accountSignOut();
   }
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);

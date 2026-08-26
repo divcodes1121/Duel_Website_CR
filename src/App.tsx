@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Dashboard, type DashboardView } from './components/Dashboard/Dashboard';
-import { Login } from './components/Login/Login';
 import { AuthScreen } from './components/Auth/AuthScreen';
 import { Onboarding } from './components/Auth/Onboarding';
-import { useAuthStore } from './state/authStore';
 import { useAccountStore } from './state/accountStore';
 import { isSupabaseConfigured } from './state/supabase';
 import styles from './App.module.css';
@@ -53,14 +51,10 @@ function useHashRoute(): string {
 
 function App() {
   const route = useHashRoute();
-  const user = useAuthStore((s) => s.user);
 
-  /* TWO GATES, ONE AT A TIME.
-     `accountStore` is real Supabase accounts; `authStore` is the 20-account
-     test gate. Which one applies is decided by whether Supabase is configured
-     at all, so a checkout without the environment variables — every clone, and
-     the deployment until the variables were set — keeps the behaviour it had
-     rather than failing to mount. */
+  /* ONE GATE. `accountStore` is the only account system — the twenty-account
+     test gate that used to run alongside it is deleted, along with its store,
+     its bundled hashes and the generator that wrote them. */
   const accountReady = useAccountStore((s) => s.ready);
   const accountId = useAccountStore((s) => s.userId);
   const profile = useAccountStore((s) => s.profile);
@@ -125,15 +119,12 @@ function App() {
         </div>
       );
     }
-  } else if (!user) {
-    /* No Supabase configured: the 20-account test gate still applies, and it
-       is still a wall, because that build has no public tier to show. */
-    return (
-      <div className={styles.app}>
-        <Login />
-      </div>
-    );
   }
+  /* NO `else` BRANCH ANY MORE. A checkout without Supabase configured used to
+     fall back to a wall over twenty bundled accounts; those are deleted, and
+     the fallback is simply the public site — `useAccess()` already answers
+     `admin` when there is nothing to gate against, so a local clone sees
+     everything rather than a login it cannot pass. */
 
   const { tag, section } = playerRoute(route);
 

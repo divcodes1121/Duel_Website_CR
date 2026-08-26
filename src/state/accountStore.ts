@@ -5,12 +5,11 @@ import { type Profile, type Tier, supabase, tierOf } from './supabase';
 /**
  * The signed-in account: session, profile, tier, and the device claim.
  *
- * SEPARATE FROM `authStore`, not a replacement for it — yet. `authStore` is the
- * 20-account test gate, and it is still what `api/decks.ts`, the analytics
- * proxy and the OIE allowlist authenticate against, because all three key on
- * `sha256(username:password)`. Ripping it out before those are migrated would
- * take deck sync and the Coach down with it. This store runs alongside until
- * the server side moves, and `App.tsx` prefers a real account when one exists.
+ * THE ONLY ACCOUNT SYSTEM. `authStore` — the 20-account test gate keyed on
+ * `sha256(username:password)` — is deleted, along with its bundled hashes and
+ * the script that generated them. All three consumers it used to serve now
+ * verify a Supabase JWT instead: `api/decks.ts`, the analytics proxy and the
+ * OIE allowlist.
  */
 
 export type DeviceKind = 'desktop' | 'mobile';

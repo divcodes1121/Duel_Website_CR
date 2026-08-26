@@ -594,7 +594,8 @@ rm verify-thing.mjs && npm uninstall playwright
 **No login is needed for most of it any more.** The site is public: the landing
 page, Search Player, Top Meta Decks and Deck Counter render for a signed-out
 visitor, so a verify script can drive them directly. The twenty `royal01`–
-`royal20` test accounts are retired.
+`royal20` test accounts are **deleted** — there is no such login to fall back
+on.
 
 For a screen behind the gate, a script has to sign up a real Supabase account,
 which then sits in the production accounts table until someone deletes it — about

@@ -20,60 +20,93 @@
  * tests can reach them without a second file.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 // ---------------------------------------------------------------------------
 // Accounts
 // ---------------------------------------------------------------------------
 
-/**
- * sha256(username:password) → username, mirroring `src/data/users.json`.
- * `api/decks.ts` holds the same hashes as a Set; regenerate both with
- * `scripts/generate-test-users.mjs` if the accounts change.
+/*
+ * SUPABASE TOKENS, NOT sha256(username:password).
+ *
+ * This file used to carry the twenty test accounts inline -- a Map of
+ * sha256(username:password) to "royal01".."royal20", mirroring
+ * `src/data/users.json`. That scheme is gone from the whole project: it could
+ * not describe anyone who signed themselves up, and a password derivative used
+ * as a bearer credential never expires and cannot be revoked without changing
+ * the password.
+ *
+ * VERIFIED LOCALLY, exactly as `api/decks.ts` does it, and INLINED for the same
+ * reason: package.json is `"type": "module"`, so Vercel runs these as ESM, and
+ * Node ESM does not resolve extensionless relative imports. A shared `./_auth`
+ * typechecks under `moduleResolution: "Bundler"` and then dies at module load
+ * with an uncatchable FUNCTION_INVOCATION_FAILED.
  */
-const ACCOUNTS = new Map<string, string>([
-  ['0f9473eb049cd9abafd1dcd6fc4df45437dc33498ecd48ebac1742618394bdb5', 'royal01'],
-  ['f6e03fa89d9087a4b6a460a2fc50739a063963c0df6ddb4072af9ec8e0b1375a', 'royal02'],
-  ['c38e3af386b22f699fcc3d13935dc501fe23597e84fb9ae93cbbb86adac55a5d', 'royal03'],
-  ['2c76d6f28996991db5f7502ae4aa6ade5d5475148c8b7e51c5189fa169368919', 'royal04'],
-  ['09aa6805394ef898a036c07a828abcfe2daa7d8a57a0b27724f41b7f77d3a6ab', 'royal05'],
-  ['f50489ae47bff97272f947278b02e007cdf3c1e0afc84bf90e1b7ce3a0a4bb2c', 'royal06'],
-  ['3b9abd2e66025d95e2f59dc1743417b1d30cb4452aaf25468ca42713345c2610', 'royal07'],
-  ['dc8dbf9b58d76c1c03e298b075c60cc063925202523dcf3a5cee3dad05552cb9', 'royal08'],
-  ['2bb8c16f262a01de4659e2f50c691ef9bb6a00456d84a61c32a9690c8b5cf4a4', 'royal09'],
-  ['2d4b4cf7379ec7358d20cbfacdde8713e3b1178a9f06d5600b9a56ca166fdc6f', 'royal10'],
-  ['8b1f5f17ced64767c32a6dc691f40ff84dd583c111a06409160ddcc7404196e6', 'royal11'],
-  ['b8b1b002fadd34da35dbc102bb074f62a05476e2df34bb1c7d458aaec57bad20', 'royal12'],
-  ['d50e02cc0271b60809eaa9f61297d5c4e4e6cae19fbd79ecf8dbabef9b38ffd9', 'royal13'],
-  ['77091351abc868a5b464ba4d1c73c07945bc19a67ec003777337244be2e2435b', 'royal14'],
-  ['deb8e4533310eddc4d73190cb4aa8a1673b8a4e6db972ea9c6a7554a36e4ccb8', 'royal15'],
-  ['8f34142b691d16ff2c613c89deaf0e9b0cb93708f525e4c1ba69f325daeaaf4b', 'royal16'],
-  ['407744fc81fdcf59e175c03e185f9e4210816af2b0472b61f1357f2ddcf874fe', 'royal17'],
-  ['a0eaddce2e90242f0f6c11338868a806f52c408b70a029e88d5a5577344c0a71', 'royal18'],
-  ['85ed85d7bd0465ab52098d893d7a7be4e39b4ab9cb0bb6f53daae06e39d5c7ac', 'royal19'],
-  ['c97204571a25f62d4426a502425998c2c81867c6e2363875f0683814f4bb8a92', 'royal20'],
-]);
 
-/** The signed-in account, from the same bearer credential `api/decks.ts` uses. */
-export function accountFor(req: Pick<VercelRequest, 'headers'>): string | null {
+function supabaseUrl(): string {
+  return process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? '';
+}
+
+/* CACHED, BUT NOT BUILT AT MODULE LOAD. A warm container still fetches the
+   JWKS once rather than per request -- and re-fetches only when a token
+   arrives bearing an unseen `kid`, which is what lets Supabase rotate signing
+   keys without a redeploy here. Doing it lazily rather than at import time
+   also means the environment can be set by a test before first use, which an
+   eager `const` at module scope makes impossible. */
+let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+let _jwksFor = '';
+
+function keys(): ReturnType<typeof createRemoteJWKSet> | null {
+  const url = supabaseUrl();
+  if (!url) return null;
+  if (!_jwks || _jwksFor !== url) {
+    _jwks = createRemoteJWKSet(new URL(`${url}/auth/v1/.well-known/jwks.json`));
+    _jwksFor = url;
+  }
+  return _jwks;
+}
+
+/** The signed-in account id, from the same bearer token `api/decks.ts` uses. */
+export async function accountFor(
+  req: Pick<VercelRequest, 'headers'>,
+): Promise<string | null> {
+  const jwks = keys();
+  if (!jwks) return null;
   const header = req.headers?.authorization;
   if (typeof header !== 'string' || !header.startsWith('Bearer ')) return null;
-  const hash = header.slice('Bearer '.length).trim().toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(hash)) return null;
-  return ACCOUNTS.get(hash) ?? null;
+  const token = header.slice('Bearer '.length).trim();
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: `${supabaseUrl()}/auth/v1`,
+      /* Supabase puts `authenticated` in `aud` for a signed-in user. Pinning it
+         stops a token minted for another audience being replayed here. */
+      audience: 'authenticated',
+    });
+    return typeof payload.sub === 'string' ? payload.sub : null;
+  } catch {
+    /* Expired, wrong signature, wrong issuer, malformed -- one answer. The
+       difference is only useful to someone probing. */
+    return null;
+  }
 }
 
 /**
- * Who may reach the engine, from `OIE_ALLOWLIST` (comma-separated usernames).
+ * Who may reach the engine, from `OIE_ALLOWLIST`.
  *
- * Empty means NOBODY. That is the deliberate default: the engine is off, and
- * an allowlist that defaults to everyone is not an allowlist. Step 5 widens
- * this; step 3 only has to prove the gate exists and holds.
+ * NOW A LIST OF SUPABASE USER IDS OR EMAILS, not usernames -- there are no
+ * usernames any more. Both are accepted because a uuid is what the system
+ * knows and an email is what a person can actually paste into Vercel; the
+ * caller passes whichever it has.
+ *
+ * Empty means NOBODY, and that is deliberate: the engine is off, and an
+ * allowlist that defaults to everyone is not an allowlist.
  */
-export function isAllowed(username: string | null): boolean {
-  if (!username) return false;
+export function isAllowed(account: string | null): boolean {
+  if (!account) return false;
   const raw = process.env.OIE_ALLOWLIST ?? '';
   const allowed = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-  return allowed.includes(username.toLowerCase());
+  return allowed.includes(account.toLowerCase());
 }
 
 // ---------------------------------------------------------------------------
@@ -383,20 +416,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const username = accountFor(req);
-    if (!username) {
+    // `await` now: the token is verified against Supabase's JWKS rather than
+    // looked up in a Map of twenty hardcoded hashes.
+    const account = await accountFor(req);
+    if (!account) {
       res.status(401).json({ error: 'unauthorized' });
       return;
     }
 
     // Not on the list is not an error — it is the feature being off for you,
     // which is exactly what `enabled: false` already means to the client.
-    if (!isAllowed(username)) {
+    if (!isAllowed(account)) {
       res.status(200).json(DISABLED);
       return;
     }
 
-    if (!(await sharedRateLimit(username))) {
+    if (!(await sharedRateLimit(account))) {
       res.setHeader('Retry-After', String(RATE_WINDOW_S));
       res.status(429).json({ error: 'rate_limited' });
       return;
