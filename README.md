@@ -78,7 +78,7 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,252 Python checks** across **34 suites** (496 check-style + 756 unittest), **221 vitest**, `tsc -b` and `npm run build` clean |
+| tests | **1,260 Python checks** across **35 suites** (504 check-style + 756 unittest), **221 vitest**, `tsc -b` and `npm run build` clean |
 | shipped from | `main` at `6bedee0`. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -6041,7 +6041,7 @@ are in [Running it](#running-it).
 
 ## Testing and verification
 
-1,252 Python checks across 34 suites and 221 vitest tests, none of which open a
+1,260 Python checks across 35 suites and 221 vitest tests, none of which open a
 database — every Python suite runs on synthetic data or a stubbed reader, so
 they pass on a machine with no Clash_Bot install and cannot be broken by
 whatever a real player did last week. The vitest side gained the analytics-proxy
@@ -6173,6 +6173,33 @@ be collected from then on — works. The queue is one small SQLite file the
 website writes and the bot reads; the bot's own databases stay `mode=ro` to the
 website, which is what keeps a web request from ever touching the collector's
 storage.
+
+**A hundred tags at once is fine. The two-hundredth over a month was not.**
+
+The bot drains `SELECT tag FROM tag_requests ORDER BY requested_at LIMIT 200`,
+skipping tags already in `tracked_players` — and nothing deleted the rows it had
+finished with. So once 200 lifetime requests had accumulated, every drain read
+the same 200 already-enrolled rows, skipped all of them, and **never saw a newer
+request**. Enrolment would freeze permanently while the site went on answering
+"pending".
+
+Demonstrated before fixing: 250 queued, oldest 240 enrolled → **0 new tags
+reachable by the drain**. After pruning the enrolled rows → all 10 visible.
+
+The failure is **cumulative, not concurrent**, which is what makes it nasty. A
+hundred people searching a hundred new tags at once was always inside one batch
+and always worked; the queue simply had to get long enough, at which point
+enrolment stops with no error anywhere.
+
+`prune_enrolled()` in `server/tracking.py` deletes queue rows the bot has
+already picked up, triggered from `request()` once the queue passes
+`PRUNE_ABOVE = 100` — below the bot's batch of 200, because pruning only after
+the queue already exceeds a batch would be too late. It still writes nowhere but
+its own file: `tracked_players` is read through the same read-only path
+`bot_tracked()` uses. `server/test_tracking.py` (8 checks) pins the freeze and
+the fix, and deliberately hardcodes the bot's `200` rather than importing it —
+the suite exists to check that two projects agree, so reading the bot's value
+would defeat it.
 
 **`trackedPlayers` is on `/coverage`, not `/status`.** `/status` is the one
 route that answers without a key, and how many players the service collects is

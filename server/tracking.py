@@ -137,6 +137,67 @@ def bot_tracked(tag: str) -> bool:
         con.close()
 
 
+#: Queue rows above which `request()` prunes what the bot has already enrolled.
+#:
+#: THE QUEUE IS DRAINED OLDEST-FIRST WITH A LIMIT, AND NOTHING DELETED IT.
+#: The bot reads `SELECT tag FROM tag_requests ORDER BY requested_at LIMIT 200`
+#: and skips any tag already in `tracked_players`. Rows were never removed
+#: here, so once 200 lifetime requests had accumulated -- all of them long
+#: since enrolled -- every drain would read the same 200 skips and NEVER SEE a
+#: newer request. Enrolment freezes, permanently and silently: the site keeps
+#: answering "pending" and nothing ever collects.
+#:
+#: A hundred people searching a hundred new tags is well inside one batch, so
+#: that case was always fine. The failure is cumulative, not concurrent, which
+#: is exactly the kind that arrives quietly weeks later.
+#:
+#: Fixed on THIS side because it is this module's table. The bot could equally
+#: filter or delete, but the queue belongs to the website and the website is
+#: the one thing here that already writes to it.
+PRUNE_ABOVE = 100
+
+
+def prune_enrolled() -> int:
+    """Drop queue rows the bot has already picked up. Returns rows removed.
+
+    Still writes nowhere but its own file: the bot's `tracked_players` is read
+    through the read-only path, exactly as `bot_tracked` does.
+
+    Never raises. A failure here means the queue stays long, which is the
+    status quo, and must never cost someone their search.
+    """
+    _ensure()
+    path = cd.resolve_db_path()
+    if not path:
+        return 0
+    try:
+        bot = cd.connect(path)
+    except Exception:
+        return 0
+    try:
+        tracked = {r[0] for r in bot.execute("SELECT tag FROM tracked_players")}
+    except Exception:
+        return 0
+    finally:
+        bot.close()
+    if not tracked:
+        return 0
+
+    con = _connect()
+    try:
+        queued = [r["tag"] for r in con.execute("SELECT tag FROM tag_requests")]
+        done = [t for t in queued if t in tracked]
+        if not done:
+            return 0
+        con.executemany("DELETE FROM tag_requests WHERE tag = ?", ((t,) for t in done))
+        con.commit()
+        return len(done)
+    except Exception:
+        return 0
+    finally:
+        con.close()
+
+
 def request(tag: str, source: str = "search") -> dict:
     """Queue a tag for enrolment. Idempotent.
 
@@ -162,12 +223,19 @@ def request(tag: str, source: str = "search") -> dict:
         row = con.execute(
             "SELECT requested_at, hits FROM tag_requests WHERE tag = ?", (tag,)
         ).fetchone()
-        return {
+        queued = con.execute("SELECT count(*) FROM tag_requests").fetchone()[0]
+        out = {
             "requestedAt": row["requested_at"] if row else now,
             "hits": row["hits"] if row else 1,
         }
     finally:
         con.close()
+
+    # Outside the connection above: prune_enrolled opens its own, and holding
+    # two writers on one SQLite file is how this project earned its WAL notes.
+    if queued > PRUNE_ABOVE:
+        prune_enrolled()
+    return out
 
 
 def status(tag: str) -> dict:
