@@ -8,6 +8,19 @@
          dark mode. themeStore keeps theme-color in sync with the active theme. -->
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#07111f" />
+    <!-- The tab icon. There was none at all, so every browser drew its own
+         placeholder. All of these are written by scripts/build-logo.py from
+         the master in assets/background/ - never hand-edit them.
+
+         The artwork ships on a dark rounded tile rather than transparent: the
+         browser draws the tab strip in the OS theme and the page cannot
+         influence it, so a transparent icon with a near-white letter is a coin
+         flip. Gold and off-white on near-black reads on either. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <title>Deckkies — Clash Royale Duel Deck Builder</title>
   </head>
   <body>

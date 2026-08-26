@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { ReadingState } from './ReadingState';
+import { VsMark } from '../VsMark/VsMark';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import {
   AnalyticsError,
@@ -176,8 +177,8 @@ function BattleRow({ battle, you, youTag }: { battle: RecentBattle; you: string;
           having to know which of them is on top. */}
       <div className={styles.versus}>
         <Side side={battle.player} name={you} tag={youTag} align="left" />
-        <span className={styles.vs} aria-hidden="true">
-          VS
+        <span className={styles.vs}>
+          <VsMark size="lg" />
         </span>
         <Side
           side={battle.opponent}

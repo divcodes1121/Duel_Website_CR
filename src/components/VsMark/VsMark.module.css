@@ -1,0 +1,99 @@
+/* The mark that stands between two decks.
+ *
+ * The logo is a real <img>, not something the shader draws: it stays crisp at
+ * any size, it costs nothing, and it is still there when WebGL is refused or
+ * `prefers-reduced-motion` is set. The lightning is a separate fixed canvas
+ * (`LightningMarks`) that finds this element by `[data-bolt]` and draws around
+ * its box — so this file only has to be the right size in the right place.
+ */
+
+.mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  /* The bolts reach past the logo. Nothing here clips, and the neighbours are
+     spaced for the glow rather than for the artwork. */
+  width: var(--vs-size, 3.2rem);
+  height: var(--vs-size, 3.2rem);
+}
+
+.logo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* WHICH LETTER COLOUR, in all three theme states.
+   An explicit choice stamps `data-theme` on <html>; the default "system"
+   setting stamps nothing and only `prefers-color-scheme` separates the two.
+   So the light variant is the bare default, the media query flips it for a
+   system-dark viewer who has not chosen, and the two attribute rules let an
+   explicit choice win in both directions. */
+.logoLight {
+  display: block;
+}
+
+.logoDark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .logoLight {
+    display: none;
+  }
+
+  :root:not([data-theme='light']) .logoDark {
+    display: block;
+  }
+}
+
+:root[data-theme='dark'] .logoLight {
+  display: none;
+}
+
+:root[data-theme='dark'] .logoDark {
+  display: block;
+}
+
+:root[data-theme='light'] .logoLight {
+  display: block;
+}
+
+:root[data-theme='light'] .logoDark {
+  display: none;
+}
+
+.mark[data-size='sm'] {
+  --vs-size: 2.4rem;
+}
+
+.mark[data-size='lg'] {
+  --vs-size: 4.4rem;
+}
+
+/* The word, under the mark. Kept because "VS" is what the row means and a logo
+   alone does not say it — and because a screen reader gets the label either
+   way, but a reader glancing at the row should not have to infer it. */
+.word {
+  position: absolute;
+  left: 50%;
+  bottom: -0.9rem;
+  transform: translateX(-50%);
+  font-family: var(--font-display, inherit);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.mark[data-size='lg'] .word {
+  font-size: 0.82rem;
+  bottom: -1.05rem;
+}

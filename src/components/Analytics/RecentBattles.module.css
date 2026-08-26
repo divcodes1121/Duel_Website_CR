@@ -379,22 +379,17 @@
   padding: 0.85rem 1rem;
 }
 
-/* Bigger, now that it has the middle of the row to itself — but display type,
-   not a headline: it is the joint between the two decks, and a VS that shouts
-   competes with the thing it is separating. `--hue-blue-deep` is the step for
-   bare graphic marks at this size, which only need 3:1 and can spend the
-   headroom on saturation. */
+/* The joint between the two decks. It holds the mark now rather than the
+   letters, so this is only a box: `VsMark` sizes itself and `LightningMarks`
+   draws around it from its own canvas. Nothing here clips — the bolts reach
+   well past the logo. */
 .vs {
   align-self: center;
   flex: none;
-  padding: 0.3rem 0.15rem;
-  font-family: var(--font-display, inherit);
-  font-size: 1.45rem;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: 0.04em;
-  color: var(--hue-blue-deep);
-  opacity: 0.75;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.4rem;
 }
 
 /* A SIDE IS EXACTLY AS WIDE AS ITS DECK, and that width is declared once.
@@ -504,8 +499,7 @@
 
   .vs {
     align-self: center;
-    padding: 0;
-    font-size: 1.15rem;
+    padding: 0.2rem 0;
   }
 
   .side[data-align='right'] {

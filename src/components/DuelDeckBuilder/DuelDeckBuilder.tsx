@@ -6,6 +6,7 @@ import { DECK_SIZE } from '../../types/deck';
 import { DeckPanel } from './DeckPanel';
 import { CrownCounter } from './CrownCounter';
 import { SavedGroups } from './SavedGroups';
+import { VsMark } from '../VsMark/VsMark';
 import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { PlusIcon } from './icons';
@@ -222,6 +223,12 @@ export function DuelDeckBuilder() {
            rail collapses, or when the window narrows, and no viewport
            breakpoint can see all three of those. */
         <div className={styles.versus}>
+          {/* The mark sits in its own column between the two players, level
+              with their headers. It is what the board is FOR: blue against
+              red, said once, in the gap that already exists between them. */}
+          <span className={styles.versusMark}>
+            <VsMark size="md" />
+          </span>
           {PLAYERS.map((player) => (
             <section key={player.id} className={styles.playerColumn}>
               <header className={styles.playerHeader} data-owner={player.id}>

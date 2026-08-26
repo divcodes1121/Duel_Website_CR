@@ -49,6 +49,7 @@ import {
 import styles from './Dashboard.module.css';
 import { Fireflies, type FireflyHue } from '../../three/Fireflies';
 import { LiquidMetal } from '../../three/LiquidMetal';
+import { LightningMarks } from '../../three/LightningMarks';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import { Filmstrip } from '../Filmstrip/Filmstrip';
 import { GateCard } from '../Auth/GateCard';
@@ -446,6 +447,12 @@ export function Dashboard({
           puts dozens of circles on screen. Same reason DeckFx is one canvas.
           It draws nothing and runs no frames until something is hovered. */}
       <LiquidMetal />
+      {/* ONE canvas for every `[data-bolt]` mark on the page — the VS between
+          two decks, wherever it appears. Mounted here rather than per screen
+          because the builder and the battle log both render inside this shell,
+          and ten battle rows with a context each would be most of the
+          browser's WebGL budget. */}
+      <LightningMarks />
 
       <header className={styles.topbar}>
         <button
@@ -454,8 +461,11 @@ export function Dashboard({
           onClick={goHome}
           title="Back to the home screen"
         >
+          {/* The logo, on the same dark tile the favicon uses, so the tab
+              icon and the mark in the chrome are the same object. It was a
+              violet tile with a generic crown; there is a real mark now. */}
           <span className={styles.brandMark}>
-            <CrownIcon size={17} />
+            <img src={`${import.meta.env.BASE_URL}assets/brand/logo-dark.png`} alt="" draggable={false} />
           </span>
           DECKKIES
         </button>

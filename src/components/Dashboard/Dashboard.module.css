@@ -53,19 +53,33 @@
   color: var(--accent-select);
 }
 
-/* A solid violet tile with a white crown — the logo, not an icon button. It is
-   the one place the brand hue appears as a large fill in the chrome, which is
-   what makes it read as a mark rather than as another control. */
+/* THE REAL MARK, on the dark tile the favicon uses.
+   It was a solid violet tile with a generic crown, which was the right call
+   while there was no logo — the brand hue as a large fill is what made it read
+   as a mark rather than as another control. There is a logo now, and it brings
+   its own crown and its own gold, so the tile stops competing and becomes the
+   ground the mark needs: the D is near-white and would disappear on a light
+   topbar without one.
+
+   The same tile as the browser-tab icon, deliberately. The thing in the tab
+   and the thing in the chrome should be one object. */
 .brandMark {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 2.1rem;
   height: 2.1rem;
+  padding: 0.18rem;
   border-radius: 11px;
-  background: var(--solid-violet);
-  color: var(--on-solid);
+  background: #0c1222;
   box-shadow: 0 0 22px color-mix(in srgb, var(--solid-violet) var(--glow-core), transparent);
+}
+
+.brandMark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 /* The top-level nav is `TopDock` now — a proximity dock, in its own module.

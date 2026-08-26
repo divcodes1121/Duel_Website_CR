@@ -1,0 +1,13 @@
+{
+  "name": "Deckkies",
+  "short_name": "Deckkies",
+  "description": "A Clash Royale duels companion: deck builder, meta board and battle analytics.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c1222",
+  "theme_color": "#07111f",
+  "icons": [
+    { "src": "/favicon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/favicon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

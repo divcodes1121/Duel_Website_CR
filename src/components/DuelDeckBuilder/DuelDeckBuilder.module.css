@@ -113,9 +113,34 @@
    decks are always in order down their own side. */
 .versus {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* THREE tracks now: the middle one holds the mark. `auto` rather than a
+     fraction so it takes exactly the mark's width and the two collections
+     keep the rest — a 1fr middle would steal a third of the board for a
+     badge. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
+}
+
+/* Explicit placement, because the mark comes FIRST in the DOM (it belongs to
+   the board, not to either player) and auto-placement would otherwise put it
+   in blue's column and push red off the end. */
+.versusMark {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  /* Level with the two player headers: half a header, less half the mark. */
+  margin-top: 0.15rem;
+}
+
+.versus > .playerColumn:first-of-type {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.versus > .playerColumn:last-of-type {
+  grid-column: 3;
+  grid-row: 1;
 }
 
 .playerColumn {
@@ -256,5 +281,25 @@
 @media (max-width: 62rem) {
   .versus {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked, the two collections are one above the other and there is no gap
+     between them for a mark to stand in. It goes to the top, centred, where it
+     titles the board instead of dividing it. */
+  .versusMark {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: center;
+    margin: 0 0 0.2rem;
+  }
+
+  .versus > .playerColumn:first-of-type {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .versus > .playerColumn:last-of-type {
+    grid-column: 1;
+    grid-row: 3;
   }
 }
