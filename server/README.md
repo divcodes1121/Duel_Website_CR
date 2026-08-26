@@ -12,14 +12,40 @@ Both need to be running. Vite alone will show "Analytics service is not
 running" on the analysis screen, which is the intended message rather than a
 crash.
 
+## Where this runs now
+
+**Production is a Contabo VPS, not a laptop.** `app.py` runs there as the
+`royalweb` systemd unit, bound to `127.0.0.1:8787`, behind Caddy at
+`api.deckkies.com`, reading `/var/clashbot/battles.db` with the bot writing to
+it on the same box. `docs/analytics-tunnel-runbook.md` is the configuration and
+the rollback.
+
+Two things differ from a local run and both are load-bearing:
+
+- **`CLASH_TRUSTED_PROXY=1` is required behind Caddy.** The rate limiter keys on
+  the client address, and behind any reverse proxy every request arrives from
+  loopback — one shared bucket for the whole internet. With the flag set,
+  `app.py` reads the first `X-Forwarded-For` entry. Spoofing it means reaching
+  8787 directly, which the loopback bind and `ufw` prevent.
+- **There is no archive tier.** `CLASH_ARCHIVE_DB_PATH` is set explicitly empty.
+  The default is a Windows path that cannot exist on Linux, and the startup
+  banner would print it.
+
+The rest of this file describes the model, which did not change with the move.
+
 ## Storage tiers
 
 Mirrors the bot's own model (`Clash_Bot/clashdb.py`, `Clash_Bot/archive.py`):
 
-| Tier | Default path | Role |
-|------|--------------|------|
-| Hot | `H:\ClashBot\data\battles.db` | rolling window (150 days), ~11.5 GB |
-| Archive | `H:\ClashArchive\archive.db` | every battle ever, ~46 GB |
+| Tier | Path | Role |
+|------|------|------|
+| Hot (production) | `/var/clashbot/battles.db` | what the VPS reads. ~17 GB |
+| Hot (local default) | `H:\ClashBot\data\battles.db` | rolling window (150 days), ~11.5 GB |
+| Archive (local only) | `H:\ClashArchive\archive.db` | every battle ever, ~46 GB |
+
+**The H: copies are the rollback and must not be touched during the soak.**
+Nothing has run long enough on the VPS to retire them, and they are the only way
+back if the migrated copy turns out to be wrong.
 
 **Both tiers moved to H: on 2026-08-17**, along with the bot's `RETENTION_DAYS`
 going 60 → 150: a five-month window is ~28.5M battles and does not fit on the
@@ -28,8 +54,12 @@ internal SSD. Tier 1 was `C:\ClashBot\data\battles.db` before that date.
 The archive is still only *opened* when the requested window reaches further
 back than the hot tier holds, so normally the 46 GB file is not touched.
 
-**What the move changed is the failure story.** An unplugged H: used to cost
-only the archive, because the hot tier was on C:. Both tiers are one failure
+The three paragraphs that follow are about the **local** setup, which is now a
+development and rollback environment rather than what production reads. They are
+kept because that is still where the data is when there is no VPS in the loop.
+
+**What the 2026-08-17 move changed is the failure story.** An unplugged H: used
+to cost only the archive, because the hot tier was on C:. Both tiers are one failure
 domain now, and the migration deleted the old C: database and the desktop
 `battles-pre-retention.db` with it — so a detached drive leaves no database at
 all. `resolve_db_path()` returns `None` and the screens show the explicit
@@ -53,7 +83,22 @@ they used to — they are what keeps a request off the disk.
 ## Configuration
 
 Every path is an environment variable with a local default. This is the
-migration seam — moving to a VPS means setting these, not editing code.
+migration seam — moving to a VPS means setting these, not editing code, and
+that turned out to be true when it actually happened: the move set
+`CLASH_DB_PATH`, `CLASH_ARCHIVE_DB_PATH` (empty), `CLASH_API_KEY`,
+`CLASH_ALLOWED_ORIGIN` and `CLASH_TRUSTED_PROXY` in `/etc/royalweb.env` and
+changed no Python at all.
+
+**A `.env` written `KEY = value` works for python-dotenv and silently fails for
+systemd** — systemd takes the name as `KEY ` with the trailing space and passes
+nothing, no error and no warning. That is why the bot's unit on the VPS must not
+use `EnvironmentFile`; `WorkingDirectory` is what lets `load_dotenv()` find and
+parse the file the way it was written.
+
+**Do not start a unit in a way that dumps its environment.** `--environ` put
+`CLASH_API_KEY` into the journal in plain text on the VPS. The key was
+**rotated**, not merely hidden — a leaked secret that is still valid is not a
+fixed secret.
 
 | Variable | Default |
 |----------|---------|
@@ -97,9 +142,10 @@ development set `CLASH_API_ALLOW_ANONYMOUS=1`, which has to be typed — a
 developer who is merely inconvenienced invents a placeholder key instead, and a
 placeholder key looks like security from the outside while being none.
 
-**Loopback is not trusted, and this is the whole point.** `cloudflared` runs on
-this machine and dials `127.0.0.1`, so every tunnelled request arrives with a
-loopback peer address. An exemption for local clients would wave through
+**Loopback is not trusted, and this is the whole point.** The reverse proxy in
+front — Caddy on the VPS today, `cloudflared` before it — runs on the same
+machine and dials `127.0.0.1`, so every proxied request arrives with a loopback
+peer address. An exemption for local clients would wave through
 precisely the traffic the key exists to authenticate. The process does refuse
 to *start* unauthenticated on a non-loopback `CLASH_API_HOST`, because that
 combination cannot be a deliberate local-dev choice.

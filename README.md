@@ -16,31 +16,35 @@ Vite + React 18 + TypeScript, CSS Modules, zustand, hash routing (no router
 library). The analytics half is served by a small Python API reading the Discord
 bot's SQLite files read-only.
 
-> **Status: revamp in progress, on the `revamp` branch.** Production
-> (`royal-duels.vercel.app`) still runs `6ab701d`, the last commit before the
-> revamp began — Vercel deploys from `main`, and `main` has not moved. Merging
-> `revamp` into `main` is what would ship it, so that is a deliberate decision
-> rather than a side effect of pushing.
+> **Status: shipped.** Production is **[deckkies.com](https://deckkies.com)**,
+> deployed by Vercel from `main`, which now tracks `revamp`. The old
+> `royal-duels.vercel.app` deployment and its `6ab701d` build are history.
 >
-> **The rename is half-applied, and that is a known inconsistency rather than a
-> decision.** The signed-in shell wears **DEKKIES** — top bar, sidebar, Dekkies
-> Pro card — but the login screen still says **Royal Arena**, and so do the
-> persistence keys (`royal-duels-builder`, `royal-duels-auth`,
-> `royal-duels-theme`, `royal-rail`). The storage keys are deliberately left
-> alone: renaming them orphans every saved deck in every browser unless a
-> migration reads the old keys first. The login screen is simply not done.
+> **The analytics half works in production now**, which it did not for most of
+> this project's life. `server/app.py` and the battle database run on a Contabo
+> VPS behind Caddy at `api.deckkies.com`; the browser talks to that directly for
+> shareable analytics and through a same-origin Vercel function for the Coach's
+> opponent read. See [The move off the home machine](#the-move-off-the-home-machine).
+> A local checkout without `server/app.py` running still shows "Analytics
+> service is not running", which remains the intended message rather than a crash.
 >
-> **The analytics half does not work on Vercel.** It needs `server/app.py` and
-> ~43 GB of local SQLite that is not in this repo and never will be. Deployed,
-> those screens show "Analytics service is not running", which is the intended
-> message rather than a crash — see [Where the data comes from](#where-the-data-comes-from)
-> for the environment variables that would point it at a hosted service instead.
+> **Accounts are real.** Sign-up, sign-in, a three-day trial, per-feature gating,
+> one desktop and one mobile per account, and an admin console — on Supabase,
+> with Row Level Security. The twenty-account SHA-256 test gate is retired
+> everywhere except the Coach's proxy, which is the last thing still keyed on it.
+> See [Accounts, tiers and the gate](#accounts-tiers-and-the-gate).
+>
+> **The rename is all but finished.** The shell, the landing page and the login
+> screen all wear **DEKKIES**. What still says `royal-` is the persistence keys
+> (`royal-duels-builder`, `royal-duels-theme`, `royal-rail`), left alone
+> deliberately: renaming them orphans every saved deck in every browser unless a
+> migration reads the old keys first.
 
 ---
 
 ---
 
-## Status — 2026-08-23
+## Status — 2026-08-26
 
 | | |
 |---|---|
@@ -63,8 +67,13 @@ bot's SQLite files read-only.
 | UI — circular buttons | **shipped, verified in a browser.** The 14 circular icon controls take a travelling chromatic rim and a press ripple, adapted from ThreeUI's liquid-metal button. One shared canvas, idle until you touch it |
 | UI — primary buttons | **shipped, 14/14 browser checks.** The twelve rectangular solid CTAs share one treatment: a masked gradient edge and a sheen that sweeps on hover, both mixed from `--on-solid` so the file names no colour |
 | UI — loading states | **shipped, 23/23 then 16/16 browser checks.** The WebGL card fan is **deleted**; all 12 slow loads now show a measured progress rig that paces itself from how long the screen actually took before |
-| tests | **1,236 Python checks** across 21 suites, 172 vitest, `tsc -b` and `npm run build` clean |
-| preserved | `revamp` pushed through `778fdde` — analytics boundary, tunnel verification and the UI pass all on the remote. `main` still runs `6ab701d` |
+| accounts | **shipped.** Supabase auth, three-day trial, per-feature gate, onboarding form, one desktop + one mobile per account |
+| admin console | **shipped** at `#/admin` — every account and tier, role changes, end-trial, deployment health, storage capacity |
+| hosting | **the analytics service left the home machine.** `battles.db`, `server/app.py` and the bot all run on a Contabo VPS behind Caddy at `api.deckkies.com` |
+| domain | **`deckkies.com` live**, Vercel apex + `www`, `api.` pointing at the VPS |
+| deck sync | **re-keyed to the Supabase user id.** A cross-account leak on shared browsers was found and closed |
+| tests | **1,236 Python checks** across 21 suites, **179 vitest**, `tsc -b` and `npm run build` clean |
+| shipped from | `main` at `02b7618`. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
@@ -84,54 +93,62 @@ the practice domain ships no band at all.
 See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 [Closing the engine: phases 20B–24B](#closing-the-engine-phases-20b24b).
 
-**Two operational notes before running anything:**
+**Three operational notes before running anything:**
 
-- The website and the bot share `battles.db`. Overlapping readers stop the bot
-  folding its WAL — it reached **5.66 GB** once. Drop
-  `H:\ClashBot\data\.maintenance` to make the site let go, and delete it
-  afterwards.
+- The website and the bot share `battles.db`, and they now share it on the VPS
+  rather than on H:. Overlapping readers stop the bot folding its WAL — it
+  reached **5.66 GB** once. Drop `/var/clashbot/.maintenance` to make the site
+  let go, and delete it afterwards.
 - Do **not** repoint the site at `archive.db` to dodge that. It is two days
-  stale and would break the OIE experiment outright.
+  stale and would break the OIE experiment outright. There is no archive tier on
+  the VPS at all — `CLASH_ARCHIVE_DB_PATH` is set explicitly empty there.
+- **H: is the rollback and must not be touched during the soak.** The local
+  copies of `battles.db` and `archive.db` are the only way back if the VPS copy
+  turns out to be wrong, and nothing has yet run long enough on the VPS to
+  retire them.
 
 ## Table of contents
 
 1. [Running it](#running-it)
 2. [What the app is now](#what-the-app-is-now)
-3. [Where the data comes from](#where-the-data-comes-from)
-4. [The analytics API](#the-analytics-api)
-5. [Reaching the analytics API from the hosted site](#reaching-the-analytics-api-from-the-hosted-site)
-6. [The tunnel, and what was actually proved](#the-tunnel-and-what-was-actually-proved)
-7. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
-8. [Deck rendering: the three special slots](#deck-rendering-the-three-special-slots)
-9. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
-10. [Duel Zone — the series log and the deck sequence](#duel-zone--the-series-log-and-the-deck-sequence)
-11. [Cards — one player's whole card pool](#cards--one-players-whole-card-pool)
-12. [Deck Counter — what beats what](#deck-counter--what-beats-what)
-13. [Coach Assist — mid-duel help](#coach-assist--mid-duel-help)
-14. [Colour: how it was chosen](#colour-how-it-was-chosen)
-15. [The UI pass — surfaces, selection and navigation](#the-ui-pass--surfaces-selection-and-navigation)
-16. [The display face, and the one property that decides it](#the-display-face-and-the-one-property-that-decides-it)
-17. ["Why is Evolutions 0?" — two emptinesses that shared a sentence](#why-is-evolutions-0--two-emptinesses-that-shared-a-sentence)
-18. [Duel Analysis, on the Dekkies light system](#duel-analysis-on-the-dekkies-light-system)
-19. [The Dekkies redesign — shell first](#the-dekkies-redesign--shell-first)
-20. [The deck builder — two columns instead of a drawer](#the-deck-builder--two-columns-instead-of-a-drawer)
-21. [The home screen — three real areas, three behind a gate](#the-home-screen--three-real-areas-three-behind-a-gate)
-22. [The landing screen, rebuilt](#the-landing-screen-rebuilt)
-23. [Tracking a new tag, and the live battlelog](#tracking-a-new-tag-and-the-live-battlelog)
-24. [Duel Insights](#duel-insights)
-25. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
-26. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
-27. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
-28. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
-29. [The WebGL layer](#the-webgl-layer)
-30. [The top navigation dock](#the-top-navigation-dock)
-31. [The primary buttons](#the-primary-buttons)
-32. [The theme switch](#the-theme-switch)
-33. [The filmstrip](#the-filmstrip)
-34. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
-35. [Testing and verification](#testing-and-verification)
-36. [Project layout](#project-layout)
-37. [Deliberately not done](#deliberately-not-done)
+3. [Accounts, tiers and the gate](#accounts-tiers-and-the-gate)
+4. [The admin console](#the-admin-console)
+5. [Where the data comes from](#where-the-data-comes-from)
+6. [The analytics API](#the-analytics-api)
+7. [Reaching the analytics API from the hosted site](#reaching-the-analytics-api-from-the-hosted-site)
+8. [The tunnel, and what was actually proved](#the-tunnel-and-what-was-actually-proved)
+9. [The move off the home machine](#the-move-off-the-home-machine)
+10. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
+11. [Deck rendering: the three special slots](#deck-rendering-the-three-special-slots)
+12. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
+13. [Duel Zone — the series log and the deck sequence](#duel-zone--the-series-log-and-the-deck-sequence)
+14. [Cards — one player's whole card pool](#cards--one-players-whole-card-pool)
+15. [Deck Counter — what beats what](#deck-counter--what-beats-what)
+16. [Coach Assist — mid-duel help](#coach-assist--mid-duel-help)
+17. [Colour: how it was chosen](#colour-how-it-was-chosen)
+18. [The UI pass — surfaces, selection and navigation](#the-ui-pass--surfaces-selection-and-navigation)
+19. [The display face, and the one property that decides it](#the-display-face-and-the-one-property-that-decides-it)
+20. ["Why is Evolutions 0?" — two emptinesses that shared a sentence](#why-is-evolutions-0--two-emptinesses-that-shared-a-sentence)
+21. [Duel Analysis, on the Dekkies light system](#duel-analysis-on-the-dekkies-light-system)
+22. [The Dekkies redesign — shell first](#the-dekkies-redesign--shell-first)
+23. [The deck builder — two columns instead of a drawer](#the-deck-builder--two-columns-instead-of-a-drawer)
+24. [The home screen — three real areas, three behind a gate](#the-home-screen--three-real-areas-three-behind-a-gate)
+25. [The landing screen, rebuilt](#the-landing-screen-rebuilt)
+26. [Tracking a new tag, and the live battlelog](#tracking-a-new-tag-and-the-live-battlelog)
+27. [Duel Insights](#duel-insights)
+28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
+29. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
+30. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
+31. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
+32. [The WebGL layer](#the-webgl-layer)
+33. [The top navigation dock](#the-top-navigation-dock)
+34. [The primary buttons](#the-primary-buttons)
+35. [The theme switch](#the-theme-switch)
+36. [The filmstrip](#the-filmstrip)
+37. [Things that went wrong and what fixed them](#things-that-went-wrong-and-what-fixed-them)
+38. [Testing and verification](#testing-and-verification)
+39. [Project layout](#project-layout)
+40. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -152,7 +169,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 118 tests over the deck and duel logic (vitest)
+npm run test                      # 179 tests over the deck, duel, export and admin logic
 python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
@@ -168,6 +185,44 @@ npm run lint
 npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
 ```
+
+### Environment
+
+None of these are required to run the app. Without them it still builds and
+mounts — the analytics screens say the service is not running, and with no
+Supabase configured the gate opens everything rather than locking a local
+checkout out of five screens.
+
+**In `.env.local`, read by the browser.** Both are public by design and both
+ship inside the bundle:
+
+| Variable | What it is |
+|---|---|
+| `VITE_SUPABASE_URL` | the project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | the anon/publishable key |
+| `VITE_ANALYTICS_BASE` | where the analytics API lives, if not the Vite proxy |
+
+**In Vercel only, never with a `VITE_` prefix.** Vite inlines any `VITE_`
+variable into the browser bundle at build time, so **the naming convention is
+the security boundary** — renaming one of these to `VITE_*` publishes it:
+
+| Variable | What it is |
+|---|---|
+| `ANALYTICS_ORIGIN` | `https://api.deckkies.com` |
+| `CLASH_API_KEY` | what the Vercel proxy presents to that origin |
+| `OIE_ALLOWLIST` | who gets the Coach's opponent read. Empty means nobody |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Upstash, for deck sync |
+| `SUPABASE_URL` | used server-side to fetch the JWKS that verifies tokens |
+
+**On the VPS**, in `/etc/royalweb.env` — see the runbook.
+
+`GET /api/health` reports which of these a deployment can actually reach, as
+booleans and never as values. It exists because "the JWT check is wrong" and
+"the function cannot see its configuration" are indistinguishable from outside,
+and one boolean settles it.
+
+**Database setup** is one file: run `supabase/001_accounts.sql` in the Supabase
+SQL editor. It is idempotent, so re-running it after an edit is safe.
 
 **Note on the dev server host.** Vite binds IPv6 loopback here, so it answers on
 `http://localhost:5174` but *not* on `http://127.0.0.1:5174`. Scripts that hard-code
@@ -203,6 +258,8 @@ open, so links and refreshes work.
 | `#/player/<tag>/counter` | **Deck Counter** — player counter, deck vs deck, find counters |
 | `#/player/<tag>/coach` | **Coach Assist** — duel prediction and the next-deck suggestion |
 | `#/player/<tag>/<slug>` | Deck Analysis (a shell, no data yet) |
+| `#/signin` | Sign in / sign up, then the three-step onboarding form |
+| `#/admin` | The admin console. Not linked from anywhere a non-admin sees |
 
 The analytics areas are **Search Player · Top Meta Decks · Deck Analysis · Duel
 Analysis · Duel Zone · Cards · Deck Counter · Coach Assist**, each with its own
@@ -238,9 +295,292 @@ The builder tools were previously separate full pages with their own nav bars;
 they now render `embedded` inside the dashboard panel, so the chrome stays put
 and only the content scrolls.
 
-Auth is a client-side gate over 20 fixed test accounts (SHA-256 of
-`username:password` checked against bundled hashes). It is a test gate, not
-security. Credentials live in `TEST_ACCOUNTS.md`, which is gitignored.
+**Anyone can use the site without an account.** The landing page, Search
+Player, Top Meta Decks and Deck Counter are open to everybody; the five deeper
+analytics areas are what signing up buys, free for three days. Accounts are real
+— Supabase, with Row Level Security — and the twenty-account SHA-256 test gate
+that used to stand in front of everything is retired. See
+[Accounts, tiers and the gate](#accounts-tiers-and-the-gate).
+
+Deck lists can be **filtered by card**. Pick any cards — win conditions lead the
+panel, the full 122 follow — and only decks holding *all* of them stay. On Deck's
+Home and the Counter Palette the non-matching rows **collapse** rather than
+vanishing, so the list narrows instead of becoming a different list; the duel
+builder dims them instead, because its decks are positional and collapsing one
+would renumber the rest. See `docs/UI.md`.
+
+---
+
+## Accounts, tiers and the gate
+
+Real accounts, on Supabase. This replaced a client-side gate over twenty fixed
+usernames whose SHA-256 hashes were bundled into the JavaScript — fine as a
+placeholder, useless the moment anyone could sign themselves up.
+
+Everything below lives in one migration, `supabase/001_accounts.sql`, because a
+trial, a Pro badge, an admin console and a device limit are the same thing
+wearing four hats: per-user state the browser must not be able to forge.
+
+**The publishable key is public and that is the design.** It ships inside the
+JavaScript bundle and anyone can read it out of the network tab. It is only safe
+because every table has Row Level Security on with policies keyed to
+`auth.uid()`, which comes from a verified JWT and cannot be forged by a client
+holding that key. A table with RLS on and no policy denies everything, and each
+policy grants the narrowest thing that works. Nothing that IS a secret may ever
+be given a `VITE_` prefix — Vite inlines those at build time, so the prefix is
+the boundary.
+
+### The site is public and the gate is per-feature
+
+The first build put a sign-in wall in front of the whole app. That was the wrong
+reading of the brief and it was corrected: **the landing page is the main page**,
+for everybody, signed in or not. Signing in is what happens when someone reaches
+for something their tier does not include.
+
+| access | may open |
+|---|---|
+| `anon` — never signed in | Search Player, Top Meta Decks, Deck Counter |
+| `free` — signed up, trial spent | the same three |
+| `trial` — first three days | everything |
+| `pro` | everything |
+| `admin` | everything, plus `#/admin` |
+
+`anon` and `free` get the **same** sections deliberately. A lapsed account keeps
+"meta and Evo counter"; a visitor who has not signed up has no claim to more
+than that, and giving them less would mean the public page is not really public.
+
+**Search Player is free, and that is a judgement rather than a reading of the
+brief.** It is the tag overview behind the hero's search field — the landing
+page's entire call to action. Gating it would mean a stranger types their tag
+into the biggest control on a public page and is handed a paywall, which makes
+the search a tease rather than a demonstration. The five deeper areas (Deck
+Analysis, Duel Analysis, Duel Zone, Cards, Coach Assist) are what a trial is for.
+
+A closed section renders a `GateCard`, and it asks the right question: `anon`
+sees "make an account, three days free", `free` sees "your three days are up".
+Showing a stranger an upgrade prompt reads as the site not knowing who you are.
+
+### The trial expires with nothing running
+
+There is no cron, no scheduled job, no "switch the account" task. `trial_ends_at`
+is a timestamp and the tier is **derived from it every time it is asked for**:
+
+```sql
+when p.role in ('pro','admin') then p.role
+when p.trial_ends_at > now()   then 'trial'
+else 'free'
+```
+
+So it expires exactly on time whether or not anything is awake to notice, and
+there is no window in which a job has not run yet and someone still has Pro. The
+same function answers for the app, for the policies, and for the admin console,
+so "is this person Pro" cannot get three different answers.
+
+`tierOf()` in `src/state/supabase.ts` mirrors it in TypeScript. That copy only
+decides what to *draw* — a client that lies to itself about its tier gets a
+nicer-looking screen and no extra access, because the data is guarded by the
+database's copy.
+
+### One desktop and one mobile, enforced by a primary key
+
+```sql
+primary key (user_id, kind)   -- kind in ('desktop','mobile')
+```
+
+That constraint *is* the whole enforcement. There is no "how many devices are
+signed in" query and no counting, because **counting races** — two simultaneous
+logins can both read "one device" and both insert. A second desktop login
+upserts onto the same row with a new `device_id`; the previously signed-in
+desktop discovers on its next heartbeat that the stored id is no longer its own
+and signs itself out. No cron, no reaper.
+
+The heartbeat is 60 seconds plus a `focus` listener, so the common case —
+someone comes back to a tab — is checked immediately rather than up to a minute
+later. A network failure during that check must **not** sign anyone out: an
+offline moment is not an eviction, and treating it as one would throw people out
+of their own account on a flaky connection.
+
+Desktop versus mobile is decided by `pointer: coarse` or a 900px width. Coarse
+on purpose — a tablet counting as "mobile" is a judgement call, not a bug.
+
+The device id is a `crypto.randomUUID()` in `localStorage`, not a fingerprint.
+It survives a refresh, it is per-browser-profile, and clearing site data resets
+it, which is the honest behaviour. Fingerprinting would be harder to shake off
+and is not something to build into a deck site.
+
+### Three flaws found in this work, each by checking rather than assuming
+
+**Any signed-in user could make themselves an admin.** The RLS policy said "you
+may update your own row", and `role` is a column *on* that row — so one `PATCH`
+against the public REST endpoint, with a real account's own token, set
+`role: 'admin'` and it stuck. This was not a theory; it was tried against this
+project and it worked.
+
+The lesson is precise, and it is the one thing to take from this section:
+**RLS decides which ROWS may be written. Only a column grant decides which
+COLUMNS.**
+
+```sql
+revoke update on public.profiles from authenticated;
+grant update (display_name, country, player_tag, onboarded_at, updated_at)
+  on public.profiles to authenticated;
+```
+
+Leaving `role` out of the client's `saveProfile()` is **not** a fix, and the
+comment claiming it was is worse than no comment at all — it stops *our* code
+from doing it while the endpoint stays open to anyone with a token and a
+terminal. `role` and `trial_ends_at` now move only through `admin_set_role()`
+and `admin_end_trial()`, which check the caller.
+
+**Supabase's defaults had granted `authenticated` TRUNCATE.** TRUNCATE bypasses
+RLS entirely — policies are row filters, and TRUNCATE does not visit rows. Any
+signed-in user could have emptied `profiles`. Revoked.
+
+**Deck sync leaked decks between accounts on a shared browser.** Server-side the
+isolation was already right: `/api/decks` keys on the Supabase user id taken
+from a verified JWT, so no account can name another's storage. Locally it was
+not. `royal-duels-builder` is a zustand persist key — per *browser*, and it
+survived sign-out:
+
+1. A signs in; decks live in `localStorage`
+2. A signs out — the decks stay
+3. B signs up on the same browser and sees A's decks
+4. B has no remote data, so the "first sync ever" branch pushed what was on
+   screen — A's decks — into **B's** cloud storage
+
+Step 4 is a leak that then persists, and it is exactly what a second person
+signing up on one laptop triggers. Persisted state is now stamped with its
+owning user id and reset on sign-in if it belongs to someone else — **before**
+the remote pull, not after. The pull is a round trip, and for that whole window
+the previous account's decks would be on screen and editable, and an edit during
+it would be pushed to the new account.
+
+### Two more that were not security, just broken
+
+**Logout did nothing.** The profile menu cleared the retired `authStore` while
+the session lived in `accountStore`. The sweep that followed found something
+worse alongside it: the PDF export gate keyed on the old store's username, so
+`canExportDecks` had silently become **nobody** — a feature that had stopped
+working for everyone, with no error anywhere.
+
+**`FUNCTION_INVOCATION_FAILED` on every deck sync.** `package.json` is
+`"type": "module"`, so Vercel runs the functions as ESM, and **Node ESM does not
+resolve extensionless relative imports**. `import { callerFrom } from './_auth'`
+typechecks perfectly — `tsconfig.api.json` uses `moduleResolution: "Bundler"` —
+and then fails at module load, uncatchably. The auth helper is inlined into
+`api/decks.ts` instead. Same class of trap as the JSON-import one already
+recorded here.
+
+Debugging it wasted time twice on my own bad theories: the old deployment's 401
+body was word-for-word identical to the new code's, so the error said nothing
+about which code was running, and I blamed a missing environment variable.
+`api/health` — names and booleans, never a value — disproved that in one request
+and now exists permanently for exactly that reason.
+
+### Why a password hash was the wrong credential anyway
+
+The retired scheme sent `sha256(username:password)` as a bearer token. Beyond
+not scaling past a hardcoded list, a password derivative used as a credential
+**never expires and cannot be revoked** — changing it means changing the
+password. Supabase tokens are verified locally in the Vercel function with
+`jose`, against the JWKS fetched once per warm container and re-fetched only
+when a token arrives bearing an unseen `kid`. That is what lets Supabase rotate
+signing keys without a redeploy here.
+
+### What is deliberately not built
+
+- **No password is ever created by an admin.** Handing out passwords means
+  storing one somewhere it can be read back. People sign themselves up and get
+  promoted. The brief asked for admin-created accounts; the honest version needs
+  a service-role key held server-side, and it is still open.
+- **No presence.** "Users currently online" is not knowable here: there is no
+  socket, and a JWT is valid for an hour whether or not its owner is looking at
+  the page. Last sign-in and device slots held *are* knowable, so those are what
+  the console shows, labelled as what they are rather than dressed up as
+  presence.
+- **No email confirmation, yet.** Switched off so sign-up works without an SMTP
+  provider. It must go back on before real users.
+- **Google sign-in is built but hidden.** The button appears when the provider is
+  enabled in Supabase; the PKCE flow and hash-callback handling are already in
+  place, because the app routes on the hash and so does OAuth's callback.
+
+---
+
+## The admin console
+
+`#/admin`. One screen, because "what is going on" is one question and splitting
+it into three would mean checking three places to answer it.
+
+| block | what it answers |
+|---|---|
+| account tiles | how many accounts, on trial, pro, free; signed in today; device slots held |
+| health tiles | the deployed commit and region, analytics API latency, and which integrations this deployment can reach |
+| storage meter | `battles.db` against the VPS volume |
+| accounts table | every account: name, email, tier, country, tag, last sign-in, devices, and a role control |
+
+**Hiding it is a courtesy, not the boundary.** `admin_list_users()` and
+`admin_set_role()` are `security definer` functions that check the *caller* is an
+admin before doing anything. A free user who typed the route gets an empty table
+and "not authorised", which is the correct answer rather than a leak.
+
+The three data sources load with `Promise.allSettled` and none may sink the
+others. The accounts table, the deployment's configuration and the VPS's storage
+are independent things, and a console that shows nothing because one of them is
+down is worse than one that shows two thirds and says so.
+
+**"End trial now" is an option in the role select, not a fourth role.** It is an
+action sitting in a list of states, which is a compromise — but it is where you
+already are when you want it, and it is disabled unless there is a trial to end,
+so it never looks like a state someone could be left on. It sets
+`trial_ends_at = now()`, **not null**: null reads as "never had a trial", which
+makes the person indistinguishable from a fresh account and would let a later
+change hand them three more days.
+
+Changing a role takes effect on that account's next profile read — a sign-in or
+a refresh — and the console says so, because a control that looks instant and is
+not is a support question waiting to happen.
+
+**`/api/health` reports names and booleans only** — never a value, never a
+length, never a prefix. Whether a deployment has an API key configured is not a
+secret; the key is. Same distinction that took the paths and sizes out of
+`/api/analytics/status`.
+
+### Three layout bugs, all in the same screen, all the same family
+
+Worth recording together because each one rendered the content and then hid it,
+which is the failure mode that reads as "the feature was never built".
+
+**The console did not scroll.** `body` is `overflow: hidden` in this project —
+the page never scrolls and every route owns its own scroll region. The console
+had `min-height: 100vh` inside a `height: 100%` shell, so everything past the
+fold was rendered, clipped and unreachable. It needs
+`height: 100%; min-height: 0; overflow-y: auto`.
+
+**Then the accounts table was crushed to the height of its own header.** `.wrap`
+is a flex column, and a flex child will not shrink below its automatic minimum
+size — normally its content, which is why every stat tile above it kept full
+height. But **any `overflow` other than `visible` sets that minimum to zero**,
+and the table wrapper had `overflow-x: auto`. It was the one child the flexbox
+could squash, so it got the ~40px left over and every account went behind an
+inner scrollbar too short to grab. `flex: none` on it.
+
+The corollary bit as well: an `overflow` on that wrapper also makes it the
+sticky context, so a sticky `<th>` silently stops pinning to the page. Sideways
+scroll is now behind a `max-width: 60rem` media query rather than declared
+unconditionally — it is wanted on a phone and it costs the sticky header on a
+desktop.
+
+**Every trial read "ends just now".** `ago()` computes `now − date`. Fed a
+*future* date it goes negative, every threshold below sixty seconds succeeds,
+and it answers "just now" — so thirty accounts with three days left all looked
+expired. `until()` is a separate function because `ago()` genuinely cannot do
+it, and it rounds **up**: three days minus a few microseconds floors to "in 2d",
+so a fresh trial would read as two days the instant it started.
+
+The formatters moved out of `adminStore.ts` into `src/utils/format.ts` to be
+testable at all — importing the store constructs a Supabase client at module
+load, which wants a WebSocket that Node 21 does not have natively, so the test
+died on an import it never used. Six tests now pin the "just now" trap.
 
 ---
 
@@ -565,6 +905,114 @@ the feature off for everyone; level 6 is `git revert`. At every level Recent
 still renders, because the opponent read has always been a separate request that
 cannot block it.
 
+
+## The move off the home machine
+
+For most of this project the analytics half only worked on one laptop, with an
+external drive plugged in. It now runs on a **Contabo Cloud VPS 6** (Ubuntu
+24.04) behind **Caddy**, on a domain we own.
+
+```
+browser
+  → api.deckkies.com                    Caddy, TLS from Let's Encrypt
+  → header_up X-Analytics-Key           the edge authenticates to the origin
+  → 127.0.0.1:8787                      server/app.py (systemd: royalweb)
+  → /var/clashbot/battles.db            SQLite, mode=ro
+
+browser                                 (the Coach's opponent read only)
+  → deckkies.com/api/analytics/opponent-read/<tag>   same origin, no key
+  → Vercel function                                  adds X-Analytics-Key
+  → the same Caddy → app.py path
+```
+
+`docs/analytics-tunnel-runbook.md` holds the configuration, the unit files, the
+firewall rules and the rollback. What follows is what the move actually settled.
+
+### This contradicts an entry in "Deliberately not done", and here is why
+
+That entry said **do not replicate the database to a VPS** — 69.4 GB growing by
+~190,000 battles a day, and SQLite has no native replication. That reasoning
+still stands and nothing here refutes it.
+
+What changed is that **the bot moved too**. Nothing is replicated: there is one
+database, on the VPS, with the bot writing to it and the API reading it
+`mode=ro` beside it. The rejected design was two copies and a sync; the built
+design is the same "run the service beside the data" the entry recommended, with
+the data relocated. Retention is capped at 365 days, so it plateaus — the sizing
+put the ceiling near 266 GB against a 387 GB volume, and the console's meter is
+there to catch that being wrong.
+
+There is **no archive tier on the VPS at all**. `CLASH_ARCHIVE_DB_PATH` is set
+explicitly empty, because `clash_data.py` defaults it to a Windows path that
+cannot exist on Linux and the startup banner would print it.
+
+### The edge injects the key, and that is only safe for one reason
+
+The browser calls `api.deckkies.com` directly for the shareable analytics and
+sends no headers, so something has to authenticate to the origin. Caddy does it.
+That is only acceptable because **the origin is unreachable any other way**:
+`app.py` binds `127.0.0.1:8787` and `ufw` allows nothing but 22, 80 and 443. The
+key protects the origin; the rate limiter protects the service from the public.
+
+**`CLASH_TRUSTED_PROXY=1` is required here and was not under the tunnel.** The
+limiter keys on the client address, and behind any reverse proxy every request
+arrives from loopback — one shared bucket for the entire internet. That failure
+was demonstrated on the old tunnel: 60 local plus 70 tunnelled requests gave 120
+allowed then 10 × 429, one bucket, because `cloudflared` also dialled loopback.
+With the flag set, `app.py` reads the first entry of `X-Forwarded-For`, which
+Caddy sets. Spoofing it would mean reaching 8787 directly, which the firewall
+and the loopback bind prevent.
+
+### Four things the box taught that reading did not
+
+**Systemd's `--environ` leaked the API key into the journal.** The Caddy unit
+was started in a way that dumped its environment, and `CLASH_API_KEY` went into
+`journalctl` in plain text, readable by anything that could read the journal.
+The key was **rotated**, not just hidden, because a leaked secret that is still
+valid is not a fixed secret. `ExecStart` is overridden now.
+
+**A `.env` written `KEY = value` works for python-dotenv and silently fails for
+systemd.** systemd takes the name as `KEY ` with the trailing space and passes
+nothing — no error, no warning, just an unset variable. The bot unit therefore
+must **not** use `EnvironmentFile`; `WorkingDirectory=/opt/clashbot` is what lets
+`load_dotenv()` find the file and parse it the way it was written.
+
+**An empty `CLASH_ARCHIVE_DB_PATH` did not disable the archive.** It fell through
+to the default rather than to "no archive", which on the VPS would have armed
+raw-row deletion against a write to a temporary database. Found before it ran;
+fixed on the bot side.
+
+**The password the VPS shipped with is burned.** It was sent over chat to get the
+box provisioned, so it must be treated as public regardless of what it is now.
+SSH password authentication is disabled and access is by key only.
+
+### What the tunnel work bought, given it was replaced days later
+
+The transport was thrown away. Everything it proved about `server/app.py` was
+not, because those are properties of the service rather than of the pipe: the
+auth gate, the one-exact-origin CORS rule, the reason-code-only error bodies,
+the secret audit that took `str(exc)` out of three response paths, and the
+service-wide rate-limit behaviour that is precisely why `CLASH_TRUSTED_PROXY`
+exists now. The runbook keeps that record below its superseded notice.
+
+The measured latencies are also still the only comparison available: opponent-
+read direct p50 46 ms / p95 51 ms, through the tunnel p50 144 ms / p95 1119 ms.
+The p95 spike was home-connection variance, and it is the clearest single
+argument for the box the service now runs on.
+
+### Still open on the hosting side
+
+- **H: is the rollback and must not be touched.** The local `battles.db` and
+  `archive.db` are the only way back. Nothing has run long enough on the VPS to
+  retire them.
+- **`OIE_ALLOWLIST` is unset**, so the Coach's opponent read degrades to
+  `{enabled: false}` for everyone. That is the designed answer, not an error —
+  but it means the Coach's engine half is dark in production.
+- **The Coach proxy still authenticates with the retired password-hash scheme.**
+  It is the last consumer of `authStore`, and that store cannot be deleted until
+  it migrates. The empty allowlist is what keeps that harmless for now.
+
+---
 
 ## Top Meta Decks — why it is a snapshot
 
@@ -2632,7 +3080,7 @@ chosen are on screen together, which is the job.
 
 * **`min-height: 0` on every flex and grid child in the chain.** A flex item
   defaults to `min-height: auto` and refuses to shrink below its content, so
-  without it both columns grow to fit all the decks and all 123 tiles, the inner
+  without it both columns grow to fit all the decks and all 122 tiles, the inner
   `overflow-y: auto` never has anything to do, and the page scrolls as one piece
   again. That one property is the difference between two independent columns and
   the pile they replaced.
@@ -3606,6 +4054,42 @@ lists without any caller knowing why, and the server's own arrangement used as
 the link order. Full reasoning in
 [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game).
 
+### 23. Real accounts, and a gate that is per-feature
+
+Supabase replaced the twenty bundled SHA-256 hashes: sign-up, sign-in, a
+three-day trial derived from a timestamp rather than switched by a job, an
+onboarding form, and one desktop plus one mobile per account enforced by a
+primary key. The first cut put a wall in front of the whole site and that was
+wrong — the landing page is the main page, and the gate stands in front of five
+analytics areas rather than in front of the door. Three flaws came out of this
+step, one of them a live privilege escalation. Full reasoning in
+[Accounts, tiers and the gate](#accounts-tiers-and-the-gate).
+
+### 24. The admin console
+
+Every account and tier, role changes, end-a-trial, what the deployment can
+reach, and how full the database volume is — one screen, because it answers one
+question. It shipped with three layout bugs of the same family, each of which
+rendered the content and then hid it. See
+[The admin console](#the-admin-console).
+
+### 25. Off the home machine, and onto a domain
+
+`battles.db`, `server/app.py` and the bot all moved to a Contabo VPS behind
+Caddy; `deckkies.com` and `api.deckkies.com` replaced a `vercel.app` subdomain
+and a Cloudflare tunnel. The analytics screens work in production for the first
+time. This contradicts an older "deliberately not done" entry and the entry was
+right — what changed is that the bot moved too, so nothing is replicated. See
+[The move off the home machine](#the-move-off-the-home-machine).
+
+### 26. A card filter that closes rather than empties
+
+Picking cards narrows a deck list to those holding all of them. The
+non-matching rows collapse on a measured height instead of unmounting, so the
+page does not jump; the duel builder dims instead of collapsing, because its
+decks are positional. `docs/UI.md` has the measurement trap and the CSS-module
+class-name trap that cost an hour of looking for a bug that was not there.
+
 ---
 
 ## The WebGL layer
@@ -4444,6 +4928,53 @@ inside `[data-filmstrip-controls]`.
 
 Kept because each one cost time and each one can recur.
 
+**A flex child with any `overflow` can be crushed to nothing.** The automatic
+minimum size of a flex item is its content — *unless* `overflow` is anything but
+`visible`, which sets it to zero. So in a flex column, the one child with
+`overflow-x: auto` is the one the layout will squash, and it happened to be the
+admin console's accounts table: rendered in full, inside a box the height of its
+own header row. Sibling tiles kept their height and made it look intentional.
+`flex: none`. The corollary is worse, because it is silent: that same `overflow`
+makes the element a scroll container, so a sticky `<th>` inside it stops pinning
+to the page and simply never sticks.
+
+**A partial blob from the network can unmount the whole app.** Deck hydration
+did `sets: remote.sets`, and a remote payload missing one of the five
+collections left `sets.home` undefined; the first screen reading
+`sets.home.decks` threw, and React unmounted everything. A blank page is the
+worst possible response to slightly-wrong stored data. The code already knew
+blobs vary — a comment two lines down handles pre-palette blobs having no
+`sets.palette` — it just handled that one known gap and assumed every other key
+was present. `{...createDefaultSets(), ...remote.sets}` costs nothing and makes
+a missing collection fall back to an empty one instead of to `undefined`.
+
+**Importing a module for one pure function runs its whole body.** A test of the
+admin console's date formatters imported them from `adminStore.ts`, which
+constructs a Supabase client at module load, which wants a native WebSocket that
+Node 21 does not have. The test died on machinery it never used. Pure formatters
+now live in `src/utils/format.ts` with no imports at all — which is also the
+only reason they are testable.
+
+**Hand-editing `localStorage` and reloading is not a fixture.** Three checks
+passed "correctly" against state that had already been overwritten: the page
+loads, hydration pulls from the cloud, and the value under test is gone before
+the assertion runs. Anything that syncs must be driven through the UI, or the
+sync has to be understood before the fixture is written.
+
+**`const URL = ...` shadows the global `URL`.** A verify script named its target
+`URL`, and every later `new URL(...)` in the same scope threw. The error points
+at the construction, not at the declaration.
+
+**A fixed wait loses a race against production.** Verifications timed with
+`waitForTimeout` passed locally and failed against the deployed site, where a
+cold function is slower than a warm dev server. Wait for the condition, never
+for a duration.
+
+**Verify scripts and Playwright must never reach a commit.** Both did once. The
+uninstall is not the whole cleanup either — `git checkout -- package.json` after
+`npm uninstall` **restores** the dependency line it just removed, so the manifest
+has to be checked, not assumed. Both patterns are in `.gitignore` now.
+
 **A fade painted in a surface colour assumes it knows what is behind it.** The
 filmstrip's end vignette was a `--surface` gradient laid over the strip, which
 is invisible inside a panel of that exact colour and a pale band anywhere else —
@@ -5152,10 +5683,11 @@ are in [Running it](#running-it).
 
 ## Testing and verification
 
-1,067 Python checks across 20 suites and 118 vitest tests, none of which open a database — every
-Python suite runs on synthetic data or a stubbed reader, so they pass on a
-machine with no Clash_Bot install and cannot be broken by whatever a real player
-did last week.
+1,236 Python checks across 21 suites and 179 vitest tests, none of which open a
+database — every Python suite runs on synthetic data or a stubbed reader, so
+they pass on a machine with no Clash_Bot install and cannot be broken by
+whatever a real player did last week. The vitest side gained the analytics-proxy
+suites, the tier-based export gate and the admin console's date formatters.
 
 **`npm run lint` reports 2 errors and 4 warnings, none of them actionable.**
 The errors are `react-hooks/rules-of-hooks` flagging `useFont(...)` inside
@@ -5168,7 +5700,7 @@ or are deliberate; there is nothing else.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 118 tests — deck logic, deck links, PDF export
+npm run test                      # 179 tests — deck logic, links, PDF export, proxy, admin
 python server/test_duel_combos.py # 39 checks — duel logic, no database needed
 python server/test_meta.py        # 33 checks — meta board + card board, no database
 python server/test_card_art.py    # 110 checks — deck arrangement, evolution/hero art
@@ -5195,7 +5727,22 @@ npm i -D playwright
 # write a verify*.mjs driving the actual flow, run it, read the output
 node verify*.mjs
 rm verify*.mjs *.png && npm uninstall playwright   # must NOT become a committed dep
+git status                                        # and CHECK: see below
 ```
+
+**Check `package.json` afterwards, every time.** Both a verify script and the
+Playwright dependency have reached a commit here. The uninstall is not the whole
+cleanup either: running `git checkout -- package.json` after `npm uninstall`
+**restores** the dependency line that was just removed. Both patterns are in
+`.gitignore` now, which is a backstop and not a substitute for looking.
+
+**A screen behind auth cannot be verified the usual way.** The admin console
+needs an admin session, and minting one means promoting an account in the live
+database — so it has had no Playwright pass, and its three layout bugs were all
+found by a person looking at it. Signing a script in also creates a real account
+that then sits in the production accounts table; roughly thirty did, and they
+have to be cleaned up by hand. One fixed, reused test account is the answer, and
+it is not built yet.
 
 Check the `package-lock.json` diff afterwards and revert it. Chromium is
 reliable on this machine; WebKit is flaky.
@@ -6238,9 +6785,29 @@ conclusions:
 ```
 docs/
   UI.md                       the WebGL layer: what ships, what was removed,
-                              and the five things a browser had to catch
-  analytics-tunnel-runbook.md Cloudflare tunnel config, Vercel variables,
-                              measured latency, six-level rollback
+                              the five things a browser had to catch, and how
+                              a filtered deck list collapses rather than vanishes
+  analytics-tunnel-runbook.md the VPS + Caddy transport that is live, and below
+                              a SUPERSEDED notice, the Cloudflare tunnel it
+                              replaced — kept because what it proved about
+                              app.py is still true
+
+supabase/
+  001_accounts.sql            profiles, tiers, the three-day trial, device
+                              slots and the three admin functions. Idempotent;
+                              run it in the SQL editor. Read the column-grant
+                              comment before touching the policies
+
+api/                          Vercel functions. Node ESM: NO extensionless
+                              relative imports and NO JSON imports, both of
+                              which fail only at runtime
+  decks.ts                    deck sync, keyed on the Supabase user id from a
+                              locally verified JWT. Auth is inlined on purpose
+  health.ts                   which integrations this deployment can reach.
+                              Names and booleans, never a value
+  analytics/opponent-read/    the Coach's same-origin proxy. Rebuilds the
+                              response field by field and fails to
+                              {enabled:false} however it fails
 
 src/
   three/                      three.js flourishes. Dynamically imported, gated
@@ -6267,6 +6834,17 @@ src/
                               the measured figures. What paces the loader
   state/deckFx.ts             the fire-and-forget event channel for the above.
                               A plain emitter, NOT zustand — see the note in it
+  state/supabase.ts           the one client, the tier derivation, and which
+                              sections are free. Null when unconfigured, so a
+                              checkout without Supabase still runs
+  state/accountStore.ts       session, profile, and the device claim. A failed
+                              heartbeat must never sign anyone out
+  state/gate.ts               who may open what. `anon` and `free` are the same
+  state/adminStore.ts         the console's three sources, none allowed to sink
+                              the others
+  utils/format.ts             ago / until / bytes. NO imports, deliberately —
+                              importing the store to test a date formatter
+                              constructs a Supabase client
   App.tsx                     hash routing -> one Dashboard shell
   index.css                   ALL colour AND motion: neutral ladder, 5 hues in
                               two ramps (ink + solid), the three intensity
@@ -6283,6 +6861,12 @@ src/
     Filmstrip/                a browsable 3D strip of cards. Items' own controls
                               render UNDER it, for the centred item only — a
                               button may not contain buttons
+    Auth/                     sign in, sign up, the three-step onboarding form,
+                              and the GateCard a locked section renders
+    Admin/AdminConsole.tsx    #/admin. Refuses non-admins itself; the database
+                              refuses them again
+    WinConFilter/FilterSlot.tsx  a deck row that COLLAPSES when filtered out.
+                              The height is measured; see docs/UI.md
     Theme/ThemeToggle.tsx     the light/dark switch, shared by all five screens
                               that used to own a copy. One size knob; the rest
                               of the geometry derives from it
@@ -6402,8 +6986,12 @@ public/assets/                what the app actually loads
   fonts/KidsWord.otf          the display face
 ```
 
-**`analyticsClient.ts` is the seam.** It only ever calls `/api/analytics/*`, so
-moving the service to a VPS is a proxy or base-URL change, not a code change.
+**`analyticsClient.ts` is the seam, and the claim was tested.** It only ever
+calls `/api/analytics/*`, so moving the service to a VPS should be a proxy or
+base-URL change rather than a code change — and when the service actually moved,
+it was: `VITE_ANALYTICS_BASE` and the Vite proxy rewrite, with no screen touched.
+The one deliberate exception stayed the exception: `fetchOpponentRead` ignores
+the base because it must go through the Vercel proxy that holds the key.
 
 `useDateWindow` is shared by every analytics screen on purpose — six of them
 now. Two copies drift, which is exactly how the season selector once shipped
@@ -6429,7 +7017,7 @@ and it belongs to whoever owns the palette. It is a **coloured** figure, which
 is why the full-contrast text pass did not touch it. Dark mode is clean on all
 11 screens.
 
-**The deck actions have not had a browser pass.** `npx tsc -b`, all 172 vitest
+**The deck actions have not had a browser pass.** `npx tsc -b`, all 179 vitest
 tests and `npm run build` are green, and the risky shapes were checked by
 reading rather than running: no strip is a grid (so the chips cannot shift a
 column), every strip's card sizing is scoped to `img` / `.cardImg` / `.rowCard`
@@ -6437,9 +7025,37 @@ column), every strip's card sizing is scoped to `img` / `.cardImg` / `.rowCard`
 case was found and restructured. None of that is a substitute for the
 convention — a green typecheck says nothing about whether a page renders, and
 the Duel Zone's `.gameRow` restructure is the piece most worth looking at. The
-verification also now needs `server/app.py` up against H:, where a cold meta
-rollup is ~166 s.
+verification also needs `server/app.py` up against a real database — on the VPS
+now, where a cold meta rollup is far cheaper than it was on the spinning volume
+at home.
 
+### Open on the accounts and hosting work
+
+Recorded as debts rather than plans. Each one is a thing the site does not do
+yet, or does in a way that is fine now and will not be later.
+
+| item | state |
+|---|---|
+| **Email confirmation** | **off.** Sign-up works without an SMTP provider, which is what let this ship — and it means an address is never proved. Must go back on before real users |
+| **Google sign-in** | built, hidden. The PKCE flow and hash-callback handling are in place; the button appears when the provider is enabled in Supabase |
+| **Admin-created accounts** | not built. Needs `SUPABASE_SERVICE_ROLE_KEY` held server-side. An invite link is the honest shape, not a password |
+| **The Coach proxy** | still authenticates with the retired `sha256(username:password)` scheme. It is the last consumer of `authStore`, which cannot be deleted until it migrates |
+| **`OIE_ALLOWLIST`** | unset, so the Coach's opponent read degrades to `{enabled:false}` for everyone. Designed behaviour, but the engine half is dark in production |
+| **Staging** | there is none. `main` deploys to production, and every fix in this pass was verified against production after the fact |
+| **A maintenance screen** | not built. Nothing to show while a deploy is mid-flight |
+| **H:** | still the only rollback for the database. Nothing has run long enough on the VPS to retire it |
+| **Test accounts** | **cleaned up.** ~30 `dekkies.*@gmail.com` accounts from verification runs were deleted by email prefix; the `on delete cascade` took their profiles and device rows with them. The habit that created them is the thing to fix, not the rows |
+
+**The admin console has not had a Playwright pass.** It cannot get one the usual
+way: the screen needs an admin session, and creating a throwaway admin means
+promoting an account in the live database. The three layout bugs it shipped with
+were all found by a person looking at the screen, which is the honest summary of
+its verification status — and a fair argument that this is the screen that most
+needs a real test account rather than the one that least does.
+
+**Trial length is not configurable.** Three days is `interval '3 days'` inside
+`handle_new_user()`. Changing it means a migration, and changing it does not
+affect anyone already signed up.
 ---
 
 ## Deliberately not done
@@ -6462,14 +7078,45 @@ Recorded so they are not re-litigated as oversights:
   the legality filter. Any future duel work should beat random-in-pool before
   it claims anything.
 
-- **Percentage-based rollout.** The site has 20 fixed test accounts. A
-  percentage of 20 is theatre. An allowlist (`CLASH_OIE_ALLOWLIST`) does the
-  same job honestly and is what the hosting plan specifies.
+- **Percentage-based rollout.** Written when the site had 20 fixed test
+  accounts, where a percentage is theatre. Real signup exists now, so a
+  percentage would at least *mean* something — and it is still not worth it,
+  because an allowlist (`OIE_ALLOWLIST`) answers "who has this" exactly rather
+  than statistically, and that is the question being asked at this size.
 
-- **Replicating the database to a VPS.** 69.4 GB growing by ~190,000
-  battles/day, and SQLite has no native replication. The archive is already two
-  days stale and the README records what that cost. Run the service beside the
-  data instead.
+- ~~**Replicating the database to a VPS.**~~ **Superseded, and kept because the
+  reasoning still holds.** 69.4 GB growing by ~190,000 battles/day, and SQLite
+  has no native replication — all true, and nothing about the move refutes it.
+  What changed is that the **bot moved too**, so there is no replica: one
+  database, on the VPS, written by the bot and read `mode=ro` beside it. That is
+  the same "run the service beside the data" this entry recommended, with the
+  data relocated. See [The move off the home machine](#the-move-off-the-home-machine).
+
+- **Storing a password an admin can read.** The brief asked for admin-created
+  usernames and passwords. Handing someone a password means holding it somewhere
+  recoverable, which is the property you spend real effort avoiding everywhere
+  else. People sign themselves up; an admin promotes them. The nearest honest
+  version — an invite that mints a one-time link — needs a service-role key held
+  server-side and is open, not refused.
+
+- **Counting devices to enforce the device limit.** Counting races: two
+  simultaneous logins both read "one device" and both insert. `primary key
+  (user_id, kind)` makes the second one *replace* the first instead, so the
+  limit is a constraint rather than a check.
+
+- **A scheduled job to end trials.** `trial_ends_at` is read on every request and
+  the tier is derived from it, so a trial expires on time with nothing running.
+  A job would add a window in which it has not fired yet and someone still has
+  Pro, in exchange for nothing.
+
+- **Fingerprinting a device.** The device id is a random UUID in `localStorage`,
+  so clearing site data resets it and the person signs in again. A fingerprint
+  would be harder to shake off, which is the point of one, and that is not a
+  trade to make on a deck site.
+
+- **Distinguishing upstream failures in the Coach proxy.** Every failure returns
+  `{enabled: false, read: null}` with HTTP 200. Telling a caller *why* publishes
+  the private service's state to anyone who probes it.
 
 - **Displaying any band accuracy percentage.** Competitive `high` claims 90.5%
   and measured 69.1%; practice does not order at all. The numbers survive as

@@ -4,8 +4,9 @@ What `src/three/` is, what it deliberately is not, and the ten things that had
 to be measured in a browser rather than reasoned about.
 
 Everything else about the interface — colour, motion tokens, the display face,
-the surface ladder — lives in the main `README.md`. This file covers only the
-three.js work.
+the surface ladder — lives in the main `README.md`. This file covers the three.js
+work, plus two layout behaviours that are not WebGL and have nowhere better to
+live: how a filtered deck list closes, and how a route owns its own scroll.
 
 ---
 
@@ -522,6 +523,58 @@ below: **match the hashed prefix, never a bare substring.**
 
 ---
 
+## Every route owns its scroll, and that is a trap worth stating once
+
+`body` is `overflow: hidden`. **The page never scrolls.** Each route mounts a
+region that scrolls itself, which is what keeps the shell — top bar, rail, panel
+chrome — fixed while content moves under it.
+
+The consequence is that a new full-height screen has to opt in, and two ways of
+getting it wrong both end with content that exists and cannot be reached. The
+admin console shipped with both.
+
+**`min-height: 100vh` inside a `height: 100%` shell overflows and clips.** It
+does not scroll, because nothing in the chain was told to. The region needs:
+
+```css
+height: 100%;
+min-height: 0;
+overflow-y: auto;
+overscroll-behavior: contain;   /* so a scroll at the end does not move a parent */
+```
+
+**`min-height: 0` is not decoration.** A flex item's automatic minimum size is
+its content, so a column that contains a tall child grows to fit it and clips
+again. Nearly every "my scroll container does not scroll" bug in a flex layout
+is this line missing somewhere up the chain.
+
+### The inverse, which is stranger and quieter
+
+Inside such a column, **a child with any `overflow` other than `visible` has an
+automatic minimum size of zero** — that is the exception in the spec, and it
+means that child is the one the flexbox is free to crush. The admin console's
+accounts table had `overflow-x: auto` for narrow screens, so it collapsed to the
+~40px left over after the tiles above it: every row rendered, inside a box one
+row tall, behind an inner scrollbar too short to grab. Every sibling kept full
+height, which made it look deliberate.
+
+`flex: none` on the child. And the corollary, which is the part that gets missed:
+that same `overflow` makes the element a **scroll container**, so `position:
+sticky` on a `<th>` inside it now pins to the table rather than to the page and
+silently stops working. Put horizontal scroll behind a width media query when
+the sticky header is worth more on wide screens than sideways scroll is.
+
+### A future-dated timestamp run through an "ago" formatter says "just now"
+
+Not a layout bug, but the same family — it renders confidently and it is wrong.
+`ago()` computes `now − date`; a future date makes that negative, every
+threshold below sixty seconds succeeds, and thirty accounts with three days left
+all read "ends just now". Countdowns need their own function, and it must round
+**up**: three days minus a microsecond floors to "in 2d", so a fresh trial reads
+as two days the instant it starts.
+
+---
+
 ## Working on this
 
 ```bash
@@ -538,9 +591,20 @@ node verify-thing.mjs           # drive the real flow
 rm verify-thing.mjs && npm uninstall playwright
 ```
 
-Log in as `royal03`. The form mounts after the intro animation, so `networkidle`
-is not enough — wait for `input[type="password"]`. The username input has **no
-`type` attribute**, so `input:not([type="password"])` is the selector.
+**No login is needed for most of it any more.** The site is public: the landing
+page, Search Player, Top Meta Decks and Deck Counter render for a signed-out
+visitor, so a verify script can drive them directly. The twenty `royal01`–
+`royal20` test accounts are retired.
+
+For a screen behind the gate, a script has to sign up a real Supabase account,
+which then sits in the production accounts table until someone deletes it — about
+thirty accumulated in one pass and had to be swept by email prefix. Prefer one
+fixed reused account. The
+admin console cannot be reached this way at all without promoting someone in the
+live database, which is why it has had no browser pass.
+
+Two selector notes that still apply to the auth form: it mounts after the intro
+animation, so `networkidle` is not enough — wait for `input[type="password"]`.
 
 Screenshots at `deviceScaleFactor: 4` for anything small; a 48 px card tile or a
 50 px logo mark tells you nothing at 1×.
