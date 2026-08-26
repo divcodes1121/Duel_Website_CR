@@ -1,29 +1,17 @@
 /* The VS that stands between two decks.
  *
- * A square box with the word centred in it. Square because the lightning is
- * drawn from a square signed-distance field of the same word, and the two only
- * line up if the box and the field share a shape — the shader is handed a box,
- * not a glyph.
- *
- * Nothing here clips. The bolts reach well past the letters, and the room they
- * need is the reason the box is larger than the text it holds.
+ * Sized to its own text, not to a box. There WAS a square box here, larger
+ * than the letters, because a shader drew lightning around them and the bolts
+ * reached past the glyphs. That effect is gone, so the padding it needed goes
+ * with it — leaving a mark that is exactly as big as the word it is.
  */
 
 .mark {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: var(--vs-size, 3.4rem);
-  height: var(--vs-size, 3.4rem);
-}
-
-/* Display type, and plain ink rather than a hue. The lightning around it is
-   already blue; a blue word inside a blue glow is one object with no edge. */
-.word {
   font-family: var(--font-display, inherit);
-  font-size: calc(var(--vs-size, 3.4rem) * 0.42);
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.04em;
@@ -32,9 +20,15 @@
 }
 
 .mark[data-size='sm'] {
-  --vs-size: 2.6rem;
+  font-size: 1.25rem;
 }
 
+.mark[data-size='md'] {
+  font-size: 1.75rem;
+}
+
+/* The battle log's, and the largest thing in the row that is not a card. It is
+   the joint between two decks and has the middle of the row to itself. */
 .mark[data-size='lg'] {
-  --vs-size: 4.6rem;
+  font-size: 2.5rem;
 }

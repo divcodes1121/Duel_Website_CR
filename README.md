@@ -7376,10 +7376,10 @@ completely and the mark was a floating crown. CSS picks the variant, in all
 three theme states — an explicit `data-theme` either way, and
 `prefers-color-scheme` for the default where nothing is stamped.
 
-The lightning that crawls the VS in Recent Battles and on the builder's Versus
-board is `src/three/LightningMarks.tsx`, and the whole account of it — including
-FOUR separate ways it was invisible while working correctly — is in
-[docs/UI.md](docs/UI.md#lightning-on-the-mark).
+The VS between two decks is the word, drawn large, and nothing else. It wore
+lightning for a build — that is removed, and the account of it, including four
+separate ways a shader ran correctly and showed nothing, is kept in
+[docs/UI.md](docs/UI.md#lightning-on-the-mark--built-then-removed).
 
 ---
 

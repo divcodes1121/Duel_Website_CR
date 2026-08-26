@@ -379,17 +379,15 @@
   padding: 0.85rem 1rem;
 }
 
-/* The joint between the two decks. It holds the mark now rather than the
-   letters, so this is only a box: `VsMark` sizes itself and `LightningMarks`
-   draws around it from its own canvas. Nothing here clips — the bolts reach
-   well past the logo. */
+/* The joint between the two decks. `VsMark` sizes itself, so this only has to
+   place it and keep it clear of the two card grids either side. */
 .vs {
   align-self: center;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 0.4rem;
+  padding: 0 0.9rem;
 }
 
 /* A SIDE IS EXACTLY AS WIDE AS ITS DECK, and that width is declared once.

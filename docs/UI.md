@@ -319,89 +319,42 @@ materials across 3 files, no other undeclared reads.
 
 ---
 
-## Lightning on the mark
+## Lightning on the mark — built, then removed
 
-The VS between two decks — in Recent Battles and on the builder's Versus board
-— is the word itself with lightning crawling the letters. Adapted from
-ThreeUI's `ElementsCollection` / Lightning; the technique that came across is
-rasterise a logo, chamfer it into a signed distance field, then walk
-fBm-displaced arcs along the `|d| = 0` contour so the bolts trace the shape
-rather than sit near it.
+The VS between two decks briefly carried lightning crawling the letters,
+adapted from ThreeUI's `ElementsCollection` / Lightning: rasterise the word,
+chamfer it into a signed distance field, then walk fBm-displaced arcs along the
+`|d| = 0` contour so the bolts trace the glyphs rather than sit near them.
 
-**One canvas, not one per mark.** The reference gives each panel its own
-context. A page of Recent Battles has ten VS marks and a browser allows about
-sixteen WebGL contexts per document. `LightningMarks` finds every `[data-bolt]`
-element and draws them instanced — the same shape `LiquidMetal` and `DeckFx`
-already use, for the same reason.
+**It was cut.** The VS is a joint between two decks, and it turned out not to
+want decoration — the row is already sixteen pieces of card art and a
+scoreline. `src/three/LightningMarks.tsx` is deleted rather than left switched
+off, because a component nobody renders is a thing to wonder about later.
 
-**The field is two letters, not a logo.** It drew the brand mark for one
-build, and that was the wrong object: the space between two decks is where a
-reader looks to find out what happened between them, and a logo there says
-whose site it is. The field is rasterised from the word with Canvas 2D at load
-— the display face is Arial, a system font, so there is no webfont to wait on
-and no PNG to keep in step with the CSS.
+What is worth keeping is the diagnosis. It ran correctly and showed nothing in
+**four separate ways**, none of which produced an error:
 
-**No storm backdrop.** The reference paints an opaque near-black sky and lights
-the mark inside it; dropped into a battle row that is a black rectangle. Only
-the bolts are drawn, premultiplied over a transparent clear, with the letters
-underneath as real text — crisper than an SDF fill, and still there when WebGL
-is refused or `prefers-reduced-motion` is set.
-
-**The tint is a token, which is what makes light mode work.** Additive light on
-white is white. `readToken` resolves `--hue-blue` on dark (pale, reads as
-emission) and `--hue-blue-deep` on light (deep, reads as a drawn bolt).
-
-**Arcs, not an outline.** Straight from the reference the bolts scribbled
-across the D and through the crown. Two changes fixed it, and only the second
-one mattered:
-
-| attempt | result |
+| the fault | why nothing showed |
 |---|---|
-| gate the bolts to `d > 0` | halved every arc; the effect nearly vanished |
-| displace by `abs(n)` instead of `n` | the zero crossing lands OUTSIDE by construction, so nothing needs gating away |
-| one flash per layer per frame | lit the whole contour at once — a second jagged D |
-| a low-frequency mask along the contour | only stretches light, so the arcs have ends |
+| a float named `patch` | RESERVED in GLSL ES 3.0 (a tessellation qualifier). The shader failed to compile, the component's `catch` removed its canvas, and the effect simply did not exist |
+| the canvas at `z-index: auto` | the panel body is `z-index: 1` and every analytics panel carries a `backdrop-filter`, so every bolt drew behind the content |
+| the SDF sampled with v flipped twice | the vertex shader already negates `clip.y`, and `sdf()` did `1.0 - y` as well. Invisible with a blob silhouette; unmistakable the moment the field was two letters |
+| backticks inside the GLSL, three times | the shaders are template literals, so one ends the string and the parse error is reported dozens of lines away — twice this was inside the comment *warning about backticks* |
 
-### Four ways it was invisible while working
+`tests/shaders.test.ts` still guards the first and the last across everything
+left in `src/three/`, and both checks were verified by injecting the bug and
+watching them catch it. A guard that has never been seen to fail is not a
+guard.
 
-Worth writing down because none of them produced an error.
+**Paint the field before reading the maths.** The upside-down sampling was
+found by one throwaway `frag = mix(red, green, inside)`, which showed it in a
+single screenshot after considerably longer spent re-checking element rects.
 
-**`patch` is a reserved word in GLSL ES 3.0** (a tessellation qualifier).
-Naming a float that made the fragment shader fail to compile, which made the
-component's `catch` remove its canvas, which made the effect not exist — no
-console error, no missing element, nothing to notice.
-
-**The canvas at `z-index: auto` painted under every glass panel.** The panel
-body is `z-index: 1` and the panels carry `backdrop-filter`, so the shader ran,
-found its marks, and drew every bolt behind the content. It sits at 20 now:
-above the content, below the popovers (the range picker is 60, the profile menu
-300).
-
-**The field was sampled upside down.** The vertex shader negates `clip.y` so
-`vUv.y = 0` is the top of the element, and `texImage2D` uploads the canvas top
-row first, so `v = 0` is the top of the field too — and `sdf()` flipped it
-again. With the logo, whose silhouette is a blob, an upside-down field looked
-entirely plausible and the bolts traced something reasonable. The moment the
-field became two letters it rendered a clear upside-down "VS" and the bug was
-obvious. **A probe that paints the field is worth writing before a shader
-misbehaves, not after**: one temporary `frag = mix(red, green, inside)` showed
-in a single screenshot what an hour of reading the maths had not.
-
-**Backticks inside the GLSL, three times** — twice inside the comment warning
-about backticks. The shaders are template literals, so one ends the string and
-the parse error is reported dozens of lines away in whatever the rest of the
-file then looks like as code.
-
-`tests/shaders.test.ts` fails on the first two, and both checks were verified by
-injecting the bug and watching them catch it. A guard that has never been seen
-to fail is not a guard.
-
-### And one measurement that lied
-
-The first "does it animate" check compared two PNG screenshots by byte length
-and reported **210,175 differing bytes** for a shader that was drawing
-absolutely nothing. PNG encoding shifts wholesale for a one-pixel change and
-also shifts for none at all. Decode and diff pixels, or do not claim motion.
+**And one measurement that lied.** The first "does it animate" check compared
+two PNG screenshots by byte length and reported **210,175 differing bytes** for
+a shader drawing absolutely nothing. PNG encoding shifts wholesale for a
+one-pixel change and also for none at all. Decode and diff pixels, or do not
+claim motion.
 
 ---
 

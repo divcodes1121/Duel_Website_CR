@@ -1,29 +1,23 @@
 import styles from './VsMark.module.css';
 
 /**
- * The VS between two decks, with lightning crawling the letters.
+ * The VS between two decks.
  *
- * IT WAS THE BRAND LOGO FOR ONE BUILD, AND THAT WAS THE WRONG OBJECT. The
+ * It has been three things. The brand logo, which was the wrong object — the
  * space between two decks is where a reader looks to find out what happened
- * between them; a logo there says whose site it is. The word says what the row
- * means, so the word is what stands there and what the lightning traces.
+ * between them, and a logo there says whose site it is. Then the word with
+ * lightning crawling the letters, which was the right object wearing a costume
+ * nobody asked it to wear. Now it is the word, drawn large, and nothing else.
  *
- * The letters are real text, not something the shader draws: they stay crisp
- * at any size, they take the theme's own ink, and they are still there when
- * WebGL is refused or `prefers-reduced-motion` is set — which is the whole
- * reason the effect can be decoration rather than content.
- *
- * `data-bolt` is the entire contract with `LightningMarks`: that one fixed
- * canvas finds every element carrying it and draws around its box. There is no
- * per-mark canvas and no prop to wire — a page with ten of these still has one
- * WebGL context.
+ * `src/three/LightningMarks.tsx` is deleted rather than left switched off.
+ * What is worth keeping from it is written down in docs/UI.md — four separate
+ * ways a shader can run correctly and show nothing — and the code itself would
+ * only be a thing to wonder about later.
  */
 export function VsMark({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   return (
-    <span className={styles.mark} data-size={size} data-bolt role="img" aria-label="versus">
-      <span className={styles.word} aria-hidden="true">
-        VS
-      </span>
+    <span className={styles.mark} data-size={size} role="img" aria-label="versus">
+      <span aria-hidden="true">VS</span>
     </span>
   );
 }
