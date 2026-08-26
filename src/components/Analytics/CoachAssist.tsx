@@ -399,6 +399,20 @@ function shortDay(iso: string): string {
  * stores a loadout rather than a game sequence, so reading an order off one
  * would be an artefact of storage.
  */
+/** Exact first. The order is the point, so it lives outside the component. */
+const GROUPS = [
+  {
+    exact: true,
+    label: 'This exact deck',
+    note: 'the list you pasted, card for card',
+  },
+  {
+    exact: false,
+    label: 'Close variants',
+    note: 'same archetype, a card or two different',
+  },
+] as const;
+
 function DuelLog({ history }: { history: CoachHistory }) {
   // Defensive, and it earned its place: an API process left running on the old
   // response shape returned `series` where this expects `loadouts`, and the
@@ -426,6 +440,23 @@ function DuelLog({ history }: { history: CoachHistory }) {
 
   const unordered = history.matched - history.ordered;
 
+  /* THE EVIDENCE IS COLLAPSED BY DEFAULT.
+     Every loadout below is one duel's worth of three eight-card decks. With a
+     handful of runs that is fifty-odd card tiles between the reader and the
+     answer, and the answer -- which decks travel with this one -- is the short
+     list ABOVE. The runs are what backs it up, so they are one tap away rather
+     than in the way. */
+  const [showRuns, setShowRuns] = useState(false);
+
+  /* "Most-run first" is only true when the runs differ in count. On thin
+     history every loadout is a single occurrence, the sort does nothing, and
+     the list is really in date order -- so the caption says so instead of
+     claiming a ranking that is not there. */
+  const ranked = loadouts.some((L) => L.times > 1);
+
+  /* Only label the groups when there is something to tell apart. */
+  const both = loadouts.some((L) => L.exact) && loadouts.some((L) => !L.exact);
+
   return (
     <section className={styles.block} data-hue="green">
       <h4 className={styles.blockTitle}>
@@ -451,12 +482,49 @@ function DuelLog({ history }: { history: CoachHistory }) {
       )}
 
       <p className={styles.seqFoot}>
-        The full loadouts, most-run first. The dimmed deck is the one you pasted;
-        the others are what came with it.
+        The dimmed deck is the one you pasted; the others are what came with it.
+        {ranked ? ' Most-run first.' : ' One duel each, most recent first.'}
       </p>
 
+      {/* EXACT MATCHES FIRST, THEN NEAR ONES.
+          The list was one pile in date order, so a run of the deck you actually
+          pasted could sit fourth behind three that merely share its archetype —
+          and the two answer different questions. "They have brought THIS list,
+          and here is what came with it" is evidence; "they have brought
+          something like it" is context for when there is not enough of the
+          first. Ordering by date put them in a blender.
+          The groups only appear when both exist, so a reader with only exact
+          matches is not made to read a heading explaining an absent section. */}
+      {GROUPS.map(({ exact, label, note }) => {
+        const rows = loadouts.filter((L) => Boolean(L.exact) === exact);
+        if (!rows.length) return null;
+        /* THE EXACT DECK IS ALWAYS OPEN. It is the thing being asked about —
+           "they brought THIS list, and here is what came with it" — so hiding
+           it behind a control would be hiding the answer. The variants are
+           context for when the exact runs are thin, so they fold away. */
+        const collapsible = !exact && both;
+        return (
+          <div key={label} className={styles.seqGroup}>
+            {both && (
+              <p className={styles.seqGroupHead}>
+                {label}
+                <span className={styles.seqGroupNote}>{note}</span>
+              </p>
+            )}
+            {collapsible && (
+              <button
+                type="button"
+                className={styles.runsToggle}
+                aria-expanded={showRuns}
+                onClick={() => setShowRuns((o) => !o)}
+              >
+                {showRuns ? 'Hide' : 'Show'} {rows.length} other deck
+                {rows.length === 1 ? '' : 's'} they have run
+              </button>
+            )}
+            {collapsible && !showRuns ? null : (
       <ol className={styles.seqList}>
-        {loadouts.map((L, i) => (
+        {rows.map((L, i) => (
           <li key={i} className={styles.seq}>
             <div className={styles.seqHead}>
               <span className={styles.seqDate}>
@@ -504,6 +572,10 @@ function DuelLog({ history }: { history: CoachHistory }) {
           </li>
         ))}
       </ol>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }
