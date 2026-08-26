@@ -40,6 +40,14 @@ export interface Health {
 export interface AnalyticsStatus {
   hot: { available: boolean; sizeBytes: number };
   archive: { available: boolean; sizeBytes: number };
+  /**
+   * Whether the service could read its CARD REFERENCE DATA, which is a
+   * different question from whether the database opened — and the console
+   * needs both, because the day this was false every screen still answered
+   * 200 with confident, wrong numbers. Optional: an older deployment does not
+   * report it.
+   */
+  cardData?: { loaded: boolean; count: number; error: string | null };
 }
 
 interface AdminState {

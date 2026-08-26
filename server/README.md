@@ -31,6 +31,16 @@ Two things differ from a local run and both are load-bearing:
   The default is a Windows path that cannot exist on Linux, and the startup
   banner would print it.
 
+**DEPLOYING `server/` ALONE IS NOT DEPLOYING THE SERVICE.** `duel_combos.py`
+reads `../src/data/cards.json` and `../src/data/cardMeta.json` — the website's
+own card files — so the directory layout matters: `server/` must sit beside a
+`src/data/`. The first VPS deploy copied `server/` on its own, and the loader
+swallowed the resulting `FileNotFoundError`, which silently emptied Duel
+Analysis's Win Conditions and Spells tabs, blanked the Cards board and made
+every Deck Counter row look generic, with no error anywhere. It now warns on
+stderr and reports `cardData` in `/api/analytics/status`. Check that field after
+any deploy.
+
 The rest of this file describes the model, which did not change with the move.
 
 ## Storage tiers

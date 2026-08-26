@@ -451,7 +451,15 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         try:
             if path == "/api/analytics/status":
-                return self._send(_sources())
+                # `cardData` rides along because a database that opens is not
+                # the same as a service that can answer. The card reference
+                # files went missing on the VPS deploy and every screen kept
+                # returning 200 with confident, wrong numbers — this is the one
+                # unauthenticated probe, so it is where "can this service
+                # actually answer" belongs. Booleans and a count, no paths.
+                out = _sources()
+                out["cardData"] = dcx.card_data_state()
+                return self._send(out)
 
             if path == "/api/analytics/meta":
                 # Served from a background-computed snapshot: the underlying

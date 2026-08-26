@@ -46,6 +46,7 @@ import itertools
 import json
 import math
 import os
+import sys
 
 import clash_data as cd
 
@@ -59,8 +60,50 @@ _DATA = os.path.join(
 
 _CARD_INFO: dict[str, dict] = {}
 
+# Why the failure is recorded instead of swallowed — this cost three screens.
+#
+# `_DATA` points at `<repo>/src/data`, so this module only works when `server/`
+# sits INSIDE the website checkout. The VPS deploy copied `server/` alone, so
+# the directory did not exist, `open()` raised, and a bare `except Exception:
+# return` turned a missing-file deployment error into an EMPTY `_CARD_INFO`.
+#
+# Nothing failed. `card_info()` answers with its default for every key, and that
+# default says `is_win_condition: False`, `is_spell: False`, `elixir: 0` — so:
+#
+#   * Duel Analysis's Win Conditions and Spells tabs matched nothing and showed
+#     0 for every player, while Evolutions worked, because Evolutions keys off
+#     observed slots rather than metadata;
+#   * the Cards board rendered NOTHING, because `player_cards.py` iterates
+#     `card_keys()`, which was `[]`;
+#   * deck names, styles and average elixir degraded everywhere they are drawn,
+#     which is what made every Deck Counter row look generic.
+#
+# Every one of those is a plausible-looking screen. There was no error in any
+# log, and `/status` said the service was healthy, because by its own lights it
+# was. A silent default for missing REFERENCE data is not a graceful
+# degradation — it is a wrong answer delivered confidently, and the only defence
+# is to make the failure visible.
+_CARD_LOAD_ERROR: str | None = None
+
+
+def card_data_state() -> dict:
+    """Whether the card reference data actually loaded. Surfaced by `/status`.
+
+    NO PATHS IN THE RESULT. `/status` is reachable without a key, and it was
+    already stripped of the volume paths and sizes it used to publish; the
+    resolved directory is exactly the kind of detail that belongs in the log on
+    the box and not in a response body.
+    """
+    _load_cards()
+    return {
+        "loaded": bool(_CARD_INFO),
+        "count": len(_CARD_INFO),
+        "error": _CARD_LOAD_ERROR,
+    }
+
 
 def _load_cards() -> None:
+    global _CARD_LOAD_ERROR
     if _CARD_INFO:
         return
     try:
@@ -68,8 +111,22 @@ def _load_cards() -> None:
             base = json.load(fh)
         with open(os.path.join(_DATA, "cardMeta.json"), encoding="utf-8") as fh:
             meta = json.load(fh)
-    except Exception:
+    except Exception as exc:
+        # A reason code for the wire, the detail only for the operator's log.
+        _CARD_LOAD_ERROR = type(exc).__name__
+        if not getattr(_load_cards, "_warned", False):
+            print(
+                "[cards] REFERENCE DATA MISSING: %s: %s\n"
+                "        looked in %s\n"
+                "        Win Conditions, Spells, the Cards board and every deck "
+                "name will be wrong until this is fixed."
+                % (type(exc).__name__, exc, _DATA),
+                file=sys.stderr,
+                flush=True,
+            )
+            _load_cards._warned = True  # type: ignore[attr-defined]
         return
+    _CARD_LOAD_ERROR = None
     for c in base:
         key = c.get("key")
         if not key:

@@ -174,6 +174,23 @@ export function AdminConsole() {
           note={analytics?.hot.available ? 'database attached' : 'no database'}
           tone={analytics?.hot.available ? 'good' : 'bad'}
         />
+        {/* A DATABASE THAT OPENS IS NOT A SERVICE THAT CAN ANSWER. The card
+            reference files went missing on the VPS deploy and every analytics
+            screen kept returning 200 — Win Conditions and Spells showed 0, the
+            Cards board was blank, and every deck name went generic — with
+            nothing anywhere reporting a fault. This tile is the fault. */}
+        {analytics?.cardData && (
+          <Stat
+            label="Card data"
+            value={analytics.cardData.loaded ? `${analytics.cardData.count} cards` : 'MISSING'}
+            note={
+              analytics.cardData.loaded
+                ? 'win cons, spells, elixir'
+                : (analytics.cardData.error ?? 'not loaded')
+            }
+            tone={analytics.cardData.loaded ? 'good' : 'bad'}
+          />
+        )}
         {health &&
           Object.entries(health.configured).map(([k, v]) => (
             <Stat

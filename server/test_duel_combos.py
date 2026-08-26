@@ -275,5 +275,49 @@ check("iso day of nothing is empty", dx._iso_day("") == "")
 check("iso day rejects non-digits", dx._iso_day("not-a-time") == "")
 check("iso day of None is empty", dx._iso_day(None) == "")
 
+# --- the card reference data, and the silence that cost three screens ------
+# `_DATA` resolves to `<repo>/src/data`, so this module only works when
+# `server/` sits inside the website checkout. The VPS deploy copied `server/`
+# alone; the files were absent, a bare `except Exception: return` swallowed it,
+# and `_CARD_INFO` stayed empty. Nothing raised. Every card silently became
+# "not a win condition, not a spell, 0 elixir", which emptied Duel Analysis's
+# Win Conditions and Spells tabs, blanked the Cards board (it iterates
+# `card_keys()`), and flattened every deck name and average-elixir figure.
+#
+# The point of these checks is NOT that the files load here — they do, because
+# the suite runs inside the repo. It is that a MISSING file is now REPORTABLE
+# rather than silent, so the same deploy mistake shows up instead of costing
+# three screens again.
+check("card data loads in the repo", dx.card_data_state()["loaded"])
+check("every card is known", dx.card_data_state()["count"] == len(dx.card_keys()))
+check("a win condition is flagged", dx.card_info("goblin-barrel")["is_win_condition"])
+check("a spell is flagged", dx.card_info("giant-snowball")["is_spell"])
+check("elixir is real, not zero", dx.card_info("goblin-barrel")["elixir"] == 3)
+
+_real_data, _real_info = dx._DATA, dict(dx._CARD_INFO)
+try:
+    dx._CARD_INFO.clear()
+    dx._DATA = os.path.join(os.sep, "definitely", "not", "here")
+    if hasattr(dx._load_cards, "_warned"):
+        del dx._load_cards._warned
+    _state = dx.card_data_state()
+    check("missing card data reports NOT loaded", _state["loaded"] is False)
+    check("missing card data names the failure", _state["error"] == "FileNotFoundError")
+    check("missing card data counts zero", _state["count"] == 0)
+    # The two behaviours that made it invisible, pinned so the danger lives in
+    # the suite and not only in a comment.
+    check("...and THAT is why every card looked plain",
+          dx.card_info("goblin-barrel")["is_win_condition"] is False)
+    check("...and why the Cards board came back empty", dx.card_keys() == [])
+finally:
+    dx._DATA = _real_data
+    dx._CARD_INFO.clear()
+    dx._CARD_INFO.update(_real_info)
+    if hasattr(dx._load_cards, "_warned"):
+        del dx._load_cards._warned
+
+check("card data restored after the probe", dx.card_data_state()["loaded"])
+
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

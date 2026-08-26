@@ -72,7 +72,7 @@ bot's SQLite files read-only.
 | hosting | **the analytics service left the home machine.** `battles.db`, `server/app.py` and the bot all run on a Contabo VPS behind Caddy at `api.deckkies.com` |
 | domain | **`deckkies.com` live**, Vercel apex + `www`, `api.` pointing at the VPS |
 | deck sync | **re-keyed to the Supabase user id.** A cross-account leak on shared browsers was found and closed |
-| tests | **1,236 Python checks** across 21 suites, **179 vitest**, `tsc -b` and `npm run build` clean |
+| tests | **1,247 Python checks** across 21 suites, **179 vitest**, `tsc -b` and `npm run build` clean |
 | shipped from | `main` at `02b7618`. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -4984,6 +4984,55 @@ inside `[data-filmstrip-controls]`.
 
 Kept because each one cost time and each one can recur.
 
+**A missing directory broke three screens and nothing reported a fault.** The
+worst bug in this project so far, measured by how confident the wrong answers
+looked.
+
+`server/duel_combos.py` reads the website's own card files — `cards.json` and
+`cardMeta.json` — resolving `_DATA` to `<repo>/src/data`, because the server is
+expected to sit inside the checkout. The VPS deploy copied `server/` on its own.
+The directory did not exist, `open()` raised `FileNotFoundError`, and this
+caught it:
+
+```python
+except Exception:
+    return
+```
+
+`_CARD_INFO` stayed empty. `card_info()` then answered with its default for
+every key in the game, and that default says `is_win_condition: False`,
+`is_spell: False`, `is_champion: False`, `elixir: 0`. Three screens broke in
+three different-looking ways:
+
+| screen | what it showed | why |
+|---|---|---|
+| Duel Analysis | **Win Conditions and Spells 0 for every player**, Evolutions fine | those two tabs filter on card metadata; Evolutions keys off *observed* evolution slots in the battle data, so it never consulted the missing files |
+| Cards | **completely blank**, while still reporting the battle count | `player_cards.py` iterates `dx.card_keys()`, which was `[]`. 1,158 battles, 0 cards |
+| Deck Counter | names, styles and average elixir went generic, so every player's rows looked alike | deck naming and `_avg_elixir` both go through `card_info` |
+
+Two things made it survive. The **fallback was plausible**: a card that is not a
+win condition and costs 0 elixir is a coherent-looking card, so every payload
+was well-formed and every screen rendered. And the **name survived by
+coincidence** — the default name is `key.replace("-", " ").title()`, and for
+`goblin-barrel` that is exactly "Goblin Barrel", so nothing looked misspelt.
+
+`/status` said the service was healthy, and by its own definition it was: the
+database opened. That is the lesson worth keeping — **a database that opens is
+not a service that can answer**. `/api/analytics/status` now reports
+`cardData: {loaded, count, error}` alongside the storage tiers, the admin
+console draws it as a health tile, and the loader prints a named warning to
+stderr instead of returning silently. Eleven checks in `test_duel_combos.py`
+pin both the working path and, deliberately, the broken one — including
+"...and THAT is why every card looked plain".
+
+**A silent default for missing REFERENCE data is not graceful degradation.** It
+is a wrong answer delivered confidently, and the only defence is to make the
+failure visible. Reference data is not user data: user data can legitimately be
+absent, and a card list cannot.
+
+**Deploying `server/` alone is not deploying the service.** `src/data/` goes
+with it. That is now in the runbook and in `server/README.md`.
+
 **An undefined custom property does not fall back to something sensible — it
 deletes the declaration.** `var(--solid-pink)` where no `--solid-pink` exists is
 invalid at computed-value time, and the whole property goes with it. Four
@@ -5774,7 +5823,7 @@ are in [Running it](#running-it).
 
 ## Testing and verification
 
-1,236 Python checks across 21 suites and 179 vitest tests, none of which open a
+1,247 Python checks across 21 suites and 179 vitest tests, none of which open a
 database — every Python suite runs on synthetic data or a stubbed reader, so
 they pass on a machine with no Clash_Bot install and cannot be broken by
 whatever a real player did last week. The vitest side gained the analytics-proxy
