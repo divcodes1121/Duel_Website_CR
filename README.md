@@ -7526,6 +7526,41 @@ out of the leaf's way. Both were correct product behaviour. Check what
 `elementFromPoint` actually returns under a synthetic grab before believing the
 thing you were testing is broken.
 
+### A phone does not turn the page in 3D
+
+Reported as pixel-distorted, oddly-moving page art on mobile, and it was real.
+Measured mid-turn on an iPhone: the leaf built **26 cloned images**, each a
+400 kB watercolour, each its own containment context, each blended, all inside a
+`preserve-3d` chain. Cutting the strips to five and dropping the blend removed
+14 of those layers and did **not** fix it.
+
+The giveaway was never the leaf. **The static half-pages beside it were mushy
+too**, and they are not rotating at all — so the whole `.book` subtree was being
+rasterised to one texture and transformed, at a raster scale picked once and
+reused for the length of the turn.
+
+So a phone cross-fades instead. The plate swaps and the new one fades up over
+200ms, which composites on opacity alone, touches no 3D context and cannot be
+rasterised wrongly. Nobody reads a page mid-turn on a 390px screen. The desktop
+curl is untouched — verified in the same pass that mid-turn it still builds its
+twelve strips and renders sharp.
+
+The gesture survives: a **tap** on the half you want, or a **sideways swipe**.
+Both are needed and neither is enough alone — this page scrolls vertically and
+the book fills most of it, so a finger flicking the page up starts on the book
+and ends on it. Read as a drag it turned the page every time anyone scrolled. A
+turn now needs either almost no travel (a tap) or horizontal travel clearly
+beating the vertical.
+
+**And one thing this did NOT fix, recorded because I claimed it did.** Stripping
+the 3D context off the phone was also meant to sharpen the resting art. Measured
+— edge variance over the plate art, 3D on versus off — **4599.3 against
+4600.0**. No difference at all. The art was never soft; a downscaled full-page
+screenshot was, and I read the screenshot instead of the pixels, which is a trap
+already written down in this file. What the strip does buy is smaller and real:
+`will-change: transform` was permanently promoting a layer to keep a pointer
+tilt cheap, on a device with no pointer to tilt with.
+
 ### One deliberate rule-break### One deliberate rule-break
 
 The scroll cue's chevron is **the only infinite animation in the project**, and

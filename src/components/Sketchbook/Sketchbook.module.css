@@ -260,6 +260,23 @@
 /* ---- the spread -------------------------------------------------------- */
 .spread { position: absolute; inset: 0; z-index: 1; }
 
+/* THE PHONE'S PAGE CHANGE. Opacity only: it composites without touching the 3D
+   context, so it cannot be rasterised at the wrong scale the way the curl was.
+   One-shot, and `backwards` rather than `forwards` so it pins nothing as an
+   animation-origin value once it has run. */
+.spread[data-swap] {
+  animation: sk-swap 200ms var(--ease, ease-out) backwards;
+}
+
+@keyframes sk-swap {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spread[data-swap] { animation: none; }
+}
+
 /* THE SHEET. Both the live plate and every strip's clone are dressed by this
    one rule, so a page in flight is made of the same paper as the page at rest —
    two rules would eventually disagree about the colour of the same sheet.
@@ -1229,6 +1246,22 @@
   mix-blend-mode: multiply;
 }
 
+/* EXCEPT IN THE LEAF, where it is the most expensive thing on the page.
+ *
+ * A turn clones the spread once per strip, so at rest one image blends and
+ * mid-turn twenty-six do — every one inside a `preserve-3d` chain, which forces
+ * the compositor to flatten a 3D subtree in order to blend it at all. That
+ * combination is what produced the blocky, torn art on a phone.
+ *
+ * Dropping it costs almost nothing to look at: the sheet is #fbf8f1, so
+ * multiplying against it darkens the drawing by about two per cent. Invisible
+ * on a page held still, and this is a page moving at speed. The resting plate
+ * keeps the blend, which is the only place anyone can actually see it. */
+.slice :global(.pl-art img),
+.zoominner :global(.pl-art img) {
+  mix-blend-mode: normal;
+}
+
 .page :global(.pl-art--empty) {
   flex-direction: column;
   gap: 0.7em;
@@ -1333,4 +1366,24 @@
   .zoomwrap,
   .toolLoupe,
   .sep { display: none; }
+
+  /* AND THE 3D MACHINERY GOES WITH THEM, because a phone cross-fades between
+     plates now and never curls, so none of it does anything there.
+   *
+   * BE HONEST ABOUT WHAT THIS DID AND DID NOT FIX. It was applied on the theory
+   * that a `preserve-3d` subtree gets rasterised to a texture at a capped scale,
+   * which would have explained art that looked low-resolution on a phone.
+   * Measured on an iPhone 13 — edge variance over the plate art, 3D context on
+   * versus off — it came out 4599.3 against 4600.0. No difference at all. The
+   * art was never soft; a downscaled full-page screenshot was, and I read the
+   * screenshot instead of the pixels.
+   *
+   * What it does buy is real but smaller: `will-change: transform` was
+   * permanently promoting `.tilt` to its own compositing layer to keep a pointer
+   * tilt cheap, and a touch device has no pointer to tilt with. This is dead
+   * machinery being removed, not a rendering fix. The rendering fix was not
+   * building a 3D leaf on a phone in the first place. */
+  .box3d { perspective: none; }
+  .tilt { transform: none; transform-style: flat; will-change: auto; }
+  .book { transform-style: flat; }
 }

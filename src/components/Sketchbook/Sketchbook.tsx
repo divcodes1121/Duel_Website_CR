@@ -51,11 +51,43 @@ import { ArtSlot } from './ArtSlot';
 import { BrushRule, DateStamp, FernCluster, Sprig } from './Botanicals';
 import styles from './Sketchbook.module.css';
 
-/* Strips in the bending leaf. The reference uses 18 for a bitmap; each of these
-   carries a cloned subtree, so this is the honest trade between the smoothness
-   of the curve and how much DOM is built for ~400ms. At 12 the facets are
-   already below the width of the shadow that hides them. */
+/**
+ * Strips in the bending leaf. The reference uses 18 for a bitmap; each of these
+ * carries a cloned SUBTREE, so this is the trade between how smooth the curve is
+ * and how much the browser has to build and rasterise for the length of a turn.
+ *
+ * A PHONE DOES NOT GET A CURL AT ALL — see `COARSE` below.
+ */
 const N = 12;
+
+/**
+ * NO 3D PAGE TURN ON A PHONE, AND THIS WAS NOT THE FIRST ANSWER.
+ *
+ * Reported as pixel-distorted, oddly-moving page art on mobile, and it was
+ * real. Measured mid-turn on an iPhone: the leaf built 26 cloned images, each a
+ * 400 kB watercolour, each its own containment context, each blended, all
+ * inside a `preserve-3d` chain. Cutting the strips to five and dropping the
+ * blend removed 14 of those layers and did NOT fix it — because the giveaway
+ * was never the leaf. THE STATIC HALF-PAGES BESIDE IT WERE MUSHY TOO, and they
+ * are not rotating at all.
+ *
+ * That is the tell. Everything inside `.book` sits in one 3D rendering context,
+ * so the moment a leaf is in flight the compositor rasterises the WHOLE subtree
+ * to a texture and transforms it — picking a raster scale once and reusing it
+ * for the length of the turn. On a phone that scale is a fraction of what the
+ * page needs, which is exactly what "pixel distorted" looks like. Nothing was
+ * slow; it rendered at the wrong resolution.
+ *
+ * The honest fix on a small screen is not to do it at all. A phone gets a
+ * CROSS-FADE: the spread swaps and the new plate fades up over 200ms, which
+ * composites on opacity alone, touches no 3D context and cannot be rasterised
+ * wrongly. Nobody reads a page mid-turn on a 390px screen, so what is lost is
+ * an effect that was not landing anyway. The desktop curl is untouched.
+ *
+ * Read once — a pointer does not change mid-session — and it is the same test
+ * that already decides whether the magnifier exists.
+ */
+const COARSE = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 const SPAN = 0.449; /* gutter → outer edge, as a fraction of the book */
 const BETA = 0.6; /* peak curl of the arc, radians */
 const MAG = 2.25; /* what the glass is worth */
@@ -121,7 +153,7 @@ export function Sketchbook() {
   const loupe = useRef<{ x: number; y: number } | null>(null);
   const grab = useRef<{ cx: number; cy: number; x0: number; y0: number } | null>(null);
   const target = useRef<{ x: number; y: number } | null>(null);
-  const drag = useRef<{ dir: 'next' | 'prev'; x0: number; w: number; moved: number; vel: number; at: number } | null>(null);
+  const drag = useRef<{ dir: 'next' | 'prev'; x0: number; y0: number; w: number; moved: number; up: number; vel: number; at: number } | null>(null);
 
   idxRef.current = idx;
   const M = PLATES.length;
@@ -476,6 +508,22 @@ export function Sketchbook() {
     target.current = { x: bw * (dir === 'next' ? 0.13 : 0.87), y: bh * 0.83 };
   }, []);
 
+  /** A phone's page change: swap the plate, let it fade up. */
+  const swapTo = useCallback(
+    (to: number) => {
+      const el = spreadRef.current;
+      idxRef.current = to;
+      setIdx(to);
+      if (!el || reduced) return;
+      /* Restarted by hand, because re-adding a class React has not re-rendered
+         does not replay a CSS animation. */
+      el.removeAttribute('data-swap');
+      void el.offsetWidth;
+      el.setAttribute('data-swap', '');
+    },
+    [reduced],
+  );
+
   const startTurn = useCallback(
     (dir: 'next' | 'prev', t: number) => {
       springRef.current = null;
@@ -530,11 +578,16 @@ export function Sketchbook() {
   const step = useCallback(
     (dir: 'next' | 'prev') => {
       setHinted(true);
+      const from = turnRef.current ? turnRef.current.to : idxRef.current;
+      if (COARSE) {
+        swapTo(dir === 'next' ? (from + 1) % M : (from - 1 + M) % M);
+        return;
+      }
       if (turnRef.current) settle(turnRef.current.to);
       startTurn(dir, 0);
       commit();
     },
-    [commit, settle, startTurn],
+    [M, commit, settle, startTurn, swapTo],
   );
 
   /**
@@ -563,9 +616,13 @@ export function Sketchbook() {
         return;
       }
       if (turnRef.current) settle(turnRef.current.to);
+      if (COARSE) {
+        swapTo(i);
+        return;
+      }
       setIdx(i);
     },
-    [M, settle, showBook, step],
+    [M, settle, showBook, step, swapTo],
   );
 
   /* --------------------------------------------------------- the pointer */
@@ -582,14 +639,17 @@ export function Sketchbook() {
       stage.setPointerCapture(e.pointerId);
       const r = bookRef.current!.getBoundingClientRect();
       const dir = (e.clientX - r.left) / r.width > 0.5 ? 'next' : 'prev';
-      startTurn(dir, 0);
-      drag.current = { dir, x0: e.clientX, w: r.width, moved: 0, vel: 0, at: performance.now() };
+      /* On a phone there is no leaf to drag — the gesture is still read, it is
+         just resolved on release rather than followed frame by frame. */
+      if (!COARSE) startTurn(dir, 0);
+      drag.current = { dir, x0: e.clientX, y0: e.clientY, w: r.width, moved: 0, up: 0, vel: 0, at: performance.now() };
     };
     const move = (e: PointerEvent) => {
       const d = drag.current;
       if (!d) return;
       const dx = e.clientX - d.x0;
       d.moved = Math.max(d.moved, Math.abs(dx));
+      d.up = Math.max(d.up, Math.abs(e.clientY - d.y0));
       const raw = (d.dir === 'next' ? -dx : dx) / (d.w * 0.62);
       const t = Math.max(0, Math.min(1, raw));
       const now = performance.now();
@@ -604,6 +664,18 @@ export function Sketchbook() {
       const d = drag.current;
       if (!d) return;
       drag.current = null;
+      if (COARSE) {
+        /* A TAP on the half you want, or a SIDEWAYS swipe — and nothing else.
+           This page scrolls vertically and the book fills most of it, so a
+           finger flicking the page up starts on the book and ends on it: read
+           as a gesture it would turn the page every time someone scrolled.
+           A turn therefore needs either almost no travel at all (a tap) or
+           horizontal travel that clearly beats the vertical. */
+        const tap = d.moved < 10 && d.up < 10;
+        const swipe = d.moved >= 34 && d.moved > d.up * 1.4;
+        if (tap || swipe) step(d.dir);
+        return;
+      }
       if (!turnRef.current) return;
       if (d.moved < 6) {
         commit();
@@ -624,7 +696,7 @@ export function Sketchbook() {
       stage.removeEventListener('pointerup', up);
       stage.removeEventListener('pointercancel', up);
     };
-  }, [applyTurn, cancel, commit, startTurn]);
+  }, [applyTurn, cancel, commit, startTurn, step]);
 
   /* the book leans very slightly toward the pointer */
   useEffect(() => {
