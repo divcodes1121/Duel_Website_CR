@@ -866,7 +866,7 @@ export function Sketchbook() {
           </button>
           <span className={styles.sep} aria-hidden="true" />
           <button
-            className={styles.tool}
+            className={styles.tool + ' ' + styles.toolLoupe}
             aria-pressed={loupeOn}
             aria-label="Magnifying glass"
             onClick={() => {

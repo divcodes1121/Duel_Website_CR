@@ -373,7 +373,13 @@
  * pasted over the top of it. */
 .artSpread {
   position: absolute;
-  inset: 4% 3% 7%;
+  /* THE TOP INSET CLEARS THE DATE STAMP. At 4% the drawing ran up under it, and
+     a chop mark and a hand-set date over a bright watercolour sky are simply not
+     legible — on the cover it read as broken type rather than as a stamp. Nine
+     per cent puts the art below it on clean paper, which is where a plate sits
+     in a real book anyway: the page is annotated above the image, not behind
+     it. Cheaper and truer than putting a scrim under the stamp. */
+  inset: 9% 3% 7%;
   z-index: 1;
   display: flex;
   align-items: center;
@@ -741,9 +747,6 @@
   color: var(--ink-soft);
   box-shadow: 0 3px 12px rgba(58, 44, 26, 0.14);
 }
-
-/* A coarse pointer has no hover and nowhere to park a magnifier. */
-@media (pointer: coarse) { .loupe { display: none; } }
 
 /* ---- the margins ------------------------------------------------------
  * Drawn, not photographed — see Botanicals.tsx. They are the room the book is
@@ -1300,4 +1303,34 @@
   font-size: min(14px, 1.71cqh);
   line-height: 1.6;
   color: var(--ink-soft);
+}
+
+/* ---- a phone has no magnifier -----------------------------------------
+ *
+ * A coarse pointer has no hover and nowhere to park a glass, so it does not
+ * exist there.
+ *
+ * AND NEITHER MAY ITS MAGNIFIED COPY. Hiding `.loupe` alone left `.zoomwrap`
+ * behind — the second copy of the book, masked to a disc and placed where the
+ * glass would have been. On a phone that rendered as a circle of magnified page
+ * hanging in the spread with no lens, no bezel and no handle around it: a weird
+ * round thing floating, which is exactly what it was. The glass was never the
+ * visible part; it is the frame around the part that is.
+ *
+ * The toggle goes too — a button controlling something not on the page is worse
+ * than no button — and `.sep` with it, since its whole job is to part the zoom
+ * pair from that toggle and without it the stroke hangs off the end of the pill.
+ *
+ * THIS BLOCK LIVES AT THE END OF THE FILE, AND THAT IS LOAD-BEARING. A media
+ * query adds NOTHING to specificity, so `.toolLoupe` here and `.tool` below tie
+ * at (0,1,0) and source order decides. Written further up, `.tool`'s
+ * `display: inline-flex` won and the toggle stayed on every phone — while
+ * `.sep` hid correctly, because it never declares `display` and so had nothing
+ * to lose the tie with. Half the rule worked, which is why it read as fixed.
+ * The same trap is already recorded against the loader's reduced-motion block. */
+@media (pointer: coarse) {
+  .loupe,
+  .zoomwrap,
+  .toolLoupe,
+  .sep { display: none; }
 }
