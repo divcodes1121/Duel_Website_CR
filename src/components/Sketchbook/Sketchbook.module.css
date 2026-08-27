@@ -389,16 +389,6 @@
   color: var(--ink-faint);
 }
 
-/* WHILE THE PAGES ARE FANNING, they are moving too fast to be read, so they
-   are drawn as moving rather than as sharp. Applied to the leaf and to the two
-   halves under it, never to the whole book: the desk, the shadow and the glass
-   are not in motion and blurring them would read as the page being out of
-   focus rather than the paper being in flight. */
-[data-riffling] .curl .slice,
-[data-riffling] .half .slice {
-  filter: url(#sk-riffle-blur);
-}
-
 /* ---- the turning leaf: nested strips forming a curved surface ----------
  * Each strip is rotated a little further than the one holding it, so the
  * tangent sweeps through an arc and the paper bends the way paper bends

@@ -31,8 +31,16 @@
  *   loops animated box-shadow and filter, and that is what made the app lag.
  *   Every frame here is driven by a rAF that TEARS ITSELF DOWN when the spring
  *   settles, the same shape as `topDockController` and `LiquidMetal`.
- * · REDUCED MOTION lands the turn instantly and never riffles. The book is
- *   content, so it still renders and still turns — only the travel goes.
+ * · REDUCED MOTION lands the turn instantly. The book is content, so it still
+ *   renders and still turns — only the travel goes.
+ * · THE BOOK OPENS PLAIN. An opening riffle — the pages fanning through
+ *   themselves once on arrival, motion-blurred, landing on the cover — was
+ *   built and REMOVED. It read as a glitch rather than as a book being
+ *   opened: eight turns in a second and a half is faster than the eye can
+ *   follow, so it looked like the page failing to settle rather than like
+ *   paper. Recoverable from dfd93ed if it is ever wanted with a slower
+ *   tempo and fewer leaves. The turn machinery it used is untouched — it is
+ *   the same code every manual turn runs.
  * · The palette is redefined at PAGE SCOPE on the app's own token names, the
  *   way Duel Analysis already re-skins itself. No component here invents a
  *   colour that is not on the sheet in front of you.
@@ -61,22 +69,22 @@ const TURN_MS = 620;
 
 type Turn = { dir: 'next' | 'prev'; from: number; to: number; t: number };
 /**
- * TWO WAYS A LEAF FINISHES, and they are not the same problem.
+ * A LEAF ALWAYS FINISHES ON A CLOCK, never on a spring.
  *
- * A DRAG-RELEASE is a spring: the reader let go at some position with some
- * velocity, and the paper should carry that momentum. A COMMITTED step — an
- * arrow key, a tap, an index click — has no momentum to honour and wants a
- * fixed tempo, because a critically damped spring approaches its target and
- * never actually arrives. Measured: a committed turn stayed "in flight" for
- * ~1.1s, the last third of it visually flat against the page. That is a page
- * that has turned but has not let go.
+ * A drag-release was a spring, on the reasoning that a reader who let go with
+ * momentum should have it honoured. The reasoning was fine and the mechanism
+ * was not: a critically damped spring APPROACHES its target and never arrives,
+ * so the settle test is a threshold, and from a release part-way through a turn
+ * it crawls. Measured — released at t=0.81, the leaf was still at 179.22 of 180
+ * degrees 1.6 seconds later, never crossing the threshold, so the page never
+ * committed and the book silently refused to turn. Keyboard turns were fine
+ * throughout, which is exactly why it survived: they were already tweens.
  *
- * So a step is a TWEEN with a real end, and only a release is a spring. The
- * reference splits it the same way and for the same reason.
+ * So everything is a tween with a real end, and the release's velocity buys a
+ * SHORTER one rather than a different curve. A flick still feels faster than a
+ * slow drag; it just also lands.
  */
-type Motion =
-  | { kind: 'spring'; v: number; target: number; done?: () => void; k: number; c: number }
-  | { kind: 'tween'; from: number; target: number; dur: number; t0: number; done?: () => void };
+type Motion = { from: number; target: number; dur: number; t0: number; done?: () => void };
 
 export function Sketchbook() {
   const [idx, setIdx] = useState(0);
@@ -86,8 +94,6 @@ export function Sketchbook() {
   /* Cleared the first time the glass is actually picked up. A label that
      stays after you have learned the thing it teaches is clutter. */
   const [loupeUsed, setLoupeUsed] = useState(false);
-  /* Drives the motion blur while the pages are fanning past. */
-  const [riffling, setRiffling] = useState(false);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const box3dRef = useRef<HTMLDivElement>(null);
@@ -116,22 +122,10 @@ export function Sketchbook() {
   const grab = useRef<{ cx: number; cy: number; x0: number; y0: number } | null>(null);
   const target = useRef<{ x: number; y: number } | null>(null);
   const drag = useRef<{ dir: 'next' | 'prev'; x0: number; w: number; moved: number; vel: number; at: number } | null>(null);
-  const riffleLeft = useRef(0);
 
   idxRef.current = idx;
   const M = PLATES.length;
   const reduced = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  /* Any real interaction ends the opening riffle — a reader who has taken hold
-     of the book does not want it turning itself. Declared up here because both
-     `step` and the pointer handler call it and both read better above where it
-     would naturally sit; it depends on nothing but a ref and a setter. */
-  const stopRiffle = useCallback(() => {
-    if (riffleLeft.current > 0) {
-      riffleLeft.current = 0;
-      setRiffling(false);
-    }
-  }, []);
 
   /* Two things that are invisible from a screenshot, said out loud in dev.
      A DRIFTED LABEL would render perfectly and be wrong — the access plate
@@ -380,39 +374,28 @@ export function Sketchbook() {
   const tick = useCallback(
     (now: number) => {
       rafRef.current = null;
-      const dt = Math.min(0.032, (now - lastRef.current) / 1000 || 0.016);
+      /* No per-frame delta any more: the leaf reads real elapsed time from its
+         own start, and the view and loupe eases are proportional steps toward a
+         target rather than integrations. Nothing left in this loop needs dt. */
       lastRef.current = now;
 
       const s = springRef.current;
       const t = turnRef.current;
       if (s && t) {
-        if (s.kind === 'tween') {
-          /* REAL elapsed time, not accumulated dt. `dt` is clamped to 32ms so a
-             backgrounded tab cannot make the spring explode on its first frame
-             back — correct for a spring, and wrong for a fixed tempo, because
-             every frame slower than the clamp is under-counted and the turn
-             silently runs long. Measured in a throttled browser: a 620ms tween
-             took 980ms. A tween knows when it started, so it should ask. */
-          const k = Math.min(1, (now - s.t0) / 1000 / s.dur);
-          /* ease-out cubic: the leaf leaves fast and lands softly, which is how
-             a page dropped from the fingers behaves */
-          const e = 1 - Math.pow(1 - k, 3);
-          t.t = s.from + (s.target - s.from) * e;
-          applyTurn(t.t);
-          if (k >= 1) {
-            springRef.current = null;
-            s.done?.();
-          }
-        } else {
-          const x = t.t - s.target;
-          s.v += (-s.k * x - s.c * s.v) * dt;
-          t.t += s.v * dt;
-          if (Math.abs(t.t - s.target) < 0.004 && Math.abs(s.v) < 0.03) {
-            t.t = s.target;
-            springRef.current = null;
-            applyTurn(t.t);
-            s.done?.();
-          } else applyTurn(t.t);
+        /* REAL elapsed time, not accumulated dt. `dt` is clamped to 32ms so a
+           backgrounded tab cannot jump the animation on its first frame back —
+           correct for that, and wrong for a fixed tempo, because every frame
+           slower than the clamp is under-counted and the turn silently runs
+           long. Measured in a throttled browser: a 620ms tween took 980ms. */
+        const k = Math.min(1, (now - s.t0) / 1000 / s.dur);
+        /* ease-out cubic: the leaf leaves fast and lands softly, which is how a
+           page dropped from the fingers behaves */
+        const e = 1 - Math.pow(1 - k, 3);
+        t.t = s.from + (s.target - s.from) * e;
+        applyTurn(t.t);
+        if (k >= 1) {
+          springRef.current = null;
+          s.done?.();
         }
       }
 
@@ -506,9 +489,9 @@ export function Sketchbook() {
   );
 
   /**
-   * `fling` carries a release's momentum; a plain commit is a fixed tempo.
-   * The remaining travel sets the duration, so finishing a turn the reader has
-   * already dragged most of the way does not take as long as one from flat.
+   * `fling` is the release speed, and it only shortens the travel. The distance
+   * left sets the base duration, so finishing a turn already dragged most of the
+   * way does not take as long as one from flat.
    */
   const commit = useCallback(
     (fling?: number) => {
@@ -518,12 +501,15 @@ export function Sketchbook() {
         settle(t.to);
         return;
       }
-      if (fling !== undefined) {
-        springRef.current = { kind: 'spring', v: fling, target: 1, k: 230, c: 30, done: () => settle(t.to) };
-      } else {
-        const dur = TURN_MS * Math.max(0.35, 1 - t.t) * 0.001;
-        springRef.current = { kind: 'tween', from: t.t, target: 1, dur, t0: performance.now(), done: () => settle(t.to) };
-      }
+      const remaining = Math.max(0.3, 1 - t.t);
+      const haste = 1 + Math.min(4, fling ?? 0) * 0.45;
+      springRef.current = {
+        from: t.t,
+        target: 1,
+        dur: (TURN_MS * remaining) / haste / 1000,
+        t0: performance.now(),
+        done: () => settle(t.to),
+      };
       kick();
     },
     [kick, reduced, settle],
@@ -536,20 +522,19 @@ export function Sketchbook() {
       settle(t.from);
       return;
     }
-    const dur = TURN_MS * Math.max(0.3, t.t) * 0.001;
-    springRef.current = { kind: 'tween', from: t.t, target: 0, dur, t0: performance.now(), done: () => settle(t.from) };
+    const dur = (TURN_MS * Math.max(0.3, t.t)) / 1000;
+    springRef.current = { from: t.t, target: 0, dur, t0: performance.now(), done: () => settle(t.from) };
     kick();
   }, [kick, reduced, settle]);
 
   const step = useCallback(
     (dir: 'next' | 'prev') => {
       setHinted(true);
-      stopRiffle();
       if (turnRef.current) settle(turnRef.current.to);
       startTurn(dir, 0);
       commit();
     },
-    [commit, settle, startTurn, stopRiffle],
+    [commit, settle, startTurn],
   );
 
   /**
@@ -590,7 +575,6 @@ export function Sketchbook() {
 
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      stopRiffle();
       const zone = (e.target as HTMLElement).closest('[data-zone]');
       setHinted(true);
       if (!zone) return;
@@ -640,7 +624,7 @@ export function Sketchbook() {
       stage.removeEventListener('pointerup', up);
       stage.removeEventListener('pointercancel', up);
     };
-  }, [applyTurn, cancel, commit, startTurn, stopRiffle]);
+  }, [applyTurn, cancel, commit, startTurn]);
 
   /* the book leans very slightly toward the pointer */
   useEffect(() => {
@@ -752,65 +736,6 @@ export function Sketchbook() {
     kick();
   };
 
-  /**
-   * THE OPENING RIFFLE — the book fans through itself once, then settles.
-   *
-   * It exists because arriving at a static open spread does not tell you the
-   * thing that matters about this page: that it is a BOOK, and that the pages
-   * turn. One riffle says both before anyone has touched anything, and it is
-   * the reference's own idea — its hero does the same on load.
-   *
-   * The tempo is a BELL, not a constant. A real riffle starts slow, runs fast
-   * through the middle and slows into the last page; at a fixed duration per
-   * leaf it reads as a slideshow advancing on a timer. `dur` therefore shortens
-   * toward the middle of the run and opens out again at the end.
-   *
-   * It lands on the COVER by construction — it turns exactly one full lap of
-   * the book, so wherever it starts is where it stops, and nothing has to
-   * compute a target. Skipped entirely under reduced motion and on a coarse
-   * pointer, where a burst of movement on arrival is noise rather than an
-   * introduction.
-   */
-  const riffleStep = useCallback(() => {
-    const total = PLATES.length;
-    const done = total - riffleLeft.current;
-    /* 0 at both ends, 1 in the middle */
-    const bell = Math.sin(Math.PI * (done / Math.max(1, total - 1)));
-    const dur = 0.3 - 0.2 * bell;
-
-    startTurn('next', 0);
-    const t = turnRef.current;
-    if (!t) return;
-    springRef.current = {
-      kind: 'tween',
-      from: 0,
-      target: 1,
-      dur,
-      t0: performance.now(),
-      done: () => {
-        settle(t.to);
-        riffleLeft.current -= 1;
-        if (riffleLeft.current > 0) riffleStep();
-        else setRiffling(false);
-      },
-    };
-    kick();
-  }, [kick, settle, startTurn]);
-
-  useEffect(() => {
-    const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
-    if (reduced || coarse) return;
-    const id = setTimeout(() => {
-      riffleLeft.current = PLATES.length;
-      setRiffling(true);
-      riffleStep();
-    }, 260);
-    return () => clearTimeout(id);
-    /* Once, on arrival. `riffleStep` is stable and re-running this on any later
-       identity change would restart the riffle mid-read. */
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   /* The page owns its own scroll region — `body` is `overflow: hidden` project
      wide — so this scrolls THAT, not the document. `scrollIntoView` on the band
      would work too and is worse: it picks its own alignment. */
@@ -824,7 +749,7 @@ export function Sketchbook() {
   const plate = PLATES[idx];
 
   return (
-    <div className={styles.page} ref={pageRef} data-riffling={riffling ? '' : undefined}>
+    <div className={styles.page} ref={pageRef}>
       <div className={styles.wash} aria-hidden="true" />
       <div className={styles.grain} aria-hidden="true" />
 
@@ -839,17 +764,6 @@ export function Sketchbook() {
         <a className={styles.brand} href="#/">Deckkies</a>
         <p className={styles.kicker}>A field book &mdash; what the site is, and what a Member and a Pro each get</p>
       </header>
-
-      {/* THE MOTION BLUR, and it has to be an SVG filter rather than a CSS one.
-          `filter: blur()` is isotropic — it smears the page vertically as well,
-          which reads as out of focus rather than as moving. `feGaussianBlur`
-          takes a per-axis deviation, so this smears along X only, which is the
-          direction the paper is actually travelling. */}
-      <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
-        <filter id="sk-riffle-blur">
-          <feGaussianBlur stdDeviation="5 0" />
-        </filter>
-      </svg>
 
       <div className={styles.wrap}>
         <div className={styles.stage} ref={stageRef}>

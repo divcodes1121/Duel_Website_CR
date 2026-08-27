@@ -7484,7 +7484,7 @@ It carries a label — "Pick me up, drag me over the page" — that clears the f
 time it is used. A glass lying on a page gives no clue it can be moved, and one
 hint line under the book was doing all the work.
 
-### The opening riffle, and the button that fires it
+### The button that opens it
 
 The topbar carries a closed maroon book with its page-block edge showing; the
 cover swings open 118 degrees under the pointer (flat open it would be edge-on
@@ -7492,19 +7492,41 @@ and vanish). It says **Click me** on screen and `Open the field book` to a scree
 reader — the visible words are the tease, the accessible name is the
 destination.
 
-Clicking it opens the book and fans it through itself once. The tempo is a BELL
-rather than a constant, because a real riffle starts slow, runs fast through the
-middle and slows into the last page; at a fixed duration per leaf it reads as a
-slideshow on a timer. It lands on the cover by construction — exactly one lap —
-and any real interaction cancels it.
+**It opens plain.** An opening riffle — the pages fanning through themselves
+once on arrival, motion-blurred on a bell-shaped tempo, landing on the cover by
+turning exactly one lap — was built and then removed on the same day. It read as
+a glitch rather than as a book being opened: eight turns in a second and a half
+is faster than the eye can follow, so it looked like the page failing to settle.
+Recoverable from `dfd93ed`. The turn machinery it drove is untouched, because it
+is the same code every manual turn runs.
 
-**The motion blur is an SVG filter, not `filter: blur()`.** CSS blur is
-isotropic and smears the page vertically too, which reads as out of focus rather
-than as moving. `feGaussianBlur stdDeviation="5 0"` smears along X only, the
-direction the paper is travelling, and it is applied to the leaf and the two
-halves — never the whole book, since the desk and the glass are not in motion.
+### A drag-release that never landed
 
-### One deliberate rule-break
+Worth keeping, because it hid behind a control that worked.
+
+Committed turns — arrow keys, the index, a tap — were tweens with a real end. A
+drag-RELEASE was a spring, on the reasoning that a reader who lets go with
+momentum should have it honoured. The reasoning was fine; the mechanism was not.
+A critically damped spring APPROACHES its target and never arrives, so the
+settle test is a threshold, and from a release part-way through a turn it
+crawls: released at `t = 0.81`, the leaf was still at **179.22 of 180 degrees
+1.6 seconds later**, never crossing it. The turn never committed and the book
+silently refused to turn.
+
+Every keyboard turn was fine throughout, which is exactly why it survived — they
+were already tweens. Everything is a tween now, and the release's velocity buys
+a SHORTER one rather than a different curve: a flick still feels faster than a
+slow drag, it just also lands. Measured after: committed in ~400ms.
+
+**And the probe found it twice by accident before it found it on purpose.** Two
+drag tests "failed" while grabbing the magnifier rather than the page — once on
+its handle, which extends outward at 40 degrees past the lens, and once at
+exactly `(0.13, 0.83)`, which is where a forward turn SHOVES the glass to get it
+out of the leaf's way. Both were correct product behaviour. Check what
+`elementFromPoint` actually returns under a synthetic grab before believing the
+thing you were testing is broken.
+
+### One deliberate rule-break### One deliberate rule-break
 
 The scroll cue's chevron is **the only infinite animation in the project**, and
 `index.css` bans those. The ban exists because the old glow loops animated
