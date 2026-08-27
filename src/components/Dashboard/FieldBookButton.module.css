@@ -1,0 +1,219 @@
+/* THE FIELD BOOK BUTTON.
+ *
+ * A closed book, roughly 26 x 20px, that opens under the pointer. Everything
+ * below is a token or a geometry derived from `--h`, so a caller can resize it
+ * by changing one number and nothing has to be kept in step.
+ *
+ * NOTHING HERE LOOPS. index.css bans infinite animation project-wide; the
+ * opening is a hover transition and the arrival shimmer runs once.
+ */
+
+.btn {
+  --h: 1.28rem; /* the book's height; everything is a multiple of it */
+  --dur: 460ms;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-shrink: 0;
+  height: 2.15rem;
+  margin-right: 0.15rem;
+  padding: 0 0.8rem 0 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    border-color var(--dur-2, 200ms) ease,
+    background-color var(--dur-2, 200ms) ease,
+    box-shadow var(--dur-2, 200ms) ease,
+    transform var(--dur-2, 200ms) ease;
+}
+
+.btn:hover {
+  border-color: var(--accent-action);
+  background: var(--accent-action-wash-sunken, var(--surface-sunken));
+  /* Dark-only by construction: `--glow-core` is a STRENGTH that light sets to
+     0%, and color-mix at 0% is simply transparent. One declaration, both
+     themes, no branch — the rule the whole palette is built on. */
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent-action) var(--glow-core), transparent);
+}
+
+.btn:active { transform: translateY(1px); }
+
+/* ---- the book ---------------------------------------------------------- */
+.book {
+  position: relative;
+  flex: none;
+  width: calc(var(--h) * 1.34);
+  height: var(--h);
+  /* Shallow, because the book is 20px tall: at a hero control's perspective the
+     cover would swing away to nothing. */
+  perspective: 340px;
+  transform-style: preserve-3d;
+}
+
+/* THE PAGE EDGE HAS TO SHOW AT REST, which is the whole difference between a
+   book and a maroon rectangle. A closed book is mostly cover, but the block of
+   paper stands a little proud of it on the fore edge and sits a little inside
+   it top and bottom — the cover is cut larger than what it protects. Without
+   that cream stripe down the right the control read as a swatch until you
+   hovered it, which is exactly the moment it needed to already be readable. */
+.pages {
+  position: absolute;
+  inset: 7% 0 7% 12%;
+  border-radius: 1px 2px 2px 1px;
+  background: linear-gradient(180deg, #fbf8f1, #ece5d6);
+  box-shadow: inset -1px 0 0 rgba(120, 96, 60, 0.35);
+}
+
+.pages i {
+  position: absolute;
+  right: 0;
+  left: 8%;
+  height: 1px;
+  background: rgba(120, 96, 60, 0.4);
+}
+
+.pages i:nth-child(1) { top: 26%; }
+.pages i:nth-child(2) { top: 50%; }
+.pages i:nth-child(3) { top: 74%; }
+
+/* the fore edge, so the exposed stripe reads as a stack rather than one sheet */
+.pages::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 34%;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(120, 96, 60, 0.22) 0 1px,
+    rgba(120, 96, 60, 0) 1px 3px
+  );
+  opacity: 0.8;
+}
+
+/* a ribbon marking a page inside. GOLD, which this palette reserves for game
+   iconography rather than for meaning — a bookmark is exactly that. */
+.ribbon {
+  position: absolute;
+  top: 6%;
+  right: 30%;
+  width: 10%;
+  height: 62%;
+  background: linear-gradient(180deg, var(--gold-bright, #ffd76a), var(--gold, #e0a52f));
+  transition: height var(--dur) var(--ease), top var(--dur) var(--ease);
+}
+
+.btn:hover .ribbon { height: 84%; top: 4%; }
+
+/* the front cover, hinged at the spine */
+.cover {
+  position: absolute;
+  inset: 0 11% 0 6%;
+  border-radius: 1px 2.5px 2.5px 1px;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.22) 0 26%, rgba(255, 255, 255, 0) 52%),
+    var(--solid-maroon, #96204a);
+  box-shadow: 0 1px 2px rgba(30, 8, 16, 0.4);
+  transform-origin: left center;
+  transform: rotateY(0deg);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  backface-visibility: hidden;
+}
+
+/* THE OPEN ANGLE IS 118deg, NOT 180. Flat open, the cover is edge-on to the
+   camera and vanishes — the button would appear to lose half of itself on
+   hover. Past ninety it reads as thrown open while still catching light. */
+.btn:hover .cover {
+  transform: rotateY(-118deg);
+  box-shadow: 2px 2px 7px rgba(30, 8, 16, 0.34);
+}
+
+/* a device stamped on the cover, in the ink the cover is graded to carry */
+.crest {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42%;
+  height: 42%;
+  margin: -21% 0 0 -21%;
+  border: 1px solid var(--on-solid, #fff);
+  border-radius: 1px;
+  opacity: 0.62;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.btn:hover .crest { opacity: 0.2; }
+
+/* the spine stays put while the cover leaves it */
+.spine {
+  position: absolute;
+  left: 4%;
+  top: 0;
+  bottom: 0;
+  width: 9%;
+  border-radius: 2px 0 0 2px;
+  background: linear-gradient(90deg, #6d1637, var(--solid-maroon, #96204a));
+}
+
+/* ---- the label --------------------------------------------------------- */
+.label {
+  white-space: nowrap;
+  transition: color var(--dur-2, 200ms) ease;
+}
+
+.btn:hover .label { color: var(--accent-action); }
+
+/* ---- the arrival ------------------------------------------------------- *
+ * ONE SHOT, on mount. A control this small is easy to walk past, and the whole
+ * point of it is that people notice it — so it says hello once and then never
+ * again. `animation` rather than a transition so it cannot fight the hover
+ * rules above, and `backwards` rather than `forwards` so it pins nothing as an
+ * animation-origin value once it has run: `forwards` here would freeze the
+ * sheen's transform and kill every later hover, which is the trap the landing
+ * page's scroll reveal already hit. */
+.sheen {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, var(--accent-action) 26%, transparent) 48%,
+    transparent 66%
+  );
+  transform: translateX(-130%);
+  animation: fb-sweep 1500ms var(--ease) 700ms backwards;
+}
+
+@keyframes fb-sweep {
+  from { transform: translateX(-130%); }
+  to { transform: translateX(130%); }
+}
+
+.btn:hover .sheen { transform: translateX(130%); transition: transform 620ms var(--ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheen { animation: none; }
+  .cover, .ribbon, .crest, .sheen { transition: none; }
+}
+
+/* The label is the first thing to go when the bar runs out of room; the book
+   itself still says what the control is. */
+@media (max-width: 1240px) {
+  .label { display: none; }
+  .btn { padding: 0 0.55rem; gap: 0; }
+}

@@ -1,0 +1,1269 @@
+/* THE FIELD BOOK.
+ *
+ * The palette is redefined at PAGE SCOPE, which is the pattern Duel Analysis
+ * already established: a screen with its own brief re-skins itself on local
+ * names and touches nothing else. Paper is not a theme of this app — it is one
+ * page that happens to be made of paper — so it does not belong in index.css,
+ * and nothing outside this file can read these names.
+ *
+ * NO INFINITE ANIMATION ANYWHERE IN HERE. index.css bans it project-wide and is
+ * specific about why: the old glow loops animated box-shadow and filter, and
+ * that is what made the app lag. Every transition below is one-shot.
+ */
+
+.page {
+  /* the paper, one ladder, warm rather than grey */
+  --paper: #ddd4c2;
+  --paper-lit: #fbf8f1;
+  --ink: #2b2721;
+  --ink-soft: rgba(43, 39, 33, 0.62);
+  --ink-faint: rgba(43, 39, 33, 0.38);
+  --hairline: rgba(43, 39, 33, 0.14);
+  --earth: #9a6a3e;
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
+
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- the painted ground ------------------------------------------------
+ * The reference ships a photographed wash and two botanical PNGs. Those are
+ * binary assets belonging to another project and they are Singapore, not this.
+ * The atmosphere is built here instead: three offset radial washes for the
+ * uneven soak a wet ground dries with, and a fibre grain over the top. It costs
+ * no request and it themes itself from the tokens above. */
+.wash {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 78% at 18% 6%, rgba(252, 248, 238, 0.72), rgba(252, 248, 238, 0) 58%),
+    radial-gradient(86% 58% at 88% 20%, rgba(190, 168, 128, 0.4), rgba(190, 168, 128, 0) 66%),
+    radial-gradient(140% 100% at 50% 110%, rgba(140, 96, 54, 0.26), rgba(140, 96, 54, 0) 56%),
+    linear-gradient(180deg, #e6ddcc 0%, var(--paper) 44%, #d3c9b5 100%);
+}
+
+/* The fibre. A tiny SVG turbulence tile, so it is a few hundred bytes of
+   markup rather than a texture to download. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.42;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+/* ---- chrome ------------------------------------------------------------ */
+.head {
+  position: relative;
+  z-index: 2;
+  /* ONE LINE. The title and its kicker were stacked, which is the right shape
+     for a page whose subject is the words — and this page's subject is the
+     object below them, so the header's job is to be small. */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 14px;
+  padding: 11px 20px 0;
+  text-align: center;
+}
+
+.brand {
+  font-family: var(--serif);
+  font-size: clamp(19px, 1.9vw, 25px);
+  letter-spacing: 0.012em;
+  color: var(--ink);
+  text-decoration: none;
+  line-height: 1;
+}
+
+.brand:hover { color: var(--earth); }
+
+.kicker {
+  margin: 0;
+  font-size: 11.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.wrap {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: clamp(6px, 1vh, 13px) 0 2px;
+  /* A page turn is a drag, so nothing in the book may start a text selection. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  touch-action: pan-y;
+}
+
+.arrow {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color 0.2s ease;
+  z-index: 8;
+}
+
+.arrow:hover { color: var(--ink); }
+.arrowL, .arrowR { /* named so the markup reads left/right */ }
+
+/* The box is the book's own UNTRANSFORMED frame: the glass lives here, on the
+   desk, while only .tilt leans and scales underneath it. */
+/* THE BOOK IS THE PAGE'S SUBJECT, so it takes the room. The reference gives
+   its spread nearly the whole viewport and everything else is margin; a 1000px
+   cap made this read as a widget on a page instead. */
+.box3d {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* CAPPED BY THE ROOM ABOVE AND BELOW IT, not only by width.
+     Sized on width alone the spread was 854px tall on a 1000px viewport, which
+     pushed the controls — and the SCROLL CUE, of all things — off the bottom of
+     the screen. A cue you have to scroll to find is not a cue.
+
+     The last term is that budget: whatever height is left after the header and
+     the controls, converted to a width through the book's own aspect ratio
+     (1760/1120 = 1.571). `svh` rather than `vh` so a phone's retracting URL bar
+     cannot make the book taller than the screen it is on.
+
+     THE RESERVE IS 182px AND EVERY PIXEL OF IT WAS FOUGHT FOR. At 330 the book
+     came out 1053 wide and the spreads read as cramped — the type had to shrink
+     to fit and the whole thing looked like a widget rather than a book. The way
+     back was not to let it overflow: it was to stop spending height on chrome.
+     The caption, the tools and the hint used to be three stacked rows and are
+     now one; the header put its title and its kicker on a single line; and the
+     wrap's padding came off. That bought ~160px in total, and the book spends
+     every one of them.
+
+     THE LAST 14px ARE SLACK ON PURPOSE. Trimmed to exactly what the chrome
+     measures here the cue cleared the fold by 3px, and this page sets its type
+     in a system serif STACK — 'Iowan Old Style' on a Mac, Palatino Linotype on
+     Windows, something else again on Linux. Those cuts do not share metrics, so
+     a reserve fitted to this machine's fallback is a reserve that pushes the
+     cue off the screen on somebody else's. */
+  max-width: min(1520px, 96vw, calc((100svh - 182px) * 1.571));
+  perspective: 2100px;
+  perspective-origin: 50% 46%;
+}
+
+.tilt {
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(var(--zoom, 1));
+  will-change: transform;
+}
+
+.book {
+  position: relative;
+  width: 100%;
+  /* Landscape, and wider than it is tall by more than a sheet of paper would
+     be: this is a spread — two pages side by side — not one page. */
+  aspect-ratio: 1760 / 1120;
+  transform-style: preserve-3d;
+  z-index: 1;
+}
+
+/* The book sits on a surface, so its shadow is a soft pool underneath — no box,
+   no filter on the paper, nothing with an edge of its own. Both blobs ease off
+   while a leaf is in the air. */
+.cast { position: absolute; pointer-events: none; z-index: 0; }
+
+.castAmbient {
+  left: -2%; right: -2%; top: 4%; bottom: -9%;
+  background: radial-gradient(52% 52% at 50% 58%,
+    rgba(56, 40, 20, 0.42) 0%, rgba(56, 40, 20, 0.22) 42%, rgba(56, 40, 20, 0) 74%);
+  filter: blur(30px);
+  opacity: calc(1 - var(--shade, 0) * 0.42);
+}
+
+.castContact {
+  left: 4%; right: 4%; top: 66%; bottom: -5%;
+  background: radial-gradient(50% 46% at 50% 42%,
+    rgba(40, 28, 12, 0.5) 0%, rgba(40, 28, 12, 0.2) 48%, rgba(40, 28, 12, 0) 78%);
+  filter: blur(13px);
+  opacity: calc(1 - var(--shade, 0) * 0.5);
+}
+
+/* ---- the spread -------------------------------------------------------- */
+.spread { position: absolute; inset: 0; z-index: 1; }
+
+/* THE SHEET. Both the live plate and every strip's clone are dressed by this
+   one rule, so a page in flight is made of the same paper as the page at rest —
+   two rules would eventually disagree about the colour of the same sheet.
+
+   The corner radius is uneven on purpose. A sketchbook block is cut, not
+   moulded, so its corners do not match each other; four equal radii is the
+   single thing that most makes a paper simulation read as a div. */
+.plate,
+.slice > * {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  border-radius: 4px 3px 5px 2px;
+
+  /* ONE DECLARATION, AND THAT IS NOT TIDINESS.
+     The fold shading was added as a separate `background-image` AFTER this
+     shorthand, which REPLACES the shorthand's image layers wholesale — and the
+     shorthand had also reset `background-color` to transparent. So the paper's
+     own cream vanished, every sheet became a window onto the ground behind it,
+     and the whole book read as washed out. The layers all live here now, and
+     `background-color` is stated separately below as the floor.
+
+     Layers paint FIRST-LISTED ON TOP:
+       1-2  the fold  — the sheet curving down into the gutter, both sides
+       3-4  the cut edges of the block, catching a little dirt
+       5    a soak toward the foot, the way a laid sheet ages
+       6    the paper itself */
+  background-color: var(--paper-lit);
+  background-image:
+    /* A BAND ACROSS THE CENTRE, not a ramp that runs to the edge. Written as
+       two half-gradients this darkened every pixel past the fold as well —
+       a gradient holds its LAST STOP for the rest of its length, so 0.34 at
+       50% meant 0.34 all the way to 100%, twice, and the whole spread came out
+       the colour of the desk it was lying on. */
+    linear-gradient(90deg,
+      rgba(96, 74, 42, 0) 41%,
+      rgba(96, 74, 42, 0.13) 48.4%,
+      rgba(96, 74, 42, 0.32) 50%,
+      rgba(96, 74, 42, 0.13) 51.6%,
+      rgba(96, 74, 42, 0) 59%),
+    linear-gradient(90deg, rgba(120, 96, 60, 0.14) 0 0.9%, rgba(120, 96, 60, 0) 5%),
+    linear-gradient(270deg, rgba(120, 96, 60, 0.14) 0 0.9%, rgba(120, 96, 60, 0) 5%),
+    radial-gradient(120% 80% at 50% 6%, rgba(255, 253, 247, 0.9), rgba(255, 253, 247, 0) 62%),
+    linear-gradient(180deg, var(--paper-lit) 0%, #f7f2e7 64%, #f1ebde 100%);
+  background-blend-mode: multiply, normal, normal, normal, normal;
+
+  /* THE SHEET IS THE CONTAINER, AND EVERY WORD ON IT IS SIZED FROM THAT.
+     The type used to be `clamp(min, N vw, max)` — keyed to the VIEWPORT — while
+     the book is capped by viewport HEIGHT as well as width. On a short, wide
+     window those disagree: the book shrinks and the type does not, so the ninth
+     area ran off the bottom of its leaf. Measured before this: fine at
+     1600x1000, over by 52px at 1440x820, 138px at 1366x768 and 238px at
+     1280x720 — the page silently cutting its own content off.
+
+     `cqh` is one per cent of THIS SHEET's height, so the words shrink with the
+     paper they are printed on and the spread is the same composition at every
+     size. It is also what makes the type consistent from plate to plate: they
+     all measure against the same thing.
+
+     The clones get it too, because they are dressed by this same rule and their
+     boxes are the same size as the real plate — so a page in flight and a page
+     under the glass are set exactly like the page at rest. */
+  container-type: size;
+
+  /* A sketchbook is a BLOCK, not a sheet: what shows past the top page is the
+     edge of the ones under it. */
+  box-shadow:
+    inset 0 0 0 1px rgba(120, 96, 60, 0.14),
+    0 1px 0 rgba(160, 140, 104, 0.5),
+    0 3px 0 -1px rgba(150, 128, 92, 0.4),
+    0 5px 0 -2px rgba(140, 118, 82, 0.3);
+}
+
+.plate[hidden] { display: none; }
+
+/* The gutter: two pages meeting, so the paper darkens INTO the fold from both
+   sides rather than a line being drawn down the middle. */
+/* TWO PAGES MEETING, not a line drawn down the middle. The paper darkens INTO
+   the fold from both sides and the seam itself is only the last 1px of that —
+   which is why the shadow is on the spine rather than a border on each leaf.
+   It reads far too faintly at 0.5; a real fold eats a lot of light. */
+.spine {
+  position: relative;
+  z-index: 4;
+  background: linear-gradient(90deg, rgba(90, 70, 40, 0) 0%, rgba(78, 60, 34, 0.62) 50%, rgba(90, 70, 40, 0) 100%);
+  box-shadow:
+    -40px 0 46px -26px rgba(78, 58, 30, 0.78),
+    40px 0 46px -26px rgba(78, 58, 30, 0.78),
+    -11px 0 14px -8px rgba(64, 46, 22, 0.62),
+    11px 0 14px -8px rgba(64, 46, 22, 0.62);
+}
+
+.leaf {
+  position: relative;
+  z-index: 2;
+  /* In sheet units too, so the margin holds its proportion as the book resizes
+     rather than eating the type at small sizes. */
+  padding: min(34px, 4.2cqh) min(38px, 4.7cqh);
+  display: flex;
+  flex-direction: column;
+  gap: 0.62em;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ---- the art slot ------------------------------------------------------
+ * A drawing that crosses the gutter, the way the reference's plates do. It sits
+ * UNDER the leaves (z-index 1 against their 2) so the spine's shadow still
+ * falls across it and it reads as ink on this sheet rather than as a picture
+ * pasted over the top of it. */
+.artSpread {
+  position: absolute;
+  inset: 4% 3% 7%;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.artSpread img,
+.artSpread :global(.pl-art) {
+  width: 100%;
+  height: 100%;
+}
+
+/* The title block on a spread plate, sitting on the drawing. */
+.legend {
+  position: relative;
+  z-index: 3;
+  margin-top: auto;
+  max-width: 30ch;
+  padding: 0.9em 1.1em 0.8em;
+  border-radius: 2px;
+  /* Only just enough to hold the type. A scrim's correct strength is the least
+     that achieves legibility — the landing hero already learned that the
+     expensive way, by erasing a castle. */
+  background: linear-gradient(180deg, rgba(247, 243, 234, 0.82), rgba(247, 243, 234, 0.94));
+  box-shadow: 0 2px 20px rgba(247, 243, 234, 0.7);
+}
+
+/* ---- the date stamp ----------------------------------------------------- */
+.plate :global(.sk-stamp),
+.slice :global(.sk-stamp) {
+  position: absolute;
+  z-index: 5;
+  right: clamp(16px, 2.4vw, 34px);
+  top: clamp(14px, 2vw, 28px);
+  display: flex;
+  align-items: center;
+  gap: 0.42em;
+  pointer-events: none;
+}
+
+.plate :global(.sk-chop),
+.slice :global(.sk-chop) {
+  width: clamp(15px, 1.5vw, 21px);
+  height: clamp(15px, 1.5vw, 21px);
+  /* THE ONE SATURATED COLOUR ON THE SHEET, and it is a carved seal rather than
+     a UI hue — nothing here means "error". It is the only thing that is not ink
+     or paper, which is exactly why the eye finds the date beside it. */
+  color: #a8342a;
+  opacity: 0.82;
+}
+
+.plate :global(.sk-stampDate),
+.slice :global(.sk-stampDate) {
+  font-size: clamp(7.5px, 0.76vw, 9.5px);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* WHILE THE PAGES ARE FANNING, they are moving too fast to be read, so they
+   are drawn as moving rather than as sharp. Applied to the leaf and to the two
+   halves under it, never to the whole book: the desk, the shadow and the glass
+   are not in motion and blurring them would read as the page being out of
+   focus rather than the paper being in flight. */
+[data-riffling] .curl .slice,
+[data-riffling] .half .slice {
+  filter: url(#sk-riffle-blur);
+}
+
+/* ---- the turning leaf: nested strips forming a curved surface ----------
+ * Each strip is rotated a little further than the one holding it, so the
+ * tangent sweeps through an arc and the paper bends the way paper bends
+ * instead of pivoting like a door. */
+.curl {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: calc(var(--bw, 0px) * var(--span));
+  transform-style: preserve-3d;
+  z-index: 6;
+}
+
+.curlNext { left: 50%; transform-origin: left center; transform: rotateY(calc(-1 * var(--tt, 0deg))); }
+.curlPrev { right: 50%; transform-origin: right center; transform: rotateY(var(--tt, 0deg)); }
+
+.strip {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: calc(var(--bw, 0px) * var(--span) / var(--n));
+  transform-style: preserve-3d;
+}
+
+.curlNext .strip { transform-origin: left center; }
+.curlPrev .strip { transform-origin: right center; }
+.curlNext > .strip { left: 0; }
+.curlPrev > .strip { right: 0; left: auto; }
+.curlNext .strip .strip { left: 100%; transform: rotateY(var(--td, 0deg)); }
+.curlPrev .strip .strip { right: 100%; transform: rotateY(calc(-1 * var(--td, 0deg))); }
+
+.face {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  /* the hairline overlap that stops a seam showing between strips */
+  right: -1.1px;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.back { transform: rotateY(180deg); }
+
+/* The window a strip looks at the spread through. The clone inside is the full
+   book width, slid sideways so this strip shows its own slice — the DOM
+   equivalent of the reference's background-position-x. */
+.slice { position: absolute; inset: 0; }
+.slice > * { position: absolute; top: 0; bottom: 0; }
+
+.half {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  overflow: hidden;
+}
+
+.halfLeft { left: 0; }
+.halfRight { left: 50%; }
+
+/* the shadow the lifting leaf throws onto the page beneath it */
+.gutter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 46%;
+  pointer-events: none;
+  opacity: calc(var(--shade, 0) * 0.62);
+}
+
+.gutterLeft { right: 0; background: linear-gradient(270deg, rgba(52, 38, 20, 0.3), rgba(52, 38, 20, 0) 82%); }
+.gutterRight { left: 0; background: linear-gradient(90deg, rgba(52, 38, 20, 0.24), rgba(52, 38, 20, 0) 82%); }
+
+/* per-strip shading: how much of the light this facet is turned away from */
+.sh { position: absolute; inset: 0; pointer-events: none; }
+.curlNext .front .sh, .curlPrev .back .sh {
+  background: linear-gradient(90deg, rgba(58, 43, 20, var(--a1, 0)), rgba(58, 43, 20, var(--a2, 0)));
+}
+.curlNext .back .sh, .curlPrev .front .sh {
+  background: linear-gradient(90deg, rgba(58, 43, 20, var(--a2, 0)), rgba(58, 43, 20, var(--a1, 0)));
+}
+
+/* and the sheen where it turns back toward it */
+.gl {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: #fffaf0;
+  opacity: calc(var(--shade, 0) * var(--lit, 1) * var(--lit, 1) * 0.2);
+}
+
+.edge { /* the outer strip, kept for the lighting chain */ }
+.front { }
+
+/* THE LEAF IN FLIGHT MUST OUTRANK THE PAGE AT REST, and DOM order is not
+   enough to say so. The resting plate's own children are positioned with real
+   z-indexes — the leaves at 2, the fold at 4, the date stamp at 5 — and within
+   one stacking context anything with z-index > 0 paints above a later sibling
+   whose z-index is auto. So the page you were LEAVING drew on top of the page
+   turning over it, and two plates were legible at once: the matrix and the
+   area list superimposed, and two date stamps reading "PLAPLATE V".
+
+   Nothing was wrong with the turn, the clones or the clipping. The layer was
+   simply behind the thing it was supposed to cover. */
+.layers { position: absolute; inset: 0; z-index: 10; }
+
+.zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  z-index: 60;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.zone:active { cursor: grabbing; }
+.zonePrev { left: 0; width: 50%; }
+.zoneNext { right: 0; width: 50%; }
+
+/* THE CORNER LIFTS, so both directions are visible on the paper itself.
+   A book turns forward from the right and back from the left, and until this
+   existed the only thing saying so was two small arrows outside the book. It is
+   a triangle of paper peeling off its own corner — a gradient, not an image,
+   and it costs nothing when nobody is pointing at it. */
+.corner {
+  position: absolute;
+  bottom: 0;
+  width: clamp(34px, 4vw, 62px);
+  height: clamp(34px, 4vw, 62px);
+  opacity: 0;
+  transition: opacity var(--dur-2, 200ms) ease, transform var(--dur-2, 200ms) ease;
+  pointer-events: none;
+}
+
+.cornerL {
+  left: 0;
+  transform: translate(4px, 4px);
+  background: linear-gradient(45deg, var(--paper-lit) 0 48%, rgba(120, 96, 60, 0.34) 49% 51%, transparent 52%);
+  border-bottom-left-radius: 3px;
+}
+
+.cornerR {
+  right: 0;
+  transform: translate(-4px, 4px);
+  background: linear-gradient(315deg, var(--paper-lit) 0 48%, rgba(120, 96, 60, 0.34) 49% 51%, transparent 52%);
+  border-bottom-right-radius: 3px;
+}
+
+.zone:hover .corner { opacity: 1; transform: translate(0, 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .corner { transition: none; }
+}
+
+/* ---- the loupe: a real magnifier lying on the page --------------------- */
+.loupe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--lr, 250px);
+  height: var(--lr, 250px);
+  pointer-events: none;
+  z-index: 80;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  will-change: transform;
+}
+
+.loupeOn { opacity: 1; }
+.held .ring { cursor: grabbing; }
+
+.ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: auto;
+  cursor: grab;
+  padding: calc(var(--lr, 250px) * 0.058);
+  box-shadow:
+    0 1px 2px rgba(58, 44, 26, 0.3),
+    0 10px 18px rgba(58, 44, 26, 0.24),
+    0 26px 40px rgba(58, 44, 26, 0.2),
+    0 48px 66px rgba(58, 44, 26, 0.13);
+}
+
+/* The bezel is an ANNULUS, which is what makes the glass really see-through:
+   a filled disc with a lighter middle would only look like one. */
+.ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: linear-gradient(146deg,
+    #fdf7e9 0%, #e6d7b4 14%, #b69d70 32%, #7d6740 50%,
+    #cdbb92 66%, #f4ead3 80%, #9b8459 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.8),
+    inset 0 -2px 3px rgba(70, 52, 26, 0.5);
+  -webkit-mask-image: radial-gradient(circle closest-side at 50% 50%, transparent 0 88.2%, #000 89.8% 100%);
+  mask-image: radial-gradient(circle closest-side at 50% 50%, transparent 0 88.2%, #000 89.8% 100%);
+}
+
+/* the handle, drawn before the bezel so the ring covers its inner end */
+.grip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--lr, 250px) * 0.74);
+  height: calc(var(--lr, 250px) * 0.125);
+  transform-origin: 0 50%;
+  transform: rotate(40deg) translate(calc(var(--lr, 250px) * 0.33), -50%);
+  border-radius: calc(var(--lr, 250px) * 0.06);
+  pointer-events: auto;
+  cursor: grab;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0 13%, rgba(255, 255, 255, 0) 44%, rgba(0, 0, 0, 0.26) 100%),
+    linear-gradient(90deg, #d9bd82 0 14%, #a9884e 14% 20%, #6d4c2b 20% 62%, #5a3d22 62% 92%, rgba(122, 86, 49, 0.5) 92% 100%);
+  box-shadow: 0 8px 15px rgba(58, 44, 26, 0.26), 0 18px 26px rgba(58, 44, 26, 0.14);
+}
+
+.lens {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 1px rgba(52, 40, 22, 0.55),
+    inset 0 4px 12px rgba(40, 30, 14, 0.28),
+    inset 0 -7px 16px rgba(255, 250, 240, 0.14);
+}
+
+.lens::before,
+.lens::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* the glass bends and darkens toward its rim, with a faint colour fringe */
+.lens::before {
+  z-index: 1;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(0, 0, 0, 0) 54%, rgba(58, 44, 26, 0.1) 76%, rgba(46, 34, 16, 0.34) 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(130, 162, 196, 0.26),
+    inset 0 0 0 4px rgba(206, 158, 112, 0.15);
+}
+
+/* the dome: one broad specular and a tight crescent opposite it */
+.lens::after {
+  z-index: 2;
+  background:
+    radial-gradient(36% 26% at 29% 19%, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 76%),
+    radial-gradient(24% 16% at 74% 86%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 80%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.06) 0 18%, rgba(255, 255, 255, 0) 42%);
+}
+
+/* A second copy of the book, beside the glass and OUTSIDE the tilt, scaled
+   about whichever page point the glass is over. */
+/* INFLATED BY ONE RADIUS so the lens is never cut off at a page edge — see the
+   note in placeLoupe. `.zoominner` is inset by the same amount, which puts its
+   box back exactly on the book, so every coordinate in the magnification maths
+   stays in plain book pixels. */
+.zoomwrap {
+  position: absolute;
+  inset: calc(-1 * var(--zpad, 0px));
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 70;
+  opacity: 0;
+}
+
+.zoominner {
+  position: absolute;
+  inset: var(--zpad, 0px);
+  transform-origin: 0 0;
+}
+
+/* The label under the glass. Sits outside the ring so it never lands under the
+   lens, and is `pointer-events: none` so it can never eat the grab. */
+.loupeTag {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 0.5rem);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+  padding: 0.3em 0.75em;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: rgba(252, 249, 242, 0.86);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  box-shadow: 0 3px 12px rgba(58, 44, 26, 0.14);
+}
+
+/* A coarse pointer has no hover and nowhere to park a magnifier. */
+@media (pointer: coarse) { .loupe { display: none; } }
+
+/* ---- the margins ------------------------------------------------------
+ * Drawn, not photographed — see Botanicals.tsx. They are the room the book is
+ * lying in, so they are FIXED: the index below scrolls past them rather than
+ * pushing them around, and a plate changing height cannot reflow them. */
+.botany {
+  position: fixed;
+  z-index: 1;
+  color: #6f7a58;
+  opacity: 0.3;
+  pointer-events: none;
+  user-select: none;
+}
+
+.botanyTL { top: -2%; left: -1.5%; width: clamp(120px, 15vw, 240px); transform: rotate(-8deg); }
+.botanyTR { top: 4%; right: -1%; width: clamp(110px, 13vw, 210px); transform: rotate(9deg); }
+.botanyBL { bottom: -4%; left: 1%; width: clamp(90px, 11vw, 170px); transform: rotate(168deg); opacity: 0.2; }
+
+@media (max-width: 1100px) { .botany { display: none; } }
+
+/* ---- brush rules and the bands below the book -------------------------- */
+.rule {
+  display: block;
+  width: min(1080px, 84vw);
+  height: clamp(20px, 3vw, 34px);
+  margin: clamp(26px, 5vh, 56px) auto;
+  color: #b8a074;
+  opacity: 0.5;
+}
+
+.ruleShort { width: min(420px, 50vw); opacity: 0.36; }
+
+.about {
+  position: relative;
+  z-index: 2;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 5vw, 48px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(24px, 5vw, 60px);
+  align-items: center;
+}
+
+.bio {
+  margin: 0;
+  font-size: clamp(14px, 1.4vw, 17.5px);
+  line-height: 1.72;
+  color: var(--ink-soft);
+  max-width: 58ch;
+}
+
+.bloom { width: clamp(120px, 14vw, 190px); color: #7d8a63; opacity: 0.5; }
+
+.sectionLabel {
+  margin: 0 0 14px;
+  font-size: 10.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.plates {
+  position: relative;
+  z-index: 2;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 5vw, 48px);
+}
+
+.foot {
+  position: relative;
+  z-index: 2;
+  margin: clamp(28px, 5vh, 56px) auto clamp(30px, 6vh, 60px);
+  text-align: center;
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 760px) {
+  .about { grid-template-columns: 1fr; }
+  .bloom { justify-self: center; }
+}
+
+/* ---- controls ---------------------------------------------------------- */
+.caption {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 5px 7px;
+  background: rgba(250, 246, 238, 0.62);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.tool {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.tool:hover { background: rgba(255, 252, 244, 0.9); color: var(--ink); }
+.tool[aria-pressed="true"] { background: rgba(154, 106, 62, 0.16); color: var(--earth); }
+.tool:disabled { opacity: 0.32; cursor: default; background: transparent; }
+.tool svg { width: 15px; height: 15px; display: block; }
+.sep { width: 1px; height: 17px; background: var(--hairline); margin: 0 2px; }
+
+.read {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  min-width: 40px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.hint {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  margin: 0 0 0 1.1rem;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  transition: opacity 0.4s ease;
+}
+
+.hintGone { opacity: 0; }
+
+/* ONE ROW, NOT THREE. The plate caption, the zoom pill and the hint each had
+   their own line under the book, which is ~100px of vertical chrome on a page
+   whose subject wants every pixel of height it can get. The pill and the hint
+   sit side by side now; the caption keeps its own line because it is the
+   plate's title rather than a control. */
+/* THE HINT IS TAKEN OUT OF FLOW so the pill lands on the page's centre line.
+   In flow the row centred pill AND hint together, which put the pill visibly
+   left of centre — and it stayed there after the hint faded, because
+   `opacity: 0` still occupies its space. Collapsing it properly would have
+   shifted the pill sideways the first time you touched anything, which is a
+   worse answer than either. */
+.controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- the scroll cue ----------------------------------------------------
+ * The one looping animation in the project. See the note at the call site: it
+ * is a single small chevron on transform and opacity, both composited, and it
+ * stops dead under prefers-reduced-motion. The ban exists for box-shadow and
+ * filter loops across whole panels, which is a different cost entirely. */
+.scrollCue {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  margin-top: -0.1rem;
+  padding: 0.2rem 0.9rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  font: inherit;
+  cursor: pointer;
+  transition: color var(--dur-2, 200ms) ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scrollCue:hover { color: var(--ink); }
+
+/* WEIGHT AND INK TOGETHER, because on this palette weight alone does almost
+   nothing: the words sat at `--ink-faint` (38% black), and bolding type that
+   pale mostly thickens something you still have to look for. 600 plus the soft
+   ink is what actually reads as an instruction rather than a footnote — and the
+   display face here is a system serif with a real bold, so this is a loaded cut
+   rather than a synthesised one. */
+.scrollWord {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.scrollCue:hover .scrollWord { color: var(--ink); }
+
+.scrollArrow {
+  display: block;
+  animation: sk-nudge 2.4s ease-in-out infinite;
+}
+
+/* Transform and opacity only. Nothing here invalidates layout or paint. */
+@keyframes sk-nudge {
+  0%, 100% { transform: translateY(-2px); opacity: 0.45; }
+  50%      { transform: translateY(3px);  opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The words stay; only the travel goes. A reader who has asked for no motion
+     still needs to know there is more page below. */
+  .scrollArrow { animation: none; opacity: 0.7; }
+}
+
+/* ---- the index --------------------------------------------------------- */
+.index {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.plateBtn {
+  display: grid;
+  grid-template-columns: 3.4em minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: baseline;
+  width: 100%;
+  padding: 14px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.22s ease, padding-left 0.22s ease;
+}
+
+.plateBtn:hover,
+.plateBtn[aria-current="true"] { background: rgba(255, 252, 244, 0.5); padding-left: 12px; }
+.n { font-size: 12px; color: var(--ink-faint); letter-spacing: 0.06em; }
+.t { font-size: clamp(17px, 2vw, 23px); }
+.p { font-size: 12px; color: var(--ink-faint); letter-spacing: 0.08em; text-transform: uppercase; text-align: right; }
+.plateBtn[aria-current="true"] .p { color: var(--earth); }
+
+/* ---- plate typography, shared by every page ---------------------------- */
+.page :global(.pl-kicker) {
+  margin: 0 0 0.15em;
+  font-size: min(10.5px, 1.3cqh);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.page :global(.pl-title) {
+  margin: 0;
+  font-size: min(66px, 8.1cqh);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: 0.005em;
+}
+
+.page :global(.pl-sub) {
+  margin: 0.5em 0 0;
+  font-size: min(16px, 1.96cqh);
+  line-height: 1.62;
+  color: var(--ink-soft);
+  max-width: 32ch;
+}
+
+.page :global(.pl-h) {
+  margin: 0 0 0.25em;
+  font-size: min(31px, 3.8cqh);
+  font-weight: 400;
+  line-height: 1.12;
+}
+
+.page :global(.pl-body) {
+  margin: 0;
+  font-size: min(14.5px, 1.78cqh);
+  line-height: 1.66;
+  color: var(--ink-soft);
+}
+
+.page :global(.pl-body b) { color: var(--ink); font-weight: 600; }
+
+.page :global(.pl-note) {
+  margin: auto 0 0;
+  padding-top: 0.7em;
+  border-top: 1px solid var(--hairline);
+  font-size: min(12.5px, 1.53cqh);
+  line-height: 1.55;
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
+.page :global(.pl-sig) {
+  margin: auto 0 0;
+  font-size: min(10.5px, 1.3cqh);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.page :global(.pl-toc) {
+  margin: 0.3em 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.42em;
+  font-size: min(19px, 2.32cqh);
+}
+
+.page :global(.pl-toc span) {
+  display: inline-block;
+  width: 2.2em;
+  color: var(--ink-faint);
+  font-size: 0.72em;
+  letter-spacing: 0.1em;
+}
+
+.page :global(.pl-defs) { margin: 0.2em 0 0; display: grid; gap: 0.72em; }
+.page :global(.pl-defs dt) {
+  font-size: min(16px, 1.96cqh);
+  letter-spacing: 0.01em;
+}
+.page :global(.pl-defs dd) {
+  margin: 0.12em 0 0;
+  font-size: min(13px, 1.6cqh);
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.page :global(.pl-list) {
+  margin: 0.2em 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5em;
+  font-size: min(13.5px, 1.66cqh);
+  line-height: 1.56;
+  color: var(--ink-soft);
+}
+
+.page :global(.pl-list li) { padding-left: 1.05em; position: relative; }
+.page :global(.pl-list li::before) {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--ink-faint);
+}
+.page :global(.pl-list b) { color: var(--ink); font-weight: 600; }
+
+.page :global(.pl-areas) {
+  margin: 0.2em 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.56em;
+}
+
+.page :global(.pl-areas li) {
+  display: grid;
+  gap: 0.1em;
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.page :global(.pl-areas li:last-child) { border-bottom: 0; }
+
+/* All nine on one leaf now that the other one carries a drawing. Tighter, not
+   smaller: the gap and the rule close up, the type barely moves. */
+.page :global(.pl-areas--tight) { gap: 0.42em; }
+.page :global(.pl-areas--tight li) { padding-bottom: 0.4em; }
+.page :global(.pl-areas--tight b) { font-size: min(15.5px, 1.9cqh); }
+.page :global(.pl-areas--tight span) { font-size: min(12.5px, 1.53cqh); line-height: 1.48; }
+.page :global(.pl-areas b) { font-size: min(15px, 1.84cqh); font-weight: 500; }
+.page :global(.pl-areas span) {
+  font-size: min(12.5px, 1.53cqh);
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* ---- the access matrix -------------------------------------------------
+ * This is the plate the magnifier exists for: at rest it reads as a shape, and
+ * under the glass every row is legible. */
+.page :global(.pl-matrix) {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.35em;
+  font-size: min(13px, 1.6cqh);
+}
+
+.page :global(.pl-matrix th),
+.page :global(.pl-matrix td) {
+  padding: 0.42em 0.2em;
+  border-bottom: 1px solid var(--hairline);
+  text-align: center;
+  font-weight: 400;
+}
+
+.page :global(.pl-matrix thead th) { vertical-align: bottom; padding-bottom: 0.45em; }
+.page :global(.pl-area) { text-align: left !important; white-space: nowrap; }
+.page :global(.pl-th) { display: block; letter-spacing: 0.06em; }
+.page :global(.pl-thNote) {
+  display: block;
+  font-size: 0.76em;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
+}
+
+.page :global(.pl-matrix td[data-open="yes"]) { color: var(--earth); }
+.page :global(.pl-matrix td[data-open="no"]) { color: rgba(43, 39, 33, 0.26); }
+
+/* Meaning never rests on colour alone — a filled dot and a hollow one differ in
+   SHAPE, which survives a monochrome print and a colour-blind reader. */
+.page :global(.pl-sr) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* No room beside the pill for a sentence at this width, and it is a hint
+   rather than something the page needs. */
+@media (max-width: 1180px) {
+  .hint { display: none; }
+}
+
+@media (max-width: 900px) {
+  .box3d { max-width: none; }
+  .arrow { padding: 12px 4px; }
+  .index { margin-top: 18px; }
+}
+
+/* ---- the art slot, and the placeholder that stands in for it -------------
+ * The empty state is a real object rather than a gap: a ruled ink frame
+ * carrying the plate's own brief. That is what let the whole book be composed,
+ * turned and magnified before any drawing existed — and it fails the right way
+ * round, since a missing <img> gives a broken-image glyph and a hole. */
+.page :global(.pl-art) {
+  position: relative;
+  margin: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9em;
+}
+
+.page :global(.pl-art img) {
+  max-width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  /* Ink on this paper, not a photograph laid on it. Multiply lets the sheet's
+     own tone come through the white of the drawing, so the two are one surface
+     — the single cheapest thing that makes pasted art look drawn. */
+  mix-blend-mode: multiply;
+}
+
+.page :global(.pl-art--empty) {
+  flex-direction: column;
+  gap: 0.7em;
+  color: var(--ink-faint);
+}
+
+.page :global(.pl-artFrame) {
+  position: absolute;
+  inset: 4% 2%;
+  width: 96%;
+  height: 92%;
+  color: rgba(120, 96, 60, 0.5);
+  pointer-events: none;
+}
+
+.page :global(.pl-artBrief) {
+  position: relative;
+  display: grid;
+  gap: 0.34em;
+  max-width: 30ch;
+  padding: 1.4em 1.6em;
+  text-align: center;
+}
+
+.page :global(.pl-artMark) {
+  font-size: 9.5px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--earth);
+}
+
+.page :global(.pl-artFile) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.page :global(.pl-artText) {
+  font-size: min(11.5px, 1.4cqh);
+  line-height: 1.54;
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
+/* The caption under a plate. Centred and italic, on a short rule, the way a
+   drawing is labelled in a book rather than the way a figure is labelled in a
+   document. */
+.page :global(.pl-artCap) {
+  flex: none;
+  max-width: 26ch;
+  padding-top: 0.7em;
+  border-top: 1px solid var(--hairline);
+  text-align: center;
+  font-size: min(12.5px, 1.53cqh);
+  line-height: 1.5;
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
+/* ---- the cover's title block ------------------------------------------- */
+.page :global(.pl-plateTitle) {
+  margin: 0;
+  font-size: min(58px, 7.1cqh);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: 0.006em;
+}
+
+.page :global(.pl-plateSub) {
+  margin: 0.5em 0 0;
+  font-size: min(14px, 1.71cqh);
+  line-height: 1.6;
+  color: var(--ink-soft);
+}

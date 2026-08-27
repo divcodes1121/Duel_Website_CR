@@ -50,6 +50,7 @@ import styles from './Dashboard.module.css';
 import { Fireflies, type FireflyHue } from '../../three/Fireflies';
 import { LiquidMetal } from '../../three/LiquidMetal';
 import { ThemeToggle } from '../Theme/ThemeToggle';
+import { FieldBookButton } from './FieldBookButton';
 import { Filmstrip } from '../Filmstrip/Filmstrip';
 import { GateCard } from '../Auth/GateCard';
 import { sectionAllowed, useAccess } from '../../state/gate';
@@ -533,6 +534,11 @@ export function Dashboard({
           {/* Was a 2.15rem circular icon button. It kept `data-metal` while it
               was a circle; as a 3:1 track that no longer applies, so the
               attribute went with the shape. */}
+          {/* THE FIELD BOOK. It sits in the actions rather than in the dock
+              because the dock is a row of destinations inside the product and
+              this is the book ABOUT it — and because a control meant to tempt
+              cannot be the seventh item in a list of six that all look alike. */}
+          <FieldBookButton onOpen={() => go('#/guide')} />
           <ThemeToggle size="1.85rem" />
           <button type="button" className={styles.iconButton} data-metal aria-label="Notifications">
             <BellIcon />

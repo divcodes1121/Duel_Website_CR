@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Dashboard, type DashboardView } from './components/Dashboard/Dashboard';
 import { AuthScreen } from './components/Auth/AuthScreen';
 import { Onboarding } from './components/Auth/Onboarding';
@@ -6,6 +6,14 @@ import { useAccountStore } from './state/accountStore';
 import { isSupabaseConfigured } from './state/supabase';
 import styles from './App.module.css';
 import { AdminConsole } from './components/Admin/AdminConsole';
+/* SPLIT OUT, the same treatment jsPDF and three.js get and for the same reason:
+   it is a side route most visitors never open, and everything it needs — the
+   book, the leaf machinery, the magnifier, eight plates of copy — would
+   otherwise be parsed by every single page load. `lazy` wants a default export
+   and this is a named one, hence the shim. */
+const Sketchbook = lazy(() =>
+  import('./components/Sketchbook/Sketchbook').then((m) => ({ default: m.Sketchbook })),
+);
 
 /* One shell for every signed-in route. The builder, Deck's Home and Counter
  * Palette used to be separate full pages, each with its own nav bar; they now
@@ -64,6 +72,28 @@ function App() {
   useEffect(() => {
     void initAccount();
   }, [initAccount]);
+
+  /* THE FIELD BOOK is its own route and carries no shell. It is one object — a
+     book on a desk with a glass lying on it — and a top bar, a rail and a panel
+     border around that would be three frames around a thing that is already a
+     frame.
+
+     OUTSIDE the Supabase branch, deliberately. A page explaining what a Member
+     and a Pro each get cannot itself depend on the account system being
+     configured: on a checkout with no Supabase it would otherwise be the one
+     public page that 404s into the dashboard. It reads the entitlement RULES,
+     which are pure, never the session. */
+  if (route.startsWith('#/guide')) {
+    return (
+      <div className={styles.app}>
+        {/* No spinner. The chunk is small and local, and a flash of loading
+            furniture before a book opens is worse than one quiet frame. */}
+        <Suspense fallback={null}>
+          <Sketchbook />
+        </Suspense>
+      </div>
+    );
+  }
 
   if (isSupabaseConfigured) {
     /* THE SITE IS PUBLIC. Signing in is a ROUTE, not a wall — a stranger lands

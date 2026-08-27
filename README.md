@@ -7387,6 +7387,162 @@ conclusions:
 
 ---
 
+## The field book
+
+`#/guide`. Eight painted plates explaining what the site is and what a Member
+and a Pro each get, as a sketchbook you turn by hand with a magnifier lying on
+it. Adapted from ThreeUI's `MengToSketchbookLandingPage` — the BOOK, the GLASS
+and the paper GROUND came across; its Singapore plates, portfolio sections and
+social bar did not.
+
+Its own route, with no shell: it is one object, and a top bar and a rail around
+it would be three frames around a thing that is already a frame. Outside the
+Supabase branch too, because a page explaining what each tier gets must not
+depend on the account system being configured.
+
+### The pages are DOM, and that is the whole difference
+
+The reference's pages are images. Every leaf is a chain of nested strips whose
+faces carry `background-image` with a per-strip `background-position-x` — exact,
+cheap, and only possible because a page is one bitmap.
+
+These pages are live DOM: a table computed from the entitlement rules, text that
+has to be selectable, figures counted at render time. So each strip clips a
+full-width CLONE of the spread and offsets it — the same geometry reached a
+different way, built at the start of a turn and thrown away at the end.
+
+That choice is what lets the glass magnify TEXT rather than a bitmap, which is
+the reason the page is worth reading through a magnifier at all.
+
+### The access plate is computed, never written down
+
+Every verdict on it comes from `sectionAllowed()`, the same function the router
+gates on, so the page cannot drift from the product the way a hand-maintained
+pricing table always eventually does. Move the Coach Assist carve-out and the
+plate moves with it. `UNKNOWN_GATED` is a dev-time tripwire for the one way this
+can rot: the plate matches area names as STRINGS, so a rename on one side only
+would quietly relabel a free area as locked here and nowhere else — a wrong
+answer that renders perfectly.
+
+### Type is sized from the sheet, not the viewport
+
+The plate type was `clamp(min, N vw, max)` while the book is capped by viewport
+HEIGHT as well as width. On a short, wide window those disagree: the book shrank
+and the type did not, so the ninth area ran off the bottom of its leaf. Measured
+before the fix — fine at 1600x1000, over by 52px at 1440x820, 138px at 1366x768,
+**238px at 1280x720**, the page silently cutting its own content off.
+
+The sheet is a `container-type: size` container now and every word on it is in
+`cqh`. The words shrink with the paper they are printed on, the spread is the
+same composition at every size, and the type is consistent plate to plate
+because they all measure against the same thing. The clones inherit it, so a
+page in flight and a page under the glass are set exactly like the page at rest.
+Verified with no overflow on any leaf of any plate at six viewport sizes from
+1920x1080 down to 1100x620.
+
+### Four bugs worth keeping
+
+**The leaf drew nothing.** Every non-open plate carries `hidden`, and
+`cloneNode` inherits it — so the strips were built, the geometry was right, the
+lighting ran, and the whole leaf was `display: none`.
+
+**Then the resting page painted OVER the page in flight.** The live plate's
+children carry real z-indexes (leaves 2, fold 4, stamp 5) and the leaf layer was
+`z-index: auto`; within one stacking context anything above 0 paints over a
+later sibling with auto. Two plates were legible at once and two date stamps
+read "PLAPLATE V". Nothing was wrong with the turn — the layer was behind the
+thing it was covering.
+
+**A 620ms turn took 980ms.** The `dt` clamp that stops a backgrounded tab
+exploding the spring under-counts real time, which is correct for a spring and
+wrong for a fixed tempo. A tween knows when it started, so it asks. Committed
+turns are tweens now — a critically damped spring approaches its target and
+never arrives, which left the leaf visually flat against the page for the last
+third of a second while still counting as in flight. Only a drag-release is a
+spring, and it carries the release velocity.
+
+**The whole book went grey.** Adding the fold as a separate `background-image`
+after the shorthand replaced the shorthand's layers wholesale, and the shorthand
+had also reset `background-color` to transparent — so every sheet became a
+window onto the desk. And once merged, the fold darkened the whole spread
+anyway: a gradient holds its LAST STOP for the rest of its length, so `0.34 at
+50%` meant 0.34 all the way to 100%, twice. It is a band across the centre now.
+
+### The glass
+
+A real object lying on the page: pick it up, put it down, and it stays. It
+magnifies 2.25x by cloning the book into a second copy masked to a disc.
+
+**The copy is inflated by one radius on every side.** Sitting exactly on the
+book with `overflow: hidden`, the half of the lens hanging past the paper was
+clipped by a straight vertical line — the disc appeared to break apart at the
+page edges. The mask is offset to match and `.zoominner` is inset by the same
+amount, which puts its box back on the book so every coordinate stays in plain
+book pixels.
+
+It carries a label — "Pick me up, drag me over the page" — that clears the first
+time it is used. A glass lying on a page gives no clue it can be moved, and one
+hint line under the book was doing all the work.
+
+### The opening riffle, and the button that fires it
+
+The topbar carries a closed maroon book with its page-block edge showing; the
+cover swings open 118 degrees under the pointer (flat open it would be edge-on
+and vanish). It says **Click me** on screen and `Open the field book` to a screen
+reader — the visible words are the tease, the accessible name is the
+destination.
+
+Clicking it opens the book and fans it through itself once. The tempo is a BELL
+rather than a constant, because a real riffle starts slow, runs fast through the
+middle and slows into the last page; at a fixed duration per leaf it reads as a
+slideshow on a timer. It lands on the cover by construction — exactly one lap —
+and any real interaction cancels it.
+
+**The motion blur is an SVG filter, not `filter: blur()`.** CSS blur is
+isotropic and smears the page vertically too, which reads as out of focus rather
+than as moving. `feGaussianBlur stdDeviation="5 0"` smears along X only, the
+direction the paper is travelling, and it is applied to the leaf and the two
+halves — never the whole book, since the desk and the glass are not in motion.
+
+### One deliberate rule-break
+
+The scroll cue's chevron is **the only infinite animation in the project**, and
+`index.css` bans those. The ban exists because the old glow loops animated
+`box-shadow` and `filter` across whole panels, repainting a blurred layer every
+frame. This is one 34px chevron on `transform` and `opacity`, composited,
+touching no layout and no paint, and it stops dead under
+`prefers-reduced-motion` — keeping the words and losing the travel. A scroll cue
+that does not move is not a cue.
+
+### The art
+
+Six plates carry a drawing; three (the areas list, the access table, the
+refusal-free plate that replaced them) deliberately do not — each wants the
+whole spread and a picture there would compete with the thing the reader came to
+read.
+
+**Masters in `assets/guide/`, served WebP in `public/assets/guide/`**, built by
+`scripts/build-guide-art.py`. The supplied plates are 3.2-3.9 MB PNGs — 27.8 MB
+for eight — which would have made this page the heaviest thing the site serves
+by an order of magnitude. Re-encoded at quality 78 they are ~420 kB each.
+Measured on the cover plate: q68 347 kB, q74 375 kB, **q78 424 kB**, q82 498 kB,
+q88 629 kB. 78 is where the curve turns — 82 costs 17% more bytes for a
+difference the spatter texture hides, and 74 begins to band in the flat sky
+washes, the one part of these plates with nowhere to hide an artifact.
+
+The slot composites with `mix-blend-mode: multiply`, so the sheet's tone comes
+up through the white of the paper and the spatter edges melt into the page. That
+is also why a plate must arrive on **white, not transparent**: multiply over
+transparency does nothing and a cut-out floats.
+
+**A slot is renamed to the picture that arrives, not the other way round.** Two
+briefs asked for a bench and a two-arched gatehouse; what came back was a book
+of recipes and an arena under mountains of gold. `the-gate` became
+`the-treasury`. A caption claiming a gate nobody painted would have been the one
+dishonest thing in a book about not printing claims you cannot stand behind.
+
+---
+
 ## The logo, and where it goes
 
 There is a real mark now: a gold crown over a black D. It arrives as a
@@ -7823,6 +7979,18 @@ src/
   utils/deckPreview.ts        the icon a deck slot SHOWS — evolution and hero
                               art for slots 0 and 1. One implementation; three
                               callers, one of which used to get it wrong
+    Sketchbook/               THE FIELD BOOK at #/guide. Eight plates you turn
+                              by hand, with a real magnifier on them
+      Sketchbook.tsx          the book: the bending leaf, the glass, the riffle
+      plates.tsx              the content. The access plate is COMPUTED from
+                              sectionAllowed(); nothing on it is typed in
+      ArtSlot.tsx             one plate's drawing, or a ruled frame carrying its
+                              brief until the file exists
+      Botanicals.tsx          the margins, drawn rather than downloaded
+    Dashboard/FieldBookButton.tsx
+                              the closed book in the topbar that opens on hover
+                              and fires the riffle. Says "Click me"; announces
+                              "Open the field book"
     Filmstrip/                a browsable 3D strip of cards. Items' own controls
                               render UNDER it, for the centred item only — a
                               button may not contain buttons
@@ -7935,6 +8103,10 @@ server/
 scripts/
   build-pdf-font.py           KidsWord.otf (CFF) -> a TrueType build jsPDF can
                               actually embed. Run once; output is committed.
+  build-guide-art.py          field-book plate art: masters in assets/guide/ ->
+                              WebP in public/assets/guide/ (27.8 MB -> 3.5 MB,
+                              q78, capped at 2000px, no ICC). NEVER hand-edit
+                              the outputs; re-run this.
   build-hero-art.py           masters in assets/ -> what public/ serves:
                               keys the character to alpha, re-encodes to WebP
                               (4.2 MB of PNG -> 166 kB). Idempotent.
