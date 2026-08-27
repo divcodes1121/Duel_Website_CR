@@ -761,6 +761,18 @@ export function Sketchbook() {
       <FernCluster className={styles.botany + ' ' + styles.botanyBL} />
 
       <header className={styles.head}>
+        {/* THE WAY OUT, at the far left edge. The wordmark beside it has always
+            been a link home, but a wordmark is not a control — nobody reads a
+            masthead as a button, and this page is a full-screen object with no
+            surrounding chrome to escape through. Absolutely positioned so it
+            sits hard against the edge without pushing the centred title off
+            centre, which is what putting it in the flex row would have done. */}
+        <a className={styles.home} href="#/" aria-label="Back to home">
+          <svg viewBox="0 0 16 12" width="11" height="9" fill="none" aria-hidden="true">
+            <path d="M7 1 2 6l5 5M2.4 6H15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Back to home
+        </a>
         <a className={styles.brand} href="#/">Deckkies</a>
         <p className={styles.kicker}>A field book &mdash; what the site is, and what a Member and a Pro each get</p>
       </header>

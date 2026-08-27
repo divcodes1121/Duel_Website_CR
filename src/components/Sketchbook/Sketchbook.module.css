@@ -70,6 +70,7 @@
   /* ONE LINE. The title and its kicker were stacked, which is the right shape
      for a page whose subject is the words — and this page's subject is the
      object below them, so the header's job is to be small. */
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -77,6 +78,49 @@
   gap: 4px 14px;
   padding: 11px 20px 0;
   text-align: center;
+}
+
+/* THE SAME INK AND WEIGHT AS THE SCROLL CUE, deliberately: they are the two
+   plain instructions on this page and reading as one pair is what stops either
+   looking like decoration. Rectangular and ruled, where every other control
+   here is a pill or a bare word — this one is a door, and a door has a frame. */
+.home {
+  position: absolute;
+  left: clamp(10px, 1.6vw, 26px);
+  top: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.42em 0.8em;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: rgba(252, 249, 242, 0.5);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color var(--dur-2, 200ms) ease,
+    border-color var(--dur-2, 200ms) ease,
+    background-color var(--dur-2, 200ms) ease;
+}
+
+.home:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+  background: rgba(255, 253, 247, 0.9);
+}
+
+.home svg { display: block; flex: none; }
+
+/* Below this the header's own title is already wrapping; the arrow alone still
+   says "back" and the accessible name carries the rest. */
+@media (max-width: 780px) {
+  .home { letter-spacing: 0; font-size: 0; gap: 0; padding: 0.5em; }
+  .home svg { width: 13px; height: 10px; }
 }
 
 .brand {
