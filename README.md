@@ -3978,6 +3978,50 @@ one magnifier, pressable, opening the analysis for whatever is typed. The leadin
 decorative magnifier went with it — two on one field, only one of them pressable,
 is worse than none. The shortcut still works and is named in the tooltip.
 
+### The landing bar is the page, and the marks on it had to survive that
+
+The top bar is `--glass-fill-strong` — `#2e2e2e` on dark, the correct raised
+rung over a `#000` page, because the chrome sits above the content it frames.
+The landing screen has no content to frame: no rail, no panel, a full-bleed hero
+running under the bar. So the raised rung read as a grey band lying on top of
+the artwork, which is what *"the top head bar is grey"* was describing.
+
+It takes `--bg-1` there, via `data-landing` on the header. **The flag is on the
+header as well as on `.body`** because the bar is a sibling *before* `.body`,
+and no selector on `.body` can reach backwards to it.
+
+**Dark only, and that is not a half-finished pass.** Light's bar is `#ffffff` on
+a `#f4f4f6` page — already the lightest thing on screen, already not grey, and
+dropping it to the page colour would delete the one edge between the chrome and
+the hero. The `border-bottom` is kept in both, for the same reason: once the
+fill matches the page it is the only thing stating where the bar ends.
+
+**Then the marks on it had to be re-checked, and only one had actually broken.**
+Measured as 8-bit lightness against the bar behind them:
+
+| | on the grey bar | on black |
+|---|---:|---:|
+| brand tile `#0c1222` | Δ18 | **Δ18, and gone** |
+| search pill, bell | Δ18 | **Δ28** |
+| the nav dock | **Δ2** | **Δ44** |
+
+The tile is the defect. `#0c1222` is five points of lightness — against a
+mid-grey band it is plainly a tile, and against `#000` it simply is not there,
+so the mark read as a crown and a letter floating in the bar.
+
+**The fill is not the thing to change.** It is the favicon's ground, chosen so
+the tab icon and the chrome mark are one object, and it is dark precisely so the
+near-white D shows on it. What is missing on black is an **edge**, so the tile
+takes a 1px `--border` ring and keeps its colour — the ladder rule's own
+corollary, that a surface which cannot separate itself by fill separates itself
+by border. `box-sizing: border-box` is universal here, so the ring costs no
+layout.
+
+The dock is the part worth noting for its own sake: at **Δ2** against the old
+grey bar its glass shell was barely a pill at all, and nobody had reported it
+because it is only visible once something moves. Dropping the bar to black is
+what made it an object.
+
 ### The closing band, and the scrollbar that went away
 
 **Nothing on the landing page is a written-down number.** The reference mock
