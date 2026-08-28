@@ -55,6 +55,7 @@ import live_player as live  # noqa: E402
 import recent_battles as battles  # noqa: E402
 import tracking  # noqa: E402
 import recruit  # noqa: E402
+import player_search as psearch  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
@@ -483,6 +484,16 @@ class Handler(BaseHTTPRequestHandler):
 
             if path == "/api/analytics/suggest":
                 return self._send({"tags": cd.suggest_tags(5)})
+
+            if path == "/api/analytics/search":
+                # Find a player by NAME. `suggest` answers "who has the most
+                # data" and takes no query; this answers "who is called this".
+                # Authenticated like everything else — a name index is a list
+                # of people, and the one public route stays `/status`.
+                q = parse_qs(parsed.query)
+                return self._send(
+                    {"players": psearch.search((q.get("q") or [""])[0])}
+                )
 
             if path == "/api/analytics/coverage":
                 q = parse_qs(parsed.query)

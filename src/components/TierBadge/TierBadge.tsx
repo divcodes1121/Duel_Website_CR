@@ -131,8 +131,8 @@ const LOOK: Record<'admin' | 'pro' | 'trial', {
 export function TierBadge({
   tier,
   trialDaysLeft,
-  width = 104,
-  height = 30,
+  width = 112,
+  height = 34,
   onClick,
 }: {
   tier: Tier | 'anon';
@@ -161,6 +161,13 @@ export function TierBadge({
       label={look.label}
       title={title}
       liquid={liquidAtHue(look.shallowHue, look.deepHue, theme)}
+      /* THE WATERLINE HAS TO CLEAR THE LABEL. The authored 0.56 fills the
+         bottom 56%, which on a 70px hero button leaves the meniscus well under
+         the text and on a 34px badge runs straight through it — the letters end
+         up half in the air and half in the liquid, which is what read as
+         broken. 0.78 puts the whole label inside the liquid with a thin band of
+         air above it, and the meniscus still moves where you can see it. */
+      level={0.78}
       width={width}
       height={height}
       onClick={onClick}

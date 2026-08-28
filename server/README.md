@@ -228,6 +228,7 @@ happily against a server that never called it.
 |-------|---------|
 | `GET /api/analytics/status` | which tiers are readable and their sizes, plus `cardData {loaded, count, error}` — **the only unauthenticated route, and the one place that says whether the service can actually answer.** Check it after every deploy |
 | `GET /api/analytics/suggest` | a few real tags with the most stored battles |
+| `GET /api/analytics/search?q=` | players whose stored NAME matches — `player_search.py`. Starts-with first then alphabetical, never by battle count; `%`/`_` escaped; two-character floor; capped at 8. Only players the bot has collected exist here, because Supercell has no search-by-name endpoint |
 | `GET /api/analytics/coverage?tag=` | earliest/latest stored day, globally and per player |
 | `GET /api/analytics/player/<tag>` | summary, top decks, per-day trends |
 | `GET /api/analytics/duels/<tag>` | card combinations in duel play, three tabs |
@@ -308,12 +309,14 @@ Found on the first real run against the VPS, and worth writing down because the
 failure mode is the one this module's own header warns about.
 
 `/etc/royalweb.env` has **CRLF line endings**. systemd's `EnvironmentFile`
-strips the trailing ``, so the *service* has always been fine — which is why
+strips the trailing `
+`, so the *service* has always been fine — which is why
 `cr_profile()` answers correctly in production. But `. /etc/royalweb.env` in a
 shell keeps it, and `http.client` refuses to write a header value containing a
 carriage return:
 
-    ValueError: Invalid header value b'Bearer eyJ0...'
+    ValueError: Invalid header value b'Bearer eyJ0...
+'
 
 Every call raised, `current_season()` returned `None`, `leaderboard_tags()`
 returned `[]`, and the run printed **`fetched 0`** with no reason anywhere —

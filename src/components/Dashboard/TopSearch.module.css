@@ -1,0 +1,89 @@
+/* The two shadcn tokens GooeySearch paints from, mapped to this project's, and
+ * scoped so neither becomes a global name.
+ *
+ * `--foreground` is the pill's FILL and `--background` is its ink, which reads
+ * backwards until you remember it is shadcn's inverted-pill convention: the
+ * control is painted in the page's text colour with the page's own ground
+ * showing through the letters. That is the same object the dock's tooltip is,
+ * so it takes the same two tokens and it lands the same way in both themes
+ * with no [data-theme] branch here. */
+.scope {
+  /* NOT INVERTED. shadcn's convention paints a control in the page's TEXT
+     colour with the ground showing through the letters, which gave a black pill
+     on the light bar and a white one on the dark bar — the opposite of the page
+     both times. The field is chrome, so it wears the page's own surface: white
+     on light, black on dark, and the ink is the page's ink.
+     `--bg-2` rather than `--bg-1`: on dark the bar is already #000, and a pill
+     the exact colour of the thing behind it is not a control. #161616 is still
+     black to look at and still has an edge to find. */
+  --foreground: var(--bg-2);
+  --background: var(--text);
+
+  display: inline-flex;
+  align-items: center;
+
+  /* THE RESULTS ARE `z-index: -1` AND THE TOP BAR HAS A BACKGROUND.
+     The component drops its result pills behind the button so the gooey filter
+     can pull them out of it, which works on a transparent page and paints them
+     behind the header's own fill here — they would simply never be seen. An
+     isolated stacking context keeps the -1 relative to this wrapper instead of
+     to the bar. */
+  isolation: isolate;
+
+  /* THE ICON BUBBLE HANGS PAST THE BOX. It is absolutely positioned at
+     `right: -5` and is 46px across, which is what lets the gooey filter weld it
+     to the pill — so the component's own width is not the space it occupies.
+     Without this it sits on top of whatever control follows it in the bar. */
+  margin-right: 1.15rem;
+}
+
+/* The pill sizes itself from the component's own inline styles (width 100 ->
+   180 on expand), so nothing here may set a width. Only the seat it sits in. */
+.scope > div {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The results hang below the bar. They are absolutely positioned by the
+   component; this only stops the bar clipping them. */
+.scope,
+.scope > div {
+  overflow: visible;
+}
+
+/* PLAIN AT REST. The component draws no border of its own but the input still
+   inherits a box and a fill from the app's form styles; these clear them, so
+   what shows is the pill and nothing inside it.
+ *
+ * THE FOCUS RING IS DELIBERATELY LEFT ALONE. `index.css` sets
+ * `:focus-visible { outline: 2px solid var(--accent-select) !important }` on
+ * every focusable element, and the comment above it says why: there was no
+ * focus-visible rule anywhere, a dozen stylesheets carried `outline: none`, and
+ * a keyboard user genuinely could not see where they were. It is `!important`
+ * to survive exactly the kind of local override that was written here first.
+ * The violet outline appears when the pill expands because the component
+ * focuses its input itself — that is the ring doing its job, not a border. */
+.scope input:global(.gooey-search-input) {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* The placeholder is `var(--background)` at 0.55 in the component, which is now
+   the page's ink — right hue, too strong for placeholder text. */
+.scope input:global(.gooey-search-input)::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* THE OLD FIELD HID BELOW 74rem AND THIS ONE HAS TO TOO. That rule went out
+   with the form's stylesheet, and losing it silently is a responsive
+   regression: the bar carries a wordmark, six nav icons, this field and four
+   actions, and something has to give before they collide. The tag search is the
+   one that can — every analytics screen has its own query row, and the landing
+   hero has the search that starts the journey. */
+@media (max-width: 74rem) {
+  .scope {
+    display: none;
+  }
+}

@@ -3,6 +3,7 @@ import { getCardIconUrl } from '../../data/cards';
 import { ProfileMenu } from '../Profile/ProfileMenu';
 import { TierBadge } from '../TierBadge/TierBadge';
 import { GlassDockNav } from './GlassDockNav';
+import { TopSearch } from './TopSearch';
 import { Header } from '../Header/Header';
 import { DuelDeckBuilder } from '../DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from '../DecksHome/DecksHome';
@@ -262,13 +263,24 @@ export function Dashboard({
   const [season, setSeason] = useState<string>(SEASONS[0]);
   /* ⌘K / Ctrl-K focuses the tag search from anywhere. Registered here rather
      than on the input because the point is to reach it without finding it. */
-  const findRef = useRef<HTMLInputElement>(null);
+  /* Null until the search pill is expanded — GooeySearch does not render an
+     input at all in its collapsed state, so ⌘K has to open it first. */
+  const findRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        findRef.current?.focus();
-        findRef.current?.select();
+        if (findRef.current) {
+          findRef.current.focus();
+          findRef.current.select();
+          return;
+        }
+        /* Collapsed: click the pill to expand it, then focus once the input
+           has mounted. The component focuses it itself on expand, so this only
+           has to open it. */
+        document
+          .querySelector<HTMLElement>('[aria-label="Open search"]')
+          ?.click();
       }
     }
     window.addEventListener('keydown', onKey);
@@ -504,40 +516,15 @@ export function Dashboard({
               section. It was reachable from two places — the hero, and a row
               that replaced the whole nav once a player was open — so from a
               deck screen there was no way to look someone up without going
-              home first. Here it is on every screen, and ⌘K focuses it. */}
-          <form
-            className={styles.topFind}
-            onSubmit={(e) => {
-              e.preventDefault();
-              const t = topTag.trim();
-              if (t) go(`#/player/${encodeURIComponent(t)}`);
-            }}
-          >
-            <input
-              ref={findRef}
-              className={styles.topFindInput}
-              value={topTag}
-              onChange={(e) => setTopTag(e.target.value)}
-              placeholder="Search player tag..."
-              aria-label="Search player tag"
-              spellCheck={false}
-            />
-            {/* Was a `<kbd>⌘K</kbd>` hint, and a leading decorative magnifier.
-                Now one magnifier that is the SUBMIT control — the form already
-                went to `#/player/<tag>`, so pressing it opens the analysis for
-                whatever is typed, the same as Enter. The leading icon went with
-                the swap: two magnifiers on one field, only one of them
-                pressable, is worse than none. The ⌘K shortcut still works and
-                is named in the tooltip rather than printed in the field. */}
-            <button
-              type="submit"
-              className={styles.topFindGo} data-metal
-              aria-label="Analyze this player tag"
-              title="Analyze this player tag  (⌘K / Ctrl-K to focus)"
-            >
-              <SearchIcon size={15} />
-            </button>
-          </form>
+              home first. Here it is on every screen, and ⌘K focuses it.
+
+              It is vengenceui's GooeySearch now rather than a form. The one
+              thing that component cannot do is submit what you typed, which is
+              the only thing this field is for — see `TopSearch`. */}
+          <TopSearch
+            inputRef={findRef}
+            onGo={(t) => go(`#/player/${encodeURIComponent(t.trim())}`)}
+          />
 
           {/* Was a 2.15rem circular icon button. It kept `data-metal` while it
               was a circle; as a 3:1 track that no longer applies, so the

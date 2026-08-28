@@ -197,6 +197,7 @@ python server/test_deck_counter.py # 58 checks over the matchup engine
 python server/test_coach.py       # 69 checks over the Coach Assist rules
 python server/test_live_player.py # 23 checks over the live battlelog reader
 python server/test_recruit.py     # 31 checks over the tag recruiter
+python server/test_player_search.py # 18 checks over search-by-name
 python server/test_ml_22_final.py # 66 checks over the FROZEN production contract
 python server/test_ml_20d.py      # 27 checks that `practice` excludes real duels
 python server/test_ml_21a.py      # 32 checks over the spell feasibility harness
@@ -298,8 +299,9 @@ Opening an area or loading a tag brings it back. See
 
 The brand and the top bar's **Home** both return to the landing screen, from any
 screen including a hosted tool and the player view. The top bar also carries a
-tag field whose magnifier button opens the analysis for whatever is typed;
-⌘K / Ctrl-K focuses it from anywhere. Where the rail does appear it
+tag field — vengenceui's GooeySearch, a pill that expands and drops suggestions
+out of itself; Enter opens the analysis for whatever is typed, and ⌘K / Ctrl-K
+reaches it from anywhere, opening the pill first if it is collapsed. Where the rail does appear it
 **collapses** via a chevron on its right edge, which reclaims 226px and spends
 it on larger elements rather than more of them; the choice persists, and is
 tracked separately from the landing screen's rail-less state so returning from a
@@ -6471,6 +6473,147 @@ Verified by polling the path every frame through a full hover: all six report
 component still registers it dynamically inside a `.catch` for installs that
 lack it; `gsap@3.15` ships it, so the import resolves and `GlassDockNav`
 registers it statically rather than racing the first hover.
+
+### The tag search is a gooey pill
+
+    npx shadcn@latest add https://www.vengenceui.com/r/gooey-search.json
+
+The top bar's `<form>` — an input with a magnifier submit button — is now
+vengenceui's GooeySearch: a collapsed pill that expands into a field, with an
+icon bubble beside it and results that drop out of the button through an SVG
+gooey filter. The registry file is used as-is in `components/ui/`; everything
+project-specific is in `Dashboard/TopSearch.tsx`.
+
+**The one thing the component cannot do is submit what you typed**, and it is
+the only thing this field is for. `onSelect` fires only for a result the
+component itself produced, so a query matching nothing is a dead end — you type,
+the list stays empty, and there is nothing to press. That is fine for "filter
+six frameworks" and fatal here, because **the tag you are looking up is usually
+one this site has never seen**; reaching a player who is not in the database yet
+is the whole reason `basis: "live"` exists. So Enter on the raw value submits,
+wired by listening on the component's own input rather than by forking it. A
+`MutationObserver` does the binding, because the input is not in the tree at all
+until the pill expands.
+
+Suggestions ride on top rather than gating it. `onSearch` filters the tags
+`/api/analytics/suggest` reports as most-collected, fetched **once, lazily, and
+never on a keystroke** — the endpoint takes no query, so a per-keystroke request
+would learn nothing, and this field is chrome on every screen. A failure is
+silent; the typed tag works without it.
+
+`⌘K` still focuses it, with one extra step: the collapsed pill has no input to
+focus, so the shortcut clicks the pill open and the component's own auto-focus
+takes it from there.
+
+**It wears the page, not the inverse of it.** shadcn's convention paints a
+control in the page's *text* colour with the ground showing through the letters,
+which gave a black pill on the light bar and a white one on the dark bar — the
+opposite of the page both times. It takes `--bg-2` and `--text` instead: white
+on light, black on dark, page ink. `--bg-2` rather than `--bg-1` because the
+dark bar is already `#000`, and a pill the exact colour of the thing behind it
+is not a control.
+
+Those two tokens are mapped **on the wrapper, scoped** rather than declared
+globally. `--foreground` and `--background` are shadcn's names for values this
+project already has, and adding them to `index.css` would be a second source of
+truth for the same two colours.
+
+Three things the integration had to find:
+
+- **`z-index: -1` and a top bar with a background.** The component drops its
+  result pills behind the button so the filter can pull them out of it, which
+  works on a transparent page and paints them behind the header's own fill here
+  — they would never be seen. The wrapper is an isolated stacking context so the
+  `-1` is relative to it.
+- **The icon bubble hangs outside the box.** It is positioned at `right: -5`
+  and tweened a further `x: 16`, so the component's own width is not the space
+  it occupies; without clearance it sits on top of the next control in the bar.
+  Measured, then given 1.15rem.
+- **`.gooey-search-input` must be `:global`.** It is the component's own class,
+  and written bare in a CSS Module it is hashed to `_gooey-search-input_xxxxx`
+  and matches nothing — which is exactly what happened, twice, before the styles
+  took.
+
+**The bubble does not weld to the pill, and that is the component's design.**
+It sits 5px clear, and with the filter's `stdDeviation: 5` blur against an
+`18a - 15` alpha ramp the blurred alpha at the midpoint is around 0.3 against a
+threshold of 0.833 — the goo cannot bridge it and is not meant to. The filter is
+there for the results emerging from the button, which is what the component's
+own comments say. A widened filter region was tried on the theory that the
+bubble's goo was being clipped, changed nothing, and was reverted.
+
+**The focus ring is deliberately left in place.** `index.css` sets
+`:focus-visible { outline: 2px solid var(--accent-select) !important }` on every
+focusable element, and the comment above it records why: there was no
+focus-visible rule anywhere, a dozen stylesheets carried `outline: none`, and a
+keyboard user could not see where they were. It is `!important` precisely to
+survive a local override like the one written here first, which was dead CSS
+against it. The violet outline appears the moment the pill expands because the
+component focuses its own input — that is the ring working, not a border.
+
+---
+
+### Searching by name, not just by tag
+
+`#9GJ0Q0LGG` is the right primary key and a poor thing to ask a person for.
+Nobody remembers a tag; they remember "Ninja Shoyo". `GET
+/api/analytics/search?q=` (`server/player_search.py`) reads the bot's
+`player_names` table — the same table `clash_data.player_name` reads, the other
+way round, one name to many rather than one tag to one — and the matches come
+back as pickable results in the field.
+
+**Only players this site has collected can be found that way.** Supercell has no
+search-players-by-name endpoint, so the only names that exist are ones the bot
+has stored. That is the second reason Enter on the raw value has to work: a name
+finds who we know, a tag reaches anyone.
+
+Three decisions in the query:
+
+- **Ordering is starts-with first, then alphabetical.** Explicitly *not* by
+  battle count — the loudest account is not the one you meant.
+- **`%` and `_` are escaped.** They are LIKE syntax and a player name may
+  contain either; unescaped, a name like `50%_off` matches things it should not.
+- **Two characters minimum.** One character matches most of the table; that is
+  a scan with a UI on top, not a search.
+
+The `LIKE` has a leading wildcard and so cannot use an index. That is fine at
+this size and capped at eight rows anyway; if the tracked population ever
+reaches the tens of thousands this wants FTS, not a bigger `LIMIT`.
+
+Both tripwires moved in the same change: the route count 20 → 21, and the new
+path added to the auth test. `server/test_player_search.py` is 18 checks against
+a real temp SQLite rather than a stub, because the ordering and the escaping are
+SQL and a mock would only be testing my idea of what SQLite does.
+
+### The request loop, which is the reason two identities are pinned
+
+GooeySearch's search effect is
+`useEffect(..., [debouncedQuery, items, onSearch, maxResults])`. Both `onSearch`
+and `items` are in it — and an inline arrow is a new function on every render,
+while the component's own `items = []` default is a new **array** on every
+render. So the effect re-ran on every render, set state, and rendered again.
+
+Measured before the fix: **one typed query fired about 180 requests** at
+`/api/analytics/search`. After pinning `EMPTY` at module level and wrapping the
+handler in `useCallback`: **one request per query.**
+
+It is worth knowing that this is latent in the component for anyone who uses it
+the obvious way, and that the `items` default alone is enough to cause it even
+if `onSearch` is memoised.
+
+### And two sizes
+
+The field expands to 280px rather than the registry's hardcoded 180 — a tag plus
+a player name did not fit, and results wrapped to two lines. `expandedWidth` is
+a prop now, defaulting to 180, so leaving it unset is upstream behaviour.
+
+The tier badge is 112×34 and fills to **0.78** rather than the authored 0.56.
+That fraction puts the waterline safely below the label on a 70px hero button
+and straight *through* the text on a badge — the letters ended up half in the
+air and half in the liquid, which is what read as broken. `level` is a prop with
+the authored default; only the badge overrides it.
+
+---
 
 ### What this cost
 

@@ -23,6 +23,29 @@ live: how a filtered deck list closes, and how a route owns its own scroll.
 | **Completion sweep** | a deck reaching 8/8 | one-shot |
 | **Card ring** | both paste screens, the empty palette gallery | both themes |
 | **Liquid metal** | every circular icon control, app-wide | on hover / press only |
+| **Tier badge** | the top bar's ADMIN / PRO / MEMBER badge — a liquid that fills the button, sloshes toward the pointer and discharges on click | both themes |
+
+**The tier badge is the one WebGL surface not in `src/three/`.** It is a port of
+ThreeUI's Tactile Fluidics button and lives in `components/TierBadge/`, raw
+WebGL like `LiquidMetal` rather than three.js, and it holds **one context of the
+~16 budget** for as long as it is mounted — it releases it on unmount for that
+reason. It renders once, in the top bar, and must not be put in a list without
+sharing a renderer the way `LiquidMetal` does.
+
+Two of this file's rules are answered differently there, both deliberately.
+Reduced motion draws **one frame and starts no rAF** rather than mounting
+nothing, because the authored button is a still image at `u_time = 2.0` and the
+badge would otherwise be an empty box. And its five colour constants are
+uniforms, so a theme flip re-pushes them **without rebuilding the context** —
+recompiling to change five vec3s would drop the liquid's level, tilt and slosh
+mid-motion.
+
+**Two vendored registry components now sit in `src/components/ui/`** —
+vengenceui's GlassDock (the top nav) and GooeySearch (the tag field). Neither is
+three.js and neither takes a canvas; they are noted here only because they are
+the other things in the shell that move. Their deviations from upstream are
+listed in their own file headers, and `glass-dock.tsx` is excluded from eslint
+as vendored code.
 
 ```
 src/three/

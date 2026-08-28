@@ -169,6 +169,10 @@ export interface TactileButtonProps {
   hue?: number;
   saturation?: number;
   brightness?: number;
+  /** Resting fill level, 0-1. The authored button is 0.56, which puts the
+   *  waterline through the middle of a 70px hero button — below its label. At
+   *  badge height the same fraction puts it straight THROUGH the text. */
+  level?: number;
   /** Width/height in px. The authored button is 250x70; a badge is smaller,
    *  and the shader is resolution-independent so nothing else changes. */
   width?: number;
@@ -186,6 +190,7 @@ export function TactileButton({
   hue = 0,
   saturation = 1,
   brightness = 1,
+  level = 0.56,
   width = 250,
   height = 70,
   className,
@@ -201,6 +206,8 @@ export function TactileButton({
      slosh mid-motion, and the badge would visibly reset when someone toggles
      the theme. Same reasoning as the hue ref in `three/Fireflies.tsx`. */
   const applyPaletteRef = useRef<(() => void) | null>(null);
+  const levelRef = useRef(level);
+  levelRef.current = level;
 
   useEffect(() => {
     const btn = btnRef.current;
@@ -282,7 +289,8 @@ export function TactileButton({
     window.addEventListener('resize', resize);
     resize();
 
-    const BASE = 0.56;
+    /* The authored 0.56 by default; see the `level` prop. */
+    const BASE = levelRef.current;
     let level = BASE;
     let gulp = 0;
     let slosh = 0.4;

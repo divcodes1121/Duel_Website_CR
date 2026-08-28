@@ -150,101 +150,11 @@
   flex-shrink: 0;
 }
 
-/* --- the always-there tag search --- */
+/* The tag search's own styles are GONE with the form. It is vengenceui's
+   GooeySearch now, which paints itself from two tokens mapped in
+   `TopSearch.module.css`; the field, its hover, its focus-within, the submit
+   puck and the 74rem hide rule all belonged to markup that no longer exists. */
 
-.topFind {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  width: clamp(11rem, 18vw, 17rem);
-  margin-right: 0.35rem;
-  padding: 0.4rem 0.7rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-sunken);
-  transition:
-    border-color var(--dur-2) var(--ease),
-    background-color var(--dur-2) var(--ease),
-    box-shadow var(--dur-2) var(--ease);
-}
-
-.topFind:hover {
-  border-color: var(--border-strong);
-}
-
-/* ONE indicator, not three. This had a 3px ring on the wrapper AND the global
-   `:focus-visible` outline on the input inside it, which stacked into a visible
-   double box — an outline hugging the text and a ring around the pill — as soon
-   as the field was clicked. The border it already has simply changes colour,
-   and the glow carries it on dark. The inner outline is suppressed just here,
-   where the wrapper is doing the job for it; everywhere else in the app
-   `:focus-visible` is untouched. */
-.topFind:focus-within {
-  border-color: var(--accent-select);
-  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-select) var(--glow-core), transparent);
-}
-
-.topFindInput:focus-visible {
-  outline: none !important;
-}
-
-.topFindInput {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: none;
-  outline: none;
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.topFindInput::placeholder {
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-/* The submit control. A round puck inside the pill, sized to the field rather
-   than to the top bar's 2.15rem icon buttons, so it reads as part of the input
-   and not as a third button in the actions cluster. */
-.topFindGo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 1.7rem;
-  height: 1.7rem;
-  margin: -0.15rem -0.35rem -0.15rem 0;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: var(--neutral-wash-sunken);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    background-color var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    box-shadow var(--dur-2) var(--ease);
-}
-
-.topFindGo:hover {
-  background: var(--accent-select);
-  color: var(--on-solid);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--accent-select) var(--glow-core), transparent);
-}
-
-/* Once there is something to submit, the control stops looking optional. */
-.topFind:focus-within .topFindGo {
-  background: var(--accent-select);
-  color: var(--on-solid);
-}
-
-@media (max-width: 74rem) {
-  .topFind {
-    display: none;
-  }
-}
 
 /* --- the top bar on a phone ----------------------------------------------
  *
