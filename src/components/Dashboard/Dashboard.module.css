@@ -1834,6 +1834,45 @@
   color: var(--text);
 }
 
+/* THE RING GOES ON THE BAR, NOT ON THE INPUT INSIDE IT.
+ *
+ * `index.css`'s `:focus-visible` outline is `!important` and lands on whatever
+ * is focused — here the bare `<input>`, which sits inside `.topSearch`'s
+ * border. So clicking the field drew a violet rectangle a few pixels in from
+ * the edge of the control: an inner margin, which is what it looked like.
+ *
+ * The whole control lights instead. `:focus-within` moves the indicator to the
+ * bordered box, so the thing that glows is the thing you are typing into, and
+ * it glows OUTWARD. That is still a visible focus indicator — arguably a
+ * clearer one than a ring around the text cursor's box — so the rule the
+ * project added for keyboard users is honoured rather than dropped.
+ *
+ * White on dark and black on light, matching the top bar's field. The soft
+ * second shadow is the glow; it is a static box-shadow, not an animation, which
+ * is what this project's motion rules allow. */
+.topSearchInput:focus,
+.topSearchInput:focus-visible {
+  outline: none !important;
+}
+
+.topSearch {
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+
+.topSearch:focus-within {
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 14px 2px rgb(255 255 255 / 0.28);
+}
+
+:global([data-theme='light']) .topSearch:focus-within {
+  border-color: #000000;
+  box-shadow:
+    0 0 0 2px #000000,
+    0 0 14px 2px rgb(0 0 0 / 0.18);
+}
+
 .topSearchInput::placeholder {
   color: var(--text-muted);
   font-variant-numeric: normal;

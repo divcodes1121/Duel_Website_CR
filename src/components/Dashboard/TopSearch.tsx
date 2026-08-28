@@ -18,19 +18,19 @@
  * itself, so this is not a private detail being reached into; it is the one
  * hook it offers.
  *
- * ── SEARCHING BY NAME ────────────────────────────────────────────────────
+ * ── IT IS TAG-ONLY, AND THAT IS A DECISION ───────────────────────────────
  *
- * Nobody remembers `#9GJ0Q0LGG`; they remember "Ninja Shoyo". `onSearch` asks
- * `/api/analytics/search`, which reads the bot's `player_names` table, and the
- * matches come back as pickable results.
+ * Search-by-name was built and removed. `/api/analytics/search` read the bot's
+ * `player_names` and it worked, but the field is chrome on EVERY screen and the
+ * component fires a request per debounced keystroke — so the cost of the
+ * feature is a steady stream of authenticated queries against the analytics
+ * host, paid on every page, to save typing a tag that the person pasting it
+ * already has on their clipboard. It was not worth the traffic.
  *
- * ONLY PLAYERS WE HAVE COLLECTED CAN BE FOUND THAT WAY. Supercell has no
- * search-by-name endpoint, so the only names that exist are ones the bot has
- * stored — which is the second reason Enter on the raw value has to work. A
- * name finds who we know; a tag reaches anyone.
- *
- * A query that already looks like a tag skips the request entirely. `#ABC123`
- * is not a name and never will be, and the field is chrome on every screen.
+ * So there is no `onSearch` and no `items`: nothing is fetched, no result list
+ * is produced, and the field does exactly one thing — take a tag and open it.
+ * Enter is the whole interface, which is why the listener below is not an
+ * enhancement but the feature.
  *
  * ── AND THE TOKENS ───────────────────────────────────────────────────────
  *
@@ -40,39 +40,9 @@
  * `index.css`, and two new global colour names would be a second source of
  * truth for the same two values.
  */
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { GooeySearch } from '../ui/gooey-search';
-import { searchPlayers } from '../../state/analyticsClient';
 import styles from './TopSearch.module.css';
-
-/* STABLE IDENTITIES, AND THIS IS NOT A STYLE CHOICE.
- *
- * GooeySearch's search effect is
- * `useEffect(..., [debouncedQuery, items, onSearch, maxResults])`. `onSearch`
- * and `items` are both in it; an inline arrow is a new function every render,
- * and the component's own `items = []` default is a new ARRAY every render. So
- * the effect re-runs on every render, sets state, renders again — and the query
- * fires in a loop. Measured before this was fixed: **one query typed, ~180
- * requests to `/api/analytics/search`.**
- *
- * `EMPTY` is module-level and `onSearch` is a `useCallback` with no changing
- * dependency, so both identities are constant for the life of the component and
- * the effect runs exactly when the debounced query changes. */
-const EMPTY: string[] = [];
-
-/** Supercell's tag alphabet. Anything drawn only from it is a tag, not a name. */
-const TAG_LIKE = /^#?[0289PYLQGRJCUV]{3,}$/i;
-
-/** "Ninja Shoyo · #9GJ0Q0LGG" — the label a result shows. */
-function label(name: string | null, tag: string) {
-  return name ? `${name} · ${tag}` : tag;
-}
-
-/** The tag back out of a label. The component's contract is strings only. */
-function tagOf(item: string) {
-  const at = item.lastIndexOf('#');
-  return at >= 0 ? item.slice(at) : item;
-}
 
 export function TopSearch({
   onGo,
@@ -120,33 +90,12 @@ export function TopSearch({
     };
   }, [onGo, inputRef]);
 
-  /* See the note on EMPTY: this identity must not change between renders. */
-  const onSearch = useCallback(async (q: string) => {
-    const needle = q.trim();
-    /* Already a tag: there is nothing to look up, and this field is chrome on
-       every screen. */
-    if (TAG_LIKE.test(needle)) return EMPTY;
-    try {
-      const r = await searchPlayers(needle);
-      return (r.players ?? []).map((t) => label(t.name, t.tag));
-    } catch {
-      /* A search that errors is worse than one that finds nothing — the typed
-         value still submits on Enter. */
-      return EMPTY;
-    }
-  }, []);
-
   return (
     <div ref={rootRef} className={styles.scope}>
       <GooeySearch
         placeholder="Enter player tag"
         buttonLabel="Search"
-        maxResults={5}
         expandedWidth={280}
-        debounceMs={220}
-        items={EMPTY}
-        onSearch={onSearch}
-        onSelect={(item) => onGo(tagOf(item))}
       />
     </div>
   );

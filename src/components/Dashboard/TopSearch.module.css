@@ -79,31 +79,41 @@
   }
 }
 
-/* THE FOCUS RING IS RECOLOURED, NOT REMOVED.
+/* THE FOCUS RING IS RECOLOURED AND MOVED OUTSIDE.
  *
  * `index.css` sets `:focus-visible { outline: 2px solid var(--accent-select)
  * !important }` on every focusable element, and the comment above it records
  * why: there was no focus-visible rule anywhere, a dozen stylesheets carried
  * `outline: none`, and a keyboard user genuinely could not see where they were.
- * Deleting it here would put this one field back in that state.
+ * Deleting it here would put this one field back in that state, so it keeps a
+ * ring — the colour and the PLACE are what change.
  *
- * What was wrong was the COLOUR, not the ring. Violet is this app's selection
- * hue and it read as a highlight inside the field rather than as an edge around
- * it — on a pill that is already white on light and black on dark, the one
- * thing the ring should be is the opposite of the pill. So it inverts: white on
- * dark, black on light. `!important` because that is what it is overriding, and
- * scoped to this input so nothing else in the app changes.
+ * Violet read as a highlight because it is this app's selection hue, and it sat
+ * INSIDE the pill because an outline draws around the element that has it and
+ * the element that had it was the input, which lives inside the pill. Both are
+ * fixed by putting the ring on the pill's wrapper instead: white on dark, black
+ * on light, hugging the outside of the control.
  *
- * `:focus` as well as `:focus-visible` on purpose. The component focuses its
- * own input the moment the pill expands, and a pointer user gets `:focus`
- * without `:focus-visible` — which is the state that was being looked at. */
+ * IT GOES ON THE COMPONENT ROOT, NOT THE GOOEY CONTAINER. The container carries
+ * `filter: url(#gooey-...)`, which would blur and threshold a 2px ring along
+ * with everything else in it. The root is outside that filter and wraps the
+ * same box, so the ring stays a ring. It gets the pill's radius because the
+ * root is a plain box and an outline follows the border-radius of the element
+ * it is on, not of the thing inside it. */
 .scope input:global(.gooey-search-input):focus,
 .scope input:global(.gooey-search-input):focus-visible {
-  outline: 2px solid #ffffff !important;
-  outline-offset: 2px;
+  outline: none !important;
 }
 
-:global([data-theme='light']) .scope input:global(.gooey-search-input):focus,
-:global([data-theme='light']) .scope input:global(.gooey-search-input):focus-visible {
-  outline-color: #000000 !important;
+.scope > div {
+  border-radius: 9999px;
+}
+
+.scope > div:focus-within {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+:global([data-theme='light']) .scope > div:focus-within {
+  outline-color: #000000;
 }

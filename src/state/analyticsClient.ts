@@ -989,19 +989,6 @@ export function fetchSuggestedTags(): Promise<{
   return get('/api/analytics/suggest');
 }
 
-/** Find a player by NAME. Empty for a query under two characters.
- *
- * Only players this site has COLLECTED can be found this way — Supercell has no
- * search-players-by-name endpoint, so the names are the ones the bot has stored.
- * That is why the field still takes a raw tag and submits it on Enter: this is
- * an aid to finding someone we know, never the only way in.
- */
-export function searchPlayers(
-  q: string,
-): Promise<{ players: { tag: string; name: string | null }[] }> {
-  return get(`/api/analytics/search?q=${encodeURIComponent(q)}`);
-}
-
 export function fetchSources(): Promise<ApiSources> {
   return get<ApiSources>('/api/analytics/status');
 }

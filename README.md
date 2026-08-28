@@ -6542,71 +6542,53 @@ there for the results emerging from the button, which is what the component's
 own comments say. A widened filter region was tried on the theory that the
 bubble's goo was being clipped, changed nothing, and was reverted.
 
-**The focus ring is recoloured, not removed.** `index.css` sets
+**The focus ring is recoloured and moved outside.** `index.css` sets
 `:focus-visible { outline: 2px solid var(--accent-select) !important }` on every
 focusable element, and the comment above it records why: there was no
 focus-visible rule anywhere, a dozen stylesheets carried `outline: none`, and a
-keyboard user could not see where they were. Deleting it for this field would
-put that one input back in that state.
+keyboard user could not see where they were. Deleting it for these fields would
+put them back in that state, so both keep a ring — the colour and the *place*
+are what changed.
 
-What was wrong was the colour rather than the ring. Violet is this app's
-selection hue, and against a pill that is already white on light and black on
-dark it read as a highlight *inside* the field instead of an edge around it. It
-inverts now — white on dark, black on light — `!important` because that is what
-it overrides, and scoped to this input so nothing else in the app moves. It
-covers `:focus` as well as `:focus-visible`, because the component focuses its
-own input the moment the pill expands and a pointer user gets the first without
-the second.
+Violet read as a highlight because it is this app's selection hue, and it sat
+**inside** the control because an outline draws around the element that has it,
+and the element that had it was the `<input>` living inside the pill. Both are
+fixed by moving the indicator outward: the top bar's ring goes on the pill's
+wrapper, and the panel's query row lights the whole bordered bar on
+`:focus-within` with a ring and a soft glow. White on dark, black on light,
+hugging the outside.
+
+The top bar's ring goes on the **component root, not the gooey container** — the
+container carries `filter: url(#gooey-…)`, and it would blur and threshold a 2px
+ring along with everything else inside it. The root sits outside that filter and
+wraps the same box, so it takes `border-radius: 9999px` to stay pill-shaped.
 
 ---
 
-### Searching by name, not just by tag
+### It is tag-only, and search-by-name was built and removed
 
-`#9GJ0Q0LGG` is the right primary key and a poor thing to ask a person for.
-Nobody remembers a tag; they remember "Ninja Shoyo". `GET
-/api/analytics/search?q=` (`server/player_search.py`) reads the bot's
-`player_names` table — the same table `clash_data.player_name` reads, the other
-way round, one name to many rather than one tag to one — and the matches come
-back as pickable results in the field.
+`#9GJ0Q0LGG` is a poor thing to ask a person for, so `/api/analytics/search` was
+added — it read the bot's `player_names`, ordered starts-with first, escaped the
+LIKE wildcards, and it worked against the real database.
 
-**Only players this site has collected can be found that way.** Supercell has no
-search-players-by-name endpoint, so the only names that exist are ones the bot
-has stored. That is the second reason Enter on the raw value has to work: a name
-finds who we know, a tag reaches anyone.
+It came straight back out. **The field is chrome on every screen and the
+component fires a request per debounced keystroke**, so the standing cost was a
+stream of authenticated queries against the analytics host, paid on every page,
+to save typing a tag the person pasting it already has on their clipboard. The
+route, the module, its 18 checks and the client call are all gone and the
+route-count tripwire is back to 20 — an authenticated route nothing calls is
+exactly the surface that tripwire exists to keep down.
 
-Three decisions in the query:
+So the field passes no `onSearch` and no `items`: nothing is fetched, no result
+list is produced, and Enter is the whole interface.
 
-- **Ordering is starts-with first, then alphabetical.** Explicitly *not* by
-  battle count — the loudest account is not the one you meant.
-- **`%` and `_` are escaped.** They are LIKE syntax and a player name may
-  contain either; unescaped, a name like `50%_off` matches things it should not.
-- **Two characters minimum.** One character matches most of the table; that is
-  a scan with a UI on top, not a search.
-
-The `LIKE` has a leading wildcard and so cannot use an index. That is fine at
-this size and capped at eight rows anyway; if the tracked population ever
-reaches the tens of thousands this wants FTS, not a bigger `LIMIT`.
-
-Both tripwires moved in the same change: the route count 20 → 21, and the new
-path added to the auth test. `server/test_player_search.py` is 18 checks against
-a real temp SQLite rather than a stub, because the ordering and the escaping are
-SQL and a mock would only be testing my idea of what SQLite does.
-
-### The request loop, which is the reason two identities are pinned
-
-GooeySearch's search effect is
-`useEffect(..., [debouncedQuery, items, onSearch, maxResults])`. Both `onSearch`
-and `items` are in it — and an inline arrow is a new function on every render,
-while the component's own `items = []` default is a new **array** on every
-render. So the effect re-ran on every render, set state, and rendered again.
-
-Measured before the fix: **one typed query fired about 180 requests** at
-`/api/analytics/search`. After pinning `EMPTY` at module level and wrapping the
-handler in `useCallback`: **one request per query.**
-
-It is worth knowing that this is latent in the component for anyone who uses it
-the obvious way, and that the `items` default alone is enough to cause it even
-if `onSearch` is memoised.
+**If a search source is ever added back, pin the identities.** GooeySearch's
+effect is `useEffect(..., [debouncedQuery, items, onSearch, maxResults])`. An
+inline `onSearch` is a new function every render, and the component's own
+`items = []` default is a new **array** every render — so the effect re-runs on
+every render, sets state, and renders again. Measured while it was wired up:
+**one typed query fired about 180 requests.** A module-level constant and a
+`useCallback` brought it to one. The `items` default alone is enough to cause it.
 
 ### And two sizes
 

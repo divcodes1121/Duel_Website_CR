@@ -160,8 +160,7 @@ class Authentication(unittest.TestCase):
                   "/api/analytics/coach/opponent-read/%23Y022GRCJQ",
                   "/api/analytics/track/pending",
                   "/api/analytics/battles/%23Y022GRCJQ",
-                  "/api/analytics/deck?cards=knight",
-                  "/api/analytics/search?q=ninja"]
+                  "/api/analytics/deck?cards=knight"]
         with configured(CLASH_API_KEY=KEY) as mod, serving(mod) as base:
             for path in routes:
                 with self.subTest(path=path):
@@ -690,12 +689,15 @@ class RoutingUnchanged(unittest.TestCase):
         src = inspect.getsource(app_module.Handler._route)
         routes = [l.strip() for l in src.split("\n")
                   if l.strip().startswith(("if path ==", "if path.startswith("))]
-        # 21 since 28 Aug 2026: `/api/analytics/search` (find a player by
-        # name). 20 before that, for `/api/analytics/battles/<tag>`. Bumping
-        # this number is the POINT of the test rather than a chore around it -
-        # it is a tripwire, so the bump belongs in the same commit as the route,
-        # beside a new line in the auth test above.
-        self.assertEqual(len(routes), 21)
+        # BACK TO 20 on 28 Aug 2026: `/api/analytics/search` (find a player by
+        # name) was added and removed the same day - the field that used it
+        # fires a request per debounced keystroke on every screen, and the
+        # traffic was not worth saving someone typing a tag. 20 is the count
+        # from `/api/analytics/battles/<tag>`. Bumping this number is the POINT
+        # of the test rather than a chore around it - it is a tripwire, so the
+        # change belongs in the same commit as the route, beside the auth test
+        # above.
+        self.assertEqual(len(routes), 20)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]
