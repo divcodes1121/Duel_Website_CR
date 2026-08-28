@@ -185,19 +185,7 @@ def prune_enrolled() -> int:
     status quo, and must never cost someone their search.
     """
     _ensure()
-    path = cd.resolve_db_path()
-    if not path:
-        return 0
-    try:
-        bot = cd.connect(path)
-    except Exception:
-        return 0
-    try:
-        tracked = {r[0] for r in bot.execute("SELECT tag FROM tracked_players")}
-    except Exception:
-        return 0
-    finally:
-        bot.close()
+    tracked = bot_tracked_set()
     if not tracked:
         return 0
 
@@ -212,6 +200,106 @@ def prune_enrolled() -> int:
         return len(done)
     except Exception:
         return 0
+    finally:
+        con.close()
+
+
+def bot_tracked_set() -> set[str]:
+    """Every tag the bot is already collecting, as a set. Empty on any failure.
+
+    `bot_tracked()` answers for one tag and is right for a search; a bulk
+    caller asking it two thousand times would open two thousand connections to
+    a database on a spinning volume. This is the same read `prune_enrolled()`
+    was already doing inline, lifted out so the recruiter shares it.
+
+    Empty on failure means "we cannot say anything is tracked", which makes a
+    caller queue tags it did not need to. That is the safe direction: the bot's
+    drain skips an already-enrolled tag anyway, so the cost of being wrong here
+    is a wasted row, not a wrong enrolment.
+    """
+    path = cd.resolve_db_path()
+    if not path:
+        return set()
+    try:
+        con = cd.connect(path)
+    except Exception:
+        return set()
+    try:
+        return {r[0] for r in con.execute("SELECT tag FROM tracked_players")}
+    except Exception:
+        return set()
+    finally:
+        con.close()
+
+
+def queued_tags() -> set[str]:
+    """Everything currently sitting in our own queue."""
+    _ensure()
+    con = _connect()
+    try:
+        return {r[0] for r in con.execute("SELECT tag FROM tag_requests")}
+    finally:
+        con.close()
+
+
+def queue_depth() -> int:
+    """How many tags are waiting. 0 if the queue has never been written.
+
+    DOES NOT CREATE THE FILE. Every other reader here calls `_ensure()` first,
+    which is right for them — they are on a path that is about to write. This
+    one is read by `/api/analytics/status`, the single unauthenticated route,
+    and a health probe that brings a database into existence as a side effect of
+    being asked a question is doing something it was not asked to do.
+    """
+    if not os.path.exists(DB_PATH):
+        return 0
+    con = _connect()
+    try:
+        return con.execute("SELECT count(*) FROM tag_requests").fetchone()[0]
+    except Exception:
+        return 0
+    finally:
+        con.close()
+
+
+def bulk_request(tags, source: str) -> int:
+    """Queue many tags in ONE transaction. Returns how many rows are new.
+
+    `request()` opens a connection, writes, reads back and may prune, all per
+    tag — which is right for the one tag a search is about and is the wrong
+    shape entirely for two thousand off a leaderboard. This does the same
+    INSERT with the same conflict rule, once.
+
+    It deliberately does NOT prune: the recruiter already filters against
+    `bot_tracked_set()` before it calls here, so the rows this writes are by
+    construction ones the bot has not enrolled, and a prune would scan the
+    bot's whole table to discover exactly that.
+
+    `requested_at` still never moves on conflict, for the reason `request()`
+    gives — the drain is oldest-first and rewriting it starves a popular tag
+    behind its own re-sightings.
+    """
+    _ensure()
+    tags = [t for t in dict.fromkeys(tags) if t]
+    if not tags:
+        return 0
+    now = _now()
+    con = _connect()
+    try:
+        before = con.execute("SELECT count(*) FROM tag_requests").fetchone()[0]
+        con.executemany(
+            """
+            INSERT INTO tag_requests (tag, requested_at, last_seen_at, hits, source)
+            VALUES (?, ?, ?, 1, ?)
+            ON CONFLICT(tag) DO UPDATE SET
+                last_seen_at = excluded.last_seen_at,
+                hits = tag_requests.hits + 1
+            """,
+            ((t, now, now, source) for t in tags),
+        )
+        con.commit()
+        after = con.execute("SELECT count(*) FROM tag_requests").fetchone()[0]
+        return after - before
     finally:
         con.close()
 

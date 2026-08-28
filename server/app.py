@@ -54,6 +54,7 @@ import coach  # noqa: E402
 import live_player as live  # noqa: E402
 import recent_battles as battles  # noqa: E402
 import tracking  # noqa: E402
+import recruit  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
@@ -460,6 +461,11 @@ class Handler(BaseHTTPRequestHandler):
                 # actually answer" belongs. Booleans and a count, no paths.
                 out = _sources()
                 out["cardData"] = dcx.card_data_state()
+                # Counts only, never tags — see `recruit.state()`. It rides on
+                # `/status` for the same reason `cardData` does: "the recruiter
+                # is enabled but has never completed a run" is invisible from
+                # every other angle, and this is the probe an operator checks.
+                out["recruit"] = recruit.state()
                 return self._send(out)
 
             if path == "/api/analytics/meta":
@@ -796,6 +802,9 @@ def main():
     # The meta leaderboard rolls up in the background from here on.
     meta_board.start_background()
     counter.start_background()
+    # No-op unless CLASH_RECRUIT=on. It enrols players, which is what the
+    # database costs money to hold, so it ships dark like CLASH_OIE.
+    recruit.start_background()
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
 
 

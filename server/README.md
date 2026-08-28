@@ -131,6 +131,11 @@ fixed secret.
 | `CLASH_ALLOWED_ORIGIN` | *(unset — no CORS headers sent)* |
 | `CLASH_RATE_LIMIT` / `CLASH_RATE_WINDOW` | `120` requests / `60` s per client |
 | `CLASH_TRUSTED_PROXY` | unset; `1` believes `X-Forwarded-For` |
+| `CLASH_RECRUIT` | `off` — `on` starts the background recruiter |
+| `CLASH_RECRUIT_TOP` | `2000` ranked players per run |
+| `CLASH_RECRUIT_REFRESH` | `7200` seconds, matching the bot's poll |
+| `CLASH_RECRUIT_OPP_DAYS` / `_OPP_MIN` / `_OPP_MAX` | `2` days / `2` sightings / `500` per run |
+| `CLASH_RECRUIT_CEILING` | `12000` tracked + queued, refused past it |
 
 Client side: `CLASH_API_URL` retargets the Vite proxy, and
 `VITE_ANALYTICS_BASE` points a built bundle straight at a remote host. The
@@ -243,6 +248,97 @@ populated screen.
 
 Tags are validated against Supercell's 14-symbol alphabet before they reach a
 query (same rule as `clashdb.normalize_tag`), so junk never hits the database.
+
+## Recruiting tags (`recruit.py`)
+
+Two ways a player gets collected without anyone searching for them: the top of
+the ranked ladder, and the opponents our tracked players are actually meeting.
+
+```bash
+python server/recruit.py --dry-run          # reads everything, queues nothing
+python server/recruit.py --top 2000         # both sources, for real
+python server/recruit.py --no-opponents     # the leaderboard only
+python server/test_recruit.py               # 31 checks, no DB and no network
+```
+
+**It adds no route and no write.** Both recruiters end at
+`tracking.bulk_request()`, which writes `server/.tracking.db` — our file, the
+one this service already owned. The bot's `drain_tag_requests()` picks the tags
+up at the top of its next two-hourly poll and enrols each through
+`clashdb.add_tracked_player`. So `mode=ro` on the bot's databases is untouched,
+and **there is no bot edit**: the enrolment door and the skip both already
+existed, and all this had to do was stop putting known tags in front of them.
+
+### Ranked is Path of Legends, and the season must be discovered
+
+    GET /locations/global/pathoflegend/<seasonId>/rankings/players?limit=&after=
+
+Measured 2026-08-28, against the live API:
+
+| | |
+|---|---|
+| `limit=2000` in one request | **200, 2000 items**, ranks 1–2000, elo 3685–2523 |
+| paged `4 × 500` via `paging.cursors.after` | 2000 unique tags in 14.1 s |
+| every tag through `normalize_tag` | **0 rejected** |
+| `/locations/global/rankings/players` | 200 and **zero items** — the retired trophy ladder |
+| season `2026-08` (the current month) | **404 `notFound`** |
+| season `2026-07` (newest listed) | 200, full board |
+
+That last pair is the trap and it is why `current_season()` asks
+`/locations/global/seasons` instead of formatting the clock. A
+`time.strftime("%Y-%m")` would 404 on every run, forever, and look exactly like
+a leaderboard with nobody on it. The listed ids arrive duplicated, so they are
+de-duped, and if the newest listed season 404s anyway it walks back through the
+previous five rather than stranding.
+
+It pages even though one request is enough. A server-side cap on `limit` is
+precisely the kind of thing that changes without an announcement, and the
+cursor path is already proven.
+
+### Opponents come out of the database, not the API
+
+`battles.opponent_tag` is stored on every row, so "who are our players facing"
+is one indexed range scan over a two-day window — no CR API call, no rate-limit
+budget, and the answer is about the population we actually track. Hot tier
+only: a two-day window never reaches the archive, and the VPS has no archive.
+
+### The skip, three times
+
+1. against `tracked_players` — do not queue what is already collected
+2. against `tag_requests` — do not requeue what is already waiting
+3. in the bot's drain — because (1) is a snapshot and a tag can be enrolled
+   between our read and its
+
+Only (3) is load-bearing. (1) and (2) keep the queue the size of the work
+outstanding: without them a two-hourly harvest rewrites the same two thousand
+rows forever, and `PRUNE_ABOVE` is tuned for a queue of searches rather than of
+a leaderboard. Verified end to end against the live API — first run `added:
+2000`, second run `added: 0, skippedQueued: 2000`.
+
+### What it costs, and why the loop ships off
+
+Every tag enrolled here is a player polled every two hours forever, into a
+database on a 304-day retention. The root README measures ~105 GB for 3,278
+tracked players — about **32 MB per player per year of retention**. So:
+
+* the top 2000 is a **known, bounded ~64 GB**;
+* opponent harvesting is bounded by *nothing in its own definition*, because
+  every player polled yields up to 25 more opponents every two hours.
+
+And there is still **no backup of the VPS database**, which the root README
+calls the largest single exposure on the project. Growing the unbacked thing is
+not a decision this module makes quietly, so it is fenced four ways: a
+`CEILING` on tracked + queued that refuses rather than trims, a minimum
+sighting count before an opponent counts as anything, a per-run cap on new
+opponents, and a background loop that **does nothing unless `CLASH_RECRUIT=on`**
+— the same convention as `CLASH_OIE=off`. The CLI runs on demand either way.
+
+`/api/analytics/status` grows a `recruit` block: enabled, last run, runs, last
+added, queue depth, ceiling. **Counts only, never tags** — that route is the
+unauthenticated one, and a list of who the service decided to start collecting
+is a log of people, not a metric. It also does not create the queue file just
+by being probed, which is why `queue_depth()` is the one reader here that skips
+`_ensure()`.
 
 ## Duel combinations (`duel_combos.py`)
 
