@@ -126,7 +126,9 @@ def _get(path: str, **params):
     not decoration: the RoyaleAPI proxy answers 403 to urllib's default agent,
     and that failure reads as a bad token.
     """
+    global _last_error
     if not cd.CR_TOKEN:
+        _last_error = "no CR_TOKEN in the environment"
         return "NOKEY", None
     url = cd.CR_API_BASE.rstrip("/") + path
     if params:
@@ -141,11 +143,26 @@ def _get(path: str, **params):
     )
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
+            _last_error = None
             return resp.status, json.load(resp)
     except urllib.error.HTTPError as exc:
+        _last_error = "HTTP %s on %s" % (exc.code, path)
         return exc.code, None
     except Exception as exc:  # noqa: BLE001
+        _last_error = "%s on %s: %s" % (type(exc).__name__, path, exc)[:200]
         return "ERR", repr(exc)[:200]
+
+
+#: Why the last CR API call failed, for the report. A recruiter that fetched
+#: nobody and a recruiter that could not ASK look identical from the outside —
+#: this module's own docstring says so, and it then shipped exactly that: a
+#: carriage return in CR_TOKEN made every request raise, `current_season()`
+#: returned None, and the run printed "fetched 0" with no reason anywhere.
+_last_error: str | None = None
+
+
+def last_error() -> str | None:
+    return _last_error
 
 
 def current_season() -> str | None:
@@ -349,6 +366,8 @@ def run_once(top: int = TOP_N,
             tags = leaderboard_tags(top)
             report["leaderboard"] = enqueue(tags, "leaderboard")
             report["leaderboard"]["fetched"] = len(tags)
+            if not tags and last_error():
+                report["leaderboard"]["why"] = last_error()
         except Exception as exc:  # noqa: BLE001
             report["leaderboard"] = {"error": type(exc).__name__}
 
@@ -454,6 +473,9 @@ def main(argv: list[str]) -> int:
                   "%d already queued" % (len(tags), len(new),
                                          sum(1 for t in tags if t in tracked),
                                          sum(1 for t in tags if t in queued)))
+            if not tags:
+                print("             NOTHING FETCHED: %s"
+                      % (last_error() or "the board answered with no items"))
         if do_opp:
             met = opponent_tags(days, minsight, oppmax)
             new = [t for t, _ in met if t not in tracked and t not in queued]

@@ -1351,8 +1351,27 @@ def suggest_tags(limit: int = 5) -> list[dict]:
 # come from the live API. Everything here is best-effort: no token, no network,
 # or a rate limit all return None and the screen falls back to stored numbers.
 
-CR_API_BASE = os.getenv("CR_API_BASE", "https://api.clashroyale.com/v1")
-CR_TOKEN = os.getenv("CR_TOKEN", "")
+def _env(name: str, default: str = "") -> str:
+    """An environment value with surrounding whitespace removed.
+
+    THE STRIP IS LOAD-BEARING AND IT COST A LIVE DEBUG. `/etc/royalweb.env` on
+    the VPS carries CRLF line endings. systemd's `EnvironmentFile` strips the
+    trailing ``, so the service has always been fine — but `. /etc/royalweb.env`
+    in a shell does NOT, and `CR_TOKEN` then ends in a carriage return. urllib
+    refuses to send a header value containing one:
+
+        ValueError: Invalid header value b'Bearer eyJ0...'
+
+    which every caller here catches and turns into "no data". So the API looked
+    unreachable from the CLI while the identical code answered fine inside the
+    service. Stripping at the point of read fixes every consumer at once, and
+    costs nothing when the value was already clean.
+    """
+    return os.getenv(name, default).strip()
+
+
+CR_API_BASE = _env("CR_API_BASE", "https://api.clashroyale.com/v1")
+CR_TOKEN = _env("CR_TOKEN")
 
 # The bot keeps its credentials in its own .env; read them rather than making
 # the user copy a 500-character token into a second place.

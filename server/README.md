@@ -302,6 +302,38 @@ is one indexed range scan over a two-day window — no CR API call, no rate-limi
 budget, and the answer is about the population we actually track. Hot tier
 only: a two-day window never reaches the archive, and the VPS has no archive.
 
+### A carriage return in `CR_TOKEN` made the whole thing silent
+
+Found on the first real run against the VPS, and worth writing down because the
+failure mode is the one this module's own header warns about.
+
+`/etc/royalweb.env` has **CRLF line endings**. systemd's `EnvironmentFile`
+strips the trailing ``, so the *service* has always been fine — which is why
+`cr_profile()` answers correctly in production. But `. /etc/royalweb.env` in a
+shell keeps it, and `http.client` refuses to write a header value containing a
+carriage return:
+
+    ValueError: Invalid header value b'Bearer eyJ0...'
+
+Every call raised, `current_season()` returned `None`, `leaderboard_tags()`
+returned `[]`, and the run printed **`fetched 0`** with no reason anywhere —
+a recruiter that found nobody and a recruiter that could not ask, indistinguishable,
+exactly as predicted three paragraphs earlier in this file.
+
+Two fixes, both kept:
+
+* `clash_data._env()` **strips at the point of read**, so no consumer has to
+  know. It is not specific to the recruiter — `cr_profile` and `cr_battlelog`
+  read the same token.
+* `recruit.last_error()` records *why* the last call failed, and both the run
+  report and the dry run print it when nothing came back. A count of zero now
+  always arrives with a reason attached.
+
+`test_recruit.py` pins both, and pins the mechanism where it actually lives:
+`urllib.request.Request()` accepts the bad header happily and `http.client`
+rejects it at write time, which is why this surfaced as a network failure rather
+than a bad argument.
+
 ### The skip, three times
 
 1. against `tracked_players` — do not queue what is already collected

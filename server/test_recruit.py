@@ -111,6 +111,51 @@ class SeasonDiscovery(unittest.TestCase):
             self.assertIsNone(recruit.current_season())
             self.assertEqual(recruit.leaderboard_tags(10), [])
 
+    def test_a_token_with_a_carriage_return_still_works(self):
+        """REGRESSION, found in production on the first real run.
+
+        /etc/royalweb.env is CRLF. systemd EnvironmentFile strips the trailing
+        carriage return, so the SERVICE was always fine; sourcing the same file
+        in a shell does not, and urllib refuses to send a header value holding
+        one. Every call raised, current_season() returned None, and the run
+        printed "fetched 0" with no reason anywhere. clash_data strips at the
+        point of read so no consumer has to know.
+        """
+        import http.client
+        import importlib
+        dirty = "abc123" + chr(13)
+        old = os.environ.get("CR_TOKEN")
+        os.environ["CR_TOKEN"] = dirty
+        try:
+            importlib.reload(cd)
+            self.assertEqual(cd.CR_TOKEN, "abc123")
+            # Pin the ACTUAL mechanism. Request() does not validate --
+            # http.client does, when the header is written -- which is why
+            # this surfaced as a live network failure and not a bad argument.
+            # putrequest/putheader buffer, so this needs no connection.
+            def put(value):
+                conn = http.client.HTTPConnection("example.invalid")
+                conn.putrequest("GET", "/", skip_host=1,
+                                skip_accept_encoding=1)
+                conn.putheader("Authorization", "Bearer " + value)
+
+            put(cd.CR_TOKEN)                      # the stripped one is fine
+            with self.assertRaises(ValueError):   # the raw one never was
+                put(dirty)
+        finally:
+            if old is None:
+                os.environ.pop("CR_TOKEN", None)
+            else:
+                os.environ["CR_TOKEN"] = old
+            importlib.reload(cd)
+
+    def test_a_failed_call_records_why(self):
+        """A recruiter that fetched nobody and one that could not ASK must not
+        look the same -- which they did, in production, on the first run."""
+        with Stub(cd, CR_TOKEN=""):
+            recruit._get("/anything")
+        self.assertIn("CR_TOKEN", recruit.last_error() or "")
+
     def test_a_missing_token_is_not_an_error(self):
         with Stub(cd, CR_TOKEN=""):
             status, data = recruit._get("/anything")
