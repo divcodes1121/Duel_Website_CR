@@ -349,11 +349,11 @@ export const PLATES: Plate[] = [
         <h2 className="pl-h">Member and Pro</h2>
         <dl className="pl-defs">
           <div>
-            <dt>Member — free</dt>
+            <dt>Free — signed in</dt>
             <dd>{FREE_SECTIONS.length} areas, permanently: {FREE_SECTIONS.join(', ')}. Every deck tool, every paste box, every copy-and-open link.</dd>
           </div>
           <div>
-            <dt>Trial — three days</dt>
+            <dt>Member — three days</dt>
             <dd>Everything a Pro has, except the one carve-out. It expires on time on its own; nothing has to run.</dd>
           </div>
           <div>
@@ -362,7 +362,7 @@ export const PLATES: Plate[] = [
           </div>
         </dl>
         <p className="pl-note">
-          <b>{PRO_ONLY_SECTIONS.join(' and ')} is the only thing a trial does not open.</b>{' '}
+          <b>{PRO_ONLY_SECTIONS.join(' and ')} is the only thing Member does not open.</b>{' '}
           It is the deep end, and the reason to subscribe rather than a sample of
           what subscribing is like.
         </p>

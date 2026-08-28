@@ -5,6 +5,7 @@ import { LiquidMetal } from '../../three/LiquidMetal';
 import { useAccountStore } from '../../state/accountStore';
 import { ago, bytes, until } from '../../utils/format';
 import { useAccess } from '../../state/gate';
+import { TIER_LABEL } from '../../state/tiers';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import styles from './AdminConsole.module.css';
 
@@ -223,7 +224,7 @@ export function AdminConsole() {
         {/* The two are no longer the same product, so the tiles say so. A
             trial is everything for three days EXCEPT Coach Assist; paid Pro is
             the only tier that opens it. */}
-        <Stat label="On trial" value={String(counts.trial)} note="no Coach Assist" tone="good" />
+        <Stat label="Members" value={String(counts.trial)} note="no Coach Assist" tone="good" />
         <Stat label="Pro" value={String(counts.pro)} note="paid · full access" tone="good" />
         <Stat label="Free" value={String(counts.free)} />
         <Stat
@@ -399,7 +400,7 @@ export function AdminConsole() {
                 <td className={styles.email}>{u.email ?? '—'}</td>
                 <td>
                   <span className={styles.tier} data-tier={u.tier}>
-                    {u.tier}
+                    {TIER_LABEL[u.tier] ?? u.tier}
                   </span>
                   {u.tier === 'trial' && u.trial_ends_at && (
                     <span className={styles.sub}>ends {until(u.trial_ends_at)}</span>

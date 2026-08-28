@@ -25,6 +25,23 @@ export type Tier = 'free' | 'trial' | 'pro' | 'admin';
 /** A tier, plus the state of never having signed in. */
 export type Access = 'anon' | Tier;
 
+/** What each tier is CALLED to a person.
+ *
+ * `trial` shows as **Member**. The stored value stays `trial` — it is what the
+ * database, the entitlement matrix and `trial_ends_at` all key on, and renaming
+ * a stored value to change a word on screen is how those three drift apart.
+ * "Trial" describes what the account is to us, a countdown we are running;
+ * "Member" describes what the person is, which is the half they have a reason
+ * to care about. The countdown is still shown, in the badge's tooltip and in
+ * the admin console's own column.
+ */
+export const TIER_LABEL: Record<Tier, string> = {
+  admin: 'Admin',
+  pro: 'Pro',
+  trial: 'Member',
+  free: 'Free',
+};
+
 export interface Profile {
   id: string;
   display_name: string | null;
