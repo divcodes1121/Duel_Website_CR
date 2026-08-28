@@ -79,41 +79,62 @@
   }
 }
 
-/* THE FOCUS RING IS RECOLOURED AND MOVED OUTSIDE.
+/* THE FOCUS RING: RECOLOURED, AND DRAWN AROUND THE PILL FROM OUTSIDE IT.
  *
  * `index.css` sets `:focus-visible { outline: 2px solid var(--accent-select)
  * !important }` on every focusable element, and the comment above it records
  * why: there was no focus-visible rule anywhere, a dozen stylesheets carried
  * `outline: none`, and a keyboard user genuinely could not see where they were.
- * Deleting it here would put this one field back in that state, so it keeps a
- * ring — the colour and the PLACE are what change.
+ * Deleting it here would put this field back in that state, so it keeps a ring.
+ * Violet was wrong because it is this app's SELECTION hue — it read as a
+ * highlight rather than as an edge.
  *
- * Violet read as a highlight because it is this app's selection hue, and it sat
- * INSIDE the pill because an outline draws around the element that has it and
- * the element that had it was the input, which lives inside the pill. Both are
- * fixed by putting the ring on the pill's wrapper instead: white on dark, black
- * on light, hugging the outside of the control.
+ * GETTING IT IN THE RIGHT PLACE TOOK THREE GOES, and both failures are worth
+ * keeping because they are properties of this component, not slips:
  *
- * IT GOES ON THE COMPONENT ROOT, NOT THE GOOEY CONTAINER. The container carries
- * `filter: url(#gooey-...)`, which would blur and threshold a 2px ring along
- * with everything else in it. The root is outside that filter and wraps the
- * same box, so the ring stays a ring. It gets the pill's radius because the
- * root is a plain box and an outline follows the border-radius of the element
- * it is on, not of the thing inside it. */
+ *   1. On the `<input>`: an outline draws around the element that HAS it, and
+ *      the input lives inside the pill — so the ring appeared a few pixels in
+ *      from the edge of the control. That is the "inner margin".
+ *   2. On the pill itself, as a box-shadow: the pill is inside the gooey
+ *      container, whose `filter: url(#gooey-...)` blurs by 5 and then
+ *      alpha-thresholds at `18a - 15`. A 3px ring blurred that far never
+ *      reaches the threshold, so it is ERASED — the same arithmetic that stops
+ *      the icon bubble welding to the pill. The rule computed correctly and
+ *      rendered nothing.
+ *   3. What works: a pseudo-element on the component root, which sits OUTSIDE
+ *      the filter, overlaying the pill's box.
+ *
+ * THE -30px IS NOT A FUDGE. The expanded pill is tweened `x: -30`, and a
+ * transform does not move the layout box — so the root and the gooey container
+ * both stay 30px to the right of where the pill is DRAWN. `inset: 0` plus the
+ * same -30px puts the ring exactly over it. Measured: root 886..1066, pill
+ * 856..1036, identical widths. If the component's `x` ever changes, this
+ * number changes with it. */
 .scope input:global(.gooey-search-input):focus,
 .scope input:global(.gooey-search-input):focus-visible {
   outline: none !important;
 }
 
 .scope > div {
+  position: relative;
+}
+
+.scope > div::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* See the note: the pill is drawn 30px left of this box. */
+  transform: translateX(-30px);
   border-radius: 9999px;
+  box-shadow: 0 0 0 0 rgb(255 255 255 / 0);
+  transition: box-shadow var(--dur-1) var(--ease);
+  pointer-events: none;
 }
 
-.scope > div:focus-within {
-  outline: 2px solid #ffffff;
-  outline-offset: 3px;
+.scope > div:focus-within::after {
+  box-shadow: 0 0 0 3px #ffffff;
 }
 
-:global([data-theme='light']) .scope > div:focus-within {
-  outline-color: #000000;
+:global([data-theme='light']) .scope > div:focus-within::after {
+  box-shadow: 0 0 0 3px #000000;
 }

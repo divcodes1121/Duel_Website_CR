@@ -6558,10 +6558,18 @@ wrapper, and the panel's query row lights the whole bordered bar on
 `:focus-within` with a ring and a soft glow. White on dark, black on light,
 hugging the outside.
 
-The top bar's ring goes on the **component root, not the gooey container** — the
-container carries `filter: url(#gooey-…)`, and it would blur and threshold a 2px
-ring along with everything else inside it. The root sits outside that filter and
-wraps the same box, so it takes `border-radius: 9999px` to stay pill-shaped.
+Getting the top bar's ring in the right place took three goes, and both failures
+are properties of the component rather than slips. On the pill itself, as a
+box-shadow, it is **erased**: the pill sits inside the gooey container, whose
+filter blurs by 5 and then alpha-thresholds at `18a - 15`, and a 3px ring never
+reaches that threshold — the same arithmetic that stops the icon bubble welding.
+It computed correctly and rendered nothing.
+
+What works is a pseudo-element on the component root, which is outside the
+filter, overlaid on the pill's box. The `translateX(-30px)` in it is not a fudge:
+the expanded pill is tweened `x: -30`, and a transform does not move the layout
+box, so the root and the container both sit 30px to the right of where the pill
+is drawn. Measured — root 886…1066, pill 856…1036, identical widths.
 
 ---
 
