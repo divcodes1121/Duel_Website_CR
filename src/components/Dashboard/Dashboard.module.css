@@ -69,6 +69,23 @@
   border: 1px solid var(--border);
 }
 
+/* The wordmark and the nav, as one left-hand group.
+ *
+ * `.topbar` is `space-between` over three children; with the dock as the middle
+ * one it was pinned to the centre of the bar with air on both sides, which is
+ * what made it read as a separate slab. Two children — this cluster and the
+ * actions — put the nav immediately after DECKKIES and leave the whole
+ * remainder to the right-hand controls.
+ *
+ * The gap is larger than the dock's own item gap on purpose: the wordmark is a
+ * different KIND of thing from the nav items, and the space is what says so. */
+.brandCluster {
+  display: flex;
+  align-items: center;
+  gap: 1.35rem;
+  min-width: 0;
+}
+
 .brand {
   display: flex;
   align-items: center;

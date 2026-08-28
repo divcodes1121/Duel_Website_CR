@@ -19,6 +19,7 @@
  */
 
 import { TactileButton } from './TactileButton';
+import { useThemeStore } from '../../state/themeStore';
 import type { Tier } from '../../state/tiers';
 
 /* Each tier's liquid: THE AUTHORED PALETTE WITH ITS HUE MOVED, and nothing else.
@@ -78,7 +79,34 @@ const glow = (c: RGB, t: number): RGB =>
   [c[0] + (1 - c[0]) * t, c[1] + (1 - c[1]) * t, c[2] + (1 - c[2]) * t];
 const scale = (c: RGB, k: number): RGB => [c[0] * k, c[1] * k, c[2] * k];
 
-function liquidAtHue(shallowHue: number, deepHue: number) {
+/* THE AIR ABOVE THE WATERLINE IS THEME-DEPENDENT, and nothing else is.
+ *
+ * The authored button is a dark object: the empty part of it is near-black
+ * (#050b11 behind the canvas, vec3(0.03,0.06,0.1) inside it), which is right on
+ * a black page and is a black box in a #ffffff top bar. Light mode fills it
+ * with paper instead and lets the liquid keep every one of its colours — the
+ * tier is the liquid, and it should not change meaning with the theme.
+ *
+ * The band is the soft lift the author puts near the top edge. On dark it adds
+ * light; on light it has to REMOVE it, and a fragment shader cannot add a
+ * negative, so on light it is near-zero and the gradient does the work instead
+ * (air1 slightly darker than air0, so the top stays the brighter end). */
+const AIR = {
+  dark: {
+    air0: [0.03, 0.06, 0.1] as RGB,
+    air1: [0.05, 0.09, 0.15] as RGB,
+    band: [0.02, 0.05, 0.1] as RGB,
+    plate: '#050b11',
+  },
+  light: {
+    air0: [0.97, 0.97, 0.98] as RGB,
+    air1: [0.9, 0.91, 0.93] as RGB,
+    band: [0.01, 0.01, 0.01] as RGB,
+    plate: '#f4f4f6',
+  },
+};
+
+function liquidAtHue(shallowHue: number, deepHue: number, theme: 'light' | 'dark') {
   const shallow = hsv(shallowHue, SHALLOW_S, SHALLOW_V);
   return {
     shallow,
@@ -86,6 +114,7 @@ function liquidAtHue(shallowHue: number, deepHue: number) {
     sloshTint: scale(shallow, 0.3),
     glowA: glow(shallow, 0.4),
     glowB: glow(shallow, 0.8),
+    ...AIR[theme],
   };
 }
 
@@ -112,6 +141,7 @@ export function TierBadge({
   height?: number;
   onClick?: () => void;
 }) {
+  const theme = useThemeStore((st) => st.theme);
   if (tier !== 'admin' && tier !== 'pro' && tier !== 'trial') return null;
   const look = LOOK[tier];
 
@@ -130,7 +160,7 @@ export function TierBadge({
     <TactileButton
       label={look.label}
       title={title}
-      liquid={liquidAtHue(look.shallowHue, look.deepHue)}
+      liquid={liquidAtHue(look.shallowHue, look.deepHue, theme)}
       width={width}
       height={height}
       onClick={onClick}

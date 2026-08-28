@@ -6377,6 +6377,20 @@ shallow colour — his `vec3(0.8, 0.98, 1.0)` *is* `mix(shallow, white, 0.8)`
 exactly — so each tier's highlight tints to its own liquid instead of staying
 cyan on a maroon button.
 
+**Light mode changes the air, never the liquid.** The empty half of the button
+above the waterline is authored near-black, which is right on a black page and a
+black box in a `#ffffff` top bar. Those three constants are uniforms too, so
+light mode fills it with paper — and the tier's colours are deliberately left
+alone across themes, because the tier *is* the liquid and should not change
+meaning when someone toggles the theme. One asymmetry worth knowing: the
+author's soft band near the top edge *adds* light, and on a light ground it
+would have to subtract, which a fragment shader cannot do — so on light it is
+near-zero and the gradient carries it instead. The label inks black with a white
+halo rather than white with a dark one, and both themes went from the authored
+400 to 600: that weight is right for a 250px hero button and thin at 10px under
+0.3em of tracking on a moving fill. A theme flip re-pushes the uniforms and must
+not rebuild the context, or the liquid's level, tilt and slosh reset mid-motion.
+
 Two adaptations. **Reduced motion draws one frame and starts no rAF**: the
 authored document freezes `u_time` at 2.0 but keeps requesting frames forever,
 and this project's rule is that nothing loops when it cannot be seen to move.
@@ -6393,6 +6407,23 @@ badge then wanted another 104px. The dock is icon-only with the name on hover,
 which is the trade the old dock already made below 1000px, now made everywhere.
 It went from a row that overlapped the search field to **370px with 155px of
 clear gap**.
+
+**The pill is gone and the dock sits beside the wordmark.** It ships as a
+floating glass slab — `bg-white/80 dark:bg-black/80`, `glass-border`,
+`backdrop-blur-xl`, `shadow-2xl`, `px-6 py-4` — which is right for a dock
+hovering over a page and is a box inside a box in a top bar that already has its
+own fill and its own bottom rule. Stripped back to a plain row, the icons sit
+directly after DECKKIES in a `.brandCluster`, so `.topbar` is two children
+rather than three and the nav reads as belonging to the brand instead of
+floating between it and the actions. `py-4` alone had pushed the header from
+66px to 97px; it is 63px now. None of it edits the vendored file — the resets
+are in `glass-dock.css` and win on source order.
+
+That produced one bug worth recording: **the dark slab survived the reset**.
+`dark:bg-black/80` is defined as `[data-theme='dark'] .glass-dock-scope
+.dark\:bg-black\/80`, three compound selectors against the reset's two, so it
+outranked it — and being black on a black bar, it was invisible. It would have
+turned up somewhere else later.
 
 The registry file is used as-is, with six deviations listed in its own header:
 

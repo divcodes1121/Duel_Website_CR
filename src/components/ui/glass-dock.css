@@ -226,3 +226,62 @@
     transition: none !important;
   }
 }
+
+/* ── THE PILL IS REMOVED ──────────────────────────────────────────────────
+ *
+ * The dock ships as a floating glass slab: `bg-white/80 dark:bg-black/80`,
+ * `glass-border`, `backdrop-blur-xl`, `shadow-2xl`, `rounded-2xl`, `px-6 py-4`.
+ * That is right for a dock that hovers over a page, which is what it was drawn
+ * for. In a top bar it is a box inside a box — the bar is already a surface
+ * with its own fill and its own bottom rule, so the slab read as a third
+ * object floating between the wordmark and the actions rather than as
+ * navigation belonging to either.
+ *
+ * So the shell is stripped back to a plain row and the icons sit directly
+ * beside DECKKIES. NOTHING IS EDITED IN THE VENDORED COMPONENT to do it: these
+ * override the utility classes it emits, and they win on source order alone
+ * because they are the same specificity and come last. Restoring the pill is
+ * deleting this block.
+ *
+ * The padding going is also what gives the bar its height back — `py-4` on the
+ * dock had pushed the header from 66px to 97px, and a nav is not worth 31px of
+ * everything else. */
+.glass-dock-scope .glass-dock {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* Tighter than the floating dock's `gap-4`. That gap is sized for a row of
+     44px targets with nothing around them; here the 40px cells already carry
+     their own space and the row has to sit next to a wordmark. */
+  gap: 0.15rem;
+}
+
+/* The border came from `glass-border`, which is also on the shell. */
+.glass-dock-scope .glass-dock.glass-border,
+[data-theme='dark'] .glass-dock-scope .glass-dock.glass-border {
+  border: 0;
+}
+
+/* AND THE DARK FILL NEEDS THE ATTRIBUTE TOO. `dark:bg-black/80` is defined
+   above as `[data-theme='dark'] .glass-dock-scope .dark\:bg-black\/80` — three
+   compound selectors against this block's two — so it outranks the reset and
+   the slab survived on dark while vanishing on light. Invisible on the black
+   bar, which is exactly why it would have been found somewhere else later. */
+[data-theme='dark'] .glass-dock-scope .glass-dock {
+  background: none;
+}
+
+/* Each cell gets the affordance the pill used to give the group: a quiet wash
+   on hover, so an icon still reads as a target now that nothing frames it. */
+.glass-dock-scope .glass-dock [role='button'] {
+  border-radius: 10px;
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.glass-dock-scope .glass-dock [role='button']:hover {
+  background: var(--surface-hover, rgb(255 255 255 / 0.06));
+}

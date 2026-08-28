@@ -455,6 +455,13 @@ export function Dashboard({
           screen's bar is the page colour now, so the flag has one reader left
           and it is `.body`, for the rail. */}
       <header className={styles.topbar}>
+        {/* THE BRAND AND THE NAV ARE ONE CLUSTER. The dock used to sit in the
+            middle of the bar as its own glass pill, which read as a third
+            object floating between the wordmark and the actions. The nav
+            belongs to the brand — it is what DECKKIES *is* — so the two share a
+            row and the pill is gone. See the note at the foot of
+            `ui/glass-dock.css`. */}
+        <div className={styles.brandCluster}>
         <button
           type="button"
           className={styles.brand}
@@ -490,6 +497,7 @@ export function Dashboard({
             },
           }))}
         />
+        </div>
 
         <div className={styles.topActions}>
           {/* The tag search lives in the CHROME now, not only on the landing

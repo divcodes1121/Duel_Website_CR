@@ -89,7 +89,12 @@
   position: relative;
   z-index: 10;
   pointer-events: none;
-  font-weight: 400;
+  /* The authored ink is `font-normal` (400), which is right for the source's
+     250px hero button and thin at badge size — the letters are 10px under
+     0.3em of tracking, sitting on a moving, lit fill. 600 holds them together
+     without turning the badge into a shouty chip. Both themes: the dark one
+     needed it as much as the light one, the light one just showed it first. */
+  font-weight: 600;
   font-size: clamp(0.6rem, calc(var(--tb-h, 70px) * 0.26), 0.875rem);
   letter-spacing: 0.3em;
   text-indent: 0.3em;
@@ -99,6 +104,23 @@
   align-items: center;
   gap: 0.5rem;
   white-space: nowrap;
+}
+
+/* LIGHT MODE INKS THE LABEL BLACK.
+ *
+ * The authored ink is #e0faff — a near-white cyan tint, drawn to sit on a lit
+ * liquid inside a near-black button. The liquid is unchanged in light mode (the
+ * tier IS the colour, and it must not change meaning with the theme), but
+ * everything around it went to paper, and near-white on a mid-saturated fill at
+ * 0.6rem reads thin rather than bright.
+ *
+ * The halo flips with it. The authored `drop-shadow` is a dark blue-black,
+ * which is what lifts pale ink off the liquid; under black ink it would only
+ * thicken the letterforms. A white one separates them from the fill the same
+ * way round. */
+:global([data-theme='light']) .label {
+  color: #06131c;
+  filter: drop-shadow(0 1px 6px rgb(255 255 255 / 0.8));
 }
 
 /* The authored hover lift is a transform, which the project's motion rules

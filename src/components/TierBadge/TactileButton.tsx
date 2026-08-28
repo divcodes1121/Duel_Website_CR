@@ -71,6 +71,12 @@ const FS = [
   'uniform vec3 u_sloshTint;',
   'uniform vec3 u_glowA;',
   'uniform vec3 u_glowB;',
+  /* The AIR above the waterline, and the soft band near the top. Authored as
+     near-black, which is correct on a dark page and a black box on a light one
+     — the badge sits in a #ffffff top bar in light mode. */
+  'uniform vec3 u_air0;',
+  'uniform vec3 u_air1;',
+  'uniform vec3 u_band;',
   'float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}',
   'float noise(vec2 p){',
   '  vec2 i=floor(p), f=fract(p);',
@@ -95,8 +101,8 @@ const FS = [
   '    + amp * 0.62 * sin(x * 9.7 + t * (-6.8) + 1.7)',
   '    + amp * 0.38 * sin(x * 14.3 + t * 8.9 + 4.2);',
   '  float d = surf - uv.y;',
-  '  vec3 col = mix(vec3(0.03, 0.06, 0.1), vec3(0.05, 0.09, 0.15), uv.y);',
-  '  col += vec3(0.02, 0.05, 0.1) * pow(max(0.0, 1.0 - abs(uv.y - 0.88) * 6.0), 2.0);',
+  '  vec3 col = mix(u_air0, u_air1, uv.y);',
+  '  col += u_band * pow(max(0.0, 1.0 - abs(uv.y - 0.88) * 6.0), 2.0);',
   '  float inside = smoothstep(0.0, 0.012, d);',
   '  float depth = clamp(d / max(u_level, 0.001), 0.0, 1.0);',
   '  vec3 liq = mix(u_shallow, u_deep, depth);',
@@ -129,6 +135,10 @@ export const AUTHORED_LIQUID: LiquidPalette = {
   sloshTint: [0.02, 0.25, 0.35],
   glowA: [0.4, 0.9, 1.0],
   glowB: [0.8, 0.98, 1.0],
+  air0: [0.03, 0.06, 0.1],
+  air1: [0.05, 0.09, 0.15],
+  band: [0.02, 0.05, 0.1],
+  plate: '#050b11',
 };
 
 export interface LiquidPalette {
@@ -137,6 +147,12 @@ export interface LiquidPalette {
   sloshTint: [number, number, number];
   glowA: [number, number, number];
   glowB: [number, number, number];
+  /** The empty part of the button, above the liquid. */
+  air0: [number, number, number];
+  air1: [number, number, number];
+  band: [number, number, number];
+  /** The CSS fill behind the canvas, for the frame the shader does not cover. */
+  plate: string;
 }
 
 /* The authored no-WebGL fallback, kept exactly. */
@@ -179,6 +195,12 @@ export function TactileButton({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const liquidRef = useRef(liquid);
   liquidRef.current = liquid;
+  /* The first effect fills this in. A THEME FLIP CHANGES THE PALETTE AND MUST
+     NOT REBUILD THE CONTEXT — recompiling the shader and reallocating a
+     context to change five vec3s would drop the liquid's level, tilt and
+     slosh mid-motion, and the badge would visibly reset when someone toggles
+     the theme. Same reasoning as the hue ref in `three/Fireflies.tsx`. */
+  const applyPaletteRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const btn = btnRef.current;
@@ -225,6 +247,9 @@ export function TactileButton({
     const uSloshTint = gl.getUniformLocation(prog, 'u_sloshTint');
     const uGlowA = gl.getUniformLocation(prog, 'u_glowA');
     const uGlowB = gl.getUniformLocation(prog, 'u_glowB');
+    const uAir0 = gl.getUniformLocation(prog, 'u_air0');
+    const uAir1 = gl.getUniformLocation(prog, 'u_air1');
+    const uBand = gl.getUniformLocation(prog, 'u_band');
 
     /* The palette is constant for the life of the button, so it is set once
        rather than every frame. `liquidRef` keeps the effect off the palette's
@@ -237,8 +262,12 @@ export function TactileButton({
       gl!.uniform3fv(uSloshTint, q.sloshTint);
       gl!.uniform3fv(uGlowA, q.glowA);
       gl!.uniform3fv(uGlowB, q.glowB);
+      gl!.uniform3fv(uAir0, q.air0);
+      gl!.uniform3fv(uAir1, q.air1);
+      gl!.uniform3fv(uBand, q.band);
     }
     setPalette();
+    applyPaletteRef.current = setPalette;
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -333,6 +362,17 @@ export function TactileButton({
     };
   }, []);
 
+  /* Re-push the colours when the palette changes — a theme flip — and redraw
+     once, because under reduced motion there is no frame loop to pick it up. */
+  useEffect(() => {
+    applyPaletteRef.current?.();
+    const canvas = canvasRef.current;
+    const gl = canvas?.getContext('webgl');
+    if (gl && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+  }, [liquid]);
+
   /* NO CSS FILTER. It was here, and it is what dimmed the water: `brightness`
      multiplies the meniscus flare and the body alike, so the only way to reach
      a dark brand colour was to darken the glow with it. The colour now comes
@@ -352,7 +392,14 @@ export function TactileButton({
       className={[styles.frame, className].filter(Boolean).join(' ')}
       style={{ ['--tb-w' as string]: `${width}px`, ['--tb-h' as string]: `${height}px` }}
     >
-      <button ref={btnRef} type="button" className={styles.button} title={title} onClick={onClick}>
+      <button
+        ref={btnRef}
+        type="button"
+        className={styles.button}
+        title={title}
+        onClick={onClick}
+        style={{ background: liquid.plate }}
+      >
         <canvas
           ref={canvasRef}
           aria-hidden="true"
