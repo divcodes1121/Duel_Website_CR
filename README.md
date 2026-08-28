@@ -6542,14 +6542,21 @@ there for the results emerging from the button, which is what the component's
 own comments say. A widened filter region was tried on the theory that the
 bubble's goo was being clipped, changed nothing, and was reverted.
 
-**The focus ring is deliberately left in place.** `index.css` sets
+**The focus ring is recoloured, not removed.** `index.css` sets
 `:focus-visible { outline: 2px solid var(--accent-select) !important }` on every
 focusable element, and the comment above it records why: there was no
 focus-visible rule anywhere, a dozen stylesheets carried `outline: none`, and a
-keyboard user could not see where they were. It is `!important` precisely to
-survive a local override like the one written here first, which was dead CSS
-against it. The violet outline appears the moment the pill expands because the
-component focuses its own input — that is the ring working, not a border.
+keyboard user could not see where they were. Deleting it for this field would
+put that one input back in that state.
+
+What was wrong was the colour rather than the ring. Violet is this app's
+selection hue, and against a pill that is already white on light and black on
+dark it read as a highlight *inside* the field instead of an edge around it. It
+inverts now — white on dark, black on light — `!important` because that is what
+it overrides, and scoped to this input so nothing else in the app moves. It
+covers `:focus` as well as `:focus-visible`, because the component focuses its
+own input the moment the pill expands and a pointer user gets the first without
+the second.
 
 ---
 

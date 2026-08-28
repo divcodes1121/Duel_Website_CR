@@ -53,16 +53,7 @@
 
 /* PLAIN AT REST. The component draws no border of its own but the input still
    inherits a box and a fill from the app's form styles; these clear them, so
-   what shows is the pill and nothing inside it.
- *
- * THE FOCUS RING IS DELIBERATELY LEFT ALONE. `index.css` sets
- * `:focus-visible { outline: 2px solid var(--accent-select) !important }` on
- * every focusable element, and the comment above it says why: there was no
- * focus-visible rule anywhere, a dozen stylesheets carried `outline: none`, and
- * a keyboard user genuinely could not see where they were. It is `!important`
- * to survive exactly the kind of local override that was written here first.
- * The violet outline appears when the pill expands because the component
- * focuses its input itself — that is the ring doing its job, not a border. */
+   what shows is the pill and nothing inside it. */
 .scope input:global(.gooey-search-input) {
   border: 0;
   box-shadow: none;
@@ -86,4 +77,33 @@
   .scope {
     display: none;
   }
+}
+
+/* THE FOCUS RING IS RECOLOURED, NOT REMOVED.
+ *
+ * `index.css` sets `:focus-visible { outline: 2px solid var(--accent-select)
+ * !important }` on every focusable element, and the comment above it records
+ * why: there was no focus-visible rule anywhere, a dozen stylesheets carried
+ * `outline: none`, and a keyboard user genuinely could not see where they were.
+ * Deleting it here would put this one field back in that state.
+ *
+ * What was wrong was the COLOUR, not the ring. Violet is this app's selection
+ * hue and it read as a highlight inside the field rather than as an edge around
+ * it — on a pill that is already white on light and black on dark, the one
+ * thing the ring should be is the opposite of the pill. So it inverts: white on
+ * dark, black on light. `!important` because that is what it is overriding, and
+ * scoped to this input so nothing else in the app changes.
+ *
+ * `:focus` as well as `:focus-visible` on purpose. The component focuses its
+ * own input the moment the pill expands, and a pointer user gets `:focus`
+ * without `:focus-visible` — which is the state that was being looked at. */
+.scope input:global(.gooey-search-input):focus,
+.scope input:global(.gooey-search-input):focus-visible {
+  outline: 2px solid #ffffff !important;
+  outline-offset: 2px;
+}
+
+:global([data-theme='light']) .scope input:global(.gooey-search-input):focus,
+:global([data-theme='light']) .scope input:global(.gooey-search-input):focus-visible {
+  outline-color: #000000 !important;
 }
