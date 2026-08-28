@@ -2020,43 +2020,9 @@
 /* Item 3. `--solid-*` because it is a fill carrying `--on-solid` text, graded
    to hold it at 5.48:1 — `--hue-*` is the ink step and would be pastel here,
    which is the mistake this project keeps making. */
-.proBadge {
-  padding: 0.26rem 0.6rem;
-  border-radius: 999px;
-  background: var(--solid-violet);
-  color: var(--on-solid);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-}
-
-/* MAROON, and the token is `--solid-maroon` -- there is no `--solid-pink` in
-   this project, and referencing one makes the whole declaration invalid at
-   computed-value time, which is how the admin tier badge in the console ended
-   up with no background at all. Same colour as that badge, deliberately: one
-   role, one colour, wherever it appears. */
-.adminBadge {
-  padding: 0.26rem 0.6rem;
-  border-radius: 999px;
-  background: var(--solid-maroon);
-  color: var(--on-solid);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-}
-
-/* Quieter than PRO on purpose: a countdown is information, not status, and it
-   should not look like a thing you have earned. */
-.trialBadge {
-  padding: 0.26rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--hue-green) 45%, transparent);
-  color: var(--hue-green);
-  font-size: 0.7rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
+/* The three tier pills that used to live here are gone: the tier is one
+   idea and it is now one component, TierBadge, drawn as the tactile
+   shader button. */
 
 @media (prefers-reduced-motion: reduce) {
   .signIn:hover {

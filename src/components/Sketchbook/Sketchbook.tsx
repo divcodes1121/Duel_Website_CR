@@ -30,7 +30,7 @@
  *   `index.css` bans that outright and is specific about why — the old glow
  *   loops animated box-shadow and filter, and that is what made the app lag.
  *   Every frame here is driven by a rAF that TEARS ITSELF DOWN when the spring
- *   settles, the same shape as `topDockController` and `LiquidMetal`.
+ *   settles, the same shape as `LiquidMetal`.
  * · REDUCED MOTION lands the turn instantly. The book is content, so it still
  *   renders and still turns — only the travel goes.
  * · THE BOOK OPENS PLAIN. An opening riffle — the pages fanning through

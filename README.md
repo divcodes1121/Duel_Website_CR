@@ -63,7 +63,7 @@ bot's SQLite files read-only.
 | Phase 24C | boundary built: API authenticated, same-origin Vercel proxy, tunnel hop **verified for real** |
 | UI | WebGL fireflies behind the whole shell in **both themes**, wearing the open area's hue; the painted login backdrop — see `docs/UI.md` |
 | UI — motion pass | **shipped and browser-verified.** The deck column's aura + placement burst + completion sweep, a card ring on the empty paste screens. One canvas per screen plus the backdrop; three.js chunk unchanged |
-| UI — top dock | **shipped, 33/33 browser checks.** The top nav is a proximity dock: items expand downward on a spring toward the pointer, and answer keyboard focus with the same field |
+| UI — top dock | **replaced.** The proximity dock is gone; the top nav is vengenceui's GlassDock — icon-only, one travelling tooltip, every icon morphing through a droplet on hover. Six deviations from the registry source, all listed in its header |
 | UI — filmstrip | **shipped on the landing screen's seven analytics areas and the Counter Hub folder gallery, 10/10 browser checks.** **Not applied to the meta board or the saved decks** — both would remove function; see the section |
 | UI — text contrast | **shipped, swept in a browser.** Every neutral font is now pure white on dark and pure black on light. Coloured ink untouched. 10 screen/theme sweeps report no grey text left |
 | UI — theme switch | **shipped, 16/16 browser checks.** Five separate theme buttons became one skeuomorphic toggle: a recessed groove, a raised cap that slides, and `role="switch"` semantics they never had |
@@ -6282,6 +6282,177 @@ assert in **both** `data-theme` values:
 - then **screenshot both themes and actually look at them**. Both colour bugs
   above compiled cleanly, passed every test, and were only visible on screen.
   If a panel reads as a rainbow, reduce the colour.
+
+---
+
+## The top nav is a glass dock, and the tier badge is a liquid button
+
+Two components arrived from registries in one pass, and both are ports rather
+than embeds. They are described together because the first is what made room
+for the second.
+
+### The tier badge
+
+The top bar carried three pill spans — violet PRO, maroon ADMIN, and a green
+outlined "2d left". They are one component now, drawn as the Nexus **Tactile
+Fluidics** button from ThreeUI: a liquid that fills the button, sloshes toward
+the pointer, tilts with it, and discharges when clicked.
+
+The source bundle was fetched and **all three files hash-verified** against the
+manifest before a line was written. ThreeUI ships the button by rendering the
+authored document in a sandboxed `<iframe srcDoc>` that pulls Tailwind, GSAP,
+iconify and Google Fonts off three CDNs and carries an entire demo page; an
+iframe also cannot join the host page's focus order. So what is preserved is the
+button — markup, styling value-for-value, the shader, the motion, every
+interaction constant, the DPR cap and the no-WebGL fallback.
+
+**Trial is called Member.** "Trial" describes what the account is to *us*, a
+countdown we are running; "Member" describes what the person is. `TIER_LABEL` in
+`state/tiers.ts` is the single source for it. **The stored value stays `trial`**
+— the database, the entitlement matrix and `trial_ends_at` all key on it, and
+renaming a stored value to change a word on screen is how those three drift
+apart. The countdown moved into the tooltip; a number that changes daily is not
+a status, and a badge is read as one. One collision came out of it: the field
+book already called the *free* tier "Member", so that row is now
+"Free — signed in".
+
+### The colour took three attempts
+
+The ask was blue for Pro, green for Member, maroon for Admin.
+
+**One — `hue-rotate` and `brightness`,** which is ThreeUI's own recolour channel.
+Fitting each badge so the liquid's average matched this project's flat
+`--solid-*` token drove brightness to 0.5–0.8, and brightness multiplies the
+*entire* canvas, including the meniscus flares and caustics that are the only
+reason the surface glows:
+
+| band | authored | as first shipped |
+|---|---|---|
+| surface | L 171.0 | L 85.5 |
+| deep | L 89.9 | L 44.9 |
+| ramp | 1.90x | 1.90x |
+
+The *ratio* was never lost. The water was half as bright as the author drew it,
+which reads as flat. A filter cannot colour the body without dimming the
+highlight, because to a filter they are the same pixels.
+
+**Two — colour stops derived from the `--solid-*` tokens,** moved into the
+shader as uniforms so body and glow could be separated. That fixed the hue and
+killed the vividness instead: those tokens are **dark flat fills** graded to
+hold white text at 4.5:1, so `--solid-green` (#047857) carries about half the
+value and much less saturation than the authored cyan. Build a liquid around one
+and you get a muted liquid.
+
+**Three — keep the authored saturation and value, change only the hue.** What
+makes the authored button look the way it does is not its hue:
+
+```
+authored shallow   H 186   S 1.000   V 1.000
+authored deep      H 222   S 0.956   V 0.450
+```
+
+Both numbers are kept exactly and only the hue substituted, so every tier has
+the same brightness structure as the button the author drew — the same water,
+dyed. The **+36 degree shallow-to-deep spread** is preserved too; that "deeper
+reads bluer" shift is part of why it looks like water rather than a gradient,
+which is why each tier names two hues:
+
+| | shallow | deep |
+|---|---|---|
+| PRO | H 205 `#0095ff` | H 238 `#050973` |
+| MEMBER | H 142 `#00ff5e` | H 170 `#057360` |
+| ADMIN | H 345 `#ff0040` | H 318 `#730552` |
+
+The `--solid-*` tokens are not referenced by the badge at all. They remain right
+for a flat chip that must hold white text; they are the wrong thing to build a
+lit liquid out of, and finding that out cost two rounds.
+
+**Five colour constants became uniforms and nothing else in the shader moved** —
+same fbm, same surface equation, same depth ramp, same falloffs, same vignette.
+`AUTHORED_LIQUID` holds the author's own values, so passing it renders the
+original button, and that is the control a change is checked against: it
+measures a mid-body of **#028cb8** against the **#0386b9** the authored stops
+predict analytically. The glow stops follow the author's own relationship to his
+shallow colour — his `vec3(0.8, 0.98, 1.0)` *is* `mix(shallow, white, 0.8)`
+exactly — so each tier's highlight tints to its own liquid instead of staying
+cyan on a maroon button.
+
+Two adaptations. **Reduced motion draws one frame and starts no rAF**: the
+authored document freezes `u_time` at 2.0 but keeps requesting frames forever,
+and this project's rule is that nothing loops when it cannot be seen to move.
+And the WebGL context is released on unmount — the budget is about sixteen and
+`LiquidMetal` already holds one for every circular control.
+
+### The dock, and the six deviations it needed
+
+    npx shadcn@latest add https://www.vengenceui.com/r/glass-dock.json
+
+Six labelled nav items, a tag field and four actions did not fit one bar — at
+1440px the Meta label and the search field were measurably overlapping — and the
+badge then wanted another 104px. The dock is icon-only with the name on hover,
+which is the trade the old dock already made below 1000px, now made everywhere.
+It went from a row that overlapped the search field to **370px with 155px of
+clear gap**.
+
+The registry file is used as-is, with six deviations listed in its own header:
+
+1. `@/lib/utils` becomes a local `cn` — no path alias, and no Tailwind to merge.
+2. `'use client'` is inert under Vite; kept so a diff stays clean.
+3. `useEffect` was imported and never used, which fails `noUnusedLocals`.
+4. **The tooltip is repositioned.** It is authored for a dock that floats at the
+   BOTTOM of a page, so the label animates to `y: -60` — upward, clear of the
+   icons. In a top bar that lands at **y = -48, off the top of the window**. It
+   hangs below now. Its `x` was `index * 52 + 12`, which does not describe its
+   own layout either (40px items, 16px gaps, 24px padding, so item *i* centres
+   at `44 + 56i`); the last of six sat about 52px from its icon. It is measured
+   off the element now and centred on it.
+5. **The built-in animated icon set is emptied.** Upstream it is seven hardcoded
+   names — `home, blog, marker, email, linkedin, x, github` — matched on
+   `title.toLowerCase()`. This app collides on exactly one, so "Home" took the
+   component's own branch with its own hardcoded house, its own button and its
+   own custom properties, while the other five fell through to the plain
+   `<Icon>` branch and never animated. That asymmetry produced the same
+   complaint in both directions: first Home was the only item that worked, then
+   the only one that did not.
+6. **The registry ships no CSS.** There is no `css` and no `cssVars` block, the
+   component emits bare class names (`glass-dock`, `glass-border`, `home`,
+   `active`) plus about fifty Tailwind utilities, and it points at a
+   `globals.css` that is not in the package. Installed as-is it renders
+   unstyled. `glass-dock.css` supplies them, **scoped under
+   `.glass-dock-scope`** — class names as generic as `.flex` and `.border` are
+   exactly the kind that collide with an app's own styles, and this file must
+   not become a global utility layer by accident. Dark mode is keyed off
+   `[data-theme]`, not Tailwind's `.dark` class.
+
+**Every item morphs, and that needed new icons.** MorphSVG interpolates one path
+into one path; `icons.tsx` draws stroked, multi-element line art — the house is
+two paths, the swords four, the chart a `<rect>` plus a path — so none of them
+can morph at all. `dockIcons.tsx` adds a single-path filled twin per
+destination, used **only by the dock**; the sidebar and every panel keep the
+line icons they have always had. Each icon then morphs itself: it finds its
+cell, listens for the same `mouseenter` the component uses for its tooltip, and
+runs the source's own sequence — scale to 0.25 and fade over 0.1s, through both
+droplet shapes at 0.1s and 0.05s, then back on `elastic.out(1, .9)` over 0.75s.
+Verified by polling the path every frame through a full hover: all six report
+22-26 distinct `d` values, against 1 for a static icon.
+
+**MorphSVGPlugin is free now.** It was a paid Club GreenSock plugin and the
+component still registers it dynamically inside a `.catch` for installs that
+lack it; `gsap@3.15` ships it, so the import resolves and `GlassDockNav`
+registers it statically rather than racing the first hover.
+
+### What this cost
+
+**The main bundle went from 166 kB gzip to 320 kB.** `framer-motion` and `gsap`
+are both real dependencies now and both land in the main chunk. This project
+keeps three.js and jspdf out of it deliberately — the note in `docs/UI.md` says
+three.js "would be more than a third of the app" — so this is the largest single
+regression in the build, and it is recorded rather than hidden. Lazy-loading the
+dock behind a dynamic import would claw most of it back and is the obvious next
+move.
+
+The old `TopDock`, its stylesheet and `topDockController.ts` are **deleted**;
+nothing imported them once the dock changed.
 
 ---
 

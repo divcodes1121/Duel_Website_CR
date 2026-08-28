@@ -1,0 +1,228 @@
+/* The stylesheet the vengenceui registry does not ship.
+ *
+ * `glass-dock.json` carries one .tsx file and no `css` or `cssVars` block, so
+ * `npx shadcn add` installs a component that renders unstyled. It needs two
+ * things this project cannot otherwise give it:
+ *
+ *   1. THE UTILITIES. It is written for Tailwind and emits ~50 utility classes
+ *      (`flex`, `px-6`, `rounded-2xl`, `dark:bg-white`, `h-[22px]`, ...). This
+ *      project has no Tailwind and is CSS Modules throughout, so those classes
+ *      match nothing. Adding Tailwind to a CSS-Modules codebase to style one
+ *      dock is the larger change; what is here instead is exactly the utilities
+ *      this one component uses, and nothing else.
+ *
+ *   2. THE COMPONENT'S OWN CLASSES. `glass-dock`, `glass-border`, and the icon
+ *      buttons (`home`, `blog`, `marker`, `email`, `linkedin`, `x`, `github`,
+ *      `active`) are referenced by the source and defined nowhere in the
+ *      package — the comment in it points at a `globals.css` that was not
+ *      published.
+ *
+ * EVERYTHING IS SCOPED UNDER `.glass-dock-scope`. Class names this generic —
+ * `.flex`, `.border`, `.absolute` — are exactly the kind that collide with an
+ * app's own styles, and this file must not become a global utility layer by
+ * accident. The wrapper is applied by `GlassDockNav`; nothing outside it is
+ * affected, and deleting that wrapper deletes this file's reach entirely.
+ *
+ * DARK MODE IS `[data-theme='dark']`, NOT `.dark`. The component was written
+ * for Tailwind's class strategy; this project stamps the theme on <html>. The
+ * `dark:` variants below are therefore keyed off the attribute, which is why
+ * they are written out rather than generated.
+ */
+
+.glass-dock-scope,
+.glass-dock-scope * {
+  box-sizing: border-box;
+}
+
+/* ── layout ───────────────────────────────────────────────────────────── */
+.glass-dock-scope.w-max,
+.glass-dock-scope .w-max { width: max-content; }
+.glass-dock-scope .relative { position: relative; }
+.glass-dock-scope .absolute { position: absolute; }
+.glass-dock-scope .top-0 { top: 0; }
+.glass-dock-scope .left-0 { left: 0; }
+.glass-dock-scope .z-30 { z-index: 30; }
+.glass-dock-scope .flex { display: flex; }
+.glass-dock-scope .items-center { align-items: center; }
+.glass-dock-scope .justify-center { justify-content: center; }
+.glass-dock-scope .gap-4 { gap: 1rem; }
+.glass-dock-scope .overflow-hidden { overflow: hidden; }
+.glass-dock-scope .pointer-events-none { pointer-events: none; }
+.glass-dock-scope .cursor-pointer { cursor: pointer; }
+.glass-dock-scope .whitespace-nowrap { white-space: nowrap; }
+
+/* ── box ──────────────────────────────────────────────────────────────── */
+.glass-dock-scope .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
+.glass-dock-scope .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+.glass-dock-scope .px-5 { padding-left: 1.25rem; padding-right: 1.25rem; }
+.glass-dock-scope .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+.glass-dock-scope .rounded-2xl { border-radius: 1rem; }
+.glass-dock-scope .rounded-lg { border-radius: 0.5rem; }
+.glass-dock-scope .border { border-width: 1px; border-style: solid; }
+.glass-dock-scope .w-10 { width: 2.5rem; }
+.glass-dock-scope .h-10 { height: 2.5rem; }
+.glass-dock-scope .h-4 { height: 1rem; }
+.glass-dock-scope .w-full { width: 100%; }
+.glass-dock-scope .w-\[22px\] { width: 22px; }
+.glass-dock-scope .h-\[22px\] { height: 22px; }
+.glass-dock-scope .min-w-\[100px\] { min-width: 100px; }
+
+/* ── type ─────────────────────────────────────────────────────────────── */
+.glass-dock-scope .text-\[13px\] { font-size: 13px; }
+.glass-dock-scope .font-medium { font-weight: 500; }
+.glass-dock-scope .tracking-wide { letter-spacing: 0.025em; }
+
+/* ── effects ──────────────────────────────────────────────────────────── */
+.glass-dock-scope .backdrop-blur-xl {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+.glass-dock-scope .shadow-2xl { box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25); }
+.glass-dock-scope .shadow-md {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+.glass-dock-scope .transition-colors {
+  transition-property: color, background-color, border-color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-dock-scope .duration-200 { transition-duration: 200ms; }
+
+/* ── colour, light ────────────────────────────────────────────────────── */
+.glass-dock-scope .bg-white\/80 { background-color: rgb(255 255 255 / 0.8); }
+.glass-dock-scope .bg-black { background-color: #000; }
+.glass-dock-scope .text-white { color: #fff; }
+.glass-dock-scope .border-neutral-700 { border-color: #404040; }
+.glass-dock-scope .text-neutral-500 { color: #737373; }
+.glass-dock-scope .text-neutral-900 { color: #171717; }
+
+/* ── colour, dark — keyed off [data-theme], not Tailwind's .dark class ── */
+[data-theme='dark'] .glass-dock-scope .dark\:bg-black\/80 { background-color: rgb(0 0 0 / 0.8); }
+[data-theme='dark'] .glass-dock-scope .dark\:bg-white { background-color: #fff; }
+[data-theme='dark'] .glass-dock-scope .dark\:text-black { color: #000; }
+[data-theme='dark'] .glass-dock-scope .dark\:text-white { color: #fff; }
+[data-theme='dark'] .glass-dock-scope .dark\:text-neutral-400 { color: #a3a3a3; }
+[data-theme='dark'] .glass-dock-scope .dark\:border-neutral-300 { border-color: #d4d4d4; }
+
+/* ── the component's own classes, which the registry omits ────────────── */
+
+/* The dock shell. `glass-dock` sits alongside the utilities above, so it only
+   has to add what they do not: the edge that makes it read as glass. */
+.glass-dock-scope .glass-border {
+  border: 1px solid var(--border);
+}
+
+[data-theme='dark'] .glass-dock-scope .glass-border {
+  border-color: color-mix(in srgb, #fff 12%, transparent);
+}
+
+.glass-dock-scope .glass-dock {
+  /* The inset hairline this project puts on every glass surface, so the dock
+     belongs to the same material as the top bar it sits in. */
+  box-shadow:
+    0 25px 50px -12px rgb(0 0 0 / 0.25),
+    inset 0 1px 0 var(--glass-sheen);
+}
+
+/* The morphing icon buttons. The source styles them entirely through these
+   class names and the `--tab-bar-*` custom properties it animates, none of
+   which are defined in the package.
+ *
+ * THE CUSTOM PROPERTIES MUST BE REGISTERED TO ANIMATE. GSAP tweens
+ * `--tab-bar-home-scale` from 0.25 to 0.7; an unregistered custom property is
+ * a string to the browser and interpolates as one, so the icon would jump
+ * rather than spring. `@property` gives them a type and an initial value. */
+@property --tab-bar-home-scale { syntax: '<number>'; inherits: true; initial-value: 0.7; }
+@property --tab-bar-blog-scale { syntax: '<number>'; inherits: true; initial-value: 0.7; }
+@property --tab-bar-marker-scale { syntax: '<number>'; inherits: true; initial-value: 0.7; }
+@property --tab-bar-email-scale { syntax: '<number>'; inherits: true; initial-value: 0.7; }
+@property --tab-bar-linkedin-scale { syntax: '<number>'; inherits: true; initial-value: 0.7; }
+@property --tab-bar-x-scale { syntax: '<number>'; inherits: true; initial-value: 0.7; }
+@property --tab-bar-github-scale { syntax: '<number>'; inherits: true; initial-value: 0.7; }
+@property --tab-bar-home-opacity { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --tab-bar-blog-opacity { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --tab-bar-marker-opacity { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --tab-bar-email-opacity { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --tab-bar-linkedin-opacity { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --tab-bar-x-opacity { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --tab-bar-github-opacity { syntax: '<number>'; inherits: true; initial-value: 1; }
+
+.glass-dock-scope .home,
+.glass-dock-scope .blog,
+.glass-dock-scope .marker,
+.glass-dock-scope .email,
+.glass-dock-scope .linkedin,
+.glass-dock-scope .x,
+.glass-dock-scope .github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #737373;
+  cursor: pointer;
+  transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme='dark'] .glass-dock-scope .home,
+[data-theme='dark'] .glass-dock-scope .blog,
+[data-theme='dark'] .glass-dock-scope .marker,
+[data-theme='dark'] .glass-dock-scope .email,
+[data-theme='dark'] .glass-dock-scope .linkedin,
+[data-theme='dark'] .glass-dock-scope .x,
+[data-theme='dark'] .glass-dock-scope .github {
+  color: #a3a3a3;
+}
+
+.glass-dock-scope .home.active,
+.glass-dock-scope .blog.active,
+.glass-dock-scope .marker.active,
+.glass-dock-scope .email.active,
+.glass-dock-scope .linkedin.active,
+.glass-dock-scope .x.active,
+.glass-dock-scope .github.active {
+  color: #171717;
+}
+
+[data-theme='dark'] .glass-dock-scope .home.active,
+[data-theme='dark'] .glass-dock-scope .blog.active,
+[data-theme='dark'] .glass-dock-scope .marker.active,
+[data-theme='dark'] .glass-dock-scope .email.active,
+[data-theme='dark'] .glass-dock-scope .linkedin.active,
+[data-theme='dark'] .glass-dock-scope .x.active,
+[data-theme='dark'] .glass-dock-scope .github.active {
+  color: #fff;
+}
+
+.glass-dock-scope .home svg,
+.glass-dock-scope .blog svg,
+.glass-dock-scope .marker svg,
+.glass-dock-scope .email svg,
+.glass-dock-scope .linkedin svg,
+.glass-dock-scope .x svg,
+.glass-dock-scope .github svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  overflow: visible;
+}
+
+/* The scale/opacity the GSAP timelines drive. Each icon reads its own pair,
+   which is why the source declares seven of each rather than one. */
+.glass-dock-scope .home svg { transform: scale(var(--tab-bar-home-scale)); opacity: var(--tab-bar-home-opacity); }
+.glass-dock-scope .blog svg { transform: scale(var(--tab-bar-blog-scale)); opacity: var(--tab-bar-blog-opacity); }
+.glass-dock-scope .marker svg { transform: scale(var(--tab-bar-marker-scale)); opacity: var(--tab-bar-marker-opacity); }
+.glass-dock-scope .email svg { transform: scale(var(--tab-bar-email-scale)); opacity: var(--tab-bar-email-opacity); }
+.glass-dock-scope .linkedin svg { transform: scale(var(--tab-bar-linkedin-scale)); opacity: var(--tab-bar-linkedin-opacity); }
+.glass-dock-scope .x svg { transform: scale(var(--tab-bar-x-scale)); opacity: var(--tab-bar-x-opacity); }
+.glass-dock-scope .github svg { transform: scale(var(--tab-bar-github-scale)); opacity: var(--tab-bar-github-opacity); }
+
+/* This project's blanket rule: nothing moves under reduced motion. GSAP is
+   told separately in GlassDockNav; this covers the CSS half. */
+@media (prefers-reduced-motion: reduce) {
+  .glass-dock-scope * {
+    transition: none !important;
+  }
+}

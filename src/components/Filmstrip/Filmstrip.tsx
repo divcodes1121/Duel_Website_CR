@@ -104,7 +104,7 @@ const FADE = VISIBLE + 1;
  * `CLAUDE.md` bans loops nobody can see, and the reference's runs forever. Here
  * the rAF is started by an interaction and tears itself down once the strip has
  * settled on an index — a resting filmstrip costs nothing. Same discipline as
- * `TopDock` and `LiquidMetal`.
+ * `LiquidMetal`.
  *
  * Under `prefers-reduced-motion` the position SNAPS rather than easing. The
  * strip is content, not decoration, so it still renders and still browses; only

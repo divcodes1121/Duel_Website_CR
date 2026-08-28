@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCardIconUrl } from '../../data/cards';
 import { ProfileMenu } from '../Profile/ProfileMenu';
-import { TopDock } from './TopDock';
+import { TierBadge } from '../TierBadge/TierBadge';
+import { GlassDockNav } from './GlassDockNav';
 import { Header } from '../Header/Header';
 import { DuelDeckBuilder } from '../DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from '../DecksHome/DecksHome';
@@ -474,7 +475,7 @@ export function Dashboard({
             Deck Vault, Duel Builder or Counter Hub without going home first —
             the same half-wired navigation the Home button was caught by. The
             query row moved into the panel, where the thing it queries is. */}
-        <TopDock
+        <GlassDockNav
           items={TOP_NAV.map((item) => ({
             label: item.label,
             icon: item.icon,
@@ -557,21 +558,11 @@ export function Dashboard({
                   and "the owner" and "a subscriber" are not the same answer.
                   Maroon, which is this palette's pink SOLID step and already
                   what the admin tier wears in the console's accounts table. */}
-              {access === 'admin' && (
-                <span className={styles.adminBadge} title="Administrator">
-                  ADMIN
-                </span>
-              )}
-              {access === 'pro' && (
-                <span className={styles.proBadge} title="Deckkies Pro">
-                  PRO
-                </span>
-              )}
-              {access === 'trial' && trialLeft > 0 && (
-                <span className={styles.trialBadge} title="Free trial">
-                  {trialLeft}d left
-                </span>
-              )}
+              {/* One badge, three colours, drawn as the tactile shader button.
+                  It replaced three separate pill spans — the tier is one idea
+                  and it now has one component. `trial` renders as MEMBER; see
+                  the note in TierBadge. */}
+              <TierBadge tier={access} trialDaysLeft={trialLeft} />
               <ProfileMenu triggerClassName={styles.avatar} />
             </>
           )}

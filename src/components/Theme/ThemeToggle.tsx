@@ -39,7 +39,7 @@ interface ThemeToggleProps {
  *
  * Native `<button>` keyboard behaviour is kept rather than reimplemented: Enter
  * and Space already activate it, and the reference's own `keydown` handler
- * would double-fire on a real button. Same reasoning as `TopDock`.
+ * would double-fire on a real button.
  */
 export function ThemeToggle({ size, className }: ThemeToggleProps) {
   const theme = useThemeStore((s) => s.theme);
