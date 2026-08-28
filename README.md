@@ -81,7 +81,7 @@ bot's SQLite files read-only.
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
 | tests | **1,260 Python checks** across **35 suites** (504 check-style + 756 unittest), **221 vitest**, `tsc -b` and `npm run build` clean |
-| shipped from | `main` at `6bedee0`. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
+| shipped from | `main` at `76397f0`, deployed 2026-08-28 — the black top bar, the tag recruiter and the ranked header. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
