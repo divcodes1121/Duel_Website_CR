@@ -29,40 +29,43 @@
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
 }
 
-/* THE LANDING BAR IS THE PAGE, not a slab raised off it.
+/* THE BAR IS THE PAGE, not a slab raised off it.
  *
- * Everywhere else the bar is `--glass-fill-strong` (#2e2e2e on dark), which is
- * the correct raised rung over a #000 page: the chrome sits above the content
- * it frames. The landing screen is the one page with no content to frame — no
- * rail, no panel, a full-bleed hero running under the bar — so the raised rung
- * reads as a grey band sitting on top of the artwork rather than as chrome.
+ * It was `--glass-fill-strong` (#2e2e2e on dark) on every route except the
+ * landing screen, on the argument that chrome belongs a rung above the content
+ * it frames. What that actually produced was a bar that CHANGES COLOUR as you
+ * move through the app — black over the hero, grey the moment you open an area
+ * — and one piece of persistent chrome repainting itself on navigation reads
+ * as a bug, not as a hierarchy. The bar is #000 on every route now.
  *
  * DARK ONLY, and that is not an oversight. Light's bar is #ffffff on a #f4f4f6
  * page: already the lightest thing on screen and already not grey, so there is
  * nothing there to correct and dropping it to the page colour would delete the
- * one edge separating the chrome from the hero.
+ * one edge separating the chrome from what is under it.
  *
  * The border-bottom is deliberately KEPT. It is the only thing left stating
  * where the bar ends once the fill matches the page, and without it the
- * controls float in the hero with nothing holding them. */
-:global([data-theme='dark']) .topbar[data-landing] {
+ * controls float with nothing holding them. */
+:global([data-theme='dark']) .topbar {
   background: var(--bg-1);
 }
 
 /* AND THE MARKS ON IT HAVE TO SURVIVE THE DROP.
  *
  * The brand tile is #0c1222 — the favicon's ground, chosen so the tab icon and
- * the chrome mark are one object, and it works against a #2e2e2e bar because a
+ * the chrome mark are one object, and it worked against a #2e2e2e bar because a
  * near-black tile on a mid-grey band is plainly a tile. Against #000 it is FIVE
  * points of 8-bit lightness and simply is not there: the tile disappears and
- * the mark reads as a crown and a letter floating in the bar.
+ * the mark reads as a crown and a letter floating in the bar. That was the
+ * landing screen's problem only while the landing screen was the only black
+ * bar; it is now every screen's.
  *
  * The fill is not the thing to change — changing it breaks favicon parity, and
  * the tile is dark precisely so the near-white D shows on it. What is missing
  * on black is an EDGE, so the tile gets one and keeps its colour. Same fix the
  * ladder rule implies everywhere else: when a surface cannot separate itself by
  * fill, it separates itself by border. */
-:global([data-theme='dark']) .topbar[data-landing] .brandMark {
+:global([data-theme='dark']) .topbar .brandMark {
   border: 1px solid var(--border);
 }
 

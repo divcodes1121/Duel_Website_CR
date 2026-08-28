@@ -448,13 +448,12 @@ export function Dashboard({
           It draws nothing and runs no frames until something is hovered. */}
       <LiquidMetal />
 
-      {/* `data-landing` is on the header as well as on `.body` below. The bar
-          is a SIBLING BEFORE `.body`, so no selector on `.body` can reach back
-          to it — and the landing bar drops to the page colour, which the rest
-          of the app's bar must not do. Same flag, two readers, for the same
-          reason it is kept separate from the rail's remembered state: the
-          landing screen is not expressing a preference. */}
-      <header className={styles.topbar} data-landing={landing || undefined}>
+      {/* The bar carried `data-landing` too, back when only the landing screen's
+          bar dropped to the page colour — the header is a SIBLING BEFORE
+          `.body`, so no selector on `.body` could reach back to it. Every
+          screen's bar is the page colour now, so the flag has one reader left
+          and it is `.body`, for the rail. */}
+      <header className={styles.topbar}>
         <button
           type="button"
           className={styles.brand}
