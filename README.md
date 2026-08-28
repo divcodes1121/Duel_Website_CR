@@ -196,6 +196,7 @@ python server/test_player_cards.py # 60 checks over the card board
 python server/test_deck_counter.py # 58 checks over the matchup engine
 python server/test_coach.py       # 69 checks over the Coach Assist rules
 python server/test_live_player.py # 23 checks over the live battlelog reader
+python server/test_recruit.py     # 31 checks over the tag recruiter
 python server/test_ml_22_final.py # 66 checks over the FROZEN production contract
 python server/test_ml_20d.py      # 27 checks that `practice` excludes real duels
 python server/test_ml_21a.py      # 32 checks over the spell feasibility harness
@@ -3978,23 +3979,33 @@ one magnifier, pressable, opening the analysis for whatever is typed. The leadin
 decorative magnifier went with it — two on one field, only one of them pressable,
 is worse than none. The shortcut still works and is named in the tooltip.
 
-### The landing bar is the page, and the marks on it had to survive that
+### The bar is the page, and the marks on it had to survive that
 
-The top bar is `--glass-fill-strong` — `#2e2e2e` on dark, the correct raised
-rung over a `#000` page, because the chrome sits above the content it frames.
-The landing screen has no content to frame: no rail, no panel, a full-bleed hero
-running under the bar. So the raised rung read as a grey band lying on top of
-the artwork, which is what *"the top head bar is grey"* was describing.
+The top bar was `--glass-fill-strong` — `#2e2e2e` on dark, on the argument that
+this is the correct raised rung over a `#000` page, because chrome sits above
+the content it frames. The landing screen has no content to frame: no rail, no
+panel, a full-bleed hero running under the bar. So the raised rung read as a
+grey band lying on top of the artwork, which is what *"the top head bar is
+grey"* was describing, and the bar took `--bg-1` **there only**, via
+`data-landing` on the header.
 
-It takes `--bg-1` there, via `data-landing` on the header. **The flag is on the
-header as well as on `.body`** because the bar is a sibling *before* `.body`,
-and no selector on `.body` can reach backwards to it.
+**That fixed one screen and broke the set of them.** The bar is the one element
+that persists across every route, and making it conditional meant it repainted
+itself as you moved — black over the hero, grey the moment you opened an area,
+black again on the way back. A permanent piece of chrome that changes colour on
+navigation does not read as a hierarchy; it reads as a bug, and it was reported
+as one. The raised rung was never wrong about the landing screen in particular —
+it was wrong about the bar being a slab at all.
+
+So the bar is `--bg-1` on **every** route now. The header's `data-landing` is
+deleted along with the rule that read it; `.body` keeps the flag, which is the
+reader it always really had — that one is about the rail, not the fill.
 
 **Dark only, and that is not a half-finished pass.** Light's bar is `#ffffff` on
 a `#f4f4f6` page — already the lightest thing on screen, already not grey, and
 dropping it to the page colour would delete the one edge between the chrome and
-the hero. The `border-bottom` is kept in both, for the same reason: once the
-fill matches the page it is the only thing stating where the bar ends.
+what is under it. The `border-bottom` is kept in both, for the same reason: once
+the fill matches the page it is the only thing stating where the bar ends.
 
 **Then the marks on it had to be re-checked, and only one had actually broken.**
 Measured as 8-bit lightness against the bar behind them:
@@ -4020,7 +4031,11 @@ layout.
 The dock is the part worth noting for its own sake: at **Δ2** against the old
 grey bar its glass shell was barely a pill at all, and nobody had reported it
 because it is only visible once something moves. Dropping the bar to black is
-what made it an object.
+what made it an object — and once the drop applied everywhere, so did that.
+
+Verified in a browser across seven routes in both themes: every dark bar is
+`rgb(0, 0, 0)` with the tile's 1px ring, every light bar is `rgb(255, 255, 255)`
+with no ring, and all seven dark bars match the landing bar exactly — 14/14.
 
 ### The closing band, and the scrollbar that went away
 
@@ -6270,6 +6285,182 @@ assert in **both** `data-theme` values:
 
 ---
 
+## The player header shows ranked, not trophy road
+
+The summary cell used to read **14,000 · Trophies · Spirit Square · best
+14,000**. Every part of that is true and almost none of it is informative,
+because **trophy road caps at 14,000**: of 14 opponents sampled out of one real
+battlelog, **8 were sitting exactly on the cap** and two more were within 1,000
+of it. A statistic that reports one identical number for most competitive
+players ranks nobody.
+
+Their Path of Legends trophies over the same sample spread **2,546–3,006**, and
+that is the number two good players actually differ on. So the cell now reads:
+
+> **2,686** — Ranked · #994 · best 3,284
+
+`cr_profile()` picks up `currentPathOfLegendSeasonResult` and
+`bestPathOfLegendSeasonResult` alongside the trophy-road pair it already read.
+Three things came out of measuring the payload rather than assuming it:
+
+**`rankedBest` is the best *season*, and it can be lower than the current one.**
+Observed live: a player at 2,713 this season whose best-season block reports
+2,595. Printing "best 2,595" beside "2,713" reads as an arithmetic bug, so it is
+shown **only when it genuinely exceeds** the current figure — on screen and in
+the PDF, by the same rule.
+
+**`rank` is null below the leaderboard cut even when trophies are present.**
+Observed on a live account: 2,567 ranked trophies, `rank: null`. So the rank is
+guarded on its own; one field being set says nothing about the other.
+
+**`leagueNumber` is not displayed at all.** Every current result in the sample
+reported league 7 — the global rank 1 player and a rank 2,352 player alike. A
+field that is constant across the whole population is not information, and it
+would have looked like a meaningful tier.
+
+The arena went with the trophies. It is trophy-road furniture and says nothing
+about a ranked standing.
+
+**It degrades twice rather than blanking.** No ranked season yet (a new account,
+or before the first ranked match of a season) falls back to trophy road with its
+arena and best, exactly as before; no profile at all — the CR API unreachable —
+falls back to stored crowns, which is in the database. Verified in a browser
+across all five branches, plus the two suppression rules.
+
+`reportAdapters.ts` shares one `rankedMeta()` helper with the same fallback
+order, because a PDF quoting trophy road while the screen quotes ranked is two
+answers to one question.
+
+**Live Player's trophy cell is deliberately untouched.** It shows the *change*
+across the battlelog, which is a different quantity from a standing.
+
+---
+
+## Recruiting players nobody searched for
+
+Searching a tag enrols it. That is a good mechanism and it only ever collects
+players somebody has already heard of, which is the wrong population for a meta
+board. `server/recruit.py` adds two sources that need no visitor at all: **the
+top 2,000 of ranked**, and **the opponents our tracked players are actually
+meeting**. Both run on the two-hourly cadence the bot already keeps, and both
+skip anything already tracked.
+
+**It required no bot edit, and that is the interesting part.** The enrolment
+door and the skip already existed — `drain_tag_requests()` runs at the top of
+every poll, takes up to `CLASH_TAG_DRAIN_BATCH` (2,000 on the VPS) oldest-first,
+and passes each through `clashdb.add_tracked_player`, skipping anything already
+in `tracked_players`. So the whole feature reduces to *putting the right tags in
+the queue*, and the queue is `server/.tracking.db`, the one file this service
+has always owned. `mode=ro` on the bot's databases is untouched; the bot is a
+live process on a VPS with one backup, and a feature that can be built entirely
+on this side of the queue should be.
+
+### Ranked is Path of Legends, and the season cannot be computed
+
+    GET /locations/global/pathoflegend/<seasonId>/rankings/players?limit=&after=
+
+Measured against the live API on 2026-08-28:
+
+| | |
+|---|---|
+| `limit=2000`, one request | **200, 2,000 items** — ranks 1–2000, elo 3685–2523 |
+| paged `4 × 500` on `paging.cursors.after` | 2,000 unique tags in 14.1 s |
+| all 2,000 through `normalize_tag` | **0 rejected** |
+| `/locations/global/rankings/players` | 200 and **zero items** |
+| season `2026-08` — the current month | **404 `notFound`** |
+| season `2026-07` — the newest listed | 200, a full board |
+
+The last two rows are the whole reason `current_season()` exists. Formatting the
+clock into `%Y-%m` is the obvious implementation and it would have 404ed on
+every single run, permanently, while looking exactly like a leaderboard with
+nobody on it — a recruiter that finds no players and a recruiter asking the
+wrong question are indistinguishable from the outside. It asks
+`/locations/global/seasons` instead, de-dupes ids (the payload lists each one
+twice), and walks back through the previous five if the newest still 404s.
+
+The old `/locations/global/rankings/players` is the retired trophy ladder. It
+answers 200, which is what makes it dangerous: reading it produces a working
+recruiter that recruits nobody.
+
+### The opponents are already in the database
+
+`battles.opponent_tag` is stored on every row, so this half costs **no API call
+at all** — one indexed range scan over a two-day window says who our players
+have been meeting, ordered by how often. That population is better than a
+leaderboard for what this site does, since it is the people its own users are
+actually up against.
+
+### The skip, which was most of the ask
+
+Three layers, and only the last is load-bearing:
+
+1. against `tracked_players` — do not queue what is already collected
+2. against `tag_requests` — do not requeue what is already waiting
+3. in the bot's drain — because (1) is a snapshot, and a tag can be enrolled
+   between our read and its
+
+(1) and (2) are there so the queue stays the size of the work outstanding.
+Without them a two-hourly harvest rewrites the same two thousand rows forever,
+and `PRUNE_ABOVE` — the guard that stops the drain's oldest-first `LIMIT`
+freezing behind finished rows — is tuned for a queue of *searches*, not of a
+leaderboard. Run twice against the live API, back to back:
+
+```
+run 1   fetched 2000   added 2000   skippedQueued 0
+run 2   fetched 2000   added    0   skippedQueued 2000
+```
+
+### What this costs, and why the loop ships off
+
+This is the part that decided the shape. Every tag enrolled is a player polled
+every two hours forever, into a database on a **304-day retention**. The
+measured figure elsewhere in this README is ~105 GB at steady state for 3,278
+tracked players — roughly **32 MB per player per year of retention**.
+
+* the top 2,000 is **known and bounded**: about **+64 GB**.
+* opponent harvesting is bounded by **nothing in its own definition**. Every
+  player polled yields up to 25 more opponents every two hours, and each of
+  those is then polled. Left open it does not grow the collection, it
+  detonates it.
+
+And there is still **no backup of the VPS database** — [recorded above](#known-measured-and-not-yet-fixed)
+as the largest single exposure on the project. Multiplying the size of the
+unbacked thing is not a call a background thread should make quietly, so it is
+fenced four ways:
+
+| fence | default | what it does |
+|---|---|---|
+| `CLASH_RECRUIT_CEILING` | 12,000 | caps tracked + queued. **Refuses rather than trimming silently**, and counts queued as already spent — a queued tag is an enrolled tag that has not happened yet, so ignoring it just moves the breach two hours out |
+| `CLASH_RECRUIT_OPP_MIN` | 2 sightings | met once in two days is a stranger in a queue; met twice is somebody playing in the same water |
+| `CLASH_RECRUIT_OPP_MAX` | 500 / run | growth per day has a stated maximum instead of an emergent one |
+| `CLASH_RECRUIT` | **`off`** | the background loop does nothing until someone sets `on` |
+
+That last one follows `CLASH_OIE=off`: code that changes what the service
+*costs* ships dark and is switched on by someone who has read the number. The
+CLI runs on demand either way, so the feature is usable today without committing
+to the trajectory:
+
+```bash
+python server/recruit.py --dry-run     # reads everything, queues nothing
+python server/recruit.py --top 2000
+python server/recruit.py --no-opponents
+```
+
+`/api/analytics/status` grows a `recruit` block — enabled, last run, runs, last
+added, queue depth, ceiling. **Counts only, never tags.** That is the one
+unauthenticated route, and a list of who the service has decided to start
+collecting is a log of people rather than a metric, which is the same reason the
+request metrics are not keyed by route. It also does not bring the queue file
+into existence merely by being probed.
+
+**Not verified against a real database:** the opponent half. `H:` is unplugged,
+so `resolve_db_path()` returns `None` here and `opponent_tags()` correctly
+returns `[]`. Its SQL, its window and its ordering have unit tests; its
+behaviour against 18 GB of real `battles` has not been run, and the scan cost in
+particular is an estimate rather than a measurement.
+
+---
+
 ## Tracking a new tag, and the live battlelog
 
 **Verified end to end on production, 2026-08-26**, because "I think we built
@@ -8242,6 +8433,7 @@ yet, or does in a way that is fine now and will not be later.
 | **Thin tags read as broken** | a new player with a handful of battles clears no evidence floor, so Duel Analysis and Deck Counter are correctly empty and *look* faulty. The Deck Counter now says why in its own numbers; Duel Analysis does not yet |
 | **The site cannot enforce analytics tiers** | `api.deckkies.com` answers anyone. Making the gate real means routing those calls through a Vercel function that checks the tier, as the Coach's opponent read already does |
 | **Signed-in mobile** | unverified. The mobile pass was run signed out, so Cards, Duel Analysis and Duel Zone showed the gate card and their phone layouts have never actually been looked at |
+| **Recruiter, on a real database** | the leaderboard half is verified against the live API; the opponent half has never run against real `battles`, because `H:` is unplugged. The scan cost is an estimate. `CLASH_RECRUIT=off` until it has |
 | **No backup of the VPS database** | **the largest single exposure.** No backup directory, no cron, no timer; `deploy/backup_db.py` sits at `/opt/clashbot/deploy/` unscheduled. Cutover checklist item 11 is unmet, and the migration doc says outright there is "no second copy of the active database anywhere" |
 | **H:** | unplugged 2026-08-26 with contents intact, and still the only rollback. Frozen at that date, so its value decays daily — which is the argument for the row above. Must not be wiped: `archive.db` holds 1 May – 1 Jun, a month in no other copy |
 | **Deploying `server/`** | nothing enforces that `src/data/` goes with it. That omission emptied three screens silently; it is now merely *visible* (a console tile), not prevented |

@@ -1385,8 +1385,39 @@ _profile_cache: dict[str, tuple[dict | None, float]] = {}
 _PROFILE_TTL_S = 300.0
 
 
+def _ranked(result) -> dict:
+    """One `*PathOfLegendSeasonResult` block, flattened. Missing -> all None.
+
+    `leagueNumber` is deliberately NOT surfaced. Measured over 16 real players
+    on 2026-08-28, every single current result reported league 7 — the global
+    rank 1 player and a rank 2,352 player alike — so it separates nobody, and a
+    field that is constant across the whole population is not information.
+    """
+    if not isinstance(result, dict):
+        return {"trophies": None, "rank": None}
+    return {"trophies": result.get("trophies"), "rank": result.get("rank")}
+
+
 def cr_profile(tag: str) -> dict | None:
-    """Trophies, best trophies, arena and level from the live CR API.
+    """Ranked standing, trophies, arena and level from the live CR API.
+
+    RANKED IS THE HEADLINE, and the reason is measured. Trophy road caps at
+    14,000 and 8 of 14 sampled opponents were sitting exactly on it — a number
+    that says "this player is good" for everyone and ranks nobody. Their Path
+    of Legends trophies over the same sample spread 2,546 to 3,006, which is
+    the figure that actually separates two competitive players.
+
+    Three ranked blocks come back and they are NOT interchangeable:
+
+      current — this season. The standing. May be absent before someone plays
+                a ranked match in a new season, which is why trophy road stays
+                in the payload as the fallback rather than being replaced.
+      best    — the best SEASON, and its trophy count can be LOWER than the
+                current one (observed: current 2,713 / best 2,595). So a caller
+                may only print it as "best" when it actually exceeds current.
+      rank    — global placement, and it is `null` below the leaderboard cut
+                even when trophies are present (observed on a live account).
+                Optional everywhere it is displayed.
 
     Returns None on any failure — the caller shows stored stats instead. Cached
     for five minutes so re-sorting or changing the date range does not spend a
@@ -1418,6 +1449,8 @@ def cr_profile(tag: str) -> dict | None:
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             d = json.load(resp)
+        cur = _ranked(d.get("currentPathOfLegendSeasonResult"))
+        best = _ranked(d.get("bestPathOfLegendSeasonResult"))
         out = {
             "name": d.get("name"),
             "trophies": d.get("trophies"),
@@ -1425,6 +1458,10 @@ def cr_profile(tag: str) -> dict | None:
             "expLevel": d.get("expLevel"),
             "arena": (d.get("arena") or {}).get("name"),
             "clan": (d.get("clan") or {}).get("name"),
+            "rankedTrophies": cur["trophies"],
+            "rankedRank": cur["rank"],
+            "rankedBest": best["trophies"],
+            "rankedBestRank": best["rank"],
         }
     except Exception:
         out = None

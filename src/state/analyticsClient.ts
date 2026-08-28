@@ -67,6 +67,16 @@ export interface ApiProfile {
   expLevel: number | null;
   arena: string | null;
   clan: string | null;
+  /** Path of Legends — this season's standing. Null before they play a ranked
+   *  match in a new season, which is why the trophy-road pair stays above. */
+  rankedTrophies: number | null;
+  /** Global placement, and null below the leaderboard cut EVEN WHEN
+   *  `rankedTrophies` is set. Never assume one implies the other. */
+  rankedRank: number | null;
+  /** Best SEASON, not best trophies — it can be lower than `rankedTrophies`.
+   *  Only print it as "best" when it actually exceeds the current figure. */
+  rankedBest: number | null;
+  rankedBestRank: number | null;
 }
 
 /** Where a tag stands with collection.

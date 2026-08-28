@@ -409,13 +409,40 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
           </div>
         </div>
 
-        {/* Trophies and arena are not in the battle databases — they come from
-            the live CR API. When that is unreachable the cell falls back to
-            crowns, which is stored, rather than showing a blank. */}
+        {/* Ranked standing. Not in the battle databases — it comes from the
+            live CR API, and it degrades twice: to trophy road when the player
+            has no ranked season yet, then to stored crowns when the API itself
+            is unreachable, rather than showing a blank.
+
+            RANKED RATHER THAN TROPHY ROAD, and the reason is measured: trophy
+            road caps at 14,000 and 8 of 14 sampled opponents sat exactly on the
+            cap, so the old cell printed one identical number for most good
+            players. Their ranked trophies spread 2,546–3,006 over the same
+            sample. The arena goes with it — it is trophy-road furniture and
+            says nothing about a ranked standing.
+
+            Two nulls that are NOT redundant, both observed live:
+              · `rankedRank` is null below the leaderboard cut while
+                `rankedTrophies` is still set, so the rank is its own guard.
+              · `rankedBest` is the best SEASON and can be BELOW the current
+                season (observed 2,713 current against 2,595 best). Printing
+                that as "best" reads as a bug, so it only shows when it is
+                genuinely higher. */}
         <div className={styles.stat}>
           <span className={styles.statIcon}>{ICONS.rank}</span>
           <span className={styles.statText}>
-            {profile?.trophies != null ? (
+            {profile?.rankedTrophies != null ? (
+              <>
+                <span className={styles.statValue}>{nf.format(profile.rankedTrophies)}</span>
+                <span className={styles.statLabel}>
+                  Ranked
+                  {profile.rankedRank != null ? ` · #${nf.format(profile.rankedRank)}` : ''}
+                  {profile.rankedBest != null && profile.rankedBest > profile.rankedTrophies
+                    ? ` · best ${nf.format(profile.rankedBest)}`
+                    : ''}
+                </span>
+              </>
+            ) : profile?.trophies != null ? (
               <>
                 <span className={styles.statValue}>{nf.format(profile.trophies)}</span>
                 <span className={styles.statLabel}>

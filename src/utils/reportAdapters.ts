@@ -1,5 +1,6 @@
 import { CARDS_BY_KEY } from '../data/cards';
 import type {
+  ApiProfile,
   CardBoard,
   LivePlayerReport,
   MetaBoard,
@@ -43,6 +44,28 @@ function cardName(key: string): string {
 
 /* ------------------------------------------------------- player (stored) */
 
+/** The trophies row both player reports print, ranked first.
+ *
+ * `rankedBest` is the best SEASON and can sit BELOW the current season, so it
+ * is only called "best" when it actually is one — the same rule the screen
+ * follows. `rankedRank` is null below the leaderboard cut even with trophies
+ * present, so it is guarded separately.
+ */
+function rankedMeta(p: ApiProfile | null | undefined): { label: string; value: string }[] {
+  if (p?.rankedTrophies != null) {
+    const parts = [int(p.rankedTrophies)];
+    if (p.rankedRank != null) parts.push(`rank #${int(p.rankedRank)}`);
+    if (p.rankedBest != null && p.rankedBest > p.rankedTrophies) {
+      parts.push(`best ${int(p.rankedBest)}`);
+    }
+    return [{ label: 'Ranked', value: parts.join(' · ') }];
+  }
+  if (p?.trophies != null) {
+    return [{ label: 'Trophies', value: int(p.trophies) }];
+  }
+  return [];
+}
+
 export function playerReportDoc(r: StoredPlayerReport, tag: string): ReportDoc {
   const decided = r.player.wins + r.player.losses;
   const top = r.decks.slice(0, 10);
@@ -60,9 +83,10 @@ export function playerReportDoc(r: StoredPlayerReport, tag: string): ReportDoc {
       { label: 'Stored history', value: `${DAY(r.coverage.start)} – ${DAY(r.coverage.end)}` },
       { label: 'Battles', value: int(r.player.battles) },
       { label: 'Databases', value: tiersLabel(r.sources) },
-      ...(r.profile?.trophies != null
-        ? [{ label: 'Trophies', value: `${int(r.profile.trophies)} (best ${int(r.profile.bestTrophies)})` }]
-        : []),
+      // Mirrors the header tile, including its fallback order — a PDF that
+      // quotes trophy road while the screen quotes ranked is two answers to
+      // one question. See the note on the tile in PlayerAnalysis.tsx.
+      ...rankedMeta(r.profile),
       { label: 'Collection', value: r.tracking?.state ?? 'unknown' },
     ],
     blocks: [
@@ -155,9 +179,7 @@ export function livePlayerReportDoc(r: LivePlayerReport, tag: string): ReportDoc
       { label: 'Battles', value: `${r.battles} of ${r.logSize} in the log` },
       { label: 'Span', value: `${DAY(r.span.from)} – ${DAY(r.span.to)}` },
       { label: 'Collection', value: r.tracking.state },
-      ...(r.profile?.trophies != null
-        ? [{ label: 'Trophies', value: int(r.profile.trophies) }]
-        : []),
+      ...rankedMeta(r.profile),
     ],
     blocks: [
       {
