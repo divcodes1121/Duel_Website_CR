@@ -54,10 +54,12 @@ backed up is not a decision this module gets to make quietly, so:
     in two days is a stranger; met twice is somebody playing in the same water.
   * `OPP_MAX` caps how many new opponents one run may add, so growth per day
     has a stated maximum instead of an emergent one.
-  * the background loop is **off unless `CLASH_RECRUIT=on`**. Same convention
-    as `CLASH_OIE=off`: code that changes what the service costs ships dark and
-    is turned on by someone who has read what it costs. The functions run on
-    demand from the CLI at the bottom of this file regardless.
+  * the background loop is **off unless `CLASH_RECRUIT=on`**, and its opponent
+    half is off again unless `CLASH_RECRUIT_OPPONENTS=on`. Same convention as
+    `CLASH_OIE=off`: code that changes what the service costs ships dark and is
+    turned on by someone who has read what it costs. Two switches because the
+    two sources carry different risk — see `OPPONENTS_ENABLED`. The functions
+    run on demand from the CLI at the bottom of this file regardless.
 """
 
 from __future__ import annotations
@@ -80,6 +82,18 @@ import tracking
 
 #: `off` (default) / `on`. Only the background loop reads this.
 ENABLED = os.getenv("CLASH_RECRUIT", "off").strip().lower()
+
+#: The OPPONENT half, separately, and off even when the loop is on.
+#:
+#: THE TWO SOURCES HAVE DIFFERENT RISK AND MUST HAVE DIFFERENT SWITCHES. The
+#: leaderboard is a fixed population — the top N of ranked, the same ~2000
+#: accounts week to week, of which most are already tracked — so turning it on
+#: costs a one-off step and then only the churn. Opponent harvest is unbounded
+#: by its own definition: every player polled yields up to 25 more opponents
+#: every two hours, and each of those is then polled. One flag for both would
+#: mean enabling the bounded thing silently enables the unbounded one, which is
+#: exactly the mistake this file exists to avoid making quietly.
+OPPONENTS_ENABLED = os.getenv("CLASH_RECRUIT_OPPONENTS", "off").strip().lower()
 
 #: Seconds between background runs. Two hours by default because that is the
 #: bot's poll interval — running more often cannot produce more opponents, it
@@ -407,6 +421,7 @@ def state() -> dict:
         queued = None
     return {
         "enabled": ENABLED == "on",
+        "opponents": OPPONENTS_ENABLED == "on",
         "lastRunAt": last,
         "runs": runs,
         "lastAdded": added,
@@ -420,6 +435,8 @@ def start_background() -> None:
     if ENABLED != "on":
         return
 
+    opponents = OPPONENTS_ENABLED == "on"
+
     def loop():
         # A first run at startup would collide with the meta and counter
         # rollups, which are the two things a fresh process actually needs to
@@ -427,7 +444,7 @@ def start_background() -> None:
         time.sleep(120)
         while True:
             try:
-                run_once()
+                run_once(opponents=opponents)
             except Exception:  # noqa: BLE001
                 pass
             time.sleep(max(300, REFRESH_SECONDS))

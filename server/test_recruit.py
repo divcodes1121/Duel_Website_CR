@@ -392,6 +392,34 @@ class Resilience(unittest.TestCase):
         self.assertEqual(report["leaderboard"]["error"], "RuntimeError")
         self.assertEqual(report["opponents"]["error"], "RuntimeError")
 
+    def test_the_opponent_half_has_its_own_switch(self):
+        """Enabling the bounded source must not enable the unbounded one.
+
+        The leaderboard is the same ~2000 accounts week to week; opponent
+        harvest yields up to 25 new tags per tracked player per poll, and each
+        of those is then polled. One flag for both would make turning on the
+        safe thing turn on the dangerous one silently."""
+        self.assertEqual(os.getenv("CLASH_RECRUIT_OPPONENTS", "off"), "off")
+        with Stub(recruit, ENABLED="on", OPPONENTS_ENABLED="off"):
+            self.assertFalse(recruit.state()["opponents"])
+            self.assertTrue(recruit.state()["enabled"])
+
+    def test_run_once_can_skip_the_opponent_half(self):
+        seen = {}
+
+        def lb(n, season=None):
+            seen["leaderboard"] = True
+            return []
+
+        def opp(*a, **k):
+            seen["opponents"] = True
+            return []
+
+        with Stub(recruit, leaderboard_tags=lb, opponent_tags=opp):
+            recruit.run_once(opponents=False)
+        self.assertTrue(seen.get("leaderboard"))
+        self.assertNotIn("opponents", seen)
+
     def test_the_background_loop_stays_off_by_default(self):
         """It enrols players into a database with no backup. Same convention as
         CLASH_OIE: code that changes what the service costs ships dark."""

@@ -6770,17 +6770,37 @@ as the largest single exposure on the project. Multiplying the size of the
 unbacked thing is not a call a background thread should make quietly, so it is
 fenced four ways:
 
-| fence | default | what it does |
+| fence | setting | what it does |
 |---|---|---|
 | `CLASH_RECRUIT_CEILING` | 12,000 | caps tracked + queued. **Refuses rather than trimming silently**, and counts queued as already spent — a queued tag is an enrolled tag that has not happened yet, so ignoring it just moves the breach two hours out |
+| `CLASH_RECRUIT_OPPONENTS` | **`off`** | the opponent half has its own switch, and it stays off. Two sources, two flags, because enabling the bounded one must not silently enable the unbounded one |
 | `CLASH_RECRUIT_OPP_MIN` | 2 sightings | met once in two days is a stranger in a queue; met twice is somebody playing in the same water |
 | `CLASH_RECRUIT_OPP_MAX` | 500 / run | growth per day has a stated maximum instead of an emergent one |
-| `CLASH_RECRUIT` | **`off`** | the background loop does nothing until someone sets `on` |
+| `CLASH_RECRUIT` | **`on` since 2026-08-29** | the leaderboard half runs every two hours |
 
-That last one follows `CLASH_OIE=off`: code that changes what the service
-*costs* ships dark and is switched on by someone who has read the number. The
-CLI runs on demand either way, so the feature is usable today without committing
-to the trajectory:
+### It is on now, and only the bounded half
+
+Switched on in production on **2026-08-29**, for the leaderboard only. What made
+that affordable is the overlap: of the top 2,000, **1,433 were already tracked**
+and only **567 were new** — about **+18 GB** at steady state against 358 GB free
+on the volume, not the +64 GB a naive count suggests. The first automatic run
+queued exactly those 567.
+
+Polling has room for them too: the bot does 3,293 players in ~6m 30s at 8.4/s,
+so the new arrivals cost about a minute a cycle.
+
+**The opponent half stays off**, behind its own flag. That is the unbounded one
+— every player polled yields up to 25 more opponents every two hours, each of
+which is then polled — and one flag for both would have meant enabling the safe
+source silently enabled the dangerous one.
+
+The chain end to end: `recruit.py` writes `server/.tracking.db`, and the bot's
+`drain_tag_requests()` reads that same file at the top of every two-hourly poll,
+batch 2,000, skipping anything already in `tracked_players`. Both `/etc/royalweb.env`
+and `/opt/clashbot/.env` point `CLASH_TRACKING_DB` at the same path — verified,
+because if they ever diverge the queue fills forever and nothing enrols.
+
+The CLI still runs on demand either way:
 
 ```bash
 python server/recruit.py --dry-run     # reads everything, queues nothing

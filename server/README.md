@@ -131,7 +131,8 @@ fixed secret.
 | `CLASH_ALLOWED_ORIGIN` | *(unset — no CORS headers sent)* |
 | `CLASH_RATE_LIMIT` / `CLASH_RATE_WINDOW` | `120` requests / `60` s per client |
 | `CLASH_TRUSTED_PROXY` | unset; `1` believes `X-Forwarded-For` |
-| `CLASH_RECRUIT` | `off` — `on` starts the background recruiter |
+| `CLASH_RECRUIT` | **`on` in production since 2026-08-29.** Starts the background recruiter |
+| `CLASH_RECRUIT_OPPONENTS` | `off`. The opponent half, separately — it is the unbounded source |
 | `CLASH_RECRUIT_TOP` | `2000` ranked players per run |
 | `CLASH_RECRUIT_REFRESH` | `7200` seconds, matching the bot's poll |
 | `CLASH_RECRUIT_OPP_DAYS` / `_OPP_MIN` / `_OPP_MAX` | `2` days / `2` sightings / `500` per run |
