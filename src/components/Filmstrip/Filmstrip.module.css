@@ -415,3 +415,42 @@
     transform: none;
   }
 }
+
+/* ── THE DOT RAIL, FOR A FINGER ──────────────────────────────────────────
+ *
+ * The dots are 6x6. They are the only way to jump straight to an area on the
+ * landing screen without swiping past everything between, and at 6px they are
+ * a target you hit by luck.
+ *
+ * BOTH HALVES ARE NEEDED AND THE GAP IS THE HALF THAT IS EASY TO MISS. An
+ * `::after` alone would give each dot a 24px hit area centred on a dot whose
+ * neighbour's centre is only 6 + 6.4 = 12.4px away — the areas would overlap
+ * by half, so a tap between two dots would go to whichever the hit test
+ * reached first, and the rail would feel worse than it does now rather than
+ * better. Opening the gap to 1.15rem puts the centres 24.4px apart, which is
+ * exactly enough for 24px targets that touch and never overlap.
+ *
+ * The dots themselves do not change size: the rail is a position indicator
+ * first, and seven fat dots under the card would read as a control bar. */
+@media (pointer: coarse) {
+  .rail {
+    /* 1.3rem, not 1.15: measured, 1.15 put the centres 24px apart and each
+       target came back 23px — the two areas meet exactly, so each is a
+       hair under the 24px floor rather than a hair over. */
+    gap: 1.3rem;
+    /* The taller hit areas reach up into the card; give the rail its own room
+       so they land on the rail rather than on the artwork above it. */
+    padding-bottom: 0.55rem;
+  }
+
+  .dot {
+    position: relative;
+  }
+
+  .dot::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+    border-radius: 50%;
+  }
+}

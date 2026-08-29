@@ -99,3 +99,33 @@
     transform: none;
   }
 }
+
+/* ── FINGER TARGETS ──────────────────────────────────────────────────────
+ *
+ * 1.55rem is 24.8px — over WCAG 2.5.8's 24px floor by less than a pixel, and
+ * a long way under anything comfortable. Measured on a phone against the live
+ * site, every one of these on Player, Meta, Recent Battles and Deck Counter
+ * came out 25x25, and they are the payoff of each of those screens: copy the
+ * deck, or open it in the game.
+ *
+ * THE SQUARE GROWS RATHER THAN TAKING AN `::after`. The `::after` trick is
+ * right where a target stands alone (the theme toggle, "Forgot your
+ * password?"); here the two chips sit 0.25rem apart, so hit areas inset past
+ * their own borders would overlap each other and a tap near the middle would
+ * land on whichever came later in the DOM. Growing the real box keeps every
+ * press unambiguous.
+ *
+ * The row is `flex: 0 0 auto` beside a card strip that is `flex: 1 1 0`, so
+ * the strip yields the ~18px this costs rather than the row overflowing —
+ * verified at 390px on all four screens after the change. */
+@media (pointer: coarse) {
+  .actions[data-size='sm'] .button {
+    width: 2.15rem;
+    height: 2.15rem;
+  }
+
+  .actions[data-size='md'] .button {
+    width: 2.3rem;
+    height: 2.3rem;
+  }
+}
