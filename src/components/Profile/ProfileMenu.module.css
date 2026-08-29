@@ -1,9 +1,38 @@
+/* The account dropdown, redrawn to the reference scheme.
+ *
+ * The reference is a light card holding a stack of GROUPS: an identity block,
+ * one filled row for the tier, then rounded groups of rows separated by rules,
+ * and a red row on its own at the end. Two details carry most of the character
+ * and both are here:
+ *
+ *   - **the hovered row lifts as a raised card**, rather than taking a wash.
+ *     That is what makes the menu read as a stack of surfaces instead of a
+ *     list, and it is the single thing most worth copying.
+ *   - **the tier row is the one raised thing in it.** A menu with one emphatic
+ *     row has a clear primary action; a menu with three has none.
+ *
+ * WHERE IT DEPARTS FROM THE REFERENCE: that row is not coloured. The reference
+ * fills it with a blue gradient because the pill on it is flat white and
+ * carries no colour of its own. Ours carries the real `TierBadge`, a lit liquid
+ * in the tier's own hue — so a coloured row put blue on blue and maroon on
+ * maroon, and the badge, which is the part that reacts, lost. The row is the
+ * page's own surface in both themes and the badge is the only colour in it.
+ *
+ * Every colour here is a token; the file declares no literal of its own, so it
+ * follows the theme with no `[data-theme]` branch anywhere in it.
+ */
+
 .menu {
   position: fixed;
   z-index: 300;
-  width: 240px;
-  padding: 0.6rem;
-  border-radius: 18px;
+  /* Wider than the old 240px, twice over. The reference's rows carry an icon,
+     a label and sometimes a pill, and at 240 the tier row wrapped; then
+     "ADMIN Mode Activated" measured 149px against the 108px the label had, so
+     the row is now sized to its longest real string rather than to the
+     shortest. Measured, not guessed. */
+  width: 292px;
+  padding: 0.5rem;
+  border-radius: 20px;
   border: 1px solid var(--glass-border);
   transform-origin: top right;
   animation: profile-menu-in 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
@@ -35,121 +64,269 @@
 .identity {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.45rem 0.5rem 0.6rem;
+  gap: 0.7rem;
+  padding: 0.55rem 0.6rem 0.7rem;
+  min-width: 0;
 }
 
 .bigAvatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  flex: none;
+  width: 2.4rem;
+  height: 2.4rem;
   border-radius: 999px;
-  flex-shrink: 0;
-  color: var(--accent-contrast);
-  background: linear-gradient(140deg, var(--accent-light), var(--accent) 60%, var(--accent-deep));
-  box-shadow: inset 0 1px 0 var(--highlight);
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text-muted);
 }
 
 .identityText {
   display: flex;
   flex-direction: column;
-  line-height: 1.25;
+  gap: 0.1rem;
   min-width: 0;
 }
 
 .username {
-  font-size: 0.92rem;
-  font-weight: 800;
+  font-size: 0.86rem;
+  font-weight: 700;
   color: var(--text);
+  /* A display name can be anything; the row must not grow to fit it. */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.email {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-/* --- stats ------------------------------------------------------------ */
+/* --- the tier row ------------------------------------------------------
+ *
+ * NEUTRAL, NOT COLOURED. The reference fills this row with a blue gradient and
+ * puts a flat white pill on it, which works there because the pill carries no
+ * colour of its own. Ours does: the badge in this row is the real `TierBadge`,
+ * a lit liquid in the tier's own hue. Painting the row the same hue put blue on
+ * blue and maroon on maroon — the two things that should be telling you apart
+ * were the same colour, and the badge, which is the part that actually reacts,
+ * was the one that lost.
+ *
+ * So the row takes the page's own surface — dark on dark, light on light — and
+ * the badge is the only colour in it. That also settles the earlier question
+ * about admin needing its own gradient: it does not, because the row no longer
+ * states the tier by colour at all. The badge does.
+ */
+
+.tierRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  margin-bottom: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-nested);
+  color: var(--text);
+  font: inherit;
+  /* A notch down from the rows below it: this line is the longest in the menu
+     and the only one competing with a badge for the same width. */
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+}
+
+/* Only the upgrade version is a link, so only it responds to the pointer, and
+   it lifts the same way the menu rows do rather than inventing a second
+   hover language. The statement version must not look pressable. */
+a.tierRow {
+  cursor: pointer;
+  transition:
+    background-color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
+}
+
+a.tierRow:hover,
+a.tierRow:focus-visible {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+}
+
+.tierIcon {
+  display: flex;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.tierLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The flat `.tierPill` is gone: the row carries the real `TierBadge` now, which
+   brings its own shape, its own colour and its own liquid. Nothing here should
+   style it — it is a component, not a span. */
+
+/* --- the two figures ---------------------------------------------------- */
 
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.4rem;
-  padding: 0 0.15rem 0.2rem;
+  margin-bottom: 0.35rem;
 }
 
 .stat {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.1rem;
-  padding: 0.45rem 0.3rem;
-  border-radius: 12px;
-  background: var(--slot-bg);
-  border: 1px solid var(--slot-border);
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  gap: 0.05rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 11px;
+  background: var(--surface-nested);
 }
 
 .statValue {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 800;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
 .statLabel {
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.62rem;
   color: var(--text-muted);
-  text-align: center;
+  letter-spacing: 0.02em;
 }
 
-/* --- items ------------------------------------------------------------ */
+/* --- groups ------------------------------------------------------------
+ *
+ * The reference separates its rows into blocks with a hairline between them
+ * rather than running one long list. Three groups here, answering three
+ * different questions — where can I go, what can I read, how does this look —
+ * and the log out sits outside all of them because it is the only row that
+ * ends the session. */
 
-.divider {
-  height: 1px;
-  margin: 0.4rem 0.3rem;
-  background: var(--glass-border);
+.group {
+  padding: 0.25rem 0;
+  border-top: 1px solid var(--border);
 }
+
+.group:first-of-type {
+  border-top: none;
+}
+
+/* --- rows --------------------------------------------------------------- */
 
 .item {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.65rem;
   width: 100%;
-  padding: 0.5rem 0.55rem;
-  border: none;
-  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 11px;
   background: none;
   color: var(--text);
+  font: inherit;
   font-size: 0.82rem;
-  font-weight: 650;
-  font-family: inherit;
+  font-weight: 600;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease;
+  transition:
+    background-color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
+}
+
+/* THE HOVERED ROW LIFTS AS A CARD. This is the reference's one real move: the
+   row it is pointing at becomes a raised white surface with a border and a
+   shadow, so the menu reads as a stack of cards rather than a list with a
+   highlight running down it. `--surface` over `--glass-fill-strong` is the
+   same one-rung lift the rest of this project uses. */
+.item:hover,
+.item:focus-visible {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
 }
 
 .itemIcon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 7px;
-  flex-shrink: 0;
-  font-size: 0.8rem;
+  flex: none;
+  width: 1.05rem;
   color: var(--text-muted);
-  background: var(--slot-bg);
-  border: 1px solid var(--slot-border);
 }
 
+.item:hover .itemIcon,
+.item:focus-visible .itemIcon {
+  color: var(--text);
+}
+
+/* Log out. The reference gives its destructive row a pink wash rather than a
+   red label alone, so it reads as a different KIND of thing at a glance
+   instead of only on reading. */
 .itemDanger {
-  color: var(--error-soft);
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--hue-pink);
 }
 
 .itemDanger .itemIcon {
-  color: var(--error-soft);
+  color: var(--hue-pink);
+}
+
+.itemDanger:hover,
+.itemDanger:focus-visible {
+  background: color-mix(in srgb, var(--hue-pink) 12%, transparent);
+  border-color: color-mix(in srgb, var(--hue-pink) 32%, transparent);
+  color: var(--hue-pink);
+}
+
+.itemDanger:hover .itemIcon {
+  color: var(--hue-pink);
+}
+
+/* --- the theme row -----------------------------------------------------
+ *
+ * A row, not a button. The switch owns the click; nesting a control inside a
+ * control double-fires it, which is the trap the Duel Zone's `.gameRow` hit
+ * with a button inside a button. It gets no hover lift for the same reason —
+ * the row is a label, and a label that looks pressable is a lie. */
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* No label. The glyph and the switch are the whole row, so this only holds
+   them apart — see the note at the call site. */
+.switchSpacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.switchControl {
+  flex: none;
 }

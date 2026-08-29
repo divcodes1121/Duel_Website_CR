@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAccountStore } from '../../state/accountStore';
-import { useThemeStore } from '../../state/themeStore';
 import { useBuilderStore } from '../../state/store';
+import { ThemeToggle } from '../Theme/ThemeToggle';
+import { TierBadge } from '../TierBadge/TierBadge';
+import { useThemeStore } from '../../state/themeStore';
+import { TIER_LABEL } from '../../state/tiers';
 import styles from './ProfileMenu.module.css';
 
 function UserIcon({ size = 16 }: { size?: number }) {
@@ -13,11 +16,80 @@ function UserIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+function CrownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+      <path d="M3 8l4.5 3.5L12 5l4.5 6.5L21 8l-1.7 9.5a1 1 0 0 1-1 .8H5.7a1 1 0 0 1-1-.8z" />
+    </svg>
+  );
+}
+
+/** The stroked line icons the rows use. 24x24, 1.7, currentColor. */
+const ICON = {
+  home: <path d="M3 10.5 12 3l9 7.5M5 9.5V20h14V9.5" />,
+  swords: <path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4" />,
+  cards: <path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM8 9h8v6H8z" />,
+  folder: <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" />,
+  book: <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z" />,
+  console: <path d="M4 6h16M4 12h16M4 18h10" />,
+  sun: <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />,
+  moon: <path d="M20 13.5A8 8 0 1 1 10.5 4a6.5 6.5 0 0 0 9.5 9.5z" />,
+  out: <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />,
+};
+
+function Glyph({ d }: { d: keyof typeof ICON }) {
+  return (
+    <span className={styles.itemIcon}>
+      <svg
+        viewBox="0 0 24 24"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        {ICON[d]}
+      </svg>
+    </span>
+  );
+}
+
 interface MenuPos {
   top: number;
   right: number;
 }
 
+/**
+ * The account dropdown.
+ *
+ * ── THE SCHEME ───────────────────────────────────────────────────────────
+ *
+ * Redrawn to the reference layout: an identity block, one filled row for the
+ * tier, then the destinations in GROUPS separated by rules rather than one
+ * undifferentiated list, and a red row on its own at the bottom. The hovered
+ * row lifts as a raised card instead of taking a wash, which is the detail
+ * that makes the whole thing read as a stack of cards rather than a list.
+ *
+ * Grouping is the substantive part. The old menu was nine rows in a column
+ * with two dividers placed by accident of order; these are three groups that
+ * answer three different questions — where can I go, what can I read, and how
+ * does this look — and the log out sits outside all of them because it is the
+ * only row that ends the session.
+ *
+ * ── THE THEME ROW IS A SWITCH NOW ────────────────────────────────────────
+ *
+ * It was a menu item labelled "Light mode" that changed the theme when
+ * clicked: an ACTION named after the state it would produce, which is the
+ * opposite convention from the switch every other screen uses. It is that same
+ * switch here, smaller, so the row states what the theme IS.
+ *
+ * The row itself is a `<div>`, not a button. The switch owns the click, and
+ * nesting a control inside a control double-fires it — the same trap the Duel
+ * Zone's `.gameRow` hit with a button inside a button.
+ */
 export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) {
   /* TWO STORES, AND THE MENU MUST FOLLOW THE ONE IN CHARGE.
      There is ONE store now. `authStore` and its twenty bundled accounts are
@@ -34,7 +106,6 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
     void accountSignOut();
   }
   const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const library = useBuilderStore((s) => s.library);
   const homeDecks = useBuilderStore((s) => s.sets.home.decks);
 
@@ -81,6 +152,8 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
     window.location.hash = hash;
   }
 
+  const paid = tier === 'pro' || tier === 'admin';
+
   return (
     <>
       <button
@@ -99,27 +172,77 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
 
       {createPortal(
         open && pos ? (
-            <div
-              className={styles.menu}
-              style={{ top: pos.top, right: pos.right }}
-              role="menu"
-            >
-              <div ref={menuRef}>
+          <div className={styles.menu} style={{ top: pos.top, right: pos.right }} role="menu">
+            <div ref={menuRef}>
+              {/* ── IDENTITY ────────────────────────────────────────────
+                  Name over email. The email is back: this slot used to hold
+                  the literal string "Test account" from the deleted gate, and
+                  on a site where one person may hold several accounts it is
+                  the only line that says WHICH one is signed in. */}
               <div className={styles.identity}>
                 <span className={styles.bigAvatar}>
                   <UserIcon size={20} />
                 </span>
                 <div className={styles.identityText}>
                   <span className={styles.username}>{authUser}</span>
-                  {/* JUST THE NAME. This slot held the literal string
-                      "Test account" (from the deleted twenty-account gate),
-                      then briefly the tier — but the tier is already a badge
-                      in the top bar beside this menu's own trigger, and a
-                      panel that repeats what is visible two centimetres away
-                      is noise. */}
+                  {accountEmail && <span className={styles.email}>{accountEmail}</span>}
                 </div>
               </div>
 
+              {/* ── THE TIER ROW ───────────────────────────────────────
+                  Three readings of one row, decided by what the account has:
+
+                    free / member   Upgrade profile        (a link)
+                    pro             PRO Mode Activated     (a statement)
+                    admin           ADMIN Mode Activated   (a statement)
+
+                  Free sits with member rather than getting a fourth wording:
+                  both of them are accounts that could upgrade, which is the
+                  only thing this row is asking. What separates them is the
+                  badge, and a free account has none to show.
+                  Free and Member get an upgrade — the only thing in this menu
+                  that should be loud, so it takes the filled treatment. Pro
+                  and Admin get the same row as a statement with nothing to
+                  click: offering Pro to someone who has it is how a product
+                  tells you it is not listening. */}
+              {paid ? (
+                <div className={styles.tierRow} data-tier={tier}>
+                  <span className={styles.tierIcon}>
+                    <CrownIcon />
+                  </span>
+                  <span className={styles.tierLabel}>
+                    {TIER_LABEL[tier].toUpperCase()} Mode Activated
+                  </span>
+                  {/* THE REAL BADGE, not a flat pill printed to look like one.
+                      It is the same liquid button the top bar wears, at the
+                      size this row has room for — so the thing that states
+                      your tier is one component with one appearance wherever
+                      it shows up, and it reacts here exactly as it does
+                      there. */}
+                  <TierBadge tier={tier} width={68} height={24} />
+                </div>
+              ) : (
+                <a
+                  className={styles.tierRow}
+                  data-tier="upgrade"
+                  role="menuitem"
+                  href="#/signin"
+                  onClick={() => setPos(null)}
+                >
+                  <span className={styles.tierIcon}>
+                    <CrownIcon />
+                  </span>
+                  <span className={styles.tierLabel}>Upgrade profile</span>
+                  {/* The upgrade row advertises the tier it sells, so the badge
+                      is forced to `pro` rather than read from the account —
+                      the account is by definition not pro, and `TierBadge`
+                      renders nothing for free. */}
+                  <TierBadge tier="pro" width={68} height={24} />
+                </a>
+              )}
+
+              {/* The two figures stay. They are the only thing in here that is
+                  about this account rather than about navigation. */}
               <div className={styles.stats}>
                 <div className={styles.stat}>
                   <span className={styles.statValue}>{library.length}</span>
@@ -131,90 +254,79 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                 </div>
               </div>
 
-              <div className={styles.divider} />
+              {/* ── GROUP: where you can go ─────────────────────────── */}
+              <div className={styles.group}>
+                <button type="button" className={styles.item} role="menuitem" onClick={() => go('')}>
+                  <Glyph d="home" />
+                  Home
+                </button>
+                <button
+                  type="button"
+                  className={styles.item}
+                  role="menuitem"
+                  onClick={() => go('#/builder')}
+                >
+                  <Glyph d="swords" />
+                  Royal Duels
+                </button>
+                <button
+                  type="button"
+                  className={styles.item}
+                  role="menuitem"
+                  onClick={() => go('#/decks')}
+                >
+                  <Glyph d="cards" />
+                  Deck&apos;s Home
+                </button>
+                <button
+                  type="button"
+                  className={styles.item}
+                  role="menuitem"
+                  onClick={() => go('#/palette')}
+                >
+                  <Glyph d="folder" />
+                  Counter Palette
+                </button>
+              </div>
 
-              <button type="button" className={styles.item} role="menuitem" onClick={() => go('')}>
-                <span className={styles.itemIcon}>
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-                    <path d="M12 3l9 8h-3v9h-4v-6H10v6H6v-9H3z" />
-                  </svg>
-                </span>
-                Home
-              </button>
-              <button
-                type="button"
-                className={styles.item}
-                role="menuitem"
-                onClick={() => go('#/builder')}
-              >
-                <span className={styles.itemIcon}>
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-                    <path d="M3 8l4 4 5-7 5 7 4-4v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z" />
-                  </svg>
-                </span>
-                Royal Duels
-              </button>
-              <button
-                type="button"
-                className={styles.item}
-                role="menuitem"
-                onClick={() => go('#/decks')}
-              >
-                <span className={styles.itemIcon}>
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-                    <path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" />
-                  </svg>
-                </span>
-                Deck&apos;s Home
-              </button>
-              <button
-                type="button"
-                className={styles.item}
-                role="menuitem"
-                onClick={() => go('#/palette')}
-              >
-                <span className={styles.itemIcon}>
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-                    <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" />
-                  </svg>
-                </span>
-                Counter Palette
-              </button>
-              <button
-                type="button"
-                className={styles.item}
-                role="menuitem"
-                onClick={() => {
-                  toggleTheme();
-                }}
-              >
-                <span className={styles.itemIcon}>{theme === 'dark' ? '☀' : '☾'}</span>
-                {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-              </button>
-
-              {/* Only admins are offered it. The route and the database both
-                  refuse everyone else anyway — this just avoids showing a
-                  door that does not open. */}
-              {tier === 'admin' && (
-                <>
-                  <div className={styles.divider} />
+              {/* ── GROUP: what you can read, and the console for those who
+                  have one. Only admins are offered it; the route and the
+                  database both refuse everyone else anyway, so this just
+                  avoids showing a door that does not open. */}
+              <div className={styles.group}>
+                <a className={styles.item} role="menuitem" href="#/guide" onClick={() => setPos(null)}>
+                  <Glyph d="book" />
+                  Field Book
+                </a>
+                {tier === 'admin' && (
                   <a
                     className={styles.item}
                     role="menuitem"
                     href="#/admin"
                     onClick={() => setPos(null)}
                   >
-                    <span className={styles.itemIcon}>
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-                        <path d="M4 5h16v2H4zm0 6h16v2H4zm0 6h10v2H4z" />
-                      </svg>
-                    </span>
+                    <Glyph d="console" />
                     Console
                   </a>
-                </>
-              )}
+                )}
+              </div>
 
-              <div className={styles.divider} />
+              {/* ── GROUP: how it looks ─────────────────────────────── */}
+              <div className={styles.group}>
+                {/* NO WORDS. The leading glyph says which mode is on and the
+                    switch says which way it goes, so a label between them
+                    would be a third statement of the same fact — and the one
+                    it used to make ("Dark mode") was ambiguous about whether
+                    it described the state or the action. The row keeps the
+                    others' icon-left rhythm rather than floating a lone
+                    switch in an empty band. `aria-label` on the switch is what
+                    carries the name now, which it always did. */}
+                <div className={styles.switchRow}>
+                  <Glyph d={theme === 'dark' ? 'moon' : 'sun'} />
+                  <span className={styles.switchSpacer} />
+                  <ThemeToggle size="1.05rem" className={styles.switchControl} />
+                </div>
+              </div>
 
               <button
                 type="button"
@@ -225,15 +337,11 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                   logout();
                 }}
               >
-                <span className={styles.itemIcon}>
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-                    <path d="M10 3h4a2 2 0 0 1 2 2v3h-2V5h-4v14h4v-3h2v3a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm7.5 6l4 3-4 3v-2H12v-2h5.5z" />
-                  </svg>
-                </span>
+                <Glyph d="out" />
                 Log out
               </button>
-              </div>
             </div>
+          </div>
         ) : null,
         document.body,
       )}
