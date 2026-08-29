@@ -215,3 +215,22 @@
   place-items: center;
   color: var(--hue-blue);
 }
+
+/* ── ON A PHONE THIS IS A SECTION, NOT A WINDOW ─────────────────────────
+ *
+ * See the long note on `.tool` in `Dashboard.module.css`. Every analytics
+ * screen is `flex: 1; min-height: 0; overflow-y: auto` — a pane that fills the
+ * panel and scrolls inside it — and stacked on a 390px phone that is a small
+ * window scrolling through a tall document inside a page that does not scroll
+ * at all. Measured on the live Meta board: the table sat in a 356x335 box
+ * hiding 4,097px, while `.main` reported scrollHeight === clientHeight.
+ *
+ * `.main` is the only scroll region below this width. Matching the 62rem the
+ * panel itself switches at, so the two cannot disagree. */
+@media (max-width: 62rem) {
+  .galleryScroll {
+    flex: none;
+    min-height: auto;
+    overflow-y: visible;
+  }
+}

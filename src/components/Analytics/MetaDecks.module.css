@@ -369,3 +369,31 @@
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+
+/* ── ON A PHONE THIS IS A SECTION, NOT A WINDOW ─────────────────────────
+ *
+ * See the long note on `.tool` in `Dashboard.module.css`. Every analytics
+ * screen is `flex: 1; min-height: 0; overflow-y: auto` — a pane that fills the
+ * panel and scrolls inside it — and stacked on a 390px phone that is a small
+ * window scrolling through a tall document inside a page that does not scroll
+ * at all. Measured on the live Meta board: the table sat in a 356x335 box
+ * hiding 4,097px, while `.main` reported scrollHeight === clientHeight.
+ *
+ * `.main` is the only scroll region below this width. Matching the 62rem the
+ * panel itself switches at, so the two cannot disagree. */
+@media (max-width: 62rem) {
+  .tableWrap {
+    /* THE `overflow` STAYS `auto` HERE, AND ONLY THIS ONE DOES. `.table` is
+       `min-width: 1020px` against a 356px screen, so this wrap is a genuine
+       horizontal scroller and must remain one — it is in the same short list
+       as `.phoneNav` and the deck action rail.
+
+       Growing the box is what moves the VERTICAL scroll to the page: once the
+       wrap is as tall as its rows there is no vertical overflow left for it to
+       take, so `auto` resolves to a sideways scroll and nothing else. Setting
+       `overflow-y: visible` would not have worked anyway — `visible` computes
+       to `auto` beside an `auto` on the other axis. */
+    flex: none;
+    min-height: auto;
+  }
+}
