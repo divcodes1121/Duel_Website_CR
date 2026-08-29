@@ -847,6 +847,17 @@ rung, and it is invisible until a client formats it — which is exactly how it
 shipped for an afternoon, with 59 passing tests, because the fixture had
 invented the same wrong name.
 
+**The pool is one candidate per (player, deck) pair.** It used to be
+deduplicated across players — a shared list kept for whoever had played it more
+— and that made the per-player board impossible: the other teammate could not be
+offered the deck they actually play. Dedup happens only WITHIN a player now.
+`_DeckProfile` is keyed by the cards and shared by reference, so a list two
+teammates both run still costs one set of database reads.
+
+`folders[].perPlayer` is the payload the screen is built from: one entry per
+blue player, in roster order, each with that player's own top 3 and a `reason`
+when they have none. Every player appears, including one with nothing to offer.
+
 Floors: `MIN_COMFORT_GAMES` 5 (a deck under it is one somebody tried, not one
 they play), `MIN_OPPONENT_DECK_GAMES` 2, `MAX_SQUAD` 8 per side (refused, never
 truncated), `TOP_N` 3. `COMFORT_WEIGHT` is 1.5 points and is a TIEBREAK — sized

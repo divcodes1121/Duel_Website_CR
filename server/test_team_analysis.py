@@ -212,10 +212,21 @@ shared = [
     player("#B2", "Aditya", [deck("Hog", HOG, matches=12, wins=6, wc="hog")]),
 ]
 dedup = ta._candidates(shared)
-check("the same deck on two players is ONE candidate", len(dedup) == 1)
-check("kept for whoever has played it more",
-      dedup[0].owner["name"] == "Ravi",
-      "two rows of one deck is one option and a note, not two options")
+check("A DECK TWO PLAYERS BOTH RUN IS TWO CANDIDATES, one each",
+      len(dedup) == 2,
+      "it used to be deduplicated to whoever played it more, which made the "
+      "per-player board impossible: the other teammate could not be offered "
+      "the deck they actually play")
+check("and both owners are represented",
+      sorted(c.owner["name"] for c in dedup) == ["Aditya", "Ravi"])
+check("but the expensive profile is read ONCE and shared by reference",
+      dedup[0].profile is dedup[1].profile,
+      "two teammates on one list must not cost two sets of database reads")
+check("a player listing the same deck twice still gets one candidate",
+      len(ta._candidates([player("#B9", "Dup", [
+          deck("Hog", HOG, matches=40, wc="hog"),
+          deck("Hog", HOG, matches=30, wc="hog")])])) == 1,
+      "dedup WITHIN a player is still right - one person, one list, one option")
 
 check("a deck that is not exactly 8 cards is not a candidate",
       ta._candidates([player("#B3", "Sam",
@@ -247,10 +258,15 @@ opponent_spread = ta._spread([
     deck("Golem", GOLEM, matches=90, wc="golem"),
     deck("Xbow", XBOW, matches=10, wc="xbow"),
 ])
-hog_card = ta._Scorecard(deck("Hog", HOG, matches=40, wins=24, wc="hog"),
-                         {"tag": "#B1", "name": "Ravi"})
-golem_card = ta._Scorecard(deck("Golem", GOLEM, matches=40, wins=20, wc="golem"),
-                           {"tag": "#B2", "name": "Aditya"})
+def card(d, owner):
+    """A `_Candidate` with its own profile, the way `_candidates` builds one."""
+    return ta._Candidate(d, owner, ta._DeckProfile(d["cards"], d["winCondition"]))
+
+
+hog_card = card(deck("Hog", HOG, matches=40, wins=24, wc="hog"),
+                {"tag": "#B1", "name": "Ravi"})
+golem_card = card(deck("Golem", GOLEM, matches=40, wins=20, wc="golem"),
+                  {"tag": "#B2", "name": "Aditya"})
 
 partial_spread_probe = ta._spread([
     deck("Golem", GOLEM, matches=50, wc="golem"),
@@ -293,26 +309,23 @@ check("score is the expected rate plus exactly that bonus",
 print(NL + "comfort cannot overturn a real matchup difference")
 
 # Same deck, one owner practised and one not: comfort decides, as a tiebreak.
-practised = ta._Scorecard(deck("Hog", HOG, matches=40, wc="hog"),
-                          {"tag": "#B1", "name": "Ravi"})
-rusty = ta._Scorecard(deck("Hog", HOG, matches=5, wc="hog"),
-                      {"tag": "#B2", "name": "Aditya"})
+practised = card(deck("Hog", HOG, matches=40, wc="hog"), {"tag": "#B1", "name": "Ravi"})
+rusty = card(deck("Hog", HOG, matches=5, wc="hog"), {"tag": "#B2", "name": "Aditya"})
 check("with matchups equal, the practised deck wins",
       ta._score(practised, opponent_spread, None)["score"]
       > ta._score(rusty, opponent_spread, None)["score"])
 check("but a 5.9-point matchup gap is not closed by 1.5 points of practice",
       ta._score(hog_card, opponent_spread, None)["score"]
       > ta._score(
-          ta._Scorecard(deck("Golem", GOLEM, matches=10_000, wc="golem"),
-                        {"tag": "#B2", "name": "Aditya"}),
+          card(deck("Golem", GOLEM, matches=10_000, wc="golem"),
+               {"tag": "#B2", "name": "Aditya"}),
           opponent_spread, None)["score"],
       "the golem deck here has every possible rep and still loses")
 
 
 print(NL + "evidence, and what happens without it")
 
-lava_card = ta._Scorecard(deck("Lava", LAVA, matches=40, wc="lava"),
-                          {"tag": "#B3", "name": "Sam"})
+lava_card = card(deck("Lava", LAVA, matches=40, wc="lava"), {"tag": "#B3", "name": "Sam"})
 check("a deck with no evidence against ANY archetype scores None, not 50%",
       ta._score(lava_card, opponent_spread, None) is None,
       "averaging over an empty set is how a ranking goes flat exactly when "
@@ -339,16 +352,17 @@ check("full coverage reports 100", hog_row["spreadCovered"] == 100.0)
 
 print(NL + "a folder")
 
-pool = ta._candidates([
+blue_roster = [
     player("#B1", "Ravi", [deck("Hog", HOG, matches=40, wins=24, wc="hog")]),
     player("#B2", "Aditya", [deck("Golem", GOLEM, matches=30, wins=15, wc="golem")]),
     player("#B3", "Sam", [deck("Xbow", XBOW, matches=30, wins=15, wc="xbow")]),
-])
+]
+pool = ta._candidates(blue_roster)
 opp = player("#R1", "Mohamed", [
     deck("Golem", GOLEM, matches=90, wc="golem"),
     deck("Xbow", XBOW, matches=10, wc="xbow"),
 ], basis="stored")
-folder = ta._folder(opp, pool, None)
+folder = ta._folder(opp, blue_roster, pool, None)
 
 check("the folder is named for the opponent", folder["player"]["name"] == "Mohamed")
 check("their own decks are the left side", len(folder["theirDecks"]) == 2)
@@ -356,24 +370,39 @@ check("at most TOP_N are recommended", len(folder["recommended"]) <= ta.TOP_N)
 check("best first", all(
     folder["recommended"][i]["score"] >= folder["recommended"][i + 1]["score"]
     for i in range(len(folder["recommended"]) - 1)))
-check("byPlayer holds one entry per teammate who could answer at all",
-      len({r["owner"]["tag"] for r in folder["byPlayer"]}) == len(folder["byPlayer"]))
-check("byPlayer gives each teammate their OWN best deck",
-      all(r["owner"]["tag"] in {"#B1", "#B2", "#B3"} for r in folder["byPlayer"]))
+check("EVERY blue player gets a row, in roster order",
+      [r["owner"]["tag"] for r in folder["perPlayer"]] == ["#B1", "#B2", "#B3"],
+      "a teammate with nothing to offer must still appear, or a roster of "
+      "five silently looks like a roster of three")
+check("each row holds that player's OWN decks and nobody else's",
+      all(all(d["owner"]["tag"] == r["owner"]["tag"] for d in r["decks"])
+          for r in folder["perPlayer"]))
+check("no row holds more than the top 3",
+      all(len(r["decks"]) <= ta.TOP_N for r in folder["perPlayer"]))
+check("each row is sorted best first",
+      all(all(r["decks"][i]["score"] >= r["decks"][i + 1]["score"]
+              for i in range(len(r["decks"]) - 1))
+          for r in folder["perPlayer"]))
+check("a row that produced decks states no reason",
+      all(r["reason"] is None for r in folder["perPlayer"] if r["decks"]))
+check("the squad-wide headline lists three DISTINCT decks",
+      len({",".join(sorted(set(r["cards"]))) for r in folder["recommended"]})
+      == len(folder["recommended"]),
+      "one deck under three co-owners is one option wearing three rows")
 check("a folder that produced recommendations states no reason",
       folder["reason"] is None)
 check("how many candidates were weighed is reported",
       folder["considered"] == len(pool))
 
-empty = ta._folder(player("#R2", "Nobody", []), pool, None)
+empty = ta._folder(player("#R2", "Nobody", []), blue_roster, pool, None)
 check("an opponent with no history says so, rather than showing an empty list",
       empty["reason"] == "no_history")
 check("and recommends nothing rather than guessing", empty["recommended"] == [])
 
+sam_roster = [player("#B3", "Sam", [deck("Lava", LAVA, matches=40, wc="lava")])]
 no_ev = ta._folder(
     player("#R3", "Unread", [deck("Lava", LAVA, matches=50, wc="lava")]),
-    ta._candidates([player("#B3", "Sam", [deck("Lava", LAVA, matches=40, wc="lava")])]),
-    None)
+    sam_roster, ta._candidates(sam_roster), None)
 check("a spread nothing can answer is 'no_evidence', not 'no_history'",
       no_ev["reason"] == "no_evidence",
       "the two are different problems and the screen must say which")

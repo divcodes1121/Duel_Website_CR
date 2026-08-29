@@ -52,7 +52,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped, then fixed: it could not be scrolled on a desktop.** 46/46 browser checks now, across six sizes. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. Pro-only. 61 Python checks + 23 vitest |
+| **Team Analysis** (`#/teams`) | **shipped, then reshaped.** The board is now YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. Pro-only. 61 Python checks + 23 vitest |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -7168,12 +7168,58 @@ which part of the opponent's play could not be read.
 A candidate with no evidence against *anything* they play scores `None` and is
 not listed at all. Averaging over an empty set is how a screen invents 50.0%.
 
-### Two questions, because a lineup needs both
+### The board is YOUR PLAYERS, one row each, expanding to their own top 3
 
-`recommended` is the **top 3 across the whole squad** — which can legitimately
-all belong to one teammate. `byPlayer` is **each teammate's own best answer**,
-which is what a team format is actually picked from, since it assigns every
-player a match. Both fall out of one scoring pass, so the second costs nothing.
+The right-hand side is the blue roster, not a list of decks. A team format
+assigns each player a match, so the question is "what should Ravi bring against
+this person", asked once per teammate — and "the three best decks on the squad"
+can legitimately all belong to one person, which answers that question for one
+player and leaves everyone else with nothing.
+
+**Every collapsed row is the same height, and that is the point.** The reader is
+scanning their own squad to decide who takes this match, so the players have to
+be comparable at a glance; rows that grow to fit their content turn a scan into
+a reading exercise, and a teammate with nothing to bring would shrink to a
+sliver and read as unimportant rather than as unavailable. The collapsed row
+already carries the headline figure and the deck that produced it, so the list
+answers *who* before anything is opened — the expansion is for *why*.
+
+One row is open at a time. Several at once rebuilds the wall the uniform rows
+exist to avoid.
+
+**A teammate with nothing to offer still gets a row**, with which of three
+distinct problems it is: `no_history` (nothing stored), `no_comfort` (nothing
+played often enough to count as a deck they run), `no_evidence` (decks, but no
+measured record against what this opponent brings). Dropping them would make a
+roster of five render as a roster of three — the same failure as a parser that
+silently drops a tag.
+
+`recommended` survives as the squad-wide top 3, deduplicated by deck, and is
+what the folder card's face shows.
+
+### The candidate pool was deduplicated across players, and that was a bug
+
+A deck two teammates both play was kept for whoever had played it more. That is
+right for a single "top 3 for the squad" — one deck under two names is one
+option wearing two rows — and it is **wrong** the moment the screen answers per
+player: the other teammate simply could not be offered the deck they actually
+play. It is now one candidate per (player, deck) pair, deduplicated only
+*within* a player, where a repeated list really is one option.
+
+The profiles stayed shared. `_DeckProfile` is keyed by the eight cards and
+`_Candidate` holds the owner and their record, so a list two people both run
+still costs one set of database reads rather than two — which is the whole
+reason the class was split rather than just having the dedupe removed.
+
+### Two identical-looking rows can both be right
+
+One player can show two decks of one archetype with the same name and the same
+expected rate. That is honest rather than a duplicate: they are different lists
+(observed, one swapped `royal-ghost` for `elite-barbarians`), neither clears the
+deck-level evidence floor, so both fall through to the archetype matrix and the
+matrix cannot tell them apart. The evidence column says so — tens of thousands
+of games is the matrix rung — and each row carries its own record, which is what
+distinguishes them.
 
 ### Tags nobody has ever tracked
 
@@ -7256,6 +7302,20 @@ read `battles`, got null from every real rung, and the client then called
 the same name the code was reading. **A fixture that does not speak the real
 vocabulary pins nothing** — it was found by calling the endpoint, not by the
 tests, and the fixture now uses `games` and asserts the denominator explicitly.
+
+### `1fr` is `minmax(auto, 1fr)`, and it blew both grids out
+
+Found at 1024px after the per-player board went in: `.entry` was 52px wider
+than its own box, with the two sides at 297px and 349px instead of equal.
+Nothing *inside* overflowed, which is what makes this one hard to see — every
+child fitted its track and the tracks refused to fit the grid.
+
+A bare `1fr` is `minmax(auto, 1fr)`, so a track cannot shrink below its
+content's min-content width. Both `1fr auto 1fr` grids on this screen — the
+entry board and the versus board — needed `minmax(0, 1fr) auto minmax(0, 1fr)`.
+Same family as the `auto`-track note already recorded for the ranked-deck
+boards: a track is sized by the widest thing anywhere in it unless it is told
+it may shrink.
 
 ### It shipped unable to scroll, and that is the shell's oldest trap
 

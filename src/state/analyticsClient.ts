@@ -1352,6 +1352,23 @@ export interface TeamRecommendation {
   matchups: TeamMatchupRow[];
 }
 
+/** One blue player's options against one opponent. */
+export interface TeamPlayerOptions {
+  owner: { tag: string; name: string };
+  basis: TeamBasis;
+  /** Their own best decks against this opponent, best first, at most 3. */
+  decks: TeamRecommendation[];
+  /** How many of their decks could be scored at all. */
+  considered: number;
+  /**
+   * `no_history` — nothing stored for them.
+   * `no_comfort` — nothing played often enough to count as a deck they run.
+   * `no_evidence` — decks, but no measured record against what this opponent
+   *                 brings. Three different problems, so the row says which.
+   */
+  reason: 'no_history' | 'no_comfort' | 'no_evidence' | null;
+}
+
 /** One opponent's folder: what they play, and what to bring against them. */
 export interface TeamFolder {
   player: {
@@ -1367,10 +1384,17 @@ export interface TeamFolder {
   /** LEFT side of an opened folder: the decks they actually play. */
   theirDecks: ApiDeck[];
   spread: TeamSpreadRow[];
-  /** RIGHT side: the top decks from the blue squad, best first. */
+  /** The squad-wide top 3, deduplicated by deck. The folder card's face. */
   recommended: TeamRecommendation[];
-  /** Each blue teammate's own best answer — what a lineup is built from. */
-  byPlayer: TeamRecommendation[];
+  /**
+   * RIGHT side of the board: one row per blue player, in roster order, each
+   * holding THAT player's own top 3 against this opponent.
+   *
+   * Every teammate appears even when they have nothing to offer — a roster of
+   * five must not render as a roster of three — and `reason` says which of the
+   * three empty states it is.
+   */
+  perPlayer: TeamPlayerOptions[];
   considered: number;
   /** Why there is nothing to show, when there is nothing to show. */
   reason: 'no_history' | 'no_evidence' | null;

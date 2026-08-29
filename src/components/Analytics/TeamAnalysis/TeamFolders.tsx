@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type {
   TeamFolder,
+  TeamPlayerOptions,
   TeamRecommendation,
   TeamReport,
 } from '../../../state/analyticsClient';
@@ -175,9 +177,94 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
   );
 }
 
+/** Why one teammate has nothing to bring, in their own words. */
+const NO_OPTIONS: Record<string, string> = {
+  no_history: 'Nothing stored for this player yet',
+  no_comfort: 'No deck played often enough to count',
+  no_evidence: 'No measured record against what they bring',
+};
+
+/**
+ * ONE TEAMMATE, AND THEIR OWN TOP THREE against this opponent.
+ *
+ * A ROW PER PLAYER, COLLAPSED, ALL THE SAME HEIGHT. This is the shape a lineup
+ * is chosen in: the reader is scanning their own squad to decide who takes this
+ * match, so the thing that has to be comparable at a glance is the players, not
+ * the decks. Uniform rows make that a scan; rows that grow to fit their content
+ * make it a reading exercise, and a teammate with nothing to offer would
+ * collapse to a sliver and read as less important rather than as unavailable.
+ *
+ * THE COLLAPSED ROW IS NOT EMPTY. It carries the headline figure and the deck
+ * that produced it, so the list answers "who should take this one" before
+ * anything is opened at all — the expansion is for *why*, not for *what*.
+ */
+function PlayerRow({ row, open, onToggle }: {
+  row: TeamPlayerOptions;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const best = row.decks[0];
+  const id = `team-opts-${row.owner.tag.replace(/[^A-Za-z0-9]/g, '')}`;
+
+  return (
+    <li className={styles.mate} data-open={open || undefined}>
+      <button
+        type="button"
+        className={styles.mateHead}
+        onClick={onToggle}
+        disabled={!best}
+        aria-expanded={open}
+        aria-controls={id}
+      >
+        <span className={styles.mateChevron} aria-hidden="true">
+          {best ? (open ? '▾' : '▸') : '·'}
+        </span>
+
+        <span className={styles.mateWho}>
+          <span className={styles.mateName}>{row.owner.name}</span>
+          <span className={styles.mateSub}>
+            {best
+              ? `${best.name}${row.considered > row.decks.length ? ` · ${row.considered} decks weighed` : ''}`
+              : NO_OPTIONS[row.reason ?? ''] ?? 'No options'}
+          </span>
+        </span>
+
+        {/* The figure sits on the collapsed row deliberately: it is what the
+            reader is comparing teammates on. */}
+        <span className={styles.mateFigure}>
+          {best ? (
+            <>
+              <span className={styles.mateRate}>{pct(best.expectedWinRate)}</span>
+              <span className={styles.mateCount}>
+                {row.decks.length} deck{row.decks.length === 1 ? '' : 's'}
+              </span>
+            </>
+          ) : (
+            <span className={styles.mateNone}>—</span>
+          )}
+        </span>
+      </button>
+
+      {open && best && (
+        <ol className={styles.mateDecks} id={id}>
+          {row.decks.map((r, i) => (
+            <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
+          ))}
+        </ol>
+      )}
+    </li>
+  );
+}
+
 /** The opened folder: what they play, and what to bring. */
 export function OpenFolder({ folder, onBack }: { folder: TeamFolder; onBack: () => void }) {
   const p = folder.player;
+
+  /* WHICH TEAMMATE IS OPEN, and only one at a time. Several open at once turns
+     the uniform list back into a wall the reader has to scroll, which is the
+     thing the collapsed rows exist to avoid. Keyed by tag rather than index so
+     it survives the list changing. */
+  const [openMate, setOpenMate] = useState<string | null>(null);
   return (
     <div className={styles.open}>
       <div className={styles.openHead}>
@@ -249,38 +336,31 @@ export function OpenFolder({ folder, onBack }: { folder: TeamFolder; onBack: () 
               <VsMark size="md" />
             </div>
 
+            {/* YOUR SQUAD, ONE ROW EACH. Every teammate appears — including
+                one with nothing to bring, which is information rather than a
+                reason to omit them. */}
             <section className={styles.boardSide} data-side="blue">
-              <h4 className={styles.boardTitle}>You should bring</h4>
-              <ol className={styles.recs}>
-                {folder.recommended.map((r, i) => (
-                  <Recommendation key={`${r.owner.tag}-${r.archetype}-${i}`} rec={r} rank={i + 1} />
+              <h4 className={styles.boardTitle}>Your players</h4>
+              <ul className={styles.mates}>
+                {folder.perPlayer.map((row) => (
+                  <PlayerRow
+                    key={row.owner.tag}
+                    row={row}
+                    open={openMate === row.owner.tag}
+                    onToggle={() =>
+                      setOpenMate(openMate === row.owner.tag ? null : row.owner.tag)
+                    }
+                  />
                 ))}
-              </ol>
+              </ul>
               <p className={styles.considered}>
-                Ranked from {folder.considered} deck{folder.considered === 1 ? '' : 's'} your squad
-                actually plays.
+                Tap a player for their best three against {p.name}. Ranked from{' '}
+                {folder.considered} deck{folder.considered === 1 ? '' : 's'} your squad actually
+                plays.
               </p>
             </section>
           </div>
 
-          {/* A DIFFERENT QUESTION FROM THE TOP 3, and the one a lineup is built
-              from: a team format assigns each player a match, so the three best
-              decks all belonging to one teammate answers the wrong half. */}
-          {folder.byPlayer.length > 1 && (
-            <section className={styles.byPlayer}>
-              <h4 className={styles.boardTitle}>Best option per teammate</h4>
-              <ul className={styles.byPlayerList}>
-                {folder.byPlayer.map((r) => (
-                  <li key={r.owner.tag} className={styles.byPlayerRow}>
-                    <span className={styles.byPlayerName}>{r.owner.name}</span>
-                    <span className={styles.byPlayerDeck}>{r.name}</span>
-                    <Strip cards={r.cards} art={r.art} name={`${r.owner.name} — ${r.name}`} />
-                    <span className={styles.byPlayerRate}>{pct(r.expectedWinRate)}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
         </>
       )}
     </div>

@@ -57,7 +57,7 @@ the outside would evict every candidate's profile on every opponent and turn
 ~240 memory lookups into ~240 database reads on a spinning volume.
 
 So every candidate's three profiles are built ONCE into a run-local scorecard
-(`_Scorecard`) before any opponent is scored, and the scoring loop then reads
+(`_DeckProfile`) before any opponent is scored, and the scoring loop reads
 memory only. The upstream caches are left alone rather than resized: they are
 correct for their own screen, and a run here should not change how the Deck
 Counter behaves afterwards.
@@ -309,36 +309,26 @@ def _spread(decks: list[dict]) -> list[dict]:
 # ── The candidate pool, profiled once ───────────────────────────────────────
 
 
-class _Scorecard:
-    """One blue deck, with everything needed to score it held in memory.
+class _DeckProfile:
+    """The three expensive reads for ONE deck list, held in memory.
 
-    THE POINT OF THIS CLASS IS THAT IT IS BUILT ONCE. See the module docstring:
-    the three profiles behind `matchup_ladder` are LRU-cached upstream at 64/32
-    entries, and scoring opponents on the outside of the loop would evict them
-    on every pass. Everything expensive happens in `__init__`; `against()` is
-    dictionary lookups.
+    KEYED BY THE DECK, NOT BY THE PLAYER, which is the whole reason it is
+    separate from `_Candidate`. Two teammates on the same list is common; the
+    profiles are a property of the eight cards and must not be read twice
+    because two people happen to play them.
+
+    See the module docstring for why they are read up front at all: the ladder's
+    caches are LRU 64/32 upstream, sized for a screen looking at one deck, and
+    scoring opponents on the outside of the loop would evict them every pass.
     """
 
-    __slots__ = ("cards", "key", "archetype", "owner", "games", "wins",
-                 "win_rate", "use_rate", "art", "name", "_exact", "_c7",
-                 "_c6", "_c7_decks", "_c6_decks")
+    __slots__ = ("archetype", "_exact", "_c7", "_c6", "_c7_decks", "_c6_decks")
 
-    def __init__(self, deck: dict, owner: dict):
-        self.cards = list(deck.get("cards") or [])
-        self.key = ",".join(sorted(set(self.cards)))
-        self.archetype = deck.get("winCondition") or "other"
-        self.name = deck.get("name") or dcx._label(self.archetype)
-        self.owner = owner
-        self.games = int(deck.get("matches") or 0)
-        self.wins = int(deck.get("wins") or 0)
-        self.win_rate = float(deck.get("winRate") or 0.0)
-        self.use_rate = float(deck.get("useRate") or 0.0)
-        self.art = deck.get("art") or {}
-
-        # The three reads, once each, right here.
-        self._exact = dcx.deck_profile(self.cards).get("archetypes") or {}
-        c7 = dcx.cluster_profile(self.cards, 7)
-        c6 = dcx.cluster_profile(self.cards, 6)
+    def __init__(self, cards: list[str], archetype: str):
+        self.archetype = archetype
+        self._exact = dcx.deck_profile(cards).get("archetypes") or {}
+        c7 = dcx.cluster_profile(cards, 7)
+        c6 = dcx.cluster_profile(cards, 6)
         self._c7 = c7.get("archetypes") or {}
         self._c6 = c6.get("archetypes") or {}
         self._c7_decks = c7.get("decks")
@@ -368,33 +358,79 @@ class _Scorecard:
         return None
 
 
-def _candidates(blue: list[dict]) -> list[_Scorecard]:
-    """Every deck the blue squad can actually pilot, profiled and deduped.
+class _Candidate:
+    """One deck AS PLAYED BY ONE PLAYER: the profile, plus that player's record.
 
-    THE SAME DECK ON TWO PLAYERS IS ONE CANDIDATE, kept for whoever has played
-    it more. Two teammates on the same list is common and the folder would
-    otherwise spend two of its three rows on one deck — which is not two
-    options, it is one option and a note about who else knows it.
+    ONE PER (PLAYER, DECK) PAIR, and the pool is no longer deduplicated across
+    players. It was, and that was a real bug once the screen started answering
+    "what should THIS teammate bring": a shared list was kept for whoever had
+    played it more, so the other player simply could not be offered the deck
+    they actually play. Dedup now happens WITHIN a player, where a repeated
+    list really is one option.
+
+    The profile is shared by reference, so a deck two people play is still only
+    read from the database once.
     """
-    best: dict[str, dict] = {}
+
+    __slots__ = ("cards", "key", "archetype", "name", "art", "owner",
+                 "games", "wins", "win_rate", "use_rate", "profile")
+
+    def __init__(self, deck: dict, owner: dict, profile: "_DeckProfile"):
+        self.cards = list(deck.get("cards") or [])
+        self.key = ",".join(sorted(set(self.cards)))
+        self.archetype = deck.get("winCondition") or "other"
+        self.name = deck.get("name") or dcx._label(self.archetype)
+        self.art = deck.get("art") or {}
+        self.owner = owner
+        self.games = int(deck.get("matches") or 0)
+        self.wins = int(deck.get("wins") or 0)
+        self.win_rate = float(deck.get("winRate") or 0.0)
+        self.use_rate = float(deck.get("useRate") or 0.0)
+        self.profile = profile
+
+    def against(self, other: str, snap: dict | None) -> dict | None:
+        return self.profile.against(other, snap)
+
+
+def _candidates(blue: list[dict]) -> list["_Candidate"]:
+    """Every (player, deck) pair the blue squad can actually pilot.
+
+    NOT DEDUPLICATED ACROSS PLAYERS. It used to be — a shared list was kept for
+    whoever had played it more — and that quietly made the per-player view
+    impossible: the other teammate could not be offered the deck they actually
+    play. Two people on one archetype is normal, and for a lineup they are two
+    separate options, because two different people have to pilot them.
+
+    Deduplication WITHIN a player still happens, via the deck key: one person
+    listed twice on one list is one option.
+
+    Profiles are shared by deck key, so a list two teammates both play still
+    costs one set of database reads rather than two.
+    """
+    profiles: dict[str, "_DeckProfile"] = {}
+    out: list["_Candidate"] = []
+
     for player in blue:
         decks = [d for d in (player.get("decks") or [])
                  if len(set(d.get("cards") or [])) == 8]
         decks.sort(key=lambda d: -int(d.get("matches") or 0))
+        seen: set[str] = set()
         for deck in decks[:CANDIDATES_PER_PLAYER]:
             if int(deck.get("matches") or 0) < MIN_COMFORT_GAMES:
                 continue
             key = ",".join(sorted(set(deck["cards"])))
-            prev = best.get(key)
-            if prev is None or int(deck.get("matches") or 0) > int(prev[0].get("matches") or 0):
-                best[key] = (deck, player)
-
-    out = []
-    for deck, player in best.values():
-        try:
-            out.append(_Scorecard(deck, player))
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                prof = profiles.get(key)
+                if prof is None:
+                    prof = _DeckProfile(deck["cards"],
+                                        deck.get("winCondition") or "other")
+                    profiles[key] = prof
+                out.append(_Candidate(deck, player, prof))
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
     return out
 
 
@@ -405,7 +441,7 @@ def _comfort(games: int) -> float:
     return COMFORT_WEIGHT * min(1.0, games / COMFORT_FULL)
 
 
-def _score(card: _Scorecard, spread: list[dict], snap: dict | None) -> dict | None:
+def _score(card: _Candidate, spread: list[dict], snap: dict | None) -> dict | None:
     """One candidate against one opponent's whole spread.
 
     Returns None when NOTHING in the spread could be answered — no rung of the
@@ -483,7 +519,27 @@ def _score(card: _Scorecard, spread: list[dict], snap: dict | None) -> dict | No
 # ── The report ──────────────────────────────────────────────────────────────
 
 
-def _folder(opponent: dict, cards: list[_Scorecard], snap: dict | None) -> dict:
+def _distinct(rows: list[dict]) -> list[dict]:
+    """One row per DECK, keeping the best-scoring owner of it.
+
+    Only for the squad-wide headline. The per-player board WANTS the same deck
+    to appear under each teammate who plays it; a "top 3 for the squad" that
+    listed one deck three times under three names would be one option wearing
+    three rows.
+    """
+    seen: set[str] = set()
+    out = []
+    for r in rows:
+        key = ",".join(sorted(set(r["cards"])))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
+
+
+def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
+            snap: dict | None) -> dict:
     """One opponent, and what the blue squad should bring against them."""
     decks = (opponent.get("decks") or [])[:OPPONENT_DECKS]
     _archetypes_for(decks)
@@ -497,17 +553,46 @@ def _folder(opponent: dict, cards: list[_Scorecard], snap: dict | None) -> dict:
                 scored.append(row)
         scored.sort(key=lambda r: (-r["score"], -r["comfort"]["games"], r["name"]))
 
-    # BEST DECK PER BLUE PLAYER, which is a different question from the top 3
-    # and free once everything is scored. A team format assigns each player a
-    # match, so "who on my squad matches up best against this person" is the
-    # question a lineup is actually built from — and the top 3 can legitimately
-    # all belong to one teammate, which answers the other question well and
-    # that one not at all.
-    by_player: dict[str, dict] = {}
+    # EVERY BLUE PLAYER GETS THEIR OWN TOP THREE, in roster order.
+    #
+    # This is the shape the screen is built from. A team format assigns each
+    # player a match, so the question is "what should Ravi bring against this
+    # person", asked once per teammate — not "what are the three best decks on
+    # the squad", which can legitimately all belong to one person and leaves
+    # everyone else with nothing to play.
+    #
+    # A PLAYER WITH NOTHING TO OFFER STILL APPEARS, with a reason. Dropping
+    # them would silently shorten the list and make a roster of five look like
+    # a roster of three — the same failure as a parser that drops a tag.
+    by_tag: dict[str, list[dict]] = {}
     for row in scored:
-        tag = row["owner"]["tag"]
-        if tag not in by_player:
-            by_player[tag] = row
+        by_tag.setdefault(row["owner"]["tag"], []).append(row)
+
+    per_player = []
+    for mate in blue:
+        rows = by_tag.get(mate["tag"], [])
+        # `own`, NOT `decks`. Naming it `decks` rebound the opponent's list
+        # eight lines above and `theirDecks` came back holding the LAST blue
+        # player's decks — the left half of the board showing the wrong team.
+        own = [d for d in (mate.get("decks") or [])
+               if len(set(d.get("cards") or [])) == 8]
+        per_player.append({
+            "owner": {"tag": mate["tag"], "name": mate["name"]},
+            "basis": mate["basis"],
+            # `scored` is already sorted and grouping preserves that order.
+            "decks": rows[:TOP_N],
+            "considered": len(rows),
+            # WHICH empty state this is, said rather than inferred from a
+            # missing list. The three are genuinely different problems: nothing
+            # stored, nothing practised enough, nothing measurable.
+            "reason": (
+                None if rows else
+                "no_history" if not own else
+                "no_comfort" if not any(
+                    int(d.get("matches") or 0) >= MIN_COMFORT_GAMES for d in own)
+                else "no_evidence"
+            ),
+        })
 
     return {
         "player": {
@@ -520,8 +605,11 @@ def _folder(opponent: dict, cards: list[_Scorecard], snap: dict | None) -> dict:
         "theirDecks": decks,
         "spread": spread,
         # RIGHT SIDE: what to bring, best first.
-        "recommended": scored[:TOP_N],
-        "byPlayer": [by_player[t] for t in by_player],
+        # The squad-wide top 3, deduplicated by DECK so the headline is three
+        # options rather than one option with two co-owners. It is what the
+        # folder card's face shows; the board itself is `perPlayer`.
+        "recommended": _distinct(scored)[:TOP_N],
+        "perPlayer": per_player,
         "considered": len(cards),
         # Said out loud rather than left to be inferred from an empty list.
         "reason": (
@@ -547,7 +635,7 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     snap = dcx._snap()
     cards = _candidates(blue)
 
-    folders = [_folder(opp, cards, snap) for opp in red]
+    folders = [_folder(opp, blue, cards, snap) for opp in red]
 
     # A squad with nothing pilotable is the one failure the screen cannot
     # recover from, and it is worth naming: every folder below it would be
