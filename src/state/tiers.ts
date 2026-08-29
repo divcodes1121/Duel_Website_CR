@@ -127,7 +127,44 @@ export const FREE_SECTIONS = [
  * since it was written, and until now no combination of tier and section could
  * produce it. That copy is what this makes true.
  */
+/**
+ * TEAM ANALYSIS JOINS IT, for the same reason and one more.
+ *
+ * It is the squad-scale version of Coach Assist — read an opponent, rank your
+ * decks against them — run over two whole rosters at once. Gating the
+ * one-opponent tool while giving away the eight-opponent one would price the
+ * smaller answer above the larger one.
+ *
+ * It is also the most expensive thing the service does: a single run resolves
+ * up to sixteen players, enrols the ones nobody is tracking, and profiles every
+ * deck the blue squad plays. That cost is fine behind a paying account and is
+ * not something to hand to an anonymous visitor with a paste box.
+ */
 export const PRO_ONLY_SECTIONS = ['Coach Assist'] as const;
+
+/**
+ * Areas only an ADMIN may open. Stricter than pro-only.
+ *
+ * NOT A TIER, and not a permanent home for anything — this is the staging shelf
+ * this project does not otherwise have. `main` deploys straight to production
+ * (see "Open on the accounts and hosting work"), so the only way to try a new
+ * screen against real data is to ship it and then be the only person who can
+ * reach it.
+ *
+ * TEAM ANALYSIS IS HERE TO BE TESTED, not because admin is where it belongs.
+ * It is written and gated as a Pro feature — see `PRO_ONLY_SECTIONS`, where it
+ * sat before this — and moving it back is deleting one line here and adding it
+ * there. Until then a paying Pro account cannot see it, which is deliberate:
+ * a half-verified screen is worse to sell than a missing one.
+ *
+ * A section listed here is hidden rather than locked. There is no point drawing
+ * a gate card that says "become an admin".
+ */
+export const ADMIN_ONLY_SECTIONS = ['Team Analysis'] as const;
+
+function adminOnly(section: string): boolean {
+  return (ADMIN_ONLY_SECTIONS as readonly string[]).includes(section);
+}
 
 function proOnly(section: string): boolean {
   return (PRO_ONLY_SECTIONS as readonly string[]).includes(section);
@@ -135,6 +172,8 @@ function proOnly(section: string): boolean {
 
 /** True when this tier may open the named analytics area. */
 export function canOpenSection(tier: Tier, section: string): boolean {
+  // BEFORE the pro/admin short-circuit, or `pro` would open an admin-only area.
+  if (adminOnly(section)) return tier === 'admin';
   if (tier === 'pro' || tier === 'admin') return true;
   if (tier === 'trial') return !proOnly(section);
   return (FREE_SECTIONS as readonly string[]).includes(section);
@@ -148,6 +187,9 @@ export function canOpenSection(tier: Tier, section: string): boolean {
  * than that, and giving them less would mean the public page is not public.
  */
 export function sectionAllowed(access: Access, section: string): boolean {
+  // FIRST, for the same reason as above: an admin-only area is closed to every
+  // other access level including paid Pro, so no later branch may open it.
+  if (adminOnly(section)) return access === 'admin';
   if (access === 'anon' || access === 'free') {
     return (FREE_SECTIONS as readonly string[]).includes(section);
   }

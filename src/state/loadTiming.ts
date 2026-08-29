@@ -50,6 +50,12 @@ const SEEDS: Record<string, number> = {
   'deck-counter': 16_000,
   'deck-lab': 12_000,
   'counter-lab': 16_000,
+  /* THE LONGEST READ ON THE SERVICE, and the seed says so rather than letting
+     the bar sprint to 90% and sit there. One run resolves up to sixteen
+     players — each a report, and for an untracked tag two live API calls — and
+     then profiles every deck the blue squad plays. The seed is a starting
+     guess only; the median of the last five real runs replaces it. */
+  teams: 45_000,
 };
 
 const DEFAULT_SEED = 12_000;

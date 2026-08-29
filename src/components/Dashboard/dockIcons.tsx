@@ -49,6 +49,12 @@ export const DOCK_PATHS: Record<string, string> = {
   'Counter Hub':
     'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z',
 
+  /* two figures — the roster, as one closed outline so it can morph */
+  'Team Analysis':
+    'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm0 1.6c-3 0-6 1.5-6 4.4V20h12v-3c0-2.9-3-4.4-6-4.4z'
+    + 'M17.5 11.5a2.8 2.8 0 1 0 0-5.6 2.8 2.8 0 0 0 0 5.6zm.5 1.7c-.6 0-1.2.1-1.7.2 1.2 1.1 1.9 '
+    + '2.5 1.9 4.1V20h4v-2.6c0-2.4-2.3-4.2-4.2-4.2z',
+
   /* three bars */
   Meta: 'M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z',
 };

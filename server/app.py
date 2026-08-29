@@ -19,6 +19,7 @@ Endpoints
     GET /api/analytics/deck?cards=         how one pasted deck draws (slots + art)
     GET /api/analytics/matchup?a=&b=       head-to-head for two pasted decks
     GET /api/analytics/counters?deck=      what beats a pasted deck
+    GET /api/analytics/teams?blue=&red=    squad vs squad, a folder per opponent
     GET /api/analytics/coach/predict/<tag> which decks they will bring next
     GET /api/analytics/coach/suggest       what to play, given both tags
     GET /api/analytics/meta                the global leaderboard (snapshot)
@@ -55,6 +56,7 @@ import live_player as live  # noqa: E402
 import recent_battles as battles  # noqa: E402
 import tracking  # noqa: E402
 import recruit  # noqa: E402
+import team_analysis as teams  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
@@ -320,6 +322,30 @@ def _window(q: dict, cov: dict) -> tuple[str | None, str | None]:
         since = (end - _dt.timedelta(days=days - 1)).isoformat()
         until = until or cov["end"]
     return since, until
+
+
+def _squad(q: dict, side: str) -> tuple[list[str], list[str]]:
+    """`(tags, rejected)` for one side of a team analysis.
+
+    THE CLIENT ALREADY PARSED THIS, and that is not a reason to trust it. The
+    browser's extractor exists so a roster appears as chips before an expensive
+    call is spent; `normalize_tag` here is the boundary, the same one every
+    other tag route crosses, and it is what keeps junk out of a query.
+
+    Rejects are RETURNED rather than dropped. A squad is pasted in bulk, so
+    "one of these sixteen tags is malformed" has to name which one or the
+    person is left proof-reading.
+    """
+    raw = [t.strip() for t in (q.get(side) or [""])[0].split(",") if t.strip()]
+    tags: list[str] = []
+    bad: list[str] = []
+    for t in raw:
+        norm = cd.normalize_tag(t)
+        if not norm:
+            bad.append(t[:24])
+        elif norm not in tags:
+            tags.append(norm)
+    return tags, bad
 
 
 def _decks(q: dict, keys: tuple) -> list[list[str]]:
@@ -651,6 +677,33 @@ class Handler(BaseHTTPRequestHandler):
                 out = coach.suggest(me, opp, _decks(q, ("m1", "m2")),
                                     _decks(q, ("o1", "o2")),
                                     my_since, my_until, opp_since, opp_until)
+                out["sources"] = _sources()
+                return self._send(out)
+
+            if path == "/api/analytics/teams":
+                q = parse_qs(parsed.query)
+                blue, blue_bad = _squad(q, "blue")
+                red, red_bad = _squad(q, "red")
+                # WHICH SIDE, AND WHICH TAG. A roster is pasted, not typed, so
+                # "invalid_tag" alone leaves someone re-reading sixteen tags to
+                # find the one with a typo in it.
+                if not blue or not red:
+                    return self._send({
+                        "error": "squad_required",
+                        "side": "blue" if not blue else "red",
+                        "rejected": blue_bad if not blue else red_bad,
+                    }, 400)
+                if len(blue) > teams.MAX_SQUAD or len(red) > teams.MAX_SQUAD:
+                    over = "blue" if len(blue) > teams.MAX_SQUAD else "red"
+                    return self._send({
+                        "error": "squad_too_large", "side": over,
+                        "count": len(blue if over == "blue" else red),
+                        "max": teams.MAX_SQUAD,
+                    }, 400)
+                days = max(1, min(4000, int((q.get("days") or ["30"])[0] or 30)))
+                out = teams.analyze(blue, red, days)
+                out["rejected"] = {"blue": blue_bad, "red": red_bad}
+                out["status"] = counter.status()
                 out["sources"] = _sources()
                 return self._send(out)
 

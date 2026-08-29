@@ -254,6 +254,7 @@ happily against a server that never called it.
 | `GET /api/analytics/deck?cards=&wild=` | how one pasted deck draws — slots + art (`wild=evolution` or `wild=hero` picks slot 3) |
 | `GET /api/analytics/matchup?a=&b=` | head-to-head for two decks (comma-separated keys) |
 | `GET /api/analytics/counters?deck=` | what beats a deck |
+| `GET /api/analytics/teams?blue=&red=` | **squad vs squad** — one folder per opponent: their decks, their archetype spread, and the top 3 decks the blue squad already plays that answer it. The most expensive route on the service: up to sixteen player resolutions, enrolment for the untracked ones, and a profile of every blue deck. `days` as everywhere else |
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
@@ -818,6 +819,43 @@ they cannot overlap and cannot leave a gap. `find_counters` likewise returns
 every archetype that beats the deck rather than the first five — a deck with
 twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
+
+
+## Team analysis (`team_analysis.py`)
+
+Two rosters in, a folder per opponent out. The scoring rule and its floors are
+in the module docstring; three things matter from outside it.
+
+**It reuses `deck_counter.matchup_ladder` rather than reimplementing it.** Every
+figure a recommendation carries is a rung of that ladder — exact deck vs
+archetype, the 7- and 6-card clusters, then the archetype matrix — already
+symmetrised, so the 58.59% tracked-player house edge is already out. A second
+scorer here would eventually disagree with the Deck Counter about the same two
+decks.
+
+**Each candidate's profiles are built once.** `matchup_ladder` reads
+`deck_profile` plus two `cluster_profile`s, LRU-cached upstream at 64 and 32
+entries. Those sizes are right for a screen looking at one deck and wrong for 40
+candidates scored against 8 opponents: looping opponents on the outside evicts
+every candidate on every pass. `_Scorecard` does the reads in `__init__` and
+`against()` is dictionary lookups. Do not resize the upstream caches to "fix"
+this — they are correct for their own screen.
+
+**A rung's denominator is `games`.** `battles` is a field on the profile
+WRAPPER, not on a per-archetype record. Reading `battles` gives null on every
+rung, and it is invisible until a client formats it — which is exactly how it
+shipped for an afternoon, with 59 passing tests, because the fixture had
+invented the same wrong name.
+
+Floors: `MIN_COMFORT_GAMES` 5 (a deck under it is one somebody tried, not one
+they play), `MIN_OPPONENT_DECK_GAMES` 2, `MAX_SQUAD` 8 per side (refused, never
+truncated), `TOP_N` 3. `COMFORT_WEIGHT` is 1.5 points and is a TIEBREAK — sized
+to lose to any real matchup difference.
+
+An archetype no rung can answer is renormalised out of the denominator, never
+counted as 50%: averaging over an empty set flattens the ranking exactly when
+there is least evidence. A candidate that can answer nothing at all scores
+`None` and is not listed.
 
 ## Safety
 

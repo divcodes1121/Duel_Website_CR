@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
    client at module load, which wants a native WebSocket that Node 21 lacks. A
    test of a pure rule must not need a network stack. */
 import {
+  ADMIN_ONLY_SECTIONS,
   FREE_SECTIONS,
   PRO_ONLY_SECTIONS,
   canOpenSection,
@@ -43,6 +44,10 @@ const ALL_SECTIONS = [
   'Cards',
   'Deck Counter',
   'Coach Assist',
+  /* Pro-only, alongside Coach Assist. Added 30 Aug 2026 with the Team
+     Analysis screen — this list is a tripwire, so a new area has to be
+     enumerated here before the matrix below can claim to be exhaustive. */
+  'Team Analysis',
 ] as const;
 
 const PAID: Access[] = ['trial', 'pro', 'admin'];
@@ -64,14 +69,26 @@ function profile(over: Partial<Profile> = {}): Profile {
   };
 }
 
-describe('paid Pro and admin open everything', () => {
-  for (const access of ['pro', 'admin'] as Access[]) {
-    it(`${access} may open all ${ALL_SECTIONS.length} sections`, () => {
-      for (const section of ALL_SECTIONS) {
-        expect(sectionAllowed(access, section), section).toBe(true);
-      }
-    });
-  }
+describe('paid Pro and admin open everything except the admin shelf', () => {
+  /* `pro` USED TO OPEN EVERYTHING, and this test used to say so. It stopped
+     being true when `ADMIN_ONLY_SECTIONS` arrived — the staging shelf this
+     project has no other way to provide, since `main` deploys to production.
+     Stated as an exclusion rather than quietly narrowed, so the day something
+     leaves that shelf this test is what notices. */
+  it('admin opens literally every section', () => {
+    for (const section of ALL_SECTIONS) {
+      expect(sectionAllowed('admin', section), section).toBe(true);
+    }
+  });
+
+  it('pro opens everything that is not on the admin shelf', () => {
+    const rest = ALL_SECTIONS.filter(
+      (x) => !(ADMIN_ONLY_SECTIONS as readonly string[]).includes(x),
+    );
+    for (const section of rest) {
+      expect(sectionAllowed('pro', section), section).toBe(true);
+    }
+  });
 
   for (const access of PAID) {
     it(`${access} may export decks`, () => {
@@ -83,7 +100,11 @@ describe('paid Pro and admin open everything', () => {
 describe('a trial opens everything EXCEPT the pro-only areas', () => {
   /* The carve-out. A trial is otherwise "everything for three days"; Coach
      Assist is the thing a subscription is FOR, and a trial that includes it has
-     given away what it exists to sell. */
+     given away what it exists to sell.
+
+     Team Analysis is the same claim at squad scale — read an opponent, rank
+     your decks against them, eight opponents at a time — so pricing it below
+     Coach Assist would put the bigger answer behind the smaller gate. */
   it('Coach Assist is the pro-only area', () => {
     expect([...PRO_ONLY_SECTIONS]).toEqual(['Coach Assist']);
   });
@@ -96,7 +117,9 @@ describe('a trial opens everything EXCEPT the pro-only areas', () => {
 
   it('a trial still opens everything else', () => {
     const rest = ALL_SECTIONS.filter(
-      (x) => !(PRO_ONLY_SECTIONS as readonly string[]).includes(x),
+      (x) =>
+        !(PRO_ONLY_SECTIONS as readonly string[]).includes(x) &&
+        !(ADMIN_ONLY_SECTIONS as readonly string[]).includes(x),
     );
     for (const section of rest) {
       expect(sectionAllowed('trial', section), section).toBe(true);
@@ -131,6 +154,36 @@ describe('a trial opens everything EXCEPT the pro-only areas', () => {
         expect(sectionAllowed(a, section), `${a}/${section}`).toBe(false);
       }
     }
+  });
+});
+
+describe('the admin shelf is closed to everyone else', () => {
+  /* A TRIPWIRE, exactly like FREE_SECTIONS below. Team Analysis sits here while
+     it is verified against real data; the day it moves to Pro, this fails and
+     that decision gets made in a commit rather than inherited. */
+  it('Team Analysis is the admin-only area', () => {
+    expect([...ADMIN_ONLY_SECTIONS]).toEqual(['Team Analysis']);
+  });
+
+  it('every access level except admin is refused it', () => {
+    for (const access of ['anon', 'free', 'trial', 'pro'] as Access[]) {
+      for (const section of ADMIN_ONLY_SECTIONS) {
+        expect(sectionAllowed(access, section), `${access}/${section}`).toBe(false);
+      }
+    }
+    expect(sectionAllowed('admin', 'Team Analysis')).toBe(true);
+  });
+
+  /* PAID IS NOT ENOUGH, which is the whole point of a separate list. `isPaid`
+     is true for pro and this section is still closed to it. */
+  it('being paid does not open it', () => {
+    expect(isPaid('pro')).toBe(true);
+    expect(sectionAllowed('pro', 'Team Analysis')).toBe(false);
+  });
+
+  it('canOpenSection agrees, including for pro', () => {
+    expect(canOpenSection('pro', 'Team Analysis')).toBe(false);
+    expect(canOpenSection('admin', 'Team Analysis')).toBe(true);
   });
 });
 

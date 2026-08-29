@@ -277,6 +277,19 @@ export function PaletteIcon({ size = 17 }: P) {
   );
 }
 
+/* Two figures side by side — the roster icon. Stroked like its neighbours, so
+   the dock's filled single-path twin lives in `dockIcons.tsx` instead. */
+export function TeamIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="8" cy="8" r="3" />
+      <circle cx="17" cy="9" r="2.4" />
+      <path d="M2.5 20v-1.5A4.5 4.5 0 0 1 7 14h2a4.5 4.5 0 0 1 4.5 4.5V20" />
+      <path d="M15.5 14h1a4 4 0 0 1 4 4v2" />
+    </svg>
+  );
+}
+
 export function StarIcon({ size = 14 }: P) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">

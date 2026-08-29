@@ -52,6 +52,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Team Analysis** (`#/teams`) | **shipped, 27/27 browser checks.** Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. Pro-only. 61 Python checks + 23 vitest |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -151,6 +152,8 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 25. [The landing screen, rebuilt](#the-landing-screen-rebuilt)
 26. [Tracking a new tag, and the live battlelog](#tracking-a-new-tag-and-the-live-battlelog)
 27. [Duel Insights](#duel-insights)
+27a. [Team Analysis — a squad against a squad](#team-analysis--a-squad-against-a-squad)
+27b. [A render loop that starves Suspense](#a-render-loop-that-starves-suspense)
 28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
 29. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
 30. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
@@ -274,6 +277,7 @@ open, so links and refreshes work.
 | `#/builder` | Duel deck builder (5 decks × 8 slots, cards unique across the set) |
 | `#/decks` | Deck's Home — unlimited auto-saving single decks |
 | `#/palette` | Counter Palette — archetype folders of counter decks |
+| `#/teams` | **Team Analysis** — two rosters in, a folder per opponent out |
 | `#/player/<tag>` | Player analysis — top decks, use/win trends |
 | `#/player/<tag>/meta` | **Top Meta Decks** — the global leaderboard (needs no tag) |
 | `#/player/<tag>/duels` | **Duel Analysis** — card combinations in duel play |
@@ -7111,6 +7115,193 @@ floor, the decider rule and the fact that a coin-flip record produces silence.
 
 ---
 
+## Team Analysis — a squad against a squad
+
+`#/teams`, and the only tool route that consults the tier gate. Paste your
+roster on the left and theirs on the right, press Analyse, and every opponent
+comes back as a **folder**: open it and their decks are on the left, the decks
+your squad should answer them with on the right, the word VS between.
+
+### The question it answers, and the one it refuses
+
+*Given what this opponent has actually been playing, which deck that somebody on
+my team already knows how to pilot does best against that spread?*
+
+It is **not** "what is the best deck against this player". The candidate pool is
+not the meta, not the 122-card space and not a generated deck — it is exactly
+the decks the blue squad has already played, with the games to prove it. A
+recommendation nobody on the team can pilot is worth nothing on the day, and
+this project has already measured what happens when it goes looking for decks
+that do not exist: Phases 17B and 18 closed exact retrieval and novel generation
+on ceilings, not on model quality.
+
+### How a recommendation is scored
+
+An opponent's decks give an **archetype spread**, each archetype weighted by how
+much of their play it is. Then for every candidate deck:
+
+    expectedWinRate = sum over a of  weight[a] * winRate(deck vs a)
+
+`winRate(deck vs a)` is `deck_counter.matchup_ladder`, **reused rather than
+reimplemented**: exact deck-vs-archetype, then the 7-card cluster, then the
+6-card, then the archetype matrix. Every rung is symmetrised upstream, which is
+what removes the 58.59% tracked-player house edge, and every rung says which it
+is — so a row reads "61.4% over 11,918 games · high" rather than a bare number.
+
+**Comfort is a tiebreak, not a model.** A deck its owner has played 40 times
+gets at most `COMFORT_WEIGHT` (1.5 points) over one played 5 times, and nothing
+under `MIN_COMFORT_GAMES` (5) enters the pool at all. Matchup first because it
+is what was asked; comfort second because between two decks inside the noise,
+the one somebody has actually piloted is the better call. 1.5 points is sized to
+**lose** to any real matchup difference — it is not a claim that practice is
+worth 1.5 points of win rate.
+
+### An unanswerable archetype is renormalised out, never scored as even
+
+If no rung has evidence for something the opponent plays, that archetype is
+dropped from the denominator and `spreadCovered` says so. Counting it as 50%
+instead would pull every deck toward even and make the ranking **flatter the
+less evidence there is**, which is exactly backwards. The row still appears with
+"no evidence" in place of a rate — withheld, not hidden, so a reader can see
+which part of the opponent's play could not be read.
+
+A candidate with no evidence against *anything* they play scores `None` and is
+not listed at all. Averaging over an empty set is how a screen invents 50.0%.
+
+### Two questions, because a lineup needs both
+
+`recommended` is the **top 3 across the whole squad** — which can legitimately
+all belong to one teammate. `byPlayer` is **each teammate's own best answer**,
+which is what a team format is actually picked from, since it assigns every
+player a match. Both fall out of one scoring pass, so the second costs nothing.
+
+### Tags nobody has ever tracked
+
+Three outcomes, and the screen distinguishes all three. `stored` is the real
+thing. `live` means never tracked, so the ~25-battle Clash Royale battlelog
+answers **now** and the tag is queued for collection — thin, and labelled thin
+on the chip, in the folder header and in a warning above the board. `unknown`
+means not tracked and the live API unreachable: no decks, and the reason said
+out loud. Enrolment is a side effect of being named in a squad, exactly as it is
+of being searched, and it writes to our own queue file rather than the bot's
+database.
+
+Verified against the live Clash Royale API with **no database mounted at all**:
+both tags resolved to real names, 30 battles each, a full archetype spread
+(X-Bow 61% / Royal Giant 22% / Hog 17%) and a scored recommendation off the
+archetype matrix, which persists in `.counter_snapshot.json` beside the code.
+
+### The cache that would otherwise thrash
+
+`matchup_ladder` reads `deck_profile` and two `cluster_profile`s, LRU-cached
+upstream at 64 and 32 entries — sized for a screen looking at one deck, not for
+40 candidates scored against 8 opponents. Looping opponents on the outside would
+evict every candidate's profile on every pass and turn ~240 memory lookups into
+~240 database reads on a spinning volume. So each candidate's three profiles are
+built **once** into a run-local `_Scorecard` before any opponent is scored, and
+the scoring loop then reads memory only. The upstream caches are left alone
+rather than resized: they are correct for their own screen, and a run here
+should not change how the Deck Counter behaves afterwards.
+
+### The parser is the thing most worth testing
+
+It decides **who gets analysed**, and a dropped player does not produce an error
+— it produces a shorter report that looks exactly as correct as a complete one.
+Two modes, chosen by the text rather than by a setting, because asking someone
+to declare the format of what they are about to paste is asking them to do the
+parser's job:
+
+- **any `#` present** → only `#`-prefixed tokens are tags, everything else on the
+  line is name context. This is `Mohamed Light #Y022GRCJQ`.
+- **no `#` anywhere** → every whitespace/comma-separated token is tried as a bare
+  tag. This is a column pasted out of a spreadsheet.
+
+The split exists because the alphabet is 14 symbols, so a real name **can** be a
+syntactically valid tag body — `QUURY` parses cleanly. An early version rejected
+any name that was tag-shaped and threw that one away; the `#` is what
+disambiguates, and in hashed mode a name is just text. Rejects and duplicates
+are reported rather than dropped: a roster is pasted in bulk, so "one of these
+sixteen is malformed" has to name which one or the person proof-reads all
+sixteen.
+
+`MAX_SQUAD` is 8 per side and a squad over it is **refused, not truncated** —
+analysing the first eight of eleven answers a question nobody asked, and the
+missing three are invisible in the output. The server enforces it again:
+`squadParse.ts` is feedback, `clash_data.normalize_tag` is the boundary.
+
+### The name on a chip is the pasted one, unless the server knows better
+
+`_resolve` falls back to the tag when neither the database nor the CR profile
+knows a name, so preferring the server's answer unconditionally printed a chip
+as "#2PP0PYLQ #2PP0PYLQ" and discarded the label the person had actually typed
+beside the tag. The server's name wins only when it is not the tag; the folder
+header and the gallery card drop the tag line in the same case.
+
+### Pro-only, and the gate is asked on a tool route
+
+It joins Coach Assist in `PRO_ONLY_SECTIONS`. It is the squad-scale version of
+that screen, so pricing it lower would put the bigger answer behind the smaller
+gate — and it is the most expensive thing the service does: one run resolves up
+to sixteen players, enrols the untracked ones and profiles every deck the blue
+squad plays. `sectionAllowed()` is consulted in the Dashboard exactly as it is
+for a sidebar area; one predicate, never a second opinion about what Pro means.
+
+### The test fixture that pinned nothing
+
+`test_team_analysis.py` passed 59/59 while the module read a field that does not
+exist. Every rung of the ladder publishes its denominator as `games`; `battles`
+is a field on the profile **wrapper**, not on a per-archetype record. The module
+read `battles`, got null from every real rung, and the client then called
+`.toLocaleString()` on it. Nothing caught it because the fixture had invented
+the same name the code was reading. **A fixture that does not speak the real
+vocabulary pins nothing** — it was found by calling the endpoint, not by the
+tests, and the fixture now uses `games` and asserts the denominator explicitly.
+
+### It cannot be `React.lazy`, and that is somebody else's bug
+
+This screen is the obvious candidate for a code split — Pro-only, so most
+visitors literally cannot open it, and 5.4 kB gzip. It was built lazy and **did
+not render**, in dev or in a production build where the chunk was fetched (both
+the `.js` and the `.css`) and then never committed. See
+[A render loop that starves Suspense](#a-render-loop-that-starves-suspense). The
+import is eager until that is fixed, and the reason is written at the import.
+
+---
+
+## A render loop that starves Suspense
+
+**Found while building Team Analysis, pre-existing, and live in production.**
+It is not a Team Analysis bug and is recorded here because it is the reason that
+screen cannot be code-split, and because it is burning CPU on every screen of
+the site right now.
+
+`TopSearch` renders vengenceui's `GooeySearch`. That component declares
+`items = []` as a **default parameter** and then lists `items` in an effect's
+dependency array (`ui/gooey-search.tsx`). A default parameter is a **new array
+on every render**, and `TopSearch` passes no `items` — the field is tag-only and
+fetches nothing. So the effect re-runs every render, calls `setResults([])` with
+another new array, and re-renders forever. React logs "Maximum update depth
+exceeded" continuously; a verification run measured **169 of them in a few
+seconds on one page**.
+
+This is exactly the failure `docs`/CLAUDE.md already warns about for this
+component — "an inline `onSearch` is a new identity per render AND the
+component's own `items = []` default is a new ARRAY per render, so it re-runs
+forever" — and the note was written about a search source that was later
+removed. The `items` half survived the removal.
+
+**A tree that never settles never commits a resolved Suspense boundary**, so any
+`React.lazy` child of the Dashboard hangs at its fallback permanently. Proved by
+deleting `<TopSearch>` and rebuilding: `#/teams` rendered immediately with the
+lazy import untouched. `#/guide` is lazy too and works, because the field book
+renders **outside** this shell.
+
+The fix is to hoist the default to a module-level constant so its identity is
+stable. It is a one-line change to vendored code that every screen depends on,
+so it is recorded rather than applied in a commit about something else.
+
+---
+
 ## The display face, and the dark ground
 
 **Headings are Arial**, a system font. They were Kids Word, a hand-drawn
@@ -8880,6 +9071,16 @@ src/
   components/Analytics/RecentBattles.tsx
                               the raw battle log. The only analytics screen
                               that lists rather than aggregates
+  components/Analytics/TeamAnalysis/
+                              #/teams. Two rosters in, a folder per opponent
+                              out. TeamAnalysis.tsx is the entry board and the
+                              run; TeamFolders.tsx is the gallery and the
+                              opened versus board. EAGERLY imported on purpose
+                              — see the Suspense note in the README
+  utils/squadParse.ts         pulling a squad out of pasted text. NO IMPORTS,
+                              like tiers.ts and format.ts: it decides WHO gets
+                              analysed, and a dropped player produces a report
+                              that looks exactly as correct as a complete one
   state/duelImport.ts         a played duel -> a Versus group. What counts as a
                               real deck, and what counts as the same set twice.
                               Pure, so both can be tested without a store
@@ -9008,6 +9209,11 @@ server/
   live_player.py              the live CR battlelog, analysed for a new tag
   tracking.py                 the tag-enrolment queue — the ONLY file this API
                               writes, and it is ours, not the bot's
+  team_analysis.py            squad vs squad. Reuses deck_counter's matchup
+                              ladder rather than reimplementing it, and builds
+                              each candidate's profiles ONCE — the upstream
+                              LRUs are 64/32 and would thrash otherwise
+  test_team_analysis.py       61 checks, no DB and no network
   test_duel_combos.py         39 checks, no DB
   test_meta.py                33 checks, no DB
   test_card_art.py            110 checks, no DB
@@ -9089,6 +9295,18 @@ so they are recorded rather than quietly restyled:
 |---|---:|---|
 | Cards board, the rate figures | **3.34–4.16:1** at 10.1px, 96 elements | `--c-use` (#2a78d6) on `--surface-nested` |
 | ~~Duel Zone, the pane blurb~~ | ~~4.19:1~~ | **closed.** It was `--text-muted` on a violet fill; that token is pure white / pure black now — see [Every neutral font is at full contrast now](#every-neutral-font-is-at-full-contrast-now) |
+
+**A render loop is live in production.** `TopSearch` -> `GooeySearch` re-renders
+forever because its `items = []` default parameter is a new array inside an
+effect's dependency array. It burns CPU on every screen and it makes
+`React.lazy` unusable anywhere inside the Dashboard shell. One-line fix, in
+vendored code every screen depends on, so it is recorded rather than applied in
+a commit about something else — see
+[A render loop that starves Suspense](#a-render-loop-that-starves-suspense).
+
+**`.topActions` overflows its box at 390px** by 43px (278 into 235), noticed
+during the Team Analysis phone pass. Pre-existing; the phone pass dropped the
+notification bell specifically so this would fit, and it still does not.
 
 The remaining one needs 4.5:1. The fix is a token, not a layout — but it is a
 token shared across screens, so it is a palette decision rather than a bug fix,

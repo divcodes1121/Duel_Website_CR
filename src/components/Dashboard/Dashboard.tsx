@@ -8,6 +8,30 @@ import { Header } from '../Header/Header';
 import { DuelDeckBuilder } from '../DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from '../DecksHome/DecksHome';
 import { CounterPalette } from '../CounterPalette/CounterPalette';
+/* EAGER, AND NOT BY CHOICE — `React.lazy` DOES NOT WORK INSIDE THIS SHELL.
+ *
+ * This screen is the obvious candidate for a split: it is Pro-only, so most
+ * visitors literally cannot open it, and it costs 5.4 kB gzip. It was built
+ * that way and it did not render — in dev OR in a production build, where the
+ * chunk was fetched (both the .js and the .css) and then never committed.
+ *
+ * The cause is `TopSearch` -> vengenceui's `GooeySearch`, which is in an
+ * INFINITE RENDER LOOP: its `items = []` default is a new array on every
+ * render and sits in the effect's dependency array
+ * (`ui/gooey-search.tsx`), so the effect re-runs, calls `setResults([])`
+ * with another new array, and re-renders forever. React logs "Maximum update
+ * depth exceeded" continuously. A tree that never settles never commits a
+ * resolved Suspense boundary, so any lazy child of the Dashboard hangs at its
+ * fallback for good.
+ *
+ * Proved by removing `<TopSearch>` and rebuilding: `#/teams` rendered
+ * immediately with the lazy import untouched. `#/guide` is lazy too and works,
+ * because the field book renders OUTSIDE this shell.
+ *
+ * So this import is eager until that loop is fixed. Making it lazy again is a
+ * one-line change here — and it must not be attempted before the loop is gone,
+ * or the screen silently goes blank again. */
+import { TeamAnalysis } from '../Analytics/TeamAnalysis/TeamAnalysis';
 import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
 import { DuelAnalysis } from '../Analytics/DuelAnalysis';
 import { DuelZone } from '../Analytics/DuelZone';
@@ -47,6 +71,7 @@ import {
   CoachIcon,
   StarIcon,
   SwordsIcon,
+  TeamIcon,
 } from './icons';
 import styles from './Dashboard.module.css';
 import { Fireflies, type FireflyHue } from '../../three/Fireflies';
@@ -67,7 +92,13 @@ import { trialDaysLeft } from '../../state/supabase';
  * is rendered `embedded`, which drops the page nav it used to carry — the top
  * bar already provides the brand, theme toggle and profile menu. */
 
-export type DashboardView = 'home' | 'builder' | 'decks' | 'palette' | 'player';
+export type DashboardView =
+  | 'home'
+  | 'builder'
+  | 'decks'
+  | 'palette'
+  | 'teams'
+  | 'player';
 
 /* The home route is `#/`, not the empty string.
  *
@@ -93,6 +124,11 @@ const TOP_NAV = [
   { label: 'Deck Vault', icon: DeckIcon, hash: '#/decks', home: false },
   { label: 'Duel Builder', icon: SwordsIcon, hash: '#/builder', home: false },
   { label: 'Counter Hub', icon: PaletteIcon, hash: '#/palette', home: false },
+  /* A TOOL, NOT AN ANALYTICS AREA, which is why it is here rather than in
+     SIDE_NAV: the rail lists the sections of ONE loaded player, and this screen
+     has no single subject — it takes two rosters and has nothing to say until
+     both are pasted. */
+  { label: 'Team Analysis', icon: TeamIcon, hash: '#/teams', home: false },
   /* Meta is a top-level destination now rather than a sidebar row. It is about
      the whole player base, so it never belonged among a player's own sections —
      it was already home-only, and this is the same rule stated in the nav. */
@@ -190,6 +226,22 @@ const FEATURES = [
     hash: '#/palette',
     art: ['pekka', 'inferno-tower', 'skeleton-army'],
   },
+  /* THE FOURTH PANEL, and the only one that is not a deck editor. It is here
+     rather than in the analytics grid above because it takes an INPUT — two
+     rosters — the way the three tools do, and the grid's blocks all open a
+     screen that is already about the loaded player. Pink is the action hue and
+     this is the one tool that performs a read rather than editing a deck. */
+  {
+    hue: 'pink',
+    icon: TeamIcon,
+    kicker: 'Team Analysis',
+    title: 'Scout a whole roster',
+    body: 'Paste both squads. Every opponent gets a folder holding the decks they actually play and the decks your team should answer them with — named for the teammate who already pilots each one.',
+    chips: ['Two squads at once', 'A folder per opponent', 'Ranked on real matchups'],
+    cta: 'Open Team Analysis',
+    hash: '#/teams',
+    art: ['archer-queen', 'pekka', 'goblin-barrel'],
+  },
 ] as const;
 
 function go(hash: string) {
@@ -201,10 +253,11 @@ function go(hash: string) {
    but they own identity hues too, on their landing-page panels. Same colours,
    so the backdrop keeps meaning something on all eleven screens rather than
    falling back to ambient on three of them. */
-const TOOL_HUE: Record<'builder' | 'decks' | 'palette', FireflyHue> = {
+const TOOL_HUE: Record<'builder' | 'decks' | 'palette' | 'teams', FireflyHue> = {
   builder: 'violet',
   decks: 'green',
   palette: 'blue',
+  teams: 'pink',
 };
 
 export function Dashboard({
@@ -337,6 +390,18 @@ export function Dashboard({
    * gets the full width and no rail. Opening an area, or loading a tag, is
    * leaving it. */
   const landing = view === 'home' && section === 'Search Player';
+
+  /* HIDDEN, NOT LOCKED. Team Analysis is admin-only while it is being tested
+     against real data (see `ADMIN_ONLY_SECTIONS`), and there is no point
+     drawing a nav entry or a landing panel that opens a card saying "become an
+     admin". Both lists are filtered from the SAME predicate the route itself
+     uses, so a hidden entry and a closed route can never disagree. */
+  const topNavItems = TOP_NAV.filter(
+    (item) => item.label !== 'Team Analysis' || sectionAllowed(access, 'Team Analysis'),
+  );
+  const featureItems = FEATURES.filter(
+    (f) => f.kicker !== 'Team Analysis' || sectionAllowed(access, 'Team Analysis'),
+  );
 
   /* THE BACKDROP WEARS THE OPEN AREA'S HUE — the same one the sidebar row and
    * the area's block already carry, so the whole page agrees about where you
@@ -496,7 +561,7 @@ export function Dashboard({
             query row moved into the panel, where the thing it queries is. */}
         <GlassDockNav
           className={styles.topDock}
-          items={TOP_NAV.map((item) => ({
+          items={topNavItems.map((item) => ({
             label: item.label,
             icon: item.icon,
             active: topNav === item.label,
@@ -805,6 +870,20 @@ export function Dashboard({
               )}
               {view === 'decks' && <DecksHome embedded />}
               {view === 'palette' && <CounterPalette embedded />}
+              {/* THE ONE TOOL ROUTE THAT CONSULTS THE GATE. The other three
+                  are deck editors that touch no player data; this one reads the
+                  analytics service for up to sixteen players, so it is a
+                  Pro-only SECTION that happens to live on a tool route.
+                  `sectionAllowed` is asked here for exactly the same reason it
+                  is asked for a sidebar area — one predicate, never a second
+                  opinion about what Pro means. */}
+              <div data-probe-view={view} data-probe-allowed={String(sectionAllowed(access, 'Team Analysis'))} />
+              {view === 'teams' &&
+                (sectionAllowed(access, 'Team Analysis') ? (
+                  <TeamAnalysis />
+                ) : (
+                  <GateCard access={access} section="Team Analysis" />
+                ))}
             </section>
           ) : section === 'Search Player' ? (
             /* The scroll target for the top bar's Analytics item — the field
@@ -979,7 +1058,7 @@ export function Dashboard({
               {/* Also unheaded, for the same reason: each tool panel already
                   carries its own kicker, title and description. */}
               <div className={styles.band} ref={toolsReveal}>
-              {FEATURES.map((f, i) => {
+              {featureItems.map((f, i) => {
                 const Icon = f.icon;
                 return (
                   <button

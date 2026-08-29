@@ -160,6 +160,10 @@ class Authentication(unittest.TestCase):
                   "/api/analytics/coach/opponent-read/%23Y022GRCJQ",
                   "/api/analytics/track/pending",
                   "/api/analytics/battles/%23Y022GRCJQ",
+                  # The most expensive route on the service: sixteen player
+                  # resolutions and a profile of every blue deck. An unkeyed
+                  # caller must not be able to start one.
+                  "/api/analytics/teams?blue=%23Y022GRCJQ&red=%23L8GVPJ900",
                   "/api/analytics/deck?cards=knight"]
         with configured(CLASH_API_KEY=KEY) as mod, serving(mod) as base:
             for path in routes:
@@ -697,7 +701,13 @@ class RoutingUnchanged(unittest.TestCase):
         # of the test rather than a chore around it - it is a tripwire, so the
         # change belongs in the same commit as the route, beside the auth test
         # above.
-        self.assertEqual(len(routes), 20)
+        #
+        # 21 on 30 Aug 2026: `/api/analytics/teams` (Team Analysis - two
+        # rosters in, a folder per opponent out). It is the most expensive
+        # route on the service - one run resolves up to sixteen players and
+        # profiles every deck the blue squad plays - which is exactly why it
+        # gets named here rather than slipping in unremarked.
+        self.assertEqual(len(routes), 21)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]

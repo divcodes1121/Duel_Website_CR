@@ -1271,3 +1271,149 @@ export async function fetchOpponentRead(
     clearTimeout(timer);
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+   TEAM ANALYSIS — two rosters in, a folder per opponent out.
+   server/team_analysis.py is the shape below; see its docstring for what the
+   scoring rule is and, more importantly, what it refuses to claim.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/** How well a roster member could be read at all.
+ *
+ *  `stored` — the bot has been collecting them; the real thing.
+ *  `live`   — never tracked, so the ~25-battle CR API log answered and the tag
+ *             was queued. Thin, and the screen must say so.
+ *  `unknown`— not tracked and the live API could not be reached either. No
+ *             decks, and the reason stated rather than an empty folder.
+ */
+export type TeamBasis = 'stored' | 'live' | 'unknown';
+
+export interface TeamMember {
+  tag: string;
+  name: string;
+  basis: TeamBasis;
+  battles: number;
+  winRate: number;
+  decks: number;
+  tracking: TrackingState;
+  window: { from: string | null; to: string | null };
+}
+
+/** One archetype in an opponent's spread, weighted by how much they play it. */
+export interface TeamSpreadRow {
+  archetype: string;
+  name: string;
+  style: string;
+  games: number;
+  weight: number;
+  /** Percentage of the decks considered — the weight, as it is displayed. */
+  share: number;
+}
+
+/** One candidate deck against one archetype of the opponent's spread. */
+export interface TeamMatchupRow {
+  archetype: string;
+  name: string;
+  share: number;
+  /** NULL when no rung of the ladder had evidence. Withheld, never 50. */
+  winRate: number | null;
+  source: string | null;
+  sourceText?: string;
+  /** The denominator behind `winRate`. Named `games` because that is what
+   *  every rung of the matchup ladder publishes — see the note in
+   *  `team_analysis._score`. */
+  games: number;
+  tier: 'high' | 'medium' | 'low' | null;
+  interval?: string | null;
+  decks?: number | null;
+}
+
+/** A deck the blue squad should bring, and who on it already plays that deck. */
+export interface TeamRecommendation {
+  cards: string[];
+  art: Record<string, WildForm>;
+  archetype: string;
+  name: string;
+  avgElixir: number;
+  owner: { tag: string; name: string };
+  comfort: {
+    games: number;
+    wins: number;
+    winRate: number;
+    useRate: number;
+    /** What the practice tiebreak was worth here, in points. */
+    bonus: number;
+  };
+  /** Spread-weighted expected win rate against this opponent. The headline. */
+  expectedWinRate: number;
+  /** How much of their play that figure actually covers, as a percentage. */
+  spreadCovered: number;
+  score: number;
+  matchups: TeamMatchupRow[];
+}
+
+/** One opponent's folder: what they play, and what to bring against them. */
+export interface TeamFolder {
+  player: {
+    tag: string;
+    name: string;
+    basis: TeamBasis;
+    battles: number;
+    winRate: number;
+    tracking: TrackingState;
+    coverage: ApiCoverage;
+    window: { from: string | null; to: string | null };
+  };
+  /** LEFT side of an opened folder: the decks they actually play. */
+  theirDecks: ApiDeck[];
+  spread: TeamSpreadRow[];
+  /** RIGHT side: the top decks from the blue squad, best first. */
+  recommended: TeamRecommendation[];
+  /** Each blue teammate's own best answer — what a lineup is built from. */
+  byPlayer: TeamRecommendation[];
+  considered: number;
+  /** Why there is nothing to show, when there is nothing to show. */
+  reason: 'no_history' | 'no_evidence' | null;
+}
+
+export interface TeamReport {
+  blue: TeamMember[];
+  red: TeamMember[];
+  folders: TeamFolder[];
+  pool: {
+    decks: number;
+    reason: 'no_blue_history' | 'no_blue_comfort' | null;
+    minGames: number;
+  };
+  days: number;
+  limits: {
+    maxSquad: number;
+    topN: number;
+    minComfortGames: number;
+    minOpponentDeckGames: number;
+  };
+  /** Tags the server could not read, per side. Named so a paste can be fixed. */
+  rejected: { blue: string[]; red: string[] };
+  status: CounterStatus;
+  sources: ApiSources;
+}
+
+/**
+ * Analyse two squads against each other.
+ *
+ * THE MOST EXPENSIVE CALL THIS CLIENT MAKES — up to sixteen player resolutions
+ * and a profile of every deck the blue squad plays — so it is fired by a
+ * button, never by typing. The tags are sent already normalised, and the server
+ * normalises them again: the client copy is what makes chips appear before the
+ * call is spent, not a boundary.
+ */
+export function fetchTeamAnalysis(
+  blue: string[], red: string[], days = 30,
+): Promise<TeamReport> {
+  const q = new URLSearchParams({
+    blue: blue.join(','),
+    red: red.join(','),
+    days: String(days),
+  });
+  return get<TeamReport>(`/api/analytics/teams?${q.toString()}`);
+}
