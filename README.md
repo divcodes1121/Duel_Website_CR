@@ -52,7 +52,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped, then reshaped.** The board is now YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. Pro-only. 61 Python checks + 23 vitest |
+| **Team Analysis** (`#/teams`) | **shipped, then reshaped.** The board is now YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 23 vitest |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -7283,25 +7283,45 @@ as "#2PP0PYLQ #2PP0PYLQ" and discarded the label the person had actually typed
 beside the tag. The server's name wins only when it is not the tag; the folder
 header and the gallery card drop the tag line in the same case.
 
-### Pro-only, and the gate is asked on a tool route
+### Admin-only for now, and the gate is asked on a tool route
 
-It joins Coach Assist in `PRO_ONLY_SECTIONS`. It is the squad-scale version of
-that screen, so pricing it lower would put the bigger answer behind the smaller
-gate — and it is the most expensive thing the service does: one run resolves up
-to sixteen players, enrols the untracked ones and profiles every deck the blue
-squad plays. `sectionAllowed()` is consulted in the Dashboard exactly as it is
-for a sidebar area; one predicate, never a second opinion about what Pro means.
+**It is written and priced as a Pro feature and is currently visible only to an
+admin.** That is a staging shelf, not a tier: `main` deploys straight to
+production and there is no staging environment, so the only way to try a screen
+against real data is to ship it and be the only person who can reach it.
+`ADMIN_ONLY_SECTIONS` in `tiers.ts` holds it, checked **before** the pro/admin
+short-circuit so that even a paying Pro is refused. Moving it to Pro is deleting
+one line there and adding it to `PRO_ONLY_SECTIONS`, where it sat first.
 
-### The test fixture that pinned nothing
+Where it belongs is beside Coach Assist. It is the squad-scale version of that
+screen, so pricing it lower would put the bigger answer behind the smaller gate
+— and it is the most expensive thing the service does: one run resolves up to
+sixteen players, enrols the untracked ones and profiles every deck the blue
+squad plays.
 
-`test_team_analysis.py` passed 59/59 while the module read a field that does not
-exist. Every rung of the ladder publishes its denominator as `games`; `battles`
-is a field on the profile **wrapper**, not on a per-archetype record. The module
-read `battles`, got null from every real rung, and the client then called
-`.toLocaleString()` on it. Nothing caught it because the fixture had invented
-the same name the code was reading. **A fixture that does not speak the real
-vocabulary pins nothing** — it was found by calling the endpoint, not by the
-tests, and the fixture now uses `games` and asserts the denominator explicitly.
+**Hidden, not locked.** The dock entry and the landing tool panel are filtered
+from the *same* predicate the route consults, so a hidden entry and a closed
+route cannot disagree. There is no point drawing a gate card that says "become
+an admin". `sectionAllowed()` is asked here exactly as it is for a sidebar
+area — one predicate, never a second opinion about what a tier means.
+
+**Both tripwires were bumped deliberately**: the route count 20 → 21 in
+`server/test_api_security.py`, and `ALL_SECTIONS` plus a new admin-shelf block
+in `tests/entitlement.test.ts`. The entitlement suite also stopped asserting
+that "pro opens everything", which had quietly become false.
+
+### The denominator is `games`, and `battles` does not exist on a rung
+
+Worth stating on its own because it is a property of `deck_counter`'s contract
+rather than of this screen. Every rung of the matchup ladder — the exact deck
+profile, both cluster levels, the archetype matrix — publishes its denominator
+as **`games`**. `battles` is a field on the profile **wrapper**
+(`{"archetypes": …, "overall": …, "battles": n}`) and never on a per-archetype
+record, so reading it returns `None` from every rung and nothing notices until
+a client formats it.
+
+How that shipped anyway, and the lesson it carries, is in
+[Everything this feature got wrong](#everything-this-feature-got-wrong-and-what-caught-it).
 
 ### `1fr` is `minmax(auto, 1fr)`, and it blew both grids out
 
@@ -7386,9 +7406,11 @@ either — four fractions of that row would draw the art at ~78px, larger than
 the desktop board's 42px, which is the trap already recorded for the meta
 boards.
 
-### Two probes that lied, again
+### Three probes that lied, again
 
-Both worth knowing because both reported a fault in correct code:
+All three reported a fault in correct code, which is the expensive kind of wrong
+— a failing check sends you looking, and there is nothing to find. The fuller
+write-up is in `docs/UI.md`.
 
 - **`element.screenshot()` on a tall element inside a scrolling ancestor paints
   blank.** The phone capture showed content stopping after ~550px with 3,000px
@@ -7399,11 +7421,113 @@ Both worth knowing because both reported a fault in correct code:
   art are not all the same aspect, so with `height: auto` cards in one visual
   row sit a pixel or two apart and a 4 x 2 grid reported three rows. Group with
   a tolerance.
+- **A `data-` attribute used for two purposes matches both.** `data-side="blue"`
+  is on the paste box *and* on the board column, so an unscoped
+  `.first()`/`.last()` measured the entry area and reported the versus board
+  laid out backwards. Scope to the board first. Same trap as the
+  `[class*="bar"]` note: a selector that is nearly right is worse than one that
+  is obviously wrong, because it returns something.
+
+### Everything this feature got wrong, and what caught it
+
+Recorded in full because the interesting property is *what found each one*. Six
+of the nine shipped, and the tests that were passing at the time did not fail.
+
+| # | fault | found by | why the existing checks missed it |
+|---|---|---|---|
+| 1 | `_live_decks` read a `player` object that does not exist | calling the endpoint | no fixture had a live payload in it |
+| 2 | every matchup rung read `battles`; the ladder publishes `games` | calling the endpoint | **the fixture invented the same wrong name** |
+| 3 | chips rendered `#2PP0PYLQ #2PP0PYLQ` | looking at a screenshot | no assertion covered the tag-fallback name |
+| 4 | the screen could not be scrolled on a desktop | **a person using it** | phone-first verification; the clipping ancestor is desktop-only |
+| 5 | deck names truncated at ≤1280 | a width sweep | only 1440 had been checked |
+| 6 | the matchup row overflowed at 1024 | a width sweep | its breakpoint was on the page, not on its column |
+| 7 | the phone deck strip orphaned its 8th card | a screenshot at 390px | overflow checks pass; 7+1 is not overflow |
+| 8 | the candidate pool deduped a shared deck to one owner | the per-player rewrite | correct for the old shape, wrong for the new one |
+| 9 | a loop variable shadowed the opponent's `decks` | **a unit test** | — it did its job |
+
+Two patterns run through that list.
+
+**A fixture that invents its own vocabulary pins nothing.** Fault 2 is the sharp
+version: `test_team_analysis.py` passed 59/59 while the module read a field that
+does not exist anywhere in `deck_counter`. The module said `m.get("battles")`,
+the fixture said `"battles": 400`, and they agreed with each other and with
+nothing else. Every real rung returned `None`, and the client then called
+`.toLocaleString()` on it. **Fixtures must be written from the producer's actual
+output, not from what the consumer expects to receive.**
+
+**A layout check that measures shape says nothing about behaviour.** Fault 4
+shipped past checks that asserted the boxes stacked correctly, that nothing
+overflowed, and that the phone had one scroll region. All true. None of them
+asked whether a scroll gesture *moved* anything, which was the property that had
+been lost.
+
+### What was measured, and what it says
+
+| measurement | value | what it settles |
+|---|---|---|
+| 2v2 analysis, warm | **1.5 s** | the per-run profile cache is doing its job |
+| the same call, cold | **31 s** | first hit pays for the meta/counter snapshots |
+| 3 blue x 1 red, production | 15 candidate decks | a realistic pool size |
+| candidate profile reads | 3 per **unique deck**, not per pair | two teammates on one list cost one set |
+| main bundle, before | 333.63 kB gzip | the baseline, measured rather than taken from the README |
+| main bundle, after | 334.26 kB gzip | **+0.63 kB** — the screen itself was a separate chunk |
+| main bundle, eager | 339 kB gzip | what the Suspense starvation costs |
+| `.tool` at 1280x720, broken | 622px holding 770px | the clip, before the scroll fix |
+| `.entry` at 1024, broken | 698px holding 750px | the `1fr` blowout |
+| "Maximum update depth" warnings | **169 in seconds** | the render loop, quantified |
+| vitest, default pool | worker OOM-killed | 365 MB free of 7.5 GB on this machine |
+| vitest, `--poolOptions.forks.singleFork` | 293 tests in 1.5 s | the workaround |
+
+**The bundle numbers are the reason to measure a baseline before claiming a
+cost.** The README's standing figure was 320 kB; the tree actually built at
+333.63 kB before this feature touched it. Attributing that 13 kB of drift to
+this work would have been wrong in a way nobody could later disprove.
+
+### An observation about the data, not the code
+
+Against a real opponent, one blue player can show **two decks with the same
+name, the same expected win rate, and the same evidence row**. That is honest.
+They are different lists — one swapped `royal-ghost` for `elite-barbarians` —
+and *neither clears the deck-level evidence floor*, so both fall through to the
+archetype matrix, which is by construction unable to tell two Bridge Spam decks
+apart.
+
+The screen already says this without being asked to: the evidence column reads
+"28,790 games · high", and tens of thousands of games is the matrix rung rather
+than a deck's own record. Each row also carries its owner's real record with
+that list (10 games / 50.0% against 5 games / 60.0%), which is what actually
+distinguishes them.
+
+It is worth stating plainly because it looks like a duplicate-rendering bug and
+is not, and because the honest answer to "which of these two?" here is **the
+data cannot say** — the comfort tiebreak is doing the ordering, exactly as
+designed.
+
+### Deployment notes that cost time
+
+- **`server/` files must be converted to LF before `scp`.** The working tree is
+  CRLF on this machine. Python does not care, but the VPS copy is LF, so
+  shipping CRLF breaks the `md5sum` drift check that is the only way to tell
+  whether the box has been edited by hand.
+- **The drift check is worth doing every time.** Both deploys in this work
+  compared the VPS copy against `git show HEAD:` before overwriting; both
+  matched, which is the answer that makes the deploy boring.
+- **The route is publicly reachable, like every other analytics route.** Caddy
+  injects `X-Analytics-Key` at the edge (`header_up X-Analytics-Key
+  {env.CLASH_API_KEY}`), so `api.deckkies.com` answers anyone. That is
+  pre-existing and documented, but this is now **the most expensive route on the
+  service** — up to sixteen player resolutions and a live CR API call per
+  untracked tag — so it is a larger amplification target than the rest.
+- **A stale `python server/app.py` will silently serve old code.** A second one
+  cannot bind to 8787 and exits; the browser then gets the previous payload
+  shape and the UI throws `Cannot read properties of undefined`. `pkill -f
+  app.py` in Git Bash does **not** reach Windows processes — use
+  `Get-Process python | Stop-Process -Force`.
 
 ### It cannot be `React.lazy`, and that is somebody else's bug
 
-This screen is the obvious candidate for a code split — Pro-only, so most
-visitors literally cannot open it, and 5.4 kB gzip. It was built lazy and **did
+This screen is the obvious candidate for a code split — gated, so most
+visitors cannot open it at all, and 5.4 kB gzip. It was built lazy and **did
 not render**, in dev or in a production build where the chunk was fetched (both
 the `.js` and the `.css`) and then never committed. See
 [A render loop that starves Suspense](#a-render-loop-that-starves-suspense). The
@@ -7413,35 +7537,109 @@ import is eager until that is fixed, and the reason is written at the import.
 
 ## A render loop that starves Suspense
 
-**Found while building Team Analysis, pre-existing, and live in production.**
-It is not a Team Analysis bug and is recorded here because it is the reason that
-screen cannot be code-split, and because it is burning CPU on every screen of
-the site right now.
+**Found while building Team Analysis. Pre-existing, live in production, and not
+fixed here.** It is recorded at this length because it is the reason that screen
+cannot be code-split, because it is burning CPU on every page of the site right
+now, and because the way it presents — a chunk that downloads successfully and
+then never appears — points at everything except the actual cause.
 
-`TopSearch` renders vengenceui's `GooeySearch`. That component declares
-`items = []` as a **default parameter** and then lists `items` in an effect's
-dependency array (`ui/gooey-search.tsx`). A default parameter is a **new array
-on every render**, and `TopSearch` passes no `items` — the field is tag-only and
-fetches nothing. So the effect re-runs every render, calls `setResults([])` with
-another new array, and re-renders forever. React logs "Maximum update depth
-exceeded" continuously; a verification run measured **169 of them in a few
-seconds on one page**.
+### The mechanism
 
-This is exactly the failure `docs`/CLAUDE.md already warns about for this
-component — "an inline `onSearch` is a new identity per render AND the
+`TopSearch` renders vengenceui's `GooeySearch` (`src/components/ui/gooey-search.tsx`).
+The component declares
+
+```js
+items = [],                                   // a default PARAMETER
+```
+
+and then lists `items` in an effect's dependency array:
+
+```js
+}, [debouncedQuery, items, onSearch, maxResults]);
+```
+
+A default parameter is evaluated on every call, so `items` is a **new array
+identity on every render**. `TopSearch` passes no `items` at all — the field is
+tag-only and fetches nothing, deliberately, since search-by-name was built and
+removed. So the default is always what is used, and the loop is:
+
+```
+render  ->  items is a new []  ->  deps changed  ->  effect runs
+        ->  setResults([])  (another new array, so state identity changes)
+        ->  render  ->  ...
+```
+
+It never converges. React caps the cascade and logs *"Maximum update depth
+exceeded"*; a verification run counted **169 of those warnings in a few seconds
+on a single page**.
+
+This is exactly the failure the project already had written down for this
+component — *"an inline `onSearch` is a new identity per render AND the
 component's own `items = []` default is a new ARRAY per render, so it re-runs
-forever" — and the note was written about a search source that was later
-removed. The `items` half survived the removal.
+forever"*. That note was written when a search source existed and measured
+**one query costing ~180 requests**. The `onSearch` half was fixed by removing
+the search source. **The `items` half survived**, because with no source the
+effect's early branch just writes `setResults([])` instead of fetching — quieter,
+equally infinite.
 
-**A tree that never settles never commits a resolved Suspense boundary**, so any
-`React.lazy` child of the Dashboard hangs at its fallback permanently. Proved by
-deleting `<TopSearch>` and rebuilding: `#/teams` rendered immediately with the
-lazy import untouched. `#/guide` is lazy too and works, because the field book
-renders **outside** this shell.
+### Why it presents as "the lazy chunk never renders"
 
-The fix is to hoist the default to a module-level constant so its identity is
-stable. It is a one-line change to vendored code that every screen depends on,
-so it is recorded rather than applied in a commit about something else.
+`React.lazy` suspends, the promise resolves, and React then needs to **commit**
+the resolved boundary. A tree that never finishes rendering never reaches a
+commit for that boundary, so the fallback stays up for ever. Nothing errors,
+nothing rejects, nothing retries — this is starvation, not a crash, and it has
+no failure signal of its own.
+
+The observable symptoms, in the order they were hit:
+
+| observation | what it suggested | actually |
+|---|---|---|
+| `.tool` renders, empty | wrong route / gate refused | route and gate both correct |
+| module never requested (dev) | import path wrong | factory never reached a commit |
+| **chunk IS requested in prod** (`.js` + `.css`) | a render-time throw | fetched, resolved, never committed |
+| `#/guide` is lazy and works | `lazy` is fine, my code is wrong | `#/guide` renders **outside** this shell |
+
+### How it was actually pinned
+
+Reading did not settle it; deleting did. Removing `<TopSearch>` from the
+Dashboard and rebuilding made `#/teams` render immediately **with the lazy
+import untouched**. That is the whole proof: one element removed, one behaviour
+restored, nothing else changed.
+
+The diagnostic that made it cheap was the gate probe — rendering
+`<div data-probe-view={view} data-probe-allowed={...} />` beside the branch and
+reading the attributes back. It returned `view: 'teams', allowed: 'true'`, which
+eliminated routing and entitlement in one step and left only "the component is
+being rendered and is not appearing".
+
+### Blast radius
+
+- **Every screen.** `TopSearch` is in the top bar, so the loop runs on the
+  landing page, all eight analytics areas, and all four tools.
+- **`React.lazy` is unusable anywhere inside the Dashboard.** Team Analysis is
+  imported eagerly because of this, costing ~5.4 kB gzip that should have been
+  split. The field book escapes only by being its own shell-less route.
+- **CPU, continuously**, on every visitor's device including phones. Not
+  measured in battery terms; the warning count is the proxy.
+
+### The fix, and why it is not in this commit
+
+Hoist the default to a module-level constant so its identity is stable:
+
+```js
+const NO_ITEMS: string[] = [];        // module scope
+...
+items = NO_ITEMS,
+```
+
+One line. It is **vendored registry code that every screen depends on**, and the
+right place for it is its own change with its own verification across the
+screens that use the search field — not a footnote in a commit about a team
+scouting board. It is listed in
+[Known, measured, and not yet fixed](#known-measured-and-not-yet-fixed).
+
+**Do not make a Dashboard child lazy until it is done.** It will download and
+silently never appear, and the build output will look correct.
 
 ---
 

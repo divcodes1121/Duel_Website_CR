@@ -759,6 +759,115 @@ a real carousel and whose off-centre cards are clipped by `.stage` **by design**
 so an overflow probe will always flag it. Treat a new horizontal scroller as a
 bug until it is on that list.
 
+### The third instance, and the one that reached production
+
+Team Analysis (`#/teams`) shipped with exactly the first failure above and was
+reported as *"scrolling doesn't work, I have to minimise the screen to see
+what's down"* — which is the symptom worth remembering, because it does not
+sound like a scroll bug. Resizing the window reflows the content into view, so
+the page looks healthy and the **wheel** looks broken.
+
+`.page` was a plain flex column: no height, `overflow: visible`. Measured with
+a folder open, before the fix:
+
+| viewport | `.tool` client / scroll | `.main` | document | what scrolled |
+|---|---|---|---|---|
+| 1440x900 | 802 / 802 | 804 / 804 | 900 / 900 | nothing (fitted, for now) |
+| 1280x720 | **622 / 770** | 624 / 624 | 720 / 720 | **nothing** |
+| 390x844 | 1263 / 1263 | **751 / 1332** | 844 / 844 | `.main` — fine |
+
+Two things in that table are worth more than the fix:
+
+**The phone column is green.** Below 62rem `.tool` stops clipping and `.main`
+becomes the only scroll region, so the screen worked on a phone and had been
+verified there first. The clipping ancestor exists **only on the desktop path**.
+A phone-first check cannot see this class of bug at all.
+
+**At 1440 it fitted.** The content happened to be shorter than the panel, so the
+same broken CSS passed. It failed at 1280 and got worse at 1024. A single-size
+check is a coin toss here.
+
+After: `height: 100%; min-height: 0; overflow-y: auto` on `.page`, and
+`height: auto; min-height: auto; overflow: visible` again below 62rem — the two
+rules switch together, like every other pair at that breakpoint. Verified at
+1920/1440/1280/1024/768/390 that a real wheel gesture moves something, that the
+last block on the page becomes reachable, and that there is **exactly one**
+scroll region in the ancestor chain.
+
+### Assert that something MOVED, not that the boxes are the right shape
+
+The layout checks that passed while this was broken measured stacking order and
+overflow. Both were correct. Neither says anything about whether a scroll
+gesture does anything, and that is the property that was missing.
+
+A scroll check needs three assertions, and the third is the one usually left
+out:
+
+```js
+// 1. a real gesture moves a real offset
+await page.mouse.wheel(0, 900);        // repeat; one wheel is not a scroll
+// 2. the LAST block on the page becomes reachable
+el.getBoundingClientRect().bottom <= viewportHeight
+// 3. EXACTLY ONE scroller in the ancestor chain — not "at least one"
+```
+
+Three matters because two nested scrollers is its own bug: on touch, every flick
+over the inner one is a coin toss about which box moves. "At least one" passes
+in that state.
+
+### `1fr` is `minmax(auto, 1fr)`, and it blows a grid out sideways
+
+Same screen, found at 1024 after a later change. `.entry` is `1fr auto 1fr` —
+two panels with a VS between. It measured **698px wide holding 750px**, with the
+two supposedly equal sides at **297px and 349px**.
+
+**Nothing inside overflowed.** Every child fitted its own track; the tracks would
+not fit the grid. That is what makes this one quiet — an overflow sweep that
+walks children and asks "is this element wider than its box" finds nothing,
+because the fault is one level up in the track sizing.
+
+A bare `1fr` is `minmax(auto, 1fr)`: the track may not shrink below its
+content's min-content width. One side held a longer chip than the other, so its
+track refused to shrink, the other took what was left, and the sum exceeded the
+container. `minmax(0, 1fr) auto minmax(0, 1fr)` on both grids.
+
+This is the same family as the `auto`-track note recorded for the ranked-deck
+boards — *a track is sized by the widest thing anywhere in it* — with the extra
+wrinkle that `1fr` looks like it should already be flexible and is not.
+
+### Never make a child of the Dashboard `React.lazy`
+
+Not a rule about code splitting; a rule about this shell specifically. See
+[A render loop that starves Suspense](../README.md#a-render-loop-that-starves-suspense)
+in the README. Until `TopSearch` is fixed, a lazy child of the Dashboard hangs
+at its fallback for ever — in a production build too, where the chunk is
+fetched over the network and then never rendered. `#/guide` is lazy and works
+only because the field book renders outside this shell.
+
+### Three probes that reported faults in correct code
+
+Recorded because each cost a round of chasing a bug that was not there.
+
+**`element.screenshot()` on a tall element inside a scrolling ancestor paints
+blank.** Capturing `.page` on a 390x844 phone produced an image with content for
+the first ~550px and **3,000px of white below it** — indistinguishable from a
+layout that has collapsed. The layout was correct: measured, the board was
+2,295px and the per-teammate section 436px. Playwright cannot paint what the
+scroll viewport is not showing. Use a viewport tall enough to hold the content
+instead.
+
+**Counting distinct `top` values counts sub-pixel rows.** A 4x2 deck grid
+reported *three* rows. Evolution and hero art have different aspect ratios, so
+with `height: auto` cards in one visual row sit a pixel or two apart. Group tops
+with a tolerance before counting.
+
+**A `data-` attribute used for two purposes matches both.** `data-side="blue"`
+is on the paste box *and* on the board column, so an unscoped
+`.first()` / `.last()` measured the entry area and reported the versus board
+laid out backwards. Scope the query to the board first. This is the same trap as
+the `[class*="bar"]` note — a selector that is nearly right is worse than one
+that is obviously wrong, because it returns something.
+
 ### A future-dated timestamp run through an "ago" formatter says "just now"
 
 Not a layout bug, but the same family — it renders confidently and it is wrong.

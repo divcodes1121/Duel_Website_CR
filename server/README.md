@@ -868,6 +868,76 @@ counted as 50%: averaging over an empty set flattens the ranking exactly when
 there is least evidence. A candidate that can answer nothing at all scores
 `None` and is not listed.
 
+### Cost, measured
+
+| | |
+|---|---|
+| 2 blue x 2 red, warm | **1.5 s** |
+| the same call, cold | **31 s** — the first hit pays for the meta and counter snapshots |
+| 3 blue x 1 red, production | 15 candidates in the pool |
+| profile reads | 3 per **unique deck**, never per (player, deck) pair |
+
+The cold/warm gap is the whole argument for `_DeckProfile` being built once per
+run. The three reads behind each rung (`deck_profile` plus two
+`cluster_profile`s) are LRU-cached upstream at **64 and 32 entries** — sizes
+chosen for a screen looking at one deck. A 5v5 run has ~40 unique candidate
+decks scored against up to 8 opponents; looping opponents on the outside evicts
+every candidate on every pass and converts ~240 dictionary lookups into ~240
+database reads. On the spinning volume the site used to read from, that is the
+difference between a screen and a timeout. **Do not "fix" this by enlarging the
+upstream caches** — they are correct for the Deck Counter, and a team run must
+not change how that screen behaves afterwards.
+
+### Two logic bugs worth keeping written down
+
+**The pool was deduplicated across players.** A deck two teammates both run was
+kept for whoever had played it more. That is right for a single squad-wide top
+three — one deck under two names is one option wearing two rows — and it is
+wrong the moment the answer is per player, because the other teammate cannot
+then be offered the deck they actually play. The split into `_DeckProfile`
+(keyed by the eight cards) and `_Candidate` (one per player/deck pair) exists
+precisely so the dedupe could be removed **without** paying twice for the reads.
+
+**A loop variable shadowed the opponent's deck list.** In `_folder`:
+
+```python
+decks = (opponent.get("decks") or [])[:OPPONENT_DECKS]   # the left side
+...
+for mate in blue:
+    decks = [...]      # <- rebinds the line above
+...
+"theirDecks": decks,   # <- now the LAST blue player's decks
+```
+
+The left half of the board silently showed the wrong team. Caught by the unit
+test asserting the left side had two rows — the one fault in this work that an
+existing test found before a person did. The loop variable is `own` now.
+
+### `games`, not `battles`
+
+Every rung of the matchup ladder — the exact deck profile, both cluster levels
+and the archetype matrix — publishes its denominator as **`games`**. `battles`
+exists on the profile **wrapper** (`{"archetypes": ..., "overall": ...,
+"battles": n}`) and never on a per-archetype record.
+
+Reading `battles` therefore returns `None` from every real rung, and nothing
+notices until a client formats it. It shipped that way for an afternoon with 59
+passing checks, because the test fixture had invented the same wrong name the
+module was reading. A fixture written from what the consumer expects, rather
+than from what the producer emits, pins nothing.
+
+### The evidence floor makes two different decks look identical, correctly
+
+One player can return two decks of the same archetype with the same expected
+win rate and the same evidence row. Verified against production: the lists
+differ by one card (`royal-ghost` against `elite-barbarians`), **neither clears
+the deck-level floor**, so both fall through to `_symmetric` on the archetype
+matrix — which cannot distinguish two Bridge Spam decks, by construction.
+
+That is the correct answer rather than a bug, and the payload already says so:
+`source` is `archetype` and the denominator is in the tens of thousands. The
+comfort tiebreak does the ordering, which is what it is for.
+
 ## Safety
 
 Connections open with `mode=ro`, so SQLite itself refuses writes — this process
