@@ -180,6 +180,22 @@ browser never attaches credentials to one and it carries no data. The `GET`
 after it is authenticated normally. None of this affects `npm run dev`, where
 Vite proxies server-side and the browser never leaves its own origin.
 
+**In production that value is `https://deckkies.com`, and only that** — which
+is worth stating plainly because of how the failure looks from a browser. Any
+other host gets no `Access-Control-Allow-Origin` back, the browser drops the
+response before the page sees it, and every analytics board renders
+**"Analytics service is not running"** while this service is perfectly healthy
+and answering. Measured 2026-08-29: `deckkies.com` gets the header,
+`www.deckkies.com` and `royal-duels.vercel.app` do not.
+
+So a browser audit of the analytics screens has to run against `deckkies.com`.
+Diagnosing from the message alone will send you to `systemctl status royalweb`,
+which will be green. `/api/analytics/status` answers any origin — it is a plain
+`GET` with no CORS involved from `curl` — so it is the quick way to tell the two
+apart: if `/status` returns JSON and the site says the service is down, it is
+CORS, not the service. Add a host here only by setting
+`CLASH_ALLOWED_ORIGIN`; the code deliberately supports one origin, not a list.
+
 **Rate limiting.** Fixed window per client, `120 / 60 s`, `429` with
 `Retry-After` past it. Fixed windows rather than a sliding log because the
 state per client is one integer and the verdict for a given (client, clock) is
@@ -259,7 +275,7 @@ the ranked ladder, and the opponents our tracked players are actually meeting.
 python server/recruit.py --dry-run          # reads everything, queues nothing
 python server/recruit.py --top 2000         # both sources, for real
 python server/recruit.py --no-opponents     # the leaderboard only
-python server/test_recruit.py               # 31 checks, no DB and no network
+python server/test_recruit.py               # 35 checks, no DB and no network
 ```
 
 **It adds no route and no write.** Both recruiters end at
@@ -435,7 +451,7 @@ the envelope carries both halves of the explanation:
 the list *are* the span, with no second query.
 
 ```bash
-python server/test_duel_combos.py    # 39 checks, no database needed
+python server/test_duel_combos.py    # 55 checks, no database needed
 python server/test_meta.py           # 33 checks, no database needed
 python server/test_card_art.py       # 110 checks, no database needed
 python server/test_duel_zone.py      # 88 checks, no database needed

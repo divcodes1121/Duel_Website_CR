@@ -23,14 +23,18 @@ live: how a filtered deck list closes, and how a route owns its own scroll.
 | **Completion sweep** | a deck reaching 8/8 | one-shot |
 | **Card ring** | both paste screens, the empty palette gallery | both themes |
 | **Liquid metal** | every circular icon control, app-wide | on hover / press only |
-| **Tier badge** | the top bar's ADMIN / PRO / MEMBER badge — a liquid that fills the button, sloshes toward the pointer and discharges on click | both themes |
+| **Tier badge** | the ADMIN / PRO / MEMBER badge — a liquid that fills the button, sloshes toward the pointer and discharges on click. In the top bar at 112x34, and again in the account menu's tier row at 68x24 | both themes |
 
 **The tier badge is the one WebGL surface not in `src/three/`.** It is a port of
 ThreeUI's Tactile Fluidics button and lives in `components/TierBadge/`, raw
 WebGL like `LiquidMetal` rather than three.js, and it holds **one context of the
 ~16 budget** for as long as it is mounted — it releases it on unmount for that
-reason. It renders once, in the top bar, and must not be put in a list without
-sharing a renderer the way `LiquidMetal` does.
+reason. It renders **twice at most** — once in the top bar, and once more in the account
+menu's tier row while that menu is open — and must not be put in a list without
+sharing a renderer the way `LiquidMetal` does. The menu instance is why the
+badge takes its size from props: the shader reads `gl_FragCoord / u_res`, so it
+is scale-free, and the 68x24 copy is the same component with different
+`--tb-w` / `--tb-h`.
 
 Two of this file's rules are answered differently there, both deliberately.
 Reduced motion draws **one frame and starts no rAF** rather than mounting
@@ -701,6 +705,59 @@ that same `overflow` makes the element a **scroll container**, so `position:
 sticky` on a `<th>` inside it now pins to the table rather than to the page and
 silently stops working. Put horizontal scroll behind a width media query when
 the sticky header is worth more on wide screens than sideways scroll is.
+
+### Below 62rem the model inverts, and every rule above flips with it
+
+Everything so far describes a **window**: a panel that fills the height it is
+given, clips, and runs its own scroll regions so the chrome around it can stay
+put. Two panes side by side need that. One column does not, and on a phone the
+same rules that make the model work are what break it.
+
+`.tool` is the top of the chain — `flex: 1; min-height: 0; overflow: hidden`.
+Measured on the builder at 390px, it sat at **684px holding 3,553px** and
+clipped the rest; and because it *clips* rather than scrolls, `.main` had
+nothing to scroll either, so **the page was inert rather than merely cramped**.
+
+The squeeze then travelled inward, and this is where `min-height: 0` changes
+sides. Above, it is the line that *lets* a scroll container scroll. Here it is
+the line that **lets an `auto` grid track shrink below its own content**:
+`DeckWorkspace`'s three rows resolved to 110/228/228px, so the deck column drew
+1,136px of panels straight over the card library underneath it. Same property,
+same file, opposite consequence — which is why the phone rules cannot simply be
+"more of the desktop ones".
+
+So below **`62rem`** the panels are `flex: none; min-height: auto`. They grow,
+`.main` is the only scroll region, and nothing is nested inside anything that
+scrolls. `overflow: hidden` stays where it was: once a box is as tall as its
+content it clips nothing, and it is still what keeps the rounded corners honest.
+
+Three things worth knowing before touching any of it:
+
+**`flex: none` belongs to the axis that scrolls.** The rule above ("a scrolling
+child of a flex column needs it") is about a **column**. Applied to a child of a
+flex **row** it means "size to your content" instead — `.deckColumn` went to
+416px inside a 321px track, and the clipping parent cut it off rather than
+scrolling to it. A child that no longer scrolls needs nothing.
+
+**`overflow-x: clip` computes to `hidden` next to `overflow-y: auto`**, because
+one axis may only be `clip` when the other is `clip` or `visible`. `hidden`
+still blocks touch scrolling, but it stays *programmatically* scrollable — so
+anything that focuses an element past the edge shifts the page and leaves it
+shifted. Useful as a backstop, never as the fix. `visible` collapses the same
+way, to `auto`, which is why a wide table cannot be told to scroll on one axis
+and flow on the other.
+
+**Overflow towards the start is neither scrollable nor counted in
+`scrollWidth`.** A full-bleed strip (`margin: 0 -1rem`) therefore costs nothing
+on its left edge and widens its parent on its right — the phone nav made `.main`
+374px inside 358, giving two nested horizontal scrollers over the same 16px. It
+bleeds left only now.
+
+Nothing else is allowed to move sideways except the nav strip, the deck panel's
+action rail, the two wide analytics tables, and the landing filmstrip — which is
+a real carousel and whose off-centre cards are clipped by `.stage` **by design**,
+so an overflow probe will always flag it. Treat a new horizontal scroller as a
+bug until it is on that list.
 
 ### A future-dated timestamp run through an "ago" formatter says "just now"
 

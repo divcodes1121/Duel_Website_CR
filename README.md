@@ -47,7 +47,7 @@ bot's SQLite files read-only.
 
 ---
 
-## Status — 2026-08-26
+## Status — 2026-08-29
 
 | | |
 |---|---|
@@ -70,6 +70,8 @@ bot's SQLite files read-only.
 | UI — circular buttons | **shipped, verified in a browser.** The 14 circular icon controls take a travelling chromatic rim and a press ripple, adapted from ThreeUI's liquid-metal button. One shared canvas, idle until you touch it |
 | UI — primary buttons | **shipped, 14/14 browser checks.** The twelve rectangular solid CTAs share one treatment: a masked gradient edge and a sheen that sweeps on hover, both mixed from `--on-solid` so the file names no colour |
 | UI — loading states | **shipped, 23/23 then 16/16 browser checks.** The WebGL card fan is **deleted**; all 12 slow loads now show a measured progress rig that paces itself from how long the screen actually took before |
+| UI — account menu | **shipped.** The profile dropdown is a stack of cards: identity, a tier row carrying the live WebGL badge, two figures that open the screens they count, three groups and the theme switch. See [The account menu](#the-account-menu-is-a-stack-of-cards) |
+| UI — the phone | **shipped and verified on the live site**, 15 routes x 2 themes at 390/360/320 plus tablet, landscape and both sides of the breakpoint. Every screen was a WINDOW that clipped; below `62rem` they are parts of a page and `.main` is the only scroll region. The two ranked-deck boards restack as cards. See [The phone pass](#the-phone-pass--one-scroll-and-it-is-the-page) |
 | accounts | **shipped.** Supabase auth, three-day trial, per-feature gate, onboarding form, one desktop + one mobile per account |
 | admin console | **shipped** at `#/admin` — every account and tier, role changes, end-trial, deployment health, storage capacity |
 | hosting | **the analytics service left the home machine.** `battles.db`, `server/app.py` and the bot all run on a Contabo VPS behind Caddy at `api.deckkies.com` |
@@ -80,8 +82,8 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,260 Python checks** across **35 suites** (504 check-style + 756 unittest), **221 vitest**, `tsc -b` and `npm run build` clean |
-| shipped from | `main` at `76397f0`, deployed 2026-08-28 — the black top bar, the tag recruiter and the ranked header. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
+| tests | **1,319 Python checks** across **37 suites** (528 check-style + 791 unittest), **266 vitest**, `tsc -b` and `npm run build` clean |
+| shipped from | `main` at `96a52d4`, deployed 2026-08-29 — the phone pass. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
@@ -164,9 +166,11 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 40. [Recent Battles — the raw log](#recent-battles--the-raw-log)
 41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
 42. [Two filters and a heading](#two-filters-and-a-heading)
-43. [DEKKIES is DECKKIES](#dekkies-is-deckkies)
-44. [Project layout](#project-layout)
-45. [Deliberately not done](#deliberately-not-done)
+43. [The account menu is a stack of cards](#the-account-menu-is-a-stack-of-cards)
+44. [The phone pass — one scroll, and it is the page](#the-phone-pass--one-scroll-and-it-is-the-page)
+45. [DEKKIES is DECKKIES](#dekkies-is-deckkies)
+46. [Project layout](#project-layout)
+47. [Deliberately not done](#deliberately-not-done)
 
 ---
 
@@ -1172,9 +1176,12 @@ one of those two columns turns a one-off into a trend.
 - **`OIE_ALLOWLIST` is unset**, so the Coach's opponent read degrades to
   `{enabled: false}` for everyone. That is the designed answer, not an error —
   but it means the Coach's engine half is dark in production.
-- **The Coach proxy still authenticates with the retired password-hash scheme.**
-  It is the last consumer of `authStore`, and that store cannot be deleted until
-  it migrates. The empty allowlist is what keeps that harmless for now.
+- **The Coach proxy has migrated to Supabase tokens**, and `authStore` is gone
+  with the rest of the 20-account gate. `CoachAssist` reads
+  `supabase.auth.getSession().access_token` and the proxy verifies it the same
+  way `api/decks.ts` does. An earlier version of this file said this was the
+  last thing blocking that store's deletion; it is not, and the store no longer
+  exists.
 
 ---
 
@@ -4837,6 +4844,14 @@ never mounts, and the check passes against nothing.
 
 ## The top navigation dock
 
+> **Superseded.** This describes the proximity dock, which is **deleted** —
+> `TopDock.tsx`, `TopDock.module.css` and `topDockController.ts` are all gone.
+> The top nav is vengenceui's GlassDock now; see
+> [The top nav is a glass dock](#the-top-nav-is-a-glass-dock-and-the-tier-badge-is-a-liquid-button).
+> The section is kept because three of its decisions — stopping the rAF,
+> building the controller once, and driving the field from keyboard focus —
+> are rules this project still holds and re-derived in the replacement.
+
 The six top-level items — Home, Analytics, Deck Vault, Duel Builder, Counter
 Hub, Meta — sit in a glass pill and **expand downward on a spring as the pointer
 nears them**, adapted from ThreeUI's `AnimatedTopDock`. Keyboard focus drives the
@@ -6172,25 +6187,39 @@ push.
 
 ## Testing and verification
 
-1,260 Python checks across 35 suites and 221 vitest tests, none of which open a
-database — every Python suite runs on synthetic data or a stubbed reader, so
-they pass on a machine with no Clash_Bot install and cannot be broken by
-whatever a real player did last week. The vitest side gained the analytics-proxy
-suites, the tier-based export gate and the admin console's date formatters.
+**1,319 Python checks across 37 suites** (528 check-style + 791 unittest) and
+**266 vitest tests**, counted by running all of them on 2026-08-29. Only
+`test_recent_battles.py` opens a database, and it writes its own temp file —
+every other Python suite runs on synthetic data or a stubbed reader, so they
+pass on a machine with no Clash_Bot install and cannot be broken by whatever a
+real player did last week. The vitest side gained the analytics-proxy suites,
+the tier-based export gate and the admin console's date formatters.
 
-**`npm run lint` reports 2 errors and 4 warnings, none of them actionable.**
-The errors are `react-hooks/rules-of-hooks` flagging `useFont(...)` inside
-`pdfRenderer.ts` — a plain helper whose name happens to start with "use", in a
-file with no React in it at all. The warnings are two `exhaustive-deps` on the
-`win` object in the analytics fetch effects (it is rebuilt every render; the
-effect keys on `win.from` / `win.to` deliberately) and two `react-refresh`
-notes on files that export a constant beside a component. All predate this work
-or are deliberate; there is nothing else.
+**`npm run lint` reports 5 errors and 8 warnings.** Four of the errors are
+noise and one is not, so they are worth separating:
+
+- **Not actionable (4).** Two are `react-hooks/rules-of-hooks` flagging
+  `useFont(...)` inside `pdfRenderer.ts` — a plain helper whose name happens to
+  start with "use", in a file with no React in it at all. Two are
+  `no-unused-expressions` on deliberate throwaway reads in `Fireflies.tsx` and
+  `three/runtime.ts`.
+- **Real, and still open:** `CoachAssist.tsx:449` — *"React Hook `useState` is
+  called conditionally"*. That is a different class of complaint from the other
+  four: a hook whose call order can vary between renders is a correctness bug
+  waiting for the right branch, not a naming quibble. It predates this work and
+  the screen behaves, which is why it is listed rather than hidden — but it
+  should not be described as unactionable, and an earlier version of this
+  section did exactly that.
+
+The 8 warnings are five `react-refresh/only-export-components` on files that
+export a constant beside a component, two `exhaustive-deps` on the `win` object
+in the analytics fetch effects (it is rebuilt every render; the effect keys on
+`win.from` / `win.to` deliberately), and one unused `eslint-disable` directive.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 179 tests — deck logic, links, PDF export, proxy, admin
-python server/test_duel_combos.py # 39 checks — duel logic, no database needed
+npm run test                      # 266 tests — deck logic, links, PDF export, proxy, admin
+python server/test_duel_combos.py # 55 checks — duel logic, no database needed
 python server/test_meta.py        # 33 checks — meta board + card board, no database
 python server/test_card_art.py    # 110 checks — deck arrangement, evolution/hero art
 python server/test_duel_zone.py   # 88 checks — series rules, loadout legality, captions
@@ -6218,6 +6247,26 @@ node verify*.mjs
 rm verify*.mjs *.png && npm uninstall playwright   # must NOT become a committed dep
 git status                                        # and CHECK: see below
 ```
+
+**A script can no longer sign itself in.** The credentials this file used to
+recommend — `royal03` / `goblin-4559` — belonged to the deleted 20-account gate.
+Auth is Supabase email now, so a verify script runs as an anonymous reader and
+sees only the four free areas (Search Player, Recent Battles, Top Meta Decks,
+Deck Counter); everything else renders a `GateCard`. Plan around that, or check
+those screens by hand.
+
+**Point it at `deckkies.com`, not the vercel.app host.**
+`CLASH_ALLOWED_ORIGIN` is one exact origin, so an audit run anywhere else shows
+"Analytics service is not running" on every board while the service is perfectly
+healthy — the browser is dropping the response for want of a CORS header.
+
+**For anything touch-related, dispatch real touch events.** `page.mouse` does
+not pan a native scroll container, so a scrolling nav strip reads as broken when
+it is not. Use CDP `Input.dispatchTouchEvent` (touchStart, several touchMove,
+touchEnd), scroll the target into view first, and measure a `::after` hit area
+by walking outward with `elementFromPoint` rather than by reading
+`getBoundingClientRect`. See [The phone pass](#the-phone-pass--one-scroll-and-it-is-the-page)
+for what each of those caught.
 
 **Check `package.json` afterwards, every time.** Both a verify script and the
 Playwright dependency have reached a commit here. The uninstall is not the whole
@@ -8491,6 +8540,267 @@ a `Range` over the element's contents gives the glyphs.
 
 ---
 
+## The account menu is a stack of cards
+
+The profile dropdown was a list: a name, a tier pill, a few links. It is now
+built to a reference scheme, and two details carry most of the character.
+
+**The hovered row lifts as a raised card** rather than taking a wash. That is
+what makes the menu read as a stack of surfaces instead of a list with a
+highlight running down it, and it is the single thing most worth copying from
+the reference. One language for "the thing under the pointer", used by the rows,
+the tier row and the two figures alike.
+
+**The tier row is the one raised thing in it.** A menu with one emphatic row has
+a clear primary action; a menu with three has none.
+
+### Where it departs from the reference, and why
+
+**The tier row is not coloured.** The reference fills it with a blue gradient
+and puts a flat white pill on it, which works there because the pill carries no
+colour of its own. Ours does — the row holds the real `TierBadge`, a lit liquid
+in the tier's own hue — so a coloured row put blue on blue and maroon on maroon,
+and the badge, which is the part that actually reacts, was the one that lost.
+The row takes the page's own surface in both themes and the badge is the only
+colour in it. That also settles a question asked earlier about admin needing its
+own gradient: it does not, because the row no longer states the tier by colour
+at all. The badge does.
+
+**The row says what it is for, and that depends on the tier.** Free and member
+accounts get "Upgrade profile" as a link. Paid ones get a statement —
+"Pro Mode Activated", "Admin Mode Activated" — and it must not look pressable,
+so only the link version responds to the pointer. Title case rather than
+`ADMIN Mode Activated`: the badge beside it is already shouting.
+
+**The two figures are buttons.** Saved duel sets opens `#/builder`, Deck's Home
+opens `#/decks`. A figure that counts something and does not open it is a dead
+end, and both counts already name a screen.
+
+**The theme switch is symbols only.** `ThemeToggle` normally prints DARK / LIGHT
+inside the cap; in a 292px menu that is noise beside a row already labelled
+"Theme". It is hidden with a `hideWord` prop and **not** with a CSS override —
+`[class*='word']` works in dev and silently stops working in a production build,
+where the class is hashed. That mistake was made once here already.
+
+The width is 292px, and it is measured rather than guessed: at 240 the tier row
+wrapped, and "Admin Mode Activated" needs 149px against the 108 the label had.
+
+---
+
+## The phone pass — one scroll, and it is the page
+
+Everything below was found in a browser, and most of it was invisible to
+reading the code.
+
+### Every screen was built as a window
+
+`.tool` is `flex: 1; min-height: 0; overflow: hidden` — a card that fills
+whatever height is left and clips, so the screen inside can run its own scroll
+regions and keep a toolbar fixed above them. That is the right model at a width
+where two panes are visible at once. Stacked into one column it does not merely
+look cramped; it breaks, and it broke in three ways that each looked like a
+different bug.
+
+**The builder could not be scrolled at all.** Measured at 390px: `.tool` sat at
+684px holding **3,553px**, and because it *clips* rather than scrolls, `.main`
+had nothing to scroll either — `scrollHeight` equalled `clientHeight`. The page
+was not stiff or awkward. It was inert.
+
+**The deck panels painted over the card library.** The same squeeze, one level
+in. `DeckWorkspace`'s three `auto` rows resolved to **110/228/228px**, and since
+every child in that file carries `min-height: 0` — correct for the desktop
+scrollers, and precisely what lets a track shrink below its own content — the
+deck column drew its 1,136px of panels straight over the picker underneath.
+Deck 1's footer, the elixir controls and the filter row were all painted on each
+other.
+
+**Meta stopped at the third row.** Its `.panel` held **18,862px** in 609px with
+`overflow: hidden`. It is the only analytics board that wraps itself that way;
+the others' `overflow: hidden` is text-ellipsis and card corners, which is why a
+sweep finds one and not seven.
+
+Below **`62rem`** those panels are `flex: none; min-height: auto`: they grow,
+`.main` scrolls them, and nothing is nested inside anything that scrolls.
+`overflow: hidden` stays where it was — once a box is as tall as its content it
+clips nothing, and it is still what keeps the rounded corners honest.
+
+**The two `62rem` blocks must switch together.** `.tool` and the workspace grid
+share the breakpoint deliberately: a gap between them is a band of widths where
+the workspace has stacked but the panel still clips, which is the same overlap
+at 950px instead of 390px.
+
+### Seven inner panes, and the one that keeps its scroll
+
+Underneath the panel, every analytics screen was doing the same thing: `.page`
+is `flex: 1; min-height: 0; overflow-y: auto`, a pane that fills the panel and
+scrolls inside it. Deck Counter, Duel Analysis, Cards, the needs-a-tag prompt,
+the palette gallery, the saved-decks list and the placeholder panel body all
+gave that up.
+
+`MetaDecks .tableWrap` is the exception and keeps `overflow: auto`, because
+`.table` is `min-width: 1020px`. Growing the box is what hands the *vertical*
+scroll back to the page: once the wrap is as tall as its rows there is no
+vertical overflow left for it to take. Writing `overflow-y: visible` would not
+have worked — **`visible` computes to `auto` beside an `auto` on the other
+axis**, the same rule that turns `clip` into `hidden`.
+
+### The card library gave up its 42vh cap
+
+A capped band you scroll inside is a nested scroller in a page scroll, and on a
+touch screen every flick over it is a coin toss about which one moves. It is the
+last section of the page now, and the drawer chevron already collapses it — so
+the length is something you can put away rather than something you must scroll
+past.
+
+### Two horizontal scrolls where there should have been one
+
+`.phoneNav` bled `-1rem` both ways to run edge to edge, and the right half of
+that widened `.main` to 374px inside 358. The strip scrolled inside a parent
+that also scrolled, and a swipe got whichever the finger happened to land on.
+
+**Overflow towards the start is neither scrollable nor counted in
+`scrollWidth`**, so the left bleed is free and the right one is not. The strip
+bleeds left only; its right end stops at the gutter, where the existing
+`padding-right` already gives the last chip room.
+
+`.main` closes the axis behind it as a backstop, and there is a trap in doing
+so: **`overflow-x: clip` computes to `hidden` next to `overflow-y: auto`.** That
+still blocks touch scrolling, but `hidden` stays *programmatically* scrollable —
+anything that focuses an element past the edge shifts the page and leaves it
+shifted. A backstop, never the fix.
+
+### `flex: none` belongs to the axis that scrolls
+
+Fixing the crush by putting `flex: none` on `.deckColumn` was the wrong half of
+the rule. `.deckArea` is a **row**, so on that axis it means "size to your
+content" — the column went to 416px inside a 321px track, and `.tool` above it
+clips, so those 95px were not scrolled to, they were cut off. A scrolling child
+of a flex **column** needs `flex: none`; a child that no longer scrolls needs
+nothing.
+
+### The ranked-deck boards become cards
+
+Meta is seven columns and Player Analysis is nine, behind `min-width: 1020px`.
+At 390px that showed a rank and a deck name and put the cards, both rates, the
+counts and the trend behind a sideways scroll with **nothing on screen to say
+they existed** — a ranked list with no numbers in it and no reason to suspect
+otherwise.
+
+A `<tr>` takes `display: grid`, so each row lays its cells into named areas
+instead: rank and name on the first line, the deck 4x2 across the full width,
+then the figures two-up. `thead` is hidden, and a `data-label` on each figure
+cell prints in its place — **a number explained by a column heading has to
+explain itself once the heading is gone.** Both boards take the same shape on
+purpose: they are the same kind of object, and a reader who learns one should
+not have to learn the other.
+
+Two measurements decided the details:
+
+**An `auto` grid track is sized by the widest thing anywhere in it.** With
+`auto minmax(0, 1fr)` the first track took a figure cell and its meter, came out
+92px, pushed the deck name to x=155 so it read as centred, and left the paired
+figures at 92 against 184. Equal halves fix the figures; the rank is then placed
+onto the name's row and cleared with `padding-left` — one cell visually, two in
+the markup.
+
+**The deck strip is on fixed 64px tracks, not `1fr` columns.** Eight 54px cards
+and their gaps are 453px against the ~327px a stacked row has, and that strip is
+the last of the overflow once the table is released. Four fractions of the row
+would make the art ~80px — *larger* than the 54px it is on a desktop board,
+which is the wrong way round for the smaller screen.
+
+Above `62rem` nothing changes: measured `table-row` with headers at 1000px, grid
+cards at 991px, no sideways scroll either side.
+
+### Targets a finger can hit
+
+The deck chips measured **25x25** — over WCAG 2.5.8's 24px floor by less than a
+pixel, on the controls that are the payoff of four screens. They grow their real
+box rather than taking an `::after`, because the two sit 0.25rem apart and inset
+hit areas would overlap: a tap near the middle would land on whichever came
+later in the DOM.
+
+The filmstrip's dot rail was **6x6**, and it is the only way to jump to an area
+without swiping past everything between. **The gap is the half of that fix that
+is easy to miss.** An `::after` alone gives each dot a 24px area centred 12.4px
+from its neighbour's — the areas overlap by half, and the rail gets *worse*.
+Opening the gap moves the centres to 27px and each target measures 25x25 with
+nothing shared. 1.15rem was tried first, put them exactly 24 apart, and measured
+23: touching, so a hair under the floor instead of over it.
+
+So: **an `::after` where a control stands alone, a bigger box where it has
+neighbours.**
+
+### Things that did not fit, and one that told half a word
+
+The deck panel's action rail cannot shrink, so at 360px it ran 30px off a
+clipping panel and Import and Clear were simply unreachable. The header wraps
+below 560px and the rail takes its own line.
+
+The field book's "Click me" was cut mid-word by the `overflow: hidden` its
+opening cover needs — 53px of it, on every route, in both themes. On a phone it
+is the book alone; `aria-label` and `title` both say "Open the field book", so a
+screen reader was never reading "Click me" anyway. The top bar also drops the
+notification bell, which opens nothing yet, so the actions row fits without
+scrolling.
+
+"Forgot your password?" was a 133x20 target on the recovery path, widened with
+an inset `::after` so the underline does not move.
+
+### What is allowed to move sideways
+
+Nothing but these: `.phoneNav`, the deck panel's action rail, `MetaDecks
+.tableWrap` and `PlayerAnalysis .tableScroll`, and the landing `Filmstrip` —
+which is a real carousel (`touch-action: pan-y` plus pointer-drag) whose
+off-centre cards are clipped by `.stage` **by design**, so an overflow probe
+will always flag it.
+
+### How it was verified, and three probes that lied
+
+15 routes x 2 themes at 390/360/320, plus tablet, landscape and both sides of
+the breakpoint. No page scrolls sideways, nothing clips text or a control, no
+tap target under the floor.
+
+**A mouse drag does not pan a native scroll container**, so `page.mouse` reports
+a nav strip as broken when it is not. Real touch means CDP
+`Input.dispatchTouchEvent` — touchStart, several touchMove, touchEnd. And
+measure `scrollLeft` after pushing it, not `scrollWidth` alone: `hidden` boxes
+still report overflow they will never let a finger reach.
+
+**A probe must scroll its target into view first.** The landing filmstrip sits
+at y=891 on an 844-tall phone, so swiping "at its centre" dispatched into empty
+space and reported the carousel dead.
+
+**Measure a hit area by walking out from the centre with `elementFromPoint`,
+not with `getBoundingClientRect`.** An `::after` target is invisible to the box:
+the theme toggle reads 59x30 and is really 69x41.
+
+### Two things that made the live check possible
+
+**`CLASH_ALLOWED_ORIGIN` is `https://deckkies.com` and only that.** An audit run
+against `royal-duels.vercel.app` shows "Analytics service is not running" on
+every board — the Python service is fine, the browser is dropping the response
+for want of an `Access-Control-Allow-Origin` header. Verified: that origin gets
+the header back, `www.deckkies.com` and the vercel.app host do not.
+
+**Replay real payloads to see a board locally.** `/api/analytics` needs the VPS
+key and answers 500 under `vite dev`, so these screens are empty on this
+machine. Capture with a Playwright `response` listener against `deckkies.com`,
+then `ctx.route('**/api/analytics/**')` and fulfil from the capture on
+`localhost:5173`. That is the only way to lay out a board with data here.
+
+### Not verified
+
+**Duel Analysis, Duel Zone, Cards and Coach Assist have not been seen with real
+data on a phone.** Their containers are fixed and they audit clean, but their
+content is unchecked. The verify login recorded in this repo's notes —
+`royal03` / `goblin-4559` — was the deleted 20-account gate; auth is Supabase
+email now, so a script cannot sign itself in, and only the four free areas
+(Search Player, Recent Battles, Top Meta Decks, Deck Counter) render for an
+anonymous reader.
+
+---
+
 ## DEKKIES is DECKKIES
 
 The domain has always been `deckkies.com`. The brand in the shell, the sign-in
@@ -8612,16 +8922,37 @@ src/
                               The height is measured; see docs/UI.md
     Theme/ThemeToggle.tsx     the light/dark switch, shared by all five screens
                               that used to own a copy. One size knob; the rest
-                              of the geometry derives from it
+                              of the geometry derives from it. `hideWord` drops
+                              the DARK/LIGHT cap text for the account menu — a
+                              prop and NOT a CSS override, because the class is
+                              hashed in a production build
+    Profile/ProfileMenu.tsx   the account dropdown: identity, the tier row with
+                              the live TierBadge on it, two figures that OPEN the
+                              screens they count, three groups, theme, log out
+    TierBadge/                the ADMIN / PRO / MEMBER badge as a WebGL button
+      TactileButton.tsx       the port of ThreeUI's Tactile Fluidics. Raw WebGL,
+                              one context, released on unmount
+      TierBadge.tsx           the tier -> colour mapping. Hue is substituted and
+                              the authored saturation/value are kept; see README
+    ui/                       VENDORED registry components, deviations listed in
+                              each file's own header
+      glass-dock.tsx          vengenceui's GlassDock — the top nav. Excluded
+                              from eslint as vendored code
+      gooey-search.tsx        vengenceui's GooeySearch — the tag field
     Dashboard/                top bar, sidebar, landing screen, content panel
-      Dashboard.tsx           the shell; `landing` decides whether a rail exists
-      TopDock.tsx             the top nav as a proximity dock — markup only
-      topDockController.ts    its springs. Plain DOM, and the rAF STOPS when
-                              they settle; see the note at the top of it
-          VsMark/VsMark.tsx       the logo standing between two decks. `data-bolt` is
-                              the whole contract with LightningMarks
+      Dashboard.tsx           the shell; `landing` decides whether a rail exists.
+                              Also owns `.phoneNav`, the chip strip that IS the
+                              navigation below 860px
+      GlassDockNav.tsx        the adapter between our nav model and GlassDock,
+                              and where MorphSVGPlugin is registered
+      dockIcons.tsx           single-path filled twins of the nav icons, used
+                              ONLY by the dock — MorphSVG does one path to one
+                              path, and `icons.tsx` is stroked multi-element
+      TopSearch.tsx           the tag field's adapter. Owns Enter-to-submit,
+                              which the vendored component cannot do itself
       ClosingBand.tsx         the page ending — ten card facts, three shown
                               shuffled, all counted from CARDS at render time
+    VsMark/VsMark.tsx         the word VS standing between two decks, drawn large
     Analytics/
       ReadingState.tsx        the one loading state all 12 slow reads share
       UplinkLoader.tsx        the progress rig inside it. Paced from MEASURED
@@ -8787,7 +9118,7 @@ yet, or does in a way that is fine now and will not be later.
 | **Email confirmation** | **off.** Sign-up works without an SMTP provider, which is what let this ship — and it means an address is never proved. Must go back on before real users |
 | **Google sign-in** | built, hidden. The PKCE flow and hash-callback handling are in place; the button appears when the provider is enabled in Supabase |
 | **Admin-created accounts** | not built. Needs `SUPABASE_SERVICE_ROLE_KEY` held server-side. An invite link is the honest shape, not a password |
-| **The Coach proxy** | still authenticates with the retired `sha256(username:password)` scheme. It is the last consumer of `authStore`, which cannot be deleted until it migrates |
+| **The Coach proxy** | ~~still on the retired `sha256(username:password)` scheme~~ — **done.** It verifies a Supabase access token, and `authStore` is deleted |
 | **`OIE_ALLOWLIST`** | unset, so the Coach's opponent read degrades to `{enabled:false}` for everyone. Designed behaviour, but the engine half is dark in production |
 | **Staging** | there is none. `main` deploys to production, and every fix in this pass was verified against production after the fact |
 | **A maintenance screen** | not built. Nothing to show while a deploy is mid-flight |

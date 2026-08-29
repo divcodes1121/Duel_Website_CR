@@ -1237,10 +1237,14 @@ export type OpponentReadOutcome =
  * browser to authenticate to the analytics service itself, and the browser is
  * precisely who must never hold that key.
  *
- * The `credential` is the same `sha256(username:password)` the deck sync uses;
- * the proxy maps it to an account and checks the OIE allowlist. Without one the
- * proxy answers 401 and the panel renders nothing, which is the correct state
- * for a signed-out reader.
+ * The `credential` is a **Supabase access token** — `CoachAssist` reads it from
+ * `supabase.auth.getSession()`. It used to be the `sha256(username:password)`
+ * the deck sync used, and that scheme is gone from the whole project: it could
+ * not describe anyone who signed themselves up, and a password derivative used
+ * as a bearer credential never expires and cannot be revoked without changing
+ * the password. The proxy verifies the token, maps it to an account and checks
+ * the OIE allowlist. Without one the proxy answers 401 and the panel renders
+ * nothing, which is the correct state for a signed-out reader.
  */
 export async function fetchOpponentRead(
   tag: string,
