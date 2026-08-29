@@ -303,3 +303,21 @@
     grid-row: 3;
   }
 }
+
+/* ── TOUCH TARGETS ───────────────────────────────────────────────────────
+ *
+ * WCAG 2.2 puts the floor at 24x24 CSS px (2.5.8, AA) and the comfortable
+ * target at 44x44 (2.5.5, AAA); Apple's HIG says 44pt and Material says 48dp.
+ * Measured on a 390px phone these controls came in between 12px and 30px tall,
+ * so some of them failed the floor outright and the rest were merely hard.
+ *
+ * `(pointer: coarse)` and not a width breakpoint, because the question is what
+ * is POINTING at the control, not how wide the window is — a touch laptop at
+ * 1400px needs the bigger target and a 500px desktop window does not. Nothing
+ * about the density on a mouse-driven screen changes. */
+
+@media (pointer: coarse) {
+  .modeTab {
+    min-height: 40px;
+  }
+}

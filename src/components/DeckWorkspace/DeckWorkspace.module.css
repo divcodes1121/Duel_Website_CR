@@ -84,22 +84,70 @@
 /* --- Narrow windows ----------------------------------------------------- */
 
 /* Under ~62rem there is no room for two columns of anything, so the pool goes
-   back to being a band under the decks. It keeps its own scroll and a capped
-   height (set on `.library` itself), which is the drawer's behaviour without
-   the drawer's overlay. */
+   back to being a band under the decks — and, below, it stops being a band with
+   its own scroll and becomes simply the last section of the page. */
 @media (max-width: 62rem) {
   .shell,
   .shell[data-library='closed'] {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    /* ALL THREE TRACKS SIZE TO THEIR CONTENT. `minmax(0, 1fr)` for the decks
+       divided a height the stacked layout does not have, and it did not fail
+       by leaving a gap — it failed by SQUEEZING. Every child in this file
+       carries `min-height: 0` (correct for the desktop scrollers, and the
+       thing that lets a track shrink below its own content), so the row was
+       free to resolve to 228px around 1,136px of decks and paint them straight
+       over the library beneath. Measured rows before: 110/228/228. */
+    grid-template-rows: auto auto auto;
   }
 
   .libraryCell {
     grid-column: 1;
     grid-row: 3;
+    /* The `0` above is what let this track be crushed; on a stacked page the
+       cell must be at least as tall as the library in it. */
+    min-height: auto;
   }
 
   .deckColumn {
     padding-right: 0;
+  }
+}
+
+/* ── ON A PHONE THERE IS ONE SCROLL, AND IT IS THE PAGE ──────────────────
+ *
+ * The desktop layout is a fixed-height grid with TWO independent scroll
+ * regions inside it — the deck column and the card library — so the toolbar
+ * stays put while either side moves. That is right at a size where both are
+ * visible at once and wrong on a 390px screen, where they are stacked and only
+ * one is on screen anyway.
+ *
+ * It is also broken there rather than merely unhelpful. Stacked, the library
+ * row is `auto`, and `flex: 1` inside an auto-height parent resolves against
+ * nothing: measured on the builder at 390px, the card grid came out
+ * **295 x 9px** — all 122 tiles present, scrollable, and nine pixels tall. That
+ * is the same "content present, correct, invisible" failure this project has
+ * hit three times before, and the cause is the same each time: a scrolling
+ * child in a column with no definite height to divide.
+ *
+ * So on a phone the rows size to their content and the inner scrollers are
+ * turned off. `.main` above is the one scroll region, the page moves as a
+ * single column, and nothing is nested inside anything that scrolls. */
+@media (max-width: 62rem) {
+  /* ONLY THE OVERFLOW COMES OFF. `flex: none` was here for one build and it
+     was the wrong half of the rule: `.deckArea` is a ROW, so on this axis
+     `flex: none` means "size to your content", and the column went to its
+     max-content width — measured 416px inside a 321px grid track. `.tool`
+     above it is `overflow: hidden`, so the extra 95px were not scrolled to,
+     they were CUT OFF and unreachable, which is worse than the sideways scroll
+     it was meant to prevent.
+
+     The `flex: none` habit is real but it belongs to the axis that scrolls:
+     a scrolling child of a flex COLUMN needs it, because its automatic minimum
+     size is zero and the column crushes it. Here the child is not scrolling
+     any more — that is the whole point of this block — so it needs nothing but
+     to keep filling its track. */
+  .deckColumn {
+    overflow-y: visible;
+    min-height: auto;
   }
 }

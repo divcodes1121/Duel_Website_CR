@@ -546,8 +546,19 @@
    grid row it would otherwise grow to all 123 tiles and push the decks off the
    top of the scroll. */
 @media (max-width: 62rem) {
+  /* NO CAP, AND NO SCROLL OF ITS OWN. This was `max-height: 42vh` — a compact
+     band you scrolled inside — which is a nested scroller sitting in the page
+     scroll, and on a touch screen that means every flick over the card pool is
+     a coin toss about which of the two moves. It also stopped working the
+     moment `.grid` gave up its own `overflow` (see the foot of this file): the
+     grid no longer scrolled, so 2,750px of tiles simply hung out of a 354px
+     box.
+     The picker is the last section of the page now and it is as tall as the
+     cards in it. Long, but the drawer chevron already collapses it, so the
+     length is something you can put away rather than something you must scroll
+     past. */
   .library {
-    max-height: 42vh;
+    min-height: auto;
   }
 
   .libraryCollapsed {
@@ -563,5 +574,67 @@
 
   .libraryReopenLabel {
     writing-mode: horizontal-tb;
+  }
+}
+
+/* ── TOUCH TARGETS ───────────────────────────────────────────────────────
+ * WCAG 2.2 floor is 24x24 (2.5.8 AA), comfortable is 44x44 (2.5.5 AAA); Apple
+ * says 44pt, Material 48dp. Measured on a 390px phone these were 27-29px tall.
+ * `(pointer: coarse)` rather than a width query: the question is what is
+ * pointing at the control, not how wide the window is. */
+
+@media (pointer: coarse) {
+  /* 27x27, and the one that opens the card library -- the drawer this whole
+     column is for. */
+  .libraryToggle {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .reset {
+    min-height: 40px;
+  }
+
+  .direction {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  /* The sort chip is the wrapper and the <select> lies transparent on top of
+     it, so the thing a finger actually lands on is the SELECT -- measured at
+     62x18. Sizing the chip alone would leave the real target where it was. */
+  .select,
+  .select select {
+    min-height: 40px;
+  }
+
+  /* 20px tall, and it is the field you use to find a card among 122. Text
+     inputs under 16px also make iOS Safari zoom the whole page on focus, which
+     is its own kind of broken -- so the type comes up with the box. */
+  .searchInput {
+    min-height: 40px;
+    font-size: 16px;
+  }
+}
+
+/* ── TOUCH TARGETS ───────────────────────────────────────────────────────
+ * 24px tall is exactly the WCAG 2.2 AA floor (2.5.8) and nothing above it.
+ * `(pointer: coarse)` rather than a width query: what matters is whether a
+ * finger or a cursor is doing the pointing. */
+@media (pointer: coarse) {
+  .segment {
+    min-height: 40px;
+  }
+}
+
+/* The card grid is the other half of the phone-scroll rule — see the long note
+   at the foot of `DeckWorkspace.module.css`. Stacked under the decks it was
+   295x9px: `flex: 1` inside an `auto` row divides a height that does not
+   exist. It sizes to its tiles here and the page scrolls past it. */
+@media (max-width: 62rem) {
+  .grid {
+    flex: none;
+    overflow-y: visible;
+    min-height: auto;
   }
 }

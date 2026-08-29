@@ -1562,6 +1562,40 @@
    One column, and the character moves to the END — below the search and the
    chips — because on a phone the first screen has room for exactly one job and
    that job is the field. `order` rather than a second copy of the markup. */
+/* ── THE TOOL PANEL STOPS BEING A WINDOW AND BECOMES A PAGE ──────────────
+ *
+ * `.tool` is `flex: 1; min-height: 0; overflow: hidden` — a card that fills
+ * whatever height is left and clips, so the screen inside it can run its own
+ * scroll regions. That is the whole desktop model and it is exactly wrong once
+ * the screen inside has stacked into one column.
+ *
+ * What it actually did on a 390px phone, measured on the builder: `.tool` sat
+ * at 684px holding 3,553px of content and clipped the rest, and because it
+ * clips rather than scrolls, `.main` had nothing to scroll either — scrollHeight
+ * equalled clientHeight, so **the builder could not be scrolled at all**. Worse,
+ * the squeeze reached inside: `DeckWorkspace`'s grid resolved its three `auto`
+ * rows to 110/228/228px, and since every child carries `min-height: 0` (which
+ * is what lets an auto track shrink below its content) the deck column drew its
+ * 1,136px of panels straight over the card library underneath it. The footer of
+ * deck 1, the elixir controls and the picker's filters were painted on top of
+ * one another.
+ *
+ * So above this width the card is a window; below it, it is just a part of the
+ * page. `flex: none` + `min-height: auto` lets it grow to its content, which
+ * leaves `overflow: hidden` with nothing to clip — it stays only to keep the
+ * rounded corners honest.
+ *
+ * **62rem, matching `DeckWorkspace.module.css`.** The two must switch together:
+ * that file stacks its grid at 62rem, and a gap between the breakpoints is a
+ * band of widths where the workspace has stacked but the panel still clips —
+ * which is precisely the overlap above, just at 950px instead of 390px. */
+@media (max-width: 62rem) {
+  .tool {
+    flex: none;
+    min-height: auto;
+  }
+}
+
 @media (max-width: 900px) {
   /* THE HERO STOPS BEING ITS OWN SCROLLER.
      Stacked, the content is taller than the panel's min-height, so the inner
@@ -1677,10 +1711,42 @@
   }
 
   .sidebar,
-  .topNav,
+  /* THE DOCK GOES AT THIS WIDTH, AND FORGETTING IT COST EVERY SCREEN.
+     `.topNav` used to be here, from a nav two rewrites ago; the class was dead
+     and nothing wore it, so when the GlassDock replaced the labelled dock it
+     inherited no hide rule and simply stayed. Measured on every route: 252px of
+     dock in a 390px bar pushed the document to 431px, so EVERY page on EVERY
+     phone scrolled sideways. `.phoneNav` below is the navigation at this size,
+     which is why the dock can go rather than shrink. */
+  .topDock,
   /* The rail is already gone at this width, so a control for hiding it would
      do nothing on press. */
   .railToggle {
+    display: none;
+  }
+
+  /* A BACKSTOP, NOT THE FIX. The page must never move sideways, so whatever a
+     child does, this axis is closed. The real cause of the one overflow we had
+     is fixed at its source on `.phoneNav` below.
+
+     **`clip` does not survive here and it is worth knowing why.** `.main` is
+     `overflow-y: auto`, and when one axis is `clip` while the other is
+     anything but `clip` or `visible`, the `clip` COMPUTES TO `hidden` —
+     measured, `getComputedStyle(main).overflowX === 'hidden'`. That is still
+     the behaviour wanted (a `hidden` box cannot be scrolled by touch) but it
+     is NOT inert: `hidden` stays programmatically scrollable, so anything that
+     focuses an element past the edge shifts the page and leaves it shifted.
+     Which is exactly why the nav's own overflow had to go rather than be
+     covered up here. */
+  .main {
+    overflow-x: clip;
+  }
+
+  /* The notification bell goes. Measured, the actions row needed 240px in the
+     222px it had, so Sign in sat 15px off the end and the whole row scrolled
+     sideways to reach it — a top bar that has to be swiped is worse than one
+     control fewer. The bell is the only item here that opens nothing yet. */
+  .iconButton[aria-label='Notifications'] {
     display: none;
   }
 
@@ -1698,7 +1764,20 @@
     flex: none;
     display: flex;
     gap: 0.4rem;
-    margin: 0 -1rem 0.15rem;
+    /* BLEEDS LEFT ONLY, AND THE MISSING RIGHT MARGIN IS THE POINT. This was
+       `0 -1rem 0.15rem`, full bleed both ways, and the right half of that is
+       what made `.main` scroll sideways — a strip 390px wide inside a 358px
+       column, measured scrollWidth 374. Two nested horizontal scrollers over
+       the same 16px, and a swipe got whichever one the finger landed on.
+
+       Overflow towards the START is neither scrollable nor counted in
+       `scrollWidth`, so the left bleed costs nothing and keeps the chips
+       running under the screen edge as they scroll away. The right end stops
+       at the gutter instead, where the existing `padding-right` already leaves
+       the last chip a margin. No explicit width: a stretched flex item resolves
+       to the column width MINUS its margins, so -1rem left and 0 right is
+       exactly the one-sided bleed. */
+    margin: 0 0 0.15rem -1rem;
     padding: 0.15rem 1rem 0.55rem;
     overflow-x: auto;
     overscroll-behavior-x: contain;

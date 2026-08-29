@@ -495,6 +495,7 @@ export function Dashboard({
             the same half-wired navigation the Home button was caught by. The
             query row moved into the panel, where the thing it queries is. */}
         <GlassDockNav
+          className={styles.topDock}
           items={TOP_NAV.map((item) => ({
             label: item.label,
             icon: item.icon,

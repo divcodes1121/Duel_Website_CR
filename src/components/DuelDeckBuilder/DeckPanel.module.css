@@ -592,3 +592,85 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── TOUCH TARGETS ───────────────────────────────────────────────────────
+ *
+ * WCAG 2.2 puts the floor at 24x24 CSS px (2.5.8, AA) and the comfortable
+ * target at 44x44 (2.5.5, AAA); Apple's HIG says 44pt and Material says 48dp.
+ * Measured on a 390px phone these controls came in between 12px and 30px tall,
+ * so some of them failed the floor outright and the rest were merely hard.
+ *
+ * `(pointer: coarse)` and not a width breakpoint, because the question is what
+ * is POINTING at the control, not how wide the window is — a touch laptop at
+ * 1400px needs the bigger target and a 500px desktop window does not. Nothing
+ * about the density on a mouse-driven screen changes. */
+
+@media (pointer: coarse) {
+  /* The rename button is the deck's own name, so it is as narrow as the name is
+     — 13px on a short one. It keeps a floor now whatever it says. */
+  .name {
+    min-height: 40px;
+    min-width: 44px;
+  }
+
+  .iconButton {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* EIGHT ON ONE LINE STOPS WORKING ON A PHONE, and the number says where.
+ * Measured across the slot: 31px wide at 390, 27px at 360, 22px at 320 — a
+ * card at 22px is not a card, it is a swatch, and it is under the 24px WCAG
+ * floor for something you are meant to tap.
+ *
+ * Four and four fixes it by doubling the width rather than by scrolling: a deck
+ * is two rows of four at 68px on the same 390px screen. Sideways scroll was the
+ * alternative and it is the wrong one here — a deck is a THING YOU READ AT A
+ * GLANCE to see what is in it, and half of it off-screen defeats that.
+ *
+ * The breakpoint is on width, not pointer: this is about how much room the row
+ * has, and a narrow window on a desktop has the same problem. */
+@media (max-width: 560px) {
+  .slotGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  /* THE ACTION RAIL DROPS TO ITS OWN LINE, because it cannot shrink and there
+     is nothing left to take from. The header is index + name + count + rail,
+     and only the name flexes: at 360px the rail alone measured 213px against a
+     panel ~250px wide, so it ran 30px off the end — and the panel clips, so
+     Import and Clear were not merely cramped, they were unreachable.
+
+     Wrapping is the right answer rather than shrinking the buttons: these are
+     the deck's whole action set, they are already at the coarse-pointer floor,
+     and a second line is free here where horizontal space is not. */
+  .header {
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    width: 100%;
+    /* The `auto` that pushed it right belongs to the one-line layout; on its
+       own line it starts where the rest of the row starts. */
+    margin-left: 0;
+    justify-content: flex-start;
+    /* Six 28px buttons and five gaps still just fit 320px, but a longer rail
+       one day should scroll rather than clip — `.actions` is the only thing
+       here allowed to move sideways, and only inside itself. */
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .actions::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  /* The two deck actions -- copy link and open in game. They are the payoff of
+     the whole screen, so they are the last thing that should be fiddly. */
+  .launch {
+    min-height: 40px;
+  }
+}

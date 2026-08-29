@@ -143,7 +143,13 @@ function MorphingNavIcon({
   );
 }
 
-export function GlassDockNav({ items }: { items: GlassDockNavItem[] }) {
+export function GlassDockNav({
+  items,
+  className,
+}: {
+  items: GlassDockNavItem[];
+  className?: string;
+}) {
   const dockItems = useMemo<DockItem[]>(
     () =>
       items.map((item) => ({
@@ -157,7 +163,7 @@ export function GlassDockNav({ items }: { items: GlassDockNavItem[] }) {
   );
 
   return (
-    <div className="glass-dock-scope">
+    <div className={['glass-dock-scope', className].filter(Boolean).join(' ')}>
       <GlassDock items={dockItems} aria-label="Primary" />
     </div>
   );

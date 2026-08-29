@@ -174,3 +174,30 @@
   line-height: 1.55;
   color: var(--text);
 }
+
+/* ── FINGER TARGETS ──────────────────────────────────────────────────────
+ *
+ * "Forgot your password?" measured 133x20 on a phone — an underlined line of
+ * text with `padding: 0`, which is the right look and half the height a finger
+ * can aim at (WCAG 2.5.8 asks 24px, and a control on the recovery path is the
+ * last one that should be fiddly).
+ *
+ * The hit area grows and the type does not: a `::after` inset upward leaves
+ * the underline sitting exactly where it was, so nothing about the card moves.
+ * The same trick the theme toggle uses. `.links` gets the room back so the two
+ * do not overlap where the reset form stacks them. */
+@media (pointer: coarse) {
+  .link {
+    position: relative;
+  }
+
+  .link::after {
+    content: '';
+    position: absolute;
+    inset: -0.65rem -0.75rem;
+  }
+
+  .links {
+    margin-top: 1.25rem;
+  }
+}
