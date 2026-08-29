@@ -12,6 +12,21 @@ interface ThemeToggleProps {
   size?: string;
   /** Extra positioning from the caller. Login pins its toggle to a corner. */
   className?: string;
+  /**
+   * Drop the DARK / LIGHT word from the cap, leaving the glyph.
+   *
+   * A PROP AND NOT A CSS OVERRIDE. The obvious way to do this from outside is
+   * `[class*='word'] { display: none }`, and it works in dev and silently
+   * stops working in a production build, where the CSS-module class is hashed
+   * to something with no `word` in it. A caller that needs the compact cap
+   * says so here.
+   *
+   * Only the profile menu passes it: that row has its own label column, so the
+   * word would be a cramped duplicate of the text beside it. The other five
+   * call sites have no label of their own and the word is the only thing
+   * naming the control, so it stays.
+   */
+  hideWord?: boolean;
 }
 
 /**
@@ -41,7 +56,7 @@ interface ThemeToggleProps {
  * and Space already activate it, and the reference's own `keydown` handler
  * would double-fire on a real button.
  */
-export function ThemeToggle({ size, className }: ThemeToggleProps) {
+export function ThemeToggle({ size, className, hideWord }: ThemeToggleProps) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const dark = theme === 'dark';
@@ -64,9 +79,11 @@ export function ThemeToggle({ size, className }: ThemeToggleProps) {
         <span className={styles.label} aria-hidden="true">
           {dark ? <MoonIcon size={13} /> : <SunIcon size={13} />}
         </span>
-        <span className={styles.word} aria-hidden="true">
-          {dark ? 'DARK' : 'LIGHT'}
-        </span>
+        {!hideWord && (
+          <span className={styles.word} aria-hidden="true">
+            {dark ? 'DARK' : 'LIGHT'}
+          </span>
+        )}
       </span>
     </button>
   );

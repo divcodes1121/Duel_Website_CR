@@ -188,13 +188,31 @@ a.tierRow:focus-visible {
   margin-bottom: 0.35rem;
 }
 
+/* Each tile is a button now — it opens the screen it counts. It takes the same
+   card lift as the rows rather than a hover of its own, so the whole menu has
+   one language for "the thing under the pointer". */
 .stat {
   display: flex;
   flex-direction: column;
   gap: 0.05rem;
   padding: 0.45rem 0.55rem;
+  border: 1px solid transparent;
   border-radius: 11px;
   background: var(--surface-nested);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
+}
+
+.stat:hover,
+.stat:focus-visible {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
 }
 
 .statValue {
@@ -320,12 +338,14 @@ a.tierRow:focus-visible {
   color: var(--text);
 }
 
-/* No label. The glyph and the switch are the whole row, so this only holds
-   them apart — see the note at the call site. */
-.switchSpacer {
+.switchLabel {
   flex: 1;
   min-width: 0;
 }
+
+/* The cap's DARK / LIGHT word is dropped by the `hideWord` prop, not from
+   here — a `[class*='word']` override works in dev and silently stops working
+   in a production build, where the class is hashed. */
 
 .switchControl {
   flex: none;

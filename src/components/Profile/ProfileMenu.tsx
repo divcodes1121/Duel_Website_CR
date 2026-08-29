@@ -193,8 +193,13 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                   Three readings of one row, decided by what the account has:
 
                     free / member   Upgrade profile        (a link)
-                    pro             PRO Mode Activated     (a statement)
-                    admin           ADMIN Mode Activated   (a statement)
+                    pro             Pro Mode Activated     (a statement)
+                    admin           Admin Mode Activated   (a statement)
+
+                  Title case, from `TIER_LABEL` unaltered. Shouting the tier
+                  set it apart from every other line in the menu for no reason
+                  — the badge beside it is already doing the emphasis, in caps,
+                  and two things shouting is one too many.
 
                   Free sits with member rather than getting a fourth wording:
                   both of them are accounts that could upgrade, which is the
@@ -211,7 +216,7 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                     <CrownIcon />
                   </span>
                   <span className={styles.tierLabel}>
-                    {TIER_LABEL[tier].toUpperCase()} Mode Activated
+                    {TIER_LABEL[tier]} Mode Activated
                   </span>
                   {/* THE REAL BADGE, not a flat pill printed to look like one.
                       It is the same liquid button the top bar wears, at the
@@ -241,17 +246,34 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                 </a>
               )}
 
-              {/* The two figures stay. They are the only thing in here that is
-                  about this account rather than about navigation. */}
+              {/* The two figures, and each one goes to the thing it counts.
+                  They were static text, which is the wrong instinct for a
+                  number in a menu: it names a place, someone will point at it,
+                  and a count that cannot be opened is a dead end two rows above
+                  the row that opens it anyway. Saved sets live under the duel
+                  builder and home decks are Deck's Home, so each tile is the
+                  short way to its own screen. */}
               <div className={styles.stats}>
-                <div className={styles.stat}>
+                <button
+                  type="button"
+                  className={styles.stat}
+                  role="menuitem"
+                  title="Open the duel builder"
+                  onClick={() => go('#/builder')}
+                >
                   <span className={styles.statValue}>{library.length}</span>
                   <span className={styles.statLabel}>Saved duel sets</span>
-                </div>
-                <div className={styles.stat}>
+                </button>
+                <button
+                  type="button"
+                  className={styles.stat}
+                  role="menuitem"
+                  title="Open Deck&apos;s Home"
+                  onClick={() => go('#/decks')}
+                >
                   <span className={styles.statValue}>{homeDecks.length}</span>
                   <span className={styles.statLabel}>Home decks</span>
-                </div>
+                </button>
               </div>
 
               {/* ── GROUP: where you can go ─────────────────────────── */}
@@ -313,18 +335,25 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
 
               {/* ── GROUP: how it looks ─────────────────────────────── */}
               <div className={styles.group}>
-                {/* NO WORDS. The leading glyph says which mode is on and the
-                    switch says which way it goes, so a label between them
-                    would be a third statement of the same fact — and the one
-                    it used to make ("Dark mode") was ambiguous about whether
-                    it described the state or the action. The row keeps the
-                    others' icon-left rhythm rather than floating a lone
-                    switch in an empty band. `aria-label` on the switch is what
-                    carries the name now, which it always did. */}
+                {/* THE WORD IS ON THE ROW, NOT IN THE SWITCH. The toggle ships
+                    with DARK/LIGHT printed on its own cap, which is right at
+                    the sizes the top bar and the tool headers use it and is a
+                    cramped, shouting duplicate here — the row already has a
+                    label column, so the name belongs in it. `hideWord` drops
+                    it from the cap and keeps the glyph — a prop rather than a
+                    CSS override, because the override would have been a
+                    class-name substring and those are hashed in a production
+                    build.
+
+                    It reads the STATE, matching the switch's own convention
+                    everywhere else: "Dark Mode" while dark is on, not while
+                    clicking would turn it on. */}
                 <div className={styles.switchRow}>
                   <Glyph d={theme === 'dark' ? 'moon' : 'sun'} />
-                  <span className={styles.switchSpacer} />
-                  <ThemeToggle size="1.05rem" className={styles.switchControl} />
+                  <span className={styles.switchLabel}>
+                    {theme === 'dark' ? 'Dark' : 'Light'} Mode
+                  </span>
+                  <ThemeToggle size="1.05rem" hideWord className={styles.switchControl} />
                 </div>
               </div>
 
