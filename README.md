@@ -52,7 +52,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped, 27/27 browser checks.** Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. Pro-only. 61 Python checks + 23 vitest |
+| **Team Analysis** (`#/teams`) | **shipped, then fixed: it could not be scrolled on a desktop.** 46/46 browser checks now, across six sizes. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. Pro-only. 61 Python checks + 23 vitest |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -7256,6 +7256,89 @@ read `battles`, got null from every real rung, and the client then called
 the same name the code was reading. **A fixture that does not speak the real
 vocabulary pins nothing** — it was found by calling the endpoint, not by the
 tests, and the fixture now uses `games` and asserts the denominator explicitly.
+
+### It shipped unable to scroll, and that is the shell's oldest trap
+
+The first build could not be scrolled at all on a desktop. Reported as "I have
+to minimise the screen to see what's down", which is exactly what it looks
+like: resize the window and the content reflows into view, so the page seems
+fine and the scroll wheel seems broken.
+
+`body` is `overflow: hidden` and **every route owns its own scroll region**.
+The host here is `.tool` — `flex: 1; min-height: 0; overflow: hidden` — a card
+that fills the leftover height and CLIPS, on the assumption that whatever it
+hosts runs a scroller inside it. The three deck tools do. This screen's `.page`
+was a plain flex column with no height and `overflow: visible`, so at 1280x720
+`.tool` sat at **622px holding 770px** and cut the rest off. Nothing scrolled,
+at any depth: measured, `.main` was 624/624 and the document 720/720.
+
+The fix is `height: 100%; min-height: 0; overflow-y: auto` on `.page`, and
+`min-height: 0` is as load-bearing as the height — without it the flex child
+refuses to shrink below its content and pushes the overflow straight back up
+into `.tool`, which clips it exactly as before.
+
+**Below 62rem it gives the scroll back**, because there `.tool` stops clipping
+and `.main` becomes the page's only scroll region. A scroller here would be a
+second one nested inside it, and every flick would be a coin toss about which
+moves. The two rules switch together, like the other pairs at that breakpoint.
+
+**Why the phone pass did not catch it.** It was verified at 390px first, where
+`.main` scrolls and everything worked. The desktop path is the one with the
+clipping ancestor, and it was never wheel-tested — the checks measured stacking
+and overflow, not whether a scroll gesture moved anything. The verification now
+sends a real wheel at six sizes, asserts the last block on the page becomes
+reachable, and asserts there is **exactly one** scroll region in the ancestor
+chain rather than merely at least one.
+
+### Four layout faults the same pass found
+
+- **The paste boxes were seven rows of mostly nothing.** Most rosters are two
+  or three lines, and that dead space was most of the reason the results landed
+  below the fold. They size to their content now, capped at 260px, measured off
+  `scrollHeight` with the box reset to `auto` first — without the reset a
+  textarea can only ever grow, so a shrinking paste leaves it at its
+  high-water mark.
+- **The finished analysis stayed below the fold.** The entry board fills the
+  first screen, so a completed run looked like it had done nothing. It scrolls
+  itself into view now — against `.page`, since on a desktop neither `window`
+  nor `main` is what scrolls.
+- **Deck names were being truncated** at 1280 and below: "Royal Hogs Lightning"
+  and "X-Bow Tesla" both ellipsised. The deck's name is the one label on a
+  recommendation that has to survive — it is what the reader is being told to
+  play — so it wraps instead.
+- **The matchup row overflowed its column at 1024.** Its breakpoint was on the
+  page when the row is sized by its COLUMN: the board splits in two at 62rem,
+  so from there to ~1300px each side is only 330-440px wide. A breakpoint on
+  the page does not describe a box that is half the page. It goes two-up at
+  82rem instead.
+
+### The phone deck strip is 4 x 2 on capped tracks
+
+Left to wrap, eight 38px cards fitted **seven on the first line and orphaned
+the eighth**, which reads as a broken deck rather than a deck. It is a
+four-column grid now, the same shape the ranked-deck boards take on a phone.
+
+The tracks are `minmax(0, 64px)` and not a fixed `64px`: fixed tracks need
+265px and a 320px phone has about 253 inside the page, panel and row padding,
+so they pushed the whole chain wide at 320 and 360. Capped tracks keep the art
+at 64px where there is room and let it shrink where there is not. Not `1fr`
+either — four fractions of that row would draw the art at ~78px, larger than
+the desktop board's 42px, which is the trap already recorded for the meta
+boards.
+
+### Two probes that lied, again
+
+Both worth knowing because both reported a fault in correct code:
+
+- **`element.screenshot()` on a tall element inside a scrolling ancestor paints
+  blank.** The phone capture showed content stopping after ~550px with 3,000px
+  of white below it, which looks exactly like a broken layout. Everything was
+  there — measured, the board was 2,295px and the per-teammate section 436. Use
+  a viewport tall enough to hold the content instead.
+- **Counting distinct `top` values counts sub-pixel rows.** Evolution and hero
+  art are not all the same aspect, so with `height: auto` cards in one visual
+  row sit a pixel or two apart and a 4 x 2 grid reported three rows. Group with
+  a tolerance.
 
 ### It cannot be `React.lazy`, and that is somebody else's bug
 

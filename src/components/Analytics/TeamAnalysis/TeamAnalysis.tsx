@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AnalyticsError,
   fetchTeamAnalysis,
@@ -90,6 +90,20 @@ function SquadInput({
   resolved: TeamMember[] | null;
 }) {
   const over = squad.members.length > MAX_SQUAD;
+
+  /* AUTO-GROW. Measured off `scrollHeight`, which needs the box reset to `auto`
+     first or it can only ever get taller — a shrinking paste would leave the
+     field at its high-water mark. Capped so a pasted novel cannot push the
+     Analyse button off the screen; past the cap it scrolls itself, which is
+     the one place on this screen that is allowed to. */
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
+  }, [value]);
+
   return (
     <div className={styles.side} data-side={side}>
       <div className={styles.sideHead}>
@@ -100,14 +114,18 @@ function SquadInput({
         </span>
       </div>
 
+      {/* IT GROWS WITH WHAT IS IN IT. A fixed seven rows is a tall empty box
+          for the two lines most rosters actually are, and on a laptop that
+          dead space was most of the reason the results sat below the fold. */}
       <textarea
+        ref={box}
         className={styles.paste}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={hint}
         spellCheck={false}
         aria-label={label}
-        rows={7}
+        rows={3}
       />
 
       {/* THE CHIPS ARE THE CONFIRMATION. A roster is pasted in bulk, so the one
@@ -161,6 +179,26 @@ export function TeamAnalysis() {
   const blue = useSquad(blueText);
   const red = useSquad(redText);
 
+  /* THE ANSWER HAS TO COME INTO VIEW. The entry board fills the first screen,
+     so a finished analysis landed entirely below the fold and the screen looked
+     like it had done nothing. `.page` is this screen's scroll region (see the
+     module CSS) — scrolling `window` or `main` here would move the wrong box on
+     a desktop, where neither of them is what scrolls. */
+  const results = useRef<HTMLElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const revealResults = useCallback(() => {
+    // Two frames: the first commits the results, the second can measure them.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const box = scroller.current;
+        const target = results.current;
+        if (!box || !target) return;
+        const top = target.offsetTop - box.offsetTop - 12;
+        box.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      }),
+    );
+  }, []);
+
   const problem = squadProblem(blue, red);
   const overlap = overlappingTags(blue, red);
 
@@ -176,6 +214,7 @@ export function TeamAnalysis() {
         red.members.map((m) => m.tag),
       );
       setReport(r);
+      revealResults();
       // Measured, so the next run's progress bar is paced by this machine's
       // real timing rather than by the seed.
       recordDuration('teams', performance.now() - started);
@@ -189,14 +228,21 @@ export function TeamAnalysis() {
     } finally {
       setLoading(false);
     }
-  }, [blue.members, red.members, problem]);
+  }, [blue.members, red.members, problem, revealResults]);
+
+  /* Opening a folder starts at the folder's top. Without this you land
+     mid-way down a board because the gallery you clicked from was scrolled. */
+  const openFolder = useCallback((tag: string) => {
+    setOpenTag(tag);
+    revealResults();
+  }, [revealResults]);
 
   const open: TeamFolder | null = openTag
     ? report?.folders.find((f) => f.player.tag === openTag) ?? null
     : null;
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} ref={scroller}>
       <header className={styles.head}>
         <h2 className={styles.title}>Team Analysis</h2>
         <p className={styles.lede}>
@@ -259,7 +305,7 @@ export function TeamAnalysis() {
       {error && !loading && <p className={styles.error}>{error}</p>}
 
       {report && !loading && (
-        <section className={styles.results}>
+        <section className={styles.results} ref={results}>
           {/* Named ONCE at the top. Eight identical empty folders do not read as
               "your side has no stored history" — they read as a broken tool. */}
           {report.pool.reason && (
@@ -278,9 +324,15 @@ export function TeamAnalysis() {
           )}
 
           {open ? (
-            <OpenFolder folder={open} onBack={() => setOpenTag(null)} />
+            <OpenFolder
+              folder={open}
+              onBack={() => {
+                setOpenTag(null);
+                revealResults();
+              }}
+            />
           ) : (
-            <FolderGallery report={report} onOpen={setOpenTag} />
+            <FolderGallery report={report} onOpen={openFolder} />
           )}
         </section>
       )}

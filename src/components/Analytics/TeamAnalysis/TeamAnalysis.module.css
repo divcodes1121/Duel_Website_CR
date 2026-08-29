@@ -21,11 +21,38 @@
  * the README — picking the wrong step is the recurring bug of this project.
  */
 
+/* THIS SCREEN OWNS ITS SCROLL, and forgetting that is why it shipped unable to
+ * scroll at all on a desktop.
+ *
+ * `body` is `overflow: hidden` and every route owns its own scroll region. The
+ * host here is `.tool`, which is `flex: 1; min-height: 0; overflow: hidden` — a
+ * card that fills the leftover height and CLIPS, on the assumption that
+ * whatever it hosts runs a scroller inside it. The three deck tools do. This
+ * one did not: `.page` was a plain flex column with no height and
+ * `overflow: visible`, so at 1280x720 `.tool` sat at 622px holding 770px and
+ * simply cut the rest off — nothing scrolled, and the only way to see the
+ * bottom of the page was to make the window a different shape.
+ *
+ * `min-height: 0` is load-bearing beside `height: 100%`: without it this flex
+ * child refuses to shrink below its content and pushes the overflow back up
+ * into `.tool`, which clips it again exactly as before.
+ *
+ * The scrollbar is hidden to match `.main` and the rest of the shell. */
 .page {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   padding: 1.25rem;
+}
+
+.page::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 /* ── Heading ─────────────────────────────────────────────────────────────── */
@@ -109,7 +136,8 @@
 
 .paste {
   width: 100%;
-  min-height: 8.5rem;
+  min-height: 4.5rem;
+  overflow-y: auto;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -584,13 +612,16 @@
   min-width: 0;
 }
 
+/* IT WRAPS RATHER THAN CLIPPING. "Royal Hogs Lightning" and "X-Bow Tesla" were
+   both ellipsised at 1280 and below — and the deck's name is the one label on a
+   recommendation that has to survive, since it is what the reader is being
+   told to play. Two lines is cheaper than a truncated name. */
 .recDeck {
   font-weight: 600;
   font-size: 0.9rem;
+  line-height: 1.25;
   color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .recOwner {
@@ -630,11 +661,15 @@
   margin: 0;
 }
 
+/* FOUR COLUMNS SIZED TO WHAT THEY HOLD. `minmax(0, 1fr)` for the evidence cell
+   let it be squeezed under its own text — "11,918 games · high" overflowed its
+   track at every width below 1440. The two figure columns are `auto` (they are
+   short and their width is knowable), the two text columns take what is left. */
 .recRow {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 3.5rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto minmax(3.2rem, auto) auto;
   align-items: baseline;
-  gap: 0.4rem;
+  gap: 0.35rem 0.5rem;
   font-size: 0.74rem;
   color: var(--text-muted);
 }
@@ -679,7 +714,7 @@
 
 .byPlayerRow {
   display: grid;
-  grid-template-columns: 8rem 9rem minmax(0, 1fr) 4rem;
+  grid-template-columns: minmax(6rem, 9rem) minmax(6rem, 10rem) minmax(0, 1fr) 4rem;
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.5rem;
@@ -698,9 +733,7 @@
 
 .byPlayerDeck {
   color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .byPlayerRate {
@@ -718,7 +751,15 @@
    Both `1fr auto 1fr` grids collapse to a single column and the VS becomes a
    divider between the two stacked halves rather than a gap between columns. */
 @media (max-width: 62rem) {
+  /* AND IT GIVES THE SCROLL BACK. Below this width `.tool` stops clipping
+     (`flex: none; min-height: auto`) and `.main` becomes the page's only
+     scroll region — so a scroller here would be a second one nested inside it,
+     and every flick over this screen would be a coin toss about which one
+     moves. The desktop rule above and this one must switch together. */
   .page {
+    height: auto;
+    min-height: auto;
+    overflow: visible;
     padding: 1rem 0.75rem;
   }
 
@@ -746,20 +787,62 @@
     grid-column: 1 / -1;
   }
 
-  /* Four across, two rows — eight 42px cards plus gaps do not fit ~327px, and
-     `1fr` columns would make the art LARGER than the desktop board's. */
-  .strip img {
-    width: 38px;
+  /* FOUR ACROSS, TWO ROWS, ON FIXED TRACKS — the same shape the ranked-deck
+     boards take on a phone, and for the same reasons. Left to wrap, eight
+     38px cards fitted SEVEN on the first line and orphaned the eighth, which
+     reads as a broken deck rather than a deck. Fixed 64px tracks and not
+     `1fr`: four fractions of this row would draw the art at ~78px, LARGER
+     than the desktop board's 42px, which is the trap the README records.
+
+     The deck-action chips are children of the same strip, so they are pushed
+     onto their own full-width line rather than being dealt into the grid as
+     if they were cards. */
+  .strip {
+    display: grid;
+    /* CAPPED, NOT FIXED. `repeat(4, 64px)` needs 265px and a 320px phone only
+       has ~253 inside the page, panel and row padding — so a fixed track
+       pushed the whole chain wide at 320 and 360. `minmax(0, 64px)` keeps the
+       art at 64 where there is room and lets it shrink where there is not,
+       which is what keeps four across at every phone width. */
+    grid-template-columns: repeat(4, minmax(0, 64px));
+    justify-content: start;
+    gap: 3px;
   }
 
+  .strip img {
+    width: 100%;
+    height: auto;
+  }
+
+  .strip > *:not(img) {
+    grid-column: 1 / -1;
+  }
+
+}
+
+/* THE MATCHUP ROW GOES TWO-UP MUCH EARLIER THAN THE PAGE DOES, because it is
+ * sized by its COLUMN and not by the viewport. The board splits into two sides
+ * at 62rem, so from there up to ~1300px each side is only ~330-440px wide —
+ * and four columns of text inside that overflowed at 1024 even though the page
+ * around them had plenty of room. Breakpoints on the page do not describe a
+ * box that is half the page.
+ *
+ * Name and rate stay on the first line (the two things being read together);
+ * the share and the evidence drop underneath. */
+@media (max-width: 82rem) {
   .recRow {
-    grid-template-columns: minmax(0, 1fr) 3.5rem;
-    row-gap: 0.15rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.1rem;
   }
 
   .recRowShare,
   .recRowSrc {
     grid-column: 1 / -1;
     text-align: left;
+  }
+
+  .recRowName {
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 }
