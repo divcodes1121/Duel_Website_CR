@@ -548,7 +548,9 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
                       <DeckActions cards={d.cards} name={d.name} />
                     </span>
                   </td>
-                  <td>
+                  {/* `data-label` prints in place of the column heading once
+                      the row stacks on a phone. See PlayerAnalysis.module.css. */}
+                  <td data-label="Use rate">
                     <span className={styles.meterValue}>{pct(d.useRate)}</span>
                     <span className={styles.meter}>
                       <span
@@ -557,7 +559,7 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
                       />
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Win rate">
                     <span className={`${styles.meterValue} ${styles.meterValueWin}`}>
                       {pct(d.winRate)}
                     </span>
@@ -568,10 +570,10 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
                       />
                     </span>
                   </td>
-                  <td className={styles.num}>{nf.format(d.matches)}</td>
-                  <td className={styles.num}>{nf.format(d.wins)}</td>
-                  <td className={styles.num}>{nf.format(d.losses)}</td>
-                  <td className={styles.num}>
+                  <td className={styles.num} data-label="Matches">{nf.format(d.matches)}</td>
+                  <td className={styles.num} data-label="Wins">{nf.format(d.wins)}</td>
+                  <td className={styles.num} data-label="Losses">{nf.format(d.losses)}</td>
+                  <td className={styles.num} data-label="Trend">
                     <span className={styles.trend} data-dir={d.trend >= 0 ? 'up' : 'down'}>
                       {d.trend >= 0 ? '▲' : '▼'} {Math.abs(d.trend).toFixed(1)}%
                     </span>

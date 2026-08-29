@@ -815,3 +815,104 @@
    read as a broken image rather than as a caveat — it drew more attention than
    the distinction deserves, on cards that are very likely right. The caveat
    lives in the card's tooltip and in the footnote under the table instead. */
+
+/* ── NINE COLUMNS BECOME A CARD ─────────────────────────────────────────
+ *
+ * Rank, Deck, Cards, Use, Win, Matches, Wins, Losses, Trend. Measured at
+ * 390px, `.tableScroll` hid 887px of that — the reader saw a rank and a deck
+ * name and nothing else, with no sign that seven more columns existed.
+ *
+ * Same shape as the Meta board's rows, deliberately: these two are the same
+ * kind of object (a ranked deck with figures) and a reader who learns one
+ * should not have to learn the other. See the long note in
+ * MetaDecks.module.css for why a `<tr>` can take `display: grid` and why the
+ * `data-label` on each figure cell is not optional once the header is gone. */
+@media (max-width: 62rem) {
+  .table thead {
+    display: none;
+  }
+
+  .table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'name name'
+      'cards cards'
+      'use win'
+      'matches wins'
+      'losses trend';
+    gap: 0.5rem 0.8rem;
+    align-items: center;
+    padding: 0.85rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+    /* THE RANK SITS ON THE NAME'S ROW RATHER THAN IN A COLUMN OF ITS OWN.
+       An `auto` first track is sized by the widest thing anywhere in it, which
+       here is a figure cell and its meter — measured, the track came out 92px
+       and pushed the deck name to x=155, so the name read as centred and the
+       paired figures underneath were 92 against 184. Equal halves fix the
+       figures; the rank then gets placed onto row 1 and the name spans the
+       full width with enough left padding to clear the badge. They share a
+       cell visually without sharing one in the markup. */
+  .table tbody td:nth-child(1) {
+    grid-row: 1;
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .table tbody td:nth-child(2) {
+    grid-area: name;
+    padding-left: 2.5rem;
+  }
+  .table tbody td:nth-child(3) { grid-area: cards; }
+  .table tbody td:nth-child(4) { grid-area: use; }
+  .table tbody td:nth-child(5) { grid-area: win; }
+  .table tbody td:nth-child(6) { grid-area: matches; }
+  .table tbody td:nth-child(7) { grid-area: wins; }
+  .table tbody td:nth-child(8) { grid-area: losses; }
+  .table tbody td:nth-child(9) { grid-area: trend; }
+
+  .table tbody td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.15rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* Right-aligned under a heading that is gone reads as a stray number. */
+  .table tbody td.num {
+    text-align: left;
+  }
+
+  /* The deck goes 4x2, matching the Meta board and Recent Battles. Eight 52px
+     cards and their gaps are 437px against the ~330px a stacked row has, and
+     that was the last 218px of sideways scroll left on this screen once the
+     table itself had been restacked. */
+  .cardsCell {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(4, 64px);
+    justify-content: start;
+    gap: 5px;
+  }
+
+  .cardIcon {
+    width: 100%;
+  }
+}

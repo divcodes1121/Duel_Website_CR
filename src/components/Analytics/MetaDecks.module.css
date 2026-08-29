@@ -381,6 +381,142 @@
  *
  * `.main` is the only scroll region below this width. Matching the 62rem the
  * panel itself switches at, so the two cannot disagree. */
+/* ── SEVEN COLUMNS DO NOT FIT A PHONE, SO THE ROW BECOMES A CARD ────────
+ *
+ * `.table` is `min-width: 1020px`. At 390px that showed the rank and the deck
+ * name and put the cards, both rates, the battle count and the elixir behind a
+ * sideways scroll with nothing on screen to say they were there — the reader
+ * sees a ranked list with no numbers in it and no reason to suspect otherwise.
+ *
+ * A `<tr>` takes `display: grid` perfectly well, so each row lays its cells out
+ * in named areas instead: rank beside the name, the card strip across the full
+ * width under them, then the four figures two-up. The header row goes, and the
+ * `data-label` on each figure cell prints in its place — a number that was
+ * explained by a column heading has to explain itself once the heading is gone.
+ *
+ * This is the alternative to the horizontal scroll, not a companion to it: with
+ * `min-width` released, the wrap above has nothing left to scroll on either
+ * axis and the page carries the whole board. */
+@media (max-width: 62rem) {
+  /* THE PANEL ITSELF IS A WINDOW, and releasing the table without releasing it
+     just moved the clip up one level: measured, `.panel` sat at 609px holding
+     18,862px with `overflow: hidden`, so the board was cut off at the third row
+     and `.main` had nothing to scroll. This screen is the only analytics board
+     that wraps itself this way — the rest keep their `overflow: hidden` for
+     text ellipsis and card corners, which is why the sweep found one and not
+     seven. `overflow: hidden` stays: once the panel is as tall as the table it
+     clips nothing, and it is still what keeps the glass corners honest. */
+  .panel {
+    flex: none;
+    min-height: auto;
+  }
+
+  .table {
+    min-width: 0;
+  }
+
+  /* The headings are the one thing a stacked row cannot use: there is no column
+     for them to sit above any more. Each cell names itself below instead. */
+  .table thead {
+    display: none;
+  }
+
+  .table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'name name'
+      'cards cards'
+      'use win'
+      'battles elixir';
+    gap: 0.5rem 0.7rem;
+    align-items: center;
+    padding: 0.85rem 0.9rem;
+  }
+
+  /* Cells are grid items now, so their table-cell padding and vertical
+     alignment are no longer doing anything useful. */
+  .table tbody td {
+    display: block;
+    border: 0;
+    padding: 0;
+  }
+
+    /* THE RANK SITS ON THE NAME'S ROW RATHER THAN IN A COLUMN OF ITS OWN.
+       An `auto` first track is sized by the widest thing anywhere in it, which
+       here is a figure cell and its meter — measured, the track came out 92px
+       and pushed the deck name to x=155, so the name read as centred and the
+       paired figures underneath were 92 against 184. Equal halves fix the
+       figures; the rank then gets placed onto row 1 and the name spans the
+       full width with enough left padding to clear the badge. They share a
+       cell visually without sharing one in the markup. */
+  .table tbody td:nth-child(1) {
+    grid-row: 1;
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .table tbody td:nth-child(2) {
+    grid-area: name;
+    padding-left: 2.6rem;
+  }
+  .table tbody td:nth-child(3) { grid-area: cards; }
+  .table tbody td:nth-child(4) { grid-area: use; }
+  .table tbody td:nth-child(5) { grid-area: win; }
+  .table tbody td:nth-child(6) { grid-area: battles; }
+  .table tbody td:nth-child(7) { grid-area: elixir; }
+
+  .table tbody td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.15rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* The two counts are right-aligned under a heading that is gone; left reads
+     as a labelled figure now rather than as a stray number. */
+  .table tbody td.num {
+    text-align: left;
+  }
+
+  /* The row keeps its own rule as a card edge; the empty-state row must not
+     inherit the grid, or one sentence is laid out in four areas. */
+  .table tbody tr:has(> td[colspan]) {
+    display: block;
+    padding: 0;
+  }
+
+  /* THE DECK GOES 4x2, which is the shape this project already draws a deck in
+     (see Recent Battles). Eight 54px cards and their gaps measure 453px against
+     the ~327px a stacked row has, and that 198px was the whole of what was left
+     of the sideways scroll after the table itself was released — the cards were
+     the last thing holding the board wider than the screen.
+
+     Fixed 64px tracks rather than `1fr`: at four fractions of the row the art
+     would come out ~80px, LARGER than the 54px it is on a desktop board, which
+     is the wrong way round for the smaller screen. */
+  .cardsCell {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(4, 64px);
+    justify-content: start;
+    gap: 5px;
+  }
+
+  .cardIcon {
+    width: 100%;
+  }
+}
+
 @media (max-width: 62rem) {
   .tableWrap {
     /* THE `overflow` STAYS `auto` HERE, AND ONLY THIS ONE DOES. `.table` is

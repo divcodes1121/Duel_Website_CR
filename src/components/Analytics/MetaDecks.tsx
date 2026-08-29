@@ -276,7 +276,10 @@ export function MetaDecks() {
                     <DeckActions cards={d.cards} name={d.name} />
                   </span>
                 </td>
-                <td>
+                {/* `data-label` is what the stacked phone layout prints in
+                    place of the column header it no longer has. See the foot of
+                    MetaDecks.module.css. */}
+                <td data-label="Use rate">
                   <span className={styles.meterValue} data-key="use">
                     {d.useRate.toFixed(2)}%
                   </span>
@@ -288,7 +291,7 @@ export function MetaDecks() {
                     />
                   </span>
                 </td>
-                <td>
+                <td data-label="Win rate">
                   <span className={styles.meterValue} data-key="win">
                     {d.winRate.toFixed(1)}%
                   </span>
@@ -300,8 +303,10 @@ export function MetaDecks() {
                     />
                   </span>
                 </td>
-                <td className={styles.num}>{nf.format(d.battles)}</td>
-                <td className={styles.num}>{d.avgElixir ? d.avgElixir.toFixed(1) : '—'}</td>
+                <td className={styles.num} data-label="Battles">{nf.format(d.battles)}</td>
+                <td className={styles.num} data-label="Elixir">
+                  {d.avgElixir ? d.avgElixir.toFixed(1) : '—'}
+                </td>
               </tr>
             ))}
             {/* A filter that matches nothing must say so. An empty table reads
