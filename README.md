@@ -52,7 +52,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped, then reshaped, and now it remembers.** An analysis can be **saved and re-opened**, with a banner saying how old the figures are and a Re-run that reuses the stored paste. The extractor reads **tags out of links** — a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) used to report every row as a broken tag; a clan link is still refused on purpose. **The cap is 10 a side, up from 8** — ten is what a Discord roster is numbered to; the client refuses over it while the server slices, so the screen now reads `limits.maxSquad` back and names the mismatch if the API host is behind. The paste boxes are a roster tall rather than two lines. **37/38 + 14/14 browser checks**, the one failure being the pre-existing `TopSearch` render loop. The board is YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 35 vitest |
+| **Team Analysis** (`#/teams`) | **shipped, then reshaped, and now it remembers.** An analysis can be **saved and re-opened**, with a banner saying how old the figures are and a Re-run that reuses the stored paste. The extractor reads **tags out of links** — a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) used to report every row as a broken tag; a clan link is still refused on purpose. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap of the whole board, head-to-head spreads, and a method section; 25 pages at 2v2 up to 98 at 10v10, in whichever theme the reader has on. **The cap is 10 a side, up from 8** — ten is what a Discord roster is numbered to; the client refuses over it while the server slices, so the screen now reads `limits.maxSquad` back and names the mismatch if the API host is behind. The paste boxes are a roster tall rather than two lines. **37/38 + 14/14 browser checks**, the one failure being the pre-existing `TopSearch` render loop. The board is YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 54 vitest |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -83,7 +83,7 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,319 Python checks** across **37 suites** (528 check-style + 791 unittest), **305 vitest**, `tsc -b` and `npm run build` clean |
+| tests | **1,319 Python checks** across **37 suites** (528 check-style + 791 unittest), **324 vitest**, `tsc -b` and `npm run build` clean |
 | shipped from | `main` at `96a52d4`, deployed 2026-08-29 — the phone pass. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -194,7 +194,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 305 tests over the deck, duel, export, admin and shader logic
+npm run test                      # 324 tests over the deck, duel, export, admin and shader logic
 python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
@@ -6192,7 +6192,7 @@ push.
 ## Testing and verification
 
 **1,319 Python checks across 37 suites** (528 check-style + 791 unittest) and
-**305 vitest tests**, counted by running all of them on 2026-08-30. Only
+**324 vitest tests**, counted by running all of them on 2026-08-30. Only
 `test_recent_battles.py` opens a database, and it writes its own temp file —
 every other Python suite runs on synthetic data or a stubbed reader, so they
 pass on a machine with no Clash_Bot install and cannot be broken by whatever a
@@ -6222,7 +6222,7 @@ in the analytics fetch effects (it is rebuilt every render; the effect keys on
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 305 tests — deck logic, links, PDF export, proxy, admin
+npm run test                      # 324 tests — deck logic, links, PDF export, proxy, admin
 python server/test_duel_combos.py # 55 checks — duel logic, no database needed
 python server/test_meta.py        # 33 checks — meta board + card board, no database
 python server/test_card_art.py    # 110 checks — deck arrangement, evolution/hero art
@@ -7361,6 +7361,78 @@ puts the ordinal inside the emphasis, so stripping the `*` is what first exposes
 the `1.`, and stripping that exposes the second `*`. A single pass of either rule
 leaves the other's marker behind and the chip reads `*1.* 🇵🇪 WR I Clisman™✨`.
 
+### The dossier — every player, on paper
+
+**Export PDF** on `#/teams` prints the whole analysis as a match document. Not
+the screen — a different job. The screen can hide the second-best option behind
+a click; a sheet of paper in somebody's hand cannot ask for one, so **every
+player on both sides gets their own section** whether or not the analysis found
+them anything, and each one says which of *no history*, *no deck played often
+enough* or *no measured record* it is.
+
+It is built on the same `ReportDoc` model the seven analytics screens already
+export themselves as, with four new blocks rather than a second renderer: a
+**divider** (a full-page section title, and what the contents is built from), a
+**matrix** (the whole board as a heatmap), a **spread** (an opponent's
+archetype mix as one proportional band) and a **versus** (two 4×2 deck plates
+with the word between them). A change to how a table looks still happens once.
+
+Because `readPalette()` already reads the live CSS tokens off `<html>` at export
+time, **the report is drawn in whichever theme the reader has on** with no work
+here at all — verified as the same page count in both, painting different
+colours, and not byte-identical.
+
+Length follows the rosters rather than a target. Measured, dark, with real card
+art:
+
+| squads | pages | size |
+|---|---:|---:|
+| 2 v 2 | 25 | 355 kB |
+| 3 v 3 | 35 | 460 kB |
+| 5 v 5 | 52 | 667 kB |
+| 8 v 8 | 80 | 1,066 kB |
+| 10 v 10 | 98 | 1,370 kB |
+
+Ten against ten is a long document because ten against ten is a lot of
+preparation.
+
+**The board goes through the numbers twice, deliberately** — opponent by
+opponent, then teammate by teammate. That is a duplication of the underlying
+figures and it is the point: *"we play this person on Saturday, what do we
+bring"* and *"what am I responsible for across the whole match"* are different
+questions, read on different days by different people. Printing only the first
+makes every player reconstruct their own half by flicking through ten sections.
+
+Three decisions inside it are worth stating.
+
+**The matrix scale is stretched across the range actually present, not across
+0–100.** Expected win rates live in a narrow band, and on an absolute scale a
+run of values from 48 to 57 is nine shades of one beige — the pairing that needs
+attention looks like all the others. The legend says so, rather than letting the
+compression pass as an absolute reading.
+
+**A cell with no evidence is drawn empty, with a rule through it.** It is not a
+low score. Painting it at the bottom of the scale would rank an unmeasured
+pairing below a measured bad one, which is exactly backwards, and it is the same
+mistake the scoring already refuses to make when it renormalises an unanswerable
+archetype out of the denominator instead of calling it 50%.
+
+**The contents sheet is page 2, reserved on the first pass and filled on the
+second.** A page number cannot be known until the thing it points at has been
+laid out, and a contents page that guesses is worse than none — the reader
+trusts it once, is sent to the wrong sheet, and stops trusting the document.
+`drawDivider` records where each section actually landed; the same trick the
+footers already use for the page total.
+
+The adapter is **dynamically imported**, and `ReportButton`'s thunk now accepts a
+promise so any screen can do the same. It is a 5.98 kB chunk that loads on the
+click, beside jsPDF's 390 kB; the main bundle grew 2.05 kB for the four
+renderers. Note this is *not* `React.lazy` — a lazy child anywhere inside the
+Dashboard shell hangs at its fallback for ever (see
+[A render loop that starves Suspense](#a-render-loop-that-starves-suspense)),
+but a dynamic import inside an event handler never touches Suspense and is
+unaffected by it.
+
 ### Saving a board, and why it says how old it is
 
 An analysis can be **saved and opened again**. The list sits on the entry board,
@@ -7879,6 +7951,10 @@ on purpose.
 "Export PDF" on the analytics screens. The Player Analysis screen already had an
 **Export Data** button with no handler behind it — the same decoration the
 sidebar's Upgrade Now was caught being — and it is now wired to the real thing.
+
+Team Analysis prints a much longer document off the same machinery — see
+[The dossier](#the-dossier--every-player-on-paper) — which is what the four
+extra block kinds (`divider`, `matrix`, `spread`, `versus`) were added for.
 
 `analyticsReport.ts` defines one model every screen maps into (stat tiles,
 tables, bar charts, deck rows with art, notes) and `analyticsPdf.ts` is the only
@@ -9554,6 +9630,10 @@ src/
                               explicit write: a report is far larger than
                               anything else this app stores, so a failed write
                               is a real case and `persist` would swallow it
+  utils/teamReport.ts         the team dossier: a ReportDoc with a section for
+                              every player on both sides. DYNAMICALLY IMPORTED
+                              from the export button, so it rides beside jspdf
+                              rather than in the main chunk
   state/duelImport.ts         a played duel -> a Versus group. What counts as a
                               real deck, and what counts as the same set twice.
                               Pure, so both can be tested without a store

@@ -8,11 +8,15 @@ import {
 import {
   reportFilename,
   type DeckLine,
+  type DividerBlock,
+  type MatrixBlock,
   type ReportBlock,
   type ReportDoc,
   type ReportHue,
+  type SpreadBlock,
   type TableBlock,
   type TableCell,
+  type VersusBlock,
 } from './analyticsReport';
 
 /**
@@ -306,6 +310,8 @@ interface Ctx {
   tiles: Map<string, string | null>;
   y: number;
   page: number;
+  /** Filled by `drawDivider` as sections land, read by the contents pass. */
+  contents: { title: string; page: number; depth: number }[];
 }
 
 function newPage(ctx: Ctx) {
@@ -622,6 +628,396 @@ function drawDecks(ctx: Ctx, decks: DeckLine[]) {
   ctx.y += 2;
 }
 
+/* ------------------------------------------------- divider (a title sheet) */
+
+/**
+ * Opens a section on its own sheet.
+ *
+ * The one place besides the cover where a large field of hue is allowed. It is
+ * deliberate: a reader flicking through forty pages needs a landmark that is
+ * recognisable at thumb speed, and a heading in the body text is not one.
+ */
+function drawDivider(ctx: Ctx, block: DividerBlock) {
+  const { doc, p } = ctx;
+  newPage(ctx);
+  const accent = hueColor(p, block.hue, true);
+
+  // A tall band rather than the cover's full bleed, so the two never read as
+  // the same kind of page — a section is subordinate to the document.
+  fill(doc, accent);
+  doc.rect(0, 0, PAGE_W, 74, 'F');
+
+  // A hairline of the ink step under the band. On dark the solid step and the
+  // page are close enough in value that the band's lower edge disappears.
+  fill(doc, hueColor(p, block.hue));
+  doc.rect(0, 74, PAGE_W, 0.8, 'F');
+
+  if (block.subtitle) {
+    setFont(doc, 'sans', true);
+    doc.setFontSize(9);
+    ink(doc, p.onSolid);
+    alpha(doc, 0.8, () =>
+      doc.text(block.subtitle!.toUpperCase(), MARGIN, 26, { charSpace: 0.6 }),
+    );
+  }
+
+  setFont(doc, 'display');
+  doc.setFontSize(30);
+  ink(doc, p.onSolid);
+  doc.text(clip(doc, block.title, CONTENT_W - 40), MARGIN, 45);
+
+  if (block.tag) {
+    setFont(doc, 'sans');
+    doc.setFontSize(11);
+    ink(doc, p.onSolid);
+    alpha(doc, 0.85, () => doc.text(block.tag!, MARGIN, 57));
+  }
+
+  setFont(doc, 'display');
+  doc.setFontSize(10);
+  ink(doc, p.onSolid);
+  alpha(doc, 0.65, () => doc.text('DECKKIES', PAGE_W - MARGIN, 26, { align: 'right' }));
+
+  if (block.stats?.length) {
+    const n = Math.min(block.stats.length, 4);
+    const gap = 4;
+    const w = (CONTENT_W - gap * (n - 1)) / n;
+    block.stats.slice(0, n).forEach((s, i) => {
+      const x = MARGIN + i * (w + gap);
+      fill(doc, p.nested);
+      stroke(doc, p.border);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(x, 88, w, 26, 2.5, 2.5, 'FD');
+
+      setFont(doc, 'display');
+      doc.setFontSize(19);
+      ink(doc, p.text);
+      doc.text(clip(doc, s.value, w - 8), x + 4, 101);
+
+      setFont(doc, 'sans', true);
+      doc.setFontSize(7.4);
+      ink(doc, p.muted);
+      doc.text(clip(doc, s.label.toUpperCase(), w - 8), x + 4, 107, { charSpace: 0.3 });
+
+      if (s.note) {
+        setFont(doc, 'sans');
+        doc.setFontSize(6.4);
+        ink(doc, p.muted);
+        doc.text(clip(doc, s.note, w - 8), x + 4, 111.5);
+      }
+    });
+    ctx.y = 122;
+  } else {
+    ctx.y = 90;
+  }
+
+  ctx.contents.push({
+    title: block.contents ?? block.title,
+    page: ctx.page,
+    depth: block.depth ?? 0,
+  });
+}
+
+/* ---------------------------------------------------------------- matrix */
+
+/**
+ * The whole board as a grid.
+ *
+ * COLOUR IS SCALED ACROSS THE RANGE PRESENT, not across 0..100. Every figure in
+ * this grid is an expected win rate, and those live in a narrow band — a run of
+ * values from 48 to 57 painted on an absolute scale is nine shades of the same
+ * beige, and the pairing that needs attention looks like all the others. The
+ * legend says what the ends of the scale are so the compression is stated
+ * rather than hidden.
+ *
+ * A null cell is drawn EMPTY, with a rule through it. It is not a low score; it
+ * is the absence of evidence, and the two must not look alike.
+ */
+function drawMatrix(ctx: Ctx, block: MatrixBlock) {
+  const { doc, p } = ctx;
+  if (!block.rows.length || !block.columns.length) return;
+
+  const LABEL_W = 46;
+  const HEAD_H = 15;
+  const ROW_H = 11;
+  const cellW = Math.max(14, (CONTENT_W - LABEL_W) / block.columns.length);
+  const gridW = LABEL_W + cellW * block.columns.length;
+
+  const values = block.rows
+    .flatMap((r) => r.cells.map((c) => c.fraction))
+    .filter((f): f is number => f !== null);
+  const lo = values.length ? Math.min(...values) : 0;
+  const hi = values.length ? Math.max(...values) : 1;
+  const span = hi - lo || 1;
+
+  reserve(ctx, HEAD_H + ROW_H * block.rows.length + 10);
+  const top = ctx.y;
+
+  // Column headings, rotated is tempting and wrong: at this size rotated text
+  // is unreadable and the labels are short enough to clip honestly.
+  setFont(doc, 'sans', true);
+  doc.setFontSize(6.4);
+  ink(doc, p.muted);
+  block.columns.forEach((c, i) => {
+    const x = MARGIN + LABEL_W + i * cellW;
+    doc.text(clip(doc, c.label, cellW - 2), x + cellW / 2, top + 6, { align: 'center' });
+    if (c.sub) {
+      setFont(doc, 'sans');
+      doc.setFontSize(5.4);
+      doc.text(clip(doc, c.sub, cellW - 2), x + cellW / 2, top + 10, { align: 'center' });
+      setFont(doc, 'sans', true);
+      doc.setFontSize(6.4);
+    }
+  });
+
+  block.rows.forEach((r, ri) => {
+    const y = top + HEAD_H + ri * ROW_H;
+
+    setFont(doc, 'sans', true);
+    doc.setFontSize(7);
+    ink(doc, p.text);
+    doc.text(clip(doc, r.label, LABEL_W - 4), MARGIN, y + 6);
+    if (r.sub) {
+      setFont(doc, 'sans');
+      doc.setFontSize(5.6);
+      ink(doc, p.muted);
+      doc.text(clip(doc, r.sub, LABEL_W - 4), MARGIN, y + 9.6);
+    }
+
+    r.cells.forEach((cell, ci) => {
+      const x = MARGIN + LABEL_W + ci * cellW;
+      if (cell.fraction === null) {
+        fill(doc, p.sunken);
+        doc.roundedRect(x + 0.6, y + 0.6, cellW - 1.2, ROW_H - 1.2, 1, 1, 'F');
+        stroke(doc, p.border);
+        doc.setLineWidth(0.3);
+        doc.line(x + 3, y + ROW_H / 2, x + cellW - 3, y + ROW_H / 2);
+        return;
+      }
+      const t = (cell.fraction - lo) / span;
+      /* Green at the top of the range, red at the bottom, through the surface
+         in the middle — so "better than the rest of this board" and "worse
+         than it" are opposite directions rather than two depths of one
+         colour. The mix is against the SURFACE, not white, which is what keeps
+         it legible when the theme flips. */
+      const hue = t >= 0.5 ? p.green : p.red;
+      const strength = Math.abs(t - 0.5) * 2;
+      fill(doc, mix(hue, p.surface, 0.12 + strength * (cell.thin ? 0.18 : 0.48)));
+      doc.roundedRect(x + 0.6, y + 0.6, cellW - 1.2, ROW_H - 1.2, 1, 1, 'F');
+
+      setFont(doc, 'sans', true);
+      doc.setFontSize(7);
+      ink(doc, cell.thin ? p.muted : p.text);
+      doc.text(cell.text, x + cellW / 2, y + 7, { align: 'center' });
+    });
+  });
+
+  ctx.y = top + HEAD_H + ROW_H * block.rows.length + 3;
+
+  if (block.legend) {
+    setFont(doc, 'sans');
+    doc.setFontSize(6.4);
+    ink(doc, p.muted);
+    doc.text(clip(doc, block.legend, gridW), MARGIN, ctx.y + 3);
+    ctx.y += 6;
+  }
+  ctx.y += 3;
+}
+
+/* ---------------------------------------------------------------- spread */
+
+/** One proportional band plus a legend. */
+function drawSpread(ctx: Ctx, block: SpreadBlock) {
+  const { doc, p } = ctx;
+  const segs = block.segments.filter((s) => s.share > 0);
+  if (!segs.length) return;
+
+  const BAR_H = 11;
+  const rows = Math.ceil(segs.length / 3);
+  reserve(ctx, BAR_H + rows * 6 + 8);
+  const top = ctx.y;
+
+  const total = segs.reduce((a, s) => a + s.share, 0) || 100;
+  // The five hues in a fixed order, so the same archetype keeps its colour
+  // down a section rather than changing between the bar and the legend.
+  const HUES: ReportHue[] = ['violet', 'blue', 'green', 'pink', 'red'];
+
+  fill(doc, p.sunken);
+  doc.roundedRect(MARGIN, top, CONTENT_W, BAR_H, 1.5, 1.5, 'F');
+
+  let x = MARGIN;
+  segs.forEach((s, i) => {
+    const w = (s.share / total) * CONTENT_W;
+    const c = hueColor(p, s.hue ?? HUES[i % HUES.length], true);
+    fill(doc, c);
+    doc.rect(x, top, w, BAR_H, 'F');
+    // Only label in place when the segment can actually hold the text.
+    if (w > 16) {
+      setFont(doc, 'sans', true);
+      doc.setFontSize(6.6);
+      ink(doc, p.onSolid);
+      doc.text(`${s.share.toFixed(0)}%`, x + w / 2, top + 7.2, { align: 'center' });
+    }
+    x += w;
+  });
+
+  // Hairline separators, drawn after so a segment cannot paint over its own
+  // neighbour's edge.
+  stroke(doc, p.page);
+  doc.setLineWidth(0.4);
+  let sx = MARGIN;
+  segs.forEach((s) => {
+    sx += (s.share / total) * CONTENT_W;
+    if (sx < MARGIN + CONTENT_W - 0.5) doc.line(sx, top, sx, top + BAR_H);
+  });
+
+  let ly = top + BAR_H + 5;
+  const colW = CONTENT_W / 3;
+  segs.forEach((s, i) => {
+    const col = i % 3;
+    const lx = MARGIN + col * colW;
+    if (col === 0 && i > 0) ly += 6;
+    fill(doc, hueColor(p, s.hue ?? HUES[i % HUES.length], true));
+    doc.roundedRect(lx, ly - 2.6, 3, 3, 0.6, 0.6, 'F');
+    setFont(doc, 'sans', true);
+    doc.setFontSize(6.8);
+    ink(doc, p.text);
+    doc.text(clip(doc, s.label, colW - 30), lx + 5, ly);
+    setFont(doc, 'sans');
+    ink(doc, p.muted);
+    doc.text(s.note ?? `${s.share.toFixed(1)}%`, lx + colW - 4, ly, { align: 'right' });
+  });
+
+  ctx.y = ly + 7;
+}
+
+/* ---------------------------------------------------------------- versus */
+
+/** One deck as a 4x2 plate. Returns the height it drew. */
+function deckPlate(ctx: Ctx, d: DeckLine, x: number, y: number, w: number, hue: ReportHue): number {
+  const { doc, p } = ctx;
+  const gap = 1.6;
+  const cw = (w - gap * 3) / 4;
+  const ch = cw / CARD_RATIO;
+  const artH = ch * 2 + gap;
+  const H = 15 + artH + 4;
+
+  fill(doc, p.nested);
+  stroke(doc, p.border);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(x, y, w, H, 2.5, 2.5, 'FD');
+
+  // The side's own hue, as an edge rather than a fill — the plate has card art
+  // in it and a tinted ground fights every one of the 122 palettes.
+  fill(doc, hueColor(p, hue, true));
+  doc.roundedRect(x, y, w, 1.6, 0.8, 0.8, 'F');
+
+  setFont(doc, 'sans', true);
+  doc.setFontSize(8.4);
+  ink(doc, p.text);
+  doc.text(clip(doc, d.name, w - 30), x + 3, y + 8);
+
+  if (d.value) {
+    setFont(doc, 'display');
+    doc.setFontSize(11);
+    ink(doc, hueColor(p, hue));
+    doc.text(d.value, x + w - 3, y + 8.4, { align: 'right' });
+  }
+  if (d.meta) {
+    setFont(doc, 'sans');
+    doc.setFontSize(6.2);
+    ink(doc, p.muted);
+    doc.text(clip(doc, d.meta, w - 6), x + 3, y + 12.6);
+  }
+
+  d.cards.slice(0, 8).forEach((card, i) => {
+    const url = artUrl(card, d.art?.[card]);
+    const data = ctx.tiles.get(url);
+    const cx = x + 3 + (i % 4) * (cw + gap);
+    const cy = y + 15 + Math.floor(i / 4) * (ch + gap);
+    if (data) {
+      doc.addImage(data, 'JPEG', cx, cy, cw, ch, url, 'FAST');
+    } else {
+      fill(doc, p.sunken);
+      doc.roundedRect(cx, cy, cw, ch, 0.8, 0.8, 'F');
+      setFont(doc, 'sans');
+      doc.setFontSize(4.6);
+      ink(doc, p.muted);
+      const name = CARDS_BY_KEY.get(card)?.name ?? card;
+      doc.text(clip(doc, name, cw - 1), cx + cw / 2, cy + ch / 2, { align: 'center' });
+    }
+  });
+
+  return H;
+}
+
+/** An absent answer, stated. Never a blank half. */
+function emptyPlate(ctx: Ctx, x: number, y: number, w: number, h: number, body: string) {
+  const { doc, p } = ctx;
+  fill(doc, p.sunken);
+  stroke(doc, p.border);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(x, y, w, h, 2.5, 2.5, 'FD');
+  setFont(doc, 'sans');
+  doc.setFontSize(7.4);
+  ink(doc, p.muted);
+  const lines = doc.splitTextToSize(body, w - 10) as string[];
+  lines.forEach((ln, i) =>
+    doc.text(ln, x + w / 2, y + h / 2 - (lines.length - 1) * 2 + i * 4, { align: 'center' }),
+  );
+}
+
+function drawVersus(ctx: Ctx, block: VersusBlock) {
+  const { doc, p } = ctx;
+  const GUT = 16;
+  const half = (CONTENT_W - GUT) / 2;
+
+  if (block.leftLabel || block.rightLabel) {
+    reserve(ctx, 7);
+    setFont(doc, 'sans', true);
+    doc.setFontSize(6.8);
+    ink(doc, p.muted);
+    if (block.leftLabel) doc.text(block.leftLabel.toUpperCase(), MARGIN, ctx.y + 3, { charSpace: 0.4 });
+    if (block.rightLabel) {
+      doc.text(block.rightLabel.toUpperCase(), MARGIN + half + GUT, ctx.y + 3, { charSpace: 0.4 });
+    }
+    ctx.y += 6;
+  }
+
+  for (const pair of block.pairs) {
+    // Measured before it is drawn, so a pair never straddles a page break —
+    // half a versus on each of two sheets is not a versus.
+    const cw = (half - 1.6 * 3) / 4;
+    const H = 15 + (cw / CARD_RATIO) * 2 + 1.6 + 4;
+    reserve(ctx, H + (pair.note ? 9 : 4));
+    const top = ctx.y;
+
+    deckPlate(ctx, pair.left, MARGIN, top, half, 'red');
+    if (pair.right) {
+      deckPlate(ctx, pair.right, MARGIN + half + GUT, top, half, 'blue');
+    } else {
+      emptyPlate(ctx, MARGIN + half + GUT, top, half, H, 'Nothing on the squad clears the floor against this.');
+    }
+
+    // The word, between them. It is the relationship the page is about.
+    setFont(doc, 'display');
+    doc.setFontSize(13);
+    ink(doc, p.muted);
+    doc.text('VS', MARGIN + half + GUT / 2, top + H / 2 + 2, { align: 'center' });
+
+    ctx.y = top + H + 2;
+    if (pair.note) {
+      setFont(doc, 'sans');
+      doc.setFontSize(6.4);
+      ink(doc, p.muted);
+      doc.text(clip(doc, pair.note, CONTENT_W), MARGIN, ctx.y + 3);
+      ctx.y += 6;
+    }
+    ctx.y += 2;
+  }
+  ctx.y += 2;
+}
+
 function drawNote(ctx: Ctx, body: string) {
   const { doc, p } = ctx;
   setFont(doc, 'sans');
@@ -699,6 +1095,66 @@ function drawCover(ctx: Ctx) {
   );
 }
 
+/* -------------------------------------------------------------- contents */
+
+/**
+ * The contents sheet, drawn on the SECOND pass into a page reserved on the
+ * first.
+ *
+ * A page number cannot be known until the thing it points at has been laid
+ * out, and a contents page that guesses is worse than none — the reader trusts
+ * it once, is sent to the wrong sheet, and stops trusting the document. So
+ * page 2 is left blank while everything else is drawn, `drawDivider` records
+ * where each section actually landed, and this fills it in at the end. The same
+ * trick the footers already use for the page total.
+ */
+function drawContents(ctx: Ctx) {
+  const { doc, p, docModel } = ctx;
+  const accent = hueColor(p, docModel.hue, true);
+  paintPage(ctx);
+
+  setFont(doc, 'display');
+  doc.setFontSize(20);
+  ink(doc, p.text);
+  doc.text('Contents', MARGIN, 26);
+  fill(doc, accent);
+  doc.rect(MARGIN, 30, 26, 1.6, 'F');
+
+  // Two columns, because forty sections down one column runs off the sheet and
+  // a contents page that itself needs a second page is a contradiction.
+  const entries = ctx.contents;
+  const perCol = Math.ceil(entries.length / 2) || 1;
+  const colW = (CONTENT_W - 10) / 2;
+
+  entries.forEach((e, i) => {
+    const col = Math.floor(i / perCol);
+    const row = i % perCol;
+    const x = MARGIN + col * (colW + 10);
+    const y = 42 + row * 7.2;
+    if (y > BODY_BOTTOM) return;
+
+    const indent = e.depth * 5;
+    setFont(doc, 'sans', e.depth === 0);
+    doc.setFontSize(e.depth === 0 ? 8 : 7.4);
+    ink(doc, e.depth === 0 ? p.text : p.muted);
+    const label = clip(doc, e.title, colW - indent - 14);
+    doc.text(label, x + indent, y);
+
+    // A leader rule, so the eye can cross to the number without drifting a row.
+    const lw = doc.getTextWidth(label);
+    stroke(doc, p.border);
+    doc.setLineWidth(0.2);
+    if (colW - indent - lw - 16 > 4) {
+      doc.line(x + indent + lw + 2, y - 1, x + colW - 12, y - 1);
+    }
+
+    setFont(doc, 'sans', true);
+    doc.setFontSize(8);
+    ink(doc, p.muted);
+    doc.text(String(e.page), x + colW - 2, y, { align: 'right' });
+  });
+}
+
 /* ----------------------------------------------------------------- render */
 
 export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> {
@@ -712,8 +1168,16 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
   // No font to register: the display face is Arial and jsPDF's built-in
   // Helvetica matches it metrically. See `setFont`.
 
-  // Every card in the report, built once and reused by URL alias.
-  const decks = docModel.blocks.flatMap((b) => (b.kind === 'decks' ? b.decks : []));
+  // Every card in the report, built once and reused by URL alias. Versus
+  // plates hold decks too, so both block kinds are swept — missing the second
+  // one would silently draw name-only placeholders for half the document.
+  const decks = docModel.blocks.flatMap((b) =>
+    b.kind === 'decks'
+      ? b.decks
+      : b.kind === 'versus'
+        ? b.pairs.flatMap((pr) => (pr.right ? [pr.left, pr.right] : [pr.left]))
+        : [],
+  );
   const tiles = new Map<string, string | null>();
   await Promise.all(
     deckUrls(decks).map(async ({ url }) => {
@@ -721,9 +1185,20 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
     }),
   );
 
-  const ctx: Ctx = { doc, p, docModel, tiles, y: BODY_TOP, page: 1 };
+  const ctx: Ctx = { doc, p, docModel, tiles, y: BODY_TOP, page: 1, contents: [] };
 
   drawCover(ctx);
+
+  /* Page 2 is RESERVED and left blank for now — see `drawContents`. It has to
+     exist before the body so that every page number the body produces is
+     final, and it cannot be filled until the body has told us those numbers. */
+  const contentsPage = docModel.contents ? 2 : 0;
+  if (contentsPage) {
+    doc.addPage();
+    ctx.page += 1;
+    paintPage(ctx);
+  }
+
   newPage(ctx);
   header(ctx);
   ctx.y = BODY_TOP + 4;
@@ -735,6 +1210,12 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
       ctx.y = BODY_TOP + 4;
       continue;
     }
+    // A divider owns its whole sheet, so it draws its own page and must not be
+    // given a block heading above it.
+    if (block.kind === 'divider') {
+      drawDivider(ctx, block);
+      continue;
+    }
     blockHeading(ctx, block.heading, block.note);
     switch (block.kind) {
       case 'stats': drawStats(ctx, block.tiles); break;
@@ -742,6 +1223,9 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
       case 'bars': drawBars(ctx, block.bars); break;
       case 'decks': drawDecks(ctx, block.decks); break;
       case 'note': drawNote(ctx, block.body); break;
+      case 'matrix': drawMatrix(ctx, block); break;
+      case 'spread': drawSpread(ctx, block); break;
+      case 'versus': drawVersus(ctx, block); break;
     }
   }
 
@@ -764,6 +1248,15 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
 
   // Footers last: the page total is not known until everything is laid out.
   const total = doc.getNumberOfPages();
+
+  // And the contents with them, for the same reason one page further on — the
+  // body has now told us where every section actually landed.
+  if (contentsPage) {
+    doc.setPage(contentsPage);
+    ctx.page = contentsPage;
+    drawContents(ctx);
+  }
+
   for (let i = 2; i <= total; i += 1) {
     doc.setPage(i);
     ctx.page = i;

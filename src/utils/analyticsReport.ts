@@ -111,13 +111,100 @@ export interface BreakBlock {
   kind: 'break';
 }
 
+/**
+ * A full-page section title, and the thing that makes a long report navigable.
+ *
+ * A forty-page document that scrolls uniformly is not forty pages of report, it
+ * is one page repeated — the reader cannot tell where they are or find their
+ * way back. A divider gives every player their own opening sheet, and it is
+ * also what the contents page is built from: `title` is recorded against the
+ * sheet it lands on, so the numbers are real rather than estimated.
+ */
+export interface DividerBlock {
+  kind: 'divider';
+  title: string;
+  subtitle?: string;
+  /** Printed small under the title. Usually the tag. */
+  tag?: string;
+  hue?: ReportHue;
+  /** Up to four figures on the title sheet, so it opens with substance. */
+  stats?: { label: string; value: string; note?: string }[];
+  /** How this section is listed in the contents. Defaults to `title`. */
+  contents?: string;
+  /** Indents the contents entry — a player under an opponent, say. */
+  depth?: 0 | 1;
+}
+
+/**
+ * The grid: every teammate against every opponent, one cell each.
+ *
+ * THIS IS THE ONE PICTURE THAT ANSWERS THE WHOLE DOCUMENT. Everything else is
+ * one player at a time; this is the only place a coach can see the whole board
+ * and find the pairing that is in trouble. Cells carry both a number and a
+ * fraction because the fraction is what gets painted and the number is what
+ * gets read — the same split `BarsBlock` makes, for the same reason.
+ *
+ * A null fraction is NOT zero. It means no rung of the ladder had evidence, and
+ * it is drawn as an empty cell rather than a cold one: painting it at the
+ * bottom of the scale would rank an unmeasured pairing below a measured bad
+ * one, which is exactly backwards.
+ */
+export interface MatrixBlock extends BlockBase {
+  kind: 'matrix';
+  columns: { label: string; sub?: string }[];
+  rows: {
+    label: string;
+    sub?: string;
+    cells: { text: string; fraction: number | null; thin?: boolean }[];
+  }[];
+  /** Printed under the grid to say what the colour means. */
+  legend?: string;
+}
+
+/**
+ * A proportional band — an opponent's archetype spread, as one bar.
+ *
+ * Segments rather than a pie: at print size a pie's small slices are unreadable
+ * and unlabelable, and the question here ("how much of their play is this?") is
+ * a length comparison, which a bar answers directly and a wedge does not.
+ */
+export interface SpreadBlock extends BlockBase {
+  kind: 'spread';
+  /** `share` is a percentage, 0..100, matching every other rate in this model. */
+  segments: { label: string; share: number; note?: string; hue?: ReportHue }[];
+}
+
+/**
+ * Two decks facing each other, the way the screen draws a folder.
+ *
+ * The report's central claim is relational — *this* deck answers *that* one —
+ * and a list cannot say that. Printed 4x2 a side so the art is large enough to
+ * recognise a card from across a table, which is what these get used for.
+ */
+export interface VersusBlock extends BlockBase {
+  kind: 'versus';
+  leftLabel?: string;
+  rightLabel?: string;
+  pairs: {
+    left: DeckLine;
+    /** Null when nothing on the squad answers it — printed as a stated
+     *  absence, never as a blank half. */
+    right: DeckLine | null;
+    note?: string;
+  }[];
+}
+
 export type ReportBlock =
   | StatsBlock
   | TableBlock
   | BarsBlock
   | DecksBlock
   | NoteBlock
-  | BreakBlock;
+  | BreakBlock
+  | DividerBlock
+  | MatrixBlock
+  | SpreadBlock
+  | VersusBlock;
 
 export interface ReportDoc {
   /** The screen's own name — "Duel Zone", "Top Meta Decks". */
@@ -137,6 +224,16 @@ export interface ReportDoc {
   /** Printed at the foot of the last page. The place to say what the report
    *  cannot say. */
   caveats?: string[];
+  /**
+   * Emit a contents sheet listing every `divider`, with real page numbers.
+   *
+   * Reserved as page 2 and filled on the SECOND pass, because a page number
+   * cannot be known until the thing it points at has been laid out. Worth
+   * turning on past about ten pages and pointless below that.
+   */
+  contents?: boolean;
+  /** A sentence under the cover title, when the subject line is not enough. */
+  summary?: string;
 }
 
 /* ------------------------------------------------------------------ helpers */

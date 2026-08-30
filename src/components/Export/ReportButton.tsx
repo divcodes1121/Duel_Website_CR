@@ -14,6 +14,18 @@ import styles from './ReportButton.module.css';
  *
  * `jspdf` is only reached inside `downloadAnalyticsReport`, which imports it
  * dynamically — 390 kB that must never land in the initial bundle.
+ *
+ * THE THUNK MAY BE ASYNC, so that a screen whose adapter is large can import it
+ * dynamically too and keep it out of the main chunk beside jsPDF. Team
+ * Analysis does: its dossier builder is only reachable by clicking this. The
+ * cheap adapters stay synchronous and nothing about them changes — `await` on
+ * a plain value is a no-op.
+ *
+ * This is deliberately NOT `React.lazy` on the button itself. A lazy child
+ * anywhere inside the Dashboard shell hangs at its fallback for ever, because
+ * `TopSearch` re-renders in a loop and a tree that never settles never commits
+ * a resolved Suspense boundary. A dynamic import inside an event handler is
+ * unaffected by that — it never touches Suspense.
  */
 
 function DownloadIcon() {
@@ -29,7 +41,7 @@ export function ReportButton({
   label = 'Export PDF',
   disabled,
 }: {
-  build: () => ReportDoc;
+  build: () => ReportDoc | Promise<ReportDoc>;
   label?: string;
   disabled?: boolean;
 }) {
@@ -40,7 +52,7 @@ export function ReportButton({
     setBusy(true);
     setError(null);
     try {
-      await downloadAnalyticsReport(build());
+      await downloadAnalyticsReport(await build());
     } catch (e) {
       setError('Export failed');
       // The message matters for diagnosis and does not belong in the UI.

@@ -21,6 +21,7 @@ import {
   type SavedTeamAnalysis,
 } from '../../../state/teamSaves';
 import { ago } from '../../../utils/format';
+import { ReportButton } from '../../Export/ReportButton';
 import { ReadingState } from '../ReadingState';
 import { VsMark } from '../../VsMark/VsMark';
 import { FolderGallery, OpenFolder } from './TeamFolders';
@@ -407,6 +408,21 @@ export function TeamAnalysis() {
                   Save as new
                 </button>
               )}
+
+              {/* A THUNK, not a built document — the same contract every other
+                  analytics screen's export uses. It keeps the adapter off the
+                  render path (nobody who never exports pays to build a
+                  forty-page model on every keystroke) and it guarantees the
+                  PDF describes the report as it is at the moment of the click,
+                  including a restored save's own age. */}
+              <ReportButton
+                build={async () =>
+                  (await import('../../../utils/teamReport')).teamAnalysisReport(report, {
+                    savedAt,
+                  })
+                }
+                label="Export PDF"
+              />
             </>
           )}
         </div>
