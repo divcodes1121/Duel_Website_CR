@@ -863,6 +863,13 @@ they play), `MIN_OPPONENT_DECK_GAMES` 2, `MAX_SQUAD` **10** per side, `TOP_N` 3.
 `COMFORT_WEIGHT` is 1.5 points and is a TIEBREAK — sized to lose to any real
 matchup difference.
 
+**Measured on production, 2026-08-30, at the new cap:** 10 blue x 2 red, cold,
+against the real database — **2m 30s**, 61-deck candidate pool, all ten blue
+players resolved `stored`. The blue side is what costs: ten resolutions plus a
+profile for every one of the 61 candidates, all built before the first opponent
+is scored. Two folders on top of that is cheap, which is the shape the design
+predicted and the reason the folder loop is on the inside.
+
 `MAX_SQUAD` was 8 until 2026-08-30. Ten is what people paste: a ranked roster
 off a Discord channel is numbered 1 to 10. The cost is mild — the scoring loop
 is `blue x red`, so 64 candidate-folder pairs become 100, but that loop reads
