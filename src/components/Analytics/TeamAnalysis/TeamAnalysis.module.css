@@ -98,6 +98,27 @@
   gap: 1rem;
 }
 
+/* THE EDGE IS AN ELECTRIC BORDER NOW, not a 2px rule.
+ *
+ * The side's identity hue used to be a `border-top: 2px solid` — a static
+ * marker saying which team this box is. It is React Bits' `ElectricBorder`
+ * instead: a rounded path displaced by fractal noise, stroked on a canvas that
+ * sits OUTSIDE this box, with three blurred layers under it for the glow.
+ *
+ * Two things follow, and both are why this rule changed rather than gained a
+ * line.
+ *
+ * THE 1px NEUTRAL BORDER STAYS AND THE COLOURED ONE GOES. The electric edge is
+ * the colour now, so a second coloured rule would be the same statement twice
+ * — and under `prefers-reduced-motion` the canvas is not rendered at all, so
+ * this neutral border is the box's whole edge and has to stand on its own.
+ *
+ * `--side-hue` IS STILL DECLARED, because the title and the chips' left rules
+ * read it. Only the border stopped using it.
+ *
+ * NO `box-shadow`. The glow layers are the shadow now, and the two together
+ * read as a smudge — `--shadow` is a soft drop under an opaque card, and the
+ * electric glow is light coming off the edge. */
 .side {
   --side-hue: var(--hue-blue);
   display: flex;
@@ -105,14 +126,21 @@
   gap: 0.6rem;
   padding: 0.9rem;
   border: 1px solid var(--border);
-  border-top: 2px solid var(--side-hue);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: var(--shadow);
 }
 
 .side[data-side='red'] {
   --side-hue: var(--hue-red);
+}
+
+/* THE CANVAS OVERFLOWS ITS BOX BY 40px ON EVERY SIDE, on purpose — that is the
+ * margin a displaced stroke needs. `.entry` is a grid and `.page` clips
+ * horizontally, so without this the spill is counted in the grid's own sizing
+ * and the two sides stop being equal halves. `min-width: 0` on the wrapper
+ * keeps the track from growing to fit ink that is allowed to hang outside it. */
+.entry > :global(.electric-border) {
+  min-width: 0;
 }
 
 .sideHead {

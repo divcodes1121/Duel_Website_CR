@@ -1,0 +1,103 @@
+/* VENDORED from React Bits — `ElectricBorder`, the CSS half.
+ *
+ * ── ONE DEVIATION ─────────────────────────────────────────────────────────
+ *
+ * `oklch(from …)` IS REPLACED BY `color-mix`. Upstream computes
+ * `--electric-light-color: oklch(from var(--electric-border-color) l c h)`,
+ * which is the same colour written another way, and the only place the
+ * conversion does anything is the 0.6-alpha variant on `.eb-glow-1`.
+ *
+ * Relative colour syntax is newer than `color-mix` and is the kind of thing
+ * this project has been caught by before: a value a browser cannot parse is
+ * invalid at computed-value time, which DELETES the whole declaration — so the
+ * failure is not a wrong colour, it is a border that silently is not there.
+ * `color-mix` is already used across `index.css`, so it is the form known to
+ * work in both themes here.
+ *
+ * NOT a CSS Module, deliberately. The class names are the vendored component's
+ * own and are prefixed `eb-`; hashing them would mean editing the vendored
+ * markup, which is the thing kept verbatim so it can be diffed against
+ * upstream. `.electric-border` is the only unprefixed name and it is specific
+ * enough not to collide.
+ *
+ * The blurs are STATIC. This project bans animated `filter` and `box-shadow`
+ * (they are what caused the lag that got motion switched off once) — these
+ * three layers are painted once and never keyframed; only the canvas moves.
+ */
+
+.electric-border {
+  position: relative;
+  border-radius: inherit;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.eb-canvas-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.eb-canvas {
+  display: block;
+}
+
+.eb-content {
+  position: relative;
+  border-radius: inherit;
+  z-index: 1;
+}
+
+.eb-layers {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.eb-glow-1,
+.eb-glow-2,
+.eb-background-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.eb-glow-1 {
+  border: 2px solid color-mix(in srgb, var(--electric-border-color) 60%, transparent);
+  filter: blur(1px);
+}
+
+.eb-glow-2 {
+  border: 2px solid var(--electric-border-color);
+  filter: blur(4px);
+}
+
+/* THE WIDE SPILL IS DARK-MODE ONLY, and that is this project's rule rather
+ * than a preference. `--glow-halo` is a STRENGTH — 15% on dark, 0% on light —
+ * mixed in at the point of use, so one unconditional declaration works in both
+ * themes with no `[data-theme]` branch here. On a white page a 32px-blurred
+ * coloured wash does not read as emission, it reads as a smudge; on black it
+ * is the light coming off the edge.
+ *
+ * This replaces the vendored `opacity: 0.3` on a full-strength gradient. The
+ * two tight layers above are NOT gated: they are the border's own softness,
+ * not a halo, and they are what makes the edge read as electric rather than as
+ * a 2px rule in both themes. */
+.eb-background-glow {
+  z-index: -1;
+  transform: scale(1.1);
+  filter: blur(32px);
+  background: linear-gradient(
+    -30deg,
+    color-mix(in srgb, var(--electric-border-color) var(--glow-halo, 15%), transparent),
+    transparent,
+    color-mix(in srgb, var(--electric-border-color) var(--glow-halo, 15%), transparent)
+  );
+}

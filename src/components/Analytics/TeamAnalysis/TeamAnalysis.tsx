@@ -21,6 +21,8 @@ import {
   type SavedTeamAnalysis,
 } from '../../../state/teamSaves';
 import { ago } from '../../../utils/format';
+import { ElectricBorder } from '../../ui/electric-border';
+import { readToken } from '../../../three/runtime';
 import { ReportButton } from '../../Export/ReportButton';
 import { ReadingState } from '../ReadingState';
 import { VsMark } from '../../VsMark/VsMark';
@@ -113,7 +115,29 @@ function SquadInput({
     el.style.height = `${Math.min(el.scrollHeight, 460)}px`;
   }, [value]);
 
+  /* THE COLOUR IS A TOKEN, RESOLVED, NOT A HEX.
+     `index.css` is the single source of colour truth and no component defines
+     one of its own — a canvas cannot read a CSS variable, so it reads the
+     computed value instead. That also gets the per-theme value for free:
+     `--hue-red` is a pale #f87171 on dark and a deep #c02618 on light, which
+     is the difference a glow over black and a glow over white each need.
+     Read on every render rather than memoised, because a theme flip must
+     reach the stroke and the effect below keys on this string. */
+  const hue = readToken(side === 'red' ? '--hue-red' : '--hue-blue', '#5b8def');
+
   return (
+    /* THE BORDER IS THE SIDE'S IDENTITY, so the electric edge takes the hue
+       that the 2px top rule used to carry. `chaos` is deliberately below the
+       component's default: this wraps a form somebody is reading and typing
+       into, and a lively border beside a text field competes with the caret.
+       `speed` likewise — it should read as alive, not as urgent. */
+    <ElectricBorder
+      color={hue}
+      speed={0.6}
+      chaos={0.06}
+      borderRadius={12}
+      style={{ borderRadius: 12 }}
+    >
     <div className={styles.side} data-side={side}>
       <div className={styles.sideHead}>
         <h3 className={styles.sideTitle}>{label}</h3>
@@ -175,6 +199,7 @@ function SquadInput({
         </p>
       )}
     </div>
+    </ElectricBorder>
   );
 }
 

@@ -52,7 +52,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped; saves, reads links, prints.** Paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
+| **Team Analysis** (`#/teams`) | **shipped; saves, reads links, prints.** Paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -7361,6 +7361,81 @@ puts the ordinal inside the emphasis, so stripping the `*` is what first exposes
 the `1.`, and stripping that exposes the second `*`. A single pass of either rule
 leaves the other's marker behind and the chip reads `*1.* 🇵🇪 WR I Clisman™✨`.
 
+### The two boxes wear an electric border
+
+The side's identity hue used to be a `border-top: 2px solid` — a static marker
+saying which team a box belongs to. It is React Bits' `ElectricBorder` now: a
+rounded path walked at about one sample every two pixels, displaced by fractal
+noise and stroked onto a canvas that sits outside the box, with blurred layers
+under it for the glow. Blue for your squad, red for the opposition.
+
+It is **ported to this project's plumbing rather than dropped in**, and the six
+deviations are listed in the component's own header. Two of them matter beyond
+tidiness:
+
+- **The loop is `runLoop`, not a bare `requestAnimationFrame`.** Upstream
+  animates for as long as the component is mounted, whether or not anyone can
+  see it. Everything in `src/three/` here is gated on an IntersectionObserver
+  and on `visibilitychange`, for the reason written at the top of `runtime.ts`:
+  a loop nobody can see is pure cost, and an unconditional one is what got
+  motion switched off project-wide once already.
+- **`prefers-reduced-motion` renders no canvas at all**, rather than a slower
+  one. That is why `.side` keeps its 1px neutral border: with the canvas gone,
+  that border is the box's whole edge and has to stand on its own.
+
+The colour is `readToken('--hue-blue' | '--hue-red')` rather than a hex literal.
+A canvas cannot read a CSS variable, so it resolves the computed value — which
+also gets the per-theme colour for free (`#f87171` on dark, `#c02618` on light).
+
+**The wide glow is gated on `--glow-halo`**, which is 15% on dark and 0% on
+light, because glow in this project is a dark-mode thing: a 32px-blurred
+coloured wash on a white page does not read as emission, it reads as a smudge.
+The two tight layers are *not* gated — they are the border's own softness, and
+they are what makes the edge read as electric rather than as a 2px rule in
+either theme. Upstream's flat `opacity: 0.3` is gone, and so is its
+`oklch(from …)`: relative colour syntax is newer than `color-mix`, and a value
+the browser cannot parse is invalid at computed-value time, which deletes the
+whole declaration — so the failure mode is not a wrong colour, it is a border
+that silently is not there.
+
+#### What it costs, and the theory that was wrong
+
+The obvious suspect was the noise: ten octaves, each running at
+`10 x 1.6^i`, evaluated twice per sample over roughly 770 samples a frame. By
+octave five that frequency is past the sampling limit, so the assumption was
+that half the octaves were aliasing rather than detail and could go.
+
+Measured at 10, 5 and 3 octaves: **47.6, 46.5 and 47.2 fps** — no difference
+worth having, so upstream's ten stays. The cost is somewhere else:
+
+| | fps |
+|---|---:|
+| page with nothing added | 50.3 |
+| canvas only | 50.1 |
+| blur layers only | 50.9 |
+| **both together** | **47.0** |
+
+Each half is free on its own; the ~3 fps is the cost of compositing a canvas
+that repaints every frame *over* blurred layers underneath it. Worth knowing
+before adding a second one of these somewhere.
+
+Note the ceiling in that table is 50, not 60. That is the pre-existing
+`TopSearch` render loop, which logged 262 "Maximum update depth" warnings during
+a 2.5-second sample — see
+[A render loop that starves Suspense](#a-render-loop-that-starves-suspense). The
+border did not cause it and cannot fix it.
+
+**21/21 browser checks**, and three of those were probe bugs before they were
+passes. The page does not scroll with an empty board, so `scrollTop = 5000`
+moved nothing and the "does it stop off-screen" check was failing against an
+element that had never left the screen. A `height` on a freshly appended child
+of `.page` is flex-shrunk straight back to zero, because `.page` is a flex
+column — it needs `flex: none` with a `min-height`. And comparing an
+off-screen frame against one read *before* the scroll can only ever fail, since
+frames legitimately advance between that read and the moment the observer
+pauses the loop; both readings have to be taken while off-screen. The gating was
+correct the whole time.
+
 ### The dossier — every player, on paper
 
 **Export PDF** on `#/teams` prints the whole analysis as a match document. Not
@@ -9749,6 +9824,10 @@ src/
       glass-dock.tsx          vengenceui's GlassDock — the top nav. Excluded
                               from eslint as vendored code
       gooey-search.tsx        vengenceui's GooeySearch — the tag field
+      electric-border.tsx     React Bits' ElectricBorder — the squad boxes on
+                              #/teams. Ported to `runLoop`, so it is gated on
+                              visibility and renders NOTHING under
+                              prefers-reduced-motion
     Dashboard/                top bar, sidebar, landing screen, content panel
       Dashboard.tsx           the shell; `landing` decides whether a rail exists.
                               Also owns `.phoneNav`, the chip strip that IS the
