@@ -41,6 +41,37 @@ every Deck Counter row look generic, with no error anywhere. It now warns on
 stderr and reports `cardData` in `/api/analytics/status`. Check that field after
 any deploy.
 
+### Pushing a change to the VPS
+
+The frontend deploys itself — Vercel builds from `main` in a minute or two.
+**This directory does not.** It is copied by hand, so a change here is not live
+until you do this, and in the gap between the two the two halves disagree.
+
+```bash
+# 1. Has the VPS copy drifted? Compare it to the commit it should already be at.
+ssh -i ~/.ssh/clashbot root@<host> 'md5sum /opt/royalweb/server/<file>.py'
+git show HEAD:server/<file>.py | md5sum          # must match before you overwrite
+
+# 2. Back up what you are about to replace, named for what it was.
+ssh -i ~/.ssh/clashbot root@<host>   'cp -p /opt/royalweb/server/<file>.py /opt/royalweb/server/<file>.py.bak-$(date +%Y%m%d)-<what>'
+
+# 3. Copy, clear the bytecode, restart.
+scp -i ~/.ssh/clashbot server/<file>.py root@<host>:/opt/royalweb/server/
+ssh -i ~/.ssh/clashbot root@<host>   'rm -rf /opt/royalweb/server/__pycache__ && systemctl restart royalweb'
+
+# 4. Prove it came back, and that it can still read the card files.
+curl -s https://api.deckkies.com/api/analytics/status | grep cardData
+```
+
+**Step 1 is the one people skip.** The VPS copy can be ahead of `HEAD` — a
+hotfix applied there and never committed — and overwriting it silently reverts
+that fix. An md5 that matches `HEAD` is the evidence that nothing is being lost;
+one that does not is a conversation, not a `scp`.
+
+**Step 4 is not optional either**, for the reason in the paragraph above it: a
+service that starts fine and cannot see `../src/data/` answers every request
+with plausible, empty data.
+
 The rest of this file describes the model, which did not change with the move.
 
 ## Storage tiers

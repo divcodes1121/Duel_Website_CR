@@ -47,12 +47,12 @@ bot's SQLite files read-only.
 
 ---
 
-## Status — 2026-08-29
+## Status — 2026-08-30
 
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped, then reshaped, and now it remembers.** An analysis can be **saved and re-opened**, with a banner saying how old the figures are and a Re-run that reuses the stored paste. The extractor reads **tags out of links** — a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) used to report every row as a broken tag; a clan link is still refused on purpose. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap of the whole board, head-to-head spreads, and a method section; 25 pages at 2v2 up to 98 at 10v10, in whichever theme the reader has on. **The cap is 10 a side, up from 8** — ten is what a Discord roster is numbered to; the client refuses over it while the server slices, so the screen now reads `limits.maxSquad` back and names the mismatch if the API host is behind. The paste boxes are a roster tall rather than two lines. **37/38 + 14/14 browser checks**, the one failure being the pre-existing `TopSearch` render loop. The board is YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 58 vitest |
+| **Team Analysis** (`#/teams`) | **shipped; saves, reads links, prints.** Paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -83,8 +83,8 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,319 Python checks** across **37 suites** (528 check-style + 791 unittest), **328 vitest**, `tsc -b` and `npm run build` clean |
-| shipped from | `main` at `96a52d4`, deployed 2026-08-29 — the phone pass. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
+| tests | **1,386 Python checks** across **38 suites**, **328 vitest**, `tsc -b` and `npm run build` clean. Every Python suite re-run on 2026-08-30 |
+| shipped from | `main` at `c1cf755`, deployed 2026-08-30 — the team dossier and its layout fixes. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
@@ -195,7 +195,7 @@ the browser only ever talks to its own origin.
 ```bash
 npx tsc -b                        # typecheck
 npm run test                      # 328 tests over the deck, duel, export, admin and shader logic
-python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
+python server/test_duel_combos.py # 55 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
 python server/test_duel_zone.py   # 88 checks over the series and sequence rules
@@ -203,8 +203,8 @@ python server/test_player_cards.py # 60 checks over the card board
 python server/test_deck_counter.py # 58 checks over the matchup engine
 python server/test_coach.py       # 69 checks over the Coach Assist rules
 python server/test_live_player.py # 23 checks over the live battlelog reader
-python server/test_recruit.py     # 31 checks over the tag recruiter
-python server/test_player_search.py # 18 checks over search-by-name
+python server/test_recruit.py     # 35 checks over the tag recruiter
+python server/test_team_analysis.py # 67 checks over the squad-vs-squad board
 python server/test_ml_22_final.py # 66 checks over the FROZEN production contract
 python server/test_ml_20d.py      # 27 checks that `practice` excludes real duels
 python server/test_ml_21a.py      # 32 checks over the spell feasibility harness
@@ -6191,8 +6191,8 @@ push.
 
 ## Testing and verification
 
-**1,319 Python checks across 37 suites** (528 check-style + 791 unittest) and
-**328 vitest tests**, counted by running all of them on 2026-08-30. Only
+**1,386 Python checks across 38 suites** and **328 vitest tests**, counted by
+running every one of them on 2026-08-30. Only
 `test_recent_battles.py` opens a database, and it writes its own temp file —
 every other Python suite runs on synthetic data or a stubbed reader, so they
 pass on a machine with no Clash_Bot install and cannot be broken by whatever a
@@ -8009,9 +8009,11 @@ Team Analysis prints a much longer document off the same machinery — see
 [The dossier](#the-dossier--every-player-on-paper) — which is what the four
 extra block kinds (`divider`, `matrix`, `spread`, `versus`) were added for.
 
-`analyticsReport.ts` defines one model every screen maps into (stat tiles,
-tables, bar charts, deck rows with art, notes) and `analyticsPdf.ts` is the only
-thing that draws one. Seven screens would otherwise mean seven copies of
+`analyticsReport.ts` defines one model every screen maps into — stat tiles,
+tables, bar charts, deck rows with art, notes, and the four the team dossier
+added (a full-page `divider`, a `matrix` heatmap, a proportional `spread`, a
+`versus` pair of deck plates) — and `analyticsPdf.ts` is the only thing that
+draws one. Seven screens would otherwise mean seven copies of
 pagination and seven chances for one screen's PDF to drift from another's.
 Adding a screen is an adapter of about thirty lines in `reportAdapters.ts`.
 
@@ -9670,7 +9672,8 @@ src/
                               #/teams. Two rosters in, a folder per opponent
                               out. TeamAnalysis.tsx is the entry board and the
                               run; TeamFolders.tsx is the gallery and the
-                              opened versus board. EAGERLY imported on purpose
+                              opened versus board; TeamSaves.tsx is the list of
+                              saved boards. EAGERLY imported on purpose
                               — see the Suspense note in the README
   utils/squadParse.ts         pulling a squad out of pasted text. NO IMPORTS,
                               like tiers.ts and format.ts: it decides WHO gets
@@ -9819,8 +9822,8 @@ server/
                               ladder rather than reimplementing it, and builds
                               each candidate's profiles ONCE — the upstream
                               LRUs are 64/32 and would thrash otherwise
-  test_team_analysis.py       61 checks, no DB and no network
-  test_duel_combos.py         39 checks, no DB
+  test_team_analysis.py       67 checks, no DB and no network
+  test_duel_combos.py         55 checks, no DB
   test_meta.py                33 checks, no DB
   test_card_art.py            110 checks, no DB
   test_duel_zone.py           88 checks, no DB
@@ -9849,6 +9852,7 @@ server/
     phase24b-hosting-plan.md  what deploying actually requires
 
   test_ml_20b/20c/20d/21a.py  127 checks over the four closed branches
+                              (38 + 30 + 27 + 32, re-run 2026-08-30)
   test_ml_22_final.py         66 checks. The FROZEN CONTRACT, not the
                               implementation -- a failure here means the
                               contract moved
