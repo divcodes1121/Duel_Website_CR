@@ -439,8 +439,10 @@ check("the squad cap is enforced server-side too",
       len(over["blue"]) == ta.MAX_SQUAD,
       "the client cap is feedback; this is the boundary")
 
-check("MAX_SQUAD matches the client's copy", ta.MAX_SQUAD == 8,
-      "src/utils/squadParse.ts MAX_SQUAD — the two are mirrors")
+check("MAX_SQUAD matches the client's copy", ta.MAX_SQUAD == 10,
+      "src/utils/squadParse.ts MAX_SQUAD — the two are mirrors, and this "
+      "file SLICES where the client REFUSES, so a drift is a silently "
+      "shortened roster rather than an error")
 
 print(f"{NL}{PASS} passed, {FAIL} failed{NL}")
 sys.exit(1 if FAIL else 0)

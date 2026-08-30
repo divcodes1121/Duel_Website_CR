@@ -141,9 +141,23 @@
   font-weight: 600;
 }
 
+/* THE FLOOR IS A ROSTER, NOT A LINE.
+ *
+ * This was `4.5rem` — about two lines — on the reasoning that the box grows
+ * with what is in it, so it should start at the size of the smallest useful
+ * paste. That is right about the ceiling and wrong about the floor: the box is
+ * a TARGET before it is a container, and a two-line well beside the word
+ * "Paste both rosters" reads as a field for one tag. It also means the moment
+ * of pasting is the moment the layout jumps, on both sides at once.
+ *
+ * 11rem is ten lines at this size and leading, which is a full ranked roster
+ * arriving without the box moving at all. The auto-grow above still takes over
+ * past that, and `min-height` is the floor an inline `height` cannot go under —
+ * which is why the JS may keep setting `height` from `scrollHeight` and does
+ * not need to know this number. */
 .paste {
   width: 100%;
-  min-height: 4.5rem;
+  min-height: 11rem;
   overflow-y: auto;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--border);
@@ -266,6 +280,174 @@
 .analyze:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Analyse, and beside it whatever saving offers right now. Wraps rather than
+   scrolls: these are two or three short words each, so at 320px they stack
+   into a column and every one of them stays reachable. */
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* SECONDARY TO ANALYSE, AND THE OUTLINE IS WHAT SAYS SO. Saving is the thing
+   you do to a result that already exists; the filled button is the thing that
+   produces one. Two solid buttons side by side make the reader choose between
+   them, when only one of them is ever the next step. */
+.save {
+  padding: 0.65rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-nested);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+
+.save:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-action);
+}
+
+/* ── Saved analyses ──────────────────────────────────────────────────────── */
+
+.saves {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.savesTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.saveList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saveRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.15rem 0.15rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+/* The one currently on screen. A left bar rather than a fill: the row is a
+   list item, and filling it would make it read as selected-for-an-action. */
+.saveRow[data-open] {
+  border-left: 3px solid var(--accent-select);
+  padding-left: 0.4rem;
+}
+
+.saveOpen {
+  flex: 1 1 auto;
+  /* `min-width: 0` or a long saved name refuses to ellipsize and pushes the
+     Rename and Delete chips off the end of the row. */
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.45rem 0.3rem;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.saveTitle {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.saveMeta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.saveName {
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--accent-select);
+  border-radius: 6px;
+  background: var(--surface-nested);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.saveActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.25rem;
+}
+
+/* THESE GROW THEIR REAL BOX RATHER THAN TAKING AN INSET `::after`. The two
+   chips are 0.25rem apart, so inset hit areas would overlap and a tap between
+   them would land on whichever is later in the DOM — the same call the deck
+   action chips make, for the same reason. */
+.saveChip {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+
+.saveChip:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* The armed second tap. Colour AND the word change together — colour alone
+   would be the only signal, and it is the one a colour-blind reader loses. */
+.saveChip[data-danger] {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 45%, var(--border));
+}
+
+/* The banner over a restored board. Deliberately the same shape as `.warn`
+   above: it is the same kind of statement — something about these numbers that
+   the numbers themselves cannot say. */
+.snapshot {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--accent-select) 40%, var(--border));
+  border-radius: 8px;
+  background: var(--surface-nested);
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.5;
 }
 
 .problem,

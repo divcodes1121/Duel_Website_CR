@@ -94,6 +94,93 @@ describe('parseSquad — hashed mode', () => {
   });
 });
 
+describe('parseSquad — links', () => {
+  /* THE FORMAT THIS WAS ADDED FOR. A roster arrives as a Discord message, and
+     a Discord message is markdown: the tag is wrapped in `[...]` and welded to
+     an href with no whitespace anywhere between them. Before links were read,
+     the hash token ran to the next space and came out as the tag PLUS the whole
+     URL — so every one of these ten rows was reported as a broken tag and the
+     squad was empty. */
+  const DISCORD = [
+    '*1.* 🇵🇪 WR I Clisman™✨ — [#V20U0YRCY](https://royaleapi.com/player/V20U0YRCY)',
+    '*2.* 🇦🇷 ⚡Agustin⚡ — [#U8Q9CGYU](https://royaleapi.com/player/U8Q9CGYU)',
+    '*3.* 🇳🇮 MarviToykoDrift — [#VUYV2G89Y](https://royaleapi.com/player/VUYV2G89Y)',
+    '*4.* 🇨🇱 Kito King — [#2U0G9LGRG](https://royaleapi.com/player/2U0G9LGRG)',
+  ].join('\n');
+
+  it('reads a markdown roster where the tag is welded to its link', () => {
+    const r = parseSquad(DISCORD);
+    expect(r.members.map((m) => m.tag)).toEqual([
+      '#V20U0YRCY', '#U8Q9CGYU', '#VUYV2G89Y', '#2U0G9LGRG',
+    ]);
+    expect(r.rejected).toEqual([]);
+  });
+
+  it('does not count the markdown tag and its own href as two players', () => {
+    // Same tag, written twice on one line by the format itself.
+    expect(parseSquad(DISCORD).duplicates).toEqual([]);
+  });
+
+  it('strips list numbering and emphasis marks off the name', () => {
+    // `*1.*` — the ordinal is INSIDE the emphasis, so one pass of either rule
+    // leaves the other's marker behind.
+    const r = parseSquad(DISCORD);
+    expect(r.members[2].name).toBe('🇳🇮 MarviToykoDrift');
+    expect(r.members[3].name).toBe('🇨🇱 Kito King');
+  });
+
+  it('reads a bare link with no hash anywhere', () => {
+    // No `#` in the text at all: the URL is what earns marked mode, and
+    // without it every word of every name would be tried as a tag.
+    const r = parseSquad(
+      'Kito King https://royaleapi.com/player/2U0G9LGRG\nOker royaleapi.com/player/YLVV0JPQ',
+    );
+    expect(r.members).toEqual([
+      { tag: '#2U0G9LGRG', name: 'Kito King' },
+      { tag: '#YLVV0JPQ', name: 'Oker' },
+    ]);
+    expect(r.rejected).toEqual([]);
+  });
+
+  it('reads a tag out of a query string', () => {
+    const r = parseSquad('https://link.clashroyale.com/invite/friend/en?tag=2PP0PYLQ&token=abc');
+    expect(r.members.map((m) => m.tag)).toEqual(['#2PP0PYLQ']);
+  });
+
+  it('reads a tag under a sub-page', () => {
+    // The marker only disqualifies when it INTRODUCES the tag, so a deck page
+    // for a player is still that player.
+    const r = parseSquad('https://royaleapi.com/player/2U0G9LGRG/decks');
+    expect(r.members.map((m) => m.tag)).toEqual(['#2U0G9LGRG']);
+  });
+
+  it('REFUSES a clan link, which is otherwise indistinguishable', () => {
+    /* A clan tag is a syntactically perfect player tag. Reading one would put
+       a player in the roster who is not on the team, silently. */
+    const r = parseSquad('Team https://royaleapi.com/clan/2PP0PYLQ');
+    expect(r.members).toEqual([]);
+  });
+
+  it('does not report a link that simply holds no tag', () => {
+    // A roster carrying a team page or a VOD is not a broken tag.
+    const r = parseSquad('Roster: https://example.com/teams/spring\nRavi #Y022GRCJQ');
+    expect(r.members.map((m) => m.tag)).toEqual(['#Y022GRCJQ']);
+    expect(r.rejected).toEqual([]);
+  });
+
+  it('keeps a link out of the name beside it', () => {
+    const r = parseSquad('Ravi (see https://example.com/notes) #Y022GRCJQ');
+    expect(r.members[0].name).toBe('Ravi (see');
+  });
+
+  it('unwraps a bracketed tag with no link at all', () => {
+    expect(parseSquad('Ravi [#Y022GRCJQ]').members[0]).toEqual({
+      tag: '#Y022GRCJQ',
+      name: 'Ravi',
+    });
+  });
+});
+
 describe('parseSquad — bare mode', () => {
   it('accepts a column of tags with no hashes at all', () => {
     const r = parseSquad('y022grcjq\n2pp0pylq\nl8gvpj900');
@@ -161,6 +248,24 @@ describe('readiness', () => {
     expect(over.members).toHaveLength(MAX_SQUAD + 1);
     expect(squadsReady(over, squad(1))).toBe(false);
     expect(squadProblem(over, squad(1))).toContain(String(MAX_SQUAD));
+  });
+
+  it('takes a full ten-player roster, which is what people paste', () => {
+    /* A ranked list off a Discord channel is numbered 1 to 10. The cap was 8,
+       so the most common real input was refused and the person was asked to
+       decide which two opponents did not matter. */
+    expect(MAX_SQUAD).toBe(10);
+    expect(squadProblem(squad(10), squad(10))).toBeNull();
+  });
+
+  it('MIRRORS THE SERVER, and a drift here is a silently shortened roster', () => {
+    /* `server/team_analysis.py` holds the same constant and enforces it
+       DIFFERENTLY: this side refuses, that side slices `blue_tags[:MAX_SQUAD]`.
+       So a client cap above the server's does not error — it drops the tail of
+       the roster without listing it in `rejected` or anywhere else.
+       If this fails, the other half of the change was not made:
+       `server/team_analysis.py` MAX_SQUAD, and a deploy to the API host. */
+    expect(MAX_SQUAD).toBe(10);
   });
 
   it('names the side that is the problem', () => {

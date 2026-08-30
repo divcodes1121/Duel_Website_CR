@@ -76,10 +76,20 @@ import tracking
 
 # ── Floors ──────────────────────────────────────────────────────────────────
 
-#: Squad size cap per side. Mirrors `MAX_SQUAD` in `src/utils/squadParse.ts`.
-#: REFUSED, NOT TRUNCATED — analysing the first eight of eleven answers a
-#: question nobody asked, and the missing three are invisible in the output.
-MAX_SQUAD = 8
+#: Squad size cap per side. Mirrors `MAX_SQUAD` in `src/utils/squadParse.ts`,
+#: and the mirror is load-bearing: the client REFUSES a roster over the cap,
+#: this file SLICES one. A client that permits more than this does not get an
+#: error, it gets a report with the tail of its roster missing and nothing
+#: saying so. The two constants move in the same change, always.
+#:
+#: TEN, RAISED FROM EIGHT 2026-08-30, because ten is what people paste — a
+#: ranked list off a Discord channel is numbered 1 to 10, and a cap that
+#: refuses the most common real input only asks the person to decide which two
+#: opponents do not matter. Cost: the scoring loop is `blue x red`, so 64
+#: candidate-folder pairs becomes 100, but that loop reads memory only (every
+#: profile is built once, up front). The real bill is the 20 player
+#: resolutions, which is a quarter more than 16, not 1.6x more.
+MAX_SQUAD = 10
 
 #: Games a blue deck needs before it can be recommended at all. Below this it
 #: is not a deck somebody plays, it is a deck somebody tried.

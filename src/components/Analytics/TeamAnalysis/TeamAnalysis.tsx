@@ -14,9 +14,17 @@ import {
   type SquadParse,
 } from '../../../utils/squadParse';
 import { recordDuration } from '../../../state/loadTiming';
+import {
+  defaultSaveName,
+  MAX_SAVES,
+  useTeamSaves,
+  type SavedTeamAnalysis,
+} from '../../../state/teamSaves';
+import { ago } from '../../../utils/format';
 import { ReadingState } from '../ReadingState';
 import { VsMark } from '../../VsMark/VsMark';
 import { FolderGallery, OpenFolder } from './TeamFolders';
+import { SavedAnalyses } from './TeamSaves';
 import styles from './TeamAnalysis.module.css';
 
 /**
@@ -101,7 +109,7 @@ function SquadInput({
     const el = box.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 460)}px`;
   }, [value]);
 
   return (
@@ -114,9 +122,11 @@ function SquadInput({
         </span>
       </div>
 
-      {/* IT GROWS WITH WHAT IS IN IT. A fixed seven rows is a tall empty box
-          for the two lines most rosters actually are, and on a laptop that
-          dead space was most of the reason the results sat below the fold. */}
+      {/* IT GROWS WITH WHAT IS IN IT, from a floor that already fits a full
+          roster — see the note on `.paste`. `rows` is left at the HTML default
+          on purpose: the floor is CSS (`min-height`) so that the inline height
+          this effect writes cannot go under it, and a `rows` value would be a
+          second, silently-losing declaration of the same thing. */}
       <textarea
         ref={box}
         className={styles.paste}
@@ -125,7 +135,6 @@ function SquadInput({
         placeholder={hint}
         spellCheck={false}
         aria-label={label}
-        rows={3}
       />
 
       {/* THE CHIPS ARE THE CONFIRMATION. A roster is pasted in bulk, so the one
@@ -176,6 +185,20 @@ export function TeamAnalysis() {
   const [error, setError] = useState<string | null>(null);
   const [openTag, setOpenTag] = useState<string | null>(null);
 
+  /* WHICH SAVE IS ON SCREEN, and it is runtime-only on purpose — the same call
+     `activeSavedId` makes in the builder store. It exists so Save can offer
+     "Update" instead of silently making a thirteenth copy of one board; it is
+     not a property of the analysis, so persisting it would mean a reload
+     restores a "you are looking at a saved board" claim with no board. */
+  const [savedId, setSavedId] = useState<string | null>(null);
+  /* Set only when a board came OUT of storage. `report.days` cannot answer
+     this — every report has a window, and only a restored one is stale. */
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+
+  const saves = useTeamSaves((s) => s.saves);
+  const doSave = useTeamSaves((s) => s.save);
+
   const blue = useSquad(blueText);
   const red = useSquad(redText);
 
@@ -207,6 +230,12 @@ export function TeamAnalysis() {
     setLoading(true);
     setError(null);
     setOpenTag(null);
+    setSaveNote(null);
+    /* A FRESH RUN IS NO LONGER THE SAVED BOARD. Leaving `savedId` set would
+       point Update at a record whose figures the new run has replaced, and
+       leaving `savedAt` set would keep the stale banner over live numbers. */
+    setSavedId(null);
+    setSavedAt(null);
     const started = performance.now();
     try {
       const r = await fetchTeamAnalysis(
@@ -237,9 +266,81 @@ export function TeamAnalysis() {
     revealResults();
   }, [revealResults]);
 
+  /* SAVE STORES THE REPORT AND THE PASTE. The report is what you came back
+     for; the paste is what lets a stale one be re-run rather than retyped,
+     which is the only real answer to a snapshot getting old. */
+  const saveCurrent = useCallback(
+    (asNew: boolean) => {
+      if (!report) return;
+      const existing = asNew ? null : saves.find((s) => s.id === savedId) ?? null;
+      const result = doSave(
+        {
+          name: existing?.name ?? defaultSaveName(report),
+          blueText,
+          redText,
+          report,
+        },
+        existing?.id,
+      );
+      if (result.ok) {
+        setSavedId(result.id);
+        /* NOT `savedAt`. What is on screen was measured just now; it becomes a
+           snapshot when it is re-opened, not when it is written. */
+        setSaveNote(existing ? 'Updated.' : 'Saved. It is in the list above.');
+        return;
+      }
+      setSaveNote(
+        result.reason === 'full'
+          ? `You already have ${MAX_SAVES} saved analyses. Delete one to keep this.`
+          : result.reason === 'too-large'
+            ? 'This board is too large to store in the browser. Narrow the rosters and run it again.'
+            : 'The browser refused to store it — its storage may be full or blocked.',
+      );
+    },
+    [report, saves, savedId, blueText, redText, doSave],
+  );
+
+  /* OPENING A SAVE RESTORES THE BOXES TOO, so the next thing a person is
+     likely to want — the same match-up, re-run against today's window — is one
+     click away rather than a re-paste. */
+  const openSave = useCallback(
+    (save: SavedTeamAnalysis) => {
+      setBlueText(save.blueText);
+      setRedText(save.redText);
+      setReport(save.report);
+      setSavedId(save.id);
+      setSavedAt(save.savedAt);
+      setOpenTag(null);
+      setError(null);
+      setSaveNote(null);
+      revealResults();
+    },
+    [revealResults],
+  );
+
   const open: TeamFolder | null = openTag
     ? report?.folders.find((f) => f.player.tag === openTag) ?? null
     : null;
+
+  /* THE TWO CAPS CAN DISAGREE, AND ONLY ONE OF THEM SAYS SO.
+   *
+   * `MAX_SQUAD` lives in two files — here and `server/team_analysis.py` — and
+   * they enforce it differently: this side REFUSES a roster over the cap, the
+   * server SLICES one (`blue_tags[:MAX_SQUAD]`). That asymmetry is harmless
+   * while the numbers match and dangerous the moment they do not, because the
+   * dropped tags are not in `rejected`, are not in `folders`, and produce a
+   * report that looks exactly as complete as a full one.
+   *
+   * They CAN drift, because the two halves ship separately: Vercel deploys
+   * this from `main` in a minute or two and the Python service is copied to
+   * the VPS by hand. Between those two events a raised cap here is a lowered
+   * cap there. So the report's own `limits.maxSquad` is checked against this
+   * file's — the server publishes it, and this is what that field is for. */
+  const serverCap = report?.limits?.maxSquad ?? MAX_SQUAD;
+  const capSkew =
+    !!report &&
+    serverCap < MAX_SQUAD &&
+    (report.blue.length >= serverCap || report.red.length >= serverCap);
 
   return (
     <div className={styles.page} ref={scroller}>
@@ -277,10 +378,40 @@ export function TeamAnalysis() {
         />
       </section>
 
+      <SavedAnalyses openId={savedId} onOpen={openSave} />
+
       <div className={styles.actions}>
-        <button type="button" className={styles.analyze} onClick={run} disabled={!!problem || loading}>
-          {loading ? 'Analysing…' : 'Analyse squads'}
-        </button>
+        <div className={styles.actionRow}>
+          <button
+            type="button"
+            className={styles.analyze}
+            onClick={run}
+            disabled={!!problem || loading}
+          >
+            {loading ? 'Analysing…' : savedAt ? 'Re-run against today' : 'Analyse squads'}
+          </button>
+
+          {/* SAVE APPEARS ONLY WITH SOMETHING TO SAVE. A disabled Save beside
+              an empty screen is a control that has never once been usable at
+              the moment it is read. */}
+          {report && !loading && (
+            <>
+              <button type="button" className={styles.save} onClick={() => saveCurrent(false)}>
+                {savedId ? 'Update saved' : 'Save analysis'}
+              </button>
+              {/* The second button exists only once the first has an "update"
+                  meaning — otherwise the two would do the same thing under two
+                  names, which is how a person learns to distrust both. */}
+              {savedId && (
+                <button type="button" className={styles.save} onClick={() => saveCurrent(true)}>
+                  Save as new
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {saveNote && <p className={styles.note}>{saveNote}</p>}
         {problem && <p className={styles.problem}>{problem}</p>}
         {/* Not an error — a scrim with a shared stand-in is real — but without
             this the folder recommends a player's own deck against themselves,
@@ -306,6 +437,19 @@ export function TeamAnalysis() {
 
       {report && !loading && (
         <section className={styles.results} ref={results}>
+          {/* A RESTORED BOARD SAYS WHAT IT IS, EVERY TIME. Every figure below
+              was measured over a window that closed when the analysis ran —
+              the opponent's spread, the win rates, which of your decks cleared
+              the comfort floor. None of it has been recomputed. Showing it
+              without this line presents a fortnight-old read as the current
+              one, which is the single way this feature could mislead. */}
+          {savedAt && (
+            <p className={styles.snapshot}>
+              Saved {ago(savedAt)} — these are the figures as they were then, not as they are now.
+              Use <strong>Re-run against today</strong> to measure the same squads again.
+            </p>
+          )}
+
           {/* Named ONCE at the top. Eight identical empty folders do not read as
               "your side has no stored history" — they read as a broken tool. */}
           {report.pool.reason && (
@@ -313,6 +457,17 @@ export function TeamAnalysis() {
               {report.pool.reason === 'no_blue_history'
                 ? 'Nothing is stored for your side yet, so there are no decks to recommend. Newly added tags are queued for collection and fill in within a couple of hours.'
                 : `No deck on your side clears the ${report.pool.minGames}-game floor, so there is nothing anyone has actually piloted to recommend.`}
+            </p>
+          )}
+
+          {/* Named ABOVE the folders, because it is a statement about which
+              folders exist rather than about anything inside one. */}
+          {capSkew && (
+            <p className={styles.warn}>
+              The analytics service is still enforcing a limit of {serverCap} players a side, so
+              this report covers only the first {serverCap} of each roster — anyone past that was
+              dropped without being listed. Deploying the current{' '}
+              <code>server/team_analysis.py</code> to the API host lifts it to {MAX_SQUAD}.
             </p>
           )}
 

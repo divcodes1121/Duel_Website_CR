@@ -859,9 +859,25 @@ blue player, in roster order, each with that player's own top 3 and a `reason`
 when they have none. Every player appears, including one with nothing to offer.
 
 Floors: `MIN_COMFORT_GAMES` 5 (a deck under it is one somebody tried, not one
-they play), `MIN_OPPONENT_DECK_GAMES` 2, `MAX_SQUAD` 8 per side (refused, never
-truncated), `TOP_N` 3. `COMFORT_WEIGHT` is 1.5 points and is a TIEBREAK — sized
-to lose to any real matchup difference.
+they play), `MIN_OPPONENT_DECK_GAMES` 2, `MAX_SQUAD` **10** per side, `TOP_N` 3.
+`COMFORT_WEIGHT` is 1.5 points and is a TIEBREAK — sized to lose to any real
+matchup difference.
+
+`MAX_SQUAD` was 8 until 2026-08-30. Ten is what people paste: a ranked roster
+off a Discord channel is numbered 1 to 10. The cost is mild — the scoring loop
+is `blue x red`, so 64 candidate-folder pairs become 100, but that loop reads
+memory only because every profile is built once up front (see below). The real
+bill is 20 player resolutions instead of 16.
+
+**This file SLICES; the client REFUSES.** `analyze()` takes
+`blue_tags[:MAX_SQUAD]`, so a client whose cap is higher than this one does not
+get an error — it gets a report with the tail of its roster missing, absent
+from `folders` and absent from `rejected`. The two constants are mirrors
+(`src/utils/squadParse.ts`) and must move in one change. Because this half is
+copied to the VPS by hand while the frontend deploys from `main` in a couple of
+minutes, they genuinely do drift between deploys, so the screen reads
+`limits.maxSquad` back off the report and names the mismatch. **Raising the cap
+is not live until this file is deployed.**
 
 An archetype no rung can answer is renormalised out of the denominator, never
 counted as 50%: averaging over an empty set flattens the ranking exactly when

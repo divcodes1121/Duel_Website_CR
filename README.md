@@ -52,7 +52,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped, then reshaped.** The board is now YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 23 vitest |
+| **Team Analysis** (`#/teams`) | **shipped, then reshaped, and now it remembers.** An analysis can be **saved and re-opened**, with a banner saying how old the figures are and a Re-run that reuses the stored paste. The extractor reads **tags out of links** — a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) used to report every row as a broken tag; a clan link is still refused on purpose. **The cap is 10 a side, up from 8** — ten is what a Discord roster is numbered to; the client refuses over it while the server slices, so the screen now reads `limits.maxSquad` back and names the mismatch if the API host is behind. The paste boxes are a roster tall rather than two lines. **37/38 + 14/14 browser checks**, the one failure being the pre-existing `TopSearch` render loop. The board is YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 35 vitest |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -83,7 +83,7 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,319 Python checks** across **37 suites** (528 check-style + 791 unittest), **266 vitest**, `tsc -b` and `npm run build` clean |
+| tests | **1,319 Python checks** across **37 suites** (528 check-style + 791 unittest), **305 vitest**, `tsc -b` and `npm run build` clean |
 | shipped from | `main` at `96a52d4`, deployed 2026-08-29 — the phone pass. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -194,7 +194,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 270 tests over the deck, duel, export, admin and shader logic
+npm run test                      # 305 tests over the deck, duel, export, admin and shader logic
 python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
@@ -6192,7 +6192,7 @@ push.
 ## Testing and verification
 
 **1,319 Python checks across 37 suites** (528 check-style + 791 unittest) and
-**266 vitest tests**, counted by running all of them on 2026-08-29. Only
+**305 vitest tests**, counted by running all of them on 2026-08-30. Only
 `test_recent_battles.py` opens a database, and it writes its own temp file —
 every other Python suite runs on synthetic data or a stubbed reader, so they
 pass on a machine with no Clash_Bot install and cannot be broken by whatever a
@@ -6222,7 +6222,7 @@ in the analytics fetch effects (it is rebuilt every render; the effect keys on
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 266 tests — deck logic, links, PDF export, proxy, admin
+npm run test                      # 305 tests — deck logic, links, PDF export, proxy, admin
 python server/test_duel_combos.py # 55 checks — duel logic, no database needed
 python server/test_meta.py        # 33 checks — meta board + card board, no database
 python server/test_card_art.py    # 110 checks — deck arrangement, evolution/hero art
@@ -7257,23 +7257,148 @@ Two modes, chosen by the text rather than by a setting, because asking someone
 to declare the format of what they are about to paste is asking them to do the
 parser's job:
 
-- **any `#` present** → only `#`-prefixed tokens are tags, everything else on the
-  line is name context. This is `Mohamed Light #Y022GRCJQ`.
-- **no `#` anywhere** → every whitespace/comma-separated token is tried as a bare
-  tag. This is a column pasted out of a spreadsheet.
+- **marked** — a `#` or a link is present → only `#`-prefixed tokens and tags
+  inside links are tags, everything else on the line is name context. This is
+  `Mohamed Light #Y022GRCJQ`, and it is also the Discord roster below.
+- **bare** — no `#` and no link anywhere → every whitespace/comma-separated
+  token is tried as a tag. This is a column pasted out of a spreadsheet.
 
 The split exists because the alphabet is 14 symbols, so a real name **can** be a
 syntactically valid tag body — `QUURY` parses cleanly. An early version rejected
-any name that was tag-shaped and threw that one away; the `#` is what
-disambiguates, and in hashed mode a name is just text. Rejects and duplicates
+any name that was tag-shaped and threw that one away; the marker is what
+disambiguates, and in marked mode a name is just text. Rejects and duplicates
 are reported rather than dropped: a roster is pasted in bulk, so "one of these
 sixteen is malformed" has to name which one or the person proof-reads all
 sixteen.
 
-`MAX_SQUAD` is 8 per side and a squad over it is **refused, not truncated** —
-analysing the first eight of eleven answers a question nobody asked, and the
-missing three are invisible in the output. The server enforces it again:
-`squadParse.ts` is feedback, `clash_data.normalize_tag` is the boundary.
+`MAX_SQUAD` is **10** per side and a squad over it is **refused, not
+truncated** — analysing the first ten of thirteen answers a question nobody
+asked, and the missing three are invisible in the output. The server enforces it
+again: `squadParse.ts` is feedback, `clash_data.normalize_tag` is the boundary.
+
+It was 8, on the reasoning that five is a CRL roster and eight is that plus a
+bench. **Ten is what people actually paste**: a ranked list off a Discord
+channel is numbered 1 to 10, and a cap that refuses the most common real input
+is not protecting anything — it is asking the person to decide which two of
+their opponents do not matter, which is the question they opened the screen to
+answer. The number is a cost decision and nothing else, and the cost is mild:
+the scoring loop is `blue x red`, so 64 candidate-folder pairs become 100, but
+that loop reads memory only because every profile is built once up front. The
+real bill is 20 player resolutions instead of 16.
+
+**The two halves enforce the cap differently, and that is worth knowing before
+touching it.** The client refuses; the server slices `blue_tags[:MAX_SQUAD]`.
+A client cap above the server's does not produce an error — the dropped tags are
+not in `rejected`, not in `folders`, and the report looks exactly as complete as
+a full one. And they *can* disagree, because they ship separately: Vercel
+deploys the frontend from `main` in a minute or two, and `server/` is copied to
+the VPS by hand. So the screen reads `limits.maxSquad` back off the response and
+says so when the deployed API is behind:
+
+> The analytics service is still enforcing a limit of 8 players a side, so this
+> report covers only the first 8 of each roster — anyone past that was dropped
+> without being listed.
+
+That field has always been in the payload; this is the first thing to use it.
+
+### A roster does not arrive as a column of tags
+
+It arrives as a Discord message, and a Discord message is markdown:
+
+```
+*1.* 🇵🇪 WR I Clisman™✨ — [#V20U0YRCY](https://royaleapi.com/player/V20U0YRCY)
+*2.* 🇦🇷 ⚡Agustin⚡ — [#U8Q9CGYU](https://royaleapi.com/player/U8Q9CGYU)
+```
+
+**Every one of those rows was reported as a broken tag, and the squad came out
+empty.** The hash token is `#([^\s,;|]+)` — it runs to the next whitespace — and
+in `[#V20U0YRCY](https://…)` there is no whitespace anywhere between the tag and
+its own href. So the token was the tag *plus the entire URL glued to it*, which
+fails the length bound, and the screen said "Not read as a tag" ten times about
+a paste that was perfectly well formed.
+
+The fix is three steps and **the order is the whole trick**:
+
+1. **Read the URLs first**, and take the tag out of the path or the query. This
+   is site-agnostic on purpose — RoyaleAPI, Deck Shop, StatsRoyale and
+   Supercell's own `link.clashroyale.com/…?tag=` all put it somewhere in there,
+   and a hard-coded host list means the fifth site nobody thought of silently
+   produces a shorter roster. The alphabet does the filtering.
+2. **Blank those spans, preserving length**, so every index still indexes both
+   strings.
+3. **Run the `#` walk on the blanked copy.** What is left of the example is
+   `[#V20U0YRCY]`, a wrapper the token reader already unwraps.
+
+That ordering pays for itself twice more: a link carrying its own `#fragment`
+can no longer produce a second bogus token out of a URL that was already read,
+and a link that holds no tag at all cannot end up inside somebody's name.
+
+Unwrapping is a **retry, not a laxer alphabet**. The token is tried verbatim
+first and only then re-tried with trailing non-alphanumerics trimmed. A trim
+that ran unconditionally would quietly "repair" input that was never a tag.
+
+**The same tag written twice on one line is one player.** The markdown says it
+once in the brackets and once in the href, so the first version put *"listed
+twice, counted once"* under every single row. Duplicate tracking is now per
+**kind**: a cross-kind repeat is the format talking and is silent, while
+`#T #T #T` in the same form is a real duplicate and still reports — there is a
+test for each, because collapsing them into one set breaks whichever one you
+were not thinking about.
+
+**A clan link is refused; a sub-page is not.** A clan tag is a syntactically
+perfect player tag, so reading `royaleapi.com/clan/2PP0PYLQ` would put somebody
+who is not on the team into the roster, silently — the exact failure this file
+exists to prevent. A marker like `clan` or `deck` disqualifies a URL only when it
+comes **before** the tag, which is what keeps `/player/<tag>/decks` working. The
+host is never scanned at all.
+
+**A URL holding no tag is not a rejection.** Rosters carry team pages,
+spreadsheets and VOD links; calling those broken tags buries the one message
+that matters.
+
+Names get the markdown taken off them too, and `cleanName` **loops**: `*1.*`
+puts the ordinal inside the emphasis, so stripping the `*` is what first exposes
+the `1.`, and stripping that exposes the second `*`. A single pass of either rule
+leaves the other's marker behind and the chip reads `*1.* 🇵🇪 WR I Clisman™✨`.
+
+### Saving a board, and why it says how old it is
+
+An analysis can be **saved and opened again**. The list sits on the entry board,
+above Analyse rather than beside the results: a saved board is the thing you come
+back for, so the only route to last week's must not be to run this week's first.
+
+Saves live in their own store under their own key (`royal-team-saves`), and not
+in `store.ts`. That store persists at **version 9** with a migration chain behind
+it and is the blob cross-device sync pushes; the README is already explicit about
+what a persistence key is worth here, and a separate one also cannot take every
+saved deck with it if this feature is ever removed. It does not use the `persist`
+middleware either, which the builder does: a report is orders of magnitude larger
+than anything else this app writes to `localStorage`, so a write that *fails* is
+a real case rather than a theoretical one, and `persist` swallows the throw. The
+write is explicit, the size is checked before it rather than after, and `full`,
+`too-large` and `unwritable` are three different messages because they have three
+different answers. Twelve saves is the cap and the thirteenth is **refused, not
+evicted** — the same call `MAX_SQUAD` makes.
+
+**A restored board always says how old it is, and that is not housekeeping.**
+Every figure in a report was measured over a window that closed when the analysis
+ran: the opponent's spread, the win rates, which of your decks cleared the
+comfort floor. Opening it a fortnight later recomputes none of that. Presenting
+it as current would be the single way this feature could mislead, so a restored
+board carries a banner and the Analyse button relabels itself **Re-run against
+today** — which works because the pasted text was stored beside the report. That
+is the honest answer to staleness: re-run it, do not retype it.
+
+Which save is on screen is **runtime-only**, like `activeSavedId` in the builder.
+It exists so Save can offer *Update* instead of silently making a thirteenth copy
+of one board; persisting it would mean a reload restores the claim that you are
+looking at a saved analysis with no analysis on screen.
+
+The paste boxes went from `4.5rem` to `11rem` in the same pass. The old floor was
+right about the ceiling and wrong about the floor — a two-line well beside the
+words "paste both rosters" reads as a field for one tag, and it made the act of
+pasting the moment the layout jumped on both sides at once. Eleven is ten lines,
+which is a full ranked roster arriving without the box moving.
 
 ### The name on a chip is the pasted one, unless the server knows better
 
@@ -9421,7 +9546,14 @@ src/
   utils/squadParse.ts         pulling a squad out of pasted text. NO IMPORTS,
                               like tiers.ts and format.ts: it decides WHO gets
                               analysed, and a dropped player produces a report
-                              that looks exactly as correct as a complete one
+                              that looks exactly as correct as a complete one.
+                              Reads tags out of LINKS as well as out of `#`
+                              tokens -- URLs first, blanked, then the `#` walk,
+                              in that order and for the reason in the README
+  state/teamSaves.ts          saved team analyses. Its own key, its own
+                              explicit write: a report is far larger than
+                              anything else this app stores, so a failed write
+                              is a real case and `persist` would swallow it
   state/duelImport.ts         a played duel -> a Versus group. What counts as a
                               real deck, and what counts as the same set twice.
                               Pure, so both can be tested without a store
