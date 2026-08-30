@@ -7361,6 +7361,43 @@ puts the ordinal inside the emphasis, so stripping the `*` is what first exposes
 the `1.`, and stripping that exposes the second `*`. A single pass of either rule
 leaves the other's marker behind and the chip reads `*1.* 🇵🇪 WR I Clisman™✨`.
 
+### Every upgrade ends in the same place
+
+There is no checkout. Royal Pro is set up by hand, so the button is wired to the
+truth — a dialog headed **Write to me**, with the handle and the address as real
+links rather than text to retype. That was already what `ProLock`'s "Subscribe
+to Royal Pro" and the sidebar's "Upgrade Now" did. The other two paths did not.
+
+**The gate card linked to `#/pro`, which is not a route.** `App.tsx` has no
+branch for it, so the hash changed, nothing matched, and the reader was quietly
+dropped on the home screen. That was the only call to action on a locked area,
+and it went nowhere.
+
+**The profile menu's "Upgrade profile" went to `#/signin`** — wrong twice over,
+since that row is only ever shown to somebody who is already signed in. It sent
+them back to a form they had filled in, and said nothing about how Pro is
+actually obtained.
+
+Both are buttons opening the dialog now, so all four routes to Pro end in the
+same sentence.
+
+The dialog hangs off `ProfileMenu` rather than off each of its four hosts — the
+builder, Deck's Home, the Counter Hub and the dashboard all render that menu, so
+none of them has to know about it. It is rendered *outside* the menu's own
+portal deliberately: opening it closes the menu, so anything inside that portal
+would unmount in the same click that asked for it.
+
+One small thing follows from turning links into buttons: `.tierRow` and the gate
+card's `.primary` are now worn by both, so they carry the resets a button needs
+(`border: none`, `font-family: inherit`, `cursor: pointer`). Without those the
+browser supplies its own and the two CTAs stop matching.
+
+Verified 14/14 — both menu rows are buttons and open the dialog, the gate's
+"See Pro" opens it *without* changing the hash, the sidebar card still works,
+and pro and admin are never shown an upgrade row at all. `ProLock` was skipped:
+reaching it needs analytics data the local API cannot serve, and that path was
+not changed.
+
 ### A member stays a member when the three days end
 
 Signing up is what makes somebody a member. The three-day trial is an **access

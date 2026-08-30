@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { type Access, PRO_ONLY_SECTIONS, gateReason } from '../../state/gate';
 import { useAccountStore } from '../../state/accountStore';
 import { trialDaysLeft } from '../../state/supabase';
+import { ProContact } from '../Analytics/ProContact';
 import styles from './GateCard.module.css';
 
 function LockIcon() {
@@ -22,6 +24,7 @@ function LockIcon() {
  * the site — the nav, the free areas, the tools — reachable behind it.
  */
 export function GateCard({ access, section }: { access: Access; section: string }) {
+  const [contact, setContact] = useState(false);
   const profile = useAccountStore((s) => s.profile);
   const reason = gateReason(access);
   const left = trialDaysLeft(profile);
@@ -69,10 +72,17 @@ export function GateCard({ access, section }: { access: Access; section: string 
               ? `Your trial has ${left} day${left === 1 ? '' : 's'} left, but this area needs Pro.`
               : 'Your three-day trial has ended. Top Meta Decks and Deck Counter stay free.'}
           </p>
+          {/* THIS WENT TO `#/pro`, WHICH IS NOT A ROUTE. `App.tsx` has no
+              branch for it, so the hash changed, nothing matched, and the
+              reader was silently dropped on the home screen — the one CTA on a
+              locked area, and it went nowhere. It opens the contact dialog
+              now, which is the same place every other upgrade in the app ends
+              up and, more to the point, the truth: there is no checkout, Pro
+              is set up by hand. */}
           <div className={styles.actions}>
-            <a className={styles.primary} href="#/pro">
+            <button type="button" className={styles.primary} onClick={() => setContact(true)}>
               See Pro
-            </a>
+            </button>
           </div>
         </>
       )}
@@ -81,6 +91,8 @@ export function GateCard({ access, section }: { access: Access; section: string 
         Free for everyone, always: <strong>Top Meta Decks</strong> and{' '}
         <strong>Deck Counter</strong>.
       </p>
+
+      {contact && <ProContact onClose={() => setContact(false)} />}
     </section>
   );
 }

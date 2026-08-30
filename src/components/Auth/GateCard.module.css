@@ -54,7 +54,13 @@
 /* `--solid-*`, because this fill carries `--on-solid` text and is graded to
    hold it. `--hue-green` here is the recurring mistake of this project: it is
    pastel by design, because it is graded for 14px ink rather than for a fill. */
+/* `.primary` is worn by an <a> (sign in) AND a <button> (see Pro), so it
+   carries the resets a button needs — without them the browser supplies its
+   own border and font and the two CTAs stop matching. */
 .primary {
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
   padding: 0.72rem 1.5rem;
   border-radius: 14px;
   background: var(--solid-green);

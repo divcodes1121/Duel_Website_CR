@@ -6,6 +6,7 @@ import { ThemeToggle } from '../Theme/ThemeToggle';
 import { TierBadge } from '../TierBadge/TierBadge';
 import { useThemeStore } from '../../state/themeStore';
 import { TIER_LABEL, trialDaysLeft } from '../../state/tiers';
+import { ProContact } from '../Analytics/ProContact';
 import { useAccess } from '../../state/gate';
 import styles from './ProfileMenu.module.css';
 
@@ -124,6 +125,7 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<MenuPos | null>(null);
+  const [contact, setContact] = useState(false);
   const open = pos !== null;
 
   function toggleOpen() {
@@ -240,12 +242,20 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                   <TierBadge tier={tier} width={68} height={24} />
                 </div>
               ) : (
-                <a
+                /* IT WENT TO `#/signin`, WHICH IS THE WRONG ANSWER TWICE
+                   OVER: this row is only ever shown to somebody who IS signed
+                   in, so it sent them back to a form they had already filled
+                   in, and it said nothing about how Pro is actually obtained.
+                   Every upgrade in the app ends in the same dialog now. */
+                <button
+                  type="button"
                   className={styles.tierRow}
                   data-tier="upgrade"
                   role="menuitem"
-                  href="#/signin"
-                  onClick={() => setPos(null)}
+                  onClick={() => {
+                    setPos(null);
+                    setContact(true);
+                  }}
                 >
                   <span className={styles.tierIcon}>
                     <CrownIcon />
@@ -261,7 +271,7 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                       of the two. It reads the account now, like every other
                       instance of it does. */}
                   <TierBadge tier={tier} trialDaysLeft={daysLeft} width={68} height={24} />
-                </a>
+                </button>
               )}
 
               {/* The two figures, and each one goes to the thing it counts.
@@ -392,6 +402,15 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
         ) : null,
         document.body,
       )}
+
+      {/* OUTSIDE THE MENU'S PORTAL, and it has to be: the dialog is opened by
+          closing the menu, so anything rendered inside that portal would
+          unmount in the same click that asked for it. `ProContact` portals
+          itself to `document.body` anyway, for the backdrop-filter reason every
+          dialog here does. Living on the menu rather than on each of its four
+          hosts means the builder, Deck's Home, the Counter Hub and the
+          dashboard all get it without knowing about it. */}
+      {contact && <ProContact onClose={() => setContact(false)} />}
     </>
   );
 }
