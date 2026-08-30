@@ -84,7 +84,7 @@ bot's SQLite files read-only.
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
 | tests | **1,386 Python checks** across **38 suites**, **328 vitest**, `tsc -b` and `npm run build` clean. Every Python suite re-run on 2026-08-30 |
-| shipped from | `main` at `c1cf755`, deployed 2026-08-30 — the team dossier and its layout fixes. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
+| shipped from | `main` at `93e71f9`, deployed 2026-08-30 — the electric border on the squad boxes. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
@@ -7425,6 +7425,10 @@ a 2.5-second sample — see
 [A render loop that starves Suspense](#a-render-loop-that-starves-suspense). The
 border did not cause it and cannot fix it.
 
+`docs/UI.md` carries the same table beside the WebGL context budget, which this
+does **not** breach: the ceiling of ~16 is on WebGL contexts and both of these
+are 2D canvases. What they spend is compositing, not contexts.
+
 **21/21 browser checks**, and three of those were probe bugs before they were
 passes. The page does not scroll with an empty board, so `scrollTop = 5000`
 moved nothing and the "does it stop off-screen" check was failing against an
@@ -9682,9 +9686,11 @@ and burns a slot against the device limit — the same reasoning that keeps the
 
 ```
 docs/
-  UI.md                       the WebGL layer: what ships, what was removed,
-                              the five things a browser had to catch, and how
-                              a filtered deck list collapses rather than vanishes
+  UI.md                       the canvas layer: what ships, what was removed,
+                              what a browser had to catch that reading could
+                              not, the WebGL context budget and what the 2D
+                              electric border costs against it, and how a
+                              filtered deck list collapses rather than vanishes
   analytics-tunnel-runbook.md the VPS + Caddy transport that is live, and below
                               a SUPERSEDED notice, the Cloudflare tunnel it
                               replaced — kept because what it proved about
@@ -10160,6 +10166,14 @@ Recorded so they are not re-litigated as oversights:
   versus 0.4961 for the average deck they could have brought. Recency weighting
   and per-opponent tendency lost to plain usage the same way. The read narrates
   evidence and invents no tendency.
+- **Cutting the electric border's noise octaves.** Ten octaves, twice per
+  sample, over ~770 samples a frame looked like the obvious cost, and by octave
+  five the frequency is past the sampling limit so half of them should have
+  been droppable aliasing. Measured at 10, 5 and 3 octaves the page ran at
+  47.6, 46.5 and 47.2 fps. The noise was never the cost — the ~3 fps is
+  compositing a repainting canvas over the blurred glow layers — so upstream's
+  ten stay, and a future reader does not have to re-derive that.
+
 - **Chart palettes are not merged into the UI accent system.** They are already
   CVD-validated; re-encoding them for visual consistency would trade a real
   property for a cosmetic one. See the colour section.

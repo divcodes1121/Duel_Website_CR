@@ -5,8 +5,10 @@ to be measured in a browser rather than reasoned about.
 
 Everything else about the interface — colour, motion tokens, the display face,
 the surface ladder — lives in the main `README.md`. This file covers the three.js
-work, plus two layout behaviours that are not WebGL and have nowhere better to
-live: how a filtered deck list closes, and how a route owns its own scroll.
+work and the two canvases that are not three.js (`LiquidMetal` and the tier
+badge are raw WebGL; the electric border is 2D), plus two layout behaviours that
+have nowhere better to live: how a filtered deck list closes, and how a route
+owns its own scroll.
 
 ---
 
@@ -24,6 +26,7 @@ live: how a filtered deck list closes, and how a route owns its own scroll.
 | **Card ring** | both paste screens, the empty palette gallery | both themes |
 | **Liquid metal** | every circular icon control, app-wide | on hover / press only |
 | **Tier badge** | the ADMIN / PRO / MEMBER badge — a liquid that fills the button, sloshes toward the pointer and discharges on click. In the top bar at 112x34, and again in the account menu's tier row at 68x24 | both themes |
+| **Electric border** | the two squad paste boxes on `#/teams`, in the side's own hue — blue for your squad, red for the opposition | both themes |
 
 **The tier badge is the one WebGL surface not in `src/three/`.** It is a port of
 ThreeUI's Tactile Fluidics button and lives in `components/TierBadge/`, raw
@@ -44,12 +47,29 @@ uniforms, so a theme flip re-pushes them **without rebuilding the context** —
 recompiling to change five vec3s would drop the liquid's level, tilt and slosh
 mid-motion.
 
-**Two vendored registry components now sit in `src/components/ui/`** —
-vengenceui's GlassDock (the top nav) and GooeySearch (the tag field). Neither is
-three.js and neither takes a canvas; they are noted here only because they are
-the other things in the shell that move. Their deviations from upstream are
+**Three vendored registry components now sit in `src/components/ui/`** —
+vengenceui's GlassDock (the top nav) and GooeySearch (the tag field), and React
+Bits' ElectricBorder (the squad boxes). Their deviations from upstream are
 listed in their own file headers, and `glass-dock.tsx` is excluded from eslint
 as vendored code.
+
+The first two take no canvas and are noted here only because they are the other
+things in the shell that move. **ElectricBorder does**, and it is the first
+thing outside `src/three/` and `components/TierBadge/` to draw one — so it is
+held to the same rules, and gets them by importing `runtime.ts` rather than by
+reimplementing them:
+
+- the loop is `runLoop`, so it is gated on an IntersectionObserver and on
+  `visibilitychange`; upstream animates for as long as it is mounted;
+- `reducedMotion()` means **no canvas at all**, which is why the box it wraps
+  keeps its own 1px border — with the canvas gone, that border is the whole
+  edge;
+- the DPR cap is `pixelRatio()`;
+- the colour is `readToken('--hue-blue' | '--hue-red')`, not a hex literal, so
+  it follows the theme like every shader here does.
+
+**It is a 2D canvas, not WebGL**, which is what lets there be two of them on one
+screen — see the budget note below.
 
 ```
 src/three/
@@ -67,6 +87,11 @@ src/state/
   deckFx.ts       the event channel DeckFx listens on. A plain module emitter,
                   not a store — these are events, and routing them through
                   zustand would re-render 40 slots per card drop
+src/components/ui/
+  electric-border  a noise-displaced rounded path stroked on a 2D canvas, with
+  .tsx / .css      blurred layers under it for the glow. Vendored from React
+                   Bits; uses runtime.ts for the loop, the DPR cap, the motion
+                   gate and the colour token
 ```
 
 **One canvas per screen, plus the backdrop.** That is the budget, and it is why
@@ -75,6 +100,34 @@ browser allows about 16 WebGL contexts — the same ceiling that forced the
 removed card foil onto a single shared renderer — and the three already want the
 same renderer, resize observer, rAF gate and slot-rect scan. Verified on the
 builder: exactly two canvases.
+
+**`#/teams` has three, and that is not a breach of the rule — but only because
+of what the rule is actually counting.** The ceiling is on **WebGL** contexts;
+the two electric borders are **2D** canvases and consume none. What they do cost
+is compositing, and that was measured rather than assumed:
+
+| | fps |
+|---|---:|
+| the page with neither layer | 50.3 |
+| the canvases alone | 50.1 |
+| the blurred glow layers alone | 50.9 |
+| **both together** | **47.0** |
+
+Each half is free on its own. The ~3 fps is the cost of painting a canvas that
+repaints every frame *over* blurred layers underneath it, and it is the number
+to remember before putting a second one of these anywhere.
+
+That table's ceiling is 50 rather than 60 for a reason that has nothing to do
+with any of this: the `TopSearch` render loop, which logged **262** "Maximum
+update depth" warnings during the 2.5-second sample. See
+[Never make a child of the Dashboard `React.lazy`](#never-make-a-child-of-the-dashboard-reactlazy).
+
+**And the obvious optimisation was measured and was not one.** ElectricBorder
+runs ten octaves of noise, twice per sample, over ~770 samples a frame; by
+octave five the frequency is past the sampling limit, so half of them look like
+aliasing that could be dropped. At 10, 5 and 3 octaves the page ran at 47.6,
+46.5 and 47.2 fps — no difference worth having, so upstream's ten stays. The
+noise was never the cost.
 
 ---
 
@@ -867,6 +920,31 @@ is on the paste box *and* on the board column, so an unscoped
 laid out backwards. Scope the query to the board first. This is the same trap as
 the `[class*="bar"]` note — a selector that is nearly right is worse than one
 that is obviously wrong, because it returns something.
+
+### Three more probes, all from one check that was right all along
+
+The electric border's "does the loop stop when it is off-screen?" check failed
+three times running, and the gating was correct every time. Each failure was the
+probe.
+
+**The page does not scroll with an empty board.** `.page` is the scroll region,
+but at 900px tall with nothing pasted its content fits, so `scrollTop = 5000`
+moved nothing and the element never left the viewport. A check whose
+precondition silently does not hold reports a failure about code it never
+exercised — assert the precondition first: the box's `bottom` must be past the
+observer's 80px root margin *before* the question is worth asking.
+
+**A `height` on a freshly appended child of a flex column is shrunk back to
+zero.** The fix for the above was a 4,000px spacer; `.page` is
+`display: flex; flex-direction: column`, so the spacer's default `flex-shrink: 1`
+collapsed it and the region stayed exactly as unscrollable as before. It needs
+`flex: none` with a `min-height`.
+
+**Comparing an off-screen frame against one read BEFORE the scroll can only ever
+fail.** Frames legitimately advance between that first reading and the moment
+the observer pauses the loop, so the two differ even when the gating is perfect.
+"Stopped" means the canvas does not change between two moments that are *both*
+after it went off-screen — take both readings there.
 
 ### A future-dated timestamp run through an "ago" formatter says "just now"
 
