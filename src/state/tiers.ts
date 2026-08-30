@@ -128,17 +128,24 @@ export const FREE_SECTIONS = [
  * produce it. That copy is what this makes true.
  */
 /**
- * TEAM ANALYSIS JOINS IT, for the same reason and one more.
+ * TEAM ANALYSIS IS NOT HERE, AND THAT WAS ARGUED BOTH WAYS.
  *
- * It is the squad-scale version of Coach Assist — read an opponent, rank your
- * decks against them — run over two whole rosters at once. Gating the
- * one-opponent tool while giving away the eight-opponent one would price the
- * smaller answer above the larger one.
+ * The case for putting it here: it is the squad-scale version of Coach Assist,
+ * and it is the most expensive thing the service does — one run resolves up to
+ * twenty players, enrols the ones nobody is tracking, and profiles every deck
+ * the blue squad plays.
  *
- * It is also the most expensive thing the service does: a single run resolves
- * up to sixteen players, enrols the ones nobody is tracking, and profiles every
- * deck the blue squad plays. That cost is fine behind a paying account and is
- * not something to hand to an anonymous visitor with a paste box.
+ * The case that won: a carve-out from the trial is a carve-out from the SALES
+ * PITCH. Coach Assist is withheld because it is the thing being sold and can be
+ * described in a sentence — a trialist knows what they are not getting. Team
+ * Analysis cannot be described that way; it has to be USED, on a real roster,
+ * before it is worth paying for. Withholding it during the three days means the
+ * trial never shows the feature most likely to convert it.
+ *
+ * So it is an ordinary gated area: closed to anon and free, open to trial, pro
+ * and admin. The cost objection is answered by the account requirement, which
+ * is what actually stops an anonymous paste box from spending sixteen player
+ * resolutions.
  */
 export const PRO_ONLY_SECTIONS = ['Coach Assist'] as const;
 
@@ -151,16 +158,18 @@ export const PRO_ONLY_SECTIONS = ['Coach Assist'] as const;
  * screen against real data is to ship it and then be the only person who can
  * reach it.
  *
- * TEAM ANALYSIS IS HERE TO BE TESTED, not because admin is where it belongs.
- * It is written and gated as a Pro feature — see `PRO_ONLY_SECTIONS`, where it
- * sat before this — and moving it back is deleting one line here and adding it
- * there. Until then a paying Pro account cannot see it, which is deliberate:
- * a half-verified screen is worse to sell than a missing one.
+ * **EMPTY, and that is the shelf working rather than the shelf being unused.**
+ * Team Analysis sat here while it was verified against real data. It has been:
+ * the parser, the saves, the dossier and the layout were all checked against a
+ * live database and in a browser, so it has come off. The mechanism stays,
+ * because the next screen will want it.
  *
- * A section listed here is hidden rather than locked. There is no point drawing
- * a gate card that says "become an admin".
+ * A section listed here is HIDDEN rather than locked — there is no point
+ * drawing a gate card that says "become an admin" — and that is the reason
+ * this list is not a substitute for the pro carve-out. Anything here is
+ * invisible, so nobody can want it.
  */
-export const ADMIN_ONLY_SECTIONS = ['Team Analysis'] as const;
+export const ADMIN_ONLY_SECTIONS = [] as const;
 
 function adminOnly(section: string): boolean {
   return (ADMIN_ONLY_SECTIONS as readonly string[]).includes(section);

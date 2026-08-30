@@ -181,7 +181,28 @@ const SECTION_BLURB: Record<string, string> = {
   'Deck Counter': 'What beats this player, a head-to-head between two decks, and what answers a given deck.',
   'Coach Assist': 'Mid-duel help: what they will bring next, and which of your decks answers it.',
   Cards: 'Use rate and win rate for all 122 cards, filtered how you like — win conditions, champions, evolutions, rarity, elixir.',
+  'Team Analysis': 'Paste two rosters. Every opponent gets a folder holding the decks they play and the decks your squad answers them with.',
 };
+
+/* THE GALLERY'S NINTH CARD, and it is not in `AREAS` because it is not one.
+ *
+ * `AREAS` is `SIDE_NAV` minus the search — the sections of ONE loaded player.
+ * Team Analysis has no single subject: it takes two rosters and says nothing
+ * until both are pasted, which is exactly why it was kept out of the rail. But
+ * the strip under the hero is not the rail. It is the answer to "what is on
+ * this site", and leaving the newest tool out of that list to preserve a
+ * distinction the reader cannot see is tidiness at the reader's expense.
+ *
+ * So it is appended to the strip's items rather than added to `SIDE_NAV`: the
+ * gallery gains a card, the rail stays a player's own sections, and neither
+ * has to know about the other. It opens a ROUTE rather than picking a section,
+ * which is the one thing that makes it different from its eight neighbours. */
+const TEAM_CARD = {
+  label: 'Team Analysis',
+  hue: 'pink',
+  icon: TeamIcon,
+  hash: '#/teams',
+} as const;
 
 /* Filled from the database at runtime — hardcoded tags would 404 on click. */
 const FALLBACK_TAGS = ['#9GJ0Q0LGG', '#U2YVYGGV2', '#L8GVPJ900'];
@@ -391,17 +412,21 @@ export function Dashboard({
    * leaving it. */
   const landing = view === 'home' && section === 'Search Player';
 
-  /* HIDDEN, NOT LOCKED. Team Analysis is admin-only while it is being tested
-     against real data (see `ADMIN_ONLY_SECTIONS`), and there is no point
-     drawing a nav entry or a landing panel that opens a card saying "become an
-     admin". Both lists are filtered from the SAME predicate the route itself
-     uses, so a hidden entry and a closed route can never disagree. */
-  const topNavItems = TOP_NAV.filter(
-    (item) => item.label !== 'Team Analysis' || sectionAllowed(access, 'Team Analysis'),
-  );
-  const featureItems = FEATURES.filter(
-    (f) => f.kicker !== 'Team Analysis' || sectionAllowed(access, 'Team Analysis'),
-  );
+  /* LOCKED, NOT HIDDEN — and that is the change, not a relaxation of it.
+   *
+   * Team Analysis was filtered out of the nav and the landing while it was
+   * admin-only, because there is no point drawing an entry that opens a card
+   * saying "become an admin": nobody reading it can act on it. It is an
+   * ordinary gated area now (`tiers.ts`), so the opposite applies — an area
+   * somebody could subscribe to and cannot see is a feature that does not
+   * exist as far as the person paying is concerned.
+   *
+   * Every surface therefore lists it unconditionally, and the ROUTE is what
+   * refuses: `#/teams` renders `GateCard` for anon and free. One decision, made
+   * in one place, instead of a visibility rule and an access rule that can
+   * disagree about who gets what. */
+  const topNavItems = TOP_NAV;
+  const featureItems = FEATURES;
 
   /* THE BACKDROP WEARS THE OPEN AREA'S HUE — the same one the sidebar row and
    * the area's block already carry, so the whole page agrees about where you
@@ -765,6 +790,24 @@ export function Dashboard({
                   </button>
                 );
               })}
+              {/* LAST, AND ON EVERY PHONE SCREEN THIS STRIP APPEARS ON.
+                  Below 860px this strip IS the navigation — the sidebar and the
+                  top nav are both `display: none` — so a tool missing from it
+                  is a tool with no way in on a phone at all. It goes at the end
+                  rather than in `sideNav` for the same reason it is not in the
+                  rail: those entries are the loaded player's sections and this
+                  one is a route, which is why it calls `go` rather than
+                  `openArea`. */}
+              <button
+                type="button"
+                className={`${styles.phoneNavItem} ${view === 'teams' ? styles.phoneNavItemOn : ''}`}
+                data-hue={TEAM_CARD.hue}
+                aria-current={view === 'teams' || undefined}
+                onClick={() => go(TEAM_CARD.hash)}
+              >
+                <TeamIcon size={14} />
+                {TEAM_CARD.label}
+              </button>
             </nav>
           )}
 
@@ -1025,15 +1068,18 @@ export function Dashboard({
                      where you are, and two readouts of the same thing is one
                      too many on a landing screen. */
                   counter={false}
-                  items={AREAS.map(
+                  items={[...AREAS, TEAM_CARD].map(
                     (item, i) => {
                       const Icon = item.icon;
+                      /* The only card in the strip that is a route rather than
+                         a section of the loaded player — see `TEAM_CARD`. */
+                      const isRoute = 'hash' in item;
                       return {
                         key: item.label,
                         index: i + 1,
                         title: item.label,
                         hue: item.hue,
-                        onOpen: () => setSection(item.label),
+                        onOpen: () => (isRoute ? go(item.hash) : setSection(item.label)),
                         media: (
                           <span className={styles.areaFace} data-hue={item.hue}>
                             <span className={styles.areaFaceIcon}>

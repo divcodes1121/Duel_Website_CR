@@ -102,9 +102,14 @@ describe('a trial opens everything EXCEPT the pro-only areas', () => {
      Assist is the thing a subscription is FOR, and a trial that includes it has
      given away what it exists to sell.
 
-     Team Analysis is the same claim at squad scale — read an opponent, rank
-     your decks against them, eight opponents at a time — so pricing it below
-     Coach Assist would put the bigger answer behind the smaller gate. */
+     TEAM ANALYSIS IS DELIBERATELY NOT IN IT, and this comment is the record of
+     that reversal — it used to be, on the argument that the squad-scale read
+     should not be priced below the one-opponent one. What changed the decision
+     is that a carve-out from the trial is a carve-out from the sales pitch:
+     Coach Assist can be described in a sentence, so a trialist knows what they
+     are missing, and Team Analysis cannot — it has to be used on a real roster
+     before it is worth paying for. Withholding it for the three days hides the
+     feature most likely to convert the trial. */
   it('Coach Assist is the pro-only area', () => {
     expect([...PRO_ONLY_SECTIONS]).toEqual(['Coach Assist']);
   });
@@ -157,33 +162,62 @@ describe('a trial opens everything EXCEPT the pro-only areas', () => {
   });
 });
 
-describe('the admin shelf is closed to everyone else', () => {
-  /* A TRIPWIRE, exactly like FREE_SECTIONS below. Team Analysis sits here while
-     it is verified against real data; the day it moves to Pro, this fails and
-     that decision gets made in a commit rather than inherited. */
-  it('Team Analysis is the admin-only area', () => {
-    expect([...ADMIN_ONLY_SECTIONS]).toEqual(['Team Analysis']);
+describe('the admin shelf is empty, and still closes what it holds', () => {
+  /* A TRIPWIRE, exactly like FREE_SECTIONS below. It fired as designed: Team
+     Analysis sat here while it was verified against real data, and the day it
+     came off, this test failed and the decision was made in a commit rather
+     than inherited. It is empty now and that is the shelf working, not the
+     shelf being unused — anything added to it must be a deliberate act. */
+  it('nothing is admin-only', () => {
+    expect([...ADMIN_ONLY_SECTIONS]).toEqual([]);
   });
 
-  it('every access level except admin is refused it', () => {
-    for (const access of ['anon', 'free', 'trial', 'pro'] as Access[]) {
-      for (const section of ADMIN_ONLY_SECTIONS) {
-        expect(sectionAllowed(access, section), `${access}/${section}`).toBe(false);
-      }
+  /* WHAT AN EMPTY LIST CAN AND CANNOT BE TESTED FOR.
+     It can be tested that nothing is on the shelf: no section any tier asks
+     about takes the admin branch, so no screen is invisible by accident.
+     It CANNOT be tested that the branch still refuses correctly — with the
+     list empty that branch is unreachable, and a fabricated section name does
+     not reach it either (it is not in the list, so the lookup misses and the
+     ordinary rules answer instead). That was the first version of this test
+     and it asserted nothing; the honest statement is that the mechanism's
+     coverage comes back with the next screen that uses the shelf. */
+  it('no section is admin-gated', () => {
+    for (const section of ALL_SECTIONS) {
+      const anyoneBelowAdmin = (['anon', 'free', 'trial', 'pro'] as Access[]).some((a) =>
+        sectionAllowed(a, section),
+      );
+      const adminOnlyNow = sectionAllowed('admin', section) && !anyoneBelowAdmin;
+      // Coach Assist is pro-only, not admin-only: `pro` opens it.
+      expect(adminOnlyNow, section).toBe(false);
     }
+  });
+
+  /* TEAM ANALYSIS IS AN ORDINARY GATED AREA NOW: not free, open from the trial
+     up. This is the state the previous three tests were the negative of. */
+  it('Team Analysis is closed to anon and free', () => {
+    expect(sectionAllowed('anon', 'Team Analysis')).toBe(false);
+    expect(sectionAllowed('free', 'Team Analysis')).toBe(false);
+  });
+
+  it('a three-day trial opens Team Analysis', () => {
+    expect(sectionAllowed('trial', 'Team Analysis')).toBe(true);
+  });
+
+  it('pro and admin open Team Analysis', () => {
+    expect(isPaid('pro')).toBe(true);
+    expect(sectionAllowed('pro', 'Team Analysis')).toBe(true);
     expect(sectionAllowed('admin', 'Team Analysis')).toBe(true);
   });
 
-  /* PAID IS NOT ENOUGH, which is the whole point of a separate list. `isPaid`
-     is true for pro and this section is still closed to it. */
-  it('being paid does not open it', () => {
-    expect(isPaid('pro')).toBe(true);
-    expect(sectionAllowed('pro', 'Team Analysis')).toBe(false);
-  });
-
-  it('canOpenSection agrees, including for pro', () => {
-    expect(canOpenSection('pro', 'Team Analysis')).toBe(false);
+  /* THE TWO FUNCTIONS MUST AGREE. `canOpenSection` takes the raw tier and
+     `sectionAllowed` the derived access level; the screens call the second and
+     the store the first, so a section they disagree about is one that renders
+     locked and answers anyway, or renders open and refuses. */
+  it('canOpenSection agrees with sectionAllowed', () => {
+    expect(canOpenSection('trial', 'Team Analysis')).toBe(true);
+    expect(canOpenSection('pro', 'Team Analysis')).toBe(true);
     expect(canOpenSection('admin', 'Team Analysis')).toBe(true);
+    expect(canOpenSection('free', 'Team Analysis')).toBe(false);
   });
 });
 

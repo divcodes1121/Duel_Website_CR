@@ -52,7 +52,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped; saves, reads links, prints.** Paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
+| **Team Analysis** (`#/teams`) | **shipped; saves, reads links, prints.** Paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Off the admin shelf and on sale**: everyone sees it, anon and free get a gate card, and the three-day trial opens it along with pro and admin. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -7360,6 +7360,57 @@ Names get the markdown taken off them too, and `cleanName` **loops**: `*1.*`
 puts the ordinal inside the emphasis, so stripping the `*` is what first exposes
 the `1.`, and stripping that exposes the second `*`. A single pass of either rule
 leaves the other's marker behind and the chip reads `*1.* 🇵🇪 WR I Clisman™✨`.
+
+### Who can open it, and why the trial includes it
+
+Team Analysis spent its first days in `ADMIN_ONLY_SECTIONS` — the staging shelf
+this project uses instead of a staging environment, since `main` deploys
+straight to production. It has come off. It is an ordinary gated area now:
+**anon and free get a gate card, and trial, pro and admin open it.**
+
+The interesting half is the trial. `tiers.ts` used to argue the other way, and
+the argument was decent: Team Analysis is the squad-scale version of Coach
+Assist, and Coach Assist is deliberately withheld from the trial because it is
+the thing a subscription is *for*. It is also the most expensive call the
+service makes.
+
+What overruled it is that **a carve-out from the trial is a carve-out from the
+sales pitch.** Coach Assist survives being withheld because it can be described
+in a sentence — a trialist knows exactly what they are not getting. Team
+Analysis cannot be described that way; it has to be *used*, on a roster the
+person actually cares about, before it is worth paying for. Withholding it for
+the three days hides the feature most likely to convert the trial into a
+subscription. The cost objection is answered by the account requirement, which
+is what actually stops an anonymous paste box from spending twenty player
+resolutions.
+
+**Visibility became unconditional in the same change, and that is not the same
+decision made twice.** While the screen was admin-only the rule was *hidden,
+not locked*: there is no point drawing a nav entry that opens a card saying
+"become an admin", because nobody reading it can act on it. For a purchasable
+area the opposite holds — an area somebody could subscribe to and cannot see
+does not exist as far as the person paying is concerned. So the filters that
+removed it from the top nav and the landing are deleted, every surface lists it,
+and the **route** is what refuses. One decision, in `sectionAllowed`, rather
+than a visibility rule and an access rule that can drift apart.
+
+It is now in four places, and the two new ones were placed rather than
+sprinkled:
+
+- **The gallery strip under the hero** now has **nine** cards. It is appended to
+  the strip's items rather than added to `SIDE_NAV`, because those are two
+  different lists doing two different jobs: the strip answers "what is on this
+  site", while the rail lists the sections of one loaded player — and Team
+  Analysis has no single subject, which is why it was kept out of the rail in
+  the first place. Its card opens a route where the other eight pick a section.
+- **The phone strip** gets a chip, last. Below 860px `.phoneNav` *is* the
+  navigation — the sidebar and the top nav are both `display: none` — so a tool
+  missing from it has no way in on a phone at all.
+
+Verified 17/17 across all five access levels: nine cards and nine dots in the
+strip, the tool panel, seven dock cells, the phone chip present, last, on screen
+and tappable through to `#/teams`, and the route open for trial, pro and admin
+while anon and free get the gate card.
 
 ### The two boxes wear an electric border
 
