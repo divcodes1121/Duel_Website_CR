@@ -312,19 +312,76 @@ interface Ctx {
   page: number;
   /** Filled by `drawDivider` as sections land, read by the contents pass. */
   contents: { title: string; page: number; depth: number }[];
+  /** The heading of the block being drawn, so a page it spills onto can say
+   *  what it is continuing. Null between blocks and for unheaded ones. */
+  flow: string | null;
 }
 
-function newPage(ctx: Ctx) {
+/**
+ * A fresh sheet.
+ *
+ * THE HEADER IS DRAWN HERE, NOT BY THE CALLER, and that is a fix rather than a
+ * tidy-up. It used to be the render loop's job, which meant only a page opened
+ * by an explicit `break` ever got one — every page a block SPILLED onto came
+ * out with a 30 mm empty band at the top where the bar should be, and no
+ * indication of which report it belonged to. Half the sheets in a long
+ * document are spill pages, so half the document looked unfinished.
+ *
+ * `bare` is for the divider, which paints its own full-width band and must not
+ * have a second, smaller one over it.
+ */
+function newPage(ctx: Ctx, chrome: 'body' | 'bare' = 'body') {
   ctx.doc.addPage();
   ctx.page += 1;
   paintPage(ctx);
-  ctx.y = BODY_TOP;
+  if (chrome === 'bare') {
+    ctx.y = BODY_TOP;
+    return;
+  }
+  header(ctx);
+  ctx.y = BODY_TOP + 4;
+
+  /* A CONTINUED BLOCK SAYS SO. Landing on a sheet that opens with six deck
+     plates and no heading, because the heading was on the sheet before, is the
+     single most disorienting thing a paginated document can do — the reader
+     cannot tell whose decks they are without turning back. */
+  if (ctx.flow) {
+    const { doc, p } = ctx;
+    setFont(doc, 'sans', true);
+    doc.setFontSize(8);
+    ink(doc, p.muted);
+    doc.text(`${ctx.flow} (continued)`, MARGIN, ctx.y + 3.5);
+    ctx.y += 8;
+  }
 }
 
 /** Ensure `h` millimetres are available; break if not. */
 function reserve(ctx: Ctx, h: number) {
   if (ctx.y + h <= BODY_BOTTOM) return;
   newPage(ctx);
+}
+
+/**
+ * The least of a block that must fit beside its own heading.
+ *
+ * ORPHAN CONTROL. `blockHeading` used to reserve only its own two lines, so a
+ * heading could be placed with 6 mm left on the sheet and everything it
+ * introduced began on the next one — "What your squad should bring" alone at
+ * the foot of a page, decks overleaf. A heading that is not on the same sheet
+ * as the thing it names is not a heading, it is a loose sentence.
+ */
+function firstChunk(block: ReportBlock): number {
+  switch (block.kind) {
+    case 'stats': return 25;
+    case 'table': return 7 * 3;          // column head + two rows
+    case 'bars': return 8 * 2;
+    case 'decks': return 34;             // one whole deck row, art-sized
+    case 'note': return 12;
+    case 'matrix': return 15 + 11 * 2;   // column heads + two rows
+    case 'spread': return 11 + 8;        // the band and its first legend line
+    case 'versus': return 100;           // one full pair — they stand ~94 mm
+    default: return 0;
+  }
 }
 
 function paintPage(ctx: Ctx) {
@@ -376,10 +433,16 @@ function footer(ctx: Ctx, total: number) {
 
 /* ---------------------------------------------------------------- blocks */
 
-function blockHeading(ctx: Ctx, heading?: string, note?: string): void {
+function blockHeading(ctx: Ctx, heading?: string, note?: string, minBody = 0): void {
   const { doc, p } = ctx;
+  /* Cleared FIRST: the heading is about to be drawn fresh, so a break taken
+     inside the reserve below is not a continuation and must not be labelled
+     as one. It is set again once the heading is actually on the page. */
+  ctx.flow = null;
   if (!heading && !note) return;
-  reserve(ctx, note ? 12 : 8);
+  const own = (heading ? 6.5 : 0) + (note ? 5 : 0) + 1.5;
+  // Reserved TOGETHER — see `firstChunk`.
+  reserve(ctx, own + minBody);
   if (heading) {
     setFont(doc, 'display');
     doc.setFontSize(11);
@@ -395,6 +458,7 @@ function blockHeading(ctx: Ctx, heading?: string, note?: string): void {
     ctx.y += 5;
   }
   ctx.y += 1.5;
+  ctx.flow = heading ?? null;
 }
 
 function drawStats(ctx: Ctx, tiles: { label: string; value: string; note?: string; hue?: ReportHue }[]) {
@@ -457,10 +521,20 @@ function drawTable(ctx: Ctx, block: TableBlock) {
   const cols = columnX(block);
   const ROW = 7;
 
+  let repeated = false;
   const head = () => {
     reserve(ctx, ROW * 2);
     fill(doc, p.sunken);
     doc.rect(MARGIN, ctx.y, CONTENT_W, ROW, 'F');
+    // A repeated column head is otherwise indistinguishable from the start of
+    // a second, different table.
+    if (repeated) {
+      setFont(doc, 'sans');
+      doc.setFontSize(6);
+      ink(doc, p.muted);
+      doc.text('continued', PAGE_W - MARGIN, ctx.y - 1.5, { align: 'right' });
+    }
+    repeated = true;
     setFont(doc, 'sans', true);
     doc.setFontSize(6.8);
     ink(doc, p.muted);
@@ -553,11 +627,28 @@ function drawBars(
 
 function drawDecks(ctx: Ctx, decks: DeckLine[]) {
   const { doc, p } = ctx;
-  const ROW = 20;
   const IDENT_W = 62;
   const VALUE_W = 22;
+  const gap = 1.2;
+  const stripW = CONTENT_W - IDENT_W - VALUE_W;
 
   for (const d of decks) {
+    /* THE ROW IS SIZED BY THE ART, AND IT USED TO BE THE OTHER WAY ROUND.
+       `ROW` was a flat 20 mm while the strip is 185 mm wide, so eight cards
+       came out 22.1 mm across and — at the card aspect — 26.5 mm TALL. The art
+       overflowed its own row by 3.3 mm at the top and the bottom: it printed
+       over the block's note above it and welded every row to the next, so a
+       list of six decks read as one continuous slab. It is a flat-`ROW` bug,
+       so it was in every analytics report that draws decks, not just this one.
+
+       Sizing the row from the art keeps the cards large (which is the point of
+       printing them) and cannot overflow by construction. The 20 mm floor is
+       still there for a short deck, where the art is not the constraint. */
+    const n = Math.max(1, d.cards.length);
+    const cw = (stripW - gap * (n - 1)) / n;
+    const ch = cw / CARD_RATIO;
+    const ROW = Math.max(20, ch + 4);
+
     reserve(ctx, ROW + 2);
     const top = ctx.y;
 
@@ -586,10 +677,6 @@ function drawDecks(ctx: Ctx, decks: DeckLine[]) {
 
     // The strip: eight cards on one line, sharing whatever the column has.
     const stripX = MARGIN + IDENT_W;
-    const stripW = CONTENT_W - IDENT_W - VALUE_W;
-    const gap = 1.2;
-    const cw = (stripW - gap * (d.cards.length - 1)) / d.cards.length;
-    const ch = cw / CARD_RATIO;
     const cy = top + (ROW - ch) / 2;
 
     d.cards.forEach((card, i) => {
@@ -610,17 +697,24 @@ function drawDecks(ctx: Ctx, decks: DeckLine[]) {
       }
     });
 
+    /* CLIPPED TO THE COLUMN. These are right-aligned in a 22 mm value column,
+       so anything wider does not overflow to the right where it would be
+       obvious — it grows LEFTWARDS, straight over the card art, and the only
+       sign is a caption sitting on top of a picture. A caller passing too long
+       a note is not a bug in the caller; a column that does not hold its own
+       width is a bug here. */
+    const valueX = PAGE_W - MARGIN - 3;
     if (d.value) {
       setFont(doc, 'display');
       doc.setFontSize(12);
       ink(doc, p.text);
-      doc.text(d.value, PAGE_W - MARGIN - 3, top + 9, { align: 'right' });
+      doc.text(clip(doc, d.value, VALUE_W - 4), valueX, top + 9, { align: 'right' });
     }
     if (d.valueNote) {
       setFont(doc, 'sans');
       doc.setFontSize(5.8);
       ink(doc, p.muted);
-      doc.text(d.valueNote, PAGE_W - MARGIN - 3, top + 13, { align: 'right' });
+      doc.text(clip(doc, d.valueNote, VALUE_W - 4), valueX, top + 13, { align: 'right' });
     }
 
     ctx.y += ROW + 2.5;
@@ -639,7 +733,9 @@ function drawDecks(ctx: Ctx, decks: DeckLine[]) {
  */
 function drawDivider(ctx: Ctx, block: DividerBlock) {
   const { doc, p } = ctx;
-  newPage(ctx);
+  newPage(ctx, 'bare');
+  // A divider is not a continuation of anything.
+  ctx.flow = null;
   const accent = hueColor(p, block.hue, true);
 
   // A tall band rather than the cover's full bleed, so the two never read as
@@ -893,14 +989,36 @@ function drawSpread(ctx: Ctx, block: SpreadBlock) {
 
 /* ---------------------------------------------------------------- versus */
 
+/**
+ * The card size a versus plate uses. ONE DEFINITION, read by both the plate
+ * and the reserve that decides whether the pair fits — they were computed
+ * separately and could disagree, which is how a block ends up half off a page.
+ *
+ * WIDTH-DRIVEN, AND ONE PAIR TO A SHEET. Sizing it to fit two was tried and
+ * reverted: two pairs only fit by dropping the cards to ~17 mm, which leaves
+ * the plate two-thirds empty across and makes the head-to-head — the one
+ * spread in the document whose whole job is showing two decks at a glance —
+ * the page with the smallest art on it. At full width a pair stands ~94 mm and
+ * fills about four fifths of the body, which is a page, not a gap.
+ */
+const VS_GUTTER = 16;
+function versusCard(w: number, gap: number): { cw: number; ch: number } {
+  const cw = (w - 6 - gap * 3) / 4;
+  return { cw, ch: cw / CARD_RATIO };
+}
+
 /** One deck as a 4x2 plate. Returns the height it drew. */
 function deckPlate(ctx: Ctx, d: DeckLine, x: number, y: number, w: number, hue: ReportHue): number {
   const { doc, p } = ctx;
   const gap = 1.6;
-  const cw = (w - gap * 3) / 4;
-  const ch = cw / CARD_RATIO;
+  const { cw, ch } = versusCard(w, gap);
   const artH = ch * 2 + gap;
   const H = 15 + artH + 4;
+  // The grid is CENTRED in the plate: the card size now comes from the height
+  // budget, so it no longer necessarily fills the width, and a left-aligned
+  // grid under a full-width title bar reads as a layout fault.
+  const gridW = cw * 4 + gap * 3;
+  const gx = x + (w - gridW) / 2;
 
   fill(doc, p.nested);
   stroke(doc, p.border);
@@ -921,7 +1039,7 @@ function deckPlate(ctx: Ctx, d: DeckLine, x: number, y: number, w: number, hue: 
     setFont(doc, 'display');
     doc.setFontSize(11);
     ink(doc, hueColor(p, hue));
-    doc.text(d.value, x + w - 3, y + 8.4, { align: 'right' });
+    doc.text(clip(doc, d.value, 26), x + w - 3, y + 8.4, { align: 'right' });
   }
   if (d.meta) {
     setFont(doc, 'sans');
@@ -933,7 +1051,7 @@ function deckPlate(ctx: Ctx, d: DeckLine, x: number, y: number, w: number, hue: 
   d.cards.slice(0, 8).forEach((card, i) => {
     const url = artUrl(card, d.art?.[card]);
     const data = ctx.tiles.get(url);
-    const cx = x + 3 + (i % 4) * (cw + gap);
+    const cx = gx + (i % 4) * (cw + gap);
     const cy = y + 15 + Math.floor(i / 4) * (ch + gap);
     if (data) {
       doc.addImage(data, 'JPEG', cx, cy, cw, ch, url, 'FAST');
@@ -969,7 +1087,7 @@ function emptyPlate(ctx: Ctx, x: number, y: number, w: number, h: number, body: 
 
 function drawVersus(ctx: Ctx, block: VersusBlock) {
   const { doc, p } = ctx;
-  const GUT = 16;
+  const GUT = VS_GUTTER;
   const half = (CONTENT_W - GUT) / 2;
 
   if (block.leftLabel || block.rightLabel) {
@@ -987,8 +1105,7 @@ function drawVersus(ctx: Ctx, block: VersusBlock) {
   for (const pair of block.pairs) {
     // Measured before it is drawn, so a pair never straddles a page break —
     // half a versus on each of two sheets is not a versus.
-    const cw = (half - 1.6 * 3) / 4;
-    const H = 15 + (cw / CARD_RATIO) * 2 + 1.6 + 4;
+    const H = 15 + versusCard(half, 1.6).ch * 2 + 1.6 + 4;
     reserve(ctx, H + (pair.note ? 9 : 4));
     const top = ctx.y;
 
@@ -1185,7 +1302,7 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
     }),
   );
 
-  const ctx: Ctx = { doc, p, docModel, tiles, y: BODY_TOP, page: 1, contents: [] };
+  const ctx: Ctx = { doc, p, docModel, tiles, y: BODY_TOP, page: 1, contents: [], flow: null };
 
   drawCover(ctx);
 
@@ -1199,24 +1316,36 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
     paintPage(ctx);
   }
 
-  newPage(ctx);
-  header(ctx);
-  ctx.y = BODY_TOP + 4;
+  /* A BODY PAGE IS OPENED WHEN CONTENT ARRIVES, NOT BEFORE.
+     Opening one up front produced a sheet carrying nothing but a header and a
+     footer whenever the first block was a divider — which it always is here,
+     and which was page 3 of every dossier. The same emptiness appeared after
+     any `break` immediately followed by a divider. Deferring it means a page
+     exists only once something needs to be on it. */
+  let open = false;
+  const body = () => {
+    if (open) return;
+    newPage(ctx);
+    open = true;
+  };
 
   for (const block of docModel.blocks as ReportBlock[]) {
     if (block.kind === 'break') {
-      newPage(ctx);
-      header(ctx);
-      ctx.y = BODY_TOP + 4;
+      // A deliberate break starts a section, never continues one.
+      ctx.flow = null;
+      open = false;
       continue;
     }
     // A divider owns its whole sheet, so it draws its own page and must not be
     // given a block heading above it.
     if (block.kind === 'divider') {
       drawDivider(ctx, block);
+      // Content continues on the divider's own sheet, under its stat strip.
+      open = true;
       continue;
     }
-    blockHeading(ctx, block.heading, block.note);
+    body();
+    blockHeading(ctx, block.heading, block.note, firstChunk(block));
     switch (block.kind) {
       case 'stats': drawStats(ctx, block.tiles); break;
       case 'table': drawTable(ctx, block); break;
@@ -1229,22 +1358,55 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
     }
   }
 
+  body();
   if (docModel.caveats?.length) {
-    reserve(ctx, 8 + docModel.caveats.length * 4);
+    // Its own heading, kept with its first entry like every other block.
+    ctx.flow = null;
+    reserve(ctx, 18);
     setFont(doc, 'sans', true);
     doc.setFontSize(7.5);
     ink(doc, p.muted);
-    doc.text('WHAT THIS REPORT DOES NOT SAY', MARGIN, ctx.y + 4);
+    doc.text('WHAT THIS REPORT DOES NOT SAY', MARGIN, ctx.y + 4, { charSpace: 0.4 });
     ctx.y += 7;
+    ctx.flow = 'What this report does not say';
     setFont(doc, 'sans');
     doc.setFontSize(7);
     for (const c of docModel.caveats) {
       const lines = doc.splitTextToSize(`— ${c}`, CONTENT_W) as string[];
-      reserve(ctx, lines.length * 3.6);
+      // The WHOLE entry moves, rather than splitting one bullet across a page.
+      reserve(ctx, lines.length * 3.6 + 1.5);
+      setFont(doc, 'sans');
+      doc.setFontSize(7);
+      ink(doc, p.muted);
       lines.forEach((ln, i) => doc.text(ln, MARGIN, ctx.y + i * 3.6));
       ctx.y += lines.length * 3.6 + 1.5;
     }
   }
+
+  /* A DOCUMENT THAT STOPS HAS NOT ENDED. Forty pages of sections that each
+     open with a title sheet, and then the last one simply runs out mid-column,
+     reads as a truncated file rather than a finished report — the reader's
+     first question is whether they got all of it. This is the answer. */
+  ctx.flow = null;
+  reserve(ctx, 20);
+  ctx.y += 4;
+  stroke(doc, p.border);
+  doc.setLineWidth(0.3);
+  doc.line(MARGIN, ctx.y, PAGE_W - MARGIN, ctx.y);
+  ctx.y += 6;
+  setFont(doc, 'display');
+  doc.setFontSize(10);
+  ink(doc, hueColor(p, docModel.hue));
+  doc.text('END OF REPORT', MARGIN, ctx.y, { charSpace: 0.8 });
+  setFont(doc, 'sans');
+  doc.setFontSize(7);
+  ink(doc, p.muted);
+  doc.text(
+    `${docModel.screen}${docModel.subject ? ` — ${docModel.subject}` : ''} · generated ${new Date().toLocaleString('en-GB')}`,
+    PAGE_W - MARGIN,
+    ctx.y,
+    { align: 'right' },
+  );
 
   // Footers last: the page total is not known until everything is laid out.
   const total = doc.getNumberOfPages();

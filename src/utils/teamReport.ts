@@ -323,7 +323,13 @@ function folderBlocks(
     subtitle: `Opponent ${index + 1} of ${total}`,
     tag: folder.player.tag,
     hue: 'red',
-    contents: name,
+    /* THE SIDE IS PART OF THE LABEL. Every name in this report appears twice —
+       once as an opponent and once as a teammate, unless the rosters are
+       disjoint — so a contents listing "Kito King 15" and "Kito King 52" with
+       nothing between them sends the reader to the wrong half of the document.
+       The sheets themselves say which they are in the subtitle; the contents
+       has only this line. */
+    contents: `${name} — opponent`,
     depth: 1,
     stats: [
       { label: 'Battles', value: int(folder.player.battles), note: basisText(folder.player) },
@@ -543,7 +549,7 @@ function teammateBlocks(
     subtitle: `Your squad — player ${index + 1} of ${total}`,
     tag: member.tag,
     hue: 'blue',
-    contents: name,
+    contents: `${name} — your squad`,
     depth: 1,
     stats: [
       { label: 'Battles', value: int(member.battles), note: basisText(member) },
@@ -579,10 +585,14 @@ function teammateBlocks(
     note:
       'Every deck of theirs that entered the pool, with their own record on it. This is the ' +
       'comfort half of the score — the tiebreak, never the ranking.',
+    /* The value column is 22 mm. "their own record, 14 games" does not fit in
+       it, and a right-aligned overflow grows leftwards over the card art —
+       the renderer clips it now, but the honest fix is to say it in the width
+       available and leave the sentence to the meta line. */
     decks: own.map((r) => ({
       ...recLine(r),
       value: pct(r.comfort.winRate),
-      valueNote: `their own record, ${int(r.comfort.games)} games`,
+      valueNote: `${int(r.comfort.games)} games`,
     })),
   });
 

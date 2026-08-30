@@ -52,7 +52,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped, then reshaped, and now it remembers.** An analysis can be **saved and re-opened**, with a banner saying how old the figures are and a Re-run that reuses the stored paste. The extractor reads **tags out of links** — a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) used to report every row as a broken tag; a clan link is still refused on purpose. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap of the whole board, head-to-head spreads, and a method section; 25 pages at 2v2 up to 98 at 10v10, in whichever theme the reader has on. **The cap is 10 a side, up from 8** — ten is what a Discord roster is numbered to; the client refuses over it while the server slices, so the screen now reads `limits.maxSquad` back and names the mismatch if the API host is behind. The paste boxes are a roster tall rather than two lines. **37/38 + 14/14 browser checks**, the one failure being the pre-existing `TopSearch` render loop. The board is YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 54 vitest |
+| **Team Analysis** (`#/teams`) | **shipped, then reshaped, and now it remembers.** An analysis can be **saved and re-opened**, with a banner saying how old the figures are and a Re-run that reuses the stored paste. The extractor reads **tags out of links** — a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) used to report every row as a broken tag; a clan link is still refused on purpose. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap of the whole board, head-to-head spreads, and a method section; 25 pages at 2v2 up to 98 at 10v10, in whichever theme the reader has on. **The cap is 10 a side, up from 8** — ten is what a Discord roster is numbered to; the client refuses over it while the server slices, so the screen now reads `limits.maxSquad` back and names the mismatch if the API host is behind. The paste boxes are a roster tall rather than two lines. **37/38 + 14/14 browser checks**, the one failure being the pre-existing `TopSearch` render loop. The board is YOUR PLAYERS — one uniform row per teammate, expanding to that player's own top 3 against the opponent. Also fixed: it could not be scrolled on a desktop, and both `1fr` grids blew out at 1024. 29/29 + 46/46 browser checks. Paste two rosters; every opponent gets a folder holding the decks they play and the decks your squad answers them with, each named for the teammate who pilots it. **Admin-only while it is verified against real data** (`ADMIN_ONLY_SECTIONS`), so a paying Pro cannot see it yet. 67 Python checks + 58 vitest |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -83,7 +83,7 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,319 Python checks** across **37 suites** (528 check-style + 791 unittest), **324 vitest**, `tsc -b` and `npm run build` clean |
+| tests | **1,319 Python checks** across **37 suites** (528 check-style + 791 unittest), **328 vitest**, `tsc -b` and `npm run build` clean |
 | shipped from | `main` at `96a52d4`, deployed 2026-08-29 — the phone pass. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -194,7 +194,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 324 tests over the deck, duel, export, admin and shader logic
+npm run test                      # 328 tests over the deck, duel, export, admin and shader logic
 python server/test_duel_combos.py # 39 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
@@ -6192,7 +6192,7 @@ push.
 ## Testing and verification
 
 **1,319 Python checks across 37 suites** (528 check-style + 791 unittest) and
-**324 vitest tests**, counted by running all of them on 2026-08-30. Only
+**328 vitest tests**, counted by running all of them on 2026-08-30. Only
 `test_recent_battles.py` opens a database, and it writes its own temp file —
 every other Python suite runs on synthetic data or a stubbed reader, so they
 pass on a machine with no Clash_Bot install and cannot be broken by whatever a
@@ -6222,7 +6222,7 @@ in the analytics fetch effects (it is rebuilt every render; the effect keys on
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 324 tests — deck logic, links, PDF export, proxy, admin
+npm run test                      # 328 tests — deck logic, links, PDF export, proxy, admin
 python server/test_duel_combos.py # 55 checks — duel logic, no database needed
 python server/test_meta.py        # 33 checks — meta board + card board, no database
 python server/test_card_art.py    # 110 checks — deck arrangement, evolution/hero art
@@ -7387,14 +7387,67 @@ art:
 
 | squads | pages | size |
 |---|---:|---:|
-| 2 v 2 | 25 | 355 kB |
-| 3 v 3 | 35 | 460 kB |
-| 5 v 5 | 52 | 667 kB |
-| 8 v 8 | 80 | 1,066 kB |
-| 10 v 10 | 98 | 1,370 kB |
+| 2 v 2 | 27 | 370 kB |
+| 3 v 3 | 37 | 480 kB |
+| 5 v 5 | 57 | 700 kB |
+| 8 v 8 | 92 | 1.2 MB |
+| 10 v 10 | 115 | 1.5 MB |
 
 Ten against ten is a long document because ten against ten is a lot of
 preparation.
+
+#### It shipped badly formatted, and the verification is the reason
+
+The first version was checked by grepping the emitted PDF for strings and
+counting pages. Every check passed, on a document with four layout faults in it.
+**"The text is in the file" says nothing about whether the file is readable** —
+the honest check renders the pages and looks at them.
+
+What that found:
+
+- **Spill pages had no header.** `newPage()` did not draw one; only the render
+  loop did, so a sheet only got a header bar if an explicit `break` had opened
+  it. Every page a block *spilled* onto carried a 30 mm empty band instead — and
+  in a long document, half the sheets are spill pages.
+- **Headings were orphaned.** A heading reserved only its own two lines, so
+  "What your squad should bring" printed alone at the foot of a page with its
+  decks overleaf. Each block now declares the least of itself that must fit
+  beside its heading, and the two are reserved together.
+- **The card art overflowed its own row.** `drawDecks` had a flat 20 mm row and
+  sized cards by width: on a 185 mm strip, eight cards come out 22.1 mm across
+  and **26.5 mm tall**. The art stuck out 3.3 mm top and bottom, printed over
+  the block's note, and welded every row to the next so six decks read as one
+  slab. That is a flat-row bug, so it was in **every** analytics report that
+  draws decks, not only this one. The row is sized from the art now.
+- **The document stopped rather than ended.** There is an `END OF REPORT` rule
+  and a closing line.
+
+Two smaller ones came out of the same pass: page 3 held nothing but a header and
+a footer, because the loop opened a body page and the first block is a divider
+that makes its own — pages are opened lazily now; and a 22 mm right-aligned
+value column does not overflow rightwards where you would see it, it grows
+*leftwards over the card art*, which is how "their own record, 14 games" ended
+up printed on a picture of a knight.
+
+A spilled block now says `<heading> (continued)`, and a repeated table head says
+so too. Landing on a sheet of six deck plates with no heading — because the
+heading was on the sheet before — is the most disorienting thing a paginated
+document can do.
+
+Measured after the fix: **median page fill 83%**, no blank pages, no orphaned
+headings, no art printed over text, and both themes identical in page count.
+
+**Two versus pairs to a sheet was tried and reverted.** They only fit by
+dropping the cards to about 17 mm, which would make the one spread whose whole
+job is showing two decks at a glance the page with the smallest art in the
+document. One pair at full width fills roughly four fifths of the body, which is
+a page rather than a gap.
+
+And one for the probe file: **a PyMuPDF text block is `(x0, y0, x1, y1, text)`,
+so `sorted(blocks)[0]` is the leftmost thing on the page, not the topmost.** It
+reported a missing header on 51 of 53 pages that all had one. Sort on `b[1]`.
+Text drawn with letter-spacing also extracts as `E N D  O F  R E P O R T`, so a
+substring check for the phrase fails on a page that is perfectly correct.
 
 **The board goes through the numbers twice, deliberately** — opponent by
 opponent, then teammate by teammate. That is a duplication of the underlying

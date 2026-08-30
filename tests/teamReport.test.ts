@@ -257,3 +257,62 @@ describe('teamAnalysisReport — shape', () => {
     expect(dividers(doc.blocks).map((d) => d.title)).toContain('Method, and what it does not say');
   });
 });
+
+/**
+ * WHAT THE PAGE LOOKS LIKE IS NOT WHAT THE MODEL SAYS, and the first version of
+ * this feature shipped proving the wrong one.
+ *
+ * It was verified by grepping the emitted PDF for strings and counting pages —
+ * every check passed on a document whose spill pages had no header, whose
+ * headings sat alone at the foot of a sheet with their content overleaf, whose
+ * card art printed 3.3 mm outside its own row and over the note above it, and
+ * which stopped mid-column with no ending. "The text is in the file" says
+ * nothing about whether the file is readable.
+ *
+ * The real check is a rendered-page one and lives in the browser verify
+ * (no blank sheets, a header on every body page, no orphaned heading, no art
+ * over text, median page fill, a deliberate ending). What is pinned HERE is the
+ * part of that which is decided in the model rather than in the renderer.
+ */
+describe('teamAnalysisReport — what the page will look like', () => {
+  it('gives a value column something that FITS a value column', () => {
+    /* The column is 22 mm and right-aligned, so an over-long note does not
+       overflow visibly to the right — it grows LEFTWARDS over the card art.
+       "their own record, 14 games" did exactly that on every teammate sheet. */
+    const doc = teamAnalysisReport(report());
+    const notes = doc.blocks
+      .filter((b): b is Extract<ReportBlock, { kind: 'decks' }> => b.kind === 'decks')
+      .flatMap((b) => b.decks.map((d) => d.valueNote ?? ''));
+    expect(notes.length).toBeGreaterThan(0);
+    for (const n of notes) expect(n.length).toBeLessThanOrEqual(14);
+  });
+
+  it('distinguishes the two sections a player appears in', () => {
+    // Every name appears twice — once as an opponent, once as a teammate — and
+    // the contents line is the only place that says which is which.
+    const doc = teamAnalysisReport(
+      report({ blue: [member('#B1', 'Ravi')], red: [member('#R1', 'Ravi')], folders: [folder('#R1', 'Ravi')] }),
+    );
+    const entries = dividers(doc.blocks).map((d) => d.contents ?? d.title);
+    expect(entries).toContain('Ravi — opponent');
+    expect(entries).toContain('Ravi — your squad');
+    expect(new Set(entries).size).toBe(entries.length);
+  });
+
+  it('breaks before a versus block so it opens a sheet of its own', () => {
+    // A pair stands ~94 mm; started halfway down a page it takes the whole of
+    // the next one anyway and leaves a hole behind it.
+    const doc = teamAnalysisReport(report());
+    const i = doc.blocks.findIndex((b) => b.kind === 'versus');
+    expect(i).toBeGreaterThan(0);
+    expect(doc.blocks[i - 1].kind).toBe('break');
+  });
+
+  it('every heading is short enough to print on one line', () => {
+    // Headings are clipped to the content width by the renderer; one that needs
+    // clipping loses its own end, which is where the specifics live.
+    for (const b of teamAnalysisReport(report()).blocks) {
+      if ('heading' in b && b.heading) expect(b.heading.length).toBeLessThanOrEqual(64);
+    }
+  });
+});
