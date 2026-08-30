@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { getCardIconUrl } from '../../data/cards';
 import { ProfileMenu } from '../Profile/ProfileMenu';
 import { TierBadge } from '../TierBadge/TierBadge';
@@ -28,10 +28,18 @@ import { CounterPalette } from '../CounterPalette/CounterPalette';
  * immediately with the lazy import untouched. `#/guide` is lazy too and works,
  * because the field book renders OUTSIDE this shell.
  *
- * So this import is eager until that loop is fixed. Making it lazy again is a
- * one-line change here — and it must not be attempted before the loop is gone,
- * or the screen silently goes blank again. */
-import { TeamAnalysis } from '../Analytics/TeamAnalysis/TeamAnalysis';
+ * THE LOOP IS FIXED (see `ui/gooey-search.tsx` deviation 5) AND THIS IS LAZY
+ * AGAIN. Measured after the fix: 0 "Maximum update depth" warnings on `#/`,
+ * `#/builder`, `#/decks` and `#/teams`, against 130-180 before. The screen is
+ * gated, so most visitors cannot open it and should not download it.
+ *
+ * If it ever goes blank at its fallback again, THAT is the symptom of this
+ * loop returning — the boundary never resolving is the tell, not a fault in
+ * the screen behind it. */
+const TeamAnalysis = lazy(() =>
+  import('../Analytics/TeamAnalysis/TeamAnalysis').then((m) => ({ default: m.TeamAnalysis })),
+);
+import { ReadingState } from '../Analytics/ReadingState';
 import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
 import { DuelAnalysis } from '../Analytics/DuelAnalysis';
 import { DuelZone } from '../Analytics/DuelZone';
@@ -923,7 +931,18 @@ export function Dashboard({
               <div data-probe-view={view} data-probe-allowed={String(sectionAllowed(access, 'Team Analysis'))} />
               {view === 'teams' &&
                 (sectionAllowed(access, 'Team Analysis') ? (
-                  <TeamAnalysis />
+                  /* `ReadingState` is what every slow screen here shows, so a
+                     chunk arriving looks like data arriving rather than like a
+                     second kind of waiting. */
+                  <Suspense
+                    fallback={
+                      <ReadingState k="teams" hue="pink">
+                        <p>Opening Team Analysis…</p>
+                      </ReadingState>
+                    }
+                  >
+                    <TeamAnalysis />
+                  </Suspense>
                 ) : (
                   <GateCard access={access} section="Team Analysis" />
                 ))}

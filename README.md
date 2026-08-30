@@ -10134,7 +10134,20 @@ so they are recorded rather than quietly restyled:
 | Cards board, the rate figures | **3.34–4.16:1** at 10.1px, 96 elements | `--c-use` (#2a78d6) on `--surface-nested` |
 | ~~Duel Zone, the pane blurb~~ | ~~4.19:1~~ | **closed.** It was `--text-muted` on a violet fill; that token is pure white / pure black now — see [Every neutral font is at full contrast now](#every-neutral-font-is-at-full-contrast-now) |
 
-**A render loop is live in production.** `TopSearch` -> `GooeySearch` re-renders
+**The render loop is fixed (2026-08-30).** Two lines in
+`ui/gooey-search.tsx`: the `items = []` default is hoisted to a module-level
+constant so its identity stops changing, and `setResults` is made idempotent so
+writing an empty array over an empty one is not a state change. Both are needed
+— the hoist alone leaves it one inline `items={[]}` away from coming back.
+Measured A/B alternated, median of three on `#/builder`: **153/132/136 warnings
+-> 0/0/0**. `React.lazy` works inside the Dashboard again, so Team Analysis is
+lazy once more and the main bundle went **345.59 -> 336.85 kB gzip**. Note the
+fps did NOT change (36.7 both ways) — an earlier claim here that the loop
+capped every screen at ~50 fps was never measured against a control and was
+wrong. What it cost was the Suspense boundary and a lot of wasted renders.
+The superseded description:
+
+**A render loop was live in production.** `TopSearch` -> `GooeySearch` re-renders
 forever because its `items = []` default parameter is a new array inside an
 effect's dependency array. It burns CPU on every screen and it makes
 `React.lazy` unusable anywhere inside the Dashboard shell. One-line fix, in

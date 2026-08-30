@@ -17,6 +17,13 @@
  *      the wrapper in `Dashboard/TopSearch.tsx` rather than added globally,
  *      because inventing two more global colour names in a project whose whole
  *      palette lives in `index.css` is how a second source of truth starts.
+ *   5. THE INFINITE RENDER LOOP IS FIXED. This one IS behavioural, and it is
+ *      the only deviation here that changes what the component does rather
+ *      than where it gets a name from. Two lines; see `NO_ITEMS` and the
+ *      guard in `setResults`. It ran in production on every screen of this
+ *      site for weeks, and the cost was not the component's alone: a React
+ *      tree that never settles never commits a resolved Suspense boundary, so
+ *      `React.lazy` was unusable anywhere inside the Dashboard shell.
  *
  * WHAT IT DOES NOT DO, and why the adapter exists: there is no way to submit
  * the text you typed. `onSelect` fires only for a result the component itself
@@ -189,10 +196,25 @@ export interface GooeySearchProps {
   expandedWidth?: number;
 }
 
+/**
+ * THE DEFAULT FOR `items`, HOISTED — and this is half of the loop fix.
+ *
+ * `items = []` as a default PARAMETER allocates a new array on every render.
+ * That array sits in the search effect's dependency list, so the effect re-ran
+ * on every render; the effect called `setResults([])`, which is another new
+ * array and therefore another state change; and that re-rendered the component,
+ * which allocated another default. Measured at 169-339 "Maximum update depth
+ * exceeded" warnings in a few seconds.
+ *
+ * One module-level constant has one identity for the life of the module, so
+ * the dependency stops changing.
+ */
+const NO_ITEMS: readonly string[] = [];
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function GooeySearch({
-  items = [],
+  items = NO_ITEMS as string[],
   onSearch,
   placeholder = "Type to search...",
   buttonLabel = "Search",
@@ -227,7 +249,13 @@ export function GooeySearch({
     // in the effect body (keeps React from cascading renders).
     const run = async () => {
       if (!debouncedQuery) {
-        setResults([]);
+        /* SETTING AN EMPTY ARRAY OVER AN EMPTY ARRAY IS STILL A STATE CHANGE,
+           because it is a different array. That is the second half of the loop
+           and it is worth fixing independently of the first: with only the
+           hoisted default, a caller passing an inline `items={[]}` brings the
+           whole thing straight back. Not writing when there is nothing to
+           write makes the effect safe to re-run however often it is asked to. */
+        setResults((prev) => (prev.length === 0 ? prev : []));
         setIsLoading(false);
         return;
       }
