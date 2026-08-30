@@ -811,8 +811,16 @@
      column below that.
      Below 900px the copy becomes a single centred column and the mobile block
      hands `white-space: normal` back — one line is a desktop shape, not a
-     phone one. */
-  font-size: clamp(1.6rem, 3.2vw, 3.1rem);
+     phone one.
+
+     RE-TUNED FOR BEBAS NEUE, which is condensed where Arial is not. MEASURED:
+     the same 26-character line runs 7.44em against Arial's ~12.5em — 60% of
+     the width — so the ceiling that used to fill the column left the headline
+     at 369px inside 678 and the hero lost its hierarchy. The numbers below are
+     the old ones scaled by that ratio and then checked at four widths rather
+     than computed and trusted. If the display face changes again, this clamp
+     is tuned to it and has to be re-measured with it. */
+  font-size: clamp(2rem, 4.4vw, 4.3rem);
   white-space: nowrap;
   line-height: 1.15;
   letter-spacing: 0.005em;
@@ -1358,6 +1366,282 @@
   min-width: 0;
 }
 
+/* ── A PANEL THAT IS A BANNER ─────────────────────────────────────────────
+ *
+ * The art is not half the panel any more; it IS the panel. It sits behind
+ * everything, edge to edge and corner to corner, and the copy is set on top of
+ * it. That is the difference between a card with a picture in it and a poster.
+ *
+ * FOUR THINGS THIS NEEDS:
+ *
+ *   1. IT BLEEDS TO ALL FOUR EDGES. The panel has 2rem/2.2rem of padding, so
+ *      an ordinary child stops well inside the rounded corner. `inset: 0` on
+ *      an absolutely-positioned layer ignores padding entirely, which is both
+ *      simpler and safer than four negative margins — the first attempt bled
+ *      both sides of a GRID item and printed the art over the first character
+ *      of every line of the copy beside it.
+ *   2. IT KEEPS THE PANEL'S CORNERS, all four, via `border-radius: inherit`.
+ *   3. THE COPY NEEDS A GROUND. Light text on a painted image is unreadable
+ *      wherever the image happens to be pale, so a scrim runs from the copy's
+ *      side and fades out across the middle. A gradient rather than a flat
+ *      wash, because a flat one mutes the art everywhere including the half
+ *      nobody is reading over.
+ *   4. `object-position` DECIDES WHICH HALF SURVIVES THE CROP. The art is a
+ *      wide cinematic strip and the panel is not that shape, so something is
+ *      always cropped. Pinned left, so the character stays in frame and the
+ *      emptier side falls under the copy.
+ */
+.toolPanel[data-banner] {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  /* HALF THE POSTER'S HEIGHT. With the button on the chips row there is one
+     fewer row to hold, and the reference shape is a strip. */
+  min-height: 210px;
+  /* The art carries the panel now; the glass fill would only show as a haze. */
+  background: var(--bg-2);
+}
+
+.toolBannerLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* THE ART IS MIRRORED ON THE PANELS WHOSE COPY IS ON THE RIGHT.
+ *
+ * This banner is composed with its character at the RIGHT and open wall to the
+ * left — which is precisely where the copy sits on a flipped panel, so the
+ * figure ended up behind the text and the empty half was wasted. `scaleX(-1)`
+ * puts the character at the far left and the open ground under the words.
+ *
+ * A transform rather than a second, flipped file: one asset, and a banner that
+ * is composed the other way round only has to drop the flip. Nothing in this
+ * image reads as handed — no text, no faces that must look one way — which is
+ * the condition that makes mirroring safe. Check that before adding a banner
+ * that has lettering in it. */
+.toolBanner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.toolPanelFlip .toolBanner {
+  transform: scaleX(-1);
+}
+
+/* THE SCRIM, AND ITS DIRECTION FOLLOWS THE COPY. `.toolPanelFlip` sets its
+   text on the RIGHT — Team Analysis is one — so the ground is darkest at the
+   right edge and gone by the middle. */
+/* THE SCRIM IS A FIXED DARK, NOT A THEME TOKEN, and this is the one exception
+   to "no component defines a colour of its own" that the situation forces.
+   It was `--bg-1`, which is WHITE on the light theme — so on light the scrim
+   washed the copy's half to white and the light text set on it disappeared
+   completely. The ground here is a dark painted image in both themes, so the
+   veil over it has to be dark in both. A token that flips cannot do that. */
+.toolBannerScrim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    to left,
+    rgb(8 6 10 / 0.9) 0%,
+    rgb(8 6 10 / 0.78) 30%,
+    rgb(8 6 10 / 0.35) 58%,
+    rgb(8 6 10 / 0.12) 100%
+  );
+}
+
+.toolPanel:not(.toolPanelFlip) .toolBannerScrim {
+  background: linear-gradient(
+    to right,
+    rgb(8 6 10 / 0.9) 0%,
+    rgb(8 6 10 / 0.78) 30%,
+    rgb(8 6 10 / 0.35) 58%,
+    rgb(8 6 10 / 0.12) 100%
+  );
+}
+
+/* ── THE BANNER PANEL IS A STRIP, NOT A POSTER ────────────────────────────
+ *
+ * The type scale here is the whole difference between the two shapes. A poster
+ * can afford a 420px sheet with a big body block; a strip gives the title
+ * almost all of the vertical weight and shrinks everything under it to a
+ * single dense line of supporting marks.
+ *
+ * FOUR MOVES, and they only work together:
+ *   1. THE TITLE ROUGHLY DOUBLES and becomes the panel's whole voice.
+ *   2. THE BODY DROPS a step and tightens its leading, so three lines occupy
+ *      less height than four did.
+ *   3. THE CHIPS GO SMALL AND UPPERCASE — they are labels, not sentences, and
+ *      at this size lowercase reads as body copy that failed to wrap.
+ *   4. THE BUTTON JOINS THE CHIPS ROW. That is what removes an entire row from
+ *      the stack, and it is why the panel can lose half its height without
+ *      anything being cramped.
+ *
+ * The art also gives up width: the copy needs more than the 0.85fr track the
+ * card panels hand it, and the character reads fine in a narrower crop.
+ */
+.toolPanel[data-banner] {
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+}
+
+.toolPanel[data-banner] .toolText {
+  position: relative;
+  z-index: 1;
+  gap: 0.5rem;
+  /* SHIFTED RIGHT, AND THE LEVER IS THE MEASURE, NOT PADDING.
+     Padding alone could not do it: the block still FILLED its track, so its
+     left edge stayed near the middle of the panel however much was added on
+     the inside. Capping the width and pinning the block to the END of the
+     track is what actually moves it — the copy now sits in the right-hand
+     third rather than starting at the panel's centre line. */
+  width: 100%;
+  max-width: 34rem;
+  justify-self: end;
+}
+
+/* THE KICKER IS GONE ON A BANNER. It said "Team Analysis" directly above a
+   title that says what the thing is, over a picture that says it a third time
+   — a label, a headline and an image all making the same introduction. Losing
+   it takes a row out of the stack and gives the title the top of the panel,
+   which is what a strip wants its eye to land on first. It stays on the card
+   panels, where there is no art carrying the identity. */
+.toolPanel[data-banner] .toolKicker {
+  display: none;
+}
+
+.toolPanel[data-banner] .toolTitle {
+  font-size: clamp(1.9rem, 3.5vw, 3.1rem);
+  letter-spacing: 0.01em;
+  line-height: 1.06;
+}
+
+/* 46ch wrapped this copy to FOUR lines and the reference is three, which is a
+   whole line of panel height for nothing. The measure is what decides it, not
+   the font size — the body is already a step down. */
+.toolPanel[data-banner] .toolBody {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+
+.toolPanel[data-banner] .toolChip {
+  font-size: 0.66rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 0.42rem 0.7rem;
+}
+
+.toolPanel[data-banner] .toolCta {
+  margin-top: 0;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.62rem 1.15rem;
+  white-space: nowrap;
+}
+
+/* The shared bottom row. `margin-left: auto` on the button is what pins it to
+   the far end without the chips having to know how wide it is. */
+.toolFoot {
+  display: contents;
+}
+
+/* THE BUTTON SITS UNDER THE CHIPS, not beside them.
+   It shared their row while the kicker was taking a row of its own — the two
+   traded places. On its own line it is the last thing read and the first thing
+   pressed, which is the order a panel like this is scanned in, and it stops
+   competing with three labels for one horizontal band. Column, not row, so it
+   also cannot wrap awkwardly at any width. */
+.toolPanel[data-banner] .toolFoot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.7rem;
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+/* ── THE BANNER'S OWN RED ──────────────────────────────────────────────────
+ *
+ * SAMPLED FROM THE ART, NOT PICKED. The lit rose petals in this banner sit at
+ * `rgb(180, 20, 40)` — but that measures 2.7:1 against the scrim, under even
+ * the 3:1 floor that display type needs. `#e02840` is the SAME HUE (352°) with
+ * the luminance lifted until it clears: 4.20:1, which passes body text as well
+ * as headings, so the accent word and the button can share one value.
+ *
+ * It replaces `--solid-maroon`, which is what `data-hue="pink"` hands every
+ * pink panel. Maroon is graded to hold white text on a neutral surface; on
+ * this image it read as a muddy slab beside actual roses.
+ */
+.toolPanel[data-banner][data-hue='pink'] {
+  --tool-solid: #e02840;
+  --tool-hue: #ff8fa0;
+  --tool-edge: rgb(224 40 64 / 0.55);
+  --tool-wash: rgb(224 40 64 / 0.18);
+}
+
+/* NO PILL BEHIND THE TITLE. The solid fill is the strongest mark on an
+   ordinary panel; on a banner it is a painted slab sitting on a painted image,
+   and the two grounds fight. The lettering carries itself here, with a shadow
+   doing the job the fill used to — separating it from whatever the art happens
+   to be behind any given letter. */
+.toolPanel[data-banner] .toolTitle {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  text-shadow:
+    0 1px 0 rgb(0 0 0 / 0.55),
+    0 2px 14px rgb(0 0 0 / 0.75);
+}
+
+.toolTitleAccent {
+  color: var(--tool-solid, var(--text));
+}
+
+/* The accent needs MORE separation than the white does, not less: it is the
+   darker of the two on the same ground. */
+.toolPanel[data-banner] .toolTitleAccent {
+  color: #e02840;
+  text-shadow:
+    0 1px 0 rgb(0 0 0 / 0.7),
+    0 2px 16px rgb(0 0 0 / 0.85);
+}
+
+/* The body copy is over the art too, so it gets the same treatment at a
+   weight that suits its size. */
+.toolPanel[data-banner] .toolBody {
+  text-shadow: 0 1px 10px rgb(0 0 0 / 0.8);
+}
+
+/* The art column becomes empty space the picture shows through. The card trio
+   is not rendered at all on a banner panel. */
+.toolPanel[data-banner] .toolArt {
+  visibility: hidden;
+}
+
+/* ON A BANNER THE COPY IS ALWAYS LIGHT. It is set on a dark painted image in
+   BOTH themes, so it cannot follow the page's text colour the way every other
+   panel does. This is the one place in the project where a colour is fixed
+   against the theme rather than read from it, and the reason is that the
+   ground here is a photograph rather than a surface token. */
+.toolPanel[data-banner] .toolTitle,
+.toolPanel[data-banner] .toolBody {
+  color: #f6f7f8;
+}
+
+.toolPanel[data-banner] .toolChip {
+  color: #f6f7f8;
+  border-color: rgb(255 255 255 / 0.28);
+  background: rgb(255 255 255 / 0.12);
+}
+
 .toolArtCard {
   position: absolute;
   width: clamp(90px, 9vw, 124px);
@@ -1674,6 +1958,37 @@
 
   .toolArt {
     display: none;
+  }
+
+  /* ON A PHONE THE PANEL STACKS, so the scrim comes from the BOTTOM rather
+     than from a side: the copy sits under the art's crop, not beside it. The
+     desktop floor goes too — it is a two-column shape.
+
+     THE SINGLE COLUMN HAS TO BE RESTATED HERE. `.toolPanel` above this sets
+     one track for every panel, but `.toolPanel[data-banner]` is an attribute
+     selector and therefore MORE SPECIFIC — so the banner's two-track rule won
+     at every width, including 390px, and the copy was crushed into 107px and
+     ran to twenty-three lines. Specificity beats source order, and a media
+     query does not change either. */
+  .toolPanel[data-banner] {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  /* The right-shift is a two-column move; stacked there is nothing to shift
+     away from. */
+  .toolPanel[data-banner] .toolText {
+    padding-left: 0;
+  }
+
+  .toolBannerScrim,
+  .toolPanel:not(.toolPanelFlip) .toolBannerScrim {
+    background: linear-gradient(
+      to top,
+      rgb(8 6 10 / 0.92) 0%,
+      rgb(8 6 10 / 0.84) 48%,
+      rgb(8 6 10 / 0.4) 100%
+    );
   }
 }
 

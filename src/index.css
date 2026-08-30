@@ -1,33 +1,55 @@
-/* THE DISPLAY FACE IS ARIAL, and it is a system font — there is no `@font-face`
- * here and nothing is downloaded for it.
+/* THE DISPLAY FACE IS BEBAS NEUE, served from `public/assets/fonts/`.
  *
- * It was Kids Word, a hand-drawn OpenType/CFF file served from
- * `public/assets/fonts/`. Replacing it with a system stack settles several
- * things that face cost us, all at once:
+ * It has been Kids Word, then Arial, then Impacted, then this. Impacted was
+ * tried and rejected FOR A REASON WORTH KEEPING: it is an Impact clone, and
+ * Impact is drawn for newspaper headlines at one size — the counters close up
+ * and the sidebearings vanish, so at 19px panel titles and 13px labels the
+ * words stop being scannable and become a texture. Bebas Neue is the same
+ * idea done for screens: as condensed, noticeably lighter in colour, with
+ * counters that stay open all the way down.
  *
- *   - NOTHING TO LOAD. No webfont request, no `font-display: swap` reflow, and
- *     no first-paint in a fallback face.
- *   - REAL WEIGHTS. Kids Word ships ONE cut, which is why `font-synthesis:
- *     weight` had to stay on for `font-weight: 600` to do anything at all.
- *     Arial has a genuine bold, so headings get a drawn weight rather than a
- *     synthesised smear.
- *   - THE PDF MATCHES THE SCREEN FOR FREE. jsPDF's built-in Helvetica is
- *     metrically compatible with Arial, so the export needs no embedded font,
- *     no conversion step and no verification that the embed worked — three
- *     things the CFF face required and silently failed at.
+ * BOTH FACES DRAW THEIR LOWERCASE AS CAPITAL FORMS, so nothing about the
+ * CASING of any heading changes with this swap — "Scout a whole roster" was
+ * already rendering as caps and still does. What changes is legibility. That
+ * is worth stating because it looks like a `text-transform` decision and is
+ * not one; no stylesheet is uppercasing anything.
  *
- * ONE TOKEN, named `--font-display`, because two patterns were in use across
- * the stylesheets: a literal `'Kids Word', Inter, system-ui, sans-serif` stack
- * and `var(--font-display, inherit)`, the latter resolving to nothing because
- * the variable was never actually defined. Both now point here, so the display
- * face is one edit rather than thirty-seven.
+ * Three things this inherits from being a webfont rather than a system stack:
  *
- * `scripts/build-pdf-font.py` and `KidsWord*.{otf,ttf}` are left in place but
- * unreferenced — the converter is the record of how to bring back a custom
- * face, and it is the part that is hard to rediscover.
+ *   - SOMETHING TO LOAD. `font-display: swap` is set, so text paints
+ *     immediately in the fallback and reflows once. The fallback is a
+ *     CONDENSED stack, so that reflow moves as little as it can.
+ *   - ONE CUT. Bebas Neue ships Regular only, so `font-weight: 700` does
+ *     nothing on its own — `font-synthesis: weight` further down is what makes
+ *     headings bold, and it is load-bearing again after being dead weight
+ *     under Arial. The `@font-face` declares `font-weight: 400` because that
+ *     DESCRIBES THE FILE; raising it tells the browser the file is already
+ *     bold and silently disables the synthesis for every heading on the site.
+ *   - THE PDF NO LONGER MATCHES THE SCREEN. `analyticsPdf.ts` draws headings in
+ *     jsPDF's built-in Helvetica, which is metrically compatible with Arial and
+ *     not with this. Bebas Neue IS TrueType (`glyf`, not CFF), so unlike Kids
+ *     Word it CAN be embedded with `addFont` — `scripts/build-pdf-font.py` is
+ *     the machinery. Not done here.
+ *
+ * ONE TOKEN, named `--font-display`, and 48 declarations across the stylesheets
+ * read it. Changing the display face is these two lines, which is the whole
+ * point of the token — it used to be a literal stack repeated thirty-seven
+ * times.
  */
+@font-face {
+  font-family: 'Bebas Neue';
+  src: url('/assets/fonts/BebasNeue-Regular.ttf') format('truetype');
+  /* Describes the FILE, not the intent — see the note above. */
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  --font-display: Arial, Helvetica, 'Liberation Sans', sans-serif;
+  /* The fallback is a CONDENSED stack: the swap from fallback to Impacted
+     moves the least when the two are the same shape. */
+  --font-display: 'Bebas Neue', 'Haettenschweiler', 'Arial Narrow Bold',
+    'Arial Narrow', Impact, sans-serif;
 }
 
 /* ==========================================================================

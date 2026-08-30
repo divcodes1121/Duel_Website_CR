@@ -264,12 +264,27 @@ const FEATURES = [
     hue: 'pink',
     icon: TeamIcon,
     kicker: 'Team Analysis',
-    title: 'Scout a whole roster',
+    /* SPLIT, so the last word can take the banner's own red the way the hero's
+       "Dominate." does. A banner panel drops the solid pill behind its title —
+       a painted slab on top of a painted image is two grounds fighting — and
+       the accent word is what replaces it as the mark. */
+    title: 'Scout',
+    titleAccent: 'a whole roster',
     body: 'Paste both squads. Every opponent gets a folder holding the decks they actually play and the decks your team should answer them with — named for the teammate who already pilots each one.',
     chips: ['Two squads at once', 'A folder per opponent', 'Ranked on real matchups'],
     cta: 'Open Team Analysis',
     hash: '#/teams',
     art: ['archer-queen', 'pekka', 'goblin-barrel'],
+    /* A PAINTED BANNER INSTEAD OF THREE FLOATING CARDS.
+       THE FILENAME IS THE WHOLE WIRING — the same arrangement the field book's
+       plates use. Nothing here imports the image and no manifest lists it: the
+       slot asks for this path, and until the file exists it falls back to the
+       card trio above, so the panel is complete and shippable before any art
+       arrives and improves the moment it does. Drop a file at
+       `public/assets/panels/<name>.webp` and it appears.
+       The other three keep `art` only, and adopt a banner by gaining this one
+       line each. */
+    banner: 'team-analysis',
   },
 ] as const;
 
@@ -372,6 +387,9 @@ export function Dashboard({
      they open the same thing. This one had no handler at all — a button that
      does nothing is worse than no button. */
   const [proContact, setProContact] = useState(false);
+  /* Which panels asked for a banner and did not get one. Keyed by kicker
+     because that is what identifies a FEATURES entry. */
+  const [bannerFailed, setBannerFailed] = useState<Record<string, boolean>>({});
 
   // Navigating to another tag (a popular chip, a fresh search) has to move the
   // field with it — the component does not remount on a hash change.
@@ -1131,25 +1149,67 @@ export function Dashboard({
                     type="button"
                     className={`${styles.toolPanel} ${i % 2 === 1 ? styles.toolPanelFlip : ''}`}
                     data-hue={f.hue}
+                    data-banner={'banner' in f && !bannerFailed[f.kicker] ? '' : undefined}
                     onClick={() => go(f.hash)}
                   >
+                    {/* THE ART IS THE PANEL, not a child of one half of it. An
+                        absolutely-positioned layer ignores the panel's padding,
+                        which is what lets it reach all four edges without four
+                        negative margins that have to agree with that padding.
+                        The scrim above it is what keeps the copy readable on a
+                        painted ground. */}
+                    {'banner' in f && !bannerFailed[f.kicker] && (
+                      <span className={styles.toolBannerLayer} aria-hidden="true">
+                        <img
+                          src={`${import.meta.env.BASE_URL}assets/panels/${f.banner}.webp`}
+                          alt=""
+                          draggable={false}
+                          className={styles.toolBanner}
+                          /* A NAMED FILE THAT IS NOT THERE YET FALLS BACK to the
+                             card trio, so a panel can be given a banner before
+                             the art exists and looks exactly as it did until it
+                             does. State rather than DOM poking: the previous
+                             version hid nodes by hand and left the panel in a
+                             half-converted state React did not know about. */
+                          onError={() => setBannerFailed((m) => ({ ...m, [f.kicker]: true }))}
+                        />
+                        <span className={styles.toolBannerScrim} />
+                      </span>
+                    )}
                     <span className={styles.toolText}>
                       <span className={styles.toolKicker}>
                         <Icon size={14} />
                         {f.kicker}
                       </span>
-                      <span className={styles.toolTitle}>{f.title}</span>
-                      <span className={styles.toolBody}>{f.body}</span>
-                      <span className={styles.toolChips}>
-                        {f.chips.map((c) => (
-                          <span key={c} className={styles.toolChip}>
-                            {c}
-                          </span>
-                        ))}
+                      <span className={styles.toolTitle}>
+                        {f.title}
+                        {'titleAccent' in f && (
+                          <>
+                            {' '}
+                            <span className={styles.toolTitleAccent}>{f.titleAccent}</span>
+                          </>
+                        )}
                       </span>
-                      <span className={styles.toolCta}>
-                        {f.cta}
-                        <ArrowRightIcon size={15} />
+                      <span className={styles.toolBody}>{f.body}</span>
+                      {/* THE CHIPS AND THE BUTTON SHARE A LINE on a banner
+                          panel: the chips run from the left and the CTA is
+                          pushed to the far end of the same row, which is what
+                          turns a tall stack into a strip. On the card panels
+                          they stay in their own rows, so this wrapper is inert
+                          there — it is a single flex row either way, and the
+                          difference is entirely in the CSS. */}
+                      <span className={styles.toolFoot}>
+                        <span className={styles.toolChips}>
+                          {f.chips.map((c) => (
+                            <span key={c} className={styles.toolChip}>
+                              {c}
+                            </span>
+                          ))}
+                        </span>
+                        <span className={styles.toolCta}>
+                          {f.cta}
+                          <ArrowRightIcon size={15} />
+                        </span>
                       </span>
                     </span>
 

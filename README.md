@@ -84,7 +84,7 @@ bot's SQLite files read-only.
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
 | tests | **1,386 Python checks** across **38 suites**, **335 vitest**, `tsc -b` and `npm run build` clean. Every Python suite re-run on 2026-08-30 |
-| shipped from | `main` at `3f2ed23`, deployed 2026-08-30 — the render loop killed, TeamAnalysis lazy again. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
+| shipped from | `main` at `HEAD`, deployed 2026-08-30 — Bebas Neue and the first banner panel. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
@@ -3055,10 +3055,51 @@ not evidence until you have read why it failed.
 
 ## The display face, and the one property that decides it
 
-Headings are set in **Kids Word**, replacing Subscribe. A swap is one
-`@font-face` plus a find-and-replace across seventeen stylesheets, because the
-face is only ever named in a font stack — but two things about it are worth
-recording, both learned by trying the wrong file first.
+Headings are set in **Bebas Neue**, served from `public/assets/fonts/` at 59 kB.
+The lineage is Subscribe → Kids Word → Arial → Impacted → this, and the section
+below keeps the reasoning from each because the same three trade-offs came up
+every time. What is current:
+
+**Impacted was tried and rejected, and the reason generalises.** It is an Impact
+clone, and Impact is drawn for newspaper headlines at *one* size: the counters
+close up and the sidebearings vanish, so at 19px panel titles and 13px labels
+the words stop being scannable and turn into texture. Bebas Neue is the same
+condensed idea drawn for screens — as narrow, lighter in colour, counters open
+all the way down. `assets/fonts/` keeps all three Impact files as the record of
+what was compared.
+
+**Both faces draw their lowercase as capital forms**, so nothing about the
+*casing* of any heading changed with either swap — "Scout a whole roster" was
+already rendering as caps and still does. No stylesheet is uppercasing it, which
+is worth knowing before somebody goes looking for a `text-transform` that does
+not exist.
+
+**One cut, so `font-synthesis: weight` is load-bearing again** after being dead
+weight under Arial. The `@font-face` declares `font-weight: 400` because that
+describes the *file*; raising it tells the browser the file is already bold and
+silently disables the synthesis on every heading at once.
+
+**The hero's `clamp()` is tuned to the face and had to be re-measured.** Bebas
+runs the 26-character headline at **7.44em against Arial's ~12.5em** — 60% of
+the width — so the ceiling that used to fill the column left the headline at
+369px inside 678 and the hero lost its hierarchy. The first re-tune *overflowed*
+(721px through a 678px column, because `white-space: nowrap` spills rather than
+wraps). `clamp(2rem, 4.4vw, 4.3rem)` lands it at 620px, 91% fill, checked at
+nine widths. If the face changes again, this has to be measured with it.
+
+**The PDF no longer matches the screen.** `analyticsPdf.ts` draws headings in
+jsPDF's built-in Helvetica, which is metrically compatible with Arial and is not
+compatible with this. Bebas Neue *is* TrueType, so unlike Kids Word it can be
+embedded — see the table below, which is exactly the check that decides it. Not
+done.
+
+The original note, kept because the CFF trap below is still the thing that
+catches people:
+
+A swap is one `@font-face` plus one token — `--font-display`, which 48
+declarations read — because the face is only ever named in a font stack. Two
+things about it are worth recording, both learned by trying the wrong file
+first.
 
 **Check the first four bytes.** jsPDF embeds TrueType only; it has no CFF parser.
 An OpenType/CFF face (sfnt tag `OTTO`) produces a PDF report with *no headings
@@ -7453,6 +7494,82 @@ green that already ships. What a headless browser *can* check is which tiers
 render a badge, what it says and what its tooltip says, and that is 24/24 across
 anon, free, trial, pro and admin.
 
+### The landing panel is a banner
+
+The four tool panels on the landing screen used to be a text half and three
+floating card images on a plain surface. Team Analysis is a **painted banner**
+instead: the art is not half the panel, it *is* the panel — edge to edge, corner
+to corner, with the copy set on top of it. That is the difference between a card
+with a picture in it and a poster.
+
+**The filename is the whole wiring.** A `FEATURES` entry gains one line —
+`banner: 'team-analysis'` — and the slot asks for
+`public/assets/panels/team-analysis.webp`. Nothing imports the image and no
+manifest lists it, the same arrangement the field book's plates use. A named
+file that does not exist yet falls back to the card trio, so a panel can be
+given a banner *before* the art is drawn and improves the moment it lands. The
+other three convert one line at a time.
+
+Five things this cost, each of which was a wrong first attempt:
+
+**The art must not bleed on its inner edge.** The first version was a grid item
+with `margin: -2rem -2.2rem`, which bled *both* sides — so it ran 35.2px past
+its own track and printed over the first character of every line of the copy
+beside it. An absolutely-positioned layer at `inset: 0` ignores the panel's
+padding entirely, which is both simpler and cannot drift the way four negative
+margins that must agree with that padding can.
+
+**The scrim is a fixed dark, not a token.** It was built from `--bg-1` — which is
+*white* on the light theme, so on light the scrim washed the copy's half to white
+and the light text set on it disappeared completely. The ground here is a dark
+painted image in both themes, so the veil over it has to be dark in both. This is
+one of the very few places in the project where a colour is deliberately not read
+from `index.css`, and the reason is that the ground is a photograph rather than a
+surface token.
+
+**The art is mirrored on text-right panels.** This banner is composed with its
+character at the right, which is exactly where a flipped panel's copy sits — so
+the figure ended up behind the text and the empty half was wasted. `scaleX(-1)`
+puts the character at the far left. A transform rather than a second flipped
+file, which is safe *only* because nothing in the image reads as handed. Check
+that before adding a banner with lettering in it.
+
+**The accent red is sampled from the art and then lifted.** The lit rose petals
+sit at `rgb(180, 20, 40)`, which measures **2.7:1** against the scrim — under
+even the 3:1 floor display type needs. `#e02840` is the same hue (352°) raised
+until it clears at **4.20:1**, which passes body text as well, so the accent word
+and the button can share one value. It overrides `--solid-maroon`, which is
+graded to hold white text on a neutral surface and read as a muddy slab beside
+actual roses.
+
+**The copy is moved right by its measure, not by padding.** `padding-left` moved
+nothing visible, because the block still *filled* its grid track — its left edge
+stayed near the panel's centre however much was added on the inside. Capping the
+width and pinning the block to the end of the track is what actually moves it, to
+59–97% of the panel at 1440. The cost is arithmetic: a narrower block cannot hold
+three chips across, so they wrap to two rows.
+
+A banner panel also drops two things an ordinary panel keeps. There is **no solid
+pill behind the title** — a painted slab on a painted image is two grounds
+fighting, so the lettering carries itself with a shadow and the accent word
+replaces the fill as the mark. And the **kicker chip is hidden**: a label reading
+"Team Analysis", a headline directly under it, and a picture were all making the
+same introduction three times.
+
+#### The specificity trap this shipped with
+
+At 390px the panel came out **936px tall with its body running twenty-three
+lines**, the copy crushed into 107px of width. `.toolPanel[data-banner]` is an
+attribute selector and therefore *more specific* than the `.toolPanel` rule that
+collapses the grid to one column on a phone — and **a media query does not change
+specificity**. The banner kept two columns at every width. The single column has
+to be restated inside the phone block. It is the same class of trap as the `1fr`
+/ `minmax(0, 1fr)` note already in this file: a rule that looks overridden and is
+not. Fixed, the panel is 378px with a five-line body.
+
+Weight added: 59 kB for the font and 159 kB for the banner, both served files,
+neither in the JS bundle.
+
 ### Who can open it, and why the trial includes it
 
 Team Analysis spent its first days in `ADMIN_ONLY_SECTIONS` — the staging shelf
@@ -10097,12 +10214,19 @@ scripts/
                               (4.2 MB of PNG -> 166 kB). Idempotent.
 
 assets/                       SOURCE art (masters, never served)
+  panels/                     banner masters -> public/assets/panels/*.webp
+  fonts/                      display faces, incl. the three Impact files kept
+                              as the record of what Bebas Neue was chosen over
   background/                 light_background.png, dark_background.png,
                               "king image.jpg" — the hero backdrop pair and
                               the character, all three 1.5 MB+ originals
   fonts/                      display faces, incl. the unused trials
 
 public/assets/                what the app actually loads
+  panels/                     landing tool-panel banners. THE FILENAME IS THE
+                              WIRING: `FEATURES[].banner` names one and a file
+                              that is not there yet falls back to the card trio
+  fonts/BebasNeue-Regular.ttf the display face, read through --font-display
   background/                 light_background.webp, dark_background.webp,
                               king.webp (alpha) — built by the script above
   cards/ evolutions/ heroes/  card art, plain sRGB, no ICC profile
