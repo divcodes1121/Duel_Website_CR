@@ -118,7 +118,21 @@ function liquidAtHue(shallowHue: number, deepHue: number, theme: 'light' | 'dark
   };
 }
 
-const LOOK: Record<'admin' | 'pro' | 'trial', {
+/**
+ * FOUR TIERS, AND `free` WEARS THE SAME BADGE AS `trial` — deliberately the
+ * identical entry rather than a copy with a different name.
+ *
+ * A member whose three days have run out is still a member; what they lost is
+ * Pro reach, not their standing. Giving `free` its own colour would announce
+ * the expiry as a demotion every time they open the site, and giving it NO
+ * badge — which is what happened before — meant signing up visibly took
+ * something away three days later: the badge appeared on day one and vanished
+ * on day four.
+ *
+ * The countdown is the only thing that distinguishes them, and it lives in the
+ * tooltip where a number that changes daily belongs.
+ */
+const LOOK: Record<'admin' | 'pro' | 'trial' | 'free', {
   label: string;
   shallowHue: number;
   deepHue: number;
@@ -126,6 +140,7 @@ const LOOK: Record<'admin' | 'pro' | 'trial', {
   admin: { label: 'ADMIN', shallowHue: 345, deepHue: 318 },
   pro: { label: 'PRO', shallowHue: 205, deepHue: 238 },
   trial: { label: 'MEMBER', shallowHue: 142, deepHue: 170 },
+  free: { label: 'MEMBER', shallowHue: 142, deepHue: 170 },
 };
 
 export function TierBadge({
@@ -142,15 +157,18 @@ export function TierBadge({
   onClick?: () => void;
 }) {
   const theme = useThemeStore((st) => st.theme);
-  if (tier !== 'admin' && tier !== 'pro' && tier !== 'trial') return null;
+  /* ONLY `anon` HAS NOTHING TO SHOW. Every signed-in account has a standing,
+     and the badge is what states it — so the test is "are you signed in",
+     not "are you paying". */
+  if (tier === 'anon') return null;
   const look = LOOK[tier];
 
   /* The countdown moves into the tooltip rather than the face. A number that
      changes every day is not a status, and the badge is read as one. */
   const title =
-    tier === 'trial'
+    tier === 'trial' || tier === 'free'
       ? trialDaysLeft && trialDaysLeft > 0
-        ? `Deckkies Member — ${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} left`
+        ? `Deckkies Member — ${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} of Pro access left`
         : 'Deckkies Member'
       : tier === 'pro'
         ? 'Deckkies Pro'

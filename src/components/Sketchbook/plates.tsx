@@ -49,8 +49,8 @@ export const UNKNOWN_GATED = [...FREE_SECTIONS, ...PRO_ONLY_SECTIONS].filter((s)
 
 export const COLUMNS: { access: Access; head: string; note: string }[] = [
   { access: 'anon', head: 'Visitor', note: 'never signed in' },
-  { access: 'free', head: 'Member', note: 'signed up · trial spent' },
-  { access: 'trial', head: 'Trial', note: 'first three days' },
+  { access: 'free', head: 'Member', note: 'signed up · three days spent' },
+  { access: 'trial', head: 'Member', note: 'first three days' },
   { access: 'pro', head: 'Pro', note: 'paid' },
 ];
 
@@ -349,12 +349,12 @@ export const PLATES: Plate[] = [
         <h2 className="pl-h">Member and Pro</h2>
         <dl className="pl-defs">
           <div>
-            <dt>Free — signed in</dt>
-            <dd>{FREE_SECTIONS.length} areas, permanently: {FREE_SECTIONS.join(', ')}. Every deck tool, every paste box, every copy-and-open link.</dd>
+            <dt>Member — the first three days</dt>
+            <dd>Everything a Pro has, except the one carve-out. It expires on time on its own; nothing has to run.</dd>
           </div>
           <div>
-            <dt>Member — three days</dt>
-            <dd>Everything a Pro has, except the one carve-out. It expires on time on its own; nothing has to run.</dd>
+            <dt>Member — after that</dt>
+            <dd>{FREE_SECTIONS.length} areas, permanently: {FREE_SECTIONS.join(', ')}. Every deck tool, every paste box, every copy-and-open link. Signing up is what makes you a member; the three days are an access window on top of it, so the badge does not go away when they do.</dd>
           </div>
           <div>
             <dt>Pro — paid</dt>

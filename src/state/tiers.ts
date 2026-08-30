@@ -27,18 +27,51 @@ export type Access = 'anon' | Tier;
 
 /** What each tier is CALLED to a person.
  *
- * `trial` shows as **Member**. The stored value stays `trial` — it is what the
- * database, the entitlement matrix and `trial_ends_at` all key on, and renaming
- * a stored value to change a word on screen is how those three drift apart.
- * "Trial" describes what the account is to us, a countdown we are running;
- * "Member" describes what the person is, which is the half they have a reason
- * to care about. The countdown is still shown, in the badge's tooltip and in
- * the admin console's own column.
+ * **`free` AND `trial` ARE BOTH "Member", and that is the point of this map.**
+ * Signing up is what makes somebody a member; the three-day trial is an ACCESS
+ * window running on top of that, not a different kind of person. An account
+ * whose trial has lapsed has not stopped being a member — it has stopped having
+ * Pro reach — so the word does not change when the countdown ends. Only what
+ * the account can open does.
+ *
+ * `free` used to read "Free" here, which produced an account that was called
+ * one thing for three days and something worse afterwards, with no badge at
+ * all once the trial ran out. The field book already disagreed with that: its
+ * access plate has called a signed-in free account "Member" since it was
+ * written.
+ *
+ * THE STORED VALUES ARE UNTOUCHED. `free` and `trial` are what the database,
+ * `effective_tier()`, the entitlement matrix and `trial_ends_at` all key on;
+ * renaming a stored value to change a word on screen is how those drift apart.
+ * This map is a display concern and nothing reads it to make a decision.
+ *
+ * `anon` is not in here because it is not a tier — someone who has not signed
+ * in is not a member of anything, and gets no badge.
  */
 export const TIER_LABEL: Record<Tier, string> = {
   admin: 'Admin',
   pro: 'Pro',
   trial: 'Member',
+  free: 'Member',
+};
+
+/**
+ * What each tier is called TO AN OPERATOR, in the admin console.
+ *
+ * A SECOND MAP, because it answers a different question. `TIER_LABEL` says what
+ * a person is; this says what state their row is in — and an admin scanning a
+ * table of accounts needs "free" and "trial" to be two words, because the whole
+ * reason to look is to see who is on a countdown and who has run out. Collapsing
+ * them to "Member" there would make the console agree with the badge and stop
+ * telling the operator anything.
+ *
+ * "Trial" is the honest word for that view: it is what the account is TO US,
+ * a countdown we are running.
+ */
+export const TIER_ADMIN_LABEL: Record<Tier, string> = {
+  admin: 'Admin',
+  pro: 'Pro',
+  trial: 'Trial',
   free: 'Free',
 };
 

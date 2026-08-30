@@ -83,7 +83,7 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,386 Python checks** across **38 suites**, **328 vitest**, `tsc -b` and `npm run build` clean. Every Python suite re-run on 2026-08-30 |
+| tests | **1,386 Python checks** across **38 suites**, **335 vitest**, `tsc -b` and `npm run build` clean. Every Python suite re-run on 2026-08-30 |
 | shipped from | `main` at `093bcbd`, deployed 2026-08-30 — Team Analysis off the admin shelf and on sale. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -194,7 +194,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 328 tests over the deck, duel, export, admin and shader logic
+npm run test                      # 335 tests over the deck, duel, export, admin and shader logic
 python server/test_duel_combos.py # 55 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 110 checks over deck arrangement and card art
@@ -6191,7 +6191,7 @@ push.
 
 ## Testing and verification
 
-**1,386 Python checks across 38 suites** and **328 vitest tests**, counted by
+**1,386 Python checks across 38 suites** and **335 vitest tests**, counted by
 running every one of them on 2026-08-30. Only
 `test_recent_battles.py` opens a database, and it writes its own temp file —
 every other Python suite runs on synthetic data or a stubbed reader, so they
@@ -6222,7 +6222,7 @@ in the analytics fetch effects (it is rebuilt every render; the effect keys on
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 328 tests — deck logic, links, PDF export, proxy, admin
+npm run test                      # 335 tests — deck logic, links, PDF export, proxy, admin
 python server/test_duel_combos.py # 55 checks — duel logic, no database needed
 python server/test_meta.py        # 33 checks — meta board + card board, no database
 python server/test_card_art.py    # 110 checks — deck arrangement, evolution/hero art
@@ -7360,6 +7360,61 @@ Names get the markdown taken off them too, and `cleanName` **loops**: `*1.*`
 puts the ordinal inside the emphasis, so stripping the `*` is what first exposes
 the `1.`, and stripping that exposes the second `*`. A single pass of either rule
 leaves the other's marker behind and the chip reads `*1.* 🇵🇪 WR I Clisman™✨`.
+
+### A member stays a member when the three days end
+
+Signing up is what makes somebody a member. The three-day trial is an **access
+window on top of that**, not a different kind of person — so the word and the
+badge do not change when it expires. Only what the account can open does.
+
+That was not what the code did. `TIER_LABEL.free` read `'Free'` and `TierBadge`
+returned `null` for it, so an account wore a green MEMBER badge for three days
+and then had it **disappear**: signing up visibly took something away on day
+four. `free` and `trial` are now both `Member`, sharing a byte-identical badge
+entry, and the countdown lives in the tooltip where a number that changes daily
+belongs.
+
+The stored values are untouched. `free` and `trial` are what the database,
+`effective_tier()`, the entitlement matrix and `trial_ends_at` all key on;
+renaming a stored value to change a word on screen is how those drift apart.
+This is a display map and nothing reads it to make a decision.
+
+**The admin console keeps its own map.** `TIER_ADMIN_LABEL` says Free and Trial,
+because an operator scanning a table of accounts needs those to be two words —
+seeing who is on a countdown and who has run out is the whole reason to open it.
+One map answers "what is this person called", the other "what state is this row
+in", and they are different questions with different audiences.
+
+Two bugs came out of the same change.
+
+**The profile menu was showing a PRO badge to accounts that were not Pro.** The
+upgrade row hardcoded `tier="pro"`, from when `TierBadge` rendered nothing for a
+free account and the row would otherwise have been bare. The result: a member
+opening their own menu saw a PRO badge on it and read it as their status — the
+row says "Upgrade profile" a centimetre to the left, and a badge is still the
+louder of the two. It reads the account now.
+
+**And fixing the first exposed one I had just introduced.** `ProfileMenu` read
+the raw store tier, and `accountStore` initialises `tier: 'free'` and resets to
+`'free'` on sign-out. That was harmless while free rendered no badge; the moment
+free started wearing MEMBER, a signed-out visitor would have been handed a
+membership badge. It reads `useAccess()` now — the one function that knows
+`anon` is not a tier, and the source the top bar already used. **Anything
+rendering a tier should use `useAccess()`, never the store's `tier` directly.**
+
+#### What could not be checked
+
+**The badge's colour, in this environment.** Headless Chromium renders the
+liquid as a white pill with a broken-image glyph, and neither
+`--use-angle=swiftshader` nor `--enable-unsafe-swiftshader` changes it.
+`readPixels` returns nothing because the canvas has no `preserveDrawingBuffer` —
+which the UI notes already say, in the "screenshots, not `readPixels`" entry.
+
+It is not the change: `pro`, which this did not touch, renders exactly the same
+way. And `free` uses the same two numbers as `trial` — hues 142 and 170, the
+green that already ships. What a headless browser *can* check is which tiers
+render a badge, what it says and what its tooltip says, and that is 24/24 across
+anon, free, trial, pro and admin.
 
 ### Who can open it, and why the trial includes it
 

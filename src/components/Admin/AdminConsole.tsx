@@ -5,7 +5,7 @@ import { LiquidMetal } from '../../three/LiquidMetal';
 import { useAccountStore } from '../../state/accountStore';
 import { ago, bytes, until } from '../../utils/format';
 import { useAccess } from '../../state/gate';
-import { TIER_LABEL } from '../../state/tiers';
+import { TIER_ADMIN_LABEL } from '../../state/tiers';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import styles from './AdminConsole.module.css';
 
@@ -400,7 +400,7 @@ export function AdminConsole() {
                 <td className={styles.email}>{u.email ?? '—'}</td>
                 <td>
                   <span className={styles.tier} data-tier={u.tier}>
-                    {TIER_LABEL[u.tier] ?? u.tier}
+                    {TIER_ADMIN_LABEL[u.tier] ?? u.tier}
                   </span>
                   {u.tier === 'trial' && u.trial_ends_at && (
                     <span className={styles.sub}>ends {until(u.trial_ends_at)}</span>

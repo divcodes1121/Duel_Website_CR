@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
    test of a pure rule must not need a network stack. */
 import {
   ADMIN_ONLY_SECTIONS,
+  TIER_ADMIN_LABEL,
+  TIER_LABEL,
   FREE_SECTIONS,
   PRO_ONLY_SECTIONS,
   canOpenSection,
@@ -366,5 +368,52 @@ describe('the trial countdown', () => {
 
   it('no trial has no days left', () => {
     expect(trialDaysLeft(profile(), now)).toBe(0);
+  });
+});
+
+
+/**
+ * WHAT SOMEBODY IS CALLED IS NOT WHAT THEY CAN OPEN, and these two maps are
+ * where that separation lives. `free` and `trial` are the SAME PERSON to the
+ * product and different rows to the operator, so the labels differ by audience
+ * while the access rules key on the stored tier as they always did.
+ */
+describe('a member stays a member when the three days end', () => {
+  it('free and trial are both called Member', () => {
+    expect(TIER_LABEL.free).toBe('Member');
+    expect(TIER_LABEL.trial).toBe('Member');
+  });
+
+  /* THE BADGE MUST NOT VANISH ON DAY FOUR. Before this, `free` read "Free" and
+     rendered no badge at all — so signing up visibly TOOK SOMETHING AWAY three
+     days later. The word is the same on both sides of the expiry; only the
+     access changes. */
+  it('the label does not change across the expiry', () => {
+    expect(TIER_LABEL.free).toBe(TIER_LABEL.trial);
+  });
+
+  /* ...while the ACCESS does, which is the whole point of keeping the stored
+     values distinct rather than renaming `free` to `trial`. */
+  it('but what they can open still differs', () => {
+    for (const section of PRO_ONLY_SECTIONS) {
+      expect(sectionAllowed('trial', section), section).toBe(false);
+      expect(sectionAllowed('free', section), section).toBe(false);
+    }
+    // Team Analysis is the case that separates them.
+    expect(sectionAllowed('trial', 'Team Analysis')).toBe(true);
+    expect(sectionAllowed('free', 'Team Analysis')).toBe(false);
+  });
+
+  /* The operator's view keeps them apart, because the reason to open the admin
+     console is to see who is on a countdown and who has run out. */
+  it('the admin console still tells free from trial', () => {
+    expect(TIER_ADMIN_LABEL.free).toBe('Free');
+    expect(TIER_ADMIN_LABEL.trial).toBe('Trial');
+    expect(TIER_ADMIN_LABEL.free).not.toBe(TIER_ADMIN_LABEL.trial);
+  });
+
+  it('paid tiers are named for what they pay for', () => {
+    expect(TIER_LABEL.pro).toBe('Pro');
+    expect(TIER_LABEL.admin).toBe('Admin');
   });
 });

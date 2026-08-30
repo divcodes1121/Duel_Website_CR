@@ -5,7 +5,8 @@ import { useBuilderStore } from '../../state/store';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import { TierBadge } from '../TierBadge/TierBadge';
 import { useThemeStore } from '../../state/themeStore';
-import { TIER_LABEL } from '../../state/tiers';
+import { TIER_LABEL, trialDaysLeft } from '../../state/tiers';
+import { useAccess } from '../../state/gate';
 import styles from './ProfileMenu.module.css';
 
 function UserIcon({ size = 16 }: { size?: number }) {
@@ -96,7 +97,18 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
      deleted; this used to read both, and a Log out wired to the retired one
      cleared a store nothing read, so the click did visibly nothing. */
   const account = useAccountStore((s) => s.profile);
-  const tier = useAccountStore((s) => s.tier);
+  /* THE ACCESS LEVEL, NOT THE RAW STORE TIER, and the difference is not
+     academic: `accountStore` initialises `tier` to 'free' and RESETS it to
+     'free' on sign-out, so a visitor who has never signed in reads as free
+     here. That was harmless while `TierBadge` rendered nothing for free — the
+     moment free started wearing MEMBER, this menu would have handed a
+     signed-out stranger a membership badge. `useAccess()` is the one function
+     that knows 'anon' is not a tier, and it is what the top bar already reads,
+     so the two badges in the shell now come from the same answer. */
+  const tier = useAccess();
+  /* The same source the top bar's badge reads, so the two instances of one
+     component cannot disagree about how many days are left. */
+  const daysLeft = trialDaysLeft(useAccountStore((s) => s.profile));
   const accountEmail = useAccountStore((s) => s.email);
   const accountSignOut = useAccountStore((s) => s.signOut);
 
@@ -203,8 +215,9 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
 
                   Free sits with member rather than getting a fourth wording:
                   both of them are accounts that could upgrade, which is the
-                  only thing this row is asking. What separates them is the
-                  badge, and a free account has none to show.
+                  only thing this row is asking, and BOTH ARE MEMBERS — the
+                  trial is an access window, not a different kind of person, so
+                  the badge does not change when it ends.
                   Free and Member get an upgrade — the only thing in this menu
                   that should be loud, so it takes the filled treatment. Pro
                   and Admin get the same row as a statement with nothing to
@@ -216,7 +229,7 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                     <CrownIcon />
                   </span>
                   <span className={styles.tierLabel}>
-                    {TIER_LABEL[tier]} Mode Activated
+                    {TIER_LABEL[tier as Exclude<typeof tier, 'anon'>]} Mode Activated
                   </span>
                   {/* THE REAL BADGE, not a flat pill printed to look like one.
                       It is the same liquid button the top bar wears, at the
@@ -238,11 +251,16 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                     <CrownIcon />
                   </span>
                   <span className={styles.tierLabel}>Upgrade profile</span>
-                  {/* The upgrade row advertises the tier it sells, so the badge
-                      is forced to `pro` rather than read from the account —
-                      the account is by definition not pro, and `TierBadge`
-                      renders nothing for free. */}
-                  <TierBadge tier="pro" width={68} height={24} />
+                  {/* THE BADGE IS WHAT YOU ARE, NOT WHAT IS BEING SOLD.
+                      It was forced to `pro` here, from when `TierBadge`
+                      rendered nothing for a free account and the row would
+                      otherwise have been bare. The result was that a member
+                      opening their own menu saw a PRO badge on it and read it
+                      as their status — the row says "Upgrade profile" a
+                      centimetre to the left, and a badge is still the louder
+                      of the two. It reads the account now, like every other
+                      instance of it does. */}
+                  <TierBadge tier={tier} trialDaysLeft={daysLeft} width={68} height={24} />
                 </a>
               )}
 
