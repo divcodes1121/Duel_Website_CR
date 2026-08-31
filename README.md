@@ -4096,31 +4096,56 @@ with no ring, and all seven dark bars match the landing bar exactly — 14/14.
 
 ### The closing band, and the scrollbar that went away
 
-**Nothing on the landing page is a written-down number.** The reference mock
-ends with "2.31M+ battles analysed" over a sparkline; this ends with a histogram
-of the real card list, counted from `CARDS` at render time. If a card is added
-the chart moves on its own. That restraint is the whole point of a trust
-section — one that opens with a fabricated figure is worse than none, and this
-one has to survive a reader checking it.
+**The band is a COMING SOON placeholder now**, and that is the fifth thing it
+has been. The four before it are all worth keeping, because none of them was
+replaced for the same reason:
 
-**The three claims beside it are gone.** They were properties of how the thing
-is built — "read-only", "measured, or blank", "every card" — each true and each
-checkable, and together they read as a compliance notice at the foot of a page
-about Clash Royale. A trust badge is the least interesting thing you can put
-there.
+1. **Three claims about the site** — "read-only", "measured, or blank", "every
+   card". Each true and each checkable, and together a compliance notice at the
+   foot of a page about Clash Royale. A trust badge is the least interesting
+   thing you can put there.
+2. **Ten card facts, three shuffled per visit, plus a histogram of every card
+   by elixir.** Every figure *counted* from `CARDS` at render time rather than
+   written down, so the chart moved on its own when a card was added and there
+   was no fabricated number anywhere on the page — the reference mock's "2.31M+
+   battles analysed" was deliberately never built. What did for this was
+   **position, not accuracy**: a reader who has passed the hero, seven
+   analytics blocks and four tool panels has finished reading, and a second
+   dense block of statistics at the end asks them to start again.
+3. **A painted landscape with the water simulation running over it.**
+4. **The same painting with COMING SOON set into it.**
 
-What replaced them is **card facts**: ten of them, three shown, shuffled per
-visit, and every one *counted* from the shipped card list rather than written
-down. That is the same rule the band always had, applied to something worth
-reading. Three drafts ended on a sentence that was not counted from anything
-("heavier than almost anyone plays", "most cycle decks are built around one");
-those stop at the count now, because a fun fact that turns out to be wrong is
-worse than no fun fact.
+**The picture came back out because of what ended up above it.** Four painted
+banners now sit directly above this in the same column, so a fifth full-bleed
+painting is not a finale — it is one more of them, and the page ends by
+repeating itself. That only became visible after the tool panels became
+banners; it was a good idea in a column that no longer existed. Bare, it reads
+as what it is: a space that is not filled yet.
 
-**The chart is a histogram, so height carries the value and colour carries
-nothing.** One flat hue, no legend (the title names the series), the count
-printed above the tallest bar only, and the whole column as the hit area rather
-than the 30px bar.
+**`--bg-1` is the whole theme trick.** It is black on dark and near-white on
+light, so a single declaration gives a dark ground with light type and a light
+ground with dark type, and there is no `[data-theme]` branch anywhere in the
+file. It is also the top bar's fill, so the page opens and closes on the same
+value. Deliberately *not* the glass fill the panels use — glass is for a
+surface with something on it, and the point of this one is that it is empty.
+The box is `min-height: 22rem` with `18px` and `--glass-stroke`, which measures
+identically to a tool panel's edge in both themes: a placeholder that invents
+its own border reads as a different kind of object rather than as an empty one
+of these.
+
+Two consequences worth knowing. **`src/three/WaterBand.tsx` is now
+unreferenced** — left in the tree rather than deleted, since it only ever
+loaded through the dynamic import that used to be here and costs nothing
+sitting there. And **the Supercell Fan Content attribution was removed from
+this band** on request; it survives in `ProContact.tsx` and the field book
+footer, but both are behind a click, so there is no attribution on the landing
+page itself. That was flagged to the account holder and is their call.
+
+**If anything data-driven ever returns here, the old rule comes back with it:**
+never a written-down figure, and a fact must stop at what is counted. Two
+drafts ended on sentences derivable from nothing — "heavier than almost anyone
+plays", "most cycle decks are built around one" — and a fun fact that turns out
+to be wrong is worse than no fun fact.
 
 **The scrollbar is hidden in both themes, and nothing replaces it.** There was
 briefly a travelling glow on dark, fed by a `--scroll-progress` custom property.
@@ -4389,6 +4414,11 @@ on a single-cut display face. The ⌘K chip became the submit button, and the
 doubled focus box (wrapper ring + inner outline) collapsed to one indicator.
 
 ### 20. A closing band, and three rounds of colour correction
+
+*(Superseded: the band is a COMING SOON placeholder as of 2026-09-01 — see
+"The closing band, and the scrollbar that went away" above for the full
+sequence and why each version went. The colour-correction rounds below still
+apply to the page.)*
 
 The page got an ending: three checkable claims and a histogram of the real card
 list, counted at render time — no invented "battles analysed" figure anywhere.
@@ -7619,8 +7649,8 @@ masters that nobody had noticed.
 `public/assets/panels/team-analysis.webp`. Nothing imports the image and no
 manifest lists it, the same arrangement the field book's plates use. A named
 file that does not exist yet falls back to the card trio, so a panel can be
-given a banner *before* the art is drawn and improves the moment it lands. The
-other three convert one line at a time.
+given a banner *before* the art is drawn and improves the moment it lands. All
+four are converted; the fallback is what a fifth panel would land on.
 
 Five things this cost, each of which was a wrong first attempt:
 

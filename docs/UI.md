@@ -664,6 +664,14 @@ below: **match the hashed prefix, never a bare substring.**
 
 ## Water under the closing band
 
+> **Not currently rendered (2026-09-01).** The closing band is a plain COMING
+> SOON placeholder, so `src/three/WaterBand.tsx` has no caller. The file is
+> kept rather than deleted — it only ever loaded through a dynamic import, so
+> an unreferenced copy ships nothing, and the notes below are the reason it is
+> worth keeping. If it comes back, note that its host needs `position:
+> relative` and that the additive blend below assumes something opaque behind
+> it. Everything else here still describes the file as it stands.
+
 Adapted from ThreeUI's `ElementsCollection` / Water. What came across is the
 technique: a ping-pong wave equation on a float target, then a pass that reads
 the height field's gradient to refract, shade crests and strike a specular
@@ -691,9 +699,10 @@ in light mode. Light mode also takes a much lower gain: on near-black a bright
 crest is a highlight, on a pale card the same value is a smear.
 
 **Additive over a transparent clear**, so the card's background shows through
-and `.copy` / `.figure` only need `z-index: 1` to stay on top. A negative
-z-index on the canvas would have put it behind the card's own background, where
-it would not be seen at all.
+and the content above it only needed `z-index: 1` to stay on top. (`.copy` and
+`.figure` were the closing band's two columns, and are gone with the card facts
+and the histogram.) A negative z-index on the canvas would have put it behind
+the card's own background, where it would not be seen at all.
 
 Lazy-loaded like everything else in `src/three/` — 6.6 kB, 2.8 kB gzipped, in
 its own chunk. It is at the very foot of the landing page and most visitors
