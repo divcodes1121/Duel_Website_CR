@@ -7565,13 +7565,54 @@ green that already ships. What a headless browser *can* check is which tiers
 render a badge, what it says and what its tooltip says, and that is 24/24 across
 anon, free, trial, pro and admin.
 
-### The landing panel is a banner
+### The landing panels are banners
 
 The four tool panels on the landing screen used to be a text half and three
-floating card images on a plain surface. Team Analysis is a **painted banner**
-instead: the art is not half the panel, it *is* the panel — edge to edge, corner
-to corner, with the copy set on top of it. That is the difference between a card
-with a picture in it and a poster.
+floating card images on a plain surface. **All four are painted banners now**
+(2026-08-31): the art is not half the panel, it *is* the panel — edge to edge,
+corner to corner, with the copy set on top of it. That is the difference between
+a card with a picture in it and a poster. Masters live in `assets/panels/`, the
+served WebP is built by `scripts/build-panel-art.py`, and the files in `public/`
+are never hand-edited.
+
+Five things the second, third and fourth banner taught that the first could not,
+all of them the kind of bug that cannot exist until there is more than one:
+
+**The accent colour was hardcoded to the first banner's red.** With one banner
+it looked correct. The second would have printed its title word in the first
+panel's colour. `data-banner` carries the banner's *name* now rather than an
+empty flag, and each panel's accent, framing and veil are addressed by it —
+because all three are properties of the *picture*, not of banners in general.
+
+**The accent belongs to the picture, not to the tool's hue.** Counter Palette's
+identity colour is blue and its banner is a golden sunset; a blue word set on it
+reads as having come from somewhere else. Each accent is sampled from its own
+art and then split into an ink and a fill, because off-neutral no single value
+does both jobs — gold is the extreme case, at **8.53:1** as ink on the scrim and
+**2.32:1** with white on it as a button.
+
+**An unflipped banner needs the opposite pin.** The copy is capped at 34rem and
+pinned to the *end* of its track, which pushes it out to the panel's edge when
+the copy sits right — and pulls it *in* to the centre line when the copy sits
+left. Same lever, wrong end. The two unflipped panels restate it as `start`.
+
+**The crop is vertical, and it is easy to get backwards.** The panel's box is
+4.0:1 at a 1440 window and the art is ~2.9:1 — the *box is flatter*, so `cover`
+fills the width and the height is what overflows. Nothing is cut off the sides,
+and a horizontal `object-position` does nothing at all on the desktop panel.
+That cost a round of wrong framing, with a skeleton decapitated for it. On a
+phone the panel is roughly square and the axes *swap*: two thirds of the width
+goes instead, and the horizontal value becomes the one that matters. Every rule
+is written `right <n>%` for that reason — inert at one width, load-bearing at
+the other.
+
+**Generated art arrives letterboxed, and the bars are counted in the ratio.**
+One master came in at 1774x887 (2.00:1) with 132px of black top and bottom; the
+picture inside it is 2.84:1. Trusting the file's own dimensions would have
+reported 55% of the height cut when the truth was 36%, and framed the panel to a
+picture a fifth taller than the one actually in it. The build script trims solid
+black edges automatically — and running it found bars on three of the four
+masters that nobody had noticed.
 
 **The filename is the whole wiring.** A `FEATURES` entry gains one line —
 `banner: 'team-analysis'` — and the slot asks for
@@ -7638,8 +7679,68 @@ to be restated inside the phone block. It is the same class of trap as the `1fr`
 / `minmax(0, 1fr)` note already in this file: a rule that looks overridden and is
 not. Fixed, the panel is 378px with a five-line body.
 
-Weight added: 59 kB for the font and 159 kB for the banner, both served files,
-neither in the JS bundle.
+#### The veil is solved, not chosen
+
+Light copy on a painting needs contrast, and there are exactly two places to get
+it: darken the whole half the words sit on, or darken the few pixels around each
+letter. The gradient does the first and it is expensive — every point of
+contrast it buys is paid for by the art going dimmer *everywhere*, including the
+parts nobody reads over.
+
+One veil for four pictures is therefore the wrong shape for the problem, because
+how much veil buys a given contrast depends entirely on how bright the painting
+underneath happens to be. Each banner's gradient is now the lightest that holds
+`#f6f7f8` over the **worst pixel anywhere in that banner's copy half**, computed
+by compositing the gradient over the actual art rather than judged by eye. The
+spread is the whole argument: the P.E.K.K.A night scene gives up **0.44** of
+alpha and still measures 5.5:1 — its veil was hiding a painting and buying
+nothing — while the hog rider's sunset could only give up 0.04 at the same
+floor.
+
+Then the **halo** moved the job to the letters: a three-layer `text-shadow`, 2px
+for the edge, 12px for a local ground, 30px so the glyph is not cut out of the
+image. That paid for a second lift on three of the four. The ground alone now
+measures 2.6-3.2:1 on those, *below* the 4.5 floor, while the glyphs sit at
+10.4-11.5:1. That is the deliberate trade: contrast bought locally instead of by
+dimming the picture, and the copy ends up more readable than it was, not less.
+
+**If any of this art is redrawn, re-solve its row.** A brighter picture under an
+unchanged veil does not present as a contrast bug — it presents as art that
+looks fine and text that looks thin.
+
+Two probes lied along the way, both worth recording. Sampling pixels *around*
+text reads the text: one pass reported the brightest background as
+`rgb(246,247,248)`, which is the ink itself, and a second, after masking that
+out, reported `rgb(200,200,200)` — an antialiased glyph edge. Compositing the
+gradient over the art has no text in it at all and is the only reliable form.
+And a luminance figure quoted with some confidence (0.564, "an order of
+magnitude brighter than the others") came from dividing an 80x40 sample by 1600
+instead of 3200; it printed `rgb(260,183,54)`, and there is no 260. The shipped
+values were unaffected because they came from the per-pixel solve, but the
+evidence given for them was wrong.
+
+#### The panel height, and an approach that was built and thrown away
+
+The panel is fixed at **22rem** and the art crops to it. Both directions were
+built and looked at. Giving the panel the picture's own ratio does show every
+pixel — and makes it 487px tall at a 1440 window against the 351px the plain
+panel stands at. Three posters at half a screen each turn a list of what the
+site does into a gallery you scroll past, so the height stays and the crop is
+accepted. Keeping every banner near the same ratio (all four are 2.89-2.96:1) is
+what makes that work: they crop identically, so the column reads as one set. If
+nothing should ever be cropped, that is a request to the *art* — 4.45:1 — and
+not to the stylesheet.
+
+Before the art was redrawn wider, a third option was built: widen the *canvas*,
+keeping the picture whole on one side and filling the rest with its own ground,
+mirrored, blurred and darkened with distance. It was rejected on sight, and the
+reason generalises. A mirrored crowd is a crowd with a seam down it; and on art
+whose subject fills the frame — roses edge to edge — mirroring produces more
+*subject* rather than more ground, so a second skeleton hand turned up under the
+body copy. Blur does not fix that, it only turns a duplicate into a smear.
+
+Weight added: 59 kB for the font and 156-233 kB per banner, all served files,
+none in the JS bundle (main is 337.41 kB gzip).
 
 ### Who can open it, and why the trial includes it
 

@@ -1163,12 +1163,17 @@
 /* A full-width panel per built tool — the shape the old landing used, back on
    the home screen and clickable end to end. */
 .toolPanel {
+  /* THE PADDING IS A PAIR OF VARIABLES because a banner has to BLEED past it,
+     and a hard-coded negative margin that must agree with a hard-coded padding
+     is two numbers that drift. One declaration, read by both. */
+  --tool-pad-y: 2rem;
+  --tool-pad-x: 2.2rem;
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   gap: 1.5rem;
   align-items: center;
   width: 100%;
-  padding: 2rem 2.2rem;
+  padding: var(--tool-pad-y) var(--tool-pad-x);
   border-radius: 18px;
   border: 1px solid var(--glass-stroke);
   text-align: left;
@@ -1391,13 +1396,29 @@
  *      always cropped. Pinned left, so the character stays in frame and the
  *      emptier side falls under the copy.
  */
+/* THE PANEL STANDS AT A FIXED HEIGHT AND THE ART CROPS TO IT.
+ *
+ * Both directions have now been built and looked at, so the trade is known
+ * rather than assumed. Giving the panel the picture's own ratio does show every
+ * pixel — 487px tall at a 1440 window, against the 351px the plain panel stands
+ * at — and that is simply too much of the page for one tool panel. A landing
+ * screen is a list of what the site does; three posters half a screen each
+ * turns it into a gallery you scroll past.
+ *
+ * So the height is fixed and the crop is accepted, and the pictures are drawn
+ * for it: all three banners are ~2.9:1, they crop identically, and the framing
+ * rules below decide what each one spends its loss on. 22rem is 352px, which is
+ * where the plain panels land with their own content — a matched number, not a
+ * designed one.
+ *
+ * If nothing should ever be cropped, that is a request to the ART, not to this
+ * rule: at the widest the box is 4.45:1, and a banner drawn that wide fills it
+ * at every width with the panel exactly as tall as it is now. */
 .toolPanel[data-banner] {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  /* HALF THE POSTER'S HEIGHT. With the button on the chips row there is one
-     fewer row to hold, and the reference shape is a strip. */
-  min-height: 210px;
+  min-height: 22rem;
   /* The art carries the panel now; the glass fill would only show as a haze. */
   background: var(--bg-2);
 }
@@ -1423,12 +1444,63 @@
  * image reads as handed — no text, no faces that must look one way — which is
  * the condition that makes mirroring safe. Check that before adding a banner
  * that has lettering in it. */
+/* THE CROP IS VERTICAL, AND THAT IS THE WHOLE POINT OF THIS RULE.
+ *
+ * It is easy to get backwards, and I did. The panel's box is 4.0:1 at a 1440
+ * window and the art is 2.93:1 — the BOX IS FLATTER, so `cover` scales the
+ * picture to the width and the height is what overflows. 34% of the art's
+ * height is cut, and nothing at all is cut off the sides. A horizontal
+ * `object-position` on these banners does exactly nothing; the second value is
+ * the only one that does any work.
+ *
+ * So the framing is a vertical choice, and it is per-picture because it depends
+ * on where the subject's head is. Centred, the crop takes 17% off the top and
+ * 17% off the bottom — which decapitated the skeleton, whose skull sits high in
+ * its frame. Pulling the window up keeps the head and spends the loss on the
+ * ground-level roses instead, which is the right trade: nobody misses the
+ * bottom row of a hedge.
+ *
+ * THE HORIZONTAL VALUE IS `right` FOR A DIFFERENT WIDTH ENTIRELY. On the
+ * desktop panel it does nothing at all, because nothing is cropped sideways
+ * there. On a PHONE the panel is roughly square, so the box is narrower than
+ * the art and the axes swap: two thirds of the WIDTH goes, and centred that
+ * took the subject with it — the skeleton was a sliver at the edge of its own
+ * banner. Both banners are drawn with their figure at the right of the file
+ * (they have to be — see the mirroring note above), so `right` keeps it, and
+ * costs nothing at the width where it is inert.
+ *
+ * `data-banner` carries the banner's NAME so each picture can say where its own
+ * subject is. Set these by LOOKING at the rendered panel, at both widths — the
+ * numbers mean nothing on their own. */
 .toolBanner {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
+  object-position: right 50%;
+}
+
+/* The skull sits high and the roses run to the foot of the frame. */
+.toolPanel[data-banner='team-analysis'] .toolBanner {
+  object-position: right 12%;
+}
+
+/* The knight's horns run to the very top of his frame and the ground is loose
+   rubble, so the window sits high. */
+.toolPanel[data-banner='royal-duels'] .toolBanner {
+  object-position: right 0%;
+}
+
+/* The hog rider's raised hand and hammer reach the top of the frame, and the
+   ground under the charge is dust. Held high. */
+.toolPanel[data-banner='counter-palette'] .toolBanner {
+  object-position: right 16%;
+}
+
+/* The goblin's head is a little above centre and the ivy at the bottom is
+   worth keeping — it is the only thing giving the wall a floor. */
+.toolPanel[data-banner='decks-home'] .toolBanner {
+  object-position: right 42%;
 }
 
 .toolPanelFlip .toolBanner {
@@ -1464,6 +1536,80 @@
     rgb(8 6 10 / 0.78) 30%,
     rgb(8 6 10 / 0.35) 58%,
     rgb(8 6 10 / 0.12) 100%
+  );
+}
+
+/* ── THE VEIL IS PER-PICTURE, AND THE SPREAD IS ENORMOUS ──────────────────
+ *
+ * The two rules above were one veil for every banner, set dark enough for the
+ * worst of them. That is the wrong shape for the problem: what the copy needs
+ * is a CONTRAST, and how much veil buys that contrast depends entirely on how
+ * bright the painting underneath happens to be. One number for four pictures
+ * means three of them are darker than they need to be.
+ *
+ * Each of these is the LIGHTEST veil that still holds #f6f7f8 at 5:1 over the
+ * worst pixel anywhere in that banner's copy half — solved against the actual
+ * art, not chosen by eye. The floor is 5.0 where the requirement is 4.5; the
+ * extra half point is headroom for the art being redrawn without anyone
+ * re-running the check.
+ *
+ * The range tells the story. P.E.K.K.A is a night scene whose copy half is
+ * nearly black, so it gives up 0.44 of alpha and still measures 5.5:1 — the
+ * veil there was doing almost nothing except hiding a painting. The hog rider
+ * is a golden sunset, and it can only give up 0.04. Same requirement, an
+ * eleven-fold difference in what meeting it costs.
+ *
+ * IF YOU REDRAW ANY OF THIS ART, RE-SOLVE ITS ROW. A brighter picture under an
+ * unchanged veil is unreadable copy, and it will not look like a contrast bug —
+ * it will look like the art is fine and the text is thin. */
+.toolPanel[data-banner='royal-duels'] .toolBannerScrim {
+  background: linear-gradient(
+    to right,
+    rgb(8 6 10 / 0.46) 0%,
+    rgb(8 6 10 / 0.34) 30%,
+    rgb(8 6 10 / 0.04) 58%,
+    rgb(8 6 10 / 0.02) 100%
+  );
+}
+
+.toolPanel[data-banner='counter-palette'] .toolBannerScrim {
+  background: linear-gradient(
+    to right,
+    rgb(8 6 10 / 0.68) 0%,
+    rgb(8 6 10 / 0.56) 30%,
+    rgb(8 6 10 / 0.16) 58%,
+    rgb(8 6 10 / 0.03) 100%
+  );
+}
+
+/* THESE TWO LEAN ON THE HALO, the other two do not need to.
+ *
+ * Solved to 5:1 on the veil alone they sat at 0.77 and 0.80, which was still a
+ * heavy curtain over two paintings that have real detail in that half — a rose
+ * hedge and an ivy wall. With the halo doing the work at the letters, the veil
+ * only has to keep the half from glaring, so it gives up another 0.22.
+ *
+ * The hog rider stays the heaviest of the four because its art really is the
+ * brightest, but it lifts too once the halo exists — it only has to stop the
+ * half glaring, not carry the letters on its own. P.E.K.K.A is lightest at 0.46
+ * because its painting is nearly black to begin with. */
+.toolPanel[data-banner='decks-home'] .toolBannerScrim {
+  background: linear-gradient(
+    to left,
+    rgb(8 6 10 / 0.55) 0%,
+    rgb(8 6 10 / 0.43) 30%,
+    rgb(8 6 10 / 0.1) 58%,
+    rgb(8 6 10 / 0.02) 100%
+  );
+}
+
+.toolPanel[data-banner='team-analysis'] .toolBannerScrim {
+  background: linear-gradient(
+    to left,
+    rgb(8 6 10 / 0.58) 0%,
+    rgb(8 6 10 / 0.46) 30%,
+    rgb(8 6 10 / 0.12) 58%,
+    rgb(8 6 10 / 0.02) 100%
   );
 }
 
@@ -1504,6 +1650,15 @@
   width: 100%;
   max-width: 34rem;
   justify-self: end;
+}
+
+/* AND THE OTHER WAY ON A PANEL WHOSE COPY IS ON THE LEFT. The rule above is
+   written for the flipped panels, where the copy sits right; applied unchanged
+   to an unflipped one it pulls the block INWARD to the panel's centre line
+   instead of out to its edge — the same capped measure, pinned to the wrong
+   end of the track. */
+.toolPanel[data-banner]:not(.toolPanelFlip) .toolText {
+  justify-self: start;
 }
 
 /* THE KICKER IS GONE ON A BANNER. It said "Team Analysis" directly above a
@@ -1580,11 +1735,70 @@
  * pink panel. Maroon is graded to hold white text on a neutral surface; on
  * this image it read as a muddy slab beside actual roses.
  */
+/* ── A BANNER'S TWO COLOURS ARE NOT ONE COLOUR ────────────────────────────
+ *
+ * `--tool-solid` FILLS the button and carries white text. `--tool-accent` is
+ * INK — the title's accent word, set on the dark scrim. They were the same
+ * value on the first banner, which worked only because red is naturally dark
+ * enough to do both jobs: #e02840 reads 4.17:1 on the scrim AND holds white at
+ * 4.62:1.
+ *
+ * Green does not have that luxury. At the art's hue (80deg, a yellow-green) the
+ * single value that satisfies both lands on a muted olive — bright enough for
+ * the button to be readable means too light for white text on it, and dark
+ * enough for white text means a dull accent word. Splitting them is not a
+ * workaround; it is this project's own three-step rule stated again: fills wear
+ * a solid graded to hold `--on-solid`, ink wears a step graded for contrast at
+ * text size.
+ */
+/* Sampled from the sword's glow and the crystals at rgb(185,6,239), hue 286.
+   Split the same way green had to be: at this hue no single value both holds
+   white text and reads brightly on the scrim. The sampled colour IS the fill
+   (white on it, 4.84:1); the ink is that hue lifted (6.61:1 on the scrim). */
+/* GOLD, NOT BLUE. `data-hue` is the tool's identity colour in the rail and on
+   the plain panel, but a banner's accent has to belong to the PICTURE it is set
+   on — a blue word on a sunset is a word that came from somewhere else. Sampled
+   at rgb(233,153,26), hue 37.
+
+   The split is wider here than on any other banner: gold is the lightest hue in
+   the set, so the sampled colour reads beautifully as ink (8.53:1 on the scrim,
+   the best of the four) and is hopeless as a fill (white on it is 2.32:1, not
+   even half of what body text needs). The fill is the same hue taken right down
+   to #a16912 — the darkest it can be while still reading as gold. */
+.toolPanel[data-banner][data-hue='blue'] {
+  --tool-solid: #a16912;
+  --tool-accent: #e9991a;
+  --tool-hue: #f3c169;
+  --tool-edge: rgb(233 153 26 / 0.55);
+  --tool-wash: rgb(233 153 26 / 0.18);
+}
+
+.toolPanel[data-banner][data-hue='violet'] {
+  --tool-solid: #b906ef;
+  --tool-accent: #c86bff;
+  --tool-hue: #d7a6ff;
+  --tool-edge: rgb(185 6 239 / 0.55);
+  --tool-wash: rgb(185 6 239 / 0.2);
+}
+
 .toolPanel[data-banner][data-hue='pink'] {
+  /* Sampled from the roses at rgb(180,20,40) and lifted to clear the scrim. */
   --tool-solid: #e02840;
+  --tool-accent: #e02840;
   --tool-hue: #ff8fa0;
   --tool-edge: rgb(224 40 64 / 0.55);
   --tool-wash: rgb(224 40 64 / 0.18);
+}
+
+/* Deck's Home. The art's true green is hue 80deg — the foliage and the goblin
+   skin — and both values below sit on it. The fill is dark so white holds
+   5.43:1; the ink is bright so it reads 11.36:1 against the scrim. */
+.toolPanel[data-banner][data-hue='green'] {
+  --tool-solid: #4e7500;
+  --tool-accent: #a9d63f;
+  --tool-hue: #c3e57a;
+  --tool-edge: rgb(169 214 63 / 0.5);
+  --tool-wash: rgb(169 214 63 / 0.16);
 }
 
 /* NO PILL BEHIND THE TITLE. The solid fill is the strongest mark on an
@@ -1592,32 +1806,59 @@
    and the two grounds fight. The lettering carries itself here, with a shadow
    doing the job the fill used to — separating it from whatever the art happens
    to be behind any given letter. */
+/* THE HALO IS A LOCAL SCRIM, and it is what lets the veil lift.
+ *
+ * There are only two ways to keep light copy readable on a painting: darken the
+ * whole half it sits on, or darken the few pixels around each letter. The first
+ * is what the gradient does, and it is expensive — every point of contrast it
+ * buys is paid for by the art going dimmer everywhere, including the parts
+ * nobody is reading over.
+ *
+ * The halo costs nothing but the letter's own outline. Measured on the green
+ * and red banners: the veil can give up another 0.22 of alpha, which takes the
+ * ground behind the copy from 5.1:1 down to 2.6:1 on its own — and with the
+ * halo the glyphs still sit at 10.4:1. That is a much brighter picture and MORE
+ * readable text than before, not a trade.
+ *
+ * Three layers, and they do different jobs: a 2px shadow for the edge, a 12px
+ * one for the local ground, and a wide soft one so the letter does not look
+ * cut out of the image. */
 .toolPanel[data-banner] .toolTitle {
   padding: 0;
   border-radius: 0;
   background: none;
   text-shadow:
-    0 1px 0 rgb(0 0 0 / 0.55),
-    0 2px 14px rgb(0 0 0 / 0.75);
+    0 1px 2px rgb(0 0 0 / 0.95),
+    0 0 12px rgb(0 0 0 / 0.9),
+    0 0 30px rgb(0 0 0 / 0.7);
 }
 
 .toolTitleAccent {
   color: var(--tool-solid, var(--text));
 }
 
-/* The accent needs MORE separation than the white does, not less: it is the
-   darker of the two on the same ground. */
+/* THE ACCENT READS THE PANEL'S OWN INK, not a literal. It was hardcoded to the
+   first banner's red, which meant the second banner would have printed its
+   title word in the wrong panel's colour — a bug that only appears when there
+   are two of them, which is exactly the kind that ships.
+
+   It needs MORE separation than the white does, not less: it is the darker of
+   the two on the same ground. */
 .toolPanel[data-banner] .toolTitleAccent {
-  color: #e02840;
+  color: var(--tool-accent, var(--tool-solid, var(--text)));
   text-shadow:
-    0 1px 0 rgb(0 0 0 / 0.7),
-    0 2px 16px rgb(0 0 0 / 0.85);
+    0 1px 2px rgb(0 0 0 / 0.95),
+    0 0 12px rgb(0 0 0 / 0.95),
+    0 0 30px rgb(0 0 0 / 0.75);
 }
 
 /* The body copy is over the art too, so it gets the same treatment at a
    weight that suits its size. */
 .toolPanel[data-banner] .toolBody {
-  text-shadow: 0 1px 10px rgb(0 0 0 / 0.8);
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.95),
+    0 0 10px rgb(0 0 0 / 0.9),
+    0 0 22px rgb(0 0 0 / 0.65);
 }
 
 /* The art column becomes empty space the picture shows through. The card trio
@@ -1901,7 +2142,9 @@
 
   .heroScroll {
     overflow: visible;
-    padding: 2rem 1.25rem;
+    --tool-pad-y: 2rem;
+    --tool-pad-x: 1.25rem;
+    padding: var(--tool-pad-y) var(--tool-pad-x);
   }
 
   .heroInner {

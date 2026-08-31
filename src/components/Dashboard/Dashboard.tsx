@@ -226,34 +226,40 @@ const FEATURES = [
     hue: 'violet',
     icon: SwordsIcon,
     kicker: 'Royal Duels',
-    title: 'The duel deck forge',
+    title: 'The duel',
+    titleAccent: 'deck forge',
     body: 'Build all five battle decks side by side. Evolution, Hero and Wild slots are enforced by position, so an illegal lineup is impossible.',
     chips: ['Up to 5 decks · 40 cards', 'Evo · Hero · Wild', 'Live elixir stats'],
     cta: 'Open Duel Builder',
     hash: '#/builder',
     art: ['knight', 'archer-queen', 'golden-knight'],
+    banner: 'royal-duels',
   },
   {
     hue: 'green',
     icon: DeckIcon,
     kicker: "Deck's Home",
-    title: 'Your collection hall',
+    title: 'Collection',
+    titleAccent: 'Hall',
     body: 'A home for every deck you dream up — unlimited single decks that save themselves, each with the same slot rules as a duel deck.',
     chips: ['Unlimited decks', 'Auto-saving', 'Win-condition filter'],
     cta: 'Open Deck Builder',
     hash: '#/decks',
     art: ['mega-knight', 'golden-knight', 'bandit'],
+    banner: 'decks-home',
   },
   {
     hue: 'blue',
     icon: PaletteIcon,
     kicker: 'Counter Palette',
-    title: 'The archetype armory',
+    title: 'The archetype',
+    titleAccent: 'armory',
     body: 'Sort your arsenal into folders, one per archetype you face. Every counter deck stays filed, filterable and ready to deploy.',
     chips: ['Unlimited folders', 'Decks by archetype', 'Auto-saving'],
     cta: 'Open Counter Palette',
     hash: '#/palette',
     art: ['pekka', 'inferno-tower', 'skeleton-army'],
+    banner: 'counter-palette',
   },
   /* THE FOURTH PANEL, and the only one that is not a deck editor. It is here
      rather than in the analytics grid above because it takes an INPUT — two
@@ -1149,7 +1155,13 @@ export function Dashboard({
                     type="button"
                     className={`${styles.toolPanel} ${i % 2 === 1 ? styles.toolPanelFlip : ''}`}
                     data-hue={f.hue}
-                    data-banner={'banner' in f && !bannerFailed[f.kicker] ? '' : undefined}
+                    /* THE NAME, NOT AN EMPTY FLAG. Framing is a property of the
+                       PICTURE — which side of it may be cropped depends on where
+                       its subject stands — so the stylesheet has to be able to
+                       address one banner rather than all of them. */
+                    data-banner={
+                      'banner' in f && !bannerFailed[f.kicker] ? f.banner : undefined
+                    }
                     onClick={() => go(f.hash)}
                   >
                     {/* THE ART IS THE PANEL, not a child of one half of it. An
