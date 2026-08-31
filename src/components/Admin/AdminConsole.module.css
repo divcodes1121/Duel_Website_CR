@@ -495,6 +495,14 @@
   vertical-align: 1px;
 }
 
+/* THE OWNER READS AS AUTHORITY, NOT AS A WARNING. Gold, which this palette
+   already reserves for the one-of-a-kind, rather than the red an error would
+   wear — the row is not in trouble, it is simply above the controls. */
+.you[data-owner] {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  color: var(--gold);
+}
+
 .email {
   color: var(--text);
   overflow-wrap: anywhere;

@@ -248,8 +248,11 @@ booleans and never as values. It exists because "the JWT check is wrong" and
 "the function cannot see its configuration" are indistinguishable from outside,
 and one boolean settles it.
 
-**Database setup** is one file: run `supabase/001_accounts.sql` in the Supabase
-SQL editor. It is idempotent, so re-running it after an edit is safe.
+**Database setup** is two files, in order: `supabase/001_accounts.sql` then
+`supabase/002_owner.sql`, both in the Supabase SQL editor. Both are idempotent,
+so re-running either after an edit is safe. **002 is what stops an admin you
+promote from demoting you** — see
+[The owner is above admin](#the-owner-is-above-admin).
 
 **Note on the dev server host.** Vite binds IPv6 loopback here, so it answers on
 `http://localhost:5174` but *not* on `http://127.0.0.1:5174`. Scripts that hard-code
@@ -7438,6 +7441,59 @@ Verified 14/14 — both menu rows are buttons and open the dialog, the gate's
 and pro and admin are never shown an upgrade row at all. `ProLock` was skipped:
 reaching it needs analytics data the local API cannot serve, and that path was
 not changed.
+
+### The owner is above admin
+
+Promoting somebody to admin used to be an **irreversible act of trust**.
+`admin_set_role` in `001_accounts.sql` refuses exactly one thing — changing your
+*own* role — so every other row is fair game to any admin. The moment a second
+admin existed, they could run
+
+```sql
+select public.admin_set_role('<the owner>', 'free');
+```
+
+and the owner was out of the console. There is no way back from inside the
+product, because the screen that could undo it is the screen they were just
+locked out of; recovery meant the Supabase dashboard, which is the one place a
+promoted admin does not have.
+
+`supabase/002_owner.sql` closes it. **The owner is an email, not a column and
+not a role.** That distinction is the whole design: a column or a `role='owner'`
+value is *data*, and data is what the admin functions edit — any rule written in
+terms of a column has to be defended against the very functions it is trying to
+constrain, and the first mistake there hands over the thing being protected.
+`auth.users.email` is not ours to write: nothing in this schema touches it, and
+Supabase refuses an email change to an address that is already registered, so a
+second admin cannot take the owner's identity either. The cost is honest —
+moving ownership means editing that file and re-running it in the dashboard,
+which is the right amount of friction for the one account that cannot be taken
+from the inside.
+
+Three guarantees come out of it:
+
+- **`effective_tier` returns `admin` for the owner before it reads the profile
+  row at all.** That is the recovery property: if the stored role were ever
+  wrong — a bug, a bad migration, a hand-run `UPDATE` at 2am — the owner still
+  gets into the console to put it back.
+- **`admin_set_role` and `admin_end_trial` refuse an owner target**, guard first
+  so no later branch can reach around it, and raise rather than silently
+  doing nothing.
+- **The console marks the row** with a gold `owner` badge and disables its
+  controls. That is a courtesy on top of the database rule, never the rule —
+  the REST endpoint is public, and a guard that lives only in our JavaScript
+  stops our code and nobody else's.
+
+**Row-level security was already tight, and that is why guarding one function is
+enough.** `profiles` grants `UPDATE` on `(display_name, country, player_tag,
+onboarded_at, updated_at)` and nothing else — `role` and `trial_ends_at` are not
+writable over REST at any privilege the browser holds. `admin_set_role` is the
+only door.
+
+One migration note: `admin_list_users` had to be **dropped and recreated**, not
+replaced. It gains an `is_owner` column, and a `returns table` column list *is*
+the function's return type — `create or replace` cannot change one, so without
+the `drop function if exists` the file fails the second time it is run.
 
 ### A member stays a member when the three days end
 

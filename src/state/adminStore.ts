@@ -25,6 +25,11 @@ export interface AdminUser {
   created_at: string;
   last_sign_in_at: string | null;
   devices: number;
+  /** The one account no admin may touch — see `supabase/002_owner.sql`.
+   *  Optional because a database still on 001 does not send it, and a console
+   *  that crashes against an un-migrated schema is worse than one that shows a
+   *  control the server will refuse. */
+  is_owner?: boolean;
 }
 
 export interface Health {

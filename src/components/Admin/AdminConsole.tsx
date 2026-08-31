@@ -396,6 +396,18 @@ export function AdminConsole() {
                   {/* Says WHY the controls in this row are dead. A disabled
                       control with no explanation reads as a bug. */}
                   {u.id === meId && <span className={styles.you}>you</span>}
+                  {/* THE OWNER IS MARKED, not just protected. An admin who can
+                      see one row they cannot edit, and no reason why, will
+                      assume the console is broken. */}
+                  {u.is_owner && (
+                    <span
+                      className={styles.you}
+                      data-owner=""
+                      title="The owner. No admin can change this account's role or end its trial — the database refuses it, so promoting somebody can never cost you the console."
+                    >
+                      owner
+                    </span>
+                  )}
                 </td>
                 <td className={styles.email}>{u.email ?? '—'}</td>
                 <td>
@@ -414,12 +426,14 @@ export function AdminConsole() {
                   <select
                     className={styles.roleSelect}
                     value={u.role}
-                    disabled={busyId === u.id || u.id === meId}
+                    disabled={busyId === u.id || u.id === meId || !!u.is_owner}
                     onChange={(e) => void change(u, e.target.value)}
                     title={
-                      u.id === meId
-                        ? 'You cannot change your own role — the database refuses it, so a misclick cannot lock you out of this console'
-                        : 'Grant paid Pro, make an admin, or drop back to free'
+                      u.is_owner
+                        ? "The owner's role cannot be changed by anyone, including another owner session. Moving it means editing supabase/002_owner.sql and re-running it in the dashboard"
+                        : u.id === meId
+                          ? 'You cannot change your own role — the database refuses it, so a misclick cannot lock you out of this console'
+                          : 'Grant paid Pro, make an admin, or drop back to free'
                     }
                   >
                     <option value="free">free</option>
@@ -442,12 +456,14 @@ export function AdminConsole() {
                   <button
                     type="button"
                     className={styles.endTrial}
-                    disabled={busyId === u.id || u.id === meId}
+                    disabled={busyId === u.id || u.id === meId || !!u.is_owner}
                     onClick={() => void change(u, '__end_trial')}
                     title={
-                      u.tier === 'trial'
-                        ? 'End this trial now — they drop to their role immediately'
-                        : 'No trial running. This stamps the trial as spent so a later role change cannot hand them another one'
+                      u.is_owner
+                        ? "The owner's account cannot be modified from here"
+                        : u.tier === 'trial'
+                          ? 'End this trial now — they drop to their role immediately'
+                          : 'No trial running. This stamps the trial as spent so a later role change cannot hand them another one'
                     }
                   >
                     End trial
