@@ -7490,6 +7490,21 @@ onboarded_at, updated_at)` and nothing else — `role` and `trial_ends_at` are n
 writable over REST at any privilege the browser holds. `admin_set_role` is the
 only door.
 
+**Applied and verified on 2026-08-30.** The check returns five rows:
+`is_owner()` true, `effective_tier()` admin, and both `admin_set_role` and
+`admin_end_trial` refusing an owner target by name. It runs as the owner
+deliberately — `admin_set_role` checks the caller is an admin *before* it looks
+at the target, so with `auth.uid()` null it refuses as "not authorised" and
+proves nothing about the guard being tested. A different admin hits the same
+check: it sits before the self-check and does not depend on who is calling.
+
+One thing that cost a round, and it is a tooling lesson rather than a SQL one:
+**the Supabase dashboard's SQL editor does not display `raise notice` output.**
+The first verification script used notices, so it ran, proved the guards, and
+reported "Success. No rows returned" — indistinguishable from having done
+nothing at all. `supabase/002_owner_verify.sql` returns a table instead.
+Anything meant to be read through that editor has to.
+
 One migration note: `admin_list_users` had to be **dropped and recreated**, not
 replaced. It gains an `is_owner` column, and a `returns table` column list *is*
 the function's return type — `create or replace` cannot change one, so without
