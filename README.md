@@ -10277,7 +10277,7 @@ src/
                               path, and `icons.tsx` is stroked multi-element
       TopSearch.tsx           the tag field's adapter. Owns Enter-to-submit,
                               which the vendored component cannot do itself
-      ClosingBand.tsx         the page ending — ten card facts, three shown
+      ClosingBand.tsx         the page ending — a COMING SOON placeholder
                               shuffled, all counted from CARDS at render time
     VsMark/VsMark.tsx         the word VS standing between two decks, drawn large
     Analytics/
