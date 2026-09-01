@@ -1179,7 +1179,11 @@ export function Dashboard({
 
               {/* Also unheaded, for the same reason: each tool panel already
                   carries its own kicker, title and description. */}
-              <div className={styles.band} ref={toolsReveal}>
+              {/* `toolBand` is only about the PHONE: it makes the four banners
+                  equal-height boxes there, so the set crops its art the same
+                  way instead of each panel being as tall as its own chips
+                  happen to wrap. See the rule. */}
+              <div className={`${styles.band} ${styles.toolBand}`} ref={toolsReveal}>
               {featureItems.map((f, i) => {
                 const Icon = f.icon;
                 return (

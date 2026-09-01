@@ -3424,6 +3424,59 @@ already rendering as caps and still does. No stylesheet is uppercasing it, which
 is worth knowing before somebody goes looking for a `text-transform` that does
 not exist.
 
+### The four banners on a phone, and the three faults under one symptom
+
+They were visibly disproportionate at phone widths. Measured at 390px before:
+
+| | height | art shown | body |
+|---|---:|---:|---:|
+| Royal Duels | 298px | 42% | 3 lines |
+| Deck's Home | **518px** | **23%** | 8 lines |
+| Counter Palette | 298px | 41% | 3 lines |
+| Team Analysis | **567px** | **21%** | 8 lines |
+
+A 268px spread — one panel 90% taller than another, showing half as much of its
+own painting. After: **0px spread at 430, 390, 360 and 320**, with art shown
+uniform to within a point.
+
+The tell was that the two short panels were *byte-identical* at 298.4 and the
+two tall ones were the other pair. A difference that exact tracks a class, not
+content — and it did: **the flipped pair kept the desktop two-column grid on
+every phone.** The phone block restates the single column for
+`.toolPanel[data-banner]`, which is specificity (0,2,0), but
+`.toolPanel[data-banner].toolPanelFlip` is (0,3,0) and still won.
+`grid-template-columns` measured `107.266px 154.359px` at a 390px viewport: the
+copy on Deck's Home and Team Analysis was crushed into **107px**. This is the
+same trap recorded a few paragraphs up, one level deeper — the first fix
+restated the attribute selector and stopped there. Both selectors, or neither.
+
+**`.band` was referenced and never written.** `Dashboard.tsx` wraps the analytics
+areas and the tool panels in `<div className={styles.band}>`, with a comment
+saying it "carries the same gap `.main` does, so wrapping changes the grouping
+without changing the spacing". There is no `.band` in `Dashboard.module.css`. So
+`styles.band` was `undefined`, the wrappers rendered with no class and
+`display: block`, and every child inside one lost the gap its siblings outside
+still had — **0px between all four painted banners, at 1440 as well as at 390**.
+Four full-bleed paintings meeting edge to edge read as one collage rather than as
+four panels, and on a phone, where each fills the screen, that was most of what
+looked wrong. It is a flex column with `gap: 1rem` now, which is `.main`'s own
+value, because the wrapper is supposed to be invisible to spacing.
+
+That one is worth generalising: **a CSS-module class that does not exist fails
+silently and looks like a design decision.** Nothing throws, nothing warns, the
+attribute is simply empty. It is worth sweeping every `styles.x` in a component
+against the classes its module actually defines.
+
+**Equal boxes are the last part.** With `min-height: 0` on a phone each stacked
+panel is exactly as tall as its own copy, so one extra chip row or title line
+made a panel 38px taller than its neighbours and cropped its art differently.
+`.band.toolBand { grid-auto-rows: 1fr }` sizes every row to the tallest. It costs
+the shorter panels a little empty ground, and on a banner empty ground is *more
+of the picture* — which is the thing being made uniform. Written as
+`.band.toolBand` rather than `.toolBand` on purpose: `.band` sets `display: flex`
+at the same specificity, and this file has now been caught three times assuming
+source order settles a tie.
+
 ### The display face is the landing screen's, not the whole app's
 
 That capital-forms property is exactly why it does not belong everywhere. On the

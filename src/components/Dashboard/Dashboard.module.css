@@ -599,6 +599,29 @@
   height: 0;
 }
 
+/* A WRAPPER MUST NOT CHANGE THE SPACING OF WHAT IT WRAPS, and this one did.
+ *
+ * The bands exist only to group a section with its panels so each gets ONE
+ * scroll reveal instead of one per card. The comment beside them in
+ * `Dashboard.tsx` says they carry "the same gap `.main` does, so wrapping
+ * changes the grouping without changing the spacing" — and the class was
+ * referenced and never written. `styles.band` was therefore `undefined`, the
+ * wrappers rendered with no class at all, and every child inside one lost the
+ * gap its siblings outside still had.
+ *
+ * Measured at 1440 AND at 390: **0px between all four painted tool banners**,
+ * at every width. Four full-bleed paintings meeting edge to edge read as one
+ * collage rather than as four panels, and on a phone — where each is tall and
+ * fills the screen — that is most of what made the strip look wrong.
+ *
+ * `1rem` is not a guess: it is `.main`'s own gap, which is what the wrapper is
+ * supposed to be transparent to. */
+.band {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 /* --------------------------------------------------------- hosted tool panel */
 
 /* The builder, Deck's Home and Counter Palette render in here. Same raised
@@ -2293,10 +2316,39 @@
      selector and therefore MORE SPECIFIC — so the banner's two-track rule won
      at every width, including 390px, and the copy was crushed into 107px and
      ran to twenty-three lines. Specificity beats source order, and a media
-     query does not change either. */
-  .toolPanel[data-banner] {
+     query does not change either.
+
+     AND THE FLIPPED VARIANT HAS TO BE RESTATED TOO — the same trap one level
+     further down, which the first fix walked straight past. Restating only
+     `.toolPanel[data-banner]` (0,2,0) leaves
+     `.toolPanel[data-banner].toolPanelFlip` (0,3,0) still winning, so Deck's
+     Home and Team Analysis — the two flipped panels — kept the DESKTOP
+     two-column grid on every phone. Measured at 390px before this line:
+     `grid-template-columns` resolved to `107.266px 154.359px`, their copy ran
+     to 8 lines against the other two's 3, and the panels stood 518 and 567px
+     against 298 — 90% taller, showing half as much of their own art. Both
+     selectors, or neither. */
+  .toolPanel[data-banner],
+  .toolPanel[data-banner].toolPanelFlip {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
+  }
+
+  /* EQUAL BOXES, so the four crop their art the same way.
+     With `min-height: 0` above, each stacked panel is exactly as tall as its
+     own copy — and the copy is not the same length in all four, so one extra
+     chip row or one extra title line made a panel 38px taller than its
+     neighbours and showed a visibly different slice of its own painting
+     (measured at 360px: heights 318.8 / 336.8 / 357.2, art shown 32-35%).
+     `grid-auto-rows: 1fr` sizes every row to the tallest, which costs the
+     shorter panels a little empty ground — and on a banner empty ground is
+     more of the picture, which is the thing being made uniform.
+     Written as `.band.toolBand` deliberately: `.band` sets `display: flex`
+     at the same specificity, and this file has already been bitten twice by
+     assuming source order settles a tie. */
+  .band.toolBand {
+    display: grid;
+    grid-auto-rows: 1fr;
   }
 
   /* The right-shift is a two-column move; stacked there is nothing to shift
