@@ -41,6 +41,7 @@ export function ResetPassword() {
   const email = useAccountStore((s) => s.email);
   const userId = useAccountStore((s) => s.userId);
   const ready = useAccountStore((s) => s.ready);
+  const authError = useAccountStore((s) => s.authError);
   const changePassword = useAccountStore((s) => s.changePassword);
   const cancelRecovery = useAccountStore((s) => s.cancelRecovery);
 
@@ -120,11 +121,29 @@ export function ResetPassword() {
 
           {noSession ? (
             <>
-              <p className={loginStyles.subtitle}>This reset link cannot be used</p>
+              <p className={loginStyles.subtitle}>
+                {/* "LINK", NOT "RESET LINK", WHEN SUPABASE TOLD US WHY. The same
+                    error redirect carries a lapsed sign-up confirmation as well
+                    as a lapsed recovery, and nothing in the URL distinguishes
+                    them — so claiming it was a reset link would be a guess
+                    printed as a fact. Without an error we DID arrive here on
+                    the reset route, so the narrower word is safe. */}
+                {authError ? 'This link cannot be used' : 'This reset link cannot be used'}
+              </p>
+              {/* SUPABASE'S OWN SENTENCE FIRST, because it is more specific than
+                  anything written here: "Email link is invalid or has expired"
+                  names the actual condition. Ours explains what to do about it. */}
+              {authError && <p className={styles.linkError}>{authError}</p>}
               <p className={styles.blurb}>
                 It may have expired, been used already, or been opened in a
                 different browser from the one that requested it. Ask for a new
                 link and open it in the same browser.
+                {/* THE PREFETCH CASE IS NAMED, because it is the one that looks
+                    like a bug in the site: a mail provider that scans links
+                    spends the single-use token before the reader ever clicks,
+                    so a brand-new link reports itself expired on first use. */}
+                {' '}A link can also be spent by an email provider scanning it,
+                in which case a fresh one usually works.
               </p>
               <button
                 type="button"

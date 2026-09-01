@@ -39,6 +39,19 @@ interface AccountState {
    * out, because the link that authorised it is single-use and already spent.
    */
   recovering: boolean;
+  /**
+   * What Supabase said went wrong with the link we were opened with, if
+   * anything — its own `error_description`, verbatim.
+   *
+   * IT EXISTS BECAUSE THE FAILURE WAS SILENT. A dead recovery link redirects
+   * with `?error=access_denied&error_code=otp_expired&error_description=…` and
+   * nothing read it, so the reader was dropped on the landing page with no
+   * explanation of why the link they had just clicked did nothing. An expired
+   * link is a completely ordinary event — mail scanners spend single-use
+   * tokens, and a second reset request invalidates the first — so it needs an
+   * answer rather than a shrug.
+   */
+  authError: string | null;
 
   init: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -73,6 +86,34 @@ interface AccountState {
  * The app routes on the hash, so a `#/reset` route is the signal we control and
  * the one that survives Supabase having already stripped its own parameters.
  */
+/**
+ * Supabase's own error, pulled off the URL it sent us back to.
+ *
+ * IT ARRIVES TWICE, in the query AND in the hash, and either may be the one
+ * present depending on the flow — so both are read. The description is
+ * form-encoded (`Email+link+is+invalid`), which `URLSearchParams` decodes
+ * including the pluses; `decodeURIComponent` alone would leave them.
+ */
+function authErrorInUrl(): string | null {
+  try {
+    const { search, hash } = window.location;
+    const fromHash = hash.includes('=') ? hash.slice(hash.indexOf('#') + 1) : '';
+    for (const raw of [search.replace(/^\?/, ''), fromHash]) {
+      if (!raw) continue;
+      const q = new URLSearchParams(raw);
+      const code = q.get('error_code');
+      const desc = q.get('error_description');
+      if (!code && !desc && !q.get('error')) continue;
+      /* Supabase's own sentence, because it is more specific than anything
+         written here could be — and when it is missing, name the code. */
+      return desc || code || 'That link could not be used.';
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function recoveryInUrl(): boolean {
   try {
     const { search, hash } = window.location;
@@ -96,6 +137,7 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
   tier: 'free',
   evicted: false,
   recovering: false,
+  authError: null,
 
   async init() {
     if (!supabase) {
@@ -110,6 +152,13 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
        ourselves closes that race; the listener catches the slower case. Neither
        alone was reliable. */
     if (recoveryInUrl()) set({ recovering: true });
+
+    /* A FAILED LINK IS ROUTED TO THE RESET SCREEN TOO, because that is the only
+       screen that explains one. Without this the reader lands on the landing
+       page and the error sits unread in the address bar — which is the same
+       class of silent failure as the original bug, just one step earlier. */
+    const linkError = authErrorInUrl();
+    if (linkError) set({ authError: linkError, recovering: true });
 
     const { data } = await supabase.auth.getSession();
     const user = data.session?.user ?? null;
@@ -313,7 +362,7 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
    * know. Dropping the session is the only honest exit.
    */
   async cancelRecovery() {
-    set({ recovering: false });
+    set({ recovering: false, authError: null });
     await get().signOut();
   },
 
@@ -331,6 +380,9 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
         .eq('kind', deviceKind());
     }
     await supabase.auth.signOut();
-    set({ userId: null, email: null, profile: null, tier: 'free', evicted: false, recovering: false });
+    set({
+      userId: null, email: null, profile: null, tier: 'free',
+      evicted: false, recovering: false, authError: null,
+    });
   },
 }));

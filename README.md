@@ -688,6 +688,47 @@ and the reason they mistype the confirmation box. The strength meter beside it
 argues for a long passphrase, and a long passphrase typed blind is a long
 passphrase typed wrong.
 
+#### A failed link has to explain itself, and the Site URL has to be real
+
+Two things that only showed up once the flow was live, one mine and one not.
+
+**Supabase's error was going unread.** A dead link redirects to
+`?error=access_denied&error_code=otp_expired&error_description=…` — in the query
+*and* in the hash — and nothing looked at it, so the reader landed on the
+landing page with the reason sitting in the address bar. That is the same class
+of silent failure as the original bug, moved one step earlier. `authErrorInUrl()`
+reads both places, and the reset screen shows Supabase's own sentence verbatim
+above our own explanation of what to do next.
+
+Three details in that:
+
+- `URLSearchParams`, not `decodeURIComponent` — the description is form-encoded
+  (`Email+link+is+invalid`) and only the former turns `+` back into a space.
+- **The heading drops the word "reset" when there is an error.** The same
+  redirect carries a lapsed *sign-up confirmation* as well as a lapsed recovery,
+  and nothing in the URL distinguishes them, so naming it a reset link would be
+  a guess printed as a fact.
+- **The mail-scanner cause is named in the copy**, because it is the one that
+  looks like a fault in the site and is not: a recovery token is single-use, and
+  Gmail and Outlook fetch links to scan them, so the scanner spends the token
+  and a brand-new link reports itself expired on the first human click.
+
+**And the Site URL was still `http://localhost:3000`** — Supabase's factory
+default, never changed. `redirectTo` is only honoured when it matches the
+redirect allowlist and **falls back to the Site URL silently** otherwise, so a
+production reset link sent people to a dead localhost port. That is
+configuration rather than code, it is one project-wide setting with nothing
+per-user about it, and it governs *every* auth email the project sends —
+including sign-up confirmation whenever that goes back on:
+
+| Authentication → URL Configuration | value |
+|---|---|
+| Site URL | `https://deckkies.com` |
+| Redirect URLs | `https://deckkies.com/**`, `http://localhost:5173/**` |
+
+It cannot be set from a checkout: only the publishable key lives here, and
+changing auth configuration needs the dashboard or a Management API token.
+
 #### What was verified, and what was not
 
 Thirty-one browser checks on the flow: a bare `#/reset` and an implicit-form
