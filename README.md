@@ -713,6 +713,29 @@ Three details in that:
   Gmail and Outlook fetch links to scan them, so the scanner spends the token
   and a brand-new link reports itself expired on the first human click.
 
+**Supabase overwrites the fragment, so `#/reset` never actually arrives.**
+Measured with a bogus token against `/auth/v1/verify` — safe, because an invalid
+token cannot be consumed and no mail is sent — reading only the `Location`
+header:
+
+```
+asked for   https://deckkies.com/#/reset
+came back   https://deckkies.com/#error=access_denied&error_code=otp_expired&…
+```
+
+Supabase builds `<redirect_to base>#<its own parameters>` and discards whatever
+fragment was there. **That makes the route in `redirectTo` decorative on
+arrival** — it survives only as somewhere to refresh once the app has put it
+back. Which is exactly why the three-way detection above is load-bearing rather
+than defensive: what actually catches a recovery is `type=recovery` in the hash
+on the implicit flow, the `PASSWORD_RECOVERY` event on PKCE where the code
+arrives in the query, and the error parameters on a failure. Relying on the path
+alone would have failed every time, on both the success and the failure route.
+
+That probe is also **how to read the allowlist and the Site URL from outside**,
+which `/auth/v1/settings` does not expose: point `redirect_to` at a host you know
+is not listed, and wherever the `Location` lands *is* the Site URL.
+
 **And the Site URL was still `http://localhost:3000`** — Supabase's factory
 default, never changed. `redirectTo` is only honoured when it matches the
 redirect allowlist and **falls back to the Site URL silently** otherwise, so a
