@@ -48,7 +48,7 @@ bot's SQLite files read-only.
 
 ---
 
-## Status — 2026-08-30
+## Status — 2026-09-01
 
 | | |
 |---|---|
@@ -84,8 +84,11 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,386 Python checks** across **38 suites**, **378 vitest** across 14 files, `tsc -b` and `npm run build` clean. The +43 are the password rules (27) and the device identity (16) |
-| shipped from | `main` at `03e891c`, deployed 2026-09-01 — the Counter Palette banner is a lava field, its veil re-solved 0.68 -> 0.42. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching — and this row was five commits stale before that endpoint was consulted, which is the argument for reading it rather than trusting the row |
+| UI — the landing banners | **fixed and uniform, 2026-09-01.** They were 90% apart on a phone — 298 / 518 / 298 / 567px, showing 21% to 42% of their own art — from three separate faults: the flipped pair kept the desktop two-column grid at every width (a specificity trap one level below the one already recorded beside it), `.band` was referenced in `Dashboard.tsx` and **never written**, so all four paintings met edge to edge at 1440 as well as 390, and each panel was as tall as its own copy. Now **0px spread at 430/390/360/320**. See [The four banners on a phone](#the-four-banners-on-a-phone-and-the-three-faults-under-one-symptom) |
+| UI — the display face | **scoped to the landing, 2026-09-01, 25/25 browser checks.** Bebas draws lowercase as capital forms, so every heading inside the product read as a poster. One declaration — `:root[data-app-inner] { --font-display: var(--font-body) }` — and the attribute is on `:root` rather than the shell because dialogs portal into `document.body` and inherit nothing from it |
+| Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
+| tests | **1,386 Python checks** across **38 suites**, **378 vitest** across 14 files, `tsc -b` and `npm run build` clean. Unchanged by the 2026-09-01 work, which is CSS, one effect and one JSX block — none of it in a tested unit, which is worth saying rather than implying coverage that is not there |
+| shipped from | `main` at **`ccd8c5d`**, deployed 2026-09-01 and **confirmed live by reading `/api/health`**, which reports the deployed commit. Three deploys that day: `b69db01` the Coach's narrow-it-down row, `c511188` the display-face split, `ccd8c5d` the banner fixes. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
@@ -11134,6 +11137,18 @@ a commit about something else — see
 **`.topActions` overflows its box at 390px** by 43px (278 into 235), noticed
 during the Team Analysis phone pass. Pre-existing; the phone pass dropped the
 notification bell specifically so this would fit, and it still does not.
+
+**No sweep has been run for CSS-module classes that do not exist**, and one of
+them had been live on the landing page for an unknown length of time.
+`styles.band` was referenced twice in `Dashboard.tsx` — with a comment
+describing what it did — and never written in `Dashboard.module.css`, so it
+evaluated to `undefined`, the wrappers rendered with no class, and the four tool
+banners lost their gap at every width. Nothing throws, nothing warns and
+`className` is simply empty, so **the failure looks like a design decision**;
+it was found by measuring a gap, not by reading. The check is mechanical —
+every `styles.x` in a component against the classes its own module defines —
+and it is worth doing once as its own pass. Whether there are others is
+currently unknown, which is the honest state of it.
 
 The remaining one needs 4.5:1. The fix is a token, not a layout — but it is a
 token shared across screens, so it is a palette decision rather than a bug fix,

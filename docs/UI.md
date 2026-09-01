@@ -897,6 +897,52 @@ This is the same family as the `auto`-track note recorded for the ranked-deck
 boards — *a track is sized by the widest thing anywhere in it* — with the extra
 wrinkle that `1fr` looks like it should already be flexible and is not.
 
+### A media query does not lower specificity, and the fix has to name every variant
+
+Recorded once already for `.toolPanel[data-banner]` beating `.toolPanel`. It
+came back on the same four panels, one level further down, because the first fix
+named one selector and the rule had two.
+
+The phone block restates a single column for `.toolPanel[data-banner]` —
+specificity **(0,2,0)**. The flipped variant is
+`.toolPanel[data-banner].toolPanelFlip` — **(0,3,0)** — and it kept winning, so
+the two flipped panels (`i % 2 === 1`: Deck's Home and Team Analysis) never
+stacked on a phone at all. Measured at a 390px viewport,
+`grid-template-columns` resolved to `107.266px 154.359px`: their copy ran in a
+**107px** column, wrapped to 8 lines against the other two's 3, and the panels
+stood 518 and 567px against 298.
+
+**The tell was the symmetry.** The two unflipped panels were byte-identical at
+298.4px and the two flipped ones were the tall pair. A difference that exact
+tracks a *class*, not content — if two panels agree to a tenth of a pixel and
+two others agree with each other, stop looking at the copy.
+
+The rule generalises: when a base rule has modifier variants, an override has to
+restate **every** variant or none of them. Grepping the selector you are
+overriding for other rules that also start with it is the cheap check.
+
+### A CSS-module class that does not exist fails silently
+
+`Dashboard.tsx` wrapped the analytics areas and the four tool panels in
+`<div className={styles.band}>`, with a comment beside it explaining that
+`.band` "carries the same gap `.main` does, so wrapping changes the grouping
+without changing the spacing". There is no `.band` rule in
+`Dashboard.module.css`.
+
+So `styles.band` was `undefined`, the wrapper rendered with no class at all and
+`display: block`, and every child inside it lost the gap its siblings outside
+still had — **0px between all four full-bleed painted banners, at 1440 as well
+as at 390**, for an unknown length of time.
+
+Nothing throws. Nothing warns. There is no build error and no console message;
+the attribute is simply absent. **That is what makes this class of bug
+dangerous: the result looks deliberate.** Four paintings meeting edge to edge
+reads as a designed collage rather than as a missing rule, and it was found by
+measuring a gap that should not have been zero, not by reading the code.
+
+The check is mechanical and has not been run: every `styles.x` referenced in a
+component, against the classes its own module defines. Worth one pass.
+
 ### Never make a child of the Dashboard `React.lazy`
 
 Not a rule about code splitting; a rule about this shell specifically. See
@@ -954,6 +1000,33 @@ fail.** Frames legitimately advance between that first reading and the moment
 the observer pauses the loop, so the two differ even when the gating is perfect.
 "Stopped" means the canvas does not change between two moments that are *both*
 after it went off-screen — take both readings there.
+
+### Two probes that graded the wrong elements, from the display-face split
+
+The question was "are the headings inside the app in the body face, and bold?".
+Both first answers were about elements that are not headings.
+
+**Sorting the display-face elements by font-size picks a decorative glyph.** The
+largest thing set in the display stack on `#/decks` is the **"+"** on the
+new-deck button — 22.4px, no weight of its own, and not a heading in any sense.
+It reported a bold failure on two entirely correct screens. Filter for text that
+contains actual words before ranking by size.
+
+**Matching on the computed font-family cannot work once the two faces are the
+same.** Inside the app `--font-display` *resolves to* the body stack, so
+"computed family starts with Inter" matches every paragraph on the page. The
+probe was quietly grading body copy — it failed on `"Unlock exclusive analytics
+and…"` at weight 400, which is correct body text doing exactly what it should.
+
+The reading that stays valid is **by selector**: walk `document.styleSheets`,
+collect the rules whose `font-family` names `var(--font-display)`, then
+`querySelectorAll` those. That asks the stylesheet which elements are headings
+instead of inferring it from what they currently look like — and inference is
+exactly what breaks when the thing you changed is what they look like.
+
+General form, and it is the recurring one in this file: **when a change makes
+two things identical, any probe that told them apart by that property is now
+measuring nothing.** It will not error. It will return a confident number.
 
 ### A future-dated timestamp run through an "ago" formatter says "just now"
 
