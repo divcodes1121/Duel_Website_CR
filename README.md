@@ -7806,7 +7806,7 @@ Two values did, and both had to be re-solved from scratch:
 | | before | after |
 |---|---|---|
 | veil peak | 0.68, the heaviest of four | **0.42**, now the lightest |
-| accent ink | gold `#e9991a`, 8.53:1 | **`#ee6408`**, 6.21:1 |
+| accent ink | gold `#e9991a`, 8.53:1 | **`#ff7214`**, 7.37:1 |
 | accent fill | `#a16912`, white 4.62:1 | **`#c45207`**, white 4.61:1 |
 
 The accent was re-sampled off the art, and the sampling has a wrinkle the other
@@ -7819,13 +7819,30 @@ trusted on the new one. As with violet and green, no single value does both jobs
 the sampled colour *is* the ink at 6.21:1 and needs no lift, and the fill is the
 same hue taken down until white clears at 4.61:1.
 
-**This is also the first banner whose art shares its accent's hue** — an orange
-word over orange lava — so it needed one check the other three never did. The
-accent word sits at x 289-417 of a 538px copy box, outside the veil's darkest
-end, on different ground from the white copy. Measured there: median **4.89:1**,
-worst **1.00:1**, and the share of that region under 3:1 *improves*, **9.9% ->
-4.6%**. The halo carries that word, which is not a concession — the gold it
-replaced measured 1.72:1 worst and 5.43:1 median in exactly the same place.
+**This is also the first banner whose art shares its accent's hue family** —
+warm type over warm lava — so it needed one check the other three never did. The
+accent word sits at x 289-417 of a 538px copy box, *outside* the veil's darkest
+end, which means it is not on the same ground as the white copy and a
+whole-region figure does not describe it. Measured in its own box: worst
+**4.26:1**, median **6.08:1**, nothing under 3:1.
+
+The ink was then brightened on request, and this is where it landed: `#ee6408` ->
+**`#ff7214`**, the same hue 24 at the top of its value and eased slightly off
+full saturation, because a pure value lift alone (`#ff6b09`) buys 0.86 of a
+contrast point and is hard to see.
+
+**A gold was built along the way and turned down, and the reason is worth
+keeping.** Lava is a *ramp*, not a colour: its bright pixels run continuously
+from hue 8 through the orange mode at 24 up to yellow at 60, so the white-hot
+vein cores genuinely offer `#f7d033` at hue 48 — which measures **13.48:1** on
+the scrim, nearly double the shipped value, with 0.0% of its own ground under
+3:1. It was rendered at hues 44, 48 and 52 and rejected on *look*: the panel is
+asked to read as molten, and past about hue 44 the word stops being fire and
+becomes gold trim sitting on it. Contrast is not the only axis, and a future
+reader should not "fix" this back to the gold on the strength of that 13.48. A
+gold ink could not have taken the fill with it either — white on `#f7d033` is
+1.50:1, and the gold hue taken down until white clears 4.5 lands on `#8a7317`,
+an olive brown that reads as dirt on a lava field.
 
 ##### Quote a share, not a worst pixel
 

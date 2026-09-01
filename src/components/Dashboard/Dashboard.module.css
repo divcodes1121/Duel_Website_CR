@@ -1795,26 +1795,39 @@
    red that reads as brown once it is a single word.
 
    Re-sampled from scratch, because the gold that was here belonged to a sunset
-   that is no longer in the file. Nothing about the split's arithmetic changed:
-   the sampled colour IS the ink at 6.21:1 on the scrim, needing no lift — the
-   same place violet sits — and it is hopeless as a fill (white on it 3.25:1),
-   so the fill is that same hue taken down to #c45207, the lightest it can be
-   while white still clears at 4.61:1.
+   that is no longer in the file. The FILL is that dominant orange taken down to
+   #c45207, the lightest it can be while white still clears at 4.61:1 — the
+   sampled colour itself is hopeless as a fill, white on it being 3.25:1. The
+   INK is a separate point on the same ramp; see the rule below it.
 
-   THIS IS THE FIRST BANNER WHOSE ART SHARES ITS ACCENT'S HUE, an orange word
-   over orange lava, so the one check the other three never needed. Measured off
-   the composited panel: the accent's median ground is 4.89:1 and its worst is
-   1.00:1 — and that is FINE for the reason the halo below exists, which the
-   gold it replaces proves rather than excuses, having measured 1.72:1 worst and
-   5.43:1 median in exactly the same place. The share of the copy region under
-   3:1 for the accent actually IMPROVES, 9.9% -> 4.6%.
+   THIS IS THE FIRST BANNER WHOSE ART SHARES ITS ACCENT'S HUE FAMILY — warm
+   type over warm lava — so it needs one check the other three never did. The
+   accent word is the one run of copy set OUTSIDE the darkest end of the veil
+   (x 289-417 of a 538px box), so it does NOT sit on the same ground as the
+   white copy and has to be measured separately. If this art is ever redrawn,
+   measure both. */
+/* BRIGHTENED, NOT RE-HUED (2026-09-01). `#ee6408` -> `#ff7214`: the same
+   molten orange at hue 24, taken to the top of its value and eased a little off
+   full saturation, which is what actually reads as "brighter" — a pure value
+   lift from v 0.93 alone (`#ff6b09`) is only 0.86 of a contrast point and is
+   hard to see.
 
-   The accent word is also the one run of copy set OUTSIDE the darkest end of
-   the veil (x 289-417 of a 538 box), so if this art is ever redrawn, check the
-   accent separately from the white — they do not sit on the same ground. */
+   A GOLD WAS BUILT AND REJECTED, and it is worth recording because the art
+   supports it and it still was not wanted. Lava is a RAMP rather than a colour:
+   the bright pixels run continuously from hue 8 through this orange mode at 24
+   up to yellow at 60, so the white-hot vein cores genuinely offer `#f7d033` at
+   hue 48, which measured 13.48:1 on the scrim against this value's 7.37:1. It
+   was rendered at hues 44 / 48 / 52 and turned down: the panel is asked to look
+   molten, and past about hue 44 the word stops reading as fire and starts
+   reading as a gold trim on it. Contrast is not the only axis.
+
+   The lift is free on every axis that matters. On the scrim 6.21 -> 7.37:1, and
+   on the real composited ground inside the accent's own box worst/median
+   4.25/5.09 -> 5.04/6.04:1. Still nowhere near a fill: white on it is 2.74:1,
+   so `--tool-solid` stays the darker `#c45207` it was solved to. */
 .toolPanel[data-banner][data-hue='blue'] {
   --tool-solid: #c45207;
-  --tool-accent: #ee6408;
+  --tool-accent: #ff7214;
   --tool-hue: #fc9f60;
   --tool-edge: rgb(238 100 8 / 0.55);
   --tool-wash: rgb(238 100 8 / 0.18);
