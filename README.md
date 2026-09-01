@@ -7603,7 +7603,9 @@ floating card images on a plain surface. **All four are painted banners now**
 corner to corner, with the copy set on top of it. That is the difference between
 a card with a picture in it and a poster. Masters live in `assets/panels/`, the
 served WebP is built by `scripts/build-panel-art.py`, and the files in `public/`
-are never hand-edited.
+are never hand-edited. **One of the four has since been redrawn** — Counter
+Palette's is a lava field as of 2026-09-01, and re-solving its veil and its
+accent is the whole of what that cost.
 
 Five things the second, third and fourth banner taught that the first could not,
 all of them the kind of bug that cannot exist until there is more than one:
@@ -7615,11 +7617,14 @@ empty flag, and each panel's accent, framing and veil are addressed by it —
 because all three are properties of the *picture*, not of banners in general.
 
 **The accent belongs to the picture, not to the tool's hue.** Counter Palette's
-identity colour is blue and its banner is a golden sunset; a blue word set on it
+identity colour is blue and its banner is a lava field; a blue word set on it
 reads as having come from somewhere else. Each accent is sampled from its own
 art and then split into an ink and a fill, because off-neutral no single value
-does both jobs — gold is the extreme case, at **8.53:1** as ink on the scrim and
-**2.32:1** with white on it as a button.
+does both jobs — the gold that used to sit here was the extreme case, at
+**8.53:1** as ink on the scrim and **2.32:1** with white on it as a button.
+
+That gold is gone, along with the sunset it was sampled from — see
+[The Counter Palette banner is a lava field now](#the-counter-palette-banner-is-a-lava-field-now).
 
 **An unflipped banner needs the opposite pin.** The copy is capped at 34rem and
 pinned to the *end* of its track, which pushes it out to the panel's edge when
@@ -7736,7 +7741,10 @@ dimming the picture, and the copy ends up more readable than it was, not less.
 
 **If any of this art is redrawn, re-solve its row.** A brighter picture under an
 unchanged veil does not present as a contrast bug — it presents as art that
-looks fine and text that looks thin.
+looks fine and text that looks thin. One of the four has since been redrawn and
+this is what the instruction was worth: its veil moved further than any of the
+original four differ from each other. See
+[The Counter Palette banner is a lava field now](#the-counter-palette-banner-is-a-lava-field-now).
 
 Two probes lied along the way, both worth recording. Sampling pixels *around*
 text reads the text: one pass reported the brightest background as
@@ -7769,8 +7777,92 @@ whose subject fills the frame — roses edge to edge — mirroring produces more
 *subject* rather than more ground, so a second skeleton hand turned up under the
 body copy. Blur does not fix that, it only turns a duplicate into a smear.
 
-Weight added: 59 kB for the font and 156-233 kB per banner, all served files,
-none in the JS bundle (main is 337.41 kB gzip).
+Weight added: 59 kB for the font and 145-210 kB per banner, all served files,
+none in the JS bundle (main is 335.47 kB gzip).
+
+#### The Counter Palette banner is a lava field now
+
+*2026-09-01.* The third panel's art — the hog rider charging through a golden
+sunset — was replaced with a lava hound over a volcanic field. The complaint was
+simply that the banner was not good, and the measurements agree with it in a
+specific way worth writing down: it was the **brightest** art in the set, so it
+needed the **heaviest** veil of the four, and a 0.68 curtain over a golden sunset
+does not read as a golden sunset. It reads as brown mud with a pig in it.
+
+**Nothing about the framing arithmetic changed, because the new master is the
+same shape.** 2146x733, 2.93:1, against the 2.89-2.96 band the other three
+occupy — so it crops identically, the column still reads as one set, and
+`object-position: right 16%` survived unchanged. It was re-derived rather than
+inherited: the hound's lit crest starts 64px down the frame, the crop takes 32px
+off the top, and the crest is untouched until 32%. The served file went **233 ->
+145 kB**, because a dark picture compresses better than a bright one.
+
+**The file is still `counter-palette.png`.** These are named for the panel, not
+for the picture — the same reason `royal-duels` is not called `pekka` — so the
+wiring, which is nothing but the filename, did not move.
+
+Two values did, and both had to be re-solved from scratch:
+
+| | before | after |
+|---|---|---|
+| veil peak | 0.68, the heaviest of four | **0.42**, now the lightest |
+| accent ink | gold `#e9991a`, 8.53:1 | **`#ee6408`**, 6.21:1 |
+| accent fill | `#a16912`, white 4.62:1 | **`#c45207`**, white 4.61:1 |
+
+The accent was re-sampled off the art, and the sampling has a wrinkle the other
+three did not. A wide sample of every lit pixel centres on hue 14, `#a63411` — a
+dull red that reads as brown once it is a single word. The **bright vein cores**
+centre on hue 24, which is the colour a reader would name if asked what the
+picture is. That is the one sampled, and the method was checked first by
+re-deriving the hog rider's shipped hue 37 out of its own master before being
+trusted on the new one. As with violet and green, no single value does both jobs:
+the sampled colour *is* the ink at 6.21:1 and needs no lift, and the fill is the
+same hue taken down until white clears at 4.61:1.
+
+**This is also the first banner whose art shares its accent's hue** — an orange
+word over orange lava — so it needed one check the other three never did. The
+accent word sits at x 289-417 of a 538px copy box, outside the veil's darkest
+end, on different ground from the white copy. Measured there: median **4.89:1**,
+worst **1.00:1**, and the share of that region under 3:1 *improves*, **9.9% ->
+4.6%**. The halo carries that word, which is not a concession — the gold it
+replaced measured 1.72:1 worst and 5.43:1 median in exactly the same place.
+
+##### Quote a share, not a worst pixel
+
+The honest lesson of this replacement is a measurement one, and it was nearly
+got wrong in writing. A glyph-scale model of the copy half said the new ground
+"clears the 4.5 floor on its own", and a stylesheet comment claiming it was
+written before it was checked. Measured properly — in a browser, off the
+composited panel, with the copy element hidden so no glyph can be sampled, over
+the real 538x194 `.toolText` box:
+
+| | before | after |
+|---|---:|---:|
+| share of the ground under 4.5:1 | 2.38% | **0.08%** |
+| 1st percentile | 4.15:1 | **6.89:1** |
+| median | 11.76:1 | **14.82:1** |
+| single worst raw pixel | 3.74:1 | **2.58:1** |
+
+Thirty times less sub-floor ground, under a veil 0.26 of alpha *lighter* — both
+directions improved at once, which is what a dark painting buys and the whole
+reason the veil is solved per banner.
+
+And the last row is why the first three matter. The single worst pixel got
+**worse**, and it is not a regression: it is one specular speck, a tower light,
+where the old art had 2,479 pixels of broad bright wash. Attributing the
+sub-floor pixels to the copy that actually covers them settles it — of the new
+83, thirty-two are under chips and seventeen under the CTA, both of which carry
+their own fill so the art behind them is not load-bearing at all; twenty-three
+are under the haloed title, nine under no copy, and **two under body copy,
+against twenty-three before**. A lone pixel is not what makes a line hard to
+read. Quote the share and the percentile.
+
+One probe lied first, in the way this file keeps warning about. The before/after
+harness took the new art's variant as "leave whatever is loaded", which after
+the before pass is the *old* art — so both rows measured the same painting and
+only the ink appeared to move. Identical ground means from two different
+paintings is the tell, and both variants now name their art and their veil
+explicitly, with two assertions that fail the run if the swap did not take.
 
 ### Who can open it, and why the trial includes it
 

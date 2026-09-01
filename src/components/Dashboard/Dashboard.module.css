@@ -1491,8 +1491,12 @@
   object-position: right 0%;
 }
 
-/* The hog rider's raised hand and hammer reach the top of the frame, and the
-   ground under the charge is dust. Held high. */
+/* The lava hound's lit crest starts 64px down a 733px frame and the ground
+   under it is a lava field, so the window is held high — the same trade the
+   other three make, and measured rather than judged: at 16% the crop takes
+   32px off the top, which leaves the crest 32px of headroom, and spends the
+   loss on the bottom of the lava river instead. It survives to 32% before the
+   crest is touched at all. */
 .toolPanel[data-banner='counter-palette'] .toolBanner {
   object-position: right 16%;
 }
@@ -1572,13 +1576,40 @@
   );
 }
 
+/* RE-SOLVED FOR THE LAVA ART, and it is the largest move any of these four
+   has made: 0.68 -> 0.42. The rule above says to re-solve a redrawn banner,
+   and this is what that instruction is worth — the hog rider was a golden
+   sunset and the heaviest of the set, this is a volcanic night scene, and the
+   requirement did not change at all. Only the cost of meeting it did.
+
+   Measured, in the panel's real 4.00:1 box at a 1440 window, over the copy
+   half at glyph scale: the 5:1 solve is 0.47, and 0.42 is that less the halo
+   credit this panel already shipped with.
+
+   THE HONEST FIGURE IS A SHARE, NOT A WORST PIXEL, and getting that wrong
+   nearly put a false claim in this comment. Measured off the composited panel
+   in a browser with the copy hidden, over the real 538x194 .toolText box: the
+   share of that ground sitting under 4.5:1 goes 2.38% -> 0.08%, the first
+   percentile 4.15:1 -> 6.89:1 and the median 11.76:1 -> 14.82:1. Thirty times
+   less sub-floor ground, under a veil 0.26 of alpha LIGHTER — both directions
+   improved at once, which is what a dark painting buys and the whole reason
+   this veil is per-banner.
+
+   The single WORST pixel does get worse, 3.74:1 -> 2.58:1, and it is not a
+   regression: it is one specular speck — a tower light, a lava spark — where
+   the old art's 2,479 sub-floor pixels were a broad bright wash. Attributed by
+   what copy actually covers them, the new 83 are 32 under chips and 17 under
+   the CTA (both of which carry their own fill, so the art behind them is not
+   load-bearing at all), 23 under the haloed title, 9 bare, and TWO under body
+   copy — against 23 under body copy before. Quote the share and the
+   percentile here; a lone raw pixel is not what makes a line hard to read. */
 .toolPanel[data-banner='counter-palette'] .toolBannerScrim {
   background: linear-gradient(
     to right,
-    rgb(8 6 10 / 0.68) 0%,
-    rgb(8 6 10 / 0.56) 30%,
-    rgb(8 6 10 / 0.16) 58%,
-    rgb(8 6 10 / 0.03) 100%
+    rgb(8 6 10 / 0.42) 0%,
+    rgb(8 6 10 / 0.3) 30%,
+    rgb(8 6 10 / 0.04) 58%,
+    rgb(8 6 10 / 0.02) 100%
   );
 }
 
@@ -1755,22 +1786,38 @@
    Split the same way green had to be: at this hue no single value both holds
    white text and reads brightly on the scrim. The sampled colour IS the fill
    (white on it, 4.84:1); the ink is that hue lifted (6.61:1 on the scrim). */
-/* GOLD, NOT BLUE. `data-hue` is the tool's identity colour in the rail and on
-   the plain panel, but a banner's accent has to belong to the PICTURE it is set
-   on — a blue word on a sunset is a word that came from somewhere else. Sampled
-   at rgb(233,153,26), hue 37.
+/* MOLTEN ORANGE, NOT BLUE. `data-hue` is the tool's identity colour in the rail
+   and on the plain panel, but a banner's accent has to belong to the PICTURE it
+   is set on — a blue word on a lava field is a word that came from somewhere
+   else. Sampled at rgb(238,100,8), hue 24, off the LIT CORES of the hound's
+   veins: that is the colour a reader would name if asked what this banner is,
+   and the mid-tones a wider sample averages in (hue 14, #a63411) are a duller
+   red that reads as brown once it is a single word.
 
-   The split is wider here than on any other banner: gold is the lightest hue in
-   the set, so the sampled colour reads beautifully as ink (8.53:1 on the scrim,
-   the best of the four) and is hopeless as a fill (white on it is 2.32:1, not
-   even half of what body text needs). The fill is the same hue taken right down
-   to #a16912 — the darkest it can be while still reading as gold. */
+   Re-sampled from scratch, because the gold that was here belonged to a sunset
+   that is no longer in the file. Nothing about the split's arithmetic changed:
+   the sampled colour IS the ink at 6.21:1 on the scrim, needing no lift — the
+   same place violet sits — and it is hopeless as a fill (white on it 3.25:1),
+   so the fill is that same hue taken down to #c45207, the lightest it can be
+   while white still clears at 4.61:1.
+
+   THIS IS THE FIRST BANNER WHOSE ART SHARES ITS ACCENT'S HUE, an orange word
+   over orange lava, so the one check the other three never needed. Measured off
+   the composited panel: the accent's median ground is 4.89:1 and its worst is
+   1.00:1 — and that is FINE for the reason the halo below exists, which the
+   gold it replaces proves rather than excuses, having measured 1.72:1 worst and
+   5.43:1 median in exactly the same place. The share of the copy region under
+   3:1 for the accent actually IMPROVES, 9.9% -> 4.6%.
+
+   The accent word is also the one run of copy set OUTSIDE the darkest end of
+   the veil (x 289-417 of a 538 box), so if this art is ever redrawn, check the
+   accent separately from the white — they do not sit on the same ground. */
 .toolPanel[data-banner][data-hue='blue'] {
-  --tool-solid: #a16912;
-  --tool-accent: #e9991a;
-  --tool-hue: #f3c169;
-  --tool-edge: rgb(233 153 26 / 0.55);
-  --tool-wash: rgb(233 153 26 / 0.18);
+  --tool-solid: #c45207;
+  --tool-accent: #ee6408;
+  --tool-hue: #fc9f60;
+  --tool-edge: rgb(238 100 8 / 0.55);
+  --tool-wash: rgb(238 100 8 / 0.18);
 }
 
 .toolPanel[data-banner][data-hue='violet'] {
