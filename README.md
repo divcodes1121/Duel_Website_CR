@@ -84,7 +84,7 @@ bot's SQLite files read-only.
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
 | tests | **1,386 Python checks** across **38 suites**, **335 vitest**, `tsc -b` and `npm run build` clean. Every Python suite re-run on 2026-08-30 |
-| shipped from | `main` at `7515cd2`, deployed 2026-08-30 — Bebas Neue and the first banner panel. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching |
+| shipped from | `main` at `03e891c`, deployed 2026-09-01 — the Counter Palette banner is a lava field, its veil re-solved 0.68 -> 0.42. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching — and this row was five commits stale before that endpoint was consulted, which is the argument for reading it rather than trusting the row |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
 the prediction; the model layer may add a confidence *word* and a short list of
