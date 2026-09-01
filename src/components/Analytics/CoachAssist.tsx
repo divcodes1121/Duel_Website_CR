@@ -1191,6 +1191,15 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
         label={side === 'mine' ? mineLabel : theirsLabel}
         onBack={() => {
           if (side === 'theirs') return setStep({ kind: 'paste', side: 'mine', game });
+          /* BACKING OUT OF A NARROW-IT-DOWN RETURNS TO THE ANSWER IT CAME FROM.
+             `data` still holds the previous stage's result while these two
+             questions are being asked, so `game === data.stage + 1` is exactly
+             "this paste came from the button below the result, not from the
+             opening interview". Without it Back either re-asks a question
+             already answered (game 2) or drops the reader at question 2
+             (game 1) — both discarding a result that is still in hand, which
+             is the thing the button exists to avoid. */
+          if (data && game === data.stage + 1) return setStep({ kind: 'result' });
           if (game === 2) return setStep({ kind: 'paste', side: 'theirs', game: 1 });
           return setStep({ kind: 'stage' });
         }}
@@ -1326,6 +1335,41 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
           ))}
         </ul>
       )}
+
+      {/* THE DUEL ADVANCES FROM HERE, IT DOES NOT RESTART. Window 1 has had
+          this row since it shipped; this window did not, so the only way on
+          from an answer was "Start over" — which throws away both tags and
+          every deck already pasted to ask the same questions again, in the
+          middle of a duel with a clock on it. The interview is unchanged: this
+          re-enters it at the game the reader has just finished, so each round
+          costs the two decks that are actually new.
+
+          Both sides get asked, unlike Window 1's single reveal — a suggestion
+          has to know what YOU spent as well as what they did, since that is
+          what makes a deck illegal for you next game.
+
+          Capped at stage 2 because a duel is three games and the server takes
+          `m1,m2` / `o1,o2` — there is no game 4 to narrow to. */}
+      <div className={styles.nextRow}>
+        {data.stage < 2 && (
+          <button
+            type="button"
+            className={styles.primary}
+            onClick={() => {
+              const next = (data.stage + 1) as 1 | 2;
+              setGames(next);
+              setStep({ kind: 'paste', side: 'mine', game: next });
+            }}
+          >
+            {data.stage === 0
+              ? 'Game 1 finished — narrow it down'
+              : 'Game 2 finished — pick game 3'}
+          </button>
+        )}
+        <button type="button" className={styles.secondary} onClick={reset}>
+          {data.stage >= 2 ? 'Done — start over' : 'Exit'}
+        </button>
+      </div>
     </div>
   );
 }

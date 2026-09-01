@@ -2745,6 +2745,50 @@ The flow state lives in the component and nowhere else; the server holds nothing
 between calls. A reload therefore lands on question one rather than resuming a
 duel that has since finished.
 
+### A duel advances from the answer, it does not start over
+
+Both windows now end on the same row: a primary button that takes the duel
+forward one game, and a quiet way out beside it.
+
+```
+stage 0 result  ->  "Game 1 finished — narrow it down"
+stage 1 result  ->  "Game 2 finished — pick game 3"
+stage 2 result  ->  no advance; a duel is three games
+```
+
+**Window 1 has had that row since it shipped and Window 2 did not**, which made
+the two halves of one screen disagree about what an answer is for. The
+Suggestion's result offered only *Start over* — and start over means both tags
+and every deck already pasted are discarded, so a coach who had just watched
+game 1 end had to retype their own tag and re-paste decks the screen was still
+displaying. That is the wrong cost at the wrong moment: the interview is at its
+most expensive exactly when the duel is running and there is a clock on it.
+
+The button does not add a second flow. It re-enters the interview at the game
+just finished, so each round costs only the two decks that are genuinely new.
+`games` is set to the new stage and the existing paste machinery does the rest —
+`myPlayed.slice(0, game - 1)` already preserved earlier games, because it was
+written for the case where a reader answers "two games played" up front.
+
+**Window 2 asks for two decks per game where Window 1 asks for one.** A
+prediction only needs to know what *they* revealed; a suggestion also needs what
+*you* spent, because that is what makes a deck illegal for you next game. So the
+row re-enters at `side: 'mine'` and the existing mine → theirs → run chain
+carries on unchanged.
+
+**Back out of an advance and you land on the result you came from**, not on
+question two. `data` still holds the previous stage's answer while the two new
+questions are being asked, so `game === data.stage + 1` identifies "this paste
+came from the button" exactly, with no extra state to keep in sync. Without that
+test, Back re-asked a question already answered when advancing to game 2, and
+dropped the reader at the stage question when advancing to game 1 — in both
+cases throwing away a result that was still in hand, which is the thing the
+button exists to prevent.
+
+The cap is 2 because the server takes `m1,m2` / `o1,o2` and a duel is three
+games. There is no game 4 to narrow to, so at stage 2 the row carries only
+*Done — start over*, which is also the one place "the duel is over" gets said.
+
 ### What the result shows, and what it deliberately does not
 
 Two things were on the prediction screen and were taken off:
