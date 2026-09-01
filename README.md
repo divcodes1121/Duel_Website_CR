@@ -29,7 +29,8 @@ bot's SQLite files read-only.
 > service is not running", which remains the intended message rather than a crash.
 >
 > **Accounts are real.** Sign-up, sign-in, a three-day trial, per-feature gating,
-> one desktop and one mobile per account, and an admin console — on Supabase,
+> one desktop and one mobile per account, a working password reset and a
+> change-password dialog, and an admin console — on Supabase,
 > with Row Level Security. The twenty-account SHA-256 test gate is **deleted** —
 > store, bundled hashes, generator, login screen and the last consumer (the
 > Coach's proxy) all gone.
@@ -83,7 +84,7 @@ bot's SQLite files read-only.
 | Deck Counter | **draws the deck each player actually faces**, not the archetype's global representative. Three sightings before a list is named; `typical` otherwise |
 | retention | **304 days (10 months)**, set 2026-08-26. Projects to ~105 GB at steady state for the 3,278 tracked players |
 | H: | **unplugged 2026-08-26**, contents intact. Local collection stopped, both scheduled tasks disabled. It is the only rollback and holds 1 May – 1 Jun, which exists nowhere else |
-| tests | **1,386 Python checks** across **38 suites**, **335 vitest**, `tsc -b` and `npm run build` clean. Every Python suite re-run on 2026-08-30 |
+| tests | **1,386 Python checks** across **38 suites**, **378 vitest** across 14 files, `tsc -b` and `npm run build` clean. The +43 are the password rules (27) and the device identity (16) |
 | shipped from | `main` at `03e891c`, deployed 2026-09-01 — the Counter Palette banner is a lava field, its veil re-solved 0.68 -> 0.42. `/api/health` reports the deployed commit, so "did it land" has an answer rather than a guess about caching — and this row was five commits stale before that endpoint was consulted, which is the argument for reading it rather than trusting the row |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -254,6 +255,12 @@ so re-running either after an edit is safe. **002 is what stops an admin you
 promote from demoting you** — see
 [The owner is above admin](#the-owner-is-above-admin).
 
+Two verification scripts sit beside them and change nothing:
+`002_owner_verify.sql` proves the owner guards fire, and
+`003_device_limit_verify.sql` proves the two-devices-per-account cap is real —
+both **return rows**, because the dashboard's SQL editor does not display
+`raise notice` and a check whose output you cannot see is not a check.
+
 **Note on the dev server host.** Vite binds IPv6 loopback here, so it answers on
 `http://localhost:5174` but *not* on `http://127.0.0.1:5174`. Scripts that hard-code
 the IPv4 address get `ERR_CONNECTION_REFUSED` and look like the server is down.
@@ -290,6 +297,7 @@ open, so links and refreshes work.
 | `#/player/<tag>/coach` | **Coach Assist** — duel prediction and the next-deck suggestion |
 | `#/player/<tag>/<slug>` | Deck Analysis (a shell, no data yet) |
 | `#/signin` | Sign in / sign up, then the three-step onboarding form |
+| `#/reset` | Set a new password, at the end of a recovery link |
 | `#/admin` | The admin console. Not linked from anywhere a non-admin sees |
 
 The analytics areas are **Search Player · Top Meta Decks · Deck Analysis · Duel
@@ -512,10 +520,201 @@ of their own account on a flaky connection.
 Desktop versus mobile is decided by `pointer: coarse` or a 900px width. Coarse
 on purpose — a tablet counting as "mobile" is a judgement call, not a bug.
 
+**And it is decided ONCE, which it only became on 2026-09-01.** `deviceKind()`
+documented itself as "decided once" and was in fact recomputed on every call
+from a *live* media query, so narrowing a desktop window past 900px — a docked
+browser, a split screen, dev tools opened wide — flipped it to `mobile`
+mid-session. Everything keys on that value:
+
+- `checkDevice()` then looked up the **phone's** row, found a `device_id` that
+  was not its own, concluded it had been evicted, and signed the person out
+  saying they had signed in on another phone. Resizing a window is not signing
+  in on a phone.
+- `claimDevice()` reads the same value, so a narrowed desktop would **take the
+  phone's slot** and evict the actual phone. Two devices are allowed, and one of
+  them could evict the other by being resized.
+
+The fix is persistence rather than a better breakpoint — no threshold can be
+right, because the quantity being measured is not supposed to change. The kind
+is measured the first time a browser is asked and written to
+`dekkies-device-kind` beside the device id; a corrupt stored value is
+re-measured rather than trusted, since `kind` is constrained in the database and
+a junk value would simply fail to insert.
+
+The rules moved to **`state/deviceIdentity.ts`**, the third extraction of this
+kind after `tiers.ts` and `utils/format.ts` and for the same reason: they could
+not be tested at all while they sat beside a module that constructs a Supabase
+client at load. `accountStore` re-exports both functions, so no call site
+changed. Sixteen tests now cover it, including the resize case directly.
+
+**`supabase/003_device_limit_verify.sql` proves the cap against the real
+database.** It returns rows rather than `raise notice` — the lesson
+`002_owner_verify.sql` learned — demonstrates that a second desktop row raises
+`unique_violation` while an upsert *replaces* the holder, checks that an
+invented `kind` like `tablet` raises `check_violation`, refuses to run at all if
+the test account holds live device rows, and deletes what it inserted.
+
+One verification note, because it cost a round: **nothing calls `deviceKind()`
+for an anonymous visitor.** Only `claimDevice`/`checkDevice` do, and both need a
+session — so a probe that loaded a page and read `localStorage` got `null` on
+every check and was measuring the absence of a signed-in user rather than the
+device rule. Under `vite dev` the page can `import('/src/state/deviceIdentity.ts')`
+and call it directly.
+
 The device id is a `crypto.randomUUID()` in `localStorage`, not a fingerprint.
 It survives a refresh, it is per-browser-profile, and clearing site data resets
 it, which is the honest behaviour. Fingerprinting would be harder to shake off
 and is not something to build into a deck site.
+
+### Passwords could not be changed at all, and the reset link was a dead end
+
+*2026-09-01.* `updateUser` — the only Supabase call that can set a password —
+appeared **nowhere in the repository**. There was no change-password control on
+any route, and the "Forgot your password?" link that had shipped since the auth
+work was a dead end that looked exactly like a working feature.
+
+**What the old flow actually did.** `resetPasswordForEmail` was called with
+`redirectTo: window.location.origin`, so the emailed link landed on `/`. The
+client has `detectSessionInUrl: true`, which exchanged the recovery token for a
+**real session**. And `onAuthStateChange((_event, session) => …)` discarded the
+event name, so `PASSWORD_RECOVERY` was handled identically to an ordinary
+sign-in. The reader was therefore dropped on the landing page, signed in, with
+their old password still in force and nothing anywhere able to change it. They
+asked to reset a password and got logged in instead.
+
+**The discarded event name was the fix.** Supabase distinguishes a recovery
+session; throwing that distinction away is the whole bug.
+
+Both doors now exist and share one `changePassword` in the store and one
+`passwordRules` module, so they cannot drift into disagreeing about what an
+acceptable password is:
+
+| | where | |
+|---|---|---|
+| **Reset** | `#/reset`, at the end of an emailed link | `Auth/ResetPassword.tsx` |
+| **Change** | the account menu, while signed in | `Auth/ChangePassword.tsx` |
+
+#### The rules are their own module, with no imports
+
+`state/passwordRules.ts` is the **third** file extracted on this principle,
+after `tiers.ts` and `utils/format.ts`, and for the identical reason: the rule
+used to be an inline `password.length < 8` inside `AuthScreen`, so the one part
+of the auth flow most worth testing exhaustively could not be imported by a test
+without constructing a Supabase client that wants a native WebSocket. Twenty-
+seven tests now pin it.
+
+**The ceiling is 72 *bytes*, not 72 characters**, and that is the interesting
+rule. bcrypt truncates there, and past the cut the tail is silently ignored —
+which would mean two different passwords both signing in. Twenty four-byte emoji
+is eighty bytes on a twenty-character string, so a password can be well over the
+line while looking well short of it.
+
+#### The recovery signal is read twice, on purpose
+
+`detectSessionInUrl` can finish its exchange during module load — *before*
+`onAuthStateChange` is subscribed — at which point the `PASSWORD_RECOVERY` event
+is delivered to nobody. So the flag is set from the event **and** from reading
+the URL, and `redirectTo` now names an explicit `#/reset` route as a third
+fallback that survives a refresh.
+
+**A bare `?code=` must not be read as a recovery.** An OAuth sign-in comes back
+with a `code` too, and treating that as one would trap a Google user on a
+set-a-new-password screen they cannot leave. Either `type=recovery` or the
+`#/reset` route has to say so.
+
+**The recovery route outranks onboarding** in `App.tsx`, which is the ordering
+that makes it work: a reader who never filled the onboarding form would
+otherwise be handed that form after clicking a link that says "set a new
+password". It sits after `evicted`, which is a genuinely different state with its
+own explanation, and before everything else.
+
+`recovering` is **runtime-only**, like `activeSavedId` in the builder. Persisted,
+it would trap someone on the reset screen after a refresh with no way out —
+because the link that authorised the session is single-use and already spent.
+
+**Cancel is a full sign-out**, not just leaving the screen. The link handed over
+a real session; walking away while still holding it would leave somebody signed
+in to an account whose password they by definition do not know.
+
+#### The change dialog asks for the current password
+
+Not decoration. `updateUser` will set a new password from nothing but a live
+session, so without the check an unattended signed-in browser is enough to take
+an account over. `verifyPassword` signs in with the old one — the only check a
+client can make, since there is no verify-password endpoint and no way a browser
+holding the publishable key could trust one. A failed attempt leaves the live
+session untouched, so a typo costs a message and nothing else.
+
+#### The strength meter is not a gate
+
+It scores length and variety, both weak proxies — `Password1!` scores well and is
+terrible — so nothing is refused on that number, and length is weighted above
+variety because it is the property that actually costs an attacker anything. The
+**word** carries the reading rather than the colour, which is the pair a
+colour-blind reader cannot separate; and only level 0 wears the error hue,
+because it is the only level that really is refused.
+
+#### Every password field has an eye
+
+All six of them — sign-in's one, the reset screen's two, the change dialog's
+three — through one `Auth/PasswordInput.tsx`. Six copies of this control would
+have differed in the one place that matters: whether a struck-through eye means
+*hidden now* or *press to hide*. Both readings are in the wild and they are
+opposites, so the icon is backed by an `aria-label` stating what the press does,
+which is the half an icon cannot carry.
+
+The field's own look stays with whichever sheet owns the form — the card uses
+`Login.module.css`, the dialog its own — so the class arrives as a prop and the
+component contributes only the right-hand padding that stops revealed text
+running under the button.
+
+**One eye per field, not one switch per form.** A single toggle in the change
+dialog would expose the *current* password while somebody is only checking they
+typed the new one correctly, which is more on screen than was asked for in the
+dialog most likely to be open in a shared room. A test asserts that revealing
+one field leaves its neighbours masked.
+
+Two small details that are easy to miss and annoying to live without:
+`onMouseDown` is prevented, or the press moves focus to the button and the field
+loses its caret position mid-word; and there is deliberately no `aria-pressed`,
+because a changing label plus a sticky pressed state announces as
+self-contradictory. On a coarse pointer the 44px target comes from an inset
+`::after` rather than a larger box — measured by walking out with
+`elementFromPoint`, the box is 30x30 and the tap area 42x42 — since growing the
+button would push the glyph off the field's optical centre.
+
+Why bother at all: a masked field is the reason people choose shorter passwords
+and the reason they mistype the confirmation box. The strength meter beside it
+argues for a long passphrase, and a long passphrase typed blind is a long
+passphrase typed wrong.
+
+#### What was verified, and what was not
+
+Thirty-one browser checks on the flow: a bare `#/reset` and an implicit-form
+recovery URL both reach the reset screen rather than the landing page, the reset
+email asks for `#/reset`, the form's length and mismatch rules fire, the meter
+shows a word, the account menu carries the row, the dialog opens with three
+fields, a blank current password and a reused password and a mismatch are each
+refused by name, and Escape closes it. Fifty-seven more on the reveal toggle and
+as a regression pass over both screens. Plus 43 new unit tests, `tsc -b` clean,
+378 vitest, build clean.
+
+**And the round trip was confirmed by hand**, which is what none of that could
+do: the email arrived, the link opened the reset screen, a new password was set,
+and signing in with it worked.
+
+**Not verified: the real email round trip.** There is no inbox and no account on
+this machine, so link → session → new password → sign in with the new password
+was never run end to end. Two things to check by hand:
+
+- **that the email arrives at all.** Live config reads `mailer_autoconfirm:
+  true`, and SMTP is not visible from `/auth/v1/settings` — if the project is on
+  Supabase's built-in mailer, recovery mail is rate-limited to a handful an hour.
+- **cross-device recovery is still expected to fail**, and now says so rather
+  than dying silently. `flowType: 'pkce'` needs the code verifier stored by the
+  browser that *requested* the reset, so opening the mail on a different device
+  has nothing to exchange with. The no-session state names that as a cause
+  instead of showing a form that cannot submit.
 
 ### Three flaws found in this work, each by checking rather than assuming
 
@@ -609,6 +808,14 @@ signing keys without a redeploy here.
   presence.
 - **No email confirmation, yet.** Switched off so sign-up works without an SMTP
   provider. It must go back on before real users.
+  - **AND THAT NOW MATTERS FOR MORE THAN SIGN-UP.** Password reset (2026-09-01)
+    is the first feature that *cannot work at all* without outbound mail — a
+    reset link nobody receives is the same dead end the flow already had, moved
+    one step earlier. Confirmation being off tells us no custom SMTP was ever
+    configured, which means recovery mail goes through Supabase's built-in
+    mailer and is rate-limited to a handful an hour. **Send yourself one before
+    telling anybody the feature exists**, and set up SMTP at the same time as
+    turning confirmation back on: the two are the same job.
 - **Google sign-in is built but hidden.** The button appears when the provider is
   enabled in Supabase; the PKCE flow and hash-callback handling are already in
   place, because the app routes on the hash and so does OAuth's callback.
@@ -6265,7 +6472,7 @@ push.
 
 ## Testing and verification
 
-**1,386 Python checks across 38 suites** and **335 vitest tests**, counted by
+**1,386 Python checks across 38 suites** and **378 vitest tests**, counted by
 running every one of them on 2026-08-30. Only
 `test_recent_battles.py` opens a database, and it writes its own temp file —
 every other Python suite runs on synthetic data or a stubbed reader, so they
@@ -10272,6 +10479,13 @@ supabase/
                               slots and the three admin functions. Idempotent;
                               run it in the SQL editor. Read the column-grant
                               comment before touching the policies
+  002_owner.sql               the owner sits above admin. Apply after 001
+  002_owner_verify.sql        proves the owner guards fire. RETURNS ROWS
+  003_device_limit_verify.sql proves two-devices-per-account is real: a second
+                              desktop raises unique_violation, an upsert
+                              replaces rather than adds, and `tablet` raises
+                              check_violation. Refuses to run if the account
+                              holds live rows, and cleans up after itself
 
 api/                          Vercel functions. Node ESM: NO extensionless
                               relative imports and NO JSON imports, both of
@@ -10312,8 +10526,17 @@ src/
   state/supabase.ts           the one client, the tier derivation, and which
                               sections are free. Null when unconfigured, so a
                               checkout without Supabase still runs
-  state/accountStore.ts       session, profile, and the device claim. A failed
-                              heartbeat must never sign anyone out
+  state/accountStore.ts       session, profile, the device claim, and the two
+                              password doors. A failed heartbeat must never sign
+                              anyone out, and `PASSWORD_RECOVERY` must never be
+                              read as an ordinary sign-in
+  state/passwordRules.ts      what counts as an acceptable password. NO IMPORTS,
+                              like tiers.ts and format.ts and for the same
+                              reason. The ceiling is 72 BYTES, not characters
+  state/deviceIdentity.ts     which device this browser is. No Supabase import,
+                              so the two-per-account limit is testable. The kind
+                              is measured ONCE and remembered — recomputing it
+                              signed desktop users out when they resized
   state/gate.ts               who may open what. `anon` and `free` are the same
   state/adminStore.ts         the console's three sources, none allowed to sink
                               the others
@@ -10378,6 +10601,15 @@ src/
                               button may not contain buttons
     Auth/                     sign in, sign up, the three-step onboarding form,
                               and the GateCard a locked section renders
+      ResetPassword.tsx       #/reset — the end of a recovery link. Says so when
+                              the link cannot be used, rather than showing a
+                              form that cannot submit
+      ChangePassword.tsx      the account menu's dialog. Asks for the CURRENT
+                              password, because a live session alone is enough
+                              for updateUser
+      PasswordInput.tsx       a password field with a reveal eye. ONE component
+                              for all six, because the icon's meaning is the
+                              thing six copies would disagree about
     Admin/AdminConsole.tsx    #/admin. Refuses non-admins itself; the database
                               refuses them again
     WinConFilter/FilterSlot.tsx  a deck row that COLLAPSES when filtered out.

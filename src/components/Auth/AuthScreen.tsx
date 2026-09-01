@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Fireflies } from '../../three/Fireflies';
 import { supabase } from '../../state/supabase';
 import { deviceKind, useAccountStore } from '../../state/accountStore';
+import { PasswordInput } from './PasswordInput';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import loginStyles from '../Login/Login.module.css';
 import styles from './AuthScreen.module.css';
@@ -113,8 +114,15 @@ export function AuthScreen() {
         else if (data.session) setNotice(null); // confirmation off: straight in
         else setNotice(`Check ${email.trim()} for a confirmation link.`);
       } else {
+        /* `#/reset`, NOT the bare origin, and this is what makes the link do
+           something. It used to land on `/`, where `detectSessionInUrl` quietly
+           exchanged the token for a real session and dropped the reader on the
+           landing page — signed in, with the old password still in force and no
+           screen anywhere able to change it. Naming the route means the app can
+           recognise a recovery even if the event is missed, and it is the one
+           part of the URL Supabase passes through untouched. */
         const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}/#/reset`,
         });
         /* Always the same answer, error or not — see the enumeration note
            above. Whether an address is registered is not ours to publish. */
@@ -199,9 +207,8 @@ export function AuthScreen() {
             {mode !== 'reset' && (
               <label className={loginStyles.field}>
                 <span className={loginStyles.fieldLabel}>Password</span>
-                <input
+                <PasswordInput
                   className={loginStyles.input}
-                  type="password"
                   value={password}
                   autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                   placeholder="At least 8 characters"

@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 
 import { type Profile, type Tier, supabase, tierOf } from './supabase';
+/* THE DEVICE RULES MOVED OUT so they can be tested without constructing a
+   Supabase client — the third time this extraction has been made here, after
+   `tiers.ts` and `utils/format.ts`. Re-exported below, so every existing
+   `import { deviceKind } from './accountStore'` keeps working. */
+import { type DeviceKind, deviceId, deviceKind } from './deviceIdentity';
+
+export { deviceId, deviceKind };
+export type { DeviceKind };
 
 /**
  * The signed-in account: session, profile, tier, and the device claim.
@@ -12,7 +20,6 @@ import { type Profile, type Tier, supabase, tierOf } from './supabase';
  * OIE allowlist.
  */
 
-export type DeviceKind = 'desktop' | 'mobile';
 
 interface AccountState {
   ready: boolean;
@@ -22,59 +29,63 @@ interface AccountState {
   tier: Tier;
   /** Set when this device lost its slot to a newer login of the same kind. */
   evicted: boolean;
+  /**
+   * The session came from a password-recovery link, so the ONLY thing this
+   * person may do is set a new password.
+   *
+   * RUNTIME-ONLY, never persisted, like `activeSavedId` in the builder. It
+   * describes how the CURRENT session started, and a flag restored from storage
+   * would trap someone on a reset screen forever after a refresh — with no way
+   * out, because the link that authorised it is single-use and already spent.
+   */
+  recovering: boolean;
 
   init: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   claimDevice: () => Promise<void>;
   checkDevice: () => Promise<void>;
   saveProfile: (patch: Partial<Profile>) => Promise<string | null>;
+  /** Set a new password. Returns an error message, or null on success. */
+  changePassword: (next: string) => Promise<string | null>;
+  /** Confirm the CURRENT password. Returns an error message, or null if right. */
+  verifyPassword: (current: string) => Promise<string | null>;
+  /** Leave the reset screen without setting one. */
+  cancelRecovery: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 /**
- * A stable id for THIS browser, so the device rules can tell "the same laptop
- * again" from "a second laptop".
+ * Does the URL we were opened with look like a password-recovery link?
  *
- * localStorage, not a cookie or a fingerprint: it survives a refresh, it is
- * per-browser-profile, and clearing site data resets it — which is the honest
- * behaviour. Fingerprinting would be harder to shake off and is not something
- * to build into a deck site.
+ * Supabase can deliver a recovery in three shapes and this has to read all
+ * three, because which one arrives depends on the project's email template and
+ * on the client's `flowType` — neither of which is decided in this file:
+ *   - `?code=…`             the PKCE exchange, what `flowType: 'pkce'` asks for;
+ *   - `#access_token=…&type=recovery`  the older implicit hash form;
+ *   - `?token_hash=…&type=recovery`    a template using `{{ .TokenHash }}`.
+ *
+ * `?code=` ALONE IS NOT ENOUGH TO GO ON. An OAuth sign-in comes back with a
+ * `code` too, and treating that as a recovery would trap anyone who signed in
+ * with Google on a set-a-new-password screen. So a bare `code` is only read as
+ * recovery when the link also says so — which is what `type=recovery` is for,
+ * and why `redirectTo` below is given an explicit `#/reset`.
+ *
+ * The app routes on the hash, so a `#/reset` route is the signal we control and
+ * the one that survives Supabase having already stripped its own parameters.
  */
-// NOT renamed with the brand. This key is how a browser proves it is a device
-// this account already registered; changing it makes every signed-in device
-// look new and burns a slot against the device limit. Same reasoning as the
-// `royal-` persistence keys.
-const DEVICE_KEY = 'dekkies-device-id';
-
-export function deviceId(): string {
+function recoveryInUrl(): boolean {
   try {
-    let id = localStorage.getItem(DEVICE_KEY);
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem(DEVICE_KEY, id);
-    }
-    return id;
+    const { search, hash } = window.location;
+    if (hash.startsWith('#/reset')) return true;
+    if (/[?&]type=recovery\b/.test(search)) return true;
+    /* The implicit form puts its parameters in the hash, after the `#`, which
+       is also where our routes live — hence matching on the parameter rather
+       than parsing the hash as a route. */
+    if (/[#&]type=recovery\b/.test(hash)) return true;
+    return false;
   } catch {
-    /* Private mode, or storage disabled. A per-session id still enforces the
-       limit for as long as the tab lives; it just cannot recognise the device
-       on a later visit, which fails towards asking someone to sign in again
-       rather than towards letting an extra device in. */
-    return crypto.randomUUID();
+    return false;
   }
-}
-
-/**
- * Desktop or mobile, decided once.
- *
- * Coarse on purpose. Item 7 wants one of each, and the line only has to be
- * stable for a given device — a tablet counting as "mobile" is a judgement
- * call, not a bug, and `pointer: coarse` is the closest thing to what a person
- * means by "my phone".
- */
-export function deviceKind(): DeviceKind {
-  const coarse = window.matchMedia('(pointer: coarse)').matches;
-  const narrow = window.matchMedia('(max-width: 900px)').matches;
-  return coarse || narrow ? 'mobile' : 'desktop';
 }
 
 export const useAccountStore = create<AccountState>()((set, get) => ({
@@ -84,12 +95,22 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
   profile: null,
   tier: 'free',
   evicted: false,
+  recovering: false,
 
   async init() {
     if (!supabase) {
       set({ ready: true });
       return;
     }
+    /* A RECOVERY LINK IS ALREADY IN THE URL BY THE TIME THIS RUNS, and that is
+       why the flag is read here as well as from the event below. `createClient`
+       has `detectSessionInUrl: true`, so the code is exchanged during module
+       load — which can complete BEFORE `onAuthStateChange` is subscribed, and
+       the `PASSWORD_RECOVERY` event is then delivered to nobody. Reading the URL
+       ourselves closes that race; the listener catches the slower case. Neither
+       alone was reliable. */
+    if (recoveryInUrl()) set({ recovering: true });
+
     const { data } = await supabase.auth.getSession();
     const user = data.session?.user ?? null;
     set({ userId: user?.id ?? null, email: user?.email ?? null, ready: true });
@@ -97,9 +118,14 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
 
     if (user) await get().claimDevice();
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user ?? null;
       set({ userId: u?.id ?? null, email: u?.email ?? null });
+      /* THE EVENT NAME IS THE POINT, and it used to be discarded as `_event`.
+         Supabase distinguishes a recovery session from an ordinary sign-in, and
+         throwing that away is precisely why "Forgot your password?" used to
+         send a link that silently logged people in and changed nothing. */
+      if (event === 'PASSWORD_RECOVERY') set({ recovering: true });
       if (u) {
         set({ evicted: false });
         void get().refreshProfile();
@@ -218,6 +244,79 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
     return null;
   },
 
+  /**
+   * Set a new password on the signed-in account.
+   *
+   * ONE CALL FOR BOTH DOORS — the recovery screen and the account dialog — for
+   * the reason the codebase keeps re-learning: two copies of a rule become two
+   * different rules. `updateUser` is the only Supabase call that can set a
+   * password, and before this it appeared NOWHERE in the repo, which is why
+   * neither door existed.
+   *
+   * It returns the message rather than storing it: the caller owns its own
+   * error line, and a store field would leak one screen's failure onto another.
+   */
+  async changePassword(next) {
+    if (!supabase) return 'Accounts are not configured.';
+    const { error } = await supabase.auth.updateUser({ password: next });
+    if (error) return error.message;
+    /* The recovery link is spent and the password is set, so this is an
+       ordinary session from here on. Clearing the flag is what releases the
+       reader into the app — without it they would sit on the reset screen
+       having just succeeded. */
+    set({ recovering: false });
+    /* A recovery session skipped this on the way in (see `App.tsx`): the device
+       slot is claimed only once the account is actually in the person's hands. */
+    await get().claimDevice();
+    return null;
+  },
+
+  /**
+   * Is this actually the current password?
+   *
+   * BY SIGNING IN WITH IT, because that is the only check a client can make —
+   * there is no "verify my password" endpoint, and there could not be one that
+   * a browser holding only the publishable key could trust.
+   *
+   * WHY BOTHER, given the caller already has a valid session: `updateUser` will
+   * set a new password from nothing but that session, so without this an
+   * unattended signed-in browser is enough to take an account over. The check
+   * turns "has this laptop" into "knows the password".
+   *
+   * A FAILED ATTEMPT DOES NOT DISTURB THE LIVE SESSION — Supabase leaves the
+   * existing tokens alone when `signInWithPassword` rejects — so a typo costs a
+   * message and nothing else. A SUCCESSFUL one issues fresh tokens for the same
+   * user, which is why `changePassword` can run straight afterwards.
+   *
+   * The message is passed through rather than rewritten: "Invalid login
+   * credentials" is Supabase's deliberately vague wording, and it is the honest
+   * thing to show for a wrong password here too.
+   */
+  async verifyPassword(current) {
+    if (!supabase) return 'Accounts are not configured.';
+    const email = get().email;
+    if (!email) return 'Not signed in.';
+    const { error } = await supabase.auth.signInWithPassword({ email, password: current });
+    if (error) return /invalid/i.test(error.message)
+      ? 'That is not your current password.'
+      : error.message;
+    return null;
+  },
+
+  /**
+   * Give up on the reset and go back to being signed out.
+   *
+   * A FULL SIGN-OUT, not just clearing the flag. The recovery link grants a real
+   * session, so a reader who abandons the screen while still holding it would be
+   * quietly signed in on the strength of an email link they chose not to use —
+   * and, worse, signed in to an account whose password they by definition do not
+   * know. Dropping the session is the only honest exit.
+   */
+  async cancelRecovery() {
+    set({ recovering: false });
+    await get().signOut();
+  },
+
   async signOut() {
     if (!supabase) return;
     const id = get().userId;
@@ -232,6 +331,6 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
         .eq('kind', deviceKind());
     }
     await supabase.auth.signOut();
-    set({ userId: null, email: null, profile: null, tier: 'free', evicted: false });
+    set({ userId: null, email: null, profile: null, tier: 'free', evicted: false, recovering: false });
   },
 }));

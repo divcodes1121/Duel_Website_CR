@@ -7,6 +7,7 @@ import { TierBadge } from '../TierBadge/TierBadge';
 import { useThemeStore } from '../../state/themeStore';
 import { TIER_LABEL, trialDaysLeft } from '../../state/tiers';
 import { ProContact } from '../Analytics/ProContact';
+import { ChangePassword } from '../Auth/ChangePassword';
 import { useAccess } from '../../state/gate';
 import styles from './ProfileMenu.module.css';
 
@@ -37,6 +38,9 @@ const ICON = {
   sun: <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />,
   moon: <path d="M20 13.5A8 8 0 1 1 10.5 4a6.5 6.5 0 0 0 9.5 9.5z" />,
   out: <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />,
+  /* A padlock, for the row that changes the password. Single shackle plus body,
+     drawn in the same 24x24 / 1.7 stroke as the rest so it sits level with them. */
+  lock: <path d="M6 11V8a6 6 0 0 1 12 0v3M5 11h14a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM12 15v2" />,
 };
 
 function Glyph({ d }: { d: keyof typeof ICON }) {
@@ -126,6 +130,7 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<MenuPos | null>(null);
   const [contact, setContact] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
   const open = pos !== null;
 
   function toggleOpen() {
@@ -344,6 +349,30 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                   database both refuse everyone else anyway, so this just
                   avoids showing a door that does not open. */}
               <div className={styles.group}>
+                {/* THE ONE ACCOUNT CONTROL THERE IS, and until it was built
+                    there was none: no route, no row, and no `updateUser`
+                    anywhere in the repo, so a password could not be rotated at
+                    all — not even through the reset email, whose link only
+                    signed people in. It sits in this group rather than beside
+                    Log out because it is something you READ and MANAGE, not a
+                    way out; and it is above the Field Book because an account
+                    control outranks a reference page.
+
+                    Closing the menu first is deliberate: the dialog is modal,
+                    and leaving an open dropdown behind its scrim gives two
+                    layers of furniture for one task. */}
+                <button
+                  type="button"
+                  className={styles.item}
+                  role="menuitem"
+                  onClick={() => {
+                    setPos(null);
+                    setPwOpen(true);
+                  }}
+                >
+                  <Glyph d="lock" />
+                  Change password
+                </button>
                 <a className={styles.item} role="menuitem" href="#/guide" onClick={() => setPos(null)}>
                   <Glyph d="book" />
                   Field Book
@@ -411,6 +440,8 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
           hosts means the builder, Deck's Home, the Counter Hub and the
           dashboard all get it without knowing about it. */}
       {contact && <ProContact onClose={() => setContact(false)} />}
+      {/* Same placement and the same reason as the dialog above it. */}
+      {pwOpen && <ChangePassword onClose={() => setPwOpen(false)} />}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { Dashboard, type DashboardView } from './components/Dashboard/Dashboard';
 import { AuthScreen } from './components/Auth/AuthScreen';
 import { Onboarding } from './components/Auth/Onboarding';
+import { ResetPassword } from './components/Auth/ResetPassword';
 import { useAccountStore } from './state/accountStore';
 import { isSupabaseConfigured } from './state/supabase';
 import styles from './App.module.css';
@@ -69,6 +70,9 @@ function App() {
   const profile = useAccountStore((s) => s.profile);
   const initAccount = useAccountStore((s) => s.init);
   const evicted = useAccountStore((s) => s.evicted);
+  /* Runtime-only: this session arrived through a recovery link. See the routing
+     note below for why it has to be checked before onboarding. */
+  const recovering = useAccountStore((s) => s.recovering);
 
   useEffect(() => {
     void initAccount();
@@ -121,6 +125,26 @@ function App() {
       return (
         <div className={styles.app}>
           <AdminConsole />
+        </div>
+      );
+    }
+
+    /* A RECOVERY OUTRANKS EVERY OTHER ROUTE INSIDE THIS BRANCH, and the order
+       is the whole of what makes it work.
+       - It is BEFORE the onboarding check: a reader who never filled the
+         onboarding form would otherwise be handed that instead of the password
+         field, having clicked a link that says "set a new password".
+       - It is BEFORE the dashboard: they hold a real session, so without this
+         they simply land in the app — which is exactly the old bug.
+       - It is AFTER `evicted`, which is a genuinely different state and comes
+         with its own explanation.
+       Two conditions, because either can be the one that survives: the store's
+       flag is set from the `PASSWORD_RECOVERY` event and from the URL, and the
+       route is what a refresh on this screen leaves behind. */
+    if (recovering || route.startsWith('#/reset')) {
+      return (
+        <div className={styles.app}>
+          <ResetPassword />
         </div>
       );
     }
