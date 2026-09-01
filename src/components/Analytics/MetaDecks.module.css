@@ -88,6 +88,10 @@
 .statValue {
   font-family: var(--font-display, inherit);
   font-size: 1.35rem;
+  /* See `.tileBig` in DuelAnalysis: the display face carried this figure on
+     its single cut, the body face does not, and 600 matches every other
+     `.statValue` on the site. */
+  font-weight: 600;
   line-height: 1;
   color: var(--text);
 }

@@ -506,6 +506,11 @@
 .tileBig {
   font-family: var(--font-display, inherit);
   font-size: 2.6rem;
+  /* STATED, because inside the app this is no longer the display face. Bebas
+     has one cut and carried this figure on its own weight; the body face
+     starts at 400 and a 2.6rem number would have thinned out. 600 is what the
+     other stat figures on this site already use. */
+  font-weight: 600;
   line-height: 1;
   color: var(--text);
 }

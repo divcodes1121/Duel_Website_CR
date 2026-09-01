@@ -458,6 +458,25 @@ export function Dashboard({
    * leaving it. */
   const landing = view === 'home' && section === 'Search Player';
 
+  /* WHICH FACE THE HEADINGS ARE SET IN, and it is a document-level fact rather
+     than a component one.
+     `.body` below already carries `data-landing`, and this deliberately does
+     NOT reuse it: dialogs `createPortal` into `document.body`, so they are
+     siblings of the shell and inherit nothing from it — scoped there, every
+     dialog would have kept the display face while the screen behind it
+     changed. `:root` is the one node every portal inherits from.
+     Marks the INSIDE rather than the landing, so routes that never render this
+     shell (sign-in, the recovery screen, the admin console, the field book)
+     are left exactly as they were. See the block in `index.css`. */
+  useEffect(() => {
+    const root = document.documentElement;
+    if (landing) root.removeAttribute('data-app-inner');
+    else root.setAttribute('data-app-inner', '');
+    /* The landing is the resting state, so an unmount leaves it there — a
+       stale attribute would otherwise outlive this shell on `#/guide`. */
+    return () => root.removeAttribute('data-app-inner');
+  }, [landing]);
+
   /* LOCKED, NOT HIDDEN — and that is the change, not a relaxation of it.
    *
    * Team Analysis was filtered out of the nav and the landing while it was

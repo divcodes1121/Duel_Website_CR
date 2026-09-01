@@ -50,6 +50,47 @@
      moves the least when the two are the same shape. */
   --font-display: 'Bebas Neue', 'Haettenschweiler', 'Arial Narrow Bold',
     'Arial Narrow', Impact, sans-serif;
+
+  /* THE BODY STACK IS A TOKEN NOW, for the same reason the display face is:
+     it is read in two places rather than one, and two literal copies of a
+     stack drift. `:root`'s own `font-family` below reads it. */
+  --font-body: Inter, 'Segoe UI Variable', 'Segoe UI', system-ui, Avenir,
+    Helvetica, Arial, sans-serif;
+}
+
+/* THE DISPLAY FACE IS THE LANDING SCREEN'S, NOT THE WHOLE APP'S.
+ *
+ * Bebas Neue draws lowercase as capital forms, so every heading inside the
+ * product rendered as caps — which reads as a poster. That is right for the
+ * landing page, where a heading IS the poster, and wrong once you have clicked
+ * into a tool and the headings are labelling work. Inside, they are set in the
+ * body face and carry their weight instead, so a heading reads as its own
+ * sentence and not as a banner.
+ *
+ * ONE DECLARATION, because `--font-display` is one token that 72 declarations
+ * read. Overriding the token is the whole reason it exists; the alternative is
+ * editing 72 rules and getting a different answer in some of them.
+ *
+ * WHY THE ATTRIBUTE IS ON `:root` AND NOT ON THE DASHBOARD'S `.body`, which
+ * already carries `data-landing`: dialogs `createPortal` into `document.body`,
+ * so they are SIBLINGS of the shell and inherit nothing from it. Scoped to
+ * `.body`, the export dialog, the save dialog, the change-password dialog and
+ * "Write to me" would all have kept the display face while the screen behind
+ * them changed — the inconsistency showing up only when something opened.
+ * Custom properties inherit from `:root` to every portal.
+ *
+ * INVERTED ON PURPOSE — the attribute marks the INSIDE, not the landing. Any
+ * route that is not the Dashboard's inner view (sign-in, the recovery screen,
+ * the admin console, the field book) sets nothing and keeps what it had, so
+ * this changes the screens it was asked to change and no others. `Dashboard`
+ * owns the attribute; see the effect there.
+ *
+ * Headings need no weight added here: 57 of the 72 declarations already set
+ * 600/700/800, and the rest sit on h1/h2/h3, which the UA stylesheet bolds.
+ * The three exceptions were bare `<span>` figures and are given a weight in
+ * their own files. */
+:root[data-app-inner] {
+  --font-display: var(--font-body);
 }
 
 /* ==========================================================================
@@ -809,7 +850,7 @@
 }
 
 :root {
-  font-family: Inter, 'Segoe UI Variable', 'Segoe UI', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
   line-height: 1.5;
   font-weight: 400;
 

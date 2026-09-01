@@ -3424,6 +3424,72 @@ already rendering as caps and still does. No stylesheet is uppercasing it, which
 is worth knowing before somebody goes looking for a `text-transform` that does
 not exist.
 
+### The display face is the landing screen's, not the whole app's
+
+That capital-forms property is exactly why it does not belong everywhere. On the
+landing a heading **is** the poster, and caps are the point. Inside a tool the
+headings are labelling work — a deck name, a panel title, a stat — and setting
+those as caps makes the product read like an advertisement for itself. Inside,
+headings are set in the body face and carry their **weight** instead.
+
+It is one declaration, because the face is one token that 72 rules read:
+
+```css
+:root[data-app-inner] { --font-display: var(--font-body); }
+```
+
+Overriding the token is the whole reason it exists. The alternative is editing
+72 rules and getting a different answer in a few of them. (`--font-body` is a
+token now too — the Inter stack had been a literal on `:root`, and it is read in
+two places, which is how stacks drift apart.)
+
+**The attribute is on `:root`, and putting it on the Dashboard's `.body` is the
+mistake to avoid.** `.body` already carries `data-landing`, so reusing it looks
+obvious and free. But dialogs `createPortal` into `document.body`: they are
+*siblings* of the shell and inherit nothing from it. Scoped that way, the export
+dialog, the save dialog, the change-password dialog and "Write to me" would all
+have kept the display face while the screen behind them changed — an
+inconsistency that appears only when something opens, which is the kind that
+survives a review. Custom properties inherit from `:root` to every portal.
+
+**It marks the inside, not the landing.** Inverted deliberately: any route that
+never renders this shell — sign-in, `#/reset`, the admin console, the field book
+— sets nothing and keeps exactly what it had. `Dashboard` owns the attribute in
+an effect keyed on `landing`, and removes it on unmount so it cannot outlive the
+shell on `#/guide`.
+
+**No weight was added globally, because it did not need to be.** 57 of the 72
+declarations already set 600/700/800, and the rest sit on `h1`/`h2`/`h3` — and
+`index.css` has no heading reset, so the UA stylesheet still bolds those. Two
+were genuine exceptions, both bare `<span>` figures that Bebas had been carrying
+on its single cut: `DuelAnalysis .tileBig` at 2.6rem and `MetaDecks .statValue`.
+Both now say `font-weight: 600`, which is what every other stat figure on the
+site uses. `DeckCounter .tileBig` looks like a third and is not — it never used
+the display face and was already 800.
+
+**Verified in a browser, 25/25** at 1440: the landing still Bebas on all six of
+its display elements, four inner routes on Inter at 600/700, a portal inheriting
+the inner face on each of them, and the attribute coming back *off* on returning
+to the landing.
+
+**Two probes graded the wrong elements before one graded the right ones**, and
+both mistakes generalise:
+
+* **Sorting display-face elements by size** picks the decorative **"+"** on the
+  new-deck button — 22.4px, weight 400, not a heading — and reported a bold
+  failure on two correct screens.
+* **Matching on the computed family cannot work inside at all.** There the token
+  *resolves to* the body face, so "computed family is Inter" matches every
+  paragraph on the page; the probe was quietly grading body copy at weight 400.
+
+The reading that stays valid once the two faces are the same is by **selector**:
+walk `document.styleSheets` for rules whose `font-family` names
+`var(--font-display)`, then `querySelectorAll` those. Anything else is measuring
+the page rather than the change.
+
+The hero clamp is untouched, and can be: it was tuned to Bebas, and Bebas is
+what the landing still uses.
+
 **One cut, so `font-synthesis: weight` is load-bearing again** after being dead
 weight under Arial. The `@font-face` declares `font-weight: 400` because that
 describes the *file*; raising it tells the browser the file is already bold and
