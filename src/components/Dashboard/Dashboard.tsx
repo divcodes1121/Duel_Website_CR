@@ -276,8 +276,22 @@ const FEATURES = [
        the accent word is what replaces it as the mark. */
     title: 'Scout',
     titleAccent: 'a whole roster',
-    body: 'Paste both squads. Every opponent gets a folder holding the decks they actually play and the decks your team should answer them with — named for the teammate who already pilots each one.',
-    chips: ['Two squads at once', 'A folder per opponent', 'Ranked on real matchups'],
+    /* TRIMMED TO THE LENGTH OF ITS THREE NEIGHBOURS (2026-09-01), and the
+       length is the point rather than the wording. At 183 characters against
+       their ~125 this wrapped to a THIRD line, and because a banner's copy
+       block is vertically centred a taller block starts higher — so this
+       panel's title sat 29px above the other three and the row stopped
+       reading as a set. Nothing was cut that the panel was carrying alone:
+       both squads, a folder per opponent, their real decks and the teammate
+       who answers are all still here, in 120 characters. */
+    body: 'Paste both squads. Every opponent gets a folder: the decks they actually play, and which teammate should answer each one.',
+    /* THE THIRD CHIP WAS 23 CHARACTERS AND OVERFLOWED BY EIGHTEEN PIXELS.
+       Measured: 159 + 176 + 197 = 532 plus two 7.2px gaps = 546, in a 528px
+       track — so it wrapped alone onto a second row while the other three
+       panels kept all three chips on one line. "Real" is kept deliberately;
+       it is the word doing the work on a screen whose whole argument is that
+       its numbers are measured rather than invented. */
+    chips: ['Two squads at once', 'A folder per opponent', 'Real matchup data'],
     cta: 'Open Team Analysis',
     hash: '#/teams',
     art: ['archer-queen', 'pekka', 'goblin-barrel'],

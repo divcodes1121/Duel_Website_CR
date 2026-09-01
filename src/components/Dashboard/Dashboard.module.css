@@ -1664,7 +1664,28 @@
  * The art also gives up width: the copy needs more than the 0.85fr track the
  * card panels hand it, and the character reads fine in a narrower crop.
  */
+/* THE COPY'S TRACK IS THE WIDE ONE, AND IT HAD TO BE STATED TWICE.
+ *
+ * This was one declaration, `0.82fr 1.18fr`, written for the flipped panels —
+ * where `.toolPanelFlip .toolText { order: 2 }` puts the copy in the SECOND
+ * track and it duly got the 1.18. On an unflipped panel the copy is the first
+ * child, so it landed in the 0.82 instead: the narrow share, which is the exact
+ * opposite of the intent recorded above ("the art also gives up width").
+ *
+ * THE 34rem CAP HID IT AT DESKTOP WIDTHS, which is why it survived. At 1440
+ * both tracks resolve wider than the cap, so every panel's copy measured 538-544
+ * and nothing looked wrong. Measured at 1024, where neither track reaches the
+ * cap: the two LEFT-copy panels had 367px of copy and the two RIGHT-copy panels
+ * had 528px. Same component, a 44% difference, and it read exactly as the
+ * "scattered" text it was — three chips fit in 528 and wrapped in 367, so the
+ * four panels disagreed about how many rows of chips they had.
+ *
+ * So the ratio is declared per direction and the copy always takes 1.18. */
 .toolPanel[data-banner] {
+  grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr);
+}
+
+.toolPanel[data-banner].toolPanelFlip {
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
 }
 

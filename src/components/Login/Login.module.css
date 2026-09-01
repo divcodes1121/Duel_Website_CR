@@ -63,31 +63,34 @@
   z-index: 2;
 }
 
-.themeToggle {
-  z-index: 3;
-}
-
-/* IN FROM THE EDGE. It sat at `right: 1.25rem`, hard against the corner of the
-   window — on a wide screen that reads as something that fell off the layout
-   rather than as part of it. Everything else about the control is unchanged. */
+/* POSITION ONLY. THE REST WAS A DEAD SKIN AND IT DREW A CIRCLE ROUND THE SWITCH.
+ *
+ * This rule still dressed the control as the ROUND ICON BUTTON it used to be,
+ * from before five separate theme buttons became one skeuomorphic switch:
+ * `width/height: 2.2rem`, `border-radius: 999px`, its own border, its own
+ * `--slot-bg` fill and an inset highlight.
+ *
+ * `ThemeToggle` is a 3:1 track — `--w: calc(var(--h) * 3)` — so at the
+ * `size="1.95rem"` these screens ask for it wants 93.6 x 31px. Forced into
+ * 35.2 x 35.2 it did not shrink: the thumb is sized from `--h` too, so
+ * MEASURED the groove came out 35px wide with a 57px cap sitting across it,
+ * and this rule's round `background` + `border-radius: 999px` painted a disc
+ * behind the overflow. On light that disc is near the page colour and passes
+ * for a plate; on dark it is a visible circular hole with a switch lying over
+ * it, which is exactly what it was reported as.
+ *
+ * Everything the control needs it owns: `.toggle` sets the track's width,
+ * height, radius, fill and shadows, `.thumb` the cap, and `.label` the glyph's
+ * colour. A caller may only place it. Height is deliberately not set here
+ * either — it derives from `--h`, and pinning it is how the two disagreed.
+ *
+ * `right` is in from the edge on purpose: at `1.25rem` it sat hard against the
+ * corner of the window, which reads as something that fell off the layout. */
 .themeToggle {
   position: absolute;
   top: 1.1rem;
   right: 3.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.2rem;
-  height: 2.2rem;
-  border-radius: 999px;
-  border: 1px solid var(--slot-border);
-  background: var(--slot-bg);
-  color: var(--text-muted);
-  font-size: 0.95rem;
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-  transition: color 0.15s ease, border-color 0.15s ease;
-  z-index: 2;
+  z-index: 3;
 }
 
 .scene {

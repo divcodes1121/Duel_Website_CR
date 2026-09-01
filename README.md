@@ -654,6 +654,38 @@ variety because it is the property that actually costs an attacker anything. The
 colour-blind reader cannot separate; and only level 0 wears the error hue,
 because it is the only level that really is refused.
 
+#### The sign-in page's theme switch was wearing a dead skin
+
+Reported as: light is fine, but the moment dark is on there is a circular space
+where the control should be. It was a leftover.
+
+`Login.module.css .themeToggle` still dressed the control as the **round icon
+button** it had been before five separate theme buttons became one skeuomorphic
+switch — `width/height: 2.2rem`, `border-radius: 999px`, its own border, its own
+`--slot-bg` fill and an inset highlight.
+
+`ThemeToggle` is a 3:1 track (`--w: calc(var(--h) * 3)`), so at the
+`size="1.95rem"` these screens ask for it wants **93.6 × 31px**. Forced into
+35.2 × 35.2 it did not shrink — the thumb is sized from `--h` too — so the groove
+came out **35px wide with a 57px cap lying across it**, and that rule's round
+background painted a disc behind the overflow. On light the disc is near the page
+colour and passes for a plate; on dark it is a visible circle with a switch lying
+over it. The same bug in both themes; only one of them showed it.
+
+The rule positions the control and nothing else now. `.toggle` owns the track's
+width, height, radius, fill and shadows, `.thumb` the cap, `.label` the glyph's
+colour — **a caller may only place it**, and height must not be pinned either
+because it derives from `--h`. Measured after: groove 94px, thumb 57px inside it,
+no overlap with the card and no sideways scroll at 1280 or 390.
+
+The side effect was the thing that was actually wanted: at its real width the
+switch's left edge moved ~59px in from the right edge.
+
+One probe note. **Setting `data-theme` on `<html>` does not move the toggle** —
+it reads `themeStore`, not the attribute, so a first pass reported
+`aria-checked="false"` and a *sun* glyph while the page was plainly dark. Click
+the control.
+
 #### Every password field has an eye
 
 All six of them — sign-in's one, the reset screen's two, the change dialog's
@@ -8027,6 +8059,56 @@ magnitude brighter than the others") came from dividing an 80x40 sample by 1600
 instead of 3200; it printed `rgb(260,183,54)`, and there is no 260. The shipped
 values were unaffected because they came from the per-pixel solve, but the
 evidence given for them was wrong.
+
+#### The four copy blocks were not the same shape, and it was two faults
+
+*2026-09-01.* Reported as "the texts are scattered — some have two chips on one
+line and the third on the next, some have all three". Both causes turned out to
+be measurable rather than aesthetic.
+
+**The copy sat in the narrow track on half the panels.** The grid was one
+declaration, `minmax(0, 0.82fr) minmax(0, 1.18fr)`, written for the *flipped*
+panels — where `.toolPanelFlip .toolText { order: 2 }` puts the copy in the
+second track, so it duly got the 1.18. On an unflipped panel the copy is the
+first child, so it got the 0.82: the narrow share, and the exact opposite of the
+intent recorded next to it.
+
+**The 34rem cap is why that survived.** At 1440 both tracks resolve wider than
+the cap, so every panel's copy measured 538–544 and nothing looked wrong.
+Measured at 1024, where neither track reaches the cap:
+
+| | copy width at 1024, before | after |
+|---|---:|---:|
+| Royal Duels (copy left) | **367px** | 528px |
+| Deck's Home (copy right) | 528px | 528px |
+| Counter Palette (copy left) | **367px** | 528px |
+| Team Analysis (copy right) | 528px | 528px |
+
+A 44% difference in the same component — so three chips fitted in one panel and
+wrapped in another, which is precisely the "scattered" complaint. The ratio is
+declared per direction now and the copy always takes the 1.18.
+
+**And Team Analysis' copy was simply longer than its neighbours':** 183
+characters of body against their ~125, so it wrapped to a third line. Because a
+banner's copy block is vertically centred, **a taller block starts higher** — its
+title sat 29px above the other three, which is what made the row stop reading as
+a set. Trimmed to 120 characters with every idea intact: both squads, a folder
+per opponent, the decks they really play, and the teammate who answers.
+
+Its third chip also overflowed by eighteen pixels — 159 + 176 + 197 = 532 plus
+two 7.2px gaps in a 528px track — so `Ranked on real matchups` wrapped onto a row
+of its own. It is `Real matchup data` now; "real" is kept deliberately, being the
+word that does the work on a screen whose whole argument is that its numbers are
+measured rather than invented.
+
+Measured after, at 1440, 1280 and 1024: **title tops equal on all four, body two
+lines on all four, one chip row on all four, CTA tops equal.** Before, at 1440:
+title tops 79/79/79/**50**, bodies 2/2/2/**3**, chip rows 1/1/1/**2**.
+
+One thing to keep in mind if this copy is ever rewritten: a vertically centred
+block makes content length a layout property. Keep the four bodies within a line
+of each other or the titles stop lining up — that is the mechanism, not a bug to
+hunt in the CSS.
 
 #### The panel height, and an approach that was built and thrown away
 
