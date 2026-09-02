@@ -1,0 +1,330 @@
+/* WHAT'S NEW — the bell's badge and the panel it opens.
+ *
+ * The trigger's own look is Dashboard's `.iconButton`, passed in as a prop:
+ * this is one of five circular controls in the top bar and it must not be the
+ * one that is slightly different. Only the badge is defined here, because only
+ * the badge is this component's.
+ */
+
+/* ── The badge ───────────────────────────────────────────────────────────── */
+
+/* IT SITS ON THE BUTTON, so the button has to be a positioning context — and
+   that `position: relative` is on `.iconButton` in `Dashboard.module.css`,
+   NOT here. CSS modules hash their own class names, so this file cannot reach
+   the class the trigger actually wears; the anchor has to be declared where
+   the box is. If the badge ever appears in the corner of the whole top bar
+   instead of the corner of the bell, that declaration is what went missing. */
+.badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.22rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  /* `--solid-maroon`, the fill step, because this carries `--on-solid` text.
+     Reaching for `--hue-red` here would be the recurring mistake this project
+     has made four times: that step is graded to hold 4.5:1 as INK at body
+     size, and as a fill behind white it is the wrong end of the ramp. */
+  background: var(--solid-maroon);
+  color: var(--on-solid);
+  font-size: 0.62rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  /* The ring is what separates the badge from the button's own border when the
+     two colours are close — without it the badge reads as part of the glyph. */
+  box-shadow: 0 0 0 2px var(--bg-1);
+  pointer-events: none;
+}
+
+/* ── The panel ───────────────────────────────────────────────────────────── */
+
+/* Portalled to `document.body`, so it is positioned `fixed` from a rect the
+   component measured. Same arrangement as ProfileMenu and SeasonMenu — the
+   header's `backdrop-filter` traps anything positioned inside it. */
+.panel {
+  position: fixed;
+  z-index: 300;
+  /* WIDE ENOUGH TO READ A PARAGRAPH IN. The profile menu is 292px because its
+     rows are labels; these are sentences, and at that width a two-line note
+     runs to six. Capped against the viewport so it cannot overhang on a phone
+     — `right` is already clamped to 12px by the trigger. */
+  width: min(26rem, calc(100vw - 1.5rem));
+  /* The list scrolls, the header does not. A changelog only grows, so the
+     panel has to have a ceiling or it eventually runs off the bottom of the
+     screen — and `.body` is `overflow: hidden`, so nothing else would catch it. */
+  max-height: min(32rem, calc(100vh - 6rem));
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  border: 1px solid var(--glass-border);
+  transform-origin: top right;
+  animation: whats-new-in 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
+  background: var(--glass-fill-strong);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-sheen);
+  overflow: hidden;
+}
+
+/* The panel is one flex column and the scroller is its child, so THAT is the
+   element that needs `min-height: 0` — the recurring trap this project records
+   in three places. Without it the list refuses to shrink below its content and
+   pushes the overflow back out through the rounded corners. */
+.panel > div {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: inherit;
+}
+
+@keyframes whats-new-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+.head {
+  flex: none;
+  padding: 0.85rem 0.95rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.lede {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* THE ONE SCROLLING CHILD, so it takes `flex: none`'s opposite and the
+   `min-height: 0` that lets it be shrunk. Any `overflow` other than `visible`
+   sets a flex item's automatic minimum size to zero, which is what makes this
+   the child the column is free to crush — the same property that collapsed the
+   admin console's accounts table, read from the other side. */
+.list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.entry {
+  padding: 0.6rem 0.6rem 0.7rem;
+  border-radius: 12px;
+  background: var(--surface-nested);
+  border: 1px solid transparent;
+}
+
+/* AN UNREAD ENTRY IS MARKED BY AN EDGE, NOT BY A FILL. A tinted card behind
+   body copy is a second ground for the text to clear, and the entries a reader
+   most needs to read are exactly the ones that would get it. The rule is on the
+   inline-start edge so it reads as a marker rather than as a selected state,
+   which in this app is violet and means something else. */
+.entry[data-unread] {
+  border-color: color-mix(in srgb, var(--solid-maroon) 45%, transparent);
+  box-shadow: inset 3px 0 0 var(--solid-maroon);
+}
+
+.entryHead {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+
+/* The kind chip. A WORD, not only a hue — New, Improved and Fixed are three
+   different promises and a reader who cannot separate three colours would
+   otherwise get none of them. */
+.kind {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.kind[data-kind='new'] {
+  color: var(--hue-green);
+  border-color: color-mix(in srgb, var(--hue-green) 40%, var(--border));
+}
+
+.kind[data-kind='improved'] {
+  color: var(--hue-blue);
+  border-color: color-mix(in srgb, var(--hue-blue) 40%, var(--border));
+}
+
+.kind[data-kind='fixed'] {
+  color: var(--hue-violet);
+  border-color: color-mix(in srgb, var(--hue-violet) 40%, var(--border));
+}
+
+/* What tier it needs. Deliberately quieter than the kind chip: it is a
+   qualification on the entry, not what the entry is. */
+.needs {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.date {
+  margin-left: auto;
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.entryTitle {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.entryBody {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.entryBody:last-of-type {
+  margin-bottom: 0;
+}
+
+/* A BUTTON, NOT AN ANCHOR, because it also has to close the panel — and this
+   app routes on the hash, so an `<a href="#/x">` inside a portal would change
+   the route and leave the panel open over the screen it just navigated to. */
+.entryGo {
+  margin-top: 0.45rem;
+  padding: 0;
+  border: none;
+  background: none;
+  /* The UA resets a `<button>` needs to sit in a paragraph flow without
+     announcing itself as a control — the same three this project already
+     records for `.tierRow` and GateCard's `.primary`. */
+  font: inherit;
+  font-size: 0.73rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--accent-action);
+}
+
+.entryGo:hover {
+  text-decoration: underline;
+}
+
+.empty {
+  margin: 0;
+  padding: 1rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ── The dialog form, for the profile menu's row ─────────────────────────────
+ *
+ * The same list, centred rather than hung off a trigger. The bell is
+ * `display: none` below 860px, so on a phone this is the only way in — and an
+ * anchored panel there would be pointing at a control that is not on screen.
+ */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.sheet {
+  position: relative;
+  width: min(30rem, 100%);
+  /* `100%` of a flex item inside a padded fixed scrim, so it can never exceed
+     the viewport — and the list inside it is what scrolls, never the page.
+     `body` is `overflow: hidden` in this app, so an over-tall dialog would be
+     clipped with no way to reach the rest of it. */
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 18px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill-strong);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-sheen);
+  overflow: hidden;
+  animation: whats-new-in 0.15s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.6rem;
+  z-index: 1;
+  width: 1.9rem;
+  height: 1.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--neutral-wash-sunken);
+  color: var(--text);
+}
+
+/* On a coarse pointer the link gets a real 44px area from an inset `::after`
+   rather than a taller box — the project's rule, because growing the box would
+   push it away from the paragraph it belongs to. */
+@media (pointer: coarse) {
+  .entryGo {
+    position: relative;
+  }
+
+  .entryGo::after {
+    content: '';
+    position: absolute;
+    inset: -12px -8px;
+  }
+}

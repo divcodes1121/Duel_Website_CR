@@ -206,6 +206,14 @@
 }
 
 .iconButton {
+  /* A POSITIONING CONTEXT, for the what's-new bell's unread badge. It has to
+     live here rather than in `WhatsNew.module.css`: that module styles the
+     badge, but this class is the box the badge is anchored to and CSS modules
+     hash their own names, so the component cannot reach it. Harmless for the
+     other controls wearing this class — none of them positions a child — and
+     it does not move the shared LiquidMetal canvas, which is placed from a
+     measured rect rather than from the flow. */
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2441,11 +2449,24 @@
     overflow-x: clip;
   }
 
-  /* The notification bell goes. Measured, the actions row needed 240px in the
+  /* The what's-new bell goes. Measured, the actions row needed 240px in the
      222px it had, so Sign in sat 15px off the end and the whole row scrolled
      sideways to reach it — a top bar that has to be swiped is worse than one
-     control fewer. The bell is the only item here that opens nothing yet. */
-  .iconButton[aria-label='Notifications'] {
+     control fewer. `.topActions` is STILL 43px over at 390px (a standing open
+     item), so this is not a control to put back until that is closed.
+   *
+   * IT IS NOT LOST ON A PHONE: the profile menu carries a What's new row with
+   * the same unread count, and the profile menu is on every width. That covers
+   * every ACCOUNT, which is what the feed is for; a signed-out visitor on a
+   * phone has nothing to be notified about yet.
+   *
+   * MATCHED ON `data-whats-new`, NOT ON THE LABEL. This rule used to read
+   * `[aria-label='Notifications']`, and the label now carries the unread count
+   * — so it would have stopped matching for exactly the readers who had
+   * something to read, putting the bell back on the one top bar that cannot
+   * hold it. A selector that depends on copy is a selector that breaks when
+   * the copy earns its keep. */
+  .iconButton[data-whats-new] {
     display: none;
   }
 

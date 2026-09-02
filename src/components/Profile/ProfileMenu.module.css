@@ -247,6 +247,32 @@ a.tierRow:focus-visible {
 
 /* --- rows --------------------------------------------------------------- */
 
+/* THE UNREAD COUNT ON THE WHAT'S NEW ROW. `margin-left: auto` rather than a
+   grid column, because it is the only row that has one and every other row's
+   layout must not change to accommodate it.
+
+   `--solid-maroon` and `--on-solid`, matching the bell's badge exactly — they
+   are two views of one number and a reader sees both in the same session.
+   Reaching for `--hue-red` here would be this project's recurring mistake: that
+   step is graded to hold contrast as INK at body size, not to carry white on
+   itself. */
+.itemCount {
+  margin-left: auto;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.22rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--solid-maroon);
+  color: var(--on-solid);
+  font-size: 0.62rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .item {
   display: flex;
   align-items: center;

@@ -63,7 +63,6 @@ import {
   AnalyticsIcon,
   ArrowRightIcon,
   BarsIcon,
-  BellIcon,
   CardsIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -86,6 +85,7 @@ import { Fireflies, type FireflyHue } from '../../three/Fireflies';
 import { LiquidMetal } from '../../three/LiquidMetal';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import { FieldBookButton } from './FieldBookButton';
+import { WhatsNew } from '../WhatsNew/WhatsNew';
 import { Filmstrip } from '../Filmstrip/Filmstrip';
 import { GateCard } from '../Auth/GateCard';
 import { sectionAllowed, useAccess } from '../../state/gate';
@@ -691,9 +691,13 @@ export function Dashboard({
               cannot be the seventh item in a list of six that all look alike. */}
           <FieldBookButton onOpen={() => go('#/guide')} />
           <ThemeToggle size="1.85rem" />
-          <button type="button" className={styles.iconButton} data-metal aria-label="Notifications">
-            <BellIcon />
-          </button>
+          {/* THE BELL OPENS SOMETHING NOW. It sat here inert from the day the
+              shell was built — `docs/UI.md` recorded it as "the only item here
+              that opens nothing yet" — and it is the release feed: every
+              change ships with its own note, in the same commit as the change.
+              It keeps its place immediately right of the theme switch, which
+              is where it has always been. */}
+          <WhatsNew className={styles.iconButton} />
           {/* A SIGNED-OUT VISITOR NEEDS A WAY IN that is not a gate card. The
               profile menu assumes an account exists, so it would be a menu of
               things a stranger cannot do. */}
