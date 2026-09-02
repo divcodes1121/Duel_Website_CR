@@ -1,15 +1,26 @@
-"""team_analysis.py — one squad against another, a folder per opponent.
+"""team_analysis.py — a roster read, or two rosters matched against each other.
 
-Behind `#/teams`. Paste two rosters, get one folder per opponent player holding
-two things side by side: the decks THEY actually play, and the decks from YOUR
-squad that answer them, each labelled with the teammate who already plays it.
+Behind `#/teams`, which has TWO MODES and one scoring rule shared between them.
+
+    MATCH PLAN     (`squads`)  both rosters. A folder per opponent holding the
+                               decks THEY play and the decks YOUR squad answers
+                               with, each labelled with the teammate who
+                               already pilots it.
+
+    SCOUTING REPORT (`scout`)  one roster — theirs. The same folders, but the
+                               right-hand side is drawn from the archetype
+                               REPRESENTATIVES rather than from a squad,
+                               because there is no squad to draw from.
+
+`analyze()` serves both; `blue_tags` empty IS scout mode. That is one function
+rather than two on purpose — see THE TWO MODES SHARE ONE SCORER, below.
 
 ────────────────────────────────────────────────────────────────────────────
 THE QUESTION THIS ANSWERS, AND THE ONE IT DOES NOT
 ────────────────────────────────────────────────────────────────────────────
 
-It answers: *given what this opponent has actually been playing, which deck
-that somebody on my team already knows how to pilot does best against that
+Match Plan answers: *given what this opponent has actually been playing, which
+deck that somebody on my team already knows how to pilot does best against that
 spread?*
 
 It does NOT answer "what is the best deck against this player", and the
@@ -20,6 +31,45 @@ on the team can pilot is worth nothing on the day, and this project has already
 measured what happens when it goes looking for decks that do not exist: Phases
 17B and 18 closed exact retrieval and novel generation on ceilings, not on
 model quality. See the README.
+
+────────────────────────────────────────────────────────────────────────────
+THE SCOUTING REPORT, AND WHY ITS POOL IS THE REPRESENTATIVES
+────────────────────────────────────────────────────────────────────────────
+
+With no blue roster the question changes to *what beats this?*, and the pool
+has to come from somewhere. It is `deck_counter._representatives()` — the
+most-observed real deck of each archetype — and NOT the meta board's top 50,
+for the reason `_build_reps` already gives: the board excludes duel and
+friendly modes by design, while every number scored here comes out of
+`pair_matchup_agg`, which has no mode filter at all. Picking the deck from one
+population and the figure beside it from another is the exact fault that note
+was written about, and it would be a new instance of it rather than a new
+feature.
+
+It is also NOT a generated deck and NOT a deck nobody plays: a representative
+is by construction the most-played list of its archetype, so it is a real deck
+with a real record, which is what lets it carry an exact rung of the ladder
+rather than falling to the archetype matrix on every row.
+
+WHAT A SCOUT ROW CANNOT CARRY IS COMFORT. Nobody owns these decks, so there is
+no owner, no games-piloted and no tiebreak — `comfort` and `owner` are `None`
+and the ranking is the matchup and nothing else. Instead each row carries the
+deck's OWN overall record (`overallWinRate`), so the reader can see how much of
+the expected rate is this matchup and how much is simply a strong deck. A
+recommendation with a hidden denominator is the thing this module exists not to
+produce.
+
+────────────────────────────────────────────────────────────────────────────
+THE TWO MODES SHARE ONE SCORER
+────────────────────────────────────────────────────────────────────────────
+
+`_score` is unchanged between them, and that is the point rather than a saving.
+The site already has one place where two screens could disagree about the same
+two decks — the README's note on why this module reuses `matchup_ladder`
+instead of reimplementing it — and a second scorer for the second tab would
+recreate that fault INSIDE one screen, where it is even harder to notice: the
+same deck against the same opponent would read differently depending on which
+tab you were standing in.
 
 ────────────────────────────────────────────────────────────────────────────
 HOW A RECOMMENDATION IS SCORED
@@ -106,6 +156,17 @@ COMFORT_WEIGHT = 1.5
 
 #: How many blue decks a folder recommends. The user-facing promise is "top 3".
 TOP_N = 3
+
+#: How many decks a SCOUT folder recommends. More than `TOP_N`, deliberately.
+#:
+#: In Match Plan three is the right number because the list is per teammate and
+#: the reader is choosing a person, not a deck — a fourth option for one player
+#: is noise beside a fifth player with none. A scouting report has no players to
+#: split by, so the same three rows would be the entire answer, and the reader
+#: here is choosing a deck to go and learn: they want to see where the ranking
+#: flattens out. Five is enough rows for that to be visible and still short
+#: enough to read at a glance.
+SCOUT_TOP_N = 5
 
 #: Opponent decks shown on the left of a folder, and the spread they weight.
 #: Their long tail is noise for this purpose: a deck played once tells you
@@ -332,17 +393,30 @@ class _DeckProfile:
     scoring opponents on the outside of the loop would evict them every pass.
     """
 
-    __slots__ = ("archetype", "_exact", "_c7", "_c6", "_c7_decks", "_c6_decks")
+    __slots__ = ("archetype", "_exact", "_c7", "_c6", "_c7_decks", "_c6_decks",
+                 "overall")
 
     def __init__(self, cards: list[str], archetype: str):
         self.archetype = archetype
-        self._exact = dcx.deck_profile(cards).get("archetypes") or {}
+        exact = dcx.deck_profile(cards)
+        self._exact = exact.get("archetypes") or {}
         c7 = dcx.cluster_profile(cards, 7)
         c6 = dcx.cluster_profile(cards, 6)
         self._c7 = c7.get("archetypes") or {}
         self._c6 = c6.get("archetypes") or {}
         self._c7_decks = c7.get("decks")
         self._c6_decks = c6.get("decks")
+        # THIS DECK'S OWN RECORD ACROSS THE WHOLE FIELD, widened the same way
+        # the per-archetype rungs are. It is what a scout row quotes beside its
+        # expected rate, so a reader can tell "this beats them" from "this
+        # beats everybody" — two very different reasons for a deck to top a
+        # ranking, and the headline alone cannot separate them.
+        #
+        # It is read here rather than where it is used because it comes off a
+        # profile that is already in hand; asking for it later would re-enter
+        # the LRU that this whole class exists to stop thrashing.
+        self.overall = (exact.get("overall")
+                        or c7.get("overall") or c6.get("overall"))
 
     def against(self, other: str, snap: dict | None) -> dict | None:
         """This deck versus one archetype, narrowest evidence first.
@@ -380,12 +454,19 @@ class _Candidate:
 
     The profile is shared by reference, so a deck two people play is still only
     read from the database once.
+
+    `owner` IS `None` IN SCOUT MODE, and that is a real state rather than a
+    missing value: an archetype representative is nobody's deck. Everything
+    that reads it — the comfort tiebreak, the "who plays it" line — is absent
+    for those rows rather than defaulted, because a zero games-piloted figure
+    would read as "somebody on the team has played this none of the time",
+    which is a claim about a team that was never pasted.
     """
 
     __slots__ = ("cards", "key", "archetype", "name", "art", "owner",
                  "games", "wins", "win_rate", "use_rate", "profile")
 
-    def __init__(self, deck: dict, owner: dict, profile: "_DeckProfile"):
+    def __init__(self, deck: dict, owner: dict | None, profile: "_DeckProfile"):
         self.cards = list(deck.get("cards") or [])
         self.key = ",".join(sorted(set(self.cards)))
         self.archetype = deck.get("winCondition") or "other"
@@ -444,6 +525,77 @@ def _candidates(blue: list[dict]) -> list["_Candidate"]:
     return out
 
 
+#: The scout pool, kept between requests as `(snapshot age key, candidates)`.
+#:
+#: WHY THIS IS CACHED AT ALL, when the blue pool deliberately is not: the blue
+#: pool is different on every request (it is somebody's roster), and the scout
+#: pool is the SAME SEVENTEEN DECKS every time. Rebuilding it per request would
+#: pay ~1.6 s of sibling scan per deck for an answer that cannot have changed.
+#:
+#: KEYED ON THE COUNTER SNAPSHOT, because that is the only thing that can move
+#: it: `_representatives()` reads `snapshot["reps"]`, so a rebuild is exactly
+#: when these decks may differ and nothing else is. A time-based TTL here would
+#: be a second, weaker statement of the same fact and could disagree with it.
+_SCOUT_POOL: tuple[object, list["_Candidate"]] | None = None
+
+
+def _scout_candidates() -> list["_Candidate"]:
+    """The archetype representatives, profiled — the scouting report's pool.
+
+    ONE DECK PER ARCHETYPE, from `deck_counter._representatives()`. See the
+    module docstring for why these and not the meta board's top 50.
+
+    THE PROFILES ARE BUILT IN ONE PASS AND HELD, which is not merely an
+    optimisation here — it is required. `_CLUSTER_CACHE` upstream is 32 entries
+    and CLEARS ITSELF WHOLE when it overflows; seventeen decks at two cluster
+    levels is thirty-four, so the cache would empty mid-build. That costs
+    nothing while the build walks each deck exactly once and never returns to
+    it (which is what this loop does), and it would cost a full rescan per deck
+    if anything ever looped opponents on the outside. Do not restructure this
+    into "score each opponent, widening as needed" — that is the same trap the
+    blue pool's note describes, with a cache too small to absorb it.
+    """
+    global _SCOUT_POOL
+
+    snap = dcx._snap()
+    # The snapshot's own build time IS the identity of the representatives.
+    # `None` when there is no snapshot at all, which is a state the caller has
+    # to report rather than serve an empty ranking for.
+    key = (snap or {}).get("computedAt")
+    if key is None:
+        return []
+    if _SCOUT_POOL is not None and _SCOUT_POOL[0] == key:
+        return _SCOUT_POOL[1]
+
+    out: list["_Candidate"] = []
+    for arch, rep in (dcx._representatives() or {}).items():
+        cards = list(rep.get("cards") or [])
+        if len(set(cards)) != 8:
+            continue
+        try:
+            prof = _DeckProfile(cards, arch)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            continue
+        out.append(_Candidate(
+            {
+                "cards": cards,
+                "art": rep.get("art") or {},
+                "winCondition": arch,
+                "name": rep.get("name") or dcx._label(arch),
+                # No owner means no games piloted and no win rate of anyone's
+                # own. Left at zero rather than invented; `_score` never reads
+                # them for an ownerless candidate.
+                "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
+            },
+            None,
+            prof,
+        ))
+
+    _SCOUT_POOL = (key, out)
+    return out
+
+
 def _comfort(games: int) -> float:
     """The tiebreak, in points. Linear to `COMFORT_FULL`, flat after."""
     if games <= 0:
@@ -498,14 +650,31 @@ def _score(card: _Candidate, spread: list[dict], snap: dict | None) -> dict | No
         return None
 
     expected = total_win / answered
-    comfort = _comfort(card.games)
-    return {
+
+    # NO OWNER MEANS NO COMFORT, and the ranking is then the matchup alone.
+    # A scout row is an archetype representative — nobody's deck — so there is
+    # nothing to be practised at and no tiebreak to apply. Defaulting the bonus
+    # to zero would give the same ordering, but publishing `comfort: {games: 0}`
+    # would state that somebody has piloted it zero times, which is a claim
+    # about a roster that was never pasted.
+    comfort = _comfort(card.games) if card.owner else 0.0
+
+    # THE DECK'S OWN RECORD ACROSS THE FIELD, for scout rows only. It is the
+    # denominator the headline is missing on its own: a deck expected to win
+    # 58% against this opponent while winning 57% against everybody is barely a
+    # counter, and one at 58% against a 49% baseline is a real answer. The
+    # screen shows the difference; this ships both halves rather than the
+    # subtraction, so the two numbers can be read separately.
+    overall = card.profile.overall if not card.owner else None
+
+    out = {
         "cards": card.cards,
         "art": card.art,
         "archetype": card.archetype,
         "name": card.name,
         "avgElixir": dcx._avg_elixir(card.cards),
-        "owner": {"tag": card.owner["tag"], "name": card.owner["name"]},
+        "owner": {"tag": card.owner["tag"], "name": card.owner["name"]}
+        if card.owner else None,
         "comfort": {
             "games": card.games,
             "wins": card.wins,
@@ -515,7 +684,7 @@ def _score(card: _Candidate, spread: list[dict], snap: dict | None) -> dict | No
             # `score`. A reader comparing two rows can see whether the order
             # came from the matchup or from the practice.
             "bonus": round(comfort, 2),
-        },
+        } if card.owner else None,
         # The headline. Weighted over the archetypes that had evidence.
         "expectedWinRate": round(expected, 1),
         # How much of their play this figure actually covers. A deck scored on
@@ -524,6 +693,10 @@ def _score(card: _Candidate, spread: list[dict], snap: dict | None) -> dict | No
         "score": round(expected + comfort, 3),
         "matchups": rows,
     }
+    if overall:
+        out["overallWinRate"] = overall.get("winRate")
+        out["overallGames"] = overall.get("games")
+    return out
 
 
 # ── The report ──────────────────────────────────────────────────────────────
@@ -549,8 +722,16 @@ def _distinct(rows: list[dict]) -> list[dict]:
 
 
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
-            snap: dict | None) -> dict:
-    """One opponent, and what the blue squad should bring against them."""
+            snap: dict | None, top_n: int = TOP_N) -> dict:
+    """One opponent, and what should be brought against them.
+
+    BOTH MODES COME THROUGH HERE. In a scouting report `blue` is empty, so
+    `perPlayer` falls out empty on its own rather than being special-cased —
+    the loop below has nothing to iterate. That is the whole reason the two
+    modes are one function: the left-hand side of a folder (what they play) and
+    the ranking of the right-hand side are identical work, and only the pool
+    and the row count differ.
+    """
     decks = (opponent.get("decks") or [])[:OPPONENT_DECKS]
     _archetypes_for(decks)
     spread = _spread(decks)
@@ -561,7 +742,13 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             row = _score(card, spread, snap)
             if row:
                 scored.append(row)
-        scored.sort(key=lambda r: (-r["score"], -r["comfort"]["games"], r["name"]))
+        # The second key is games piloted, which a scout row does not have —
+        # `comfort` is None there and reading it subscripts a None. Falling
+        # back to 0 keeps ownerless rows ordered by score then by name, which
+        # is a total order because the pool is one deck per archetype.
+        scored.sort(key=lambda r: (-r["score"],
+                                   -((r["comfort"] or {}).get("games") or 0),
+                                   r["name"]))
 
     # EVERY BLUE PLAYER GETS THEIR OWN TOP THREE, in roster order.
     #
@@ -574,9 +761,15 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     # A PLAYER WITH NOTHING TO OFFER STILL APPEARS, with a reason. Dropping
     # them would silently shorten the list and make a roster of five look like
     # a roster of three — the same failure as a parser that drops a tag.
+    #
+    # A SCOUT ROW HAS NO OWNER TO GROUP BY, and `blue` is empty there anyway,
+    # so the grouping is skipped rather than made to tolerate a null key: a
+    # bucket under `None` would be built and then never read, which is the kind
+    # of dead structure that later reads as an intentional one.
     by_tag: dict[str, list[dict]] = {}
     for row in scored:
-        by_tag.setdefault(row["owner"]["tag"], []).append(row)
+        if row["owner"]:
+            by_tag.setdefault(row["owner"]["tag"], []).append(row)
 
     per_player = []
     for mate in blue:
@@ -618,7 +811,14 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # The squad-wide top 3, deduplicated by DECK so the headline is three
         # options rather than one option with two co-owners. It is what the
         # folder card's face shows; the board itself is `perPlayer`.
-        "recommended": _distinct(scored)[:TOP_N],
+        #
+        # IN A SCOUTING REPORT THIS IS THE WHOLE ANSWER, not a headline over a
+        # per-player board, which is why the caller passes a longer `top_n`.
+        # `_distinct` is a no-op there — the representatives are already one
+        # deck per archetype — and is left in the path anyway rather than
+        # branched around, because a pool that ever gained a second deck of an
+        # archetype should still collapse it here.
+        "recommended": _distinct(scored)[:top_n],
         "perPlayer": per_player,
         "considered": len(cards),
         # Said out loud rather than left to be inferred from an empty list.
@@ -629,13 +829,63 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     }
 
 
+def _combined(red: list[dict], cards: list[_Candidate],
+              snap: dict | None) -> dict:
+    """The whole opposing roster as ONE spread, and what answers all of it.
+
+    THE QUESTION A SCOUTING REPORT CAN ASK AND A MATCH PLAN CANNOT. A match
+    plan assigns a person to each opponent, so a squad-wide answer would be
+    advice nobody is in a position to take. With one roster on the table the
+    real question is often the other one — *we are playing this clan next week,
+    what should we be practising* — and that is a property of the roster as a
+    whole rather than of any player in it.
+
+    WEIGHTED BY GAMES, NOT BY PLAYER. Summing each player's normalised shares
+    would give a roster's least active member the same say as its most active,
+    which is a claim that everyone plays the same amount. Games are what the
+    weights already mean everywhere else in this module, so pooling them is the
+    same arithmetic one player's spread already does — `_spread` is simply
+    handed every considered deck on the roster at once.
+    """
+    decks: list[dict] = []
+    for opp in red:
+        own = (opp.get("decks") or [])[:OPPONENT_DECKS]
+        _archetypes_for(own)
+        decks.extend(own)
+
+    spread = _spread(decks)
+    if not spread:
+        return {"players": len(red), "spread": [], "recommended": [],
+                "reason": "no_history"}
+
+    scored = [row for row in (_score(c, spread, snap) for c in cards) if row]
+    scored.sort(key=lambda r: (-r["score"], r["name"]))
+    return {
+        "players": len(red),
+        "spread": spread,
+        "recommended": _distinct(scored)[:SCOUT_TOP_N],
+        "reason": None if scored else "no_evidence",
+    }
+
+
 def analyze(blue_tags: list[str], red_tags: list[str],
             days: int = DEFAULT_DAYS) -> dict:
-    """The whole report: both rosters resolved, one folder per opponent.
+    """The whole report: the opposing roster resolved, one folder per opponent.
+
+    AN EMPTY `blue_tags` IS THE SCOUTING REPORT. That is the mode switch, and
+    it is an absence rather than a flag on purpose: the two modes differ in
+    exactly one input — whether there is a squad to recommend from — so making
+    it a separate parameter would allow the incoherent combination (a squad
+    pasted, and scout mode asked for) that this shape cannot express.
+
+    The mode is published as `mode` so no client ever has to infer it from an
+    empty array, which is the same value an ordinary failure produces.
 
     Tags arrive already normalised by the caller (`app._route` runs every one
     through `cd.normalize_tag`), so nothing here reaches a query unvalidated.
     """
+    scout = not blue_tags
+
     blue = [_resolve(t, days) for t in blue_tags[:MAX_SQUAD]]
     red = [_resolve(t, days) for t in red_tags[:MAX_SQUAD]]
 
@@ -643,20 +893,30 @@ def analyze(blue_tags: list[str], red_tags: list[str],
         _archetypes_for(p.get("decks") or [])
 
     snap = dcx._snap()
-    cards = _candidates(blue)
+    cards = _scout_candidates() if scout else _candidates(blue)
+    top_n = SCOUT_TOP_N if scout else TOP_N
 
-    folders = [_folder(opp, blue, cards, snap) for opp in red]
+    folders = [_folder(opp, blue, cards, snap, top_n) for opp in red]
 
-    # A squad with nothing pilotable is the one failure the screen cannot
-    # recover from, and it is worth naming: every folder below it would be
-    # empty for the same reason, and eight identical empty folders do not say
-    # "your side has no history" — they say the tool is broken.
+    # A pool with nothing in it is the one failure the screen cannot recover
+    # from, and it is worth naming ONCE at the top: every folder below it would
+    # be empty for the same reason, and eight identical empty folders do not
+    # say "there is nothing to recommend from" — they say the tool is broken.
+    #
+    # The two modes fail differently and must say so differently. A missing
+    # blue squad is the reader's own history; a missing scout pool is the
+    # matchup snapshot still building on the server, which is nothing the
+    # reader did and is fixed by waiting rather than by pasting more.
     pool_reason = None
     if not cards:
-        pool_reason = ("no_blue_history" if not any(p["decks"] for p in blue)
-                       else "no_blue_comfort")
+        pool_reason = (
+            "no_matchup_data" if scout else
+            "no_blue_history" if not any(p["decks"] for p in blue)
+            else "no_blue_comfort"
+        )
 
-    return {
+    out = {
+        "mode": "scout" if scout else "squads",
         "blue": [_side_summary(p) for p in blue],
         "red": [_side_summary(p) for p in red],
         "folders": folders,
@@ -667,11 +927,17 @@ def analyze(blue_tags: list[str], red_tags: list[str],
         },
         "days": days,
         "limits": {
-            "maxSquad": MAX_SQUAD, "topN": TOP_N,
+            "maxSquad": MAX_SQUAD, "topN": TOP_N, "scoutTopN": SCOUT_TOP_N,
             "minComfortGames": MIN_COMFORT_GAMES,
             "minOpponentDeckGames": MIN_OPPONENT_DECK_GAMES,
         },
     }
+    # THE ROSTER-WIDE READ, scout only. In a match plan every recommendation
+    # belongs to a named teammate, so a squad-wide answer would be advice with
+    # nobody to take it. See `_combined`.
+    if scout:
+        out["overall"] = _combined(red, cards, snap)
+    return out
 
 
 def _side_summary(p: dict) -> dict:

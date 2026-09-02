@@ -408,6 +408,88 @@ check("a spread nothing can answer is 'no_evidence', not 'no_history'",
       "the two are different problems and the screen must say which")
 
 
+# ── the scouting report ─────────────────────────────────────────────────────
+#
+# One roster in, the archetype REPRESENTATIVES ranked against it. The pool is
+# the only thing that differs from a match plan, so these checks are mostly
+# about what an ownerless candidate may and may not claim.
+
+print(NL + "the scouting report")
+
+REPS = {
+    "hog": {"cards": list(HOG), "art": {}, "name": "Hog"},
+    "golem": {"cards": list(GOLEM), "art": {}, "name": "Golem"},
+    "xbow": {"cards": list(XBOW), "art": {}, "name": "Xbow"},
+    "lava": {"cards": list(LAVA), "art": {}, "name": "Lava"},
+}
+ta.dcx._representatives = lambda: REPS
+ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 1000.0}
+ta._SCOUT_POOL = None
+
+scout_pool = ta._scout_candidates()
+check("the scout pool is one candidate per archetype representative",
+      len(scout_pool) == len(REPS))
+check("a scout candidate has NO owner", all(c.owner is None for c in scout_pool),
+      "an archetype representative is nobody's deck, and a zero games-piloted "
+      "figure would be a claim about a roster that was never pasted")
+
+# Cached on the snapshot's identity, because `_CLUSTER_CACHE` upstream is 32
+# entries and clears itself whole — rebuilding 17 decks x 2 levels per request
+# would rescan the sibling table every time for an answer that cannot change.
+again = ta._scout_candidates()
+check("the pool is reused while the snapshot has not moved", again is scout_pool)
+ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 2000.0}
+check("and rebuilt when it has", ta._scout_candidates() is not scout_pool,
+      "the representatives come off snapshot['reps'], so a rebuild is exactly "
+      "when they may differ and nothing else is")
+
+ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 1000.0}
+ta._SCOUT_POOL = None
+scout_pool = ta._scout_candidates()
+
+scout_folder = ta._folder(opp, [], scout_pool, None, ta.SCOUT_TOP_N)
+check("a scout folder still draws what they play",
+      len(scout_folder["theirDecks"]) == 2)
+check("a scout folder has no per-player board",
+      scout_folder["perPlayer"] == [],
+      "with no blue roster the loop has nothing to iterate — it is not "
+      "special-cased, it falls out empty")
+check("it recommends up to SCOUT_TOP_N, which is more than TOP_N",
+      len(scout_folder["recommended"]) <= ta.SCOUT_TOP_N
+      and ta.SCOUT_TOP_N > ta.TOP_N)
+check("a scout recommendation carries no owner",
+      all(r["owner"] is None for r in scout_folder["recommended"]))
+check("and no comfort block",
+      all(r["comfort"] is None for r in scout_folder["recommended"]))
+check("so its rank is the matchup alone",
+      all(abs(r["score"] - r["expectedWinRate"]) < 1e-9
+          for r in scout_folder["recommended"]),
+      "with no owner there is nothing to be practised at, so the tiebreak "
+      "must contribute exactly nothing")
+check("the same scorer produced it — every row still names its rung",
+      all("source" in m for r in scout_folder["recommended"]
+          for m in r["matchups"]))
+
+# ── the roster-wide read ────────────────────────────────────────────────────
+
+combined = ta._combined([opp, player("#R4", "Second", [
+    deck("Hog", HOG, matches=50, wc="hog"),
+])], scout_pool, None)
+check("the combined spread pools every opponent's decks",
+      {s["archetype"] for s in combined["spread"]} == {"golem", "xbow", "hog"})
+check("weighted by GAMES, not one vote per player",
+      max(combined["spread"], key=lambda s: s["games"])["archetype"] == "golem",
+      "golem is 90 games against hog's 50; summing normalised shares would "
+      "give a roster's least active member the same say as its most active")
+check("it counts the players it read", combined["players"] == 2)
+check("and ranks the same pool against it",
+      len(combined["recommended"]) <= ta.SCOUT_TOP_N)
+
+empty_combined = ta._combined([player("#R5", "Silent", [])], scout_pool, None)
+check("a roster with no history says so rather than ranking nothing",
+      empty_combined["reason"] == "no_history")
+
+
 # ── the whole report ────────────────────────────────────────────────────────
 
 print(NL + "the report")
@@ -443,6 +525,38 @@ check("MAX_SQUAD matches the client's copy", ta.MAX_SQUAD == 10,
       "src/utils/squadParse.ts MAX_SQUAD — the two are mirrors, and this "
       "file SLICES where the client REFUSES, so a drift is a silently "
       "shortened roster rather than an error")
+
+check("a two-roster run is stamped 'squads'", rep["mode"] == "squads")
+check("and carries no roster-wide block", "overall" not in rep,
+      "in a match plan every recommendation belongs to a named teammate, so "
+      "a squad-wide answer would be advice with nobody to take it")
+
+# ── the report, in scout mode ───────────────────────────────────────────────
+
+print(NL + "the report — scouting")
+
+scout_rep = ta.analyze([], ["#R1"], days=30)
+check("an empty blue roster IS scout mode", scout_rep["mode"] == "scout",
+      "the mode is an absence rather than a flag, so the incoherent "
+      "combination — a squad pasted AND scout asked for — cannot be expressed")
+check("the mode is published, never inferred from an empty array",
+      "mode" in scout_rep,
+      "an empty `blue` is also what an ordinary failure produces")
+check("no blue side is summarised", scout_rep["blue"] == [])
+check("one folder per opponent, as ever", len(scout_rep["folders"]) == 1)
+check("the roster-wide read is present", "overall" in scout_rep)
+check("both row counts are published so a client can label them",
+      scout_rep["limits"]["scoutTopN"] == ta.SCOUT_TOP_N
+      and scout_rep["limits"]["topN"] == ta.TOP_N)
+
+ta.dcx._snap = lambda: None
+ta._SCOUT_POOL = None
+no_snap = ta.analyze([], ["#R1"], days=30)
+check("no matchup snapshot is 'no_matchup_data', not 'no_blue_history'",
+      no_snap["pool"]["reason"] == "no_matchup_data",
+      "the two modes fail differently: a missing squad is the reader's own "
+      "history, a missing pool is the server still building and is fixed by "
+      "waiting rather than by pasting more")
 
 print(f"{NL}{PASS} passed, {FAIL} failed{NL}")
 sys.exit(1 if FAIL else 0)

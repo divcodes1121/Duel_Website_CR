@@ -20,6 +20,7 @@ Endpoints
     GET /api/analytics/matchup?a=&b=       head-to-head for two pasted decks
     GET /api/analytics/counters?deck=      what beats a pasted deck
     GET /api/analytics/teams?blue=&red=    squad vs squad, a folder per opponent
+                                           (`blue` omitted = scouting report)
     GET /api/analytics/coach/predict/<tag> which decks they will bring next
     GET /api/analytics/coach/suggest       what to play, given both tags
     GET /api/analytics/meta                the global leaderboard (snapshot)
@@ -687,11 +688,21 @@ class Handler(BaseHTTPRequestHandler):
                 # WHICH SIDE, AND WHICH TAG. A roster is pasted, not typed, so
                 # "invalid_tag" alone leaves someone re-reading sixteen tags to
                 # find the one with a typo in it.
-                if not blue or not red:
+                #
+                # ONLY `red` IS REQUIRED. An absent `blue` is the SCOUTING
+                # REPORT — one roster in, the archetype representatives ranked
+                # against it — and `team_analysis.analyze` reads that absence
+                # as the mode. It is not a new route: the two modes take the
+                # same inputs minus one, return the same shape plus one field,
+                # and the response says which it is in `mode`. Adding a second
+                # endpoint would also mean bumping the route-count tripwire in
+                # `test_api_security.py` for something that is one optional
+                # parameter.
+                if not red:
                     return self._send({
                         "error": "squad_required",
-                        "side": "blue" if not blue else "red",
-                        "rejected": blue_bad if not blue else red_bad,
+                        "side": "red",
+                        "rejected": red_bad,
                     }, 400)
                 if len(blue) > teams.MAX_SQUAD or len(red) > teams.MAX_SQUAD:
                     over = "blue" if len(blue) > teams.MAX_SQUAD else "red"

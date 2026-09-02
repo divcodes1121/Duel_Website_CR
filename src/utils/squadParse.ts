@@ -394,6 +394,30 @@ export function squadProblem(blue: SquadParse, red: SquadParse): string | null {
 }
 
 /**
+ * The same check for a SCOUTING REPORT, which has only one roster.
+ *
+ * A SEPARATE FUNCTION RATHER THAN A MODE ARGUMENT ON `squadProblem`. That one
+ * takes two parses and its every message names a side; threading a mode
+ * through it would mean each of those five branches growing a condition, and
+ * the two callers would then share a function that is never doing the same
+ * thing twice. This is four lines and cannot be made to talk about a squad
+ * that was not pasted.
+ *
+ * THE CAP IS THE SAME `MAX_SQUAD`, and deliberately so even though a scouting
+ * report does less work per player than a match plan. The cap is not really
+ * about this client's cost — it is a mirror of the server's slice, and the
+ * server slices both modes with the same constant. Two different caps here
+ * would be two chances to drift from one number over there.
+ */
+export function scoutProblem(red: SquadParse): string | null {
+  if (!red.members.length) return 'Paste the roster you want to scout.';
+  if (red.members.length > MAX_SQUAD) {
+    return `That roster has ${red.members.length} players — the most that can be analysed at once is ${MAX_SQUAD}.`;
+  }
+  return null;
+}
+
+/**
  * Tags that appear on BOTH sides.
  *
  * Not an error — a scrim between two rosters that share a stand-in is a real

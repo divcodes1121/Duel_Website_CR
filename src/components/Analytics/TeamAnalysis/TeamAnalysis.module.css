@@ -79,6 +79,52 @@
   color: var(--text-muted);
 }
 
+/* ── The two modes ───────────────────────────────────────────────────────────
+ *
+ * SCOUTING REPORT / MATCH PLAN, as an underline tab strip. This is Coach
+ * Assist's control, reproduced rather than shared: the two screens are the
+ * only ones in the app that are two readings of one subject, and giving them
+ * the same idiom is the point. It is copied rather than extracted because
+ * three declarations is not a component, and a shared one would have to be
+ * imported by a file that has no other reason to know about Coach Assist.
+ *
+ * THE COLOURED RULE IS THE INDICATOR, not the label. A pastel tab label beside
+ * a solid sidebar row is what read as washed when this was tried the other way
+ * on Coach Assist; the selected label takes the app's ink instead. Meaning
+ * still does not rest on hue alone — the selected tab is brighter AND heavier
+ * AND ruled.
+ */
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.83rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tabOn,
+.tabOn:hover {
+  color: var(--text);
+  font-weight: 750;
+  border-bottom-color: var(--accent-select);
+}
+
 /* ── Squad entry ─────────────────────────────────────────────────────────── */
 
 /* `1fr auto 1fr` is the right SHAPE here, unlike the trap noted in the README:
@@ -96,6 +142,26 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: start;
   gap: 1rem;
+}
+
+/* ONE BOX, IN A SCOUTING REPORT — and it keeps a full-width track rather than
+   sitting in the left third of a grid that still reserves two.
+   `grid-template-columns` has to be RESTATED, not left to fall out of having
+   fewer children: a grid with one child and three tracks lays that child into
+   the FIRST one, so a lone paste box would sit against the left margin with
+   two thirds of the row empty beside it, which reads as a box that failed to
+   load rather than as a deliberate single column.
+ *
+ * A SPECIFICITY NOTE, because this file is one `data-` attribute away from the
+ * trap the README records three times. This selector is (0,2,0) and the phone
+ * block's `.entry, .board` is (0,1,0), so BELOW 62rem IT IS THIS RULE THAT
+ * APPLIES TO A SOLO ENTRY, not the media query's — a media query does not
+ * raise specificity. That is harmless today only because both declare exactly
+ * `minmax(0, 1fr)`. If the phone value ever changes, this one does not follow
+ * it, and the scouting report is the one layout that would silently keep the
+ * desktop track. Change them together or restate this selector there. */
+.entry[data-solo] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* THE EDGE IS AN ELECTRIC BORDER NOW, not a 2px rule.
@@ -404,6 +470,9 @@
 }
 
 .saveTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -411,6 +480,37 @@
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--text);
+}
+
+/* WHICH TAB A SAVE CAME OUT OF. One list holds both kinds, and opening a row
+   switches tabs — so this badge is also the answer to "why did the screen just
+   change under me".
+ *
+ * IT CARRIES A WORD, NOT ONLY A HUE. Two chips distinguished by colour alone
+ * are two chips a colour-blind reader cannot tell apart, and this is the one
+ * piece of information on the row that decides what opening it will do.
+ * `--hue-*` is the INK step for the same reason it always is here: this is
+ * small coloured text on a surface, not a fill that has to carry white. */
+.saveMode {
+  flex: none;
+  padding: 0.05rem 0.36rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.saveMode[data-mode='scout'] {
+  color: var(--hue-red);
+  border-color: color-mix(in srgb, var(--hue-red) 40%, var(--border));
+}
+
+.saveMode[data-mode='squads'] {
+  color: var(--hue-blue);
+  border-color: color-mix(in srgb, var(--hue-blue) 40%, var(--border));
 }
 
 .saveMeta {
@@ -533,6 +633,47 @@
   background: var(--surface-nested);
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+/* ── The roster as a whole (scouting report only) ─────────────────────────────
+ *
+ * The coarse reading, above the folders. Two columns at desktop width — their
+ * spread on the left, what answers it on the right — because that is the same
+ * relation an opened folder draws, and reading it as one row is what makes it
+ * an answer rather than two lists.
+ *
+ * IT IS A PANEL, NOT A BARE BAND. Everything else at this level of the page is
+ * a heading over a grid of folders; this is a self-contained reading, and
+ * giving it the nested surface is what says "this is one thing" before any of
+ * it is read.
+ */
+.roster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-nested);
+}
+
+.rosterLede {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* `minmax(0, 1fr)` on both, never a bare `1fr` — see the note on `.entry`.
+   The deck strips on the right have a real min-content width and would push
+   the track wider than its share, which is the fault that blew the `.entry`
+   grid out by 52px at 1024 and is recorded in the README. */
+.rosterBody {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: 1rem;
 }
 
 .folderGrid {
@@ -879,6 +1020,29 @@
   margin: 0;
 }
 
+/* THE SCOUT ROW'S SECOND FIGURE — how much better this deck does here than it
+   does against the field. It is the only place in this file a rate is coloured
+   by its sign, and it earns that: the whole reading is "is this a counter, or
+   just a good deck", which is a question about the DIRECTION of the difference
+   rather than its size.
+ *
+ * `--success` / `--error`, not `--hue-green` / `--hue-red`. Those two are the
+   sides' identity here — blue is your squad, red is theirs — and reusing them
+   for a verdict would make a strong recommendation look like it belonged to
+   the opposition. (`--error`, not `--danger`: there is no such token, and an
+   undefined `var()` is invalid at computed-value time and DELETES the whole
+   declaration, so the mistake shows up as an uncoloured figure rather than as
+   a wrong colour. The README keeps a list of the four times that has already
+   happened here.) */
+.recEdge {
+  font-weight: 700;
+  color: var(--error);
+}
+
+.recEdge[data-up] {
+  color: var(--success);
+}
+
 /* FOUR COLUMNS SIZED TO WHAT THEY HOLD. `minmax(0, 1fr)` for the evidence cell
    let it be squeezed under its own text — "11,918 games · high" overflowed its
    track at every width below 1440. The two figure columns are `auto` (they are
@@ -1066,7 +1230,8 @@
   }
 
   .entry,
-  .board {
+  .board,
+  .rosterBody {
     grid-template-columns: minmax(0, 1fr);
   }
 

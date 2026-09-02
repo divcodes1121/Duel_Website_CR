@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useTeamSaves, type SavedTeamAnalysis } from '../../../state/teamSaves';
+import { saveMode, useTeamSaves, type SavedTeamAnalysis } from '../../../state/teamSaves';
 import { ago } from '../../../utils/format';
 import styles from './TeamAnalysis.module.css';
 
@@ -48,6 +48,7 @@ function Row({
   };
 
   const players = save.report.blue.length + save.report.red.length;
+  const mode = saveMode(save);
 
   if (editing) {
     return (
@@ -83,7 +84,17 @@ function Row({
           invalid HTML and the browser closes the outer one early, a trap this
           project has already hit once on the Duel Zone's series row. */}
       <button type="button" className={styles.saveOpen} onClick={() => onOpen(save)}>
-        <span className={styles.saveTitle}>{save.name}</span>
+        <span className={styles.saveTitle}>
+          {/* WHICH TAB THIS CAME OUT OF. One list holds both, because twelve
+              saves is twelve saves however they were made and splitting them
+              would mean two short lists that each look empty. Opening a row
+              switches to its own tab, so the badge is also the answer to "why
+              did the screen just change under me". */}
+          <span className={styles.saveMode} data-mode={mode}>
+            {mode === 'scout' ? 'Scout' : 'Match'}
+          </span>
+          {save.name}
+        </span>
         <span className={styles.saveMeta}>
           {players} player{players === 1 ? '' : 's'} · {save.report.folders.length} folder
           {save.report.folders.length === 1 ? '' : 's'} · saved {ago(save.savedAt)}

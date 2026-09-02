@@ -1328,14 +1328,24 @@ export interface TeamMatchupRow {
   decks?: number | null;
 }
 
-/** A deck the blue squad should bring, and who on it already plays that deck. */
+/**
+ * A deck to bring, and — in a match plan — who on the squad already plays it.
+ *
+ * `owner` AND `comfort` ARE NULL IN A SCOUTING REPORT, and that is a state
+ * rather than a gap: the candidate there is an archetype representative, which
+ * is nobody's deck. A zero games-piloted figure would read as "somebody on the
+ * team has played this none of the time", which is a claim about a roster that
+ * was never pasted. Anything rendering a recommendation has to handle both.
+ */
 export interface TeamRecommendation {
   cards: string[];
   art: Record<string, WildForm>;
   archetype: string;
   name: string;
   avgElixir: number;
-  owner: { tag: string; name: string };
+  /** NULL in a scouting report — see above. */
+  owner: { tag: string; name: string } | null;
+  /** NULL in a scouting report. With no owner there is nothing to be practised at. */
   comfort: {
     games: number;
     wins: number;
@@ -1343,13 +1353,23 @@ export interface TeamRecommendation {
     useRate: number;
     /** What the practice tiebreak was worth here, in points. */
     bonus: number;
-  };
+  } | null;
   /** Spread-weighted expected win rate against this opponent. The headline. */
   expectedWinRate: number;
   /** How much of their play that figure actually covers, as a percentage. */
   spreadCovered: number;
   score: number;
   matchups: TeamMatchupRow[];
+  /**
+   * SCOUT ONLY: this deck's own win rate across the whole field.
+   *
+   * The denominator the headline is missing on its own. A deck expected to win
+   * 58% here while winning 57% against everybody is barely a counter; the same
+   * 58% against a 49% baseline is a real answer. Shipped as two numbers rather
+   * than a subtraction so each can be read on its own terms.
+   */
+  overallWinRate?: number | null;
+  overallGames?: number | null;
 }
 
 /** One blue player's options against one opponent. */
@@ -1400,19 +1420,55 @@ export interface TeamFolder {
   reason: 'no_history' | 'no_evidence' | null;
 }
 
+/**
+ * Which of the screen's two modes produced a report.
+ *
+ * `squads` — Match Plan. Both rosters; every recommendation has an owner.
+ * `scout`  — Scouting Report. One roster; the pool is the archetype
+ *            representatives, so no recommendation has an owner.
+ *
+ * READ THIS, NEVER INFER IT from an empty `blue`, which is also what a failed
+ * roster resolution produces.
+ */
+export type TeamMode = 'scout' | 'squads';
+
+/**
+ * SCOUT ONLY: the opposing roster taken as one spread.
+ *
+ * The question a scouting report can ask and a match plan cannot — *we play
+ * this clan next week, what should we be practising* — because a match plan
+ * assigns a person to each opponent and a squad-wide answer would be advice
+ * with nobody to take it.
+ */
+export interface TeamOverall {
+  players: number;
+  spread: TeamSpreadRow[];
+  recommended: TeamRecommendation[];
+  reason: 'no_history' | 'no_evidence' | null;
+}
+
 export interface TeamReport {
+  /** Absent on a report from a server that predates the two modes. */
+  mode?: TeamMode;
   blue: TeamMember[];
   red: TeamMember[];
   folders: TeamFolder[];
+  /** Present in scout mode only. */
+  overall?: TeamOverall;
   pool: {
     decks: number;
-    reason: 'no_blue_history' | 'no_blue_comfort' | null;
+    /** `no_matchup_data` is the scout mode failure: the server's matchup
+     *  snapshot is still building. Nothing the reader did, and fixed by
+     *  waiting rather than by pasting more. */
+    reason: 'no_blue_history' | 'no_blue_comfort' | 'no_matchup_data' | null;
     minGames: number;
   };
   days: number;
   limits: {
     maxSquad: number;
     topN: number;
+    /** Absent on a server that predates the two modes. */
+    scoutTopN?: number;
     minComfortGames: number;
     minOpponentDeckGames: number;
   };
@@ -1423,21 +1479,26 @@ export interface TeamReport {
 }
 
 /**
- * Analyse two squads against each other.
+ * Analyse two squads against each other, or scout one roster on its own.
  *
- * THE MOST EXPENSIVE CALL THIS CLIENT MAKES — up to sixteen player resolutions
+ * THE MOST EXPENSIVE CALL THIS CLIENT MAKES — up to twenty player resolutions
  * and a profile of every deck the blue squad plays — so it is fired by a
  * button, never by typing. The tags are sent already normalised, and the server
  * normalises them again: the client copy is what makes chips appear before the
  * call is spent, not a boundary.
+ *
+ * AN EMPTY `blue` IS THE SCOUTING REPORT, and it is the same endpoint. The two
+ * modes take the same inputs minus one and return the same shape plus one
+ * field, so a second route would have been a second thing to deploy by hand to
+ * the VPS and a bump of the route-count tripwire, for one optional parameter.
+ * `blue` is omitted from the query string entirely rather than sent empty —
+ * `blue=` and no `blue` at all parse identically server-side, and sending the
+ * key would imply a roster that was cleared rather than never given.
  */
 export function fetchTeamAnalysis(
   blue: string[], red: string[], days = 30,
 ): Promise<TeamReport> {
-  const q = new URLSearchParams({
-    blue: blue.join(','),
-    red: red.join(','),
-    days: String(days),
-  });
+  const q = new URLSearchParams({ red: red.join(','), days: String(days) });
+  if (blue.length) q.set('blue', blue.join(','));
   return get<TeamReport>(`/api/analytics/teams?${q.toString()}`);
 }

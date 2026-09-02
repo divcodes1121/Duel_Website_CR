@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type {
   TeamFolder,
+  TeamMode,
+  TeamOverall,
   TeamPlayerOptions,
   TeamRecommendation,
   TeamReport,
@@ -51,6 +53,71 @@ function Strip({
   );
 }
 
+/**
+ * SCOUT ONLY: the whole roster taken as one spread, above the folders.
+ *
+ * ── WHY THIS EXISTS, AND WHY THE MATCH PLAN HAS NO EQUIVALENT ─────────────
+ *
+ * A match plan assigns a person to each opponent, so its answer is necessarily
+ * per opponent — a squad-wide "bring this" would be advice with nobody in a
+ * position to take it. A scouting report has no roster to assign, and the
+ * question people actually arrive with is usually the other one: *we play this
+ * clan next week, what should we be practising.* That is a property of the
+ * roster as a whole, and nothing further down the page answers it.
+ *
+ * IT SITS ABOVE THE FOLDERS, not below, because it is the coarser reading and
+ * the folders are the detail under it. A reader who wants one deck to learn
+ * stops here; a reader preparing player by player carries on.
+ */
+export function RosterRead({ overall }: { overall: TeamOverall }) {
+  if (overall.reason === 'no_history') {
+    return (
+      <p className={styles.warn}>
+        Nothing is stored for this roster in the window, so there is no combined spread to answer.
+      </p>
+    );
+  }
+  return (
+    <section className={styles.roster}>
+      <h3 className={styles.galleryTitle}>
+        The roster as a whole
+        <span className={styles.galleryCount}>{overall.players}</span>
+      </h3>
+      <p className={styles.rosterLede}>
+        Every considered deck on the roster pooled into one spread, weighted by games rather than
+        by player — so a roster&apos;s busiest member counts for more than its quietest, which is
+        what actually decides what you will meet.
+      </p>
+
+      <div className={styles.rosterBody}>
+        <ul className={styles.spread}>
+          {overall.spread.map((s) => (
+            <li key={s.archetype} className={styles.spreadRow}>
+              <span>{s.name}</span>
+              <span className={styles.spreadBar} aria-hidden="true">
+                <span style={{ width: `${s.share}%` }} />
+              </span>
+              <span className={styles.spreadPct}>{s.share.toFixed(0)}%</span>
+            </li>
+          ))}
+        </ul>
+
+        {overall.reason === 'no_evidence' ? (
+          <p className={styles.warn}>
+            No deck has a measured record against this roster&apos;s spread, so nothing is ranked.
+          </p>
+        ) : (
+          <ol className={styles.mateDecks}>
+            {overall.recommended.map((r, i) => (
+              <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
+            ))}
+          </ol>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /** The gallery: one card per opponent, click to open. */
 export function FolderGallery({
   report,
@@ -62,7 +129,7 @@ export function FolderGallery({
   return (
     <>
       <h3 className={styles.galleryTitle}>
-        Opponents
+        {report.mode === 'scout' ? 'Player by player' : 'Opponents'}
         <span className={styles.galleryCount}>{report.folders.length}</span>
       </h3>
 
@@ -97,8 +164,14 @@ export function FolderGallery({
                     ))}
                   </span>
                   <span className={styles.folderLead}>
-                    <strong>{pct(best.expectedWinRate)}</strong> with {best.owner.name}&apos;s{' '}
-                    {best.name}
+                    <strong>{pct(best.expectedWinRate)}</strong>{' '}
+                    {best.owner ? (
+                      <>
+                        with {best.owner.name}&apos;s {best.name}
+                      </>
+                    ) : (
+                      <>with {best.name}</>
+                    )}
                   </span>
                   <span className={styles.folderMeta}>
                     {f.recommended.length} option{f.recommended.length === 1 ? '' : 's'} ·{' '}
@@ -120,29 +193,73 @@ export function FolderGallery({
   );
 }
 
-/** One recommended deck, with the reasoning it was chosen on. */
+/**
+ * One recommended deck, with the reasoning it was chosen on.
+ *
+ * IT RENDERS BOTH MODES, and the difference is what the second line can say.
+ * A match plan's row is owned — somebody on the squad flies it, and how much
+ * they have flown it is the tiebreak that ordered the list. A scouting
+ * report's row is an archetype representative and belongs to nobody, so
+ * instead of practice it quotes the deck's OWN record across the field: the
+ * headline alone cannot separate "this beats them" from "this beats
+ * everybody", and those are very different reasons to top a ranking.
+ */
 function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number }) {
+  /* The delta is computed here rather than shipped, because the two halves are
+     worth reading separately and a lone "+9.4" hides both of them. */
+  const edge =
+    rec.overallWinRate === null || rec.overallWinRate === undefined
+      ? null
+      : rec.expectedWinRate - rec.overallWinRate;
+
   return (
     <li className={styles.rec}>
       <div className={styles.recHead}>
         {rank !== undefined && <span className={styles.recRank}>{rank}</span>}
         <div className={styles.recWho}>
           <span className={styles.recDeck}>{rec.name}</span>
-          {/* WHOSE DECK THIS IS is the load-bearing half of the
-              recommendation: on the day, somebody has to pilot it. */}
-          <span className={styles.recOwner}>{rec.owner.name} plays it</span>
+          {/* WHOSE DECK THIS IS is the load-bearing half of a match plan's
+              recommendation: on the day, somebody has to pilot it. A scouting
+              report has nobody, and says what the deck is instead of
+              inventing an owner for it. */}
+          <span className={styles.recOwner}>
+            {rec.owner ? `${rec.owner.name} plays it` : 'Most-played list of this archetype'}
+          </span>
         </div>
         <div className={styles.recFigures}>
           <span className={styles.recRate} title="Expected win rate against this opponent's spread of archetypes, weighted by how much they play each one.">
             {pct(rec.expectedWinRate)}
           </span>
           <span className={styles.recSub}>
-            {rec.comfort.games} games piloted · {pct(rec.comfort.winRate)} with it
+            {rec.comfort ? (
+              <>
+                {rec.comfort.games} games piloted · {pct(rec.comfort.winRate)} with it
+              </>
+            ) : rec.overallWinRate !== null && rec.overallWinRate !== undefined ? (
+              <span
+                title="How this deck does against the whole field, for comparison. A deck that wins 58% here and 57% everywhere is barely a counter; the same 58% against a 49% baseline is a real answer."
+              >
+                {pct(rec.overallWinRate)} vs the field
+                {edge !== null && (
+                  <strong className={styles.recEdge} data-up={edge >= 0 || undefined}>
+                    {' '}
+                    {edge >= 0 ? '+' : ''}
+                    {edge.toFixed(1)} here
+                  </strong>
+                )}
+              </span>
+            ) : (
+              'No overall record to compare against'
+            )}
           </span>
         </div>
       </div>
 
-      <Strip cards={rec.cards} art={rec.art} name={`${rec.owner.name} — ${rec.name}`} />
+      <Strip
+        cards={rec.cards}
+        art={rec.art}
+        name={rec.owner ? `${rec.owner.name} — ${rec.name}` : rec.name}
+      />
 
       {/* HOW MUCH OF THEIR PLAY THIS COVERS. An expected rate computed over
           40% of what they bring is a different claim from one computed over
@@ -256,9 +373,27 @@ function PlayerRow({ row, open, onToggle }: {
   );
 }
 
-/** The opened folder: what they play, and what to bring. */
-export function OpenFolder({ folder, onBack }: { folder: TeamFolder; onBack: () => void }) {
+/**
+ * The opened folder: what they play, and what to bring.
+ *
+ * THE LEFT HALF IS IDENTICAL IN BOTH MODES, because "what does this player
+ * actually bring" is the same question and the same evidence whether or not a
+ * squad was pasted. Only the right half changes: a match plan lists YOUR
+ * PLAYERS, one row each, because somebody has to be assigned the match; a
+ * scouting report has nobody to assign, so it lists the decks themselves,
+ * ranked, and the reader is choosing something to go and practise.
+ */
+export function OpenFolder({
+  folder,
+  onBack,
+  mode = 'squads',
+}: {
+  folder: TeamFolder;
+  onBack: () => void;
+  mode?: TeamMode;
+}) {
   const p = folder.player;
+  const scout = mode === 'scout';
 
   /* WHICH TEAMMATE IS OPEN, and only one at a time. Several open at once turns
      the uniform list back into a wall the reader has to scroll, which is the
@@ -296,7 +431,9 @@ export function OpenFolder({ folder, onBack }: { folder: TeamFolder; onBack: () 
         <p className={styles.warn}>
           {folder.reason === 'no_history'
             ? 'Nothing is stored for this player in the window, so there is no spread to answer.'
-            : 'None of your squad’s decks has a measured record against what this player brings, so nothing is ranked. A recommendation here would be a guess wearing a percentage.'}
+            : scout
+              ? 'No deck has a measured record against what this player brings, so nothing is ranked. A recommendation here would be a guess wearing a percentage.'
+              : 'None of your squad’s decks has a measured record against what this player brings, so nothing is ranked. A recommendation here would be a guess wearing a percentage.'}
         </p>
       ) : (
         <>
@@ -336,29 +473,52 @@ export function OpenFolder({ folder, onBack }: { folder: TeamFolder; onBack: () 
               <VsMark size="md" />
             </div>
 
-            {/* YOUR SQUAD, ONE ROW EACH. Every teammate appears — including
-                one with nothing to bring, which is information rather than a
-                reason to omit them. */}
-            <section className={styles.boardSide} data-side="blue">
-              <h4 className={styles.boardTitle}>Your players</h4>
-              <ul className={styles.mates}>
-                {folder.perPlayer.map((row) => (
-                  <PlayerRow
-                    key={row.owner.tag}
-                    row={row}
-                    open={openMate === row.owner.tag}
-                    onToggle={() =>
-                      setOpenMate(openMate === row.owner.tag ? null : row.owner.tag)
-                    }
-                  />
-                ))}
-              </ul>
-              <p className={styles.considered}>
-                Tap a player for their best three against {p.name}. Ranked from{' '}
-                {folder.considered} deck{folder.considered === 1 ? '' : 's'} your squad actually
-                plays.
-              </p>
-            </section>
+            {scout ? (
+              /* NO SQUAD, SO NO ASSIGNMENT — the answer is the decks
+                 themselves, ranked, and they are expanded rather than
+                 collapsed. The collapsed rows in the other mode exist so a
+                 reader can compare PLAYERS at a glance; with nobody to
+                 compare, hiding the reasoning behind a chevron would only put
+                 a click in front of the one thing on the board. */
+              <section className={styles.boardSide} data-side="blue">
+                <h4 className={styles.boardTitle}>What beats it</h4>
+                <ol className={styles.mateDecks}>
+                  {folder.recommended.map((r, i) => (
+                    <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
+                  ))}
+                </ol>
+                <p className={styles.considered}>
+                  Ranked from {folder.considered} archetype
+                  {folder.considered === 1 ? '' : 's'}, each represented by its most-played real
+                  list. Nothing here is generated — every deck is one people run, with a record
+                  to score it on.
+                </p>
+              </section>
+            ) : (
+              /* YOUR SQUAD, ONE ROW EACH. Every teammate appears — including
+                 one with nothing to bring, which is information rather than a
+                 reason to omit them. */
+              <section className={styles.boardSide} data-side="blue">
+                <h4 className={styles.boardTitle}>Your players</h4>
+                <ul className={styles.mates}>
+                  {folder.perPlayer.map((row) => (
+                    <PlayerRow
+                      key={row.owner.tag}
+                      row={row}
+                      open={openMate === row.owner.tag}
+                      onToggle={() =>
+                        setOpenMate(openMate === row.owner.tag ? null : row.owner.tag)
+                      }
+                    />
+                  ))}
+                </ul>
+                <p className={styles.considered}>
+                  Tap a player for their best three against {p.name}. Ranked from{' '}
+                  {folder.considered} deck{folder.considered === 1 ? '' : 's'} your squad actually
+                  plays.
+                </p>
+              </section>
+            )}
           </div>
 
         </>

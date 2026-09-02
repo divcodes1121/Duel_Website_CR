@@ -4,12 +4,14 @@ import {
   fetchTeamAnalysis,
   type TeamFolder,
   type TeamMember,
+  type TeamMode,
   type TeamReport,
 } from '../../../state/analyticsClient';
 import {
   MAX_SQUAD,
   overlappingTags,
   parseSquad,
+  scoutProblem,
   squadProblem,
   type SquadParse,
 } from '../../../utils/squadParse';
@@ -17,6 +19,7 @@ import { recordDuration } from '../../../state/loadTiming';
 import {
   defaultSaveName,
   MAX_SAVES,
+  saveMode,
   useTeamSaves,
   type SavedTeamAnalysis,
 } from '../../../state/teamSaves';
@@ -26,24 +29,48 @@ import { readToken } from '../../../three/runtime';
 import { ReportButton } from '../../Export/ReportButton';
 import { ReadingState } from '../ReadingState';
 import { VsMark } from '../../VsMark/VsMark';
-import { FolderGallery, OpenFolder } from './TeamFolders';
+import { FolderGallery, OpenFolder, RosterRead } from './TeamFolders';
 import { SavedAnalyses } from './TeamSaves';
 import styles from './TeamAnalysis.module.css';
 
 /**
- * TEAM ANALYSIS — two rosters in, a folder per opponent out.
+ * TEAM ANALYSIS — a roster read, or two rosters matched against each other.
  *
- * Paste your squad on the left and theirs on the right. Every opponent gets a
- * folder holding the decks they actually play and, beside them, the decks from
- * YOUR squad that answer that spread — each labelled with the teammate who
- * already pilots it.
+ * ── TWO TABS, ONE SCREEN ──────────────────────────────────────────────────
  *
- * ── WHY THE SCREEN IS SHAPED LIKE THIS ────────────────────────────────────
+ * SCOUTING REPORT  one roster — theirs. What they play, and the decks that
+ *                  beat it, drawn from the archetype representatives.
+ * MATCH PLAN       both rosters. Who on your team takes which opponent, and
+ *                  with what. The original screen, unchanged.
  *
- * THE ENTRY IS TWO BOXES AND A VS, because that is the thing being described:
- * one team against another. A single field with a side toggle would have been
- * fewer pixels and would have made the reader hold "which side am I filling in"
- * in their head while pasting sixteen tags.
+ * The tab pattern is Coach Assist's, deliberately: this project already has a
+ * screen that is two related readings of one subject behind an underline tab
+ * strip, and a second idiom for the same job would make two screens that do
+ * the same thing look like two unrelated things.
+ *
+ * WHY IT IS TWO TABS AND NOT TWO SCREENS. Both start from the same paste — the
+ * opponent roster — and the common path is genuinely sequential: scout them,
+ * then add your own squad and plan the match. Two routes would mean pasting
+ * that roster twice, which is the single most tedious thing this screen asks
+ * anybody to do.
+ *
+ * SO THE PASTED TEXT SURVIVES A TAB SWITCH AND THE RESULT DOES NOT MOVE WITH
+ * IT. Coach Assist keys its children on the tab to start a clean interview;
+ * here the equivalent would throw away sixteen pasted tags, which is the wrong
+ * trade. Instead a report remembers which mode produced it and is shown only
+ * in that mode — so flipping tabs hides the other board rather than deleting
+ * it, and coming back finds it still there. What must never happen is a scout
+ * report rendering under the Match Plan tab: `report.mode` is what prevents
+ * it, and it is read rather than inferred.
+ *
+ * ── WHY THE REST OF THE SCREEN IS SHAPED LIKE THIS ────────────────────────
+ *
+ * THE MATCH PLAN'S ENTRY IS TWO BOXES AND A VS, because that is the thing
+ * being described: one team against another. A single field with a side toggle
+ * would have been fewer pixels and would have made the reader hold "which side
+ * am I filling in" in their head while pasting sixteen tags. The scouting
+ * report has one box for the same reason inverted — there is one roster, so a
+ * second box would be a question with no answer.
  *
  * THE RESULT IS FOLDERS, not one long page. Eight opponents each carrying six
  * of their decks and three recommendations is fifty-odd decks — a scroll nobody
@@ -56,6 +83,27 @@ import styles from './TeamAnalysis.module.css';
  * deliberate and is the same mistake the tag search already made once — see the
  * GooeySearch note in the README about one query costing ~180 requests.
  */
+
+/**
+ * The two tabs.
+ *
+ * NAMED FOR WHAT THEY PRODUCE, not for how many rosters they take. "Single"
+ * and "Dual" describe the form a reader is about to fill in; "Scouting Report"
+ * and "Match Plan" describe the document they get out, which is what they came
+ * for and the only half of it they will remember afterwards.
+ */
+const MODES: { id: TeamMode; label: string; blurb: string }[] = [
+  {
+    id: 'scout',
+    label: 'Scouting Report',
+    blurb: 'One roster in. What they play, and the decks that beat it.',
+  },
+  {
+    id: 'squads',
+    label: 'Match Plan',
+    blurb: 'Both rosters. Who on your team takes which opponent, and with what.',
+  },
+];
 
 function useSquad(text: string): SquadParse {
   return useMemo(() => parseSquad(text), [text]);
@@ -204,6 +252,11 @@ function SquadInput({
 }
 
 export function TeamAnalysis() {
+  /* THE SCOUTING REPORT IS THE DEFAULT TAB. It asks for less — one roster
+     rather than two — so it is the one a first-time reader can complete, and
+     landing on the tab that demands your own squad's tags before it will do
+     anything is how a tool teaches people it is not for them. */
+  const [mode, setMode] = useState<TeamMode>('scout');
   const [blueText, setBlueText] = useState('');
   const [redText, setRedText] = useState('');
   const [report, setReport] = useState<TeamReport | null>(null);
@@ -248,8 +301,13 @@ export function TeamAnalysis() {
     );
   }, []);
 
-  const problem = squadProblem(blue, red);
-  const overlap = overlappingTags(blue, red);
+  const scout = mode === 'scout';
+  /* THE SCOUTING REPORT NEVER ASKS ABOUT A BLUE SQUAD, even if text is sitting
+     in that box from a Match Plan the reader has already run. The box is not
+     rendered in this mode, so validating it would refuse a run for a reason
+     nothing on screen explains. */
+  const problem = scout ? scoutProblem(red) : squadProblem(blue, red);
+  const overlap = scout ? [] : overlappingTags(blue, red);
 
   const run = useCallback(async () => {
     if (problem) return;
@@ -265,25 +323,45 @@ export function TeamAnalysis() {
     const started = performance.now();
     try {
       const r = await fetchTeamAnalysis(
-        blue.members.map((m) => m.tag),
+        /* AN EMPTY BLUE ROSTER IS WHAT MAKES IT A SCOUTING REPORT — see
+           `fetchTeamAnalysis`. Sending the pasted squad anyway and asking the
+           server to ignore it would put the mode in two places at once. */
+        scout ? [] : blue.members.map((m) => m.tag),
         red.members.map((m) => m.tag),
       );
-      setReport(r);
+      /* THE MODE IS STAMPED CLIENT-SIDE WHEN THE SERVER DID NOT.
+         `server/team_analysis.py` is copied to the VPS by hand while this half
+         deploys from `main` in a couple of minutes, so between those two
+         events a current client is talking to a server that has never heard of
+         `mode`. An unstamped report is always a match plan — that is all the
+         old server could produce — and a scout request against it fails
+         earlier, at the 400 handled below. */
+      setReport(r.mode ? r : { ...r, mode: 'squads' });
       revealResults();
       // Measured, so the next run's progress bar is paced by this machine's
       // real timing rather than by the seed.
       recordDuration('teams', performance.now() - started);
     } catch (e) {
       setReport(null);
+      /* AN OLD SERVER REFUSES A SCOUTING REPORT BY NAME, and the message it
+         sends is about a missing squad — which is exactly the wrong thing to
+         tell somebody looking at a screen with no squad box on it. The two
+         halves ship separately, so this is a real state rather than a
+         defensive one, and it is the same class of drift the `maxSquad` check
+         further down was written for. */
+      const stale =
+        scout && e instanceof AnalyticsError && /squad/i.test(e.message);
       setError(
-        e instanceof AnalyticsError
-          ? e.message
-          : 'The analysis could not be completed. Try again in a moment.',
+        stale
+          ? 'The analytics service has not been updated for scouting reports yet — it still requires both rosters. Match Plan works in the meantime, and deploying the current server/team_analysis.py to the API host enables this tab.'
+          : e instanceof AnalyticsError
+            ? e.message
+            : 'The analysis could not be completed. Try again in a moment.',
       );
     } finally {
       setLoading(false);
     }
-  }, [blue.members, red.members, problem, revealResults]);
+  }, [blue.members, red.members, problem, revealResults, scout]);
 
   /* Opening a folder starts at the folder's top. Without this you land
      mid-way down a board because the gallery you clicked from was scrolled. */
@@ -331,6 +409,12 @@ export function TeamAnalysis() {
      click away rather than a re-paste. */
   const openSave = useCallback(
     (save: SavedTeamAnalysis) => {
+      /* OPENING A SAVE SWITCHES TO ITS OWN TAB. One list holds both kinds, so
+         a scouting report opened from under the Match Plan tab would either
+         render as a match plan with no players in it or refuse to render at
+         all. The row carries a badge saying which it is, which is also what
+         makes the switch legible rather than startling. */
+      setMode(saveMode(save));
       setBlueText(save.blueText);
       setRedText(save.redText);
       setReport(save.report);
@@ -344,9 +428,20 @@ export function TeamAnalysis() {
     [revealResults],
   );
 
-  const open: TeamFolder | null = openTag
-    ? report?.folders.find((f) => f.player.tag === openTag) ?? null
-    : null;
+  /* WHICH MODE THE REPORT ON HAND BELONGS TO, and it decides whether it is
+     shown at all. A report is not cleared when the tabs change — that would
+     throw away a run somebody may be flipping back to — so it is hidden
+     instead, and this is the one comparison standing between a scouting report
+     and the Match Plan tab trying to draw a per-player board it does not have.
+     Read from the payload, never inferred from an empty `blue`: a match plan
+     whose roster failed to resolve has one of those too. */
+  const reportMode: TeamMode = report?.mode ?? 'squads';
+  const showing = !!report && reportMode === mode;
+
+  const open: TeamFolder | null =
+    openTag && showing
+      ? report?.folders.find((f) => f.player.tag === openTag) ?? null
+      : null;
 
   /* THE TWO CAPS CAN DISAGREE, AND ONLY ONE OF THEM SAYS SO.
    *
@@ -364,6 +459,7 @@ export function TeamAnalysis() {
    * file's — the server publishes it, and this is what that field is for. */
   const serverCap = report?.limits?.maxSquad ?? MAX_SQUAD;
   const capSkew =
+    showing &&
     !!report &&
     serverCap < MAX_SQUAD &&
     (report.blue.length >= serverCap || report.red.length >= serverCap);
@@ -372,35 +468,59 @@ export function TeamAnalysis() {
     <div className={styles.page} ref={scroller}>
       <header className={styles.head}>
         <h2 className={styles.title}>Team Analysis</h2>
-        <p className={styles.lede}>
-          Paste both rosters — names and tags, or tags on their own. Every opponent gets a folder
-          holding the decks they play and the decks your squad should answer them with.
-        </p>
+        <p className={styles.lede}>{MODES.find((m) => m.id === mode)?.blurb}</p>
       </header>
 
-      <section className={styles.entry}>
-        <SquadInput
-          side="blue"
-          label="Your team"
-          hint={'Ravi #Y022GRCJQ\nAditya #2PP0PYLQ\n#L8GVPJ900'}
-          value={blueText}
-          onChange={setBlueText}
-          squad={blue}
-          resolved={report?.blue ?? null}
-        />
+      {/* THE TAB STRIP IS COACH ASSIST'S, down to the class names' shape — an
+          underline rail where the coloured RULE is the indicator and the label
+          carries the app's ink rather than the hue. Meaning does not rest on
+          colour alone: the selected label is brighter AND heavier AND ruled. */}
+      <div className={styles.tabs} role="tablist" aria-label="Analysis type">
+        {MODES.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            role="tab"
+            aria-selected={mode === m.id}
+            className={`${styles.tab} ${mode === m.id ? styles.tabOn : ''}`}
+            onClick={() => setMode(m.id)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
 
-        <div className={styles.vs}>
-          <VsMark size="lg" />
-        </div>
+      {/* ONE BOX OR TWO. The paste survives the switch, so scouting a roster
+          and then planning the match against it is one paste rather than two —
+          which is the sequence people actually work in and the main argument
+          for these being tabs rather than routes. */}
+      <section className={styles.entry} data-solo={scout || undefined}>
+        {!scout && (
+          <>
+            <SquadInput
+              side="blue"
+              label="Your team"
+              hint={'Ravi #Y022GRCJQ\nAditya #2PP0PYLQ\n#L8GVPJ900'}
+              value={blueText}
+              onChange={setBlueText}
+              squad={blue}
+              resolved={showing ? report?.blue ?? null : null}
+            />
+
+            <div className={styles.vs}>
+              <VsMark size="lg" />
+            </div>
+          </>
+        )}
 
         <SquadInput
           side="red"
-          label="Opponent team"
+          label={scout ? 'The roster to scout' : 'Opponent team'}
           hint={'Mohamed Light #Y022GRCJQ\n#2PP0PYLQ'}
           value={redText}
           onChange={setRedText}
           squad={red}
-          resolved={report?.red ?? null}
+          resolved={showing ? report?.red ?? null : null}
         />
       </section>
 
@@ -414,13 +534,21 @@ export function TeamAnalysis() {
             onClick={run}
             disabled={!!problem || loading}
           >
-            {loading ? 'Analysing…' : savedAt ? 'Re-run against today' : 'Analyse squads'}
+            {loading
+              ? 'Analysing…'
+              : savedAt && showing
+                ? 'Re-run against today'
+                : scout
+                  ? 'Scout this roster'
+                  : 'Analyse squads'}
           </button>
 
-          {/* SAVE APPEARS ONLY WITH SOMETHING TO SAVE. A disabled Save beside
+          {/* SAVE APPEARS ONLY WITH SOMETHING TO SAVE, and only while the
+              board it would save is the one on screen. A disabled Save beside
               an empty screen is a control that has never once been usable at
-              the moment it is read. */}
-          {report && !loading && (
+              the moment it is read; a live one over a hidden board would save
+              something the reader is not looking at. */}
+          {showing && report && !loading && (
             <>
               <button type="button" className={styles.save} onClick={() => saveCurrent(false)}>
                 {savedId ? 'Update saved' : 'Save analysis'}
@@ -468,15 +596,25 @@ export function TeamAnalysis() {
       {loading && (
         <ReadingState k="teams" hue="pink">
           <p>
-            Reading {blue.members.length + red.members.length} players and scoring every deck your
-            squad plays against each opponent&apos;s spread.
+            {scout ? (
+              <>
+                Reading {red.members.length} player
+                {red.members.length === 1 ? '' : 's'} and scoring every archetype against what
+                they bring.
+              </>
+            ) : (
+              <>
+                Reading {blue.members.length + red.members.length} players and scoring every deck
+                your squad plays against each opponent&apos;s spread.
+              </>
+            )}
           </p>
         </ReadingState>
       )}
 
       {error && !loading && <p className={styles.error}>{error}</p>}
 
-      {report && !loading && (
+      {showing && report && !loading && (
         <section className={styles.results} ref={results}>
           {/* A RESTORED BOARD SAYS WHAT IT IS, EVERY TIME. Every figure below
               was measured over a window that closed when the analysis ran —
@@ -495,9 +633,16 @@ export function TeamAnalysis() {
               "your side has no stored history" — they read as a broken tool. */}
           {report.pool.reason && (
             <p className={styles.warn}>
-              {report.pool.reason === 'no_blue_history'
-                ? 'Nothing is stored for your side yet, so there are no decks to recommend. Newly added tags are queued for collection and fill in within a couple of hours.'
-                : `No deck on your side clears the ${report.pool.minGames}-game floor, so there is nothing anyone has actually piloted to recommend.`}
+              {report.pool.reason === 'no_matchup_data'
+                ? /* NOT THE READER'S FAULT AND NOT FIXED BY PASTING MORE. The
+                     matchup snapshot is a ~60s background build on the API
+                     host; until it lands there is no pool to rank at all.
+                     Saying "no decks found" here would send somebody back to
+                     their roster to look for a mistake that is not in it. */
+                  'The matchup snapshot on the analytics service is still building, so there is nothing to rank yet. It takes about a minute — try again shortly.'
+                : report.pool.reason === 'no_blue_history'
+                  ? 'Nothing is stored for your side yet, so there are no decks to recommend. Newly added tags are queued for collection and fill in within a couple of hours.'
+                  : `No deck on your side clears the ${report.pool.minGames}-game floor, so there is nothing anyone has actually piloted to recommend.`}
             </p>
           )}
 
@@ -522,13 +667,20 @@ export function TeamAnalysis() {
           {open ? (
             <OpenFolder
               folder={open}
+              mode={reportMode}
               onBack={() => {
                 setOpenTag(null);
                 revealResults();
               }}
             />
           ) : (
-            <FolderGallery report={report} onOpen={openFolder} />
+            <>
+              {/* THE COARSE READING FIRST, then the detail under it. Scout
+                  only — a match plan's recommendations each belong to a named
+                  teammate, so it has no squad-wide answer to give. */}
+              {report.overall && <RosterRead overall={report.overall} />}
+              <FolderGallery report={report} onOpen={openFolder} />
+            </>
           )}
         </section>
       )}

@@ -5,6 +5,7 @@ import {
   normalizeTag,
   overlappingTags,
   parseSquad,
+  scoutProblem,
   squadProblem,
   squadsReady,
 } from '../src/utils/squadParse';
@@ -273,6 +274,32 @@ describe('readiness', () => {
     expect(squadProblem(squad(0), squad(1))).toContain('your team');
     expect(squadProblem(squad(1), squad(0))).toContain('opponent');
     expect(squadProblem(squad(3), squad(3))).toBeNull();
+  });
+
+  /* THE SCOUTING REPORT'S CHECK, which has only one roster to look at. It is a
+     separate function rather than a mode argument because every message in
+     `squadProblem` names a side, and a scouting report has no side to name. */
+  describe('scoutProblem', () => {
+    it('asks for the one roster it needs', () => {
+      expect(scoutProblem(squad(0))).toBe('Paste the roster you want to scout.');
+      expect(scoutProblem(squad(1))).toBeNull();
+    });
+
+    it('never mentions a squad the reader was not asked for', () => {
+      /* The Scouting Report tab renders no blue box at all, so a message about
+         "your team" would refuse a run for a reason nothing on screen
+         explains. */
+      expect(scoutProblem(squad(0))).not.toMatch(/your team|opponent|both/i);
+    });
+
+    it('shares MAX_SQUAD with the two-roster check', () => {
+      /* Deliberately the same cap even though a scouting report does less work
+         per player: this number is a mirror of the server's slice, and the
+         server slices both modes with one constant. Two caps here would be two
+         chances to drift from one number over there. */
+      expect(scoutProblem(squad(MAX_SQUAD))).toBeNull();
+      expect(scoutProblem(squad(MAX_SQUAD + 1))).toContain(String(MAX_SQUAD));
+    });
   });
 });
 

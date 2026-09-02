@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { TeamReport } from './analyticsClient';
+import type { TeamMode, TeamReport } from './analyticsClient';
 
 /**
  * SAVED TEAM ANALYSES — keep a finished board and open it again later.
@@ -67,6 +67,25 @@ export interface SavedTeamAnalysis {
   blueText: string;
   redText: string;
   report: TeamReport;
+}
+
+/**
+ * Which mode a save came from.
+ *
+ * READ OFF THE REPORT, not stored as a second field. `report.mode` is already
+ * in every save written by a current server, and duplicating it in the entry
+ * would create a pair that can disagree — a save whose wrapper says one thing
+ * and whose contents say another, with nothing to say which is right.
+ *
+ * A SAVE FROM BEFORE THE TWO MODES EXISTED HAS NO `mode` AT ALL, and every one
+ * of those is a match plan, because that was the only thing the screen did.
+ * Defaulting to `squads` is therefore not a guess; it is the fact. Do not
+ * "improve" this by inferring from `blue.length` — a match plan whose roster
+ * failed to resolve has an empty `blue` too, and would come back as a scouting
+ * report holding a per-player board it cannot render.
+ */
+export function saveMode(save: SavedTeamAnalysis): TeamMode {
+  return save.report.mode ?? 'squads';
 }
 
 /** Why a save did not happen, or `ok`. One shape so the button and the message agree. */
@@ -182,7 +201,13 @@ export const useTeamSaves = create<TeamSavesState>((set, get) => ({
  */
 export function defaultSaveName(report: TeamReport): string {
   const opponents = report.folders.map((f) => f.player.name || f.player.tag);
-  if (!opponents.length) return 'Team analysis';
-  if (opponents.length === 1) return `vs ${opponents[0]}`.slice(0, 60);
-  return `vs ${opponents[0]} +${opponents.length - 1}`.slice(0, 60);
+  /* THE PREPOSITION IS THE MODE. "vs Ravi" is a match — two sides — and a
+     scouting report has only one, so calling it that would promise a squad the
+     board does not contain. "Scouting Ravi" reads as the one-sided thing it
+     is, and the two are distinguishable at a glance in a list that holds
+     both. */
+  const verb = report.mode === 'scout' ? 'Scouting' : 'vs';
+  if (!opponents.length) return report.mode === 'scout' ? 'Scouting report' : 'Team analysis';
+  if (opponents.length === 1) return `${verb} ${opponents[0]}`.slice(0, 60);
+  return `${verb} ${opponents[0]} +${opponents.length - 1}`.slice(0, 60);
 }

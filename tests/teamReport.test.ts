@@ -308,6 +308,100 @@ describe('teamAnalysisReport — what the page will look like', () => {
     expect(doc.blocks[i - 1].kind).toBe('break');
   });
 
+  /* ── The scouting report ──────────────────────────────────────────────────
+   *
+   * One roster, no squad, and a pool of archetype representatives that belong
+   * to nobody. What is tested is that the document does not go on talking
+   * about a squad it does not have — the failure mode here is not a crash, it
+   * is a confident sheet of paper describing a team that was never pasted.
+   */
+  const scoutRec = (): TeamRecommendation => ({
+    ...rec('#B1', 'Ravi'),
+    owner: null,
+    comfort: null,
+    overallWinRate: 49.2,
+    overallGames: 8400,
+  });
+
+  const scoutReport = (over: Partial<TeamReport> = {}): TeamReport =>
+    report({
+      mode: 'scout',
+      blue: [],
+      folders: [folder('#R1', 'Mohamed', { recommended: [scoutRec()], perPlayer: [] })],
+      overall: {
+        players: 1,
+        spread: [
+          { archetype: 'log-bait', name: 'Log Bait', style: 'bait', games: 61, weight: 0.7, share: 70 },
+          { archetype: 'x-bow', name: 'X-Bow', style: 'siege', games: 26, weight: 0.3, share: 30 },
+        ],
+        recommended: [scoutRec()],
+        reason: null,
+      },
+      ...over,
+    });
+
+  it('NEVER PRINTS A SQUAD IT DOES NOT HAVE', () => {
+    /* The both-squads divider would read "Your squad: 0 players" and the
+       teammate pass would emit nothing at all. An empty section under a
+       confident heading reads as a fault in the analysis rather than as a
+       section that does not apply. */
+    const doc = teamAnalysisReport(scoutReport());
+    const titles = dividers(doc.blocks).map((d) => d.title);
+    expect(titles).not.toContain('Both squads');
+    expect(titles).toContain('Mohamed');
+    expect(doc.meta.map((m) => m.label)).not.toContain('Your squad');
+    expect(doc.meta.map((m) => m.label)).toContain('Roster scouted');
+  });
+
+  it('leads with the roster-wide read, which the match plan has no equivalent of', () => {
+    const doc = teamAnalysisReport(scoutReport());
+    const titles = dividers(doc.blocks).map((d) => d.title);
+    expect(titles[0]).toBe('The roster as a whole');
+    // And the match plan must not grow one: every recommendation there belongs
+    // to a named teammate, so a squad-wide answer has nobody to take it.
+    expect(dividers(teamAnalysisReport(report()).blocks).map((d) => d.title)).not.toContain(
+      'The roster as a whole',
+    );
+  });
+
+  it('quotes the field record where a match plan quotes games piloted', () => {
+    /* An ownerless deck has nothing to be practised at, so the honest second
+       figure is its own record against everybody — which is what separates a
+       deck that beats THEM from a deck that beats everyone. */
+    const text = allText(teamAnalysisReport(scoutReport()));
+    expect(text).toContain('vs the field');
+    expect(text).not.toContain('games at');
+  });
+
+  it('says the pool is not checked against anyone’s ability to fly it', () => {
+    /* The match plan's whole promise is that somebody on the roster already
+       pilots the deck. A scouting report cannot make that promise and must not
+       appear to. */
+    const doc = teamAnalysisReport(scoutReport());
+    expect(doc.caveats?.join(' ')).toMatch(/never played|can actually bring/i);
+  });
+
+  it('puts no "v" on the cover of a one-roster document', () => {
+    // "0 v 5" would put a squad on the cover of a document containing none,
+    // and checking the cover is the first thing done with a printed sheet.
+    const doc = teamAnalysisReport(scoutReport());
+    // A plain substring, not a word-boundary regex: the match plan's subject
+    // is literally `${blue} v ${red}`, so " v " is the exact thing that must
+    // not appear rather than a class of things resembling it.
+    expect(doc.subject).not.toContain(' v ');
+    expect(teamAnalysisReport(report()).subject).toContain(' v ');
+    expect(doc.screen).toBe('Scouting Report');
+    expect(teamAnalysisReport(report()).screen).toBe('Match Plan');
+  });
+
+  it('treats a report with no mode as a match plan, never as a scout', () => {
+    /* Only a server predating the two modes omits `mode`, and that server
+       could produce nothing else. Inferring from an empty `blue` instead would
+       misread a match plan whose roster failed to resolve. */
+    const stale = report({ mode: undefined, blue: [] });
+    expect(teamAnalysisReport(stale).screen).toBe('Match Plan');
+  });
+
   it('every heading is short enough to print on one line', () => {
     // Headings are clipped to the content width by the renderer; one that needs
     // clipping loses its own end, which is where the specifics live.
