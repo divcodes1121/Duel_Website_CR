@@ -285,7 +285,7 @@ happily against a server that never called it.
 | `GET /api/analytics/deck?cards=&wild=` | how one pasted deck draws — slots + art (`wild=evolution` or `wild=hero` picks slot 3) |
 | `GET /api/analytics/matchup?a=&b=` | head-to-head for two decks (comma-separated keys) |
 | `GET /api/analytics/counters?deck=` | what beats a deck |
-| `GET /api/analytics/teams?blue=&red=` | **squad vs squad** — one folder per opponent: their decks, their archetype spread, and the top 3 decks the blue squad already plays that answer it. The most expensive route on the service: up to sixteen player resolutions, enrolment for the untracked ones, and a profile of every blue deck. `days` as everywhere else |
+| `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, and the decks that answer it. With `blue` those are the top 3 the blue squad already plays; **omit `blue` entirely** and they are the top 5 archetype representatives, plus an `overall` block ranking the same pool against the whole roster's pooled spread. `mode` says which. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
@@ -854,8 +854,37 @@ counted all twelve.
 
 ## Team analysis (`team_analysis.py`)
 
-Two rosters in, a folder per opponent out. The scoring rule and its floors are
-in the module docstring; three things matter from outside it.
+Two rosters in, a folder per opponent out — **or one roster in, on its own.**
+The scoring rule and its floors are in the module docstring; four things matter
+from outside it.
+
+**An empty `blue_tags` IS the scouting report**, and that absence is the mode
+switch rather than a flag. The two modes take the same inputs minus one, return
+the same shape plus one field (`overall`), and publish which they were in
+`mode`. So `/api/analytics/teams` simply stopped requiring `blue`: **no new
+route**, nothing extra to hand-copy to the VPS, and the route-count tripwire in
+`test_api_security.py` stays at 21. It also means the incoherent combination —
+a squad pasted *and* scout mode asked for — cannot be expressed.
+
+With no squad to recommend from, the pool is `deck_counter._representatives()`:
+the most-observed real deck of each archetype, **not** the meta board's top 50,
+for the reason `_build_reps` gives above — the board excludes duel and friendly
+modes, and every number scored here comes out of `pair_matchup_agg`, which does
+not. Those candidates carry `owner: None` and `comfort: None` (nobody owns an
+archetype representative, so there is no tiebreak and no games piloted) and
+quote `overallWinRate` instead: the deck's own record across the field, which
+is the only thing that separates *beats them* from *beats everybody*.
+
+`_score` is shared between the two modes unchanged. A second scorer for the
+second tab would put the fault this module exists to avoid — two places
+disagreeing about the same two decks — *inside* one screen.
+
+**`_SCOUT_POOL` is cached on the counter snapshot's `computedAt`, and that is
+not only an optimisation.** `_CLUSTER_CACHE` above is 32 entries and clears
+itself whole on overflow; seventeen representatives at two cluster levels is
+thirty-four. One forward pass costs a single sibling scan per deck and never
+returns to one — anything that looped opponents on the outside would rescan
+every deck every pass. The key is the snapshot because `reps` lives in it.
 
 **It reuses `deck_counter.matchup_ladder` rather than reimplementing it.** Every
 figure a recommendation carries is a rung of that ladder — exact deck vs
@@ -890,7 +919,7 @@ blue player, in roster order, each with that player's own top 3 and a `reason`
 when they have none. Every player appears, including one with nothing to offer.
 
 Floors: `MIN_COMFORT_GAMES` 5 (a deck under it is one somebody tried, not one
-they play), `MIN_OPPONENT_DECK_GAMES` 2, `MAX_SQUAD` **10** per side, `TOP_N` 3.
+they play), `MIN_OPPONENT_DECK_GAMES` 2, `MAX_SQUAD` **10** per side, `TOP_N` 3, `SCOUT_TOP_N` 5.
 `COMFORT_WEIGHT` is 1.5 points and is a TIEBREAK — sized to lose to any real
 matchup difference.
 

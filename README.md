@@ -53,7 +53,8 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Team Analysis** (`#/teams`) | **shipped; saves, reads links, prints.** Paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Off the admin shelf and on sale**: everyone sees it, anon and free get a gate card, and the three-day trial opens it along with pro and admin. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
+| **What's new** (the bell) | **shipped 2026-09-02.** The bell in the top bar sat inert from the day the shell was built; it opens the release feed now, immediately right of the theme switch. Notes live in `src/content/releases.ts` and ship in the same commit as the change they describe, so the two cannot drift. An unread count on the bell and on the profile menu's row, from one hook; a first-time reader is stamped silently rather than greeted with a badge for a product they have never used. Per browser rather than per account — the honest limit, and the upgrade is a `profiles` column. +3.01 kB gzip; 11 unit checks, browser-verified 24/24 |
+| **Team Analysis** (`#/teams`) | **TWO TABS as of 2026-09-02 — Scouting Report and Match Plan.** One roster in gives a scouting report: what they play, and the decks that beat it, drawn from the archetype representatives and ranked through the same matchup ladder — plus a roster-wide read (their whole spread pooled, weighted by games) that a match plan has no equivalent of. Match Plan is the original screen, unchanged. The mode is an ABSENT `blue`, so there is no new route and the tripwire stays at 21. Main bundle 338.43 -> 338.44 kB gzip. **92 Python checks + 387 vitest; browser-verified 40/40.** Below, as before: paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Off the admin shelf and on sale**: everyone sees it, anon and free get a gate card, and the three-day trial opens it along with pro and admin. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -87,7 +88,7 @@ bot's SQLite files read-only.
 | UI — the landing banners | **fixed and uniform, 2026-09-01.** They were 90% apart on a phone — 298 / 518 / 298 / 567px, showing 21% to 42% of their own art — from three separate faults: the flipped pair kept the desktop two-column grid at every width (a specificity trap one level below the one already recorded beside it), `.band` was referenced in `Dashboard.tsx` and **never written**, so all four paintings met edge to edge at 1440 as well as 390, and each panel was as tall as its own copy. Now **0px spread at 430/390/360/320**. See [The four banners on a phone](#the-four-banners-on-a-phone-and-the-three-faults-under-one-symptom) |
 | UI — the display face | **scoped to the landing, 2026-09-01, 25/25 browser checks.** Bebas draws lowercase as capital forms, so every heading inside the product read as a poster. One declaration — `:root[data-app-inner] { --font-display: var(--font-body) }` — and the attribute is on `:root` rather than the shell because dialogs portal into `document.body` and inherit nothing from it |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **1,386 Python checks** across **38 suites**, **378 vitest** across 14 files, `tsc -b` and `npm run build` clean. Unchanged by the 2026-09-01 work, which is CSS, one effect and one JSX block — none of it in a tested unit, which is worth saying rather than implying coverage that is not there |
+| tests | **1,411 Python checks** across **38 suites**, **398 vitest** across 15 files, `tsc -b` and `npm run build` clean. The 2026-09-02 two-tab split added 25 Python checks and 9 vitest; the 2026-09-01 work before it added none, being CSS, one effect and one JSX block — worth saying rather than implying coverage that is not there |
 | shipped from | `main` at **`ccd8c5d`**, deployed 2026-09-01 and **confirmed live by reading `/api/health`**, which reports the deployed commit. Three deploys that day: `b69db01` the Coach's narrow-it-down row, `c511188` the display-face split, `ccd8c5d` the banner fixes. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -174,6 +175,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
 42. [Two filters and a heading](#two-filters-and-a-heading)
 43. [The account menu is a stack of cards](#the-account-menu-is-a-stack-of-cards)
+43a. [What's new — the bell finally opens something](#whats-new--the-bell-finally-opens-something)
 44. [The phone pass — one scroll, and it is the page](#the-phone-pass--one-scroll-and-it-is-the-page)
 45. [DEKKIES is DECKKIES](#dekkies-is-deckkies)
 46. [Project layout](#project-layout)
@@ -208,7 +210,7 @@ python server/test_deck_counter.py # 58 checks over the matchup engine
 python server/test_coach.py       # 69 checks over the Coach Assist rules
 python server/test_live_player.py # 23 checks over the live battlelog reader
 python server/test_recruit.py     # 35 checks over the tag recruiter
-python server/test_team_analysis.py # 67 checks over the squad-vs-squad board
+python server/test_team_analysis.py # 92 checks over both tabs of the squad board
 python server/test_ml_22_final.py # 66 checks over the FROZEN production contract
 python server/test_ml_20d.py      # 27 checks that `practice` excludes real duels
 python server/test_ml_21a.py      # 32 checks over the spell feasibility harness
@@ -7658,12 +7660,267 @@ floor, the decider rule and the fact that a coin-flip record produces silence.
 
 ---
 
+## What's new — the bell finally opens something
+
+The bell has been in the top bar since the shell was built and opened nothing;
+`docs/UI.md` recorded it as "the only item here that opens nothing yet". It is
+the release feed, in the same place it has always been — immediately right of
+the theme switch.
+
+### The feed is a file, not a table
+
+`src/content/releases.ts`. There is no admin screen for this and no row in a
+database, and that is the point rather than a shortcut: a note ships in the
+**same commit** as the thing it describes, which is the only arrangement where
+the two cannot drift. A feature cannot go out unannounced, and an announcement
+cannot go out for something that was reverted. It costs no request, no table
+and no migration, and it is reviewable in a diff like everything else.
+
+The cost is that publishing a note needs a deploy. For a site that deploys from
+`main` in about two minutes, that is not a cost.
+
+It follows the same no-imports rule as `tiers.ts`, `utils/format.ts`,
+`state/passwordRules.ts` and `utils/squadParse.ts`, and for the same reason:
+this decides what every account is told the product does, and the unread
+arithmetic decides whether they are told at all.
+
+### A first-time reader is told nothing, and that is the load-bearing case
+
+`unreadCount(null)` is **0, not everything**. Somebody arriving for the first
+time has no history with this product, and greeting them with a badge saying
+seven things are new is an announcement about a thing they have never seen — it
+is exactly how a badge stops meaning anything. `seed()` stamps them with the
+newest id silently instead, so they are only ever told about what happens
+*after* they arrive.
+
+An unrecognised mark is also 0. A changelog is append-only, so that can only
+happen if history was edited, and in that case the honest count is not
+knowable; missing one badge is a far smaller failure than showing every reader
+the entire feed again.
+
+**The array is the chronology**, not the dates — two notes can share a day, and
+a date comparison would then need a tiebreak that is not the order they were
+written in. So an entry inserted in the wrong place does not *look* wrong, it
+silently gives every reader the wrong badge, and a test asserts the dates are
+non-increasing down the list for exactly that reason.
+
+### Per browser, not per account, and the limit is stated rather than hidden
+
+The seen map is keyed by user id — the same shape the deck-sync cross-account
+leak taught this project — so two accounts on one laptop do not share a mark.
+But nothing here reaches the server, so reading the feed on a laptop does not
+clear the badge on a phone.
+
+That is a real limitation and a deliberate trade. The alternative is a column
+on `profiles`, which needs a migration plus a column grant applied by hand in
+the Supabase dashboard, and the cost of getting this wrong is that somebody
+sees a badge twice. The device limit is two per account, so the blast radius is
+one extra reading. `scope` is already the user id, so moving it server-side
+later changes where the map lives and nothing else.
+
+### Two entry points, one count
+
+The bell, and a **What's new** row in the profile menu. Both read
+`useReleaseFeed()`, which lives in the store rather than beside the component —
+partly because a file exporting both a hook and components breaks fast refresh,
+and mostly because the two are on screen at the same time. A reader who sees
+"3" in one place and nothing in the other learns to trust neither.
+
+The row is not a nicety: **the bell is `display: none` below 860px**, because
+`.topActions` is already 43px too wide there and a top bar you have to swipe is
+worse than one control fewer. Without the row the release feed would not exist
+on the device most people read on. It opens a centred dialog rather than the
+anchored panel, for the obvious reason that the anchor is not on screen — and
+it is rendered outside the menu's own portal, like `ProContact` and
+`ChangePassword`, because opening it closes the menu and anything inside that
+portal would unmount in the same click.
+
+### Two things that would have failed quietly
+
+**The phone rule used to match `[aria-label='Notifications']`.** That label now
+carries the unread count, so the selector would have stopped matching for
+exactly the readers who had something to read — putting the bell back on the
+one top bar that cannot hold it, for the people most likely to reach for it. It
+matches `[data-whats-new]` now. A selector that depends on copy is a selector
+that breaks when the copy earns its keep.
+
+**The badge's positioning context is in a different stylesheet.** It is
+`position: relative` on `.iconButton` in `Dashboard.module.css`, not in
+`WhatsNew.module.css`, because CSS modules hash their own names and the
+component cannot reach the class its trigger actually wears. If the badge ever
+turns up in the corner of the whole top bar rather than the corner of the bell,
+that declaration is what went missing — which is why the browser check measures
+the badge's box against the bell's rather than merely asserting it exists.
+
+### Writing one
+
+Newest first, an id that is never reused or edited (it is what a reader's mark
+points at, so changing one re-notifies everybody about something they have
+already read), and prose for somebody who does not know the codebase — "the
+suggestion window advances the duel" is a commit subject, "you no longer lose
+your pasted decks when a game ends" is a release note.
+
+**Never put a figure in one that is not measured.** The same rule the landing
+page's closing band carries, and more so: this is the one surface that speaks
+to every account at once, so an invented number here is a claim the whole user
+base is asked to believe.
+
+Every entry states which tier it needs, where it needs one, and **nothing is
+filtered by tier**. A feed that hid what you cannot open would quietly shrink
+the product, and knowing what is behind the gate is the entire argument for
+subscribing; the badge is what keeps that honest rather than teasing.
+
+**Cost: +3.01 kB gzip on the main bundle** (338.44 → 341.45), eager because the
+bell is chrome on every screen. The feed only grows, and trimming old entries
+is the lever — the content cannot be split into its own chunk without breaking
+the badge, which has to know how many entries exist before anything is opened.
+
+---
+
 ## Team Analysis — a squad against a squad
 
-`#/teams`, and the only tool route that consults the tier gate. Paste your
-roster on the left and theirs on the right, press Analyse, and every opponent
-comes back as a **folder**: open it and their decks are on the left, the decks
-your squad should answer them with on the right, the word VS between.
+`#/teams`, and the only tool route that consults the tier gate. Two tabs over
+one scorer:
+
+| tab | takes | answers |
+|---|---|---|
+| **Scouting Report** | one roster — theirs | what they play, and the decks that beat it |
+| **Match Plan** | both rosters | who on your team takes which opponent, and with what |
+
+Match Plan is the original screen and is unchanged: paste your roster on the
+left and theirs on the right, press Analyse, and every opponent comes back as a
+**folder** — open it and their decks are on the left, the decks your squad
+should answer them with on the right, the word VS between.
+
+### Two tabs, and why they are tabs rather than two routes
+
+**They are named for the document, not the form.** "Single" and "dual" describe
+what you are about to fill in; "Scouting Report" and "Match Plan" describe what
+you get out, which is what you came for and the only half you remember
+afterwards.
+
+**Both start from the same paste, and the common path is sequential** — scout
+them, then add your own squad and plan the match. Two routes would mean pasting
+the opponent roster twice, which is the single most tedious thing this screen
+asks anybody to do. So the pasted text survives a tab switch.
+
+**The result does not move with it, and does not get thrown away either.** Coach
+Assist keys its children on the tab to start a clean interview; the equivalent
+here would discard sixteen tags. Instead a report carries the mode that produced
+it and is rendered only under that tab, so flipping hides the other board and
+flipping back finds it still there. What must never happen is a scouting report
+drawing under Match Plan — `report.mode` is what prevents it, and it is **read,
+never inferred from an empty `blue`**, because a match plan whose roster failed
+to resolve has one of those too. A report with no `mode` at all came from a
+server that predates the split, and every one of those is a match plan.
+
+**The tab strip is Coach Assist's control, reproduced.** Those two screens are
+the only ones in the app that are two readings of one subject, and giving them
+the same idiom is the point. It is copied rather than extracted because three
+declarations is not a component.
+
+### The scouting report's pool is the representatives, and that was not a free choice
+
+With no blue roster the question becomes *what beats this?*, and the candidate
+pool has to come from somewhere. It is `deck_counter._representatives()` — the
+most-observed real deck of each archetype — and **not** the meta board's top 50,
+for the reason `_build_reps` already gives: the board excludes duel and friendly
+modes by design, while every number scored here comes out of
+`pair_matchup_agg`, which has no mode filter at all. Picking the deck from one
+population and the figure beside it from another is precisely the fault that
+note was written about, and doing it here would be a new instance of it rather
+than a new feature.
+
+It is also not generated and not a deck nobody plays: a representative is by
+construction the most-played list of its archetype, so it carries a real record
+and can answer on an exact rung of the ladder rather than falling to the
+archetype matrix on every row.
+
+**What a scout row cannot carry is comfort.** Nobody owns these decks, so
+`owner` and `comfort` are `null`, there is no tiebreak, and the ranking is the
+matchup alone. Publishing `comfort: {games: 0}` instead would state that
+somebody had piloted it zero times — a claim about a roster that was never
+pasted. In its place each row quotes the deck's **own record across the whole
+field**, because the expected rate alone cannot separate *this beats them* from
+*this beats everybody*, and those are very different reasons to top a ranking.
+Both numbers ship; the screen shows the difference between them.
+
+Making `owner` and `comfort` nullable in the TypeScript type is what flushed
+out nine places in `teamReport.ts` that had assumed an owner. They are all
+match-plan paths where one always exists, and the fallbacks are written out
+rather than asserted away with `!` — a `TypeError` inside a PDF build hands the
+reader a failed export with no indication of which section broke.
+
+### The roster-wide read, which a match plan has no equivalent of
+
+`_combined()` pools every considered deck on the opposing roster into one
+spread and ranks the same pool against it. A match plan assigns a person to
+each opponent, so its answer is necessarily per opponent — a squad-wide "bring
+this" would be advice with nobody in a position to take it. A scouting report
+has no roster to assign, and the question people actually arrive with is the
+other one: *we play this clan next week, what should we be practising.*
+
+**Weighted by games, not by player.** Summing each player's normalised shares
+would give a roster's least active member the same say as its most active,
+which is a claim that everyone plays the same amount. Games are what the
+weights already mean everywhere else in the module, so `_spread` is simply
+handed every considered deck at once.
+
+It sits **above** the folders, because it is the coarser reading and they are
+the detail under it.
+
+### It is the same endpoint, and that saved two deployments
+
+`blue` is now optional on `/api/analytics/teams`; an empty one *is* scout mode.
+The two modes take the same inputs minus one and return the same shape plus one
+field, so a second route would have meant bumping the route-count tripwire and
+adding a second file to hand-copy to the VPS for what is one optional
+parameter. The mode is published as `mode` so no client has to infer it.
+
+`_score` is shared between them unchanged, and that is the point rather than a
+saving. This module already exists partly because a second scorer would
+eventually disagree with the Deck Counter about the same two decks; a second one
+for the second tab would recreate that fault *inside* one screen, where the same
+deck against the same opponent would read differently depending on which tab you
+were standing in.
+
+**The scout pool is cached on the counter snapshot's `computedAt`, and that is
+not only an optimisation.** `_CLUSTER_CACHE` upstream holds 32 entries and
+*clears itself whole* on overflow; seventeen representatives at two cluster
+levels is thirty-four. Building them in one forward pass costs one sibling scan
+per deck and never returns to one — but anything that looped opponents on the
+outside would rescan every deck on every pass. It is keyed on the snapshot
+because `reps` lives in it, so a rebuild is exactly when these decks may differ
+and nothing else is; a time-based TTL would be a second, weaker statement of
+the same fact.
+
+`SCOUT_TOP_N` is 5 against `TOP_N`'s 3. Three is right per teammate, where the
+reader is choosing a person and a fourth option for one player is noise beside a
+fifth player with none. With nobody to split by, the same three rows are the
+entire answer, and a reader choosing a deck to go and learn wants to see where
+the ranking flattens out.
+
+### What was measured, and one thing that is not this change
+
+Main bundle **338.43 → 338.44 kB gzip** — the baseline taken by stashing and
+rebuilding rather than assumed, and effectively unchanged because the whole
+feature lands in the lazy chunk. That chunk went **9.97 → 11.36 kB** gzip of JS
+and **3.24 → 3.53** of CSS, fetched only when `#/teams` is opened. 92 Python
+checks (was 67), 387 vitest (was 378), and 40/40 browser checks against a
+fulfilled payload — the analytics API cannot answer locally, so the route is
+stubbed with a body shaped exactly like `analyze()` emits. That verifies the
+client half, which is what a null owner and a CSS grid can silently break; the
+server half has its own unit checks.
+
+**`.page` overflows sideways by 28px at 390px, and it is not this work.** The
+culprit is the ElectricBorder canvas, which `BORDER_OFFSET` deliberately draws
+40px proud on every side so the noise-displaced stroke has margin; at phone
+width that bleed escapes the page. It measures identically in Match Plan, the
+path this change never touched, and it lives in vendored CSS — shrinking the
+bleed is a decision about the effect rather than a bug fix, so it is recorded
+here rather than quietly restyled. The lesson for the next probe: **assert
+which element overflows, not whether anything does.** A bare overflow check
+fails here on somebody else's code and would hide anything of yours.
 
 ### The question it answers, and the one it refuses
 
@@ -10698,8 +10955,9 @@ The field book's "Click me" was cut mid-word by the `overflow: hidden` its
 opening cover needs — 53px of it, on every route, in both themes. On a phone it
 is the book alone; `aria-label` and `title` both say "Open the field book", so a
 screen reader was never reading "Click me" anyway. The top bar also drops the
-notification bell, which opens nothing yet, so the actions row fits without
-scrolling.
+what's-new bell so the actions row fits without scrolling — it opened nothing
+when that was decided, and now that it does, the profile menu carries a What's
+new row instead, which is on every width.
 
 "Forgot your password?" was a 133x20 target on the recovery path, widened with
 an inset `::after` so the underline does not move.
@@ -10852,6 +11110,15 @@ src/
   state/gate.ts               who may open what. `anon` and `free` are the same
   state/adminStore.ts         the console's three sources, none allowed to sink
                               the others
+  content/releases.ts         THE RELEASE FEED behind the bell. NO IMPORTS,
+                              like tiers.ts and squadParse.ts. Newest FIRST —
+                              the array is the chronology and the unread count
+                              reads position, not dates. Never reuse an id
+                              and never put an unmeasured figure in a note
+  state/whatsNew.ts           who has read which note, keyed by user id.
+                              Per BROWSER, not per account — the honest limit
+  components/WhatsNew/        the bell, its badge, the anchored panel and the
+                              dialog the profile menu opens on a phone
   components/Analytics/RecentBattles.tsx
                               the raw battle log. The only analytics screen
                               that lists rather than aggregates
@@ -11018,11 +11285,13 @@ server/
   live_player.py              the live CR battlelog, analysed for a new tag
   tracking.py                 the tag-enrolment queue — the ONLY file this API
                               writes, and it is ours, not the bot's
-  team_analysis.py            squad vs squad. Reuses deck_counter's matchup
+  team_analysis.py            squad vs squad, AND one roster on its own —
+                              an empty `blue_tags` IS the scouting report.
+                              Reuses deck_counter's matchup
                               ladder rather than reimplementing it, and builds
                               each candidate's profiles ONCE — the upstream
                               LRUs are 64/32 and would thrash otherwise
-  test_team_analysis.py       67 checks, no DB and no network
+  test_team_analysis.py       92 checks, no DB and no network
   test_duel_combos.py         55 checks, no DB
   test_meta.py                33 checks, no DB
   test_card_art.py            110 checks, no DB
@@ -11136,7 +11405,9 @@ a commit about something else — see
 
 **`.topActions` overflows its box at 390px** by 43px (278 into 235), noticed
 during the Team Analysis phone pass. Pre-existing; the phone pass dropped the
-notification bell specifically so this would fit, and it still does not.
+notification bell specifically so this would fit, and it still does not. That
+is also why the bell stays hidden there now that it opens the release feed —
+it is not a control to put back until this is closed.
 
 **No sweep has been run for CSS-module classes that do not exist**, and one of
 them had been live on the landing page for an unknown length of time.
