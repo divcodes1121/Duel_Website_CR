@@ -53,12 +53,84 @@ export interface AnalyticsStatus {
    * report it.
    */
   cardData?: { loaded: boolean; count: number; error: string | null };
+  /**
+   * The tag recruiter, which enrols players nobody searched for. Counts only,
+   * never tags — and it rides on `/status` because "enabled but has never
+   * completed a run" is invisible from every other angle. Optional for the
+   * same reason `cardData` is: an older deployment does not report it.
+   */
+  recruit?: {
+    enabled: boolean;
+    opponents: boolean;
+    lastRunAt: string | null;
+    runs: number;
+    lastAdded: number;
+    queued: number;
+    ceiling: number;
+  };
+}
+
+/**
+ * OPERATIONAL METRICS, from the same authenticated coverage route.
+ *
+ * WHY EACH GROUP IS HERE. The console used to report the database as ONE
+ * number -- the file's size -- and a file whose size has not moved for two days
+ * is either a dead collector or a healthy one writing into pages a large delete
+ * freed earlier. Those two are indistinguishable from a single figure, and
+ * telling them apart took an SSH session. Each group below is a question that
+ * could not be answered from this screen:
+ *
+ *   collection  is anything still arriving, and how did the last poll go
+ *   storage     of the bytes on disk, how many hold data and how many are free
+ *   aggregates  how far the rollup has drifted behind the live table
+ *   retention   how long before the window starts deleting anything
+ *
+ * EVERY FIELD IS NULLABLE, and that is not defensive typing -- the server
+ * degrades group by group on purpose, so a missing table costs its own figures
+ * and nothing else. A console read during an incident is exactly when a table
+ * might be missing.
+ */
+export interface Ops {
+  collection: {
+    newestBattle: string | null;
+    oldestBattle: string | null;
+    battles: number;
+    trackedPlayers: number;
+    lastPollAt: string | null;
+    lastPollMs: number | null;
+    pollFailurePct: number | null;
+  } | null;
+  storage: {
+    fileBytes: number;
+    pageSize: number;
+    pageCount: number;
+    freePages: number;
+    freeBytes: number;
+    liveBytes: number;
+  } | null;
+  aggregates: {
+    watermark: string | null;
+    lastRebuild: string | null;
+    statsBattles: number;
+    pairGames: number;
+    coveragePct: number | null;
+  } | null;
+  retention: {
+    /** null when this service has not been told the bot's window. The console
+     *  then says so rather than printing a number nobody measured. */
+    days: number | null;
+    boundary: string | null;
+    daysUntilFirstDelete: number | null;
+  } | null;
 }
 
 /** What the bot is collecting, from the authenticated coverage route. */
 export interface Collection {
   trackedPlayers: number;
   global: { start: string | null; end: string | null; days: number } | null;
+  /** Optional: an older deployment of the analytics API does not report it,
+   *  and the console must still render against one that does not. */
+  ops?: Ops;
 }
 
 interface AdminState {

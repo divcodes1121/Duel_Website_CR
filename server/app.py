@@ -526,6 +526,18 @@ class Handler(BaseHTTPRequestHandler):
                         "global": cd.coverage(),
                         "player": cd.coverage(tag) if tag else None,
                         "trackedPlayers": cd.tracked_player_count(),
+                        # OPERATIONAL METRICS FOR THE ADMIN CONSOLE. It rides
+                        # here rather than on `/status` for the reason the
+                        # tracked count already does: `/status` is the one route
+                        # that answers without a key, and how the database is
+                        # doing internally is not something to hand to anyone
+                        # who curls it. NO NEW ROUTE, so the count tripwire in
+                        # test_api_security stays at 21.
+                        #
+                        # ~600 ms, measured on the live 33 GB file -- see the
+                        # docstring. It is only on this route because this route
+                        # is not on a hot path; do not copy it onto one.
+                        "ops": cd.ops_snapshot(),
                     }
                 )
 

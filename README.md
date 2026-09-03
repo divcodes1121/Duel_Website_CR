@@ -76,7 +76,7 @@ bot's SQLite files read-only.
 | UI — account menu | **shipped.** The profile dropdown is a stack of cards: identity, a tier row carrying the live WebGL badge, two figures that open the screens they count, three groups and the theme switch. See [The account menu](#the-account-menu-is-a-stack-of-cards) |
 | UI — the phone | **shipped and verified on the live site**, 15 routes x 2 themes at 390/360/320 plus tablet, landscape and both sides of the breakpoint. Every screen was a WINDOW that clipped; below `62rem` they are parts of a page and `.main` is the only scroll region. The two ranked-deck boards restack as cards. See [The phone pass](#the-phone-pass--one-scroll-and-it-is-the-page) |
 | accounts | **shipped.** Supabase auth, three-day trial, per-feature gate, onboarding form, one desktop + one mobile per account |
-| admin console | **shipped** at `#/admin` — every account and tier, role changes, end-trial, deployment health, storage capacity |
+| admin console | **shipped**, and **it reports the database now (2026-09-03)**. It showed one storage number, and a file size that does not move means either a dead collector or a healthy one writing into reclaimed pages — opposite conclusions from one figure. Four new groups: **Collection** (newest battle, last poll, poll failure rate), **Storage** (a split bar of data against reclaimable free space), **Rollup** (how far the aggregates have drifted), **Site & domain**. Rides on the existing `coverage` route, so the tripwire stays at 21. ~450 ms measured on the live 33 GB file; **+1.05 kB** gzip; 36 new Python checks |
 | hosting | **the analytics service left the home machine.** `battles.db`, `server/app.py` and the bot all run on a Contabo VPS behind Caddy at `api.deckkies.com` |
 | domain | **`deckkies.com` live**, Vercel apex + `www`, `api.` pointing at the VPS |
 | deck sync | **re-keyed to the Supabase user id.** A cross-account leak on shared browsers was found and closed |
@@ -88,7 +88,7 @@ bot's SQLite files read-only.
 | UI — the landing banners | **fixed and uniform, 2026-09-01.** They were 90% apart on a phone — 298 / 518 / 298 / 567px, showing 21% to 42% of their own art — from three separate faults: the flipped pair kept the desktop two-column grid at every width (a specificity trap one level below the one already recorded beside it), `.band` was referenced in `Dashboard.tsx` and **never written**, so all four paintings met edge to edge at 1440 as well as 390, and each panel was as tall as its own copy. Now **0px spread at 430/390/360/320**. See [The four banners on a phone](#the-four-banners-on-a-phone-and-the-three-faults-under-one-symptom) |
 | UI — the display face | **scoped to the landing, 2026-09-01, 25/25 browser checks.** Bebas draws lowercase as capital forms, so every heading inside the product read as a poster. One declaration — `:root[data-app-inner] { --font-display: var(--font-body) }` — and the attribute is on `:root` rather than the shell because dialogs portal into `document.body` and inherit nothing from it |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **1,411 Python checks** across **38 suites**, **398 vitest** across 15 files, `tsc -b` and `npm run build` clean. The 2026-09-02 two-tab split added 25 Python checks and 9 vitest; the 2026-09-01 work before it added none, being CSS, one effect and one JSX block — worth saying rather than implying coverage that is not there |
+| tests | **1,447 Python checks** across **39 suites**, **398 vitest** across 15 files, `tsc -b` and `npm run build` clean. The 2026-09-03 console work added 36 Python checks (`test_ops_snapshot.py`) and no vitest — it is one server function and JSX, which is worth saying rather than implying coverage that is not there. The 2026-09-02 two-tab split added 25 Python checks and 9 vitest; the 2026-09-01 work before it added none, being CSS, one effect and one JSX block — worth saying rather than implying coverage that is not there |
 | shipped from | `main` at **`ccd8c5d`**, deployed 2026-09-01 and **confirmed live by reading `/api/health`**, which reports the deployed commit. Three deploys that day: `b69db01` the Coach's narrow-it-down row, `c511188` the display-face split, `ccd8c5d` the banner fixes. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -932,7 +932,9 @@ it into three would mean checking three places to answer it.
 |---|---|
 | account tiles | how many accounts, on trial, pro, free; signed in today; device slots held |
 | health tiles | the deployed commit and region, analytics API latency, and which integrations this deployment can reach |
-| storage meter | `battles.db` against the VPS volume |
+| collection tiles | newest battle, last poll and its duration, the poll's API failure rate, battles stored, tracked players, how far back history reaches |
+| storage block | a split bar of data against reclaimable free space, the disk meter, page counts, and the retention runway |
+| rollup tiles | how much of the live table the aggregates cover, the watermark, and when the full rebuild last ran |
 | accounts table | every account: name, email, tier, country, tag, last sign-in, devices, and a role control |
 
 **Hiding it is a courtesy, not the boundary.** `admin_list_users()` and
@@ -1013,6 +1015,155 @@ The formatters moved out of `adminStore.ts` into `src/utils/format.ts` to be
 testable at all — importing the store constructs a Supabase client at module
 load, which wants a WebSocket that Node 21 does not have natively, so the test
 died on an import it never used. Six tests now pin the "just now" trap.
+
+---
+
+### It reported one storage number, and one number could not answer the question
+
+The console showed `battles.db`'s **size** and nothing else. That is enough to
+answer "am I running out of disk" and nothing else at all — and the question
+that actually got asked was *"the storage is stuck at 33.3 GB, is it still
+collecting?"*
+
+**A file size that does not move means one of two opposite things.** Either the
+collector has died, or it is healthily writing into pages that an earlier delete
+freed, because **SQLite never shrinks a file** — freed pages go on a freelist
+and get re-used before the file grows again. One figure cannot separate those,
+and separating them took an SSH session and an hour.
+
+It was the second. On 2026-09-01 the raw-cap valve purged **1,881,526
+`battle_raw` rows**, freeing **279,150 pages — 8.52 GiB** — and two days of new
+battles went into that hole. The bot was never unwell.
+
+Every figure now on the screen is one that was needed to reach that conclusion:
+
+| block | what it answers |
+|---|---|
+| **Collection** | newest battle (the headline — if that is minutes old, data is arriving whatever the size does), last poll and how long it took, the poll's API failure rate, battles stored, tracked players, how far back history reaches |
+| **Storage** | a split bar showing data against reclaimable free space, the disk meter, page counts, and the retention runway |
+| **Rollup** | how much of the live table the aggregates actually cover, the watermark, and when the repairing full rebuild last ran |
+| **Site & domain** | deployed commit and region, analytics API latency, card data, the recruiter, and which integrations are reachable |
+
+**It adds no route.** `ops_snapshot()` rides on `/api/analytics/coverage`, which
+is where the tracked-player count already lives and for the reason already
+recorded there: `/status` is the one route that answers without a key. The
+tripwire in `test_api_security.py` stays at **21**, and there is no second file
+to hand-deploy.
+
+**"Authenticated" is weaker than it sounds, and that was checked.** The
+Caddyfile injects `X-Analytics-Key` on the `reverse_proxy` for the **whole
+host**, not per route — so every path on `api.deckkies.com` answers anyone who
+calls it, and the key only means the origin is unreachable except through the
+edge. Nothing in the block is a path, a credential or a player tag, and
+`/status` already published `sizeBytes` unauthenticated, so the file size was
+public before this. Making it genuinely private needs a second header that only
+a Vercel function sends — worth doing, not done.
+
+**The whole block is ~450 ms, measured on the live 33 GB file rather than
+estimated.** Page pragmas are header reads (7 ms), `MIN`/`MAX` ride
+`idx_battles_time` (8 ms), the aggregate sums are 81 and 370 ms, and even
+`COUNT(*)` over 9.5M rows is **75 ms**, because SQLite counts the smallest
+index rather than the table. That is the only reason this can sit on a request.
+It is on `coverage` because `coverage` is not a hot path; it must not be copied
+onto one.
+
+**The retention runway is withheld rather than guessed.** The *bot* owns
+`CLASH_RETENTION_DAYS`, in its own env; this service is never told it. Unset,
+the tile says "unknown" and names the variable to set. Printing 304 because that
+is what the bot happened to be set to the last time somebody looked is exactly
+the invented figure this project refuses everywhere else.
+
+Cost: main bundle **333.44 → 334.49 kB gzip (+1.05)**, baseline taken by
+stashing and rebuilding rather than assumed. 36 new Python checks in
+`test_ops_snapshot.py`, which writes its own temporary SQLite file the way
+`test_recent_battles.py` does — every figure here is a pragma or an aggregate
+over real rows, and neither can be tested against a hand-built list. **No
+browser pass**, for the standing reason: the screen needs an admin session.
+
+### The rollup is half a database behind, and nothing was reporting it
+
+Building the console's Rollup block is what surfaced this. `player_stats_agg`
+sums **4,893,909** against **9,507,517** stored battles — **51.5% coverage** —
+and holds 191,098 players against 252,678 distinct tags in `battles`.
+
+**The mechanism, proven rather than guessed.**
+`advance_aggregation_watermark` folds only `[watermark, now)` and then moves the
+watermark to now. A row that *arrives* with an older timestamp is therefore
+never folded. `battles.id` is autoincrement, so insertion order is recoverable —
+and of the **last 50,000 rows inserted, all 50,000** sat below the watermark,
+**12,927 (26%)** were more than a day old, and the oldest was from
+**2026-07-01**. That is backfill plus every battle retried after a sync error,
+and the bot log is full of those (timeouts, CR API 520/525/500).
+
+**The repair has no live caller.** `rebuild_aggregates` is what corrects drift,
+and its only caller is inside the archive-seed path, under `_using_archive_db()`.
+`CLASH_ARCHIVE_DB_PATH` is empty on the VPS, so it never runs. `last_rebuild` is
+**2026-07-23**.
+
+**What it costs today is evidence, not correctness.** The windowed per-player
+screens are unaffected — `player_report` reads `FROM battles` directly and says
+so in its own docstring, as does the Deck Counter's faced-deck lookup. What is
+short is `pair_matchup_agg` (4,395,091 games), which is the substrate for the
+Deck Counter's rates, `coach.win_prob` and Team Analysis. Arrival lateness
+tracks API flakiness rather than match outcomes, so the *rates* should be
+unbiased; what is lost is decks clearing `MIN_GAMES = 8`, which pushes more
+matchups down to coarser rungs of the evidence ladder.
+
+**Do not read `pairGames` as a ratio against `battles`.** That table dedups a
+battle seen from both sides when both players are tracked, and **1,297,902**
+battles have a tracked opponent — so roughly 649,000 of the gap is legitimate.
+Only `player_stats_agg` has an honest denominator, because it counts one row per
+battle with no dedup. The console shows the ratio for that one and the pair
+figure as a bare total, for exactly this reason.
+
+**The hazard is 2027-04, not now.** `apply_age_retention` checks only
+`boundary <= watermark`; it does not verify that a row was ever aggregated. Its
+own design comment — *"a deleted row is always already in the aggregates"* — is
+currently false. The one function that does enforce that invariant,
+`run_retention` with its `REFUSING TO DELETE` guard, has **zero callers**.
+
+### Nothing is deleting battles, and that was checked rather than assumed
+
+The question behind all of the above was whether the 10-month window was quietly
+eating data. It is not, and the check is worth recording because two of the
+three ways of looking at it are misleading.
+
+```
+[retention] age-retention: deleted battles=0 duel_timeline=0
+                           (older than 20251101T064444.000Z)
+```
+
+The boundary arithmetic was recomputed rather than trusted: 2026-09-01 06:44:44
+minus 304 days *is* 2025-11-01 06:44:44, exactly the logged value — so the
+spaced `CLASH_RETENTION_DAYS = 304` really is being read by the running process.
+The oldest battle is 2026-06-01, **211 days newer** than the boundary; it first
+bites **2027-04-01**.
+
+**Exactly three sites `DELETE FROM battles`, and only one is live.**
+`run_retention` has zero callers. `consolidate_incremental` has zero live
+callers and is structurally a no-op, because its window is
+`new (2025-11) <= old (2026-09)` and it returns "nothing newly aged".
+`apply_age_retention` is the live one and it is boundary-guarded.
+
+**June looks empty and is not a loss.** 16,412 rows against July's 2.44M,
+because the CR API returns only each player's last ~25 battles — early history
+is inherently shallow and thickens as the roster grows. The daily curve is a
+smooth ramp (Jun 10: 37, Jun 20: 519, Jul 15: 163,192) with **no cliff**, which
+is the shape a retention delete would leave.
+
+**The duel payloads survived the raw purge**: 70,818 duel-like rows spanning the
+full 2026-06-01 → today, up from the ~50,000 recorded earlier. That is the
+irreplaceable half of `battle_raw`, and the valve spared it.
+
+**Maintenance only runs at bot startup**, which is worth knowing separately.
+`_run_startup_maintenance_inner` runs once, after `startup_sync`. There is no
+cron and no systemd timer on the box — the daily `ClashBot-Maintenance` Windows
+task was disabled at cutover and never replaced. `NRestarts=0`, up since
+2026-09-01 06:14, and the single maintenance run in the whole log is 20 minutes
+after that. It also logs `NOT stamping the maintenance clock`, because with no
+archive the flush is skipped and the run never counts as complete — so
+`last_maintenance` is stuck at 2026-08-25 and structurally cannot be stamped
+again on this VPS.
 
 ---
 
@@ -11458,6 +11609,8 @@ yet, or does in a way that is fine now and will not be later.
 | **The site cannot enforce analytics tiers** | `api.deckkies.com` answers anyone. Making the gate real means routing those calls through a Vercel function that checks the tier, as the Coach's opponent read already does |
 | **Signed-in mobile** | unverified. The mobile pass was run signed out, so Cards, Duel Analysis and Duel Zone showed the gate card and their phone layouts have never actually been looked at |
 | **Recruiter, on a real database** | the leaderboard half is verified against the live API; the opponent half has never run against real `battles`, because `H:` is unplugged. The scan cost is an estimate. `CLASH_RECRUIT=off` until it has |
+| **The aggregate rollup is ~48% behind** | **found 2026-09-03.** `player_stats_agg` covers 4.89M of 9.51M stored battles. `advance_aggregation_watermark` folds only `[watermark, now)` and then moves the watermark, so every backfilled or sync-error-retried row — 26% of the last 50,000 inserted were over a day old — is never folded. The repair, `rebuild_aggregates`, has no live caller: its only one is inside the archive-seed path, and there is no archive. Costs evidence rather than correctness today; becomes data loss in ~2027-04, when `apply_age_retention` starts deleting rows it never verified were aggregated |
+| **Maintenance runs only at bot startup** | no cron and no systemd timer on the VPS; the daily Windows task was disabled at cutover and never replaced. The bot has been up since 2026-09-01, so maintenance has run once. `last_maintenance` is also structurally unstampable with no archive, since the flush is skipped and the run never counts as complete |
 | **No backup of the VPS database** | **the largest single exposure.** No backup directory, no cron, no timer; `deploy/backup_db.py` sits at `/opt/clashbot/deploy/` unscheduled. Cutover checklist item 11 is unmet, and the migration doc says outright there is "no second copy of the active database anywhere" |
 | **H:** | unplugged 2026-08-26 with contents intact, and still the only rollback. Frozen at that date, so its value decays daily — which is the argument for the row above. Must not be wiped: `archive.db` holds 1 May – 1 Jun, a month in no other copy |
 | **Deploying `server/`** | nothing enforces that `src/data/` goes with it. That omission emptied three screens silently; it is now merely *visible* (a console tile), not prevented |

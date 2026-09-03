@@ -428,6 +428,190 @@ def tracked_player_count() -> int:
     return 0
 
 
+#: The BOT owns retention -- `CLASH_RETENTION_DAYS` lives in its env, not this
+#: service's -- so the website cannot know the window unless it is told the same
+#: number. Unset means the runway figure is WITHHELD rather than guessed:
+#: printing 304 because that is what the bot happened to be set to the last time
+#: somebody looked is exactly the class of invented number this project refuses
+#: everywhere else. Set it in /etc/royalweb.env to light the figure up.
+RETENTION_DAYS: int | None = int(os.getenv("CLASH_RETENTION_DAYS", "0") or 0) or None
+
+
+def _iso(stamp: str | None) -> str | None:
+    """`20260903T085236.000Z` -> `2026-09-03T08:52:36Z`.
+
+    The stored form is compact and `Date.parse` will not read it, so a console
+    that handed it straight to `ago()` would render "Invalid Date" on the one
+    figure whose entire job is to say how fresh the data is.
+    """
+    if not stamp or len(stamp) < 15:
+        return None
+    return (f"{stamp[0:4]}-{stamp[4:6]}-{stamp[6:8]}"
+            f"T{stamp[9:11]}:{stamp[11:13]}:{stamp[13:15]}Z")
+
+
+def _first(con, sql: str, default=None):
+    """First column of the first row, or `default`. Never raises.
+
+    Every figure in `ops_snapshot` is independent, and a console showing five
+    groups and one gap is strictly better than one showing an error because a
+    single pragma was unhappy.
+    """
+    try:
+        row = con.execute(sql).fetchone()
+        return default if row is None or row[0] is None else row[0]
+    except Exception:
+        return default
+
+
+def ops_snapshot() -> dict:
+    """Operational metrics for the admin console.
+
+    WHY THIS EXISTS. The console reported one storage number -- the file's size
+    -- and nothing else, so a database that had stopped collecting and one
+    collecting happily into reclaimed free pages looked EXACTLY THE SAME: a
+    figure that does not move. Telling those two apart took an SSH session and
+    an hour. Every number below is one that was needed to do it.
+
+    ALL OF IT IS CHEAP, and that was MEASURED on the live 33 GB file rather than
+    hoped: the page pragmas are header reads (7 ms), MIN/MAX ride
+    `idx_battles_time` (8 ms), the aggregate sums are 81 and 370 ms, and even
+    COUNT(*) over 9.5M rows is 75 ms because SQLite counts the smallest index.
+    The whole block is ~600 ms, which is why it can sit on a request at all.
+
+    HOT TIER ONLY, deliberately. These describe the live operational database --
+    the one the bot writes and this service reads. Merging an archive would make
+    "free pages" and "newest battle" answer about two files at once, and the
+    question being asked is about one.
+
+    NOTHING HERE IS A PATH OR A CREDENTIAL. It rides on `coverage`, the
+    authenticated route that already carries the collection's scale, rather than
+    on `/status`, which answers without a key.
+    """
+    out: dict = {"collection": None, "storage": None,
+                 "aggregates": None, "retention": None}
+    path = resolve_db_path()
+    if not path:
+        return out
+
+    try:
+        con = connect(path)
+    except Exception:
+        return out
+
+    try:
+        # ---- storage: where the file's bytes actually are ------------------
+        #
+        # THE POINT OF THIS GROUP. SQLite never shrinks a file. Freed pages go
+        # on a freelist and are re-used, so after a large delete the file size
+        # stops moving while data keeps arriving -- which reads as "collection
+        # has stopped" and is the opposite of the truth. `freeBytes` is what
+        # separates the two, and it is the number that was missing.
+        page = int(_first(con, "PRAGMA page_size", 0) or 0)
+        pages = int(_first(con, "PRAGMA page_count", 0) or 0)
+        free = int(_first(con, "PRAGMA freelist_count", 0) or 0)
+        try:
+            file_bytes = os.path.getsize(path)
+        except Exception:
+            file_bytes = pages * page
+        if page and pages:
+            out["storage"] = {
+                "fileBytes": file_bytes,
+                "pageSize": page,
+                "pageCount": pages,
+                "freePages": free,
+                "freeBytes": free * page,
+                "liveBytes": max(0, (pages - free) * page),
+            }
+
+        # ---- collection: is the bot actually still writing? ----------------
+        newest = _first(con, "SELECT MAX(battle_time) FROM battles")
+        oldest = _first(con, "SELECT MIN(battle_time) FROM battles")
+        coll: dict = {
+            "newestBattle": _iso(newest),
+            "oldestBattle": _iso(oldest),
+            "battles": int(_first(con, "SELECT COUNT(*) FROM battles", 0) or 0),
+            "trackedPlayers": int(
+                _first(con, "SELECT COUNT(*) FROM tracked_players", 0) or 0),
+            "lastPollAt": None, "lastPollMs": None, "pollFailurePct": None,
+        }
+
+        # THE BOT'S OWN TELEMETRY, one row per poll. `api_requests` and
+        # `failed_requests` are CUMULATIVE, so a useful rate is the DELTA
+        # between the last two rows -- the raw pair is a lifetime count, which
+        # on a long-running process is a large number saying nothing about now.
+        # A restart resets the counters, so a negative delta reports None
+        # rather than a nonsense percentage.
+        try:
+            rows = con.execute(
+                "SELECT ts, poll_time_ms, api_requests, failed_requests "
+                "FROM bot_health ORDER BY ts DESC LIMIT 2").fetchall()
+        except Exception:
+            rows = []
+        if rows:
+            coll["lastPollAt"] = rows[0]["ts"]
+            coll["lastPollMs"] = rows[0]["poll_time_ms"]
+            if len(rows) > 1:
+                d_req = (rows[0]["api_requests"] or 0) - (rows[1]["api_requests"] or 0)
+                d_bad = (rows[0]["failed_requests"] or 0) - (rows[1]["failed_requests"] or 0)
+                if d_req > 0 and d_bad >= 0:
+                    coll["pollFailurePct"] = round(d_bad / d_req * 100, 2)
+        out["collection"] = coll
+
+        # ---- aggregates: how far the rollup has drifted from the live table -
+        #
+        # WHAT THIS CATCHES. `advance_aggregation_watermark` folds only
+        # [watermark, now) and then moves the watermark to now, so any row that
+        # ARRIVES with an older timestamp -- every backfill, every battle
+        # retried after a sync error -- is never folded. Measured on the live
+        # database: of the last 50,000 rows inserted, all 50,000 sat below the
+        # watermark and 26% were over a day old. The repair is a full
+        # `rebuild_aggregates`, whose only caller is the archive seed path.
+        #
+        # `battles` is the honest denominator for `statsBattles` because
+        # `player_stats_agg` counts one row per battle with no dedup. It is NOT
+        # the right denominator for `pairGames`, which dedups mirrored battles
+        # when both players are tracked -- so the ratio is reported for stats
+        # only and the pair figure is shown as a bare total.
+        agg = {
+            "watermark": _iso(_first(
+                con, "SELECT value FROM retention_meta WHERE key='cutoff'")),
+            "lastRebuild": _first(
+                con, "SELECT value FROM retention_meta WHERE key='last_rebuild'"),
+            "statsBattles": int(
+                _first(con, "SELECT SUM(battles) FROM player_stats_agg", 0) or 0),
+            "pairGames": int(
+                _first(con, "SELECT SUM(games) FROM pair_matchup_agg", 0) or 0),
+            "coveragePct": None,
+        }
+        if coll["battles"] and agg["statsBattles"]:
+            agg["coveragePct"] = round(agg["statsBattles"] / coll["battles"] * 100, 1)
+        out["aggregates"] = agg
+
+        # ---- retention: how much runway before anything is deleted ---------
+        #
+        # `days` is None unless this service has been told the bot's window.
+        # With it, the boundary and the runway are arithmetic; without it, the
+        # console says the window is unknown, which is TRUE and is better than a
+        # confident wrong number on the one screen that exists to be trusted.
+        ret: dict = {"days": RETENTION_DAYS, "boundary": None,
+                     "daysUntilFirstDelete": None}
+        if RETENTION_DAYS and oldest:
+            import datetime as _dt
+            try:
+                cut = _dt.datetime.utcnow() - _dt.timedelta(days=RETENTION_DAYS)
+                born = _dt.datetime(int(oldest[0:4]), int(oldest[4:6]),
+                                    int(oldest[6:8]))
+                ret["boundary"] = cut.strftime("%Y-%m-%d")
+                ret["daysUntilFirstDelete"] = max(0, (born - cut).days)
+            except Exception:
+                pass
+        out["retention"] = ret
+    finally:
+        con.close()
+
+    return out
+
 def coverage(tag: str | None = None) -> dict:
     """Earliest and latest battle date actually stored, as 'YYYY-MM-DD'.
 
@@ -1356,11 +1540,13 @@ def _env(name: str, default: str = "") -> str:
 
     THE STRIP IS LOAD-BEARING AND IT COST A LIVE DEBUG. `/etc/royalweb.env` on
     the VPS carries CRLF line endings. systemd's `EnvironmentFile` strips the
-    trailing ``, so the service has always been fine — but `. /etc/royalweb.env`
+    trailing `
+`, so the service has always been fine — but `. /etc/royalweb.env`
     in a shell does NOT, and `CR_TOKEN` then ends in a carriage return. urllib
     refuses to send a header value containing one:
 
-        ValueError: Invalid header value b'Bearer eyJ0...'
+        ValueError: Invalid header value b'Bearer eyJ0...
+'
 
     which every caller here catches and turns into "no data". So the API looked
     unreachable from the CLI while the identical code answered fine inside the

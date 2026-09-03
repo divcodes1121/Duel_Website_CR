@@ -659,3 +659,41 @@
     animation: none;
   }
 }
+
+/* --- the split storage bar ------------------------------------------------ */
+
+/* FLEX rather than the scale transform `.meterFill` uses: that grows from a
+   left origin, which is right for one bar and puts two on top of each other.
+   Sharing the track with flex-grow also means the two segments cannot drift
+   out of sync with the figures printed above them — they ARE the figures. */
+.splitTrack {
+  display: flex;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  overflow: hidden;
+}
+
+.splitLive,
+.splitFree {
+  height: 100%;
+  transition: flex-grow var(--dur-3) var(--ease);
+}
+
+/* `--solid-*`, not `--hue-*`, for the reason `.meterFill` already records: the
+   ink step measures 2.60:1 on a dark surface and would draw a bar darker than
+   its own track. */
+.splitLive { background: var(--solid-green); }
+
+/* THE FREE SEGMENT IS NOT SPARE CAPACITY. The disk meter's remainder is room
+   to grow into; this is space already charged to the file that the file has
+   not handed back, and a neutral would read as the former. */
+.splitFree { background: var(--solid-blue); }
+
+.meterNote {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 68ch;
+}

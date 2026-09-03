@@ -106,6 +106,63 @@ function Meter({ used, total, label }: { used: number; total: number; label: str
   );
 }
 
+/** Hours since an ISO stamp, or null when there is nothing to measure. */
+function hoursSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  return (Date.now() - t) / 3_600_000;
+}
+
+/**
+ * A two-segment bar: the part of the file holding data, and the part that is
+ * free space SQLite will write into before it grows the file again.
+ *
+ * THIS IS THE WHOLE REASON THE OPS BLOCK EXISTS. A single "33.3 GB" figure
+ * cannot distinguish a collector that has died from one that is healthily
+ * re-using pages a large delete freed earlier — in both cases the number sits
+ * still. Splitting the bar makes the second case legible: a wide free segment
+ * IS the explanation for a size that has not moved.
+ *
+ * The free segment is drawn in the warn hue rather than a neutral, because it
+ * is not spare capacity in the way the disk meter's remainder is — it is space
+ * already charged to this file that the file has not given back.
+ */
+function Split({
+  live,
+  free,
+  label,
+  note,
+}: {
+  live: number;
+  free: number;
+  label: string;
+  note?: string;
+}) {
+  const total = live + free;
+  const pct = total > 0 ? (free / total) * 100 : 0;
+  const poke = usePoke<HTMLDivElement>();
+  return (
+    <div className={styles.meter} {...poke}>
+      <div className={styles.meterHead}>
+        <span>{label}</span>
+        <span className={styles.meterFigure}>
+          {bytes(live)} data · {bytes(free)} free · {pct.toFixed(1)}% reclaimable
+        </span>
+      </div>
+      {/* FLEX, not the scale transform `.meterFill` uses. That one grows from
+          a left origin and is right for ONE bar; two of them would sit on top
+          of each other. Proportion here is flex-grow, so the segments share the
+          track and always add up to it exactly. */}
+      <div className={styles.splitTrack}>
+        <div className={styles.splitLive} style={{ flexGrow: live }} />
+        <div className={styles.splitFree} style={{ flexGrow: free }} />
+      </div>
+      {note && <p className={styles.meterNote}>{note}</p>}
+    </div>
+  );
+}
+
 /**
  * Items 4, 5 and 6: every account, their tier, and what the deployment can reach.
  *
@@ -131,6 +188,13 @@ export function AdminConsole() {
   /* Closed by default. Opening the console is usually a health check, not a
      hunt for one person. */
   const [accountsOpen, setAccountsOpen] = useState(false);
+
+  /* The ops block rides on the same coverage response as the tracked
+     count. OPTIONAL: an analytics API that has not been redeployed yet
+     does not send it, and every section below is guarded rather than
+     assuming it is there — the two halves ship separately, so there is
+     always a window where the site is ahead of the service. */
+  const ops = collection?.ops;
 
   useEffect(() => {
     if (access === 'admin') void load();
@@ -251,8 +315,222 @@ export function AdminConsole() {
         )}
       </div>
 
-      {/* --- what this deployment can reach -------------------------------- */}
-      <h3 className={styles.section}>Health</h3>
+      {/* --- is the collection alive -------------------------------------- */}
+      {/* FIRST, ABOVE EVERYTHING ELSE, because it is the question the console
+          could not answer. "Storage is stuck at 33.3 GB" was the symptom that
+          started this, and the honest reading — a healthy bot writing into
+          reclaimed pages — needed four separate figures none of which were on
+          the screen. The newest battle is the one that settles it: if that is
+          minutes old, data is arriving, whatever the file size is doing. */}
+      {ops?.collection && (
+        <>
+          <h3 className={styles.section}>Collection</h3>
+          <div className={styles.stats}>
+            {(() => {
+              /* THE HEADLINE SIGNAL. The bot polls every two hours, so a gap
+                 under ~3h is an ordinary trough between passes and says
+                 nothing. Past 6h a pass has been missed outright, which is the
+                 first thing that is actually wrong rather than merely quiet. */
+              const h = hoursSince(ops.collection!.newestBattle);
+              const tone = h === null ? undefined : h > 6 ? 'bad' : h > 3 ? 'warn' : 'good';
+              return (
+                <Stat
+                  label="Newest battle"
+                  value={ops.collection!.newestBattle ? ago(ops.collection!.newestBattle) : '—'}
+                  note={h === null ? 'nothing stored' : 'the bot polls every 2h'}
+                  tone={tone}
+                />
+              );
+            })()}
+            {ops.collection.lastPollAt && (
+              <Stat
+                label="Last poll"
+                value={ago(ops.collection.lastPollAt)}
+                note={
+                  ops.collection.lastPollMs
+                    ? `took ${(ops.collection.lastPollMs / 60000).toFixed(1)} min`
+                    : 'completed'
+                }
+              />
+            )}
+            {ops.collection.pollFailurePct !== null && (
+              /* A RATE BETWEEN THE LAST TWO POLLS, not a lifetime total. The
+                 stored counters are cumulative, so the raw pair is a big number
+                 that says nothing about now. The CR API genuinely returns 5xx
+                 under load, so a small non-zero figure is the normal state and
+                 only a jump is worth reading. */
+              <Stat
+                label="Poll failures"
+                value={`${ops.collection.pollFailurePct.toFixed(2)}%`}
+                note="of last poll's API calls"
+                tone={
+                  ops.collection.pollFailurePct > 10
+                    ? 'bad'
+                    : ops.collection.pollFailurePct > 3
+                      ? 'warn'
+                      : 'good'
+                }
+              />
+            )}
+            <Stat
+              label="Battles stored"
+              value={nf.format(ops.collection.battles)}
+              note={
+                collection?.global?.days
+                  ? `over ${collection.global.days} days`
+                  : 'in the hot tier'
+              }
+            />
+            <Stat
+              label="Tracked players"
+              value={nf.format(ops.collection.trackedPlayers)}
+              note="polled by the bot"
+            />
+            {ops.collection.oldestBattle && (
+              <Stat
+                label="History reaches"
+                value={ops.collection.oldestBattle.slice(0, 10)}
+                note="oldest battle held"
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      {/* --- storage -------------------------------------------------------- */}
+      {(ops?.storage || analytics?.hot.available) && (
+        <>
+          <h3 className={styles.section}>Storage</h3>
+          {ops?.storage && (
+            <Split
+              live={ops.storage.liveBytes}
+              free={ops.storage.freeBytes}
+              label="Inside battles.db"
+              note={
+                ops.storage.freeBytes > 0
+                  ? 'SQLite never shrinks a file. Pages freed by a delete go on a freelist and are written into before the file grows again — so a size that has not moved is not the same as a collection that has stopped.'
+                  : 'No free pages: every new battle extends the file.'
+              }
+            />
+          )}
+          {analytics?.hot.available && (
+            <Meter
+              used={analytics.hot.sizeBytes}
+              total={VPS_DISK_BYTES}
+              label="battles.db on the Contabo volume"
+            />
+          )}
+          <div className={styles.stats}>
+            {ops?.storage && (
+              <>
+                <Stat
+                  label="File on disk"
+                  value={bytes(ops.storage.fileBytes)}
+                  note={`${nf.format(ops.storage.pageCount)} pages of ${bytes(ops.storage.pageSize)}`}
+                />
+                <Stat
+                  label="Reclaimable"
+                  value={bytes(ops.storage.freeBytes)}
+                  note={`${nf.format(ops.storage.freePages)} free pages`}
+                  tone={ops.storage.freeBytes > ops.storage.liveBytes / 3 ? 'warn' : undefined}
+                />
+              </>
+            )}
+            {/* THE RUNWAY, and it is BLANK unless the service has been told the
+                window. The bot owns `CLASH_RETENTION_DAYS`; this service is not
+                given it, so printing 304 here would be repeating a number from
+                memory on the one screen whose whole value is being trusted. */}
+            {ops?.retention && (
+              <Stat
+                label="Retention"
+                value={ops.retention.days ? `${ops.retention.days} days` : 'unknown'}
+                note={
+                  ops.retention.days
+                    ? ops.retention.daysUntilFirstDelete !== null
+                      ? `first deletion in ${nf.format(ops.retention.daysUntilFirstDelete)} days`
+                      : `boundary ${ops.retention.boundary}`
+                    : 'set CLASH_RETENTION_DAYS to show the runway'
+                }
+                tone={
+                  ops.retention.daysUntilFirstDelete !== null &&
+                  ops.retention.daysUntilFirstDelete < 14
+                    ? 'warn'
+                    : undefined
+                }
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      {/* --- the rollup ----------------------------------------------------- */}
+      {/* WHAT THIS CATCHES, and it caught it on the live database the day it
+          was written: the watermark advances to NOW after every poll and folds
+          only the window it just passed, so any row ARRIVING with an older
+          timestamp — every backfill, every battle retried after a sync error —
+          is never folded. Nothing on this screen showed it, and the repair
+          (a full rebuild) has no live caller at all. */}
+      {ops?.aggregates && (
+        <>
+          <h3 className={styles.section}>Rollup</h3>
+          <div className={styles.stats}>
+            {ops.aggregates.coveragePct !== null && (
+              <Stat
+                label="Aggregate coverage"
+                value={`${ops.aggregates.coveragePct.toFixed(1)}%`}
+                note="of stored battles are folded in"
+                tone={
+                  ops.aggregates.coveragePct > 95
+                    ? 'good'
+                    : ops.aggregates.coveragePct > 80
+                      ? 'warn'
+                      : 'bad'
+                }
+              />
+            )}
+            <Stat
+              label="Folded battles"
+              value={nf.format(ops.aggregates.statsBattles)}
+              note="player_stats_agg"
+            />
+            <Stat
+              label="Matchup games"
+              value={nf.format(ops.aggregates.pairGames)}
+              /* NOT a ratio against stored battles: this table dedups a battle
+                 seen from both sides when both players are tracked, so the two
+                 are not the same denominator and a percentage would invent a
+                 gap that is partly legitimate. */
+              note="pair_matchup_agg · mirror-deduped"
+            />
+            {ops.aggregates.watermark && (
+              <Stat
+                label="Watermark"
+                value={ago(ops.aggregates.watermark)}
+                note="advances after every poll"
+              />
+            )}
+            {(() => {
+              /* THE REPAIR MECHANISM'S OWN CLOCK. Incremental folds drift; a
+                 full rebuild is what corrects them. If this is weeks old the
+                 coverage figure above will keep falling, and knowing which of
+                 the two to read is the point of showing both. */
+              const h = hoursSince(ops.aggregates!.lastRebuild);
+              const days = h === null ? null : Math.floor(h / 24);
+              return (
+                <Stat
+                  label="Last full rebuild"
+                  value={ops.aggregates!.lastRebuild ? ago(ops.aggregates!.lastRebuild) : 'never'}
+                  note={days === null ? 'no record' : 'repairs rollup drift'}
+                  tone={days === null ? 'warn' : days > 14 ? 'bad' : days > 7 ? 'warn' : 'good'}
+                />
+              );
+            })()}
+          </div>
+        </>
+      )}
+
+      {/* --- the site, the API and the domain ------------------------------ */}
+      <h3 className={styles.section}>Site &amp; domain</h3>
       <div className={styles.stats}>
         <Stat
           label="Deployment"
@@ -263,7 +541,7 @@ export function AdminConsole() {
         <Stat
           label="Analytics API"
           value={analytics ? `${analyticsMs} ms` : 'down'}
-          note={analytics?.hot.available ? 'database attached' : 'no database'}
+          note={analytics?.hot.available ? 'api.deckkies.com · database attached' : 'no database'}
           tone={analytics?.hot.available ? 'good' : 'bad'}
         />
         {/* A DATABASE THAT OPENS IS NOT A SERVICE THAT CAN ANSWER. The card
@@ -281,6 +559,29 @@ export function AdminConsole() {
                 : (analytics.cardData.error ?? 'not loaded')
             }
             tone={analytics.cardData.loaded ? 'good' : 'bad'}
+          />
+        )}
+        {/* THE RECRUITER, which enrols players nobody searched for. It rides on
+            /status and is otherwise invisible: "enabled but has never completed
+            a run" looks exactly like "working" from every other angle. */}
+        {analytics?.recruit && (
+          <Stat
+            label="Recruiter"
+            value={analytics.recruit.enabled ? `${nf.format(analytics.recruit.runs)} runs` : 'off'}
+            note={
+              analytics.recruit.enabled
+                ? analytics.recruit.lastRunAt
+                  ? `last ${ago(analytics.recruit.lastRunAt)} · ${nf.format(analytics.recruit.queued)} queued`
+                  : 'never completed a run'
+                : 'CLASH_RECRUIT=off'
+            }
+            tone={
+              !analytics.recruit.enabled
+                ? undefined
+                : analytics.recruit.lastRunAt
+                  ? 'good'
+                  : 'warn'
+            }
           />
         )}
         {health &&
@@ -307,27 +608,6 @@ export function AdminConsole() {
             );
           })()}
       </div>
-
-      {/* --- storage -------------------------------------------------------- */}
-      {analytics?.hot.available && (
-        <>
-          <h3 className={styles.section}>Storage</h3>
-          <Meter
-            used={analytics.hot.sizeBytes}
-            total={VPS_DISK_BYTES}
-            label="battles.db on the Contabo volume"
-          />
-          <p className={styles.hint}>
-            Retention is capped at 304 days (10 months), so this plateaus rather
-            than growing forever — but the window is only about a quarter full,
-            so today's figure is not the steady state. Measured on 2026-08-26:
-            7.24M battles over 86 days at ~1.4&nbsp;KB each, ~158k battles/day,
-            which projects to roughly 105&nbsp;GB once the full window is held.
-            That assumes the tracked-player count stays where it is — battle
-            volume scales with it, and so does everything here.
-          </p>
-        </>
-      )}
 
       {/* --- the accounts themselves --------------------------------------- */}
       {/* THE ACCOUNTS LIST IS COLLAPSED UNTIL ASKED FOR.
