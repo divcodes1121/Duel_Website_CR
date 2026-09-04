@@ -10636,6 +10636,55 @@ Cost: the main bundle is **unchanged at 342.52 kB gzip** — the field book is
 lazy and renders outside the shell — and the Sketchbook chunk went 12.35 →
 **12.45 kB** gzip JS and 6.08 → **6.11** CSS. Both baselines taken by stashing.
 
+### Then the arrows "stopped working when zoomed", and nothing was broken
+
+Reported straight after the above: the page-turn arrows go dead once you pinch
+in. They do not. Measured at 2.06× on a 390px screen, the visible box is
+x121..310 and **both arrows sit outside it** — they live at the extreme left and
+right of the stage, so browser zoom has simply carried them off screen. Tapped
+at their real position they still turn the page. That is what zoom does to
+anything at the edge of a page, and it is not something the page can fight.
+
+What the reader *can* still reach is the book, which fills the screen when
+zoomed — and tapping either half of it turns the page. Verified at 2.06×: right
+half 0→1, left half 1→0. That worked all along.
+
+**The actual fault was that a phone is never told.** The hint under the book is
+`display: none` below 1180px, so a touch reader has had no instruction on this
+page at all, and the corner of the paper that lifts to say *this turns* only
+lifts on `:hover`, which touch does not have. So two faint arrows outside the
+book were the only thing suggesting a page could be turned, and zooming appeared
+to break them. The hint now shows on a coarse pointer with its own wording —
+"Tap either side of the page to turn it" — because the desktop sentence names
+dragging and the magnifying glass, and a phone has neither.
+
+**Four separate probe artifacts came out of this session, and each one first
+looked like a real bug.** They are worth knowing before trusting any touch
+measurement on this page. `[class*="read"]` also matches `_spread_`.
+`aria-label="Next plate"` matches both the in-book turn zone and the arrow
+outside it, so a sweep can measure the book and report it as the arrow. A fixed
+click count runs into a button that correctly disables itself at the zoom
+ceiling. And the expensive one: **CDP's touch dispatch takes visual-viewport
+coordinates while `getBoundingClientRect()` returns layout ones**, so the moment
+a pinch has zoomed the page the two differ by the visual viewport's offset
+exactly — 368,194 was sent and landed at 489,292 with the offset at 121,98 — and
+every control reports dead.
+
+That last one also ate an hour on a phantom: a "dead first tap after a scroll",
+8 of 12, surviving pauses up to two seconds. Scrolling the same distance with
+JavaScript gives 0 of 6 while a synthetic touch flick gives 5 of 6, and it
+reproduces identically on the commit before any of this work. The signature is
+`pointerdown` and `pointerup` with **no `click`**, which is what a browser does
+for a *multi-touch* gesture — CDP's empty `touchEnd` leaves a phantom finger
+down. Not a site bug, and not worth re-chasing.
+
+One thing was written and reverted: a `:active` press state for the arrows. It
+did not apply under synthetic touch, and `:active` on iOS only fires when a
+`touchstart` handler is attached, so shipping it would have been unverified
+guesswork at a symptom that turned out not to exist. The arrows still respond to
+`:hover` only, which is a genuine gap on a phone — recorded here rather than
+fixed blind.
+
 ---
 
 ## The logo, and where it goes

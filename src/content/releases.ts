@@ -89,6 +89,7 @@ export const RELEASES: Release[] = [
     body: [
       'Pinch to zoom works on the field book now. It had been switched off without anyone meaning to: the page deliberately locks sideways swiping so that dragging across the book turns the page, and the setting that does that was also disabling the browser\'s own pinch. So the one screen made of small print was the one screen a phone could not magnify — and the magnifying glass is a desktop thing, so there was nothing else to reach for.',
       'The minus / plus controls under the book work there too. They had been counting up and down from 90% to 150% without moving anything.',
+      'While you are zoomed in, the two arrows either side of the book are off the edge of the screen — that is just what zooming does. Tap either half of the page itself to turn it instead; the book says so now, which on a phone it never did.',
     ],
     href: '#/guide',
     hrefLabel: 'Open the field book',

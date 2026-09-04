@@ -636,26 +636,47 @@ export function Sketchbook() {
        `down`, rebound `drag.current` from scratch, and its release ran the
        tap/swipe test — so zooming into a plate turned the page out from under
        the reader. A gesture that has become a pinch is abandoned rather than
-       competed for: the browser is the better owner of it. */
-    let active: number | null = null;
+       competed for: the browser is the better owner of it.
+
+       ── THE STATE MUST BE RESET BY THE START OF A GESTURE, NOT ONLY BY THE
+          END OF THE LAST ONE. ────────────────────────────────────────────────
+       The first version of this tracked the live pointer id and opened `down`
+       with `if (active !== null) { abort(); return; }`. That is a trap: any
+       sequence that leaves the id set — a release delivered somewhere this
+       element never sees it, a cancel that arrives without a matching up —
+       makes the NEXT gesture get swallowed clearing the flag instead of being
+       handled. One tap does nothing, the tap after it works. Intermittently
+       dead arrows and turn zones, which is exactly how it was reported.
+
+       So the pinch test is `e.isPrimary`, which the browser answers per event
+       and which needs nothing remembered between gestures: the first finger
+       down is primary, every additional finger is not. `pinching` exists only
+       to keep the primary finger's own release from resolving a turn that was
+       abandoned mid-gesture, and **every primary pointerdown clears it**, so
+       the worst a bad sequence can cost is the gesture it happened during. */
+    let pinching = false;
 
     /* `pointercancel` USED TO RESOLVE THE GESTURE AND THAT IS BACKWARDS. The
-       browser fires it at the moment it TAKES the gesture over — which is now
-       exactly what happens when a pinch begins — and the old handler sent it to
-       `up`, where on a coarse pointer the tap/swipe test could still fire a
-       turn. A cancelled gesture is one that did not happen. */
+       browser fires it at the moment it TAKES the gesture over — which is what
+       a pinch or a scroll does now — and the old handler sent it to `up`, where
+       on a coarse pointer the tap/swipe test could still fire a turn. A
+       cancelled gesture is one that did not happen. */
     const abort = () => {
-      active = null;
+      pinching = false;
       drag.current = null;
       if (turnRef.current) cancel();
     };
 
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      if (active !== null) {
-        abort();
+      if (!e.isPrimary) {
+        /* a second finger — this is a pinch, and it belongs to the browser */
+        pinching = true;
+        drag.current = null;
+        if (turnRef.current) cancel();
         return;
       }
+      pinching = false;
       const zone = (e.target as HTMLElement).closest('[data-zone]');
       setHinted(true);
       if (!zone) return;
@@ -664,7 +685,6 @@ export function Sketchbook() {
          browser decides from `touch-action`, and preventing the default here is
          one of the ways a pinch gets swallowed before it starts. */
       if (e.pointerType !== 'touch') e.preventDefault();
-      active = e.pointerId;
       stage.setPointerCapture(e.pointerId);
       const r = bookRef.current!.getBoundingClientRect();
       const dir = (e.clientX - r.left) / r.width > 0.5 ? 'next' : 'prev';
@@ -674,7 +694,7 @@ export function Sketchbook() {
       drag.current = { dir, x0: e.clientX, y0: e.clientY, w: r.width, moved: 0, up: 0, vel: 0, at: performance.now() };
     };
     const move = (e: PointerEvent) => {
-      if (e.pointerId !== active) return;
+      if (pinching || !e.isPrimary) return;
       const d = drag.current;
       if (!d) return;
       const dx = e.clientX - d.x0;
@@ -691,11 +711,18 @@ export function Sketchbook() {
       }
     };
     const up = (e: PointerEvent) => {
-      if (e.pointerId !== active) return;
-      active = null;
+      /* The primary finger lifting ends the pinch, whichever finger actually
+         left first — cleared here as well as by the next gesture, so a release
+         is never left describing a gesture that is already over. */
+      if (pinching) {
+        drag.current = null;
+        if (e.isPrimary) pinching = false;
+        return;
+      }
+      if (!e.isPrimary) return;
       const d = drag.current;
-      if (!d) return;
       drag.current = null;
+      if (!d) return;
       if (COARSE) {
         /* A TAP on the half you want, or a SIDEWAYS swipe — and nothing else.
            This page scrolls vertically and the book fills most of it, so a
@@ -982,8 +1009,25 @@ export function Sketchbook() {
           </button>
         </div>
 
+          {/* THE PHONE IS TOLD SOMETHING DIFFERENT, because on a phone the two
+              things this sentence names do not exist: there is no drag-to-turn
+              (a coarse pointer taps or swipes) and there is no glass at all.
+              It also has to be told at ALL — the hint is hidden below 1180px,
+              so a touch reader has never had any instruction on this page.
+
+              That gap became a real problem when pinch-to-zoom was handed back
+              to the browser. Zoomed in, the two arrows are outside the visible
+              viewport — measured at 2.06x on a 390px screen, both of them —
+              which is ordinary browser zoom behaviour and not something the
+              page can or should fight. What the reader CAN still reach is the
+              book itself, filling the screen under their finger, and tapping
+              either half of it turns the page. That worked all along and
+              nothing said so, so the arrows looked like the only way to turn a
+              page and zooming appeared to break them. */}
           <p className={styles.hint + (hinted ? ' ' + styles.hintGone : '')}>
-            Drag either page to turn it &middot; Drag the glass across the paper
+            {COARSE
+              ? 'Tap either side of the page to turn it'
+              : 'Drag either page to turn it · Drag the glass across the paper'}
           </p>
         </div>
 

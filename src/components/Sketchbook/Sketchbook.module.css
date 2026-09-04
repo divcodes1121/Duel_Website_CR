@@ -1488,3 +1488,43 @@
     padding-right: 10px;
   }
 }
+
+/* ── THE ONE INSTRUCTION A PHONE NEVER GOT ───────────────────────────────
+ *
+ * `.hint` is `display: none` below 1180px, so a touch reader has never been
+ * told anything about how this book works. On a desktop that is a small loss —
+ * the corner of the page lifts under the cursor and says it for you. A coarse
+ * pointer has no hover, so that cue does not exist either, and the two faint
+ * arrows outside the book are the only thing suggesting a page can be turned.
+ *
+ * That became a real problem the moment pinch-to-zoom was handed back to the
+ * browser. Zoomed in, those arrows are outside the visible viewport — measured
+ * at 2.06x on a 390px screen, BOTH of them — which is what browser zoom does to
+ * anything at the edge of a page and is not something this page can fight. The
+ * book is what fills the screen at that point, and tapping either half of it
+ * turns the page. It always did. Nothing said so, so zooming in looked like it
+ * had broken the only control there was.
+ *
+ * THIS BLOCK MUST STAY BELOW THE `max-width: 1180px` RULE THAT HIDES IT. A
+ * media query adds nothing to specificity, so the two `.hint` rules tie at
+ * (0,1,0) and source order is the whole reason this one wins — the same trap
+ * already recorded against the loupe toggle further up this file.
+ *
+ * It goes on its own line under the pill rather than beside it: the desktop
+ * placement is `left: 100%`, which on a 390px screen is off the edge. */
+@media (pointer: coarse) {
+  .controls {
+    flex-wrap: wrap;
+    row-gap: 5px;
+  }
+
+  .hint {
+    display: block;
+    position: static;
+    flex: 0 0 100%;
+    margin: 0;
+    transform: none;
+    text-align: center;
+    white-space: normal;
+  }
+}
