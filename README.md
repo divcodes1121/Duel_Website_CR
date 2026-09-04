@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **The field book on a phone** | **zooms now, 2026-09-04.** Reported as "the guide page doesn't respond to zoom on mobile" and it was two faults under one symptom. `touch-action: pan-y` on the book was there to stop a swipe-to-turn being read as a scroll, and `pinch-zoom` is a separate keyword — so it had also disabled the browser's own pinch, on the one screen made of small print, whose magnifying glass is hidden on a touch device by design. And the `−  100%  +` controls had been dead since the phone pass: `.tilt`'s single `transform` carries the pointer lean *and* the zoom scale, and the coarse block blanked the property to drop the lean. **Verified 26/26**, and the proof is `visualViewport.scale` going 1 → 5 and back rather than the declaration reading correctly. Main bundle unchanged at 342.52 kB gzip |
 | **What's new** (the bell) | **shipped 2026-09-02.** The bell in the top bar sat inert from the day the shell was built; it opens the release feed now, immediately right of the theme switch. Notes live in `src/content/releases.ts` and ship in the same commit as the change they describe, so the two cannot drift. An unread count on the bell and on the profile menu's row, from one hook; a first-time reader is stamped silently rather than greeted with a badge for a product they have never used. Per browser rather than per account — the honest limit, and the upgrade is a `profiles` column. +3.01 kB gzip; 11 unit checks, browser-verified 24/24 |
 | **Team Analysis** (`#/teams`) | **TWO TABS as of 2026-09-02 — Scouting Report and Match Plan.** One roster in gives a scouting report: what they play, and the decks that beat it, drawn from the archetype representatives and ranked through the same matchup ladder — plus a roster-wide read (their whole spread pooled, weighted by games) that a match plan has no equivalent of. Match Plan is the original screen, unchanged. The mode is an ABSENT `blue`, so there is no new route and the tripwire stays at 21. Main bundle 338.43 -> 338.44 kB gzip. **92 Python checks + 387 vitest; browser-verified 40/40.** Below, as before: paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Off the admin shelf and on sale**: everyone sees it, anon and free get a gate card, and the three-day trial opens it along with pro and admin. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
 | Export PDF (print-exact, every section) | shipped |
@@ -10564,6 +10565,76 @@ briefs asked for a bench and a two-arched gatehouse; what came back was a book
 of recipes and an arena under mountains of gold. `the-gate` became
 `the-treasury`. A caption claiming a gate nobody painted would have been the one
 dishonest thing in a book about not printing claims you cannot stand behind.
+
+### The phone could not zoom it, two ways
+
+Reported 2026-09-04 as "the guide page doesn't respond to zoom on mobile", and
+it was two independent faults that happened to produce one symptom. Neither was
+a mistake in its own right — both are a rule that is correct about one thing
+quietly taking a second thing with it.
+
+**`touch-action: pan-y` also switches off pinch.** `.stage` carried it so that a
+horizontal drag across the book would be read as a page turn rather than as a
+scroll, which is right. What it also did is disable the browser's own
+pinch-to-zoom, because `pinch-zoom` is a separate keyword in that property's
+grammar and a value that omits it omits the behaviour. The book fills most of a
+phone screen, and the magnifying glass is `display: none` on a coarse pointer by
+design — so between the two, a touch reader had no way at all to magnify the one
+screen in the site that is made of small print. It is `pan-y pinch-zoom` now,
+declared twice so that a browser which does not know the keyword falls back to
+`pan-y` rather than dropping the declaration entirely and computing to `auto`,
+which would lose the sideways lock the value existed for in the first place.
+
+Double-tap zoom stays off, and that is a choice rather than a leftover: it
+belongs to `auto` alone, and on a phone a single tap on either half of the book
+already turns the page — so a double tap would turn two pages while zooming. The
+two gestures cannot both live here, and turning the page is the one people do.
+
+**And the zoom buttons had been dead since the phone pass.** `.tilt` carries
+three jobs in one `transform` — two rotations from the pointer lean and a
+`scale()` from the zoom pill — and the coarse block blanked the property to drop
+the rotations, since a touch device has no pointer to lean toward. It took the
+scale with it. So on every phone the `−  100%  +` controls under the book stayed
+on screen, updated their readout, and enabled and disabled themselves against
+the 90% and 150% limits exactly as they should, while moving nothing. Two live
+buttons and a counting number attached to no effect, which reads as a broken
+page rather than as an absent feature.
+
+Two details were needed to make the scale behave once it worked. It grows from
+the **top-left**, not the centre, because growing about the centre puts the
+book's left edge at a negative x — and overflow towards the start is neither
+scrollable nor counted in `scrollWidth`, so the left page would have been
+permanently unreachable. And a transform takes no space, so `.box3d` reserves
+the height the zoom needs with a percentage margin, which resolves against the
+containing block's width and is therefore the one way the book's own aspect
+ratio can be expressed here. Without it the book at 150% printed over its own
+caption.
+
+**A pinch is two pointers, and the turn handler had to learn that.** It tracks
+one active pointer now; a second `pointerdown` abandons the gesture rather than
+competing for it. `pointercancel` was wired to the same handler as
+`pointerup` — which is backwards, because the browser fires it at the moment it
+*takes* the gesture over, which is exactly what a pinch now does, and on a phone
+that handler runs the tap/swipe test. Zooming turned the page.
+
+**Verified 26/26 in a browser, and the proof is `visualViewport.scale` rather
+than the declaration**: 1 → 5 on a spread and back to 1 on a reverse pinch, with
+the plate index unmoved throughout. Nothing else on this page can move that
+number. Three probe bugs on the way, all of them ones this project has already
+written down: `[class*="read"]` **also matches `_spread_`**, so the zoom readout
+came back as the plate's prose; a fixed click count ran into a button that
+correctly disables itself at the ceiling; and the tap and swipe checks failed
+**because the fix works** — CDP touch coordinates are layout-viewport pixels, so
+once a pinch has genuinely zoomed the page every coordinate taken from
+`boundingBox()` is stale. Those two checks run before the pinch now.
+
+Worth knowing and not worth "fixing": the pill cannot land on 100% from below.
+The steps are multiplicative against a floor clamped at 0.9, so zooming out to
+the floor and back in gives 104%. That is true on the desktop control too.
+
+Cost: the main bundle is **unchanged at 342.52 kB gzip** — the field book is
+lazy and renders outside the shell — and the Sketchbook chunk went 12.35 →
+**12.45 kB** gzip JS and 6.08 → **6.11** CSS. Both baselines taken by stashing.
 
 ---
 

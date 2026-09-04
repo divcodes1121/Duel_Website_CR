@@ -630,12 +630,41 @@ export function Sketchbook() {
     const stage = stageRef.current;
     if (!stage) return;
 
+    /* THE TURN IS ONE FINGER'S, AND A SECOND FINGER IS A PINCH.
+       The stylesheet hands pinch-to-zoom back to the browser on this element;
+       this is the other half of that. Without it the second finger landed in
+       `down`, rebound `drag.current` from scratch, and its release ran the
+       tap/swipe test — so zooming into a plate turned the page out from under
+       the reader. A gesture that has become a pinch is abandoned rather than
+       competed for: the browser is the better owner of it. */
+    let active: number | null = null;
+
+    /* `pointercancel` USED TO RESOLVE THE GESTURE AND THAT IS BACKWARDS. The
+       browser fires it at the moment it TAKES the gesture over — which is now
+       exactly what happens when a pinch begins — and the old handler sent it to
+       `up`, where on a coarse pointer the tap/swipe test could still fire a
+       turn. A cancelled gesture is one that did not happen. */
+    const abort = () => {
+      active = null;
+      drag.current = null;
+      if (turnRef.current) cancel();
+    };
+
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return;
+      if (active !== null) {
+        abort();
+        return;
+      }
       const zone = (e.target as HTMLElement).closest('[data-zone]');
       setHinted(true);
       if (!zone) return;
-      e.preventDefault();
+      /* A MOUSE NEEDS THIS AND A FINGER MUST NOT HAVE IT. It is what stops a
+         drag selecting text or peeling an image off the page. For touch the
+         browser decides from `touch-action`, and preventing the default here is
+         one of the ways a pinch gets swallowed before it starts. */
+      if (e.pointerType !== 'touch') e.preventDefault();
+      active = e.pointerId;
       stage.setPointerCapture(e.pointerId);
       const r = bookRef.current!.getBoundingClientRect();
       const dir = (e.clientX - r.left) / r.width > 0.5 ? 'next' : 'prev';
@@ -645,6 +674,7 @@ export function Sketchbook() {
       drag.current = { dir, x0: e.clientX, y0: e.clientY, w: r.width, moved: 0, up: 0, vel: 0, at: performance.now() };
     };
     const move = (e: PointerEvent) => {
+      if (e.pointerId !== active) return;
       const d = drag.current;
       if (!d) return;
       const dx = e.clientX - d.x0;
@@ -660,7 +690,9 @@ export function Sketchbook() {
         applyTurn(t);
       }
     };
-    const up = () => {
+    const up = (e: PointerEvent) => {
+      if (e.pointerId !== active) return;
+      active = null;
       const d = drag.current;
       if (!d) return;
       drag.current = null;
@@ -688,13 +720,13 @@ export function Sketchbook() {
     stage.addEventListener('pointerdown', down);
     stage.addEventListener('pointermove', move);
     stage.addEventListener('pointerup', up);
-    stage.addEventListener('pointercancel', up);
+    stage.addEventListener('pointercancel', abort);
     stage.addEventListener('dragstart', (e) => e.preventDefault());
     return () => {
       stage.removeEventListener('pointerdown', down);
       stage.removeEventListener('pointermove', move);
       stage.removeEventListener('pointerup', up);
-      stage.removeEventListener('pointercancel', up);
+      stage.removeEventListener('pointercancel', abort);
     };
   }, [applyTurn, cancel, commit, startTurn, step]);
 

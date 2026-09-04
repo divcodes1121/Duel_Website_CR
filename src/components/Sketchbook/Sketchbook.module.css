@@ -154,6 +154,30 @@
   -webkit-user-select: none;
 }
 
+/* `pan-y` IS NOT "EVERYTHING EXCEPT SIDEWAYS" — IT ALSO SWITCHES OFF PINCH.
+ *
+ * This was written to protect the swipe-to-turn: a horizontal drag on the book
+ * belongs to the page turn, so the browser must not read it as a scroll. That
+ * part is right. What it also did, silently, is take away the browser's own
+ * pinch-to-zoom — `pinch-zoom` is a separate keyword in the grammar and a value
+ * that omits it omits the behaviour. The book fills most of a phone screen, so
+ * for a touch reader that meant the field book could not be magnified AT ALL:
+ * the loupe is hidden on a coarse pointer by design, and this took the only
+ * thing left.
+ *
+ * `pan-y pinch-zoom` keeps the sideways lock and hands the pinch back. Two-
+ * finger panning comes with it, which is what makes a zoomed page reachable in
+ * every direction — including left, where a layout scroll cannot reach.
+ *
+ * Double-tap zoom stays off, and that is deliberate rather than a side effect:
+ * it belongs to `auto` alone, and on a coarse pointer a TAP on either half of
+ * the book already turns the page — so a double tap would turn two pages while
+ * zooming. The two gestures cannot both live here.
+ *
+ * DECLARED TWICE ON PURPOSE. A browser that does not know the `pinch-zoom`
+ * keyword drops the whole declaration as invalid, and with nothing else said
+ * this would compute to `auto` — the sideways lock gone, which is the one thing
+ * the original value existed for. The first line is what it falls back to. */
 .stage {
   display: flex;
   align-items: center;
@@ -161,6 +185,7 @@
   gap: 4px;
   width: 100%;
   touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
 }
 
 .arrow {
@@ -1382,9 +1407,51 @@
    * permanently promoting `.tilt` to its own compositing layer to keep a pointer
    * tilt cheap, and a touch device has no pointer to tilt with. This is dead
    * machinery being removed, not a rendering fix. The rendering fix was not
-   * building a 3D leaf on a phone in the first place. */
-  .box3d { perspective: none; }
-  .tilt { transform: none; transform-style: flat; will-change: auto; }
+   * building a 3D leaf on a phone in the first place.
+   *
+   * ── AND IT TOOK THE ZOOM WITH IT. ───────────────────────────────────────
+   * `transform: none` was meant to remove the two ROTATIONS. `.tilt`'s
+   * declaration carries three jobs in one property — `rotateX` and `rotateY`
+   * from the pointer lean, and `scale` from the zoom pill — so blanking the
+   * property blanked all three. On every phone the `−  100%  +` controls under
+   * the book stayed on screen, updated their readout, enabled and disabled
+   * against ZOOM_MIN/ZOOM_MAX correctly, and moved nothing. Two live buttons
+   * and a counting number attached to no effect, which reads as a broken page
+   * rather than as an absent feature. The scale is kept and only the rotations
+   * are dropped. */
+  .box3d {
+    perspective: none;
+
+    /* THE ROOM THE ZOOM NEEDS. A transform takes no space, so a book at 150%
+       would print straight over the caption and the controls beneath it. This
+       is that overflow, reserved: the book is `aspect-ratio: 1760/1120`, so the
+       height it gains is `(zoom - 1) x width / 1.571`, and a percentage margin
+       resolves against the containing block's WIDTH, which is what lets it be
+       said in CSS at all. 50% rather than the exact 48% because the arrows eat
+       a fixed 44px each — the ratio therefore moves with screen width, and the
+       error belongs on the side of a little slack, the way the 182px reserve
+       above it already does.
+
+       Clamped at zero rather than allowed to go negative: below 100% the book
+       shrinks and a negative margin would pull the caption UP into it, which
+       is the same overlap in the other direction for no gain. */
+    margin-bottom: calc(max(0, var(--zoom, 1) - 1) * 50%);
+  }
+
+  .tilt {
+    transform: scale(var(--zoom, 1));
+    /* FROM THE TOP-LEFT, NOT THE CENTRE, and this is the half that decides
+       whether a zoomed page can be read. Growing about the centre pushes the
+       book's left edge to a negative x — and overflow towards the START is
+       neither scrollable nor counted in `scrollWidth`, so the left page would
+       be permanently unreachable. Pinned at 0 0 the book grows right and down:
+       the left edge never moves, the right is reachable by scrolling, and the
+       height is reserved above. */
+    transform-origin: 0 0;
+    transform-style: flat;
+    will-change: auto;
+  }
+
   .book { transform-style: flat; }
 }
 

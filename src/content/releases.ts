@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-04-guide-zoom',
+    date: '2026-09-04',
+    kind: 'fixed',
+    title: 'The field book zooms on a phone',
+    body: [
+      'Pinch to zoom works on the field book now. It had been switched off without anyone meaning to: the page deliberately locks sideways swiping so that dragging across the book turns the page, and the setting that does that was also disabling the browser\'s own pinch. So the one screen made of small print was the one screen a phone could not magnify — and the magnifying glass is a desktop thing, so there was nothing else to reach for.',
+      'The minus / plus controls under the book work there too. They had been counting up and down from 90% to 150% without moving anything.',
+    ],
+    href: '#/guide',
+    hrefLabel: 'Open the field book',
+  },
+  {
     id: '2026-09-02-scouting-report',
     date: '2026-09-02',
     kind: 'new',
