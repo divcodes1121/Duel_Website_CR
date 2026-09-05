@@ -12,6 +12,8 @@ import {
   type CoachHistory,
   type CoachPrediction,
   type CoachSuggestion,
+  type DeckTuner,
+  type TunerSwap,
   type WildForm,
   fetchOpponentRead,
   type OpponentReadOutcome,
@@ -21,6 +23,7 @@ import { supabase } from '../../state/supabase';
 import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
+import { useAccess } from '../../state/gate';
 
 /* Coach Assist — two windows over `server/coach.py`.
  *
@@ -1015,6 +1018,204 @@ function OpponentReadPanel({ tag }: { tag: string }) {
   );
 }
 
+/* ──────────────────────────────────────────────────── the swap brain */
+
+/** One swap row. See `DECK_TUNER.md`.
+ *
+ *  THREE FIGURES, AND ALL THREE ARE LOAD-BEARING:
+ *
+ *    delta     the change in the deck's WORST matchup, measured over the
+ *              archetypes both decks were actually measured on;
+ *    coverage  how much of the opponent's spread that comparison covered.
+ *              A +30 measured on one archetype of three is a confident
+ *              number about a third of the field, and the reader must be
+ *              able to see that;
+ *    rung      one card different or two. Two cards out is the >= 6 cluster,
+ *              which pools thousands of decks — the figure is much less about
+ *              THIS deck, and the row says so rather than hiding it.
+ */
+function cardName(key: string): string {
+  return CARDS_BY_KEY.get(key)?.name ?? key;
+}
+
+function SwapRow({ swap, spread }: { swap: TunerSwap; spread: number }) {
+  const delta = swap.floorDelta;
+  const good = delta !== null && delta > 0;
+  return (
+    <li>
+      <strong>
+        {swap.out.map(cardName).join(' + ')} → {swap.in.map(cardName).join(' + ')}
+      </strong>{' '}
+      <span style={{ color: good ? 'var(--hue-green)' : 'var(--hue-red)', fontWeight: 700 }}>
+        {delta === null ? '—' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)}pp`}
+      </span>{' '}
+      <span style={{ opacity: 0.72 }}>
+        worst matchup {swap.floor.toFixed(1)}%
+        {swap.floorArchetype ? ` vs ${swap.floorArchetype}` : ''}
+        {' · '}
+        {/* COVERAGE IS NOT DECORATION. A confident delta measured on one
+            archetype of three is a claim about a third of the field. */}
+        compared on {swap.covered} of {spread} archetype{spread === 1 ? '' : 's'}
+        {' · '}
+        {swap.cards === 1 ? 'one card different' : 'two cards different'}
+        {' · '}
+        {swap.games.toLocaleString()} games
+        {swap.comfortable ? ' · you have played it' : ' · new card for you'}
+      </span>
+    </li>
+  );
+}
+
+function TunerPanel({ tuner }: { tuner: DeckTuner }) {
+  const h = tuner.harmony;
+  return (
+    <section className={styles.block}>
+      <h4 className={styles.blockTitle}>Card changes — admin preview</h4>
+
+      {/* THE STRUCTURAL READING FIRST. "Swap Bomber for Baby Dragon" is a
+          number; "you have one air answer" is the reason, and it comes from
+          the checklist rather than from the database. */}
+      <p className={styles.askHint}>
+        Your deck: {h.counts.airAnswers} air answer{h.counts.airAnswers === 1 ? '' : 's'},{' '}
+        {h.counts.splash} splash troop{h.counts.splash === 1 ? '' : 's'},{' '}
+        {h.counts.winConditions} win condition{h.counts.winConditions === 1 ? '' : 's'},{' '}
+        {h.counts.avgElixir.toFixed(2)} average Elixir.
+      </p>
+      {!!h.problems.length && (
+        <ul className={styles.notes}>
+          {h.problems.map((p, i) => (
+            <li key={i}>{p}</li>
+          ))}
+        </ul>
+      )}
+      {!!h.unknowns.length && (
+        <ul className={styles.caveats}>
+          {h.unknowns.map((u, i) => (
+            <li key={i}>Cannot be checked — {u}</li>
+          ))}
+        </ul>
+      )}
+
+      {tuner.swaps.length ? (
+        <ul className={styles.notes}>
+          {tuner.swaps.map((s) => (
+            <SwapRow key={s.hash} swap={s} spread={tuner.archetypes.length} />
+          ))}
+        </ul>
+      ) : (
+        <p className={styles.askHint}>
+          No swap improves this deck's worst matchup against what they can bring.
+        </p>
+      )}
+
+      {/* MODE B — whole decks, not swaps. Different question, same panel:
+          "change this card" and "bring this instead" are both things a coach
+          asks, and only one of them is answered above. */}
+      {tuner.compose && tuner.compose.poolReady && !!tuner.compose.decks.length && (
+        <>
+          <h4 className={styles.blockTitle}>Or bring a different deck</h4>
+          <p className={styles.askHint}>
+            Real decks people play, ranked by their WORST matchup against what this
+            opponent can bring — never invented, never a pile of counters.
+          </p>
+          <ul className={styles.notes}>
+            {tuner.compose.decks.map((d) => (
+              <li key={d.hash}>
+                <strong>{d.archetype}</strong>{' '}
+                <span style={{ opacity: 0.72 }}>
+                  worst matchup {d.floor.toFixed(1)}%
+                  {d.floorArchetype ? ` vs ${d.floorArchetype}` : ''}
+                  {' · '}measured on {d.covered} of {tuner.archetypes.length}
+                  {' · '}{d.games.toLocaleString()} games
+                  {' · '}you know {d.familiar} of its 8 cards
+                </span>
+                <Strip cards={d.deck} size="sm" />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/* THREE DECKS THAT COVER BETWEEN THEM — the shape a duel actually asks
+          for, and the reason they cannot be chosen one at a time. */}
+      {tuner.loadout && tuner.loadout.decks.length === 3 && (
+        <>
+          <h4 className={styles.blockTitle}>A whole loadout</h4>
+          <p className={styles.askHint}>
+            Three decks sharing no card. Chosen so that between them nothing in the
+            field is unanswered — the worst archetype's best answer is{' '}
+            {tuner.loadout.loadoutFloor === null
+              ? 'not measurable'
+              : `${tuner.loadout.loadoutFloor.toFixed(1)}%`}
+            .
+          </p>
+          {tuner.loadout.decks.map((d) => (
+            <div key={d.hash} style={{ marginBottom: '.4rem' }}>
+              <strong>{d.archetype}</strong>{' '}
+              <span style={{ opacity: 0.72 }}>{d.games.toLocaleString()} games</span>
+              <Strip cards={d.deck} size="sm" />
+            </div>
+          ))}
+          <ul className={styles.caveats}>
+            {tuner.loadout.coverage
+              .filter((c) => c.measured)
+              .map((c) => (
+                <li key={c.archetype}>
+                  vs {c.archetype}: best of the three is {c.best?.toFixed(1)}%
+                </li>
+              ))}
+            {!!tuner.loadout.uncovered.length && (
+              <li>
+                No evidence at all against {tuner.loadout.uncovered.join(', ')} — a gap in
+                what has been measured, not a bad matchup.
+              </li>
+            )}
+          </ul>
+        </>
+      )}
+
+      {tuner.compose && !tuner.compose.poolReady && (
+        <p className={styles.askHint}>
+          The deck pool has not been built yet — the snapshot rebuilds hourly. This is a
+          missing snapshot, not an absence of good decks.
+        </p>
+      )}
+
+      {/* THE WORKING, because a recommendation nobody can interrogate is a
+          recommendation nobody should act on. */}
+      <ul className={styles.caveats}>
+        <li>
+          Scanned {tuner.scanned.toLocaleString()} stored decks; {tuner.siblings.toLocaleString()}{' '}
+          share at least {8 - tuner.maxSwap} cards with yours; {tuner.considered.toLocaleString()}{' '}
+          had enough games to score.
+        </li>
+        <li>
+          Ranked on the WORST matchup, not the average — a swap that gains against their
+          likeliest deck and loses to the other two is not an improvement.
+        </li>
+        {!!tuner.skipped.vetoed && (
+          <li>
+            {tuner.skipped.vetoed} swap{tuner.skipped.vetoed === 1 ? ' was' : 's were'} dropped for
+            breaking the deck's structure (no air answer, no win condition, and so on).
+          </li>
+        )}
+        {!!tuner.skipped.illegal && (
+          <li>
+            {tuner.skipped.illegal} swap{tuner.skipped.illegal === 1 ? ' was' : 's were'} dropped
+            for reusing a card already spent this duel.
+          </li>
+        )}
+        {!tuner.base.measured && (
+          <li>
+            Nobody has played your exact list enough to measure it, so every change above is
+            compared against a wider reading.
+          </li>
+        )}
+      </ul>
+    </section>
+  );
+}
+
 /* ──────────────────────────────────────────────── window 2: Suggestion */
 
 type SuggestStep =
@@ -1037,13 +1238,25 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
   const [busy, setBusy] = useState(false);
   const reading = useHeldLoading(busy);
 
+  /* THE STAGING SHELF. Card-level swaps are unmeasured against real data, and
+     `main` deploys straight to production — so an admin session is the only
+     way to try this without shipping it to everyone.
+
+     `useAccess()`, NEVER `useAccountStore(s => s.tier)`. The raw store
+     initialises to 'free' and RESETS to 'free' on sign-out, so reading it
+     would hand a signed-out visitor whatever 'free' happens to unlock. Only
+     `useAccess` knows 'anon' is not a tier. */
+  const admin = useAccess() === 'admin';
+
   useEffect(() => setOpp(tag), [tag]);
 
   const run = useCallback(
     (mine: string[][], theirs: string[][]) => {
       setBusy(true);
       setError(null);
-      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs, { days })
+      /* The flag gates the REQUEST, not just the render. A non-admin must not
+         pay the sibling scan for a block they will never be shown. */
+      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs, { days }, admin)
         .then((d) => {
           setData(d);
           setStep({ kind: 'result' });
@@ -1051,7 +1264,7 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
         .catch((e) => setError(e as AnalyticsError))
         .finally(() => setBusy(false));
     },
-    [me, opp, days],
+    [me, opp, days, admin],
   );
 
   /* As in Window 1: refresh the answer, keep the interview. */
@@ -1325,6 +1538,10 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
           )}
         </div>
       )}
+
+      {/* ADMIN ONLY, AND OPT-IN AT THE REQUEST. Absent for everyone else —
+          the server was never asked, so there is nothing to hide here. */}
+      {admin && data.tuner && <TunerPanel tuner={data.tuner} />}
 
       {/* Every reason the answer might be weaker than it looks, listed rather
           than folded into one flag nobody can interrogate. */}

@@ -1137,6 +1137,149 @@ export interface CoachSuggestion {
   oppPlayed: CoachDeck[];
   notes: string[];
   caveats: string[];
+  /** Card-level swaps for the recommended deck. ADMIN-ONLY AND OPT-IN — see
+   *  `DECK_TUNER.md`. Absent (not null) unless `swaps=1` was sent, because a
+   *  null would read as "no swaps found" where the truth is "nobody asked". */
+  tuner?: DeckTuner | null;
+}
+
+/** One swap: which card leaves, which arrives, and what the database says. */
+export interface TunerSwap {
+  deck: string[];
+  hash: string;
+  /** 7 = one card different, 6 = two. */
+  overlap: number;
+  out: string[];
+  in: string[];
+  cards: number;
+  /** This deck's own worst matchup across everything it has been measured on. */
+  floor: number;
+  floorGames: number;
+  floorArchetype: string | null;
+  /** THE HEADLINE. Measured on `comparedOn` only — see the note below. */
+  floorDelta: number | null;
+  /** The archetypes BOTH this deck and the base were measured on. A delta
+   *  between floors taken over different subsets is not a comparison: a swap
+   *  measured on one archetype once scored +36.7 against a base whose worst
+   *  matchup was an archetype it had never faced. */
+  comparedOn: string[];
+  covered: number;
+  /** `covered` as a fraction of the archetypes asked about. Discount a
+   *  confident number measured on a third of the field. */
+  coverage: number;
+  baseFloorHere: number | null;
+  expected: number | null;
+  expectedDelta: number | null;
+  weight: number;
+  games: number;
+  /** True only when every incoming card is one the player has piloted. */
+  comfortable: boolean;
+}
+
+/** The structural checklist for a deck — what is missing, never a score. */
+export interface DeckHarmony {
+  ok: boolean;
+  /** Hard failures. */
+  problems: string[];
+  /** Real costs a real deck may accept on purpose. Not failures. */
+  notes: string[];
+  /** Cards that cannot be classified from a deck list at all — Spirit
+   *  Empress, whose form is chosen by the Elixir bar at deployment, and
+   *  Mirror. A deck holding one is INCOMPLETELY CHECKED, never passed. */
+  unknowns: string[];
+  checked: boolean;
+  counts: {
+    airAnswers: number; air: string[];
+    antiSwarm: number; antiSwarmCards: string[];
+    splash: number; splashCards: string[];
+    winConditions: number; winConditionCards: string[];
+    spells: number; smallSpells: number;
+    cheap: number; avgElixir: number;
+  };
+}
+
+/** A whole deck the composer offers, chosen from real played lists. */
+export interface ComposedDeck {
+  deck: string[];
+  hash: string;
+  archetype: string;
+  /** Its worst matchup across the archetypes it was measured on. */
+  floor: number;
+  floorGames: number;
+  floorArchetype: string | null;
+  expected: number | null;
+  weight: number;
+  covered: number;
+  coverage: number;
+  games: number;
+  /** How many of its eight cards the player has piloted. A count the reader
+   *  weighs, never a score — being handed eight unfamiliar cards mid-duel is
+   *  a real cost. */
+  familiar: number;
+}
+
+export interface Composed {
+  archetypes: string[];
+  decks: ComposedDeck[];
+  considered: number;
+  skipped: { illegal: number; vetoed: number; no_floor: number; excluded: number };
+  vetoed: boolean;
+  poolSize: number;
+  /** False means the SNAPSHOT has no seeds yet — which is a different thing
+   *  from "no good decks", and the two must not look alike on screen. */
+  poolReady: boolean;
+}
+
+/** Three decks sharing no card, chosen to cover the field BETWEEN them. */
+export interface Loadout {
+  archetypes: string[];
+  decks: ComposedDeck[];
+  coverage: {
+    archetype: string;
+    /** The best of the three against this archetype. */
+    best: number | null;
+    /** Which deck that was. */
+    by: string | null;
+    measured: boolean;
+  }[];
+  /** min over archetype of (max over the three decks). Null when nothing was
+   *  measured — never 50%. */
+  loadoutFloor: number | null;
+  /** Archetypes none of the three has been measured against. A gap in the
+   *  EVIDENCE, not a bad matchup. */
+  uncovered: string[];
+  poolSize: number;
+  poolReady: boolean;
+  vetoed: boolean;
+}
+
+export interface DeckTuner {
+  base: {
+    hash: string; cards: string[];
+    floor: number | null; floorGames: number; floorArchetype: string | null;
+    expected: number | null; weight: number; games: number;
+    /** False when nobody has played this exact list enough to measure it, in
+     *  which case every delta above is null rather than a comparison against
+     *  nothing. */
+    measured: boolean;
+  };
+  archetypes: string[];
+  weights: Record<string, number>;
+  swaps: TunerSwap[];
+  considered: number;
+  siblings: number;
+  scanned: number;
+  skipped: { swap_too_big: number; illegal: number; vetoed: number; no_floor: number };
+  /** Whether the composition checklist ran at all. */
+  vetoed: boolean;
+  minGames: number;
+  maxSwap: number;
+  harmony: DeckHarmony;
+  /** Mode B — whole decks, chosen from real played lists rather than swapped
+   *  into. Null when the composer failed; check `poolReady` for "the snapshot
+   *  has no seeds yet". */
+  compose?: Composed | null;
+  loadout?: Loadout | null;
 }
 
 /** Window 1 — which decks this player will bring. No revealed decks asks about
@@ -1161,7 +1304,7 @@ export function fetchCoachPrediction(
  *  to meta decks and says so, which is a weaker answer rather than none. */
 export function fetchCoachSuggestion(
   me: string, opp: string, myPlayed: string[][], oppPlayed: string[][],
-  win?: DateWindow,
+  win?: DateWindow, swaps?: boolean,
 ): Promise<CoachSuggestion> {
   /* ONE `days` covers BOTH players, and the server resolves it separately
      against each one's own coverage — so this is thirty days of each player's
@@ -1172,6 +1315,10 @@ export function fetchCoachSuggestion(
   if (opp) q.set('opp', opp);
   myPlayed.forEach((d, i) => q.set(`m${i + 1}`, d.join(',')));
   oppPlayed.forEach((d, i) => q.set(`o${i + 1}`, d.join(',')));
+  /* OPT-IN, AND ONLY EVER FOR AN ADMIN. The swap scan walks every stored deck
+     hash, so sending this by default would put a multi-second cost on the one
+     screen people use mid-duel. The caller decides; nothing here infers it. */
+  if (swaps) q.set('swaps', '1');
   return get<CoachSuggestion>(`/api/analytics/coach/suggest?${q.toString()}`);
 }
 

@@ -687,9 +687,21 @@ class Handler(BaseHTTPRequestHandler):
                 my_since, my_until = _window(q, cd.coverage(me))
                 opp_since, opp_until = (_window(q, cd.coverage(opp)) if opp
                                         else (None, None))
+                # CARD-LEVEL SWAPS ARE OPT-IN. They cost a full sibling scan
+                # over every stored deck hash, so this must never be on by
+                # default -- the client sends it only for an admin session,
+                # which is the staging shelf this project uses for a screen
+                # that has not been measured against real data yet.
+                #
+                # NO NEW ROUTE, deliberately: the tripwire in
+                # `test_api_security.py` stays at 21 and there is no second
+                # file to hand-deploy. Same arrangement as the ops snapshot,
+                # which rides on `/coverage`.
+                swaps = (q.get("swaps") or [""])[0] in ("1", "true", "yes")
                 out = coach.suggest(me, opp, _decks(q, ("m1", "m2")),
                                     _decks(q, ("o1", "o2")),
-                                    my_since, my_until, opp_since, opp_until)
+                                    my_since, my_until, opp_since, opp_until,
+                                    swaps=swaps)
                 out["sources"] = _sources()
                 return self._send(out)
 

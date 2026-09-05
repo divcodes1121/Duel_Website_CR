@@ -582,6 +582,11 @@ def _build_matrix() -> dict:
         "rawBias": round(100 * tw / max(1, tw + tl), 2),
         "battles": tw + tl,
         "reps": _build_reps(),
+        # The composer's candidate pool. Optional on read -- a snapshot written
+        # before this existed simply has no `seeds` key, and `seeds()` returns
+        # {} rather than raising, so an old snapshot costs the composer and
+        # nothing else.
+        "seeds": _build_seeds(),
         "computedAt": time.time(),
     }
 
@@ -633,6 +638,97 @@ def _build_reps() -> dict[str, list[str]]:
         if arch not in best or g > best[arch][0]:
             best[arch] = (g, h)
     return {a: h.split(",") for a, (_g, h) in best.items()}
+
+
+#: How many real decks per archetype the composer may choose from. 40 x ~17
+#: archetypes is ~680 heavily-played lists, which is a wide enough pool to
+#: compose from and small enough to sit in the snapshot JSON and in memory.
+#: Raising it costs snapshot size, not request time -- the whole point of
+#: building this here is that the request does no database work at all.
+SEEDS_PER_ARCHETYPE = 40
+
+#: A seed must have been played this much. Below it the per-archetype records
+#: are too thin to rank on and the deck is probably somebody's experiment
+#: rather than a list anyone pilots.
+SEED_MIN_GAMES = 60
+
+
+def _build_seeds() -> dict[str, list[dict]]:
+    """`archetype -> [{cards, games, archetypes: {arch: record}}]`, most-played first.
+
+    THE COMPOSER'S ENTIRE CANDIDATE POOL, and it is built HERE -- on the
+    background snapshot thread -- rather than at request time, because that is
+    the only way the composer can do no database work at all.
+
+    `_build_reps` already scans exactly this. It runs a `GROUP BY` over 1.98M
+    pair rows to find each deck's total games, keeps the single most-played deck
+    per archetype, and THROWS THE REST AWAY. This keeps the top
+    `SEEDS_PER_ARCHETYPE` instead, with each one's per-archetype record
+    attached, which is what turns "the most-played Hog deck" into "the decks
+    somebody could actually be told to play".
+
+        EVERY CANDIDATE THE COMPOSER EVER RETURNS IS A REAL DECK OUT OF THIS
+        POOL. It cannot invent one, which is what stops it producing a pile of
+        counters no human would pilot.
+
+    SYMMETRISED, like every other reading in this file: both directions of the
+    pair table with every column swapped on the reverse, which is what cancels
+    the 58.6% tracked-player bias.
+    """
+    tiers = cd._tier_paths()
+    if not tiers:
+        return {}
+    try:
+        con = cd.connect(tiers[0])
+    except Exception:
+        return {}
+
+    per: dict[str, dict[str, list[int]]] = {}
+
+    def bump(h, arch, w, l, d, cf, ca, tf, ta):
+        # A loadout row (16 or 24 cards) is a whole duel, not a deck. It cannot
+        # be recommended and it never matches a pasted list.
+        if h.count(",") != 7:
+            return
+        e = per.setdefault(h, {}).setdefault(arch, [0, 0, 0, 0, 0, 0, 0])
+        e[0] += w; e[1] += l; e[2] += d
+        e[3] += cf; e[4] += ca; e[5] += tf; e[6] += ta
+
+    try:
+        for r in con.execute(
+                "SELECT deck_a h, deck_b o, a_wins w, a_losses l, a_draws d, "
+                "       a_crowns cf, b_crowns ca, a_three tf, b_three ta "
+                "FROM pair_matchup_agg WHERE deck_a <> '' AND deck_b <> ''"):
+            bump(r["h"], _archetype_of_hash(r["o"]), r["w"] or 0, r["l"] or 0,
+                 r["d"] or 0, r["cf"] or 0, r["ca"] or 0, r["tf"] or 0, r["ta"] or 0)
+        for r in con.execute(
+                "SELECT deck_b h, deck_a o, a_wins w, a_losses l, a_draws d, "
+                "       a_crowns cf, b_crowns ca, a_three tf, b_three ta "
+                "FROM pair_matchup_agg WHERE deck_a <> '' AND deck_b <> ''"):
+            bump(r["h"], _archetype_of_hash(r["o"]), r["l"] or 0, r["w"] or 0,
+                 r["d"] or 0, r["ca"] or 0, r["cf"] or 0, r["ta"] or 0, r["tf"] or 0)
+    except Exception:
+        return {}
+    finally:
+        con.close()
+
+    by_arch: dict[str, list[dict]] = {}
+    for h, tally in per.items():
+        games = sum(v[0] + v[1] + v[2] for v in tally.values())
+        if games < SEED_MIN_GAMES:
+            continue
+        scored = _score(tally)
+        if not scored["archetypes"]:
+            continue
+        by_arch.setdefault(_archetype_of_hash(h), []).append({
+            "hash": h, "cards": h.split(","), "games": games,
+            "archetypes": scored["archetypes"],
+        })
+
+    for a in by_arch:
+        by_arch[a].sort(key=lambda d: (-d["games"], d["hash"]))
+        del by_arch[a][SEEDS_PER_ARCHETYPE:]
+    return by_arch
 
 
 def _symmetric(snap: dict, a: str, b: str) -> dict | None:
@@ -766,6 +862,12 @@ def status() -> dict:
 # --------------------------------------------------------------------------
 # The three answers
 # --------------------------------------------------------------------------
+
+def seeds() -> dict[str, list[dict]]:
+    """The composer's candidate pool, or `{}` when the snapshot predates it."""
+    snap = _snap()
+    return (snap or {}).get("seeds") or {}
+
 
 def _label(archetype: str) -> str:
     return cd._archetype_title(archetype)

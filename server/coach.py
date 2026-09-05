@@ -67,6 +67,7 @@ So this narrates evidence and never invents a tendency to read.
 from __future__ import annotations
 
 import os
+import sys
 import threading
 import time
 
@@ -756,10 +757,94 @@ def _expected(mine: list[str], opp_decks: list[dict], snap) -> dict | None:
     return {"winRate": round(num / den, 1), "weight": round(den, 4), "per": per}
 
 
+def _spread(opp_decks: list[dict]) -> tuple[list[str], dict[str, float]]:
+    """The opponent's likely decks, collapsed to `(archetypes, weights)`.
+
+    The tuner scores against ARCHETYPES because that is what `pair_matchup_agg`
+    can answer for a deck neither player has played. Two of their decks sharing
+    an archetype have their probabilities SUMMED rather than listed twice --
+    the weight is how much of their play that archetype accounts for.
+    """
+    weights: dict[str, float] = {}
+    for d in opp_decks:
+        a = _archetype(d["cards"])
+        weights[a] = weights.get(a, 0.0) + (d.get("prob") or 0.0)
+    return sorted(weights, key=lambda a: -weights[a]), weights
+
+
+def tune(my_deck: list[str], opp_decks: list[dict],
+         used: set | None = None, hist: dict | None = None) -> dict | None:
+    """Card-level swaps for one deck. See `DECK_TUNER.md`.
+
+    OPT-IN AND ADMIN-ONLY at the route, because it costs a full sibling scan --
+    the estimate is ~2.6 s and it has not been measured on the live database
+    yet. It must never be added to the default Coach response.
+
+    Imported INSIDE the function on purpose. `deck_tuner` reaches into
+    `deck_counter`'s internals and `deck_harmony` loads three JSON files at
+    import; a deployment missing either must cost this block and nothing else,
+    which is the same rule the ops snapshot follows.
+    """
+    if not my_deck or len(set(my_deck)) != 8:
+        return None
+    try:
+        import deck_tuner as tuner
+        import deck_harmony as harmony
+    except Exception as exc:  # pragma: no cover - deployment shape
+        print("coach.tune: tuner unavailable: %r" % (exc,), file=sys.stderr)
+        return None
+
+    archetypes, weights = _spread(opp_decks)
+    if not archetypes:
+        return None
+
+    # Cards the player has actually piloted in the window. A TIEBREAK, and the
+    # result says so -- `team_analysis` calls its equivalent "not a model" and
+    # this is the same claim.
+    comfort = set()
+    if hist and hist.get("allDecks"):
+        for d in hist["allDecks"]:
+            comfort.update(d)
+
+    try:
+        out = tuner.rank(my_deck, archetypes, weights=weights,
+                         used=used or set(), comfort=comfort,
+                         veto=harmony.veto)
+    except Exception as exc:  # pragma: no cover - degradation
+        print("coach.tune: %r" % (exc,), file=sys.stderr)
+        return None
+
+    # The structural reading of the deck as it stands, beside the swaps. A
+    # reader owed "swap bomber for baby dragon" is also owed "because you have
+    # one air answer", and that sentence comes from the checklist, not the
+    # database.
+    out["harmony"] = harmony.check(my_deck)
+    out["weights"] = {a: round(w, 4) for a, w in weights.items()}
+
+    # MODE B beside Mode A, because they answer different questions and a coach
+    # wants both: "change this card" and "bring this deck instead". The
+    # composer does NO database work -- its pool is the snapshot's seeds -- so
+    # this costs almost nothing on top of the scan already paid for above.
+    try:
+        out["compose"] = tuner.compose(
+            archetypes, weights=weights, used=used or set(),
+            comfort=comfort, veto=harmony.veto,
+            # Never offer back the deck they are already being told to play.
+            exclude={",".join(sorted(set(my_deck)))})
+        out["loadout"] = tuner.loadout(
+            archetypes, weights=weights, comfort=comfort, veto=harmony.veto)
+    except Exception as exc:  # pragma: no cover - degradation
+        print("coach.tune: composer: %r" % (exc,), file=sys.stderr)
+        out["compose"] = None
+        out["loadout"] = None
+    return out
+
+
 def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
             opp_played: list[list[str]],
             my_since: str | None = None, my_until: str | None = None,
-            opp_since: str | None = None, opp_until: str | None = None) -> dict:
+            opp_since: str | None = None, opp_until: str | None = None,
+            swaps: bool = False) -> dict:
     """What to play next, and why.
 
     `my_played` / `opp_played` are the decks already used this duel, in order.
@@ -864,6 +949,12 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
                     if opp_played and opp_hist else None),
         "myPlayed": _decorate(my_played, mine_hist),
         "oppPlayed": _decorate(opp_played, opp_hist),
+        # OPT-IN, and absent rather than null when it was not asked for -- a
+        # null would read as "no swaps found" where the truth is "nobody
+        # asked". Costs a full sibling scan, so the route only sets `swaps`
+        # for an admin. See `DECK_TUNER.md`.
+        **({"tuner": tune(best["cards"], opp["decks"], used_mine, mine_hist)}
+           if swaps and best else {}),
         "notes": _read(stage, best, opp, my_played, opp_played, observed),
         # Every reason the answer might be weaker than it looks, listed rather
         # than folded into one flag the reader cannot interrogate.
