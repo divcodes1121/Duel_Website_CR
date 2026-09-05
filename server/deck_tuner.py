@@ -118,6 +118,48 @@ def _key(cards: list[str]) -> str:
     return ",".join(sorted(set(cards)))
 
 
+def _view(cards: list[str]) -> dict:
+    """A deck ARRANGED INTO ITS SLOTS with its evolution and hero art resolved.
+
+    THE BUG THIS EXISTS TO FIX, seen on the live screen: every deck this module
+    returned came straight out of `h.split(",")`, and a `deck_hash` IS THE
+    SORTED CARD LIST. So the client was handed eight cards in ALPHABETICAL
+    order with no art at all, and drew them in that order:
+
+        Baby Dragon, Barbarian Barrel, Bowler, Electro Giant, Goblin Hut, ...
+
+    Two things were wrong at once and they compounded. Slot 1 is the evolution
+    slot and slot 2 the hero slot, so alphabetical order puts whatever happens
+    to start with 'A' where the evolution belongs -- and with no `art` map
+    nothing renders as an evolution or a hero anyway. The result was decks that
+    were mis-slotted AND identical-looking, which is exactly how it was
+    reported.
+
+    `arrange_deck` is the app's ONE answer to "which slots are special", and it
+    is what the meta board, the player screens, the Duel Zone and the PDF all
+    use. Called here the same way `real_opponents` calls it:
+
+      * `trust_order=False` (the default) -- REBUILD the slots from what the
+        cards ARE. `_drawn()` passes True because a pasted copyDeck link really
+        does carry slot order; a deck hash carries the alphabet, so trusting it
+        would be trusting a sort.
+      * `marks` from `_board_art()` -- how this deck was OBSERVED being
+        fielded. A dictionary hit on a snapshot that exists anyway.
+      * `inferredArt` when the board has never seen the list, so `CardArt` can
+        say the art is a guess rather than an observation.
+    """
+    if not cards:
+        return {"cards": [], "art": {}, "inferredArt": False}
+    key = _key(cards)
+    observed = counter._board_art().get(key, {})
+    try:
+        order, art = cd.arrange_deck(list(cards), observed,
+                                     slot_of=counter._board_slots().get(key))
+    except Exception:
+        return {"cards": list(cards), "art": {}, "inferredArt": True}
+    return {"cards": order, "art": art, "inferredArt": not observed}
+
+
 def neighbours(cards: list[str], archetypes: list[str] | None = None) -> dict:
     """Every real deck within `MAX_SWAP` cards of `cards`, scored per archetype.
 
@@ -375,8 +417,10 @@ def rank(cards: list[str],
         # convenient subset.
         cmp = _comparable(base_profile, rec, archetypes)
         m, mw = _mean(rec, archetypes, weights)
+        view = _view(other)
         out.append({
-            "deck": other,
+            "deck": view["cards"],
+            "view": view,
             "hash": h,
             "overlap": rec["overlap"],
             "out": gone,
@@ -439,7 +483,8 @@ def rank(cards: list[str],
     return {
         "base": {
             "hash": base_key,
-            "cards": sorted(set(cards)),
+            "cards": _view(cards)["cards"],
+            "view": _view(cards),
             "floor": base_floor,
             "floorGames": base_floor_games,
             "floorArchetype": base_worst,
@@ -543,8 +588,10 @@ def compose(archetypes: list[str],
                 continue
             m, mw = _mean(d, archetypes, weights)
             covered = sum(1 for a in archetypes if a in d["archetypes"])
+            view = _view(d["cards"])
             out.append({
-                "deck": d["cards"],
+                "deck": view["cards"],
+                "view": view,
                 "hash": d["hash"],
                 "archetype": counter._archetype_of_hash(d["hash"]),
                 "floor": f,

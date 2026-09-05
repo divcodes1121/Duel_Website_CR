@@ -1143,9 +1143,23 @@ export interface CoachSuggestion {
   tuner?: DeckTuner | null;
 }
 
+/** A deck arranged into its slots with its evolution/hero art resolved —
+ *  the same shape every other screen draws a deck from. Without it a deck
+ *  hash renders in ALPHABETICAL order (a hash IS the sorted card list) with
+ *  no evolutions or heroes, which is mis-slotted and identical-looking at
+ *  once. */
+export interface DeckView {
+  cards: string[];
+  art: Record<string, WildForm>;
+  /** The art was inferred from slot position, not observed on the board. */
+  inferredArt: boolean;
+}
+
 /** One swap: which card leaves, which arrives, and what the database says. */
 export interface TunerSwap {
+  /** Already arranged — do not re-sort. */
   deck: string[];
+  view: DeckView;
   hash: string;
   /** 7 = one card different, 6 = two. */
   overlap: number;
@@ -1206,7 +1220,9 @@ export interface DeckHarmony {
 
 /** A whole deck the composer offers, chosen from real played lists. */
 export interface ComposedDeck {
+  /** Already arranged — do not re-sort. */
   deck: string[];
+  view: DeckView;
   hash: string;
   archetype: string;
   /** Its worst matchup across the archetypes it was measured on. */
@@ -1261,7 +1277,7 @@ export interface Loadout {
 
 export interface DeckTuner {
   base: {
-    hash: string; cards: string[];
+    hash: string; cards: string[]; view: DeckView;
     floor: number | null; floorGames: number; floorArchetype: string | null;
     expected: number | null; weight: number; games: number;
     /** False when nobody has played this exact list enough to measure it, in

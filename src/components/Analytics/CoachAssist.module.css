@@ -1278,3 +1278,31 @@
   text-transform: none;
   opacity: 0.6;
 }
+
+/* A swap, read left to right: the change, the card leaving, the card
+   arriving. Card ART rather than card NAMES — this screen is read mid-duel
+   and a player recognises a picture faster than a string, which is why every
+   other deck on the site is drawn and not listed. */
+.swapRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.swapSide {
+  display: inline-flex;
+  gap: 0.2rem;
+}
+
+/* Sized against the card art beside it, not the body text. */
+.swapSide img {
+  width: 34px;
+  height: auto;
+  border-radius: 4px;
+}
+
+.swapArrow {
+  opacity: 0.5;
+  font-size: 0.9rem;
+}

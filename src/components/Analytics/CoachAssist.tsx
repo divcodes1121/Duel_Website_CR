@@ -1019,10 +1019,6 @@ function OpponentReadPanel({ tag }: { tag: string }) {
 
 /* ──────────────────────────────────────────────────── the swap brain */
 
-function cardName(key: string): string {
-  return CARDS_BY_KEY.get(key)?.name ?? key;
-}
-
 /** A signed change, coloured. The only number in a swap row. */
 function Delta({ n }: { n: number | null }) {
   if (n === null) return <span style={{ opacity: 0.5 }}>—</span>;
@@ -1080,12 +1076,29 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
       {swaps.length ? (
         <ul className={styles.notes}>
           {swaps.map((s) => (
-            <li key={s.hash}>
-              <Delta n={s.floorDelta} />{' '}
-              {s.out.map(cardName).join(' + ')} → {s.in.map(cardName).join(' + ')}
+            <li key={s.hash} className={styles.swapRow}>
+              <Delta n={s.floorDelta} />
+              {/* THE ART COMES FROM EACH SIDE'S OWN ARRANGEMENT. The outgoing
+                  card is drawn as it was fielded in the deck it is LEAVING,
+                  the incoming one as it will be fielded in the deck it JOINS —
+                  the same card can be an evolution in one and plain in the
+                  other, and drawing both from one map would be a guess. */}
+              <span className={styles.swapSide}>
+                {s.out.map((c) => (
+                  <CardArt key={c} card={c} variant={tuner.base.view.art[c]}
+                           inferred={tuner.base.view.inferredArt} />
+                ))}
+              </span>
+              <span className={styles.swapArrow} aria-label="becomes">→</span>
+              <span className={styles.swapSide}>
+                {s.in.map((c) => (
+                  <CardArt key={c} card={c} variant={s.view.art[c]}
+                           inferred={s.view.inferredArt} />
+                ))}
+              </span>
               {s.thin && (
                 <span className={styles.blockNote} title="too few games to trust">
-                  {' '}· thin evidence
+                  thin evidence
                 </span>
               )}
             </li>
@@ -1109,7 +1122,8 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
                 {d.floor.toFixed(1)}
               </strong>{' '}
               {d.archetype}
-              <Strip cards={d.deck} size="sm" />
+              <Strip cards={d.view.cards} art={d.view.art}
+                     inferred={d.view.inferredArt} size="sm" />
             </div>
           ))}
         </>
@@ -1134,7 +1148,8 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
           {tuner.loadout.decks.map((d) => (
             <div key={d.hash} style={{ marginBottom: '.5rem' }}>
               <strong>{d.archetype}</strong>
-              <Strip cards={d.deck} size="sm" />
+              <Strip cards={d.view.cards} art={d.view.art}
+                     inferred={d.view.inferredArt} size="sm" />
             </div>
           ))}
         </>
