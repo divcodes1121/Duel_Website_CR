@@ -6,6 +6,7 @@ import {
   getHeroIconUrl,
 } from '../data/cards';
 import {
+  pdfSafe,
   reportFilename,
   type DeckLine,
   type DividerBlock,
@@ -293,12 +294,18 @@ function deckUrls(decks: DeckLine[]): { url: string; card: string }[] {
 /* ------------------------------------------------------------------ text */
 
 function clip(doc: JsPdfType, text: string, maxWidth: number): string {
-  if (doc.getTextWidth(text) <= maxWidth) return text;
-  let out = text;
-  while (out.length > 1 && doc.getTextWidth(`${out}…`) > maxWidth) {
+  /* MEASURE WHAT WILL ACTUALLY BE DRAWN. This measured the raw string, so a
+     name carrying an emoji was width-checked as something jsPDF would never
+     render — and "WR I Clisman" came back truncated to "WR I Clisman..." in a
+     column with room to spare. Sanitising first makes the measurement and the
+     drawing agree, which is the only way a truncation can be correct. */
+  const safe = pdfSafe(text);
+  if (doc.getTextWidth(safe) <= maxWidth) return safe;
+  let out = safe;
+  while (out.length > 1 && doc.getTextWidth(`${out}...`) > maxWidth) {
     out = out.slice(0, -1);
   }
-  return `${out}…`;
+  return `${out}...`;
 }
 
 /* ----------------------------------------------------------------- state */
@@ -435,11 +442,21 @@ function footer(ctx: Ctx, total: number) {
 
 function blockHeading(ctx: Ctx, heading?: string, note?: string, minBody = 0): void {
   const { doc, p } = ctx;
-  /* Cleared FIRST: the heading is about to be drawn fresh, so a break taken
-     inside the reserve below is not a continuation and must not be labelled
-     as one. It is set again once the heading is actually on the page. */
-  ctx.flow = null;
+  /* A HEADING-LESS BLOCK INHERITS THE FLOW LABEL, and this early return has to
+     come FIRST for that to happen.
+
+     `ctx.flow = null` used to be the line above, which meant a block with no
+     heading of its own WIPED the label of the block that introduced it. That
+     is not a hypothetical: a shipped dossier put "What your squad should
+     bring" and its note at the foot of page 10 as one block, and the three
+     deck rows it describes as the next block with no heading — so the rows
+     spilled to page 11 under NO heading and NO "(continued)" line, which is
+     precisely the disorientation the flow label exists to prevent.
+
+     Cleared below instead, where a heading really is about to be drawn fresh
+     and a break taken inside the reserve genuinely is not a continuation. */
   if (!heading && !note) return;
+  ctx.flow = null;
   const own = (heading ? 6.5 : 0) + (note ? 5 : 0) + 1.5;
   // Reserved TOGETHER — see `firstChunk`.
   reserve(ctx, own + minBody);
@@ -1272,6 +1289,27 @@ function drawContents(ctx: Ctx) {
   });
 }
 
+/* ------------------------------------------------------- text, made safe */
+
+/**
+ * Sanitise EVERY string the document draws, at the one place they all pass
+ * through. There are 61 `doc.text(...)` sites in this file and more in the
+ * adapters that feed it; guarding them one at a time guarantees the next one
+ * added forgets, and the failure is SILENT because a garbled name still
+ * renders something. Patching the method once cannot be bypassed.
+ *
+ * `clip()` sanitises too, and must — see `pdfSafe`. This is the backstop, not
+ * the only application.
+ */
+function guardText(doc: { text: (...a: unknown[]) => unknown }): void {
+  const orig = doc.text.bind(doc);
+  doc.text = (txt: unknown, ...rest: unknown[]) =>
+    orig(
+      Array.isArray(txt) ? txt.map((x) => pdfSafe(String(x))) : pdfSafe(String(txt)),
+      ...rest,
+    );
+}
+
 /* ----------------------------------------------------------------- render */
 
 export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> {
@@ -1281,7 +1319,15 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
   GStateCtor = GState;
 
   const p = readPalette();
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  /* `compress: true` — MEASURED: a shipped 101-page dossier was 2.26 MB, of
+     which 1.27 MB was UNCOMPRESSED content streams. `pdfRenderer.ts` has
+     carried this flag since it was written; this renderer never did, so every
+     analytics report — Player Analysis, Meta, Cards, Live Player and the team
+     dossier — shipped with its page content raw. That is most of the file and
+     most of the delay opening one on a phone. */
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  // Latin-1 only, from here on. See `guardText`.
+  guardText(doc as unknown as { text: (...a: unknown[]) => unknown });
   // No font to register: the display face is Arial and jsPDF's built-in
   // Helvetica matches it metrically. See `setFont`.
 
@@ -1329,7 +1375,8 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
     open = true;
   };
 
-  for (const block of docModel.blocks as ReportBlock[]) {
+  for (let i = 0; i < docModel.blocks.length; i += 1) {
+    const block = docModel.blocks[i] as ReportBlock;
     if (block.kind === 'break') {
       // A deliberate break starts a section, never continues one.
       ctx.flow = null;
@@ -1345,7 +1392,23 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
       continue;
     }
     body();
-    blockHeading(ctx, block.heading, block.note, firstChunk(block));
+    /* RESERVE FOR THE BLOCK THAT FOLLOWS, when that block is this one's
+       content. An adapter may emit a heading and its note as one block and the
+       rows as the next, heading-less one — so reserving only this block's own
+       first chunk leaves the heading legal at the foot of a sheet with nothing
+       under it. That is how "What your squad should bring" ended up alone at
+       the bottom of page 10 of a shipped dossier.
+
+       Only when the next block carries NO heading and NO note of its own,
+       which is what makes it a continuation rather than a new subject. */
+    const follower = docModel.blocks[i + 1] as ReportBlock | undefined;
+    const carried =
+      follower && follower.kind !== 'break' && follower.kind !== 'divider'
+      && !follower.heading && !follower.note
+        ? firstChunk(follower)
+        : 0;
+    blockHeading(ctx, block.heading, block.note,
+                 Math.max(firstChunk(block), carried));
     switch (block.kind) {
       case 'stats': drawStats(ctx, block.tiles); break;
       case 'table': drawTable(ctx, block); break;

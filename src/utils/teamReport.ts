@@ -1,3 +1,4 @@
+import { pdfSafe } from './analyticsReport';
 import type {
   TeamFolder,
   TeamMember,
@@ -66,7 +67,13 @@ function windowLabel(w: { from: string | null; to: string | null }): string {
 
 /** A member's name, falling back to the tag the way every screen does. */
 function who(m: { name: string; tag: string }): string {
-  return m.name && m.name !== m.tag ? m.name : m.tag;
+  /* THE TAG WHEN THE NAME CANNOT BE PRINTED. A Clash Royale name may be
+     entirely emoji or entirely non-Latin script, and the PDF's fonts are
+     WinAnsi — such a name sanitises to nothing and the row would print a
+     blank where a person belongs. A tag is a worse label than a name and a
+     far better one than empty. */
+  const named = m.name && m.name !== m.tag ? m.name : '';
+  return pdfSafe(named) ? named : m.tag;
 }
 
 /**

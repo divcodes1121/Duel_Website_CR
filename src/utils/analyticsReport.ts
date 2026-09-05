@@ -206,6 +206,50 @@ export type ReportBlock =
   | SpreadBlock
   | VersusBlock;
 
+
+/**
+ * Text jsPDF's built-in fonts can actually draw.
+ *
+ * Those fonts are **WinAnsi (Latin-1) only**. Hand one a character outside
+ * that range and jsPDF encodes the string as UTF-16 and writes its raw BYTES,
+ * which the standard fonts render one Latin-1 glyph each — so ONE emoji turns
+ * a whole name into byte noise, not just itself.
+ *
+ * MEASURED on a shipped 10v10 dossier: every Clash Royale name carrying an
+ * emoji or a symbol came out like this, and a contents page of them read as
+ * line noise:
+ *
+ *     "WR I Clisman<emoji>"  ->   W R   I   C l...
+ *
+ * NFKD first, so an accented letter degrades to its base and a ™ becomes "TM"
+ * instead of vanishing; combining marks go; anything still above U+00FF goes.
+ *
+ * IT LIVES HERE, in the pure model module, because it must be applied at THREE
+ * different moments and a second copy would drift from the first:
+ *
+ *   * when MEASURING (`clip`), or the layout is computed for text that will
+ *     not be the text drawn — which is what truncated "WR I Clisman" to
+ *     "WR I Clisman..." in a column with room to spare;
+ *   * when DRAWING, as the guard that cannot be bypassed;
+ *   * when CHOOSING a name at all, so a caller holding a tag can fall back to
+ *     it rather than print a blank.
+ */
+export function pdfSafe(s: string): string {
+  if (!s) return '';
+  let clean = true;
+  for (let i = 0; i < s.length; i += 1) {
+    if (s.charCodeAt(i) > 0xff) { clean = false; break; }
+  }
+  if (clean) return s;
+  const flat = s.normalize('NFKD').replace(/[̀-ͯ]/g, '');
+  let out = '';
+  for (const ch of flat) {
+    const c = ch.codePointAt(0) as number;
+    if (c === 9 || c === 10 || (c >= 32 && c <= 0xff)) out += ch;
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 export interface ReportDoc {
   /** The screen's own name — "Duel Zone", "Top Meta Decks". */
   screen: string;

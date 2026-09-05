@@ -1,3 +1,4 @@
+import { pdfSafe } from './analyticsReport';
 import type { jsPDF as JsPdfType } from 'jspdf';
 import {
   CARDS_BY_KEY,
@@ -827,6 +828,26 @@ export interface RenderOptions {
  * Renders the report and hands back a Blob. jsPDF is imported dynamically so
  * the ~400 KB library only reaches the browsers that actually export.
  */
+
+/**
+ * Latin-1, because jsPDF's built-in fonts are WinAnsi and this report still
+ * sets its small copy in Helvetica. A character outside that range makes
+ * jsPDF emit the string's raw UTF-16 BYTES, one Latin-1 glyph each, so a
+ * single emoji in a handle or a deck name turns the whole string into noise.
+ * The full account is in `analyticsPdf.ts`, where it was first measured on a
+ * shipped dossier. The registered display face does not rescue it — it is a
+ * display cut and carries no emoji either.
+ */
+/** Guard every string the document draws, at the one place they pass through. */
+function guardText(doc: { text: (...a: unknown[]) => unknown }): void {
+  const orig = doc.text.bind(doc);
+  doc.text = (txt: unknown, ...rest: unknown[]) =>
+    orig(
+      Array.isArray(txt) ? txt.map((x) => pdfSafe(String(x))) : pdfSafe(String(txt)),
+      ...rest,
+    );
+}
+
 export async function renderDeckReport(req: ExportRequest, opts: RenderOptions = {}): Promise<Blob> {
   const { jsPDF, GState } = await import('jspdf');
 
@@ -846,6 +867,7 @@ export async function renderDeckReport(req: ExportRequest, opts: RenderOptions =
   }
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  guardText(doc as unknown as { text: (...a: unknown[]) => unknown });
   GStateCtor = GState;
   registerDisplayFont(doc, fontData);
   const totalPages = pages.length + 1;
