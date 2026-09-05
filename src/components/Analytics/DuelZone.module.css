@@ -882,3 +882,11 @@
   color: var(--text-muted);
   line-height: 1.45;
 }
+
+/* The export button's slot in the header. It sits beside the win-condition
+   filter because both act on the board as it stands; a toolbar of its own
+   would cost a row, and on a phone that row pushes the board below the fold. */
+.exportSlot {
+  display: flex;
+  align-items: center;
+}

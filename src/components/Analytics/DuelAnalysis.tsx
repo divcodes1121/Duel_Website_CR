@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ReportButton } from '../Export/ReportButton';
 import { CardArt } from './CardArt';
 import { DuelInsights } from './DuelInsights';
 import { useIsPrinting } from '../../state/printMode';
@@ -293,6 +294,12 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
           </div>
 
           <div className={styles.headTools}>
+            {/* See the note in DuelZone: same placement, same dynamic import. */}
+            <ReportButton
+              build={async () =>
+                (await import('../../utils/duelAdapters')).duelAnalysisDoc(report, tag)
+              }
+            />
             <div className={styles.rangeWrap}>
               <button
                 type="button"

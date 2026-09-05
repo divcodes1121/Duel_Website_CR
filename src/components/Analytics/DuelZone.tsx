@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
+import { ReportButton } from '../Export/ReportButton';
 import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { useBuilderStore } from '../../state/store';
 import { duelPairs, type DuelSaveOutcome } from '../../state/duelImport';
@@ -534,6 +535,20 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
           {/* One control, both windows. The date range says WHEN, this says
               WHICH — keeping them on the same row is what makes it obvious the
               two compose rather than replace each other. */}
+          {/* Export lives beside the filter, not in a toolbar of its own —
+              the two are the same kind of control (they act on the board as it
+              stands) and a second row would push the board down on a phone.
+              The adapter is imported dynamically so it stays out of the chunk
+              every screen loads; a dynamic import in an EVENT HANDLER never
+              touches Suspense, which is what makes it safe inside this shell. */}
+          <div className={styles.exportSlot}>
+            <ReportButton
+              build={async () =>
+                (await import('../../utils/duelAdapters')).duelZoneDoc(report, tag)
+              }
+            />
+          </div>
+
           <div className={styles.filterSlot}>
             <WinConFilter
               align="end"
