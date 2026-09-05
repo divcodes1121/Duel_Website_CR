@@ -1059,8 +1059,11 @@ function SwapRow({ swap, spread }: { swap: TunerSwap; spread: number }) {
         {' · '}
         {swap.cards === 1 ? 'one card different' : 'two cards different'}
         {' · '}
-        {swap.games.toLocaleString()} games
+        {swap.deltaGames.toLocaleString()} games behind that change
         {swap.comfortable ? ' · you have played it' : ' · new card for you'}
+        {/* THIN IS SAID, NOT HIDDEN. A +34pp off 25 games led the first
+            production run; the ordering demotes it and this names it. */}
+        {swap.thin ? ' · thin evidence' : ''}
       </span>
     </li>
   );

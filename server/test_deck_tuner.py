@@ -306,6 +306,36 @@ def main() -> int:
           r["swaps"].index(by[N_DRAGON]) < r["swaps"].index(by[N_VALK]),
           "a swap measured on one archetype beat one measured on three")
 
+    print("\nEVIDENCE BEFORE SIZE — the production defect")
+    # FOUND ON THE FIRST LIVE RUN, 2026-09-05. The top six swaps were all
+    # 15-25 games on one archetype of three, and the leader claimed +34.5pp.
+    # `_comparable` had already made the delta honest, so the arithmetic was
+    # right and the ADVICE was still bad: an 85.7% win rate over 25 games is
+    # noise with a decimal point, and it outranked better-evidenced swaps
+    # because coverage was only the second sort key.
+    #
+    # N_VALK is the fixture's thin swap: 60 games, one archetype. It is still
+    # RETURNED — withholding a real option would be worse — but it must never
+    # lead.
+    check("SWAP_MIN_GAMES is stricter than the display floor",
+          tuner.SWAP_MIN_GAMES > tuner.MIN_GAMES,
+          f"{tuner.SWAP_MIN_GAMES} vs {tuner.MIN_GAMES}")
+    check("a swap is marked thin when its deciding archetype is under-played",
+          by[N_VALK]["thin"] is (by[N_VALK]["deltaGames"] < tuner.SWAP_MIN_GAMES),
+          str(by[N_VALK]["deltaGames"]))
+    check("the games behind the DELTA are reported, not just the deck's total",
+          by[N_DRAGON]["deltaGames"] == 100, str(by[N_DRAGON]["deltaGames"]))
+    thin = [s for s in r["swaps"] if s["thin"]]
+    solid = [s for s in r["swaps"] if not s["thin"]]
+    check("every well-evidenced swap outranks every thin one",
+          all(r["swaps"].index(a) < r["swaps"].index(b)
+              for a in solid for b in thin),
+          "a thin swap outranked a measured one — the production defect is back")
+    check("thin swaps are still returned, not deleted",
+          len(r["swaps"]) == len(thin) + len(solid))
+    check("the count of thin swaps shown is reported",
+          r["thin"] == len(thin), f'{r["thin"]} vs {len(thin)}')
+
     print("\nan unmeasured archetype is skipped, never scored 50%")
     # N_VALK has golem only; balloon fell under the floor and xbow was never
     # played. Its floor must be golem's figure, not a 50 dragged in from nothing.

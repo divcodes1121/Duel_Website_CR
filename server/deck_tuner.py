@@ -81,6 +81,28 @@ MAX_SWAP = 2
 # about the same deck.
 MIN_GAMES = counter.MIN_GAMES
 
+# BUT EIGHT GAMES IS NOT ENOUGH TO RECOMMEND A CARD CHANGE, and that is a
+# different question from whether a figure may be DISPLAYED.
+#
+# MEASURED ON PRODUCTION, 2026-09-05, the first live run of this module. The
+# top six swaps were all 15-25 games on ONE archetype of three, and the leader
+# claimed +34.5pp:
+#
+#   mother-witch/vines -> dark-prince/fireball  +34.5pp  1/3 archetypes  25 games
+#   wizard -> dark-prince                       +23.3pp  2/3 archetypes  18 games
+#
+# `_comparable` had already made the delta honest -- it is a like-for-like
+# comparison over the shared archetype -- so the arithmetic was right and the
+# ADVICE was still bad. An 85.7% win rate over 25 games is noise wearing a
+# decimal point, and it outranked better-evidenced swaps because coverage was
+# only the second sort key.
+#
+# A swap whose deciding archetype is below this is still RETURNED and still
+# shows its figures, because withholding it would hide a real option. It is
+# marked `thin` and sorted after everything that clears the bar: an ordering
+# says "trust these first" without pretending the others do not exist.
+SWAP_MIN_GAMES = 60
+
 # How many swaps to return. Small on purpose: this is advice a person acts on
 # one card at a time, and a list of forty is a list nobody reads.
 TOP_SWAPS = 8
@@ -382,6 +404,11 @@ def rank(cards: list[str],
             # A swap onto a card they have never piloted is a real cost and it
             # is SAID, not hidden in a score.
             "comfortable": bool(comfort) and all(c in comfort for c in arrived),
+            # THIN = the archetype the delta rests on has too few games to act
+            # on. Shown, not withheld; sorted last, not deleted. See
+            # SWAP_MIN_GAMES for the production run that put this here.
+            "thin": cmp["floorGames"] < SWAP_MIN_GAMES,
+            "deltaGames": cmp["floorGames"],
         })
 
     # Deterministic to the last field. Two swaps tie on a rounded win rate
@@ -392,7 +419,14 @@ def rank(cards: list[str],
     # are not equally believable when one was measured across the whole spread
     # and the other on a third of it, and this is the only place that ordering
     # can be expressed without inventing a weight for it.
+    #
+    # EVIDENCE BEFORE SIZE. `thin` leads the key, so a well-measured +12 comes
+    # before a 25-game +34. That ordering is the whole lesson of the first
+    # production run and it is deliberately not a weight -- a weight would let
+    # a big enough number buy its way past thin evidence, which is exactly what
+    # happened.
     out.sort(key=lambda r: (
+        r["thin"],
         -(r["floorDelta"] if r["floorDelta"] is not None else -99),
         -r["coverage"],
         -(r["expectedDelta"] if r["expectedDelta"] is not None else -99),
@@ -427,6 +461,8 @@ def rank(cards: list[str],
         # reader must know whether the structural filter ran at all.
         "vetoed": veto is not None,
         "minGames": MIN_GAMES,
+        "swapMinGames": SWAP_MIN_GAMES,
+        "thin": sum(1 for r in out[:limit] if r["thin"]),
         "maxSwap": MAX_SWAP,
     }
 

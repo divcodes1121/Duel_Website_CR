@@ -1174,6 +1174,12 @@ export interface TunerSwap {
   games: number;
   /** True only when every incoming card is one the player has piloted. */
   comfortable: boolean;
+  /** The archetype the delta rests on has too few games to act on. Shown
+   *  anyway — withholding a real option is worse — but sorted after
+   *  everything better evidenced, and labelled. */
+  thin: boolean;
+  /** Games behind the DELTA specifically, not the deck's lifetime total. */
+  deltaGames: number;
 }
 
 /** The structural checklist for a deck — what is missing, never a score. */
@@ -1273,6 +1279,9 @@ export interface DeckTuner {
   /** Whether the composition checklist ran at all. */
   vetoed: boolean;
   minGames: number;
+  swapMinGames: number;
+  /** How many of the swaps shown are thin. */
+  thin: number;
   maxSwap: number;
   harmony: DeckHarmony;
   /** Mode B — whole decks, chosen from real played lists rather than swapped
