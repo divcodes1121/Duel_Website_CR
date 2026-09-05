@@ -185,6 +185,21 @@ export interface VersusBlock extends BlockBase {
   kind: 'versus';
   leftLabel?: string;
   rightLabel?: string;
+  /**
+   * Fit several pairs on one sheet instead of one.
+   *
+   * TWO PAIRS PER SHEET WAS TRIED AND REVERTED for the team dossier, and that
+   * was right THERE: a pair is the unit of meaning on that document, so
+   * shrinking the art to fit two made the one spread whose job is showing two
+   * decks at a glance the page with the smallest cards on it.
+   *
+   * A DUEL IS A DIFFERENT UNIT. Three games are one duel, and splitting them
+   * across three sheets breaks the thing the reader came for — the website
+   * shows all three in a row for exactly that reason. So the cards shrink and
+   * the duel stays whole, which is the opposite trade and the correct one for
+   * this document.
+   */
+  compact?: boolean;
   pairs: {
     left: DeckLine;
     /** Null when nothing on the squad answers it — printed as a stated
@@ -234,6 +249,29 @@ export type ReportBlock =
  *   * when CHOOSING a name at all, so a caller holding a tag can fall back to
  *     it rather than print a blank.
  */
+/**
+ * Punctuation this app actually uses that sits above U+00FF, mapped rather
+ * than dropped.
+ *
+ * DROPPING THESE WAS A REGRESSION AND IT SHOWED IMMEDIATELY: the en dash in a
+ * duel score is U+2013, so "2–1" printed as "21" — a scoreline turned into a
+ * two-digit number. NFKD does not decompose a dash, so the filter below simply
+ * deleted it. The em dash used for "no value" vanished the same way, leaving a
+ * blank that reads as missing data rather than as a stated absence.
+ *
+ * Transliterated to ASCII rather than left to WinAnsi's own 0x80-0x9F block,
+ * because that block is exactly where encoders disagree and a hyphen that is
+ * definitely right beats an en dash that might be.
+ */
+const PUNCT: Record<string, string> = {
+  '–': '-', '—': '-', '−': '-',
+  '‘': "'", '’': "'", '‚': ',',
+  '“': '"', '”': '"',
+  '•': '·', '…': '...', '‰': '%%',
+  '‹': '<', '›': '>', '€': 'EUR',
+  ' ': ' ', '→': '->', '←': '<-',
+};
+
 export function pdfSafe(s: string): string {
   if (!s) return '';
   let clean = true;
@@ -244,6 +282,8 @@ export function pdfSafe(s: string): string {
   const flat = s.normalize('NFKD').replace(/[̀-ͯ]/g, '');
   let out = '';
   for (const ch of flat) {
+    const mapped = PUNCT[ch];
+    if (mapped !== undefined) { out += mapped; continue; }
     const c = ch.codePointAt(0) as number;
     if (c === 9 || c === 10 || (c >= 32 && c <= 0xff)) out += ch;
   }

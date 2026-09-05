@@ -66,41 +66,73 @@ export function duelZoneDoc(r: DuelZoneReport, tag: string): ReportDoc {
     },
   ];
 
-  /* THE SERIES, NEWEST FIRST — the same order and the same cap the screen
-     shows. `shown` is what the server actually returned, so a capped list is
-     never presented as the whole history. */
-  if (r.series.length) {
+  /* EVERY DUEL AS ITS GAMES, PLAYER AGAINST OPPONENT.
+     
+     This was a five-column TEXT table — when, opponent, format, score, result
+     — and no decks at all, which is why the report read as scattered text: the
+     screen is a board of deck art and the export was a spreadsheet of it.
+     
+     A duel is three games and each game is two decks facing each other, so
+     that is what prints. `compact` fits all three pairs on one sheet, because
+     a duel split across three sheets is not a duel any more. The server has
+     already arranged both sides into their slots and resolved the evolution
+     and hero art — `opponent_evo` carries the same marks as the player's — so
+     nothing here re-derives an order or guesses a form. */
+  for (const s of r.series) {
+    const when = DAY(s.startTime);
+    const opp = s.opponentName && s.opponentName !== s.opponentTag
+      ? s.opponentName
+      : s.opponentTag;
+    const score = s.playerWins === null || s.opponentWins === null
+      ? 'score not stored'
+      : `${s.playerWins}–${s.opponentWins}`;
+
+    const pairs = s.games
+      /* A NATIVE DUEL ROW STORES A LOADOUT, NOT PER-GAME OPPONENTS, so half of
+         the pairing genuinely does not exist. The game still prints — the
+         player's deck is real — and the missing half is a stated absence. */
+      .map((g) => ({
+        left: {
+          name: g.deckName || g.archetype,
+          meta: `G${g.slot + 1} · ${g.avgElixir.toFixed(1)} elixir`,
+          value: g.playerCrowns !== undefined && g.opponentCrowns !== undefined
+            ? `${g.playerCrowns}–${g.opponentCrowns}`
+            : undefined,
+          valueNote: g.result || undefined,
+          cards: g.cards,
+          art: g.art,
+          inferredArt: g.artInferred,
+        },
+        right: g.opponent
+          ? {
+              name: g.opponent.deckName || g.opponent.archetype,
+              meta: g.opponent.avgElixir != null
+                ? `${g.opponent.avgElixir.toFixed(1)} elixir`
+                : undefined,
+              cards: g.opponent.cards,
+              art: g.opponent.art,
+              inferredArt: g.opponent.artInferred,
+            }
+          : null,
+      }));
+
+    if (!pairs.length) continue;
+    /* A DUEL OWNS ITS SHEET. Without this the first one starts under the stats
+       tiles, so only two of its three games fit and the third spills — and a
+       duel split across two sheets is the thing `compact` was added to stop.
+       `break` is the block kind for exactly this: a section that genuinely
+       must not straddle a page break, rather than spacing. */
+    blocks.push({ kind: 'break' });
     blocks.push({
-      kind: 'table',
-      heading: 'Duels',
-      note:
-        s.shown && s.shown < s.duels
-          ? `The ${int(s.shown)} most recent of ${int(s.duels)}.`
-          : undefined,
-      columns: [
-        { key: 'when', label: 'When' },
-        { key: 'opp', label: 'Opponent' },
-        { key: 'fmt', label: 'Format' },
-        { key: 'score', label: 'Score', align: 'right' },
-        { key: 'note', label: 'Result' },
-      ],
-      rows: r.series.map((x) => ({
-        when: DAY(x.startTime),
-        /* The NAME, with the tag behind it — the site-wide convention, and the
-           tag alone when no name was ever stored. */
-        opp: x.opponentName && x.opponentName !== x.opponentTag
-          ? x.opponentName
-          : x.opponentTag,
-        fmt: x.format === 'bo5' ? 'Bo5' : 'Bo3',
-        /* A SCORE THE SERVER COULD NOT VERIFY IS NOT PRINTED AS 0–0. A native
-           row carries no per-game result, so the crowns are genuinely unknown
-           rather than nil. */
-        score:
-          x.playerWins === null || x.opponentWins === null
-            ? '—'
-            : `${x.playerWins}–${x.opponentWins}`,
-        note: x.caption || (x.playerWins === null ? 'score not stored' : ''),
-      })),
+      kind: 'versus',
+      compact: true,
+      heading: `${when} · ${opp}`,
+      note: `${s.format === 'bo5' ? 'Bo5' : 'Bo3'} · ${score}`
+        + (s.caption ? ` · ${s.caption}` : '')
+        + (s.source === 'native' ? ' · native row, per-game results not stored' : ''),
+      leftLabel: 'You',
+      rightLabel: 'Them',
+      pairs,
     });
   }
 

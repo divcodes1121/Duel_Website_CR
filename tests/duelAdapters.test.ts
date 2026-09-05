@@ -25,6 +25,32 @@ import { duelAnalysisDoc, duelZoneDoc } from '../src/utils/duelAdapters';
  * that exists on no real record.
  */
 
+const game = (slot: number, name: string, withOpponent = true) => ({
+  slot,
+  cards: ['hog-rider', 'musketeer', 'cannon', 'ice-golem',
+    'skeletons', 'the-log', 'fireball', 'baby-dragon'],
+  art: { 'baby-dragon': 'evolution' as const },
+  artInferred: false,
+  avgElixir: 3.2,
+  result: 'win' as const,
+  playerCrowns: 2,
+  opponentCrowns: 1,
+  archetype: 'hog',
+  deckName: name,
+  /* Null on a native row: it stores a loadout and no per-game opponent. */
+  opponent: withOpponent
+    ? {
+        cards: ['golem', 'night-witch', 'mega-minion', 'tombstone',
+          'lightning', 'barbarian-barrel', 'electro-dragon', 'bats'],
+        archetype: 'golem',
+        deckName: 'Golem Beatdown',
+        avgElixir: 4.1,
+        art: {},
+        artInferred: true,
+      }
+    : null,
+});
+
 const deck = (name: string) => ({
   cards: ['hog-rider', 'musketeer', 'cannon', 'ice-golem',
     'skeletons', 'the-log', 'fireball', 'baby-dragon'],
@@ -39,12 +65,14 @@ function zone(over: Record<string, unknown> = {}) {
       {
         id: 's1', startTime: '2026-09-01T10:00:00Z', opponentTag: '#ABC',
         opponentName: 'Sarac', source: 'reconstructed', format: 'bo3',
-        games: [], playerWins: 2, opponentWins: 1, caption: 'came back', won: true,
+        games: [game(0, 'Hog 2.6'), game(1, 'Golem'), game(2, 'XBow')],
+        playerWins: 2, opponentWins: 1, caption: 'came back', won: true,
       },
       {
         id: 's2', startTime: '2026-09-02T10:00:00Z', opponentTag: '#XYZ',
         opponentName: '#XYZ', source: 'native', format: 'bo5',
-        games: [], playerWins: null, opponentWins: null, caption: '', won: false,
+        games: [game(0, 'Loadout A', false)],
+        playerWins: null, opponentWins: null, caption: '', won: false,
       },
     ],
     sequence: {
@@ -83,26 +111,64 @@ describe('duelZoneDoc', () => {
     expect(tiles[3].value).toBe('15 (75%)');
   });
 
-  it('prints an unverified score as an em dash, never 0-0', () => {
-    const rows = (d.blocks[1] as { rows: Record<string, string>[] }).rows;
-    expect(rows[0].score).toBe('2–1');
-    expect(rows[1].score).toBe('—');
-    expect(rows[1].note).toBe('score not stored');
+  it('prints every duel as VS pairs, one block per duel', () => {
+    const vs = d.blocks.filter((b) => b.kind === 'versus');
+    expect(vs).toHaveLength(2);
+    // Three games, three pairs — a duel stays whole.
+    expect((vs[0] as { pairs: unknown[] }).pairs).toHaveLength(3);
   });
 
-  it('falls back to the tag when no name was stored', () => {
-    const rows = (d.blocks[1] as { rows: Record<string, string>[] }).rows;
-    expect(rows[0].opp).toBe('Sarac');
-    expect(rows[1].opp).toBe('#XYZ');
+  it('fits a whole duel on one sheet rather than one pair per sheet', () => {
+    const vs = d.blocks.find((b) => b.kind === 'versus') as { compact?: boolean };
+    expect(vs.compact).toBe(true);
   });
 
-  it('says when the list is capped', () => {
-    const b = d.blocks[1] as { note?: string };
-    expect(b.note).toContain('2 most recent of 20');
+  it('prints the opponent deck beside the player deck', () => {
+    const vs = d.blocks.find((b) => b.kind === 'versus') as {
+      pairs: { left: { name: string }; right: { name: string; cards: string[] } | null }[];
+      leftLabel?: string; rightLabel?: string;
+    };
+    expect(vs.leftLabel).toBe('You');
+    expect(vs.rightLabel).toBe('Them');
+    expect(vs.pairs[0].left.name).toBe('Hog 2.6');
+    expect(vs.pairs[0].right?.name).toBe('Golem Beatdown');
+    expect(vs.pairs[0].right?.cards).toHaveLength(8);
+  });
+
+  it('labels each pair with its game number', () => {
+    const vs = d.blocks.find((b) => b.kind === 'versus') as {
+      pairs: { left: { meta?: string } }[];
+    };
+    expect(vs.pairs[0].left.meta).toContain('G1');
+    expect(vs.pairs[2].left.meta).toContain('G3');
+  });
+
+  it('states a missing opponent rather than drawing a blank half', () => {
+    // A native row stores a loadout and no per-game opponent.
+    const vs = d.blocks.filter((b) => b.kind === 'versus');
+    const native = vs[1] as { pairs: { right: unknown }[]; note?: string };
+    expect(native.pairs[0].right).toBeNull();
+    expect(native.note).toContain('native row');
+  });
+
+  it('names the duel by date and opponent, with the score in the note', () => {
+    const vs = d.blocks.filter((b) => b.kind === 'versus') as {
+      heading?: string; note?: string;
+    }[];
+    expect(vs[0].heading).toBe('2026-09-01 · Sarac');
+    expect(vs[0].note).toContain('2–1');
+    // The tag when no name was ever stored.
+    expect(vs[1].heading).toContain('#XYZ');
+    // An unverified score is SAID, never printed as 0-0.
+    expect(vs[1].note).toContain('score not stored');
+    expect(vs[1].note).not.toContain('0–0');
   });
 
   it('distinguishes an observed sequence from a predicted one', () => {
-    const rows = (d.blocks[2] as { rows: Record<string, string>[] }).rows;
+    const seq = d.blocks.find(
+      (b) => b.kind === 'table' && (b as { heading?: string }).heading === 'What follows what',
+    ) as { rows: Record<string, string>[] };
+    const rows = seq.rows;
     expect(rows[0].opener).toBe('Hog 2.6');
     expect(rows[0].then).toBe('Golem → XBow');
     expect(rows[0].basis).toBe('observed');
@@ -113,7 +179,10 @@ describe('duelZoneDoc', () => {
       zone({ sequence: { ...(zone() as unknown as { sequence: object }).sequence, lowConfidence: true } }),
       'X',
     );
-    expect((thin.blocks[2] as { note?: string }).note).toContain('Thin evidence');
+    const seq = thin.blocks.find(
+      (b) => (b as { heading?: string }).heading === 'What follows what',
+    ) as { note?: string };
+    expect(seq.note).toContain('Thin evidence');
   });
 });
 

@@ -1019,22 +1019,33 @@ function drawSpread(ctx: Ctx, block: SpreadBlock) {
  * fills about four fifths of the body, which is a page, not a gap.
  */
 const VS_GUTTER = 16;
-function versusCard(w: number, gap: number): { cw: number; ch: number } {
-  const cw = (w - 6 - gap * 3) / 4;
+function versusCard(w: number, gap: number, cols = 4): { cw: number; ch: number } {
+  /* COLUMNS, NOT A CARD CAP. Capping the width was the first attempt and it
+     was worse than the problem: the plate still spanned its half of the sheet
+     while the 4x2 grid shrank to ~40 mm inside it, so each deck sat in a pool
+     of empty ground with art too small to recognise.
+     
+     Eight cards in ONE row fills the plate instead, and the cards come out
+     BIGGER doing it — 14.9 mm against 9 — because the width was there all
+     along and the second row was what forced the height down. It is also the
+     shape the website uses for a duel's games. */
+  const cw = (w - 6 - gap * (cols - 1)) / cols;
   return { cw, ch: cw / CARD_RATIO };
 }
 
 /** One deck as a 4x2 plate. Returns the height it drew. */
-function deckPlate(ctx: Ctx, d: DeckLine, x: number, y: number, w: number, hue: ReportHue): number {
+function deckPlate(ctx: Ctx, d: DeckLine, x: number, y: number, w: number,
+                   hue: ReportHue, cols = 4): number {
   const { doc, p } = ctx;
   const gap = 1.6;
-  const { cw, ch } = versusCard(w, gap);
-  const artH = ch * 2 + gap;
+  const rows = Math.ceil(8 / cols);
+  const { cw, ch } = versusCard(w, gap, cols);
+  const artH = ch * rows + gap * (rows - 1);
   const H = 15 + artH + 4;
   // The grid is CENTRED in the plate: the card size now comes from the height
   // budget, so it no longer necessarily fills the width, and a left-aligned
   // grid under a full-width title bar reads as a layout fault.
-  const gridW = cw * 4 + gap * 3;
+  const gridW = cw * cols + gap * (cols - 1);
   const gx = x + (w - gridW) / 2;
 
   fill(doc, p.nested);
@@ -1068,8 +1079,8 @@ function deckPlate(ctx: Ctx, d: DeckLine, x: number, y: number, w: number, hue: 
   d.cards.slice(0, 8).forEach((card, i) => {
     const url = artUrl(card, d.art?.[card]);
     const data = ctx.tiles.get(url);
-    const cx = gx + (i % 4) * (cw + gap);
-    const cy = y + 15 + Math.floor(i / 4) * (ch + gap);
+    const cx = gx + (i % cols) * (cw + gap);
+    const cy = y + 15 + Math.floor(i / cols) * (ch + gap);
     if (data) {
       doc.addImage(data, 'JPEG', cx, cy, cw, ch, url, 'FAST');
     } else {
@@ -1119,16 +1130,29 @@ function drawVersus(ctx: Ctx, block: VersusBlock) {
     ctx.y += 6;
   }
 
+  /* THE CARD CAP THAT KEEPS A DUEL WHOLE. A full-size pair stands ~96 mm, so
+     three of them are three sheets — and three games ARE one duel, so that
+     splits the very thing the reader opened the page for. Capped at 13 mm the
+     pair stands ~48 mm and all three fit one sheet, which is the arrangement
+     the website uses and for the same reason. Uncapped otherwise: where a pair
+     really is the unit, the art should be as large as the sheet allows.
+
+     Measured: at 8 columns a pair stands 15 + 17.9 + 4 = ~37 mm, so three of
+     them plus this block's heading and labels come to ~130 mm inside a 158 mm
+     body and a whole duel fits one sheet. */
+  const cols = block.compact ? 8 : 4;
+
   for (const pair of block.pairs) {
     // Measured before it is drawn, so a pair never straddles a page break —
     // half a versus on each of two sheets is not a versus.
-    const H = 15 + versusCard(half, 1.6).ch * 2 + 1.6 + 4;
+    const rows = block.compact ? 1 : 2;
+    const H = 15 + versusCard(half, 1.6, cols).ch * rows + (rows - 1) * 1.6 + 4;
     reserve(ctx, H + (pair.note ? 9 : 4));
     const top = ctx.y;
 
-    deckPlate(ctx, pair.left, MARGIN, top, half, 'red');
+    deckPlate(ctx, pair.left, MARGIN, top, half, 'red', cols);
     if (pair.right) {
-      deckPlate(ctx, pair.right, MARGIN + half + GUT, top, half, 'blue');
+      deckPlate(ctx, pair.right, MARGIN + half + GUT, top, half, 'blue', cols);
     } else {
       emptyPlate(ctx, MARGIN + half + GUT, top, half, H, 'Nothing on the squad clears the floor against this.');
     }
