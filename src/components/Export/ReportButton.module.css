@@ -39,3 +39,13 @@
   font-size: 0.72rem;
   color: var(--error);
 }
+
+/* Same 44px floor as the export dialog's buttons, and for the same reason —
+ * this is the only control on the analytics screens that produces a file.
+ * It stands alone in its header row, but the box is grown rather than an inset
+ * `::after` so that it matches the dialog it is a sibling of in intent. */
+@media (pointer: coarse) {
+  .button {
+    min-height: 44px;
+  }
+}

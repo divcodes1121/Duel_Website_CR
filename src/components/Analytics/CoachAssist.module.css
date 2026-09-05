@@ -1264,3 +1264,17 @@
   .oieCards img { width: 36px; }
   .oieCards[data-small] img { width: 28px; }
 }
+
+/* A heading's unit, inline. The tuner's numbers are meaningless without one
+   — "+6.5" and "64.5" are different quantities and the reader cannot tell
+   which is which from the digits. Attached to the heading rather than set
+   under it as a paragraph, because a paragraph per list is what made this
+   panel read as an essay in the first place. */
+.blockNote {
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.6;
+}

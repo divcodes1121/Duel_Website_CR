@@ -1071,7 +1071,12 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
 
   return (
     <section className={styles.block}>
-      <h4 className={styles.blockTitle}>Switch a card</h4>
+      <h4 className={styles.blockTitle}>
+        Switch a card{' '}
+        <span className={styles.blockNote}>
+          how much your WORST matchup moves, in points
+        </span>
+      </h4>
       {swaps.length ? (
         <ul className={styles.notes}>
           {swaps.map((s) => (
@@ -1079,8 +1084,8 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
               <Delta n={s.floorDelta} />{' '}
               {s.out.map(cardName).join(' + ')} → {s.in.map(cardName).join(' + ')}
               {s.thin && (
-                <span style={{ opacity: 0.55 }} title="too few games to act on">
-                  {' '}· thin
+                <span className={styles.blockNote} title="too few games to trust">
+                  {' '}· thin evidence
                 </span>
               )}
             </li>
@@ -1092,7 +1097,12 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
 
       {others.length > 0 && (
         <>
-          <h4 className={styles.blockTitle}>Or bring one of these</h4>
+          <h4 className={styles.blockTitle}>
+            Or bring one of these{' '}
+            <span className={styles.blockNote}>
+              win rate against their BEST matchup for you
+            </span>
+          </h4>
           {others.map((d) => (
             <div key={d.hash} style={{ marginBottom: '.5rem' }}>
               <strong style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -1116,7 +1126,10 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
                   {tuner.loadout.loadoutFloor.toFixed(1)}
                 </span>
               </>
-            )}
+            )}{' '}
+            <span className={styles.blockNote}>
+              three decks, no shared cards — nothing they bring is unanswered
+            </span>
           </h4>
           {tuner.loadout.decks.map((d) => (
             <div key={d.hash} style={{ marginBottom: '.5rem' }}>

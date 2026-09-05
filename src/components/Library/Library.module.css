@@ -268,3 +268,24 @@
     overflow-y: visible;
   }
 }
+
+/* ── Touch targets ──────────────────────────────────────────────────────────
+ *
+ * MEASURED 33px, against a 44px minimum, on the export dialog's "Download PDF"
+ * — the last button in the whole export flow and the one on a phone most
+ * likely to be missed. Every dialog built on this sheet shares the two
+ * classes, so every one of them was 33px.
+ *
+ * The real BOX grows rather than an inset `::after`, which is this project's
+ * rule for a control WITH NEIGHBOURS: Cancel and Download PDF sit in the same
+ * footer row, and two inset hit areas would overlap into whichever is later in
+ * the DOM. Vertical growth cannot collide horizontally.
+ *
+ * Coarse only. On a mouse these are correctly sized and a 44px slab would just
+ * be a heavier dialog. */
+@media (pointer: coarse) {
+  .primaryButton,
+  .ghostButton {
+    min-height: 44px;
+  }
+}
