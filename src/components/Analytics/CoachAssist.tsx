@@ -13,7 +13,6 @@ import {
   type CoachPrediction,
   type CoachSuggestion,
   type DeckTuner,
-  type TunerSwap,
   type WildForm,
   fetchOpponentRead,
   type OpponentReadOutcome,
@@ -1020,204 +1019,130 @@ function OpponentReadPanel({ tag }: { tag: string }) {
 
 /* ──────────────────────────────────────────────────── the swap brain */
 
-/** One swap row. See `DECK_TUNER.md`.
- *
- *  THREE FIGURES, AND ALL THREE ARE LOAD-BEARING:
- *
- *    delta     the change in the deck's WORST matchup, measured over the
- *              archetypes both decks were actually measured on;
- *    coverage  how much of the opponent's spread that comparison covered.
- *              A +30 measured on one archetype of three is a confident
- *              number about a third of the field, and the reader must be
- *              able to see that;
- *    rung      one card different or two. Two cards out is the >= 6 cluster,
- *              which pools thousands of decks — the figure is much less about
- *              THIS deck, and the row says so rather than hiding it.
- */
 function cardName(key: string): string {
   return CARDS_BY_KEY.get(key)?.name ?? key;
 }
 
-function SwapRow({ swap, spread }: { swap: TunerSwap; spread: number }) {
-  const delta = swap.floorDelta;
-  const good = delta !== null && delta > 0;
+/** A signed change, coloured. The only number in a swap row. */
+function Delta({ n }: { n: number | null }) {
+  if (n === null) return <span style={{ opacity: 0.5 }}>—</span>;
   return (
-    <li>
-      <strong>
-        {swap.out.map(cardName).join(' + ')} → {swap.in.map(cardName).join(' + ')}
-      </strong>{' '}
-      <span style={{ color: good ? 'var(--hue-green)' : 'var(--hue-red)', fontWeight: 700 }}>
-        {delta === null ? '—' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)}pp`}
-      </span>{' '}
-      <span style={{ opacity: 0.72 }}>
-        worst matchup {swap.floor.toFixed(1)}%
-        {swap.floorArchetype ? ` vs ${swap.floorArchetype}` : ''}
-        {' · '}
-        {/* COVERAGE IS NOT DECORATION. A confident delta measured on one
-            archetype of three is a claim about a third of the field. */}
-        compared on {swap.covered} of {spread} archetype{spread === 1 ? '' : 's'}
-        {' · '}
-        {swap.cards === 1 ? 'one card different' : 'two cards different'}
-        {' · '}
-        {swap.deltaGames.toLocaleString()} games behind that change
-        {swap.comfortable ? ' · you have played it' : ' · new card for you'}
-        {/* THIN IS SAID, NOT HIDDEN. A +34pp off 25 games led the first
-            production run; the ordering demotes it and this names it. */}
-        {swap.thin ? ' · thin evidence' : ''}
-      </span>
-    </li>
+    <span
+      style={{
+        color: n > 0 ? 'var(--hue-green)' : n < 0 ? 'var(--hue-red)' : 'inherit',
+        fontWeight: 700,
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      {n > 0 ? '+' : ''}
+      {n.toFixed(1)}
+    </span>
   );
 }
 
+/**
+ * The tuner, as three lists and nothing else.
+ *
+ * IT USED TO CARRY ITS OWN REASONING and that was the wrong call. Every figure
+ * here still has a justification — the like-for-like delta, the coverage, how
+ * many decks were scanned, which swaps the checklist dropped — and all of it
+ * was printed on screen, under a screen that already carries a recommendation,
+ * an opponent distribution and a caveat list. The reader said it was
+ * confusing, and they were right: this is a mid-duel screen and the question
+ * is "what do I switch", not "how was that worked out".
+ *
+ * So the working lives in `DECK_TUNER.md` and in the module docstrings, and
+ * what survives on screen is the part a person acts on: what to change, what
+ * else to bring, ordered best first.
+ *
+ * TWO THINGS STAY, because dropping them would make the screen dishonest
+ * rather than merely quiet:
+ *
+ *   thin      a swap whose deciding archetype has too few games to act on.
+ *             It sorts last already; the dot is what says why it is down
+ *             there. A 14-game +34.5 led the first production board.
+ *   unknowns  a card the checklist cannot classify from a deck list at all
+ *             (Spirit Empress). Silence there would assert something nothing
+ *             verified.
+ */
 function TunerPanel({ tuner }: { tuner: DeckTuner }) {
-  const h = tuner.harmony;
+  const swaps = tuner.swaps;
+  const others = tuner.compose?.decks ?? [];
+
   return (
     <section className={styles.block}>
-      <h4 className={styles.blockTitle}>Card changes — admin preview</h4>
-
-      {/* THE STRUCTURAL READING FIRST. "Swap Bomber for Baby Dragon" is a
-          number; "you have one air answer" is the reason, and it comes from
-          the checklist rather than from the database. */}
-      <p className={styles.askHint}>
-        Your deck: {h.counts.airAnswers} air answer{h.counts.airAnswers === 1 ? '' : 's'},{' '}
-        {h.counts.splash} splash troop{h.counts.splash === 1 ? '' : 's'},{' '}
-        {h.counts.winConditions} win condition{h.counts.winConditions === 1 ? '' : 's'},{' '}
-        {h.counts.avgElixir.toFixed(2)} average Elixir.
-      </p>
-      {!!h.problems.length && (
+      <h4 className={styles.blockTitle}>Switch a card</h4>
+      {swaps.length ? (
         <ul className={styles.notes}>
-          {h.problems.map((p, i) => (
-            <li key={i}>{p}</li>
-          ))}
-        </ul>
-      )}
-      {!!h.unknowns.length && (
-        <ul className={styles.caveats}>
-          {h.unknowns.map((u, i) => (
-            <li key={i}>Cannot be checked — {u}</li>
-          ))}
-        </ul>
-      )}
-
-      {tuner.swaps.length ? (
-        <ul className={styles.notes}>
-          {tuner.swaps.map((s) => (
-            <SwapRow key={s.hash} swap={s} spread={tuner.archetypes.length} />
+          {swaps.map((s) => (
+            <li key={s.hash}>
+              <Delta n={s.floorDelta} />{' '}
+              {s.out.map(cardName).join(' + ')} → {s.in.map(cardName).join(' + ')}
+              {s.thin && (
+                <span style={{ opacity: 0.55 }} title="too few games to act on">
+                  {' '}· thin
+                </span>
+              )}
+            </li>
           ))}
         </ul>
       ) : (
-        <p className={styles.askHint}>
-          No swap improves this deck's worst matchup against what they can bring.
-        </p>
+        <p className={styles.askHint}>Nothing to change — no swap improves this deck here.</p>
       )}
 
-      {/* MODE B — whole decks, not swaps. Different question, same panel:
-          "change this card" and "bring this instead" are both things a coach
-          asks, and only one of them is answered above. */}
-      {tuner.compose && tuner.compose.poolReady && !!tuner.compose.decks.length && (
+      {others.length > 0 && (
         <>
-          <h4 className={styles.blockTitle}>Or bring a different deck</h4>
-          <p className={styles.askHint}>
-            Real decks people play, ranked by their WORST matchup against what this
-            opponent can bring — never invented, never a pile of counters.
-          </p>
-          <ul className={styles.notes}>
-            {tuner.compose.decks.map((d) => (
-              <li key={d.hash}>
-                <strong>{d.archetype}</strong>{' '}
-                <span style={{ opacity: 0.72 }}>
-                  worst matchup {d.floor.toFixed(1)}%
-                  {d.floorArchetype ? ` vs ${d.floorArchetype}` : ''}
-                  {' · '}measured on {d.covered} of {tuner.archetypes.length}
-                  {' · '}{d.games.toLocaleString()} games
-                  {' · '}you know {d.familiar} of its 8 cards
-                </span>
-                <Strip cards={d.deck} size="sm" />
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {/* THREE DECKS THAT COVER BETWEEN THEM — the shape a duel actually asks
-          for, and the reason they cannot be chosen one at a time. */}
-      {tuner.loadout && tuner.loadout.decks.length === 3 && (
-        <>
-          <h4 className={styles.blockTitle}>A whole loadout</h4>
-          <p className={styles.askHint}>
-            Three decks sharing no card. Chosen so that between them nothing in the
-            field is unanswered — the worst archetype's best answer is{' '}
-            {tuner.loadout.loadoutFloor === null
-              ? 'not measurable'
-              : `${tuner.loadout.loadoutFloor.toFixed(1)}%`}
-            .
-          </p>
-          {tuner.loadout.decks.map((d) => (
-            <div key={d.hash} style={{ marginBottom: '.4rem' }}>
-              <strong>{d.archetype}</strong>{' '}
-              <span style={{ opacity: 0.72 }}>{d.games.toLocaleString()} games</span>
+          <h4 className={styles.blockTitle}>Or bring one of these</h4>
+          {others.map((d) => (
+            <div key={d.hash} style={{ marginBottom: '.5rem' }}>
+              <strong style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {d.floor.toFixed(1)}
+              </strong>{' '}
+              {d.archetype}
               <Strip cards={d.deck} size="sm" />
             </div>
           ))}
-          <ul className={styles.caveats}>
-            {tuner.loadout.coverage
-              .filter((c) => c.measured)
-              .map((c) => (
-                <li key={c.archetype}>
-                  vs {c.archetype}: best of the three is {c.best?.toFixed(1)}%
-                </li>
-              ))}
-            {!!tuner.loadout.uncovered.length && (
-              <li>
-                No evidence at all against {tuner.loadout.uncovered.join(', ')} — a gap in
-                what has been measured, not a bad matchup.
-              </li>
-            )}
-          </ul>
         </>
       )}
 
-      {tuner.compose && !tuner.compose.poolReady && (
-        <p className={styles.askHint}>
-          The deck pool has not been built yet — the snapshot rebuilds hourly. This is a
-          missing snapshot, not an absence of good decks.
-        </p>
+      {tuner.loadout && tuner.loadout.decks.length === 3 && (
+        <>
+          <h4 className={styles.blockTitle}>
+            A full loadout
+            {tuner.loadout.loadoutFloor !== null && (
+              <>
+                {' '}
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {tuner.loadout.loadoutFloor.toFixed(1)}
+                </span>
+              </>
+            )}
+          </h4>
+          {tuner.loadout.decks.map((d) => (
+            <div key={d.hash} style={{ marginBottom: '.5rem' }}>
+              <strong>{d.archetype}</strong>
+              <Strip cards={d.deck} size="sm" />
+            </div>
+          ))}
+        </>
       )}
 
-      {/* THE WORKING, because a recommendation nobody can interrogate is a
-          recommendation nobody should act on. */}
-      <ul className={styles.caveats}>
-        <li>
-          Scanned {tuner.scanned.toLocaleString()} stored decks; {tuner.siblings.toLocaleString()}{' '}
-          share at least {8 - tuner.maxSwap} cards with yours; {tuner.considered.toLocaleString()}{' '}
-          had enough games to score.
-        </li>
-        <li>
-          Ranked on the WORST matchup, not the average — a swap that gains against their
-          likeliest deck and loses to the other two is not an improvement.
-        </li>
-        {!!tuner.skipped.vetoed && (
-          <li>
-            {tuner.skipped.vetoed} swap{tuner.skipped.vetoed === 1 ? ' was' : 's were'} dropped for
-            breaking the deck's structure (no air answer, no win condition, and so on).
-          </li>
-        )}
-        {!!tuner.skipped.illegal && (
-          <li>
-            {tuner.skipped.illegal} swap{tuner.skipped.illegal === 1 ? ' was' : 's were'} dropped
-            for reusing a card already spent this duel.
-          </li>
-        )}
-        {!tuner.base.measured && (
-          <li>
-            Nobody has played your exact list enough to measure it, so every change above is
-            compared against a wider reading.
-          </li>
-        )}
-      </ul>
+      {/* The two things that cannot be dropped without making the rest a
+          claim nobody checked. */}
+      {!!tuner.harmony.unknowns.length && (
+        <ul className={styles.caveats}>
+          {tuner.harmony.unknowns.map((u, i) => (
+            <li key={i}>{u}</li>
+          ))}
+        </ul>
+      )}
+      {tuner.compose && !tuner.compose.poolReady && (
+        <p className={styles.askHint}>Deck pool still building — it rebuilds hourly.</p>
+      )}
     </section>
   );
 }
+
 
 /* ──────────────────────────────────────────────── window 2: Suggestion */
 
