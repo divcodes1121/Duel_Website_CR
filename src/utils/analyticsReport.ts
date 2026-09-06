@@ -436,7 +436,17 @@ export function reportFilename(doc: ReportDoc): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
-  const day = new Date().toISOString().slice(0, 10);
+  /* THE STAMP CARRIES THE MINUTE, NOT JUST THE DAY, and that is not
+     decoration. Two exports on one day used to produce the SAME filename, so
+     the browser saved the second as "… (1).pdf" and a reader opening the
+     obvious one in their downloads list got yesterday's layout back — which
+     is indistinguishable from a deploy that did not land, and was read as
+     exactly that. A distinct name per export is the only thing that makes
+     "I downloaded it again" mean what the reader thinks it means. */
+  const t = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`
+    + `-${pad(t.getHours())}${pad(t.getMinutes())}`;
   const who = doc.subject ? `-${slug(doc.subject)}` : '';
-  return `deckkies-${slug(doc.screen)}${who}-${day}.pdf`;
+  return `deckkies-${slug(doc.screen)}${who}-${stamp}.pdf`;
 }

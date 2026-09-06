@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { reportFilename } from '../src/utils/analyticsReport';
 import { duelAnalysisDoc, duelZoneDoc } from '../src/utils/duelAdapters';
 
 /* The two duel screens' report models.
@@ -217,6 +218,21 @@ describe('duelZoneDoc', () => {
       (b) => (b as { heading?: string }).heading === 'What follows what',
     ) as { note?: string };
     expect(seq.note).toContain('Thin evidence');
+  });
+});
+
+/* TWO EXPORTS ON ONE DAY USED TO SHARE A FILENAME, so the browser saved the
+   second as "… (1).pdf" and a reader opening the obvious entry in their
+   downloads list got the older layout back — indistinguishable from a deploy
+   that never landed, and read as exactly that. */
+describe('reportFilename', () => {
+  it('carries the minute, so two exports on one day differ', () => {
+    const name = reportFilename(duelZoneDoc(zone(), '2PP0PYLQ'));
+    expect(name).toMatch(/^deckkies-duel-zone-2pp0pylq-\d{4}-\d{2}-\d{2}-\d{4}\.pdf$/);
+  });
+
+  it('names the screen it came from', () => {
+    expect(reportFilename(duelAnalysisDoc(analysis(), 'X'))).toContain('duel-analysis');
   });
 });
 
