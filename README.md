@@ -9682,6 +9682,52 @@ which by this engine's own scoring is the worse document. It is therefore
 scoped to blocks followed by a break, a divider or the end of the report, where
 the spread is free.
 
+### The bug the fixtures could not see
+
+Shipped in `380ecef` and fixed in `331efa2`, and worth writing down because
+the reporting symptom pointed at the wrong thing entirely: *"Duel Zone doesn't
+pick up the new code, Duel Analysis does."* Both screens render through the
+same button, the same adapter module and the same engine, so which code ran was
+never the variable. What differed is that one of the two documents contains a
+**series** block, and a series can be a Bo5.
+
+`deckW` was `(inner - DECK_GAP * 2) / 3` — three decks and two gaps — while the
+drawing code lays out however many games the series actually has. A five-game
+duel therefore drew an 85 mm card grid into each 49.8 mm slot: every deck over
+the top of the one beside it, and the last running 35 mm off the page.
+
+**The fixtures had labelled a row `Bo5` and still given it three decks.** Nine
+fixtures across both themes, every audit clean, and the fault walked straight
+through the middle of them. A fixture that does not speak the producer's real
+vocabulary pins nothing — the same lesson `test_team_analysis.py` cost this
+project once already, when its fixture invented a field name the producer never
+emitted and 59 checks passed against code that returned `None` for every real
+row.
+
+Two fixes were tried before the one that shipped, and what makes them wrong is
+the *ratio* rather than the case. A real account runs about 97 Bo3s to 1 Bo5.
+Sizing the block to its widest row means that single duel pushes all 97 others
+from 55 mm to 90 and adds pages to a document where nothing was wrong;
+rejecting the eight-across layout whenever one row cannot do it took 21 series
+from seven pages to fourteen. Both are the same fault as the original — one
+rare row dictating the whole document — arriving by a different door.
+
+What ships keeps the **card** fixed and chooses the **grid** per row. A Bo3 puts
+its eight cards in a single line of eight; a Bo5, whose slot is 49.8 mm rather
+than 85, puts the same-size cards in 4x2 and is simply taller. Measured off a
+rendered sheet carrying both shapes: every card 9.58 mm. Image size is what
+"consistent within a component" is protecting; row height is free to say that
+this duel went the distance.
+
+The audit found a second fault while this was being fixed. Every adapter opens
+with a KPI strip and then names its first real block, so the strip took a sheet
+under the screen's own name, the headed block after it did not fit in what was
+left, and the strip sat alone on a 13%-full page while the series began
+overleaf. A heading-less `stats` or `note` opening a page now borrows the
+heading of the block it introduces, so the bar reads `01 / THE SERIES LOG`, the
+strip sits beneath it, and the series follows on the same sheet — which is how
+the divider pages already worked.
+
 ### The section bar cannot lie
 
 A headed block that does not fit where it stands takes a new page, and its
