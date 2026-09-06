@@ -98,10 +98,20 @@ export function duelZoneDoc(r: DuelZoneReport, tag: string): ReportDoc {
     blocks.push({
       kind: 'series',
       heading: 'The series log',
+      /* THE MISSING-OPPONENT SENTENCE IS SAID ONCE, HERE. It used to be
+         stamped inside every right-hand plate, and on a real account nine
+         duels in ten are native rows — so the reader got the same disclaimer
+         twenty-odd times, each one costing half a row. The renderer pairs
+         those duels two to a line instead, which leaves this note as the only
+         place it is said. */
       note: `${shown.length === r.series.length
         ? `All ${int(r.series.length)}`
         : `The ${int(shown.length)} most recent of ${int(r.series.length)}`}`
-        + ' · your loadout against theirs',
+        + ' · your loadout against theirs'
+        + (shown.some((s) => !s.games.some((g) => g.opponent))
+          ? `. A duel stored as one loadout row keeps no per-game opponent, so those`
+            + ` print two to a line with no right-hand side.`
+          : ''),
       rows: shown.map((s) => ({
         leftLabel: 'You',
         rightLabel: oppName(s),

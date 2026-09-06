@@ -172,6 +172,32 @@ describe('duelZoneDoc', () => {
     )).toBe(true);
   });
 
+  /* THE MISSING-OPPONENT SENTENCE IS SAID ONCE OR NOT AT ALL. It used to be
+     stamped inside every right-hand plate, and on a real account nine duels in
+     ten are native rows — so the renderer pairs those two to a line and this
+     note is the only place the reader is told why they have no right-hand
+     side. Said unconditionally it would be a disclaimer about something the
+     document does not contain. */
+  it('says once that opponent-less duels print two to a line', () => {
+    const s = d.blocks.find((b) => b.kind === 'series') as { note?: string };
+    expect(s.note).toContain('two to a line');
+    expect(s.note!.match(/two to a line/g)).toHaveLength(1);
+  });
+
+  it('does not say it when every duel stored an opponent', () => {
+    const paired = duelZoneDoc(zone({
+      series: [{
+        id: 's1', startTime: '2026-09-01T10:00:00Z', opponentTag: '#ABC',
+        opponentName: 'Sarac', source: 'reconstructed', format: 'bo3',
+        games: [game(0, 'Hog 2.6'), game(1, 'Golem'), game(2, 'XBow')],
+        playerWins: 2, opponentWins: 1, caption: 'came back', won: true,
+      }],
+    }), 'X');
+    const s = paired.blocks.find((b) => b.kind === 'series') as { note?: string };
+    expect(s.note).not.toContain('two to a line');
+    expect(s.note).toContain('your loadout against theirs');
+  });
+
   it('distinguishes an observed sequence from a predicted one', () => {
     const seq = d.blocks.find(
       (b) => b.kind === 'table' && (b as { heading?: string }).heading === 'What follows what',

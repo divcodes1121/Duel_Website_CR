@@ -391,7 +391,7 @@ function firstChunk(block: ReportBlock): number {
     case 'matrix': return 15 + 11 * 2;   // column heads + two rows
     case 'spread': return 11 + 8;        // the band and its first legend line
     case 'pairs': return 36;             // one row of five tiles
-    case 'series': return 35;            // one whole series row
+    case 'series': return 36;            // one whole series row
     case 'versus': return 100;           // one full pair — they stand ~94 mm
     default: return 0;
   }
@@ -1326,104 +1326,187 @@ function drawPairs(ctx: Ctx, block: PairsBlock) {
 
 
 /**
- * One duel series as a row: your three decks, the score, their three.
+ * One duel series as a row: your three decks, the score, theirs.
  *
  * THE ARITHMETIC, because it is what decides whether this reads at all. The
- * body is 277 mm. The score column takes 34 and the two gutters 8, leaving
- * 235 for six deck grids — 39 mm each, four cards across, so a card is 8.5 mm
- * and a 4x2 grid stands 21. A row is 32 mm and three series fit a sheet.
+ * body is 269 mm. The score column takes 28 and the two gutters 7, leaving
+ * 234 for six deck grids — 39 mm each, four cards across, so a card is 8.2 mm
+ * and a 4x2 grid stands 20. A row is 33 mm and four series fit a sheet.
  *
  * Small cards, and deliberately: the comparison a duel invites is between two
  * LOADOUTS, and a loadout you have to turn a page to finish is not being
  * compared to anything. Legibility of the individual card is the thing traded
  * away, and the deck's NAME is printed under it precisely because the art
  * alone is no longer enough to identify it.
+ *
+ * A DUEL WITH NO STORED OPPONENT NEEDS NO RIGHT-HAND HALF, SO TWO SHARE A
+ * LINE. A native duel row stores one loadout and no per-game opponent, and on
+ * a real account that is NINE DUELS IN TEN — so the old layout spent half of
+ * almost every row on a grey plate carrying the same sentence, twenty-odd
+ * times over. Pairing them says it once, in the block's own note, and puts two
+ * duels where one was. Measured on a production-shaped export (22 of 24
+ * native): 11 pages -> 6.
+ *
+ * THE PAIR IS DRAWN AS TWO INDEPENDENT HALVES, not as a two-column table: each
+ * carries its own score column, so a reader scanning down the sheet for a
+ * result finds one in the same place on both sides. The cards give up 6% of
+ * their width (8.2 -> 7.7 mm) to pay for the second score column, which is the
+ * whole cost.
+ *
+ * THE ROW IS ITS CONTENTS PLUS 13.4 mm, and every millimetre is named: 6.2
+ * above the grid for the side's label, 1 between the grid's two ranks, 3.6
+ * from the last card to the deck name's baseline, 2.6 under it. It used to be
+ * `12 + ch * 2 + 1 + 6`, which left NINE MILLIMETRES of nothing between the
+ * bottom card and the name — a fifth of the row, on every row, spent on a gap.
+ *
+ * THE THREE DECKS IN A SIDE ARE 3 mm APART AND THE CARDS INSIDE ONE ARE 1.
+ * They used to be 1 and 1, so twelve cards read as one run of twelve and the
+ * only thing saying where game 1 ended was the name underneath it.
  */
 function drawSeriesRows(ctx: Ctx, block: SeriesBlock) {
   const { doc, p } = ctx;
-  const SCORE_W = 34;
-  const GUT = 4;
-  const sideW = (CONTENT_W - SCORE_W - GUT * 2) / 2;
-  const cellW = (sideW - 4) / 3;
-  const cw = (cellW - 3) / 4;
-  const ch = cw / CARD_RATIO;
-  const ROW = 12 + ch * 2 + 1 + 6;
+  const SCORE_W = 28;
+  const HALF_SCORE_W = 18;
+  const GUT = 3.5;
+  /* WIDER BETWEEN THE TWO DUELS THAN BETWEEN A DUEL AND ITS OWN SCORE, or the
+     score column reads as belonging to the duel on its right. It is 3.5 from
+     the plate it describes and 8 from the next one. */
+  const PAIR_GUT = 8;
+  const CELL = 3;
+
+  /** Card and cell sizes for a strip of three decks `areaW` wide. */
+  const geo = (areaW: number) => {
+    const cellW = (areaW - 4 - CELL * 2) / 3;
+    const cw = (cellW - 3) / 4;
+    const ch = cw / CARD_RATIO;
+    return { cellW, cw, ch, row: 6.2 + ch * 2 + 1 + 6.2 };
+  };
+
+  const full = geo((CONTENT_W - SCORE_W - GUT * 2) / 2);
+  const fullSideW = (CONTENT_W - SCORE_W - GUT * 2) / 2;
+  const halfW = (CONTENT_W - PAIR_GUT) / 2;
+  const halfSideW = halfW - HALF_SCORE_W - GUT;
+  const half = geo(halfSideW);
+
+  type G = ReturnType<typeof geo>;
 
   const grid = (cards: string[], art: Record<string, 'evolution' | 'hero'> | undefined,
-                x: number, y: number) => {
+                x: number, y: number, g: G) => {
     cards.slice(0, 8).forEach((card, i) => {
       const url = artUrl(card, art?.[card]);
       const data = ctx.tiles.get(url);
-      const gx = x + (i % 4) * (cw + 1);
-      const gy = y + Math.floor(i / 4) * (ch + 1);
-      if (data) doc.addImage(data, 'JPEG', gx, gy, cw, ch, url, 'FAST');
-      else { fill(doc, p.sunken); doc.roundedRect(gx, gy, cw, ch, 0.5, 0.5, 'F'); }
+      const gx = x + (i % 4) * (g.cw + 1);
+      const gy = y + Math.floor(i / 4) * (g.ch + 1);
+      if (data) doc.addImage(data, 'JPEG', gx, gy, g.cw, g.ch, url, 'FAST');
+      else { fill(doc, p.sunken); doc.roundedRect(gx, gy, g.cw, g.ch, 0.5, 0.5, 'F'); }
     });
   };
 
-  const side = (decks: DeckLine[], x0: number, y: number, hue: ReportHue,
-                label: string, alignRight: boolean) => {
+  const side = (decks: DeckLine[], x0: number, y: number, w: number, g: G,
+                hue: ReportHue, label: string, alignRight: boolean) => {
     fill(doc, p.nested);
     stroke(doc, p.border);
     doc.setLineWidth(0.3);
-    doc.roundedRect(x0, y, sideW, ROW, 2, 2, 'FD');
+    doc.roundedRect(x0, y, w, g.row, 2, 2, 'FD');
 
     setFont(doc, 'sans', true);
     doc.setFontSize(5.6);
     ink(doc, hueColor(p, hue));
-    doc.text(clip(doc, label.toUpperCase(), sideW - 6),
-      alignRight ? x0 + sideW - 3 : x0 + 3, y + 4.4,
+    doc.text(clip(doc, label.toUpperCase(), w - 6),
+      alignRight ? x0 + w - 3 : x0 + 3, y + 4.4,
       alignRight ? { align: 'right', charSpace: 0.3 } : { charSpace: 0.3 });
 
     decks.slice(0, 3).forEach((d, n) => {
-      const cx = x0 + 2 + n * (cellW + 1);
-      grid(d.cards, d.art, cx, y + 6.5);
+      const cx = x0 + 2 + n * (g.cellW + CELL);
+      grid(d.cards, d.art, cx, y + 6.2, g);
       // THE NAME IS NOT OPTIONAL at this card size — it is what identifies the
-      // deck once the art is 8.5 mm.
+      // deck once the art is 8 mm.
       setFont(doc, 'sans', true);
       doc.setFontSize(5);
       ink(doc, p.muted);
-      doc.text(clip(doc, `${d.name}${d.value ? `  ${d.value}` : ''}`, cellW),
-        cx, y + ROW - 2.4);
+      doc.text(clip(doc, `${d.name}${d.value ? `  ${d.value}` : ''}`, g.cellW),
+        cx, y + g.row - 2.6);
     });
   };
 
-  for (const r of block.rows) {
-    reserve(ctx, ROW + 3);
-    const y = ctx.y;
-    side(r.left, MARGIN, y, 'blue', r.leftLabel, false);
-
-    const sx = MARGIN + sideW + GUT;
+  const scoreCol = (r: SeriesBlock['rows'][number], x: number, y: number,
+                    w: number, rowH: number) => {
     setFont(doc, 'sans', true);
     doc.setFontSize(5.4);
     ink(doc, p.muted);
-    doc.text(r.format.toUpperCase(), sx + SCORE_W / 2, y + 4.4,
+    doc.text(r.format.toUpperCase(), x + w / 2, y + 4.4,
       { align: 'center', charSpace: 0.3 });
 
     // THE SCORE CARRIES THE RESULT IN ITS COLOUR, which is the one thing a
     // reader scanning a page of duels is looking for.
     setFont(doc, 'display');
-    doc.setFontSize(16);
+    doc.setFontSize(w >= SCORE_W ? 16 : 13);
     ink(doc, r.score ? hueColor(p, r.won ? 'green' : 'pink') : p.muted);
-    doc.text(r.score || '—', sx + SCORE_W / 2, y + ROW / 2 + 1, { align: 'center' });
+    doc.text(r.score || '—', x + w / 2, y + rowH / 2 + 1, { align: 'center' });
 
     setFont(doc, 'sans', true);
     doc.setFontSize(4.8);
     ink(doc, p.muted);
+    /* `getTextWidth` DOES NOT KNOW ABOUT `charSpace`, so clipping against the
+       column's own width lets a letterspaced word out of it — "RECONSTRUCTED"
+       measured 11 mm, drew 15, and ran into the next duel's plate. Spend the
+       spacing out of the budget before measuring. */
     if (r.caption) {
-      doc.text(clip(doc, r.caption.toUpperCase(), SCORE_W),
-        sx + SCORE_W / 2, y + ROW / 2 + 5, { align: 'center', charSpace: 0.3 });
+      /* A HALF ROW'S COLUMN IS 18 mm AND "RECONSTRUCTED" DOES NOT FIT IT AT
+         4.8pt WITH 0.3 OF SPACING — it came back as "RECONSTRUC...", which is
+         a worse answer than a smaller word. The letterspacing is what has to
+         give: it is styling, and the word is information. */
+      const cap = r.caption.toUpperCase();
+      const cs = w >= SCORE_W ? 0.3 : 0.12;
+      doc.setFontSize(w >= SCORE_W ? 4.8 : 4.1);
+      doc.text(clip(doc, cap, Math.max(4, w - cs * cap.length)),
+        x + w / 2, y + rowH / 2 + 5, { align: 'center', charSpace: cs });
+      doc.setFontSize(4.8);
     }
-    doc.text(r.date.toUpperCase(), sx + SCORE_W / 2, y + ROW - 2.4,
-      { align: 'center', charSpace: 0.2 });
+    const date = r.date.toUpperCase();
+    doc.text(clip(doc, date, Math.max(4, w - 0.2 * date.length)),
+      x + w / 2, y + rowH - 2.6, { align: 'center', charSpace: 0.2 });
+  };
 
-    if (r.right.length) {
-      side(r.right, sx + SCORE_W + GUT, y, 'pink', r.rightLabel, true);
+  /* Consecutive duels with no stored opponent pair off; anything with a right
+     hand side keeps the sheet to itself. Chronology is preserved — a pair
+     reads left then right, the way the page already reads. */
+  const units: SeriesBlock['rows'][] = [];
+  for (let i = 0; i < block.rows.length; i++) {
+    const r = block.rows[i];
+    const next = block.rows[i + 1];
+    if (!r.right.length && next && !next.right.length) {
+      units.push([r, next]);
+      i++;
     } else {
-      emptyPlate(ctx, sx + SCORE_W + GUT, y, sideW, ROW,
-        r.rightNote ?? 'Opponent decks were not stored for this duel.');
+      units.push([r]);
     }
-    ctx.y = y + ROW + 3;
+  }
+
+  for (const unit of units) {
+    const g = unit.length === 2 ? half : full;
+    reserve(ctx, g.row + 2.5);
+    const y = ctx.y;
+
+    if (unit.length === 2) {
+      unit.forEach((r, n) => {
+        const x0 = MARGIN + n * (halfW + PAIR_GUT);
+        side(r.left, x0, y, halfSideW, g, 'blue', r.leftLabel, false);
+        scoreCol(r, x0 + halfSideW + GUT, y, HALF_SCORE_W, g.row);
+      });
+    } else {
+      const r = unit[0];
+      side(r.left, MARGIN, y, fullSideW, g, 'blue', r.leftLabel, false);
+      const sx = MARGIN + fullSideW + GUT;
+      scoreCol(r, sx, y, SCORE_W, g.row);
+      if (r.right.length) {
+        side(r.right, sx + SCORE_W + GUT, y, fullSideW, g, 'pink', r.rightLabel, true);
+      } else {
+        emptyPlate(ctx, sx + SCORE_W + GUT, y, fullSideW, g.row,
+          r.rightNote ?? 'Opponent decks were not stored for this duel.');
+      }
+    }
+    ctx.y = y + g.row + 2.5;
   }
   ctx.y += 1;
 }
