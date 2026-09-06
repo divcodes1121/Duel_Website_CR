@@ -56,6 +56,7 @@ bot's SQLite files read-only.
 | **The field book on a phone** | **zooms now, 2026-09-04.** Reported as "the guide page doesn't respond to zoom on mobile" and it was two faults under one symptom. `touch-action: pan-y` on the book was there to stop a swipe-to-turn being read as a scroll, and `pinch-zoom` is a separate keyword — so it had also disabled the browser's own pinch, on the one screen made of small print, whose magnifying glass is hidden on a touch device by design. And the `−  100%  +` controls had been dead since the phone pass: `.tilt`'s single `transform` carries the pointer lean *and* the zoom scale, and the coarse block blanked the property to drop the lean. **Verified 26/26**, and the proof is `visualViewport.scale` going 1 → 5 and back rather than the declaration reading correctly. Main bundle unchanged at 342.52 kB gzip |
 | **What's new** (the bell) | **shipped 2026-09-02.** The bell in the top bar sat inert from the day the shell was built; it opens the release feed now, immediately right of the theme switch. Notes live in `src/content/releases.ts` and ship in the same commit as the change they describe, so the two cannot drift. An unread count on the bell and on the profile menu's row, from one hook; a first-time reader is stamped silently rather than greeted with a badge for a product they have never used. Per browser rather than per account — the honest limit, and the upgrade is a `profiles` column. +3.01 kB gzip; 11 unit checks, browser-verified 24/24 |
 | **Team Analysis** (`#/teams`) | **TWO TABS as of 2026-09-02 — Scouting Report and Match Plan.** One roster in gives a scouting report: what they play, and the decks that beat it, drawn from the archetype representatives and ranked through the same matchup ladder — plus a roster-wide read (their whole spread pooled, weighted by games) that a match plan has no equivalent of. Match Plan is the original screen, unchanged. The mode is an ABSENT `blue`, so there is no new route and the tripwire stays at 21. Main bundle 338.43 -> 338.44 kB gzip. **92 Python checks + 387 vitest; browser-verified 40/40.** Below, as before: paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Off the admin shelf and on sale**: everyone sees it, anon and free get a gate card, and the three-day trial opens it along with pro and admin. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
+| **The PDF layout engine** | **rebuilt 2026-09-06.** The renderer was a draw loop that decided page breaks from hardcoded height estimates — `case 'decks': return 34` — which is how it shipped stranded headings, art printed over its own caption, blank pages and a document that simply stopped. It is now MEASURE -> CHOOSE -> PACK -> AUDIT -> DRAW in `src/utils/report/`, and nothing draws before the page it lands on is decided. A component OFFERS compositions and the engine picks against the room actually left, so the same 24 pairs are nine across opening a page and fewer half way down it; a 40-row table becomes two tables side by side rather than two sheets. **The audit runs on every export in production**, reading the boxes actually committed, and caught four real faults on its first run. Main bundle **346.07 -> 337.97 kB gzip (-8.10)** — the old renderer left it and the engine is a lazy chunk. 51 unit checks; nine fixtures rendered and looked at, both themes, all clean |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -89,7 +90,7 @@ bot's SQLite files read-only.
 | UI — the landing banners | **fixed and uniform, 2026-09-01.** They were 90% apart on a phone — 298 / 518 / 298 / 567px, showing 21% to 42% of their own art — from three separate faults: the flipped pair kept the desktop two-column grid at every width (a specificity trap one level below the one already recorded beside it), `.band` was referenced in `Dashboard.tsx` and **never written**, so all four paintings met edge to edge at 1440 as well as 390, and each panel was as tall as its own copy. Now **0px spread at 430/390/360/320**. See [The four banners on a phone](#the-four-banners-on-a-phone-and-the-three-faults-under-one-symptom) |
 | UI — the display face | **scoped to the landing, 2026-09-01, 25/25 browser checks.** Bebas draws lowercase as capital forms, so every heading inside the product read as a poster. One declaration — `:root[data-app-inner] { --font-display: var(--font-body) }` — and the attribute is on `:root` rather than the shell because dialogs portal into `document.body` and inherit nothing from it |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **1,447 Python checks** across **39 suites**, **398 vitest** across 15 files, `tsc -b` and `npm run build` clean. The 2026-09-03 console work added 36 Python checks (`test_ops_snapshot.py`) and no vitest — it is one server function and JSX, which is worth saying rather than implying coverage that is not there. The 2026-09-02 two-tab split added 25 Python checks and 9 vitest; the 2026-09-01 work before it added none, being CSS, one effect and one JSX block — worth saying rather than implying coverage that is not there |
+| tests | **1,447 Python checks** across **39 suites**, **471 vitest** across 17 files, `tsc -b` and `npm run build` clean. The 2026-09-06 layout engine added 51 vitest (`reportLayout.test.ts`) over the three import-free modules that decide what a page looks like — and NOT over the drawing, which is checked by rendering pages and looking at them, because three of the faults that pass caught this round are invisible to any assertion. The 2026-09-03 console work added 36 Python checks (`test_ops_snapshot.py`) and no vitest — it is one server function and JSX, which is worth saying rather than implying coverage that is not there. The 2026-09-02 two-tab split added 25 Python checks and 9 vitest; the 2026-09-01 work before it added none, being CSS, one effect and one JSX block — worth saying rather than implying coverage that is not there |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -161,7 +162,8 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27a. [Team Analysis — a squad against a squad](#team-analysis--a-squad-against-a-squad)
 27b. [A render loop that starves Suspense](#a-render-loop-that-starves-suspense)
 28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
-29. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
+29. [The layout engine — measure, then commit](#the-layout-engine--measure-then-commit)
+29a. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
 30. [The Opponent Intelligence Engine](#the-opponent-intelligence-engine)
 31. [The revamp, in order, with the reasoning](#the-revamp-in-order-with-the-reasoning)
 32. [The WebGL layer](#the-webgl-layer)
@@ -9577,6 +9579,152 @@ on purpose.
 
 ---
 
+## The layout engine — measure, then commit
+
+Rebuilt 2026-09-06. `analyticsPdf.ts` is a lazy shim now; the work is eight
+modules in `src/utils/report/`.
+
+**What was wrong with the thing it replaced.** It walked the blocks and drew as
+it went, keeping a `y` cursor and breaking when it ran out of room. That is a
+perfectly ordinary way to build a PDF, and it shipped: headings alone at the
+foot of a sheet, a 30 mm empty band at the top of every spill page, card art
+printed 3.3 mm over the note beneath it, blank pages, and a document that
+simply stopped. Every one of those is the same root cause — a decision taken
+with incomplete information, because the thing that would have informed it had
+not been measured yet. The heights it used to decide with were **hardcoded
+guesses**, one per block kind (`case 'decks': return 34`). A low guess strands
+the heading; a high one breaks the page early and leaves a gap. They are the
+same fault, and measuring is the only fix for either.
+
+So the pipeline is:
+
+```
+MEASURE   every block, at real text metrics and real art ratios, into atoms
+          with true heights
+CHOOSE    a composition per block, against the room ACTUALLY LEFT — which is
+          why this happens per block and not up front
+PACK      atoms into pages, never splitting one, never stranding a heading
+AUDIT     the committed boxes, independently
+REFLOW    on a different variant, if the audit found something it can fix
+DRAW      — and by here, drawing is replay with no decisions left in it
+```
+
+**An atom is the smallest thing that may not be split.** Not a block and not a
+line: a block is usually several atoms, and splitting one of *those* is the
+failure. A deck row cut at the fold, a series whose score is on the next sheet,
+a chart orphaned from its axis — all of them are one atom that was allowed to
+divide. `keepWithNext` chains a heading to the first thing it introduces, and
+chains nest, so a section header keeping with a column header keeping with a
+row moves all three or none.
+
+**A component offers compositions; it does not pick one.** `pairsVariants`
+returns what its data supports and `chooseVariant` decides against the room
+left — which is why the same 24 pairs come out nine across when they open a
+page and fewer when half the sheet is already spent, with no call site aware of
+the other case. Scoring is *pages*, then *legibility*, then *fill*, and the
+order matters: **fill must never outrank legibility**, or the engine shrinks
+art to close a gap. A "lossy" variant — follow-ups named rather than drawn —
+has to beat a faithful one by a whole page before it wins.
+
+**The legibility floors are the only thing stopping it.** An engine free to
+choose its own density will always find that one more column fits, because
+arithmetic has no opinion about whether a 9 mm card is still a card.
+`geometry.ts` writes the opinion down once: `CARD_MIN` is 8 mm, measured
+against the 8.5 the series log already ships and which was accepted as
+readable. Below it the engine paginates instead of shrinking.
+
+### The audit is a second, independent reading
+
+It runs on **every export, in production**, over the boxes that were actually
+committed rather than the layout's own arithmetic — a check that shares its
+numbers with the thing it checks is not a check. Every primitive records the
+rectangle it drew, so this is automatic rather than remembered.
+
+It caught four real faults on its first run, and the best of them is the one
+reasoning had missed: the pair board's **tiles** cleared the card floor while
+the **cards inside them** came out at 4.0 mm, because a tile holds two cards
+and the plus between them. 180 findings on one document. The grid is solved on
+the card now.
+
+What it cannot do is see the page. It knows every rectangle, so it catches
+overflow, overlap, orphans, blank sheets and starved art; it cannot catch ugly.
+Three of the faults fixed this round were found by rendering pages and looking
+at them, and are invisible to every assertion in the suite: the crown drawn as
+three overlapping triangles, which union into a mountain range because the
+valleys never get cut out; a 130 mm caption with a deck's name at one end and
+its win rate at the other; and a section divider reserving 25 mm more than it
+drew, which printed as a gap under every section title.
+
+### Four things that were measured rather than reasoned about
+
+**`charSpace` is in millimetres, and it applies after every glyph including the
+last.** Not points, and not `length - 1`. `getTextWidth` knows nothing about
+it. "DUEL ANALYSIS" at 17 pt with `track: 1.1` draws 61.51 mm; the wrong model
+said 52.04, and the section bar wrote CONTINUED across the final S.
+
+**"The current page is empty" is not "this is a whole page".** A flow usually
+begins in whatever is left under the block before it, so a packer that places
+an oversized chain whenever nothing has been placed yet will hang a 100 mm
+block off the 70 mm under a deck grid. Only an atom that will not fit a *whole*
+page is placed anyway — and reported.
+
+**`--text-muted` is pure white on dark**, deliberately, so that no body copy is
+grey. Handing that value to a bar meant a reading too thin to rank on came out
+as the brightest mark on the page, shouting louder than every measured one.
+Drained readings are mixed back toward the surface they sit on.
+
+**Spreading a spilled block evenly costs a page if you do it everywhere.**
+Eleven series pack as 5/5/1, and that last sheet reads as a mistake rather than
+as an ending; 4/4/3 fills three sheets that all look deliberate. But
+rebalancing moves where the block *ends*, so whatever follows can need a sheet
+it did not need before — measured at exactly one page on the 15-page fixture,
+which by this engine's own scoring is the worse document. It is therefore
+scoped to blocks followed by a break, a divider or the end of the report, where
+the spread is free.
+
+### The section bar cannot lie
+
+A headed block that does not fit where it stands takes a new page, and its
+heading becomes the bar: **"03 / THE SERIES LOG"**, with the counts on the
+context line, instead of repeating the screen's name and labelling the first
+thing under it. Stating the rule as *does it fit* rather than *is it first* is
+what makes it sound. The first version promoted only a block that happened to
+be first on its page, and produced three consecutive sheets titled MOST-PLAYED
+LOADOUTS while carrying a series log — a heading for content that was not on
+the page. It also closed the gap that exposed it, because the 10.9 mm inline
+heading was the reason the block did not fit. The closing matter resets the
+section for the same reason: a page carrying the method note and END OF REPORT
+came out headed "07 / WHAT TO BRING".
+
+### What content-aware actually buys
+
+A 40-row card table was a 190 mm name column — none of the names longer than
+30 mm — running over two sheets. A flex column is capped at its content now,
+and what is left over becomes **more columns**: two tables side by side on one
+page, at the same row height and the same type size. Nothing is shrunk; the
+page is used. The reading order is across then down, which is the one real
+cost, and it is deliberate — a down-then-across order cannot be built until the
+page break is known, and the page break depends on the composition.
+
+The duel series went the other way. Facing the two loadouts left and right is
+what the screen does and what the reference document prints, and on A4 it gives
+each side 111 mm, three decks at 35 mm each, and a 7.9 mm card. The reference
+gets away with it because its page is 513 mm wide. So the sides **stack**: your
+three decks across the full width, the score strip, then theirs, each deck one
+row of eight rather than 4x2 because at 85 mm a column that is the shape that
+makes the card biggest. The comparison survives — the two loadouts are still
+adjacent and still on one sheet — and what is given up is left-and-right, which
+was never the thing being compared.
+
+**Measured**, baseline taken by stashing and rebuilding rather than assumed:
+main bundle **346.07 -> 337.97 kB gzip**, eight kilobytes *smaller* than
+before, because the old eager renderer left the bundle and the engine is a
+14.37 kB chunk fetched by the same click that fetches jspdf. It is an
+`import()` inside an event handler, never `React.lazy`, so it never touches
+Suspense. 51 unit checks over the three import-free modules; nine fixtures
+rendered and looked at across both themes, all clean, dark and light identical
+in page count.
+
 ## Exporting a screen as a PDF
 
 "Export PDF" on the analytics screens. The Player Analysis screen already had an
@@ -11535,7 +11683,35 @@ src/
     CardPicker/               the card library column: filters, tabs, grid
   utils/
     analyticsReport.ts        the model every screen exports itself as
-    analyticsPdf.ts           draws one, in the palette read off the live page
+    analyticsPdf.ts           the seam the ten adapters import. A LAZY SHIM:
+                              nothing here runs until Export is pressed, so
+                              none of it is in the bundle every reader
+                              downloads. `import()` in an event handler, never
+                              React.lazy -- see the Suspense note
+    report/                   THE LAYOUT ENGINE. Measure, choose, pack, audit,
+                              reflow, draw -- in that order, and nothing draws
+                              before the page it lands on is decided
+      geometry.ts             page geometry, the five-level type scale, and the
+                              LEGIBILITY FLOORS. No imports. The floors are the
+                              only thing stopping an engine free to choose its
+                              own density from finding that one more column
+                              fits
+      fit.ts                  the decision layer: grid solving, row balancing,
+                              atom packing, variant scoring. Imports only
+                              geometry, so what shapes a page is testable
+                              without jsPDF, a browser or card art
+      audit.ts                the page-level quality check, read INDEPENDENTLY
+                              off the boxes actually committed. A check that
+                              shares its arithmetic with the thing it checks is
+                              not a check
+      palette.ts              colour, resolved off the live page at export time
+      paint.ts                drawing primitives. No decisions in any of them,
+                              and every one records the rectangle it drew
+      sections.ts             the components. Each measures itself and offers
+                              the compositions its data supports; which one
+                              ships is not its call
+      art.ts                  card tiles, downscaled once and reused by alias
+      engine.ts               the pipeline that runs them in order
     reportAdapters.ts         one adapter per screen, pure, no layout
   state/
     store.ts                  builder store (zustand + persist, v9)
