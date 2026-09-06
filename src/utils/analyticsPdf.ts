@@ -1154,7 +1154,8 @@ function drawVersus(ctx: Ctx, block: VersusBlock) {
     if (pair.right) {
       deckPlate(ctx, pair.right, MARGIN + half + GUT, top, half, 'blue', cols);
     } else {
-      emptyPlate(ctx, MARGIN + half + GUT, top, half, H, 'Nothing on the squad clears the floor against this.');
+      emptyPlate(ctx, MARGIN + half + GUT, top, half, H,
+        block.emptyNote ?? 'Nothing on the squad clears the floor against this.');
     }
 
     // The word, between them. It is the relationship the page is about.

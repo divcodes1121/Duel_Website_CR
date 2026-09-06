@@ -37,6 +37,25 @@ function share(n: number, of: number): string {
   return `${int(n)} (${pct((100 * n) / of, 0)})`;
 }
 
+/** The opponent's name, or their tag when none was ever stored. */
+function oppName(s: { opponentName: string; opponentTag: string }): string {
+  return s.opponentName && s.opponentName !== s.opponentTag
+    ? s.opponentName
+    : s.opponentTag;
+}
+
+/** Format, score and shape — and an unverified score is SAID, never 0-0. */
+function seriesNote(s: {
+  format: string; playerWins: number | null; opponentWins: number | null;
+  caption: string; source: string;
+}): string {
+  const score = s.playerWins === null || s.opponentWins === null
+    ? 'score not stored'
+    : `${s.playerWins}-${s.opponentWins}`;
+  return `${s.format === 'bo5' ? 'Bo5' : 'Bo3'} · ${score}`
+    + (s.caption ? ` · ${s.caption}` : '');
+}
+
 /* ------------------------------------------------------------- Duel Zone */
 
 export function duelZoneDoc(r: DuelZoneReport, tag: string): ReportDoc {
@@ -66,74 +85,102 @@ export function duelZoneDoc(r: DuelZoneReport, tag: string): ReportDoc {
     },
   ];
 
-  /* EVERY DUEL AS ITS GAMES, PLAYER AGAINST OPPONENT.
+  /* TWO KINDS OF DUEL, AND THE DIFFERENCE IS THE DATA, NOT A PREFERENCE.
      
-     This was a five-column TEXT table — when, opponent, format, score, result
-     — and no decks at all, which is why the report read as scattered text: the
-     screen is a board of deck art and the export was a spreadsheet of it.
+     MEASURED on a real player with 113 duels: 104 of them are NATIVE rows,
+     and a native row stores the whole loadout in one record with NO per-game
+     opponent. Only 25 of 277 games — 9% — have an opponent deck at all.
      
-     A duel is three games and each game is two decks facing each other, so
-     that is what prints. `compact` fits all three pairs on one sheet, because
-     a duel split across three sheets is not a duel any more. The server has
-     already arranged both sides into their slots and resolved the evolution
-     and hero art — `opponent_evo` carries the same marks as the player's — so
-     nothing here re-derives an order or guesses a form. */
-  for (const s of r.series) {
-    const when = DAY(s.startTime);
-    const opp = s.opponentName && s.opponentName !== s.opponentTag
-      ? s.opponentName
-      : s.opponentTag;
-    const score = s.playerWins === null || s.opponentWins === null
-      ? 'score not stored'
-      : `${s.playerWins}–${s.opponentWins}`;
+     So a blanket "print every duel as VS" draws an empty right-hand plate on
+     nine games in ten, which is not a versus and reads as broken. Worse, the
+     empty plate was captioned with a sentence written for the team dossier
+     ("nothing on the squad clears the floor"), which is meaningless here.
+     
+     The two cases are therefore separated:
+     
+       BOTH SIDES STORED  -> a VS sheet, all its games, player against
+                             opponent, which is what was asked for and what
+                             the data can actually support.
+       LOADOUT ONLY       -> the three decks as rows, with the reason the
+                             other half is missing stated once. Printing an
+                             empty plate three times per duel says nothing
+                             the sentence does not say better.
+     
+     It also fixes the page count. 113 duels each owning a sheet is a 113-page
+     PDF; VS sheets go to the duels that can fill them and the rest are rows. */
+  const withOpp = r.series.filter((s) => s.games.some((g) => g.opponent));
+  const loadoutOnly = r.series.filter((s) => !s.games.some((g) => g.opponent));
 
-    const pairs = s.games
-      /* A NATIVE DUEL ROW STORES A LOADOUT, NOT PER-GAME OPPONENTS, so half of
-         the pairing genuinely does not exist. The game still prints — the
-         player's deck is real — and the missing half is a stated absence. */
-      .map((g) => ({
-        left: {
-          name: g.deckName || g.archetype,
-          meta: `G${g.slot + 1} · ${g.avgElixir.toFixed(1)} elixir`,
-          value: g.playerCrowns !== undefined && g.opponentCrowns !== undefined
-            ? `${g.playerCrowns}–${g.opponentCrowns}`
-            : undefined,
-          valueNote: g.result || undefined,
-          cards: g.cards,
-          art: g.art,
-          inferredArt: g.artInferred,
-        },
-        right: g.opponent
-          ? {
-              name: g.opponent.deckName || g.opponent.archetype,
-              meta: g.opponent.avgElixir != null
-                ? `${g.opponent.avgElixir.toFixed(1)} elixir`
-                : undefined,
-              cards: g.opponent.cards,
-              art: g.opponent.art,
-              inferredArt: g.opponent.artInferred,
-            }
-          : null,
-      }));
-
+  for (const s of withOpp) {
+    const pairs = s.games.map((g) => ({
+      left: {
+        name: g.deckName || g.archetype,
+        meta: `G${g.slot + 1} · ${g.avgElixir.toFixed(1)} elixir`,
+        value: g.playerCrowns !== undefined && g.opponentCrowns !== undefined
+          ? `${g.playerCrowns}-${g.opponentCrowns}`
+          : undefined,
+        valueNote: g.result || undefined,
+        cards: g.cards,
+        art: g.art,
+        inferredArt: g.artInferred,
+      },
+      right: g.opponent
+        ? {
+            name: g.opponent.deckName || g.opponent.archetype,
+            meta: g.opponent.avgElixir != null
+              ? `${g.opponent.avgElixir.toFixed(1)} elixir`
+              : undefined,
+            cards: g.opponent.cards,
+            art: g.opponent.art,
+            inferredArt: g.opponent.artInferred,
+          }
+        : null,
+    }));
     if (!pairs.length) continue;
-    /* A DUEL OWNS ITS SHEET. Without this the first one starts under the stats
-       tiles, so only two of its three games fit and the third spills — and a
-       duel split across two sheets is the thing `compact` was added to stop.
-       `break` is the block kind for exactly this: a section that genuinely
-       must not straddle a page break, rather than spacing. */
+    /* A DUEL OWNS ITS SHEET — three games are one duel and splitting them is
+       the thing `compact` exists to stop. */
     blocks.push({ kind: 'break' });
     blocks.push({
       kind: 'versus',
       compact: true,
-      heading: `${when} · ${opp}`,
-      note: `${s.format === 'bo5' ? 'Bo5' : 'Bo3'} · ${score}`
-        + (s.caption ? ` · ${s.caption}` : '')
-        + (s.source === 'native' ? ' · native row, per-game results not stored' : ''),
+      heading: `${DAY(s.startTime)} · ${oppName(s)}`,
+      note: seriesNote(s),
       leftLabel: 'You',
       rightLabel: 'Them',
+      emptyNote: 'This game was stored without the opponent deck.',
       pairs,
     });
+  }
+
+  /* The rest, as loadouts. Capped, because the tail of a long duel history is
+     the part nobody reads and every sheet of it is weight in a file that has
+     to open on a phone. The cap is STATED, never silent. */
+  const LOADOUT_CAP = 12;
+  const shownLoadouts = loadoutOnly.slice(0, LOADOUT_CAP);
+  if (shownLoadouts.length) {
+    blocks.push({ kind: 'break' });
+    for (const [i, s] of shownLoadouts.entries()) {
+      blocks.push({
+        kind: 'decks',
+        heading: `${DAY(s.startTime)} · ${oppName(s)}`,
+        note: i === 0
+          ? `${seriesNote(s)} — these duels are stored as one loadout row, so the opponent's decks were never recorded.`
+          : seriesNote(s),
+        decks: s.games.map((g) => ({
+          name: g.deckName || g.archetype,
+          meta: `G${g.slot + 1} · ${g.avgElixir.toFixed(1)} elixir`,
+          cards: g.cards,
+          art: g.art,
+          inferredArt: g.artInferred,
+        })),
+      });
+    }
+    if (loadoutOnly.length > LOADOUT_CAP) {
+      blocks.push({
+        kind: 'note',
+        body: `${int(loadoutOnly.length - LOADOUT_CAP)} further duels are stored the same way and are not printed here.`,
+      });
+    }
   }
 
   /* The opener→companion sequence, only when the screen is willing to show

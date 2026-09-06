@@ -200,6 +200,17 @@ export interface VersusBlock extends BlockBase {
    * this document.
    */
   compact?: boolean;
+  /**
+   * What an absent right-hand deck MEANS on this document.
+   *
+   * It was hardcoded to "Nothing on the squad clears the floor against this",
+   * which is a TEAM DOSSIER sentence — and it appeared on 91% of the plates in
+   * a Duel Zone report, where the truth is completely different: a native duel
+   * row stores a loadout and no per-game opponent, so nobody failed to clear a
+   * floor and there is no squad. An absence has to say why it is absent on the
+   * page it is on.
+   */
+  emptyNote?: string;
   pairs: {
     left: DeckLine;
     /** Null when nothing on the squad answers it — printed as a stated

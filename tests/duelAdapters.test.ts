@@ -111,11 +111,22 @@ describe('duelZoneDoc', () => {
     expect(tiles[3].value).toBe('15 (75%)');
   });
 
-  it('prints every duel as VS pairs, one block per duel', () => {
+  it('gives a VS sheet only to duels that HAVE an opponent deck', () => {
+    /* MEASURED ON PRODUCTION: 104 of a real player's 113 duels are native
+       rows, and a native row stores a loadout with no per-game opponent — only
+       9% of games have one at all. Printing every duel as VS draws an empty
+       right-hand plate nine times in ten, which is not a versus. */
     const vs = d.blocks.filter((b) => b.kind === 'versus');
-    expect(vs).toHaveLength(2);
-    // Three games, three pairs — a duel stays whole.
+    expect(vs).toHaveLength(1);
     expect((vs[0] as { pairs: unknown[] }).pairs).toHaveLength(3);
+  });
+
+  it('prints a loadout-only duel as deck rows, not as empty plates', () => {
+    const decks = d.blocks.filter((b) => b.kind === 'decks');
+    expect(decks).toHaveLength(1);
+    expect((decks[0] as { decks: unknown[] }).decks).toHaveLength(1);
+    // The reason the other half is missing is stated once, not drawn thrice.
+    expect((decks[0] as { note?: string }).note).toContain('one loadout row');
   });
 
   it('fits a whole duel on one sheet rather than one pair per sheet', () => {
@@ -143,25 +154,44 @@ describe('duelZoneDoc', () => {
     expect(vs.pairs[2].left.meta).toContain('G3');
   });
 
-  it('states a missing opponent rather than drawing a blank half', () => {
-    // A native row stores a loadout and no per-game opponent.
-    const vs = d.blocks.filter((b) => b.kind === 'versus');
-    const native = vs[1] as { pairs: { right: unknown }[]; note?: string };
-    expect(native.pairs[0].right).toBeNull();
-    expect(native.note).toContain('native row');
+  it('captions an absent deck for THIS document, not the team dossier', () => {
+    /* The empty plate was hardcoded to "Nothing on the squad clears the floor
+       against this" — a team-dossier sentence that appeared on 91% of the
+       plates in a duel report, where there is no squad and no floor. */
+    const vs = d.blocks.find((b) => b.kind === 'versus') as { emptyNote?: string };
+    expect(vs.emptyNote).toContain('without the opponent deck');
+    expect(vs.emptyNote).not.toContain('squad');
   });
 
   it('names the duel by date and opponent, with the score in the note', () => {
-    const vs = d.blocks.filter((b) => b.kind === 'versus') as {
+    const vs = d.blocks.find((b) => b.kind === 'versus') as {
       heading?: string; note?: string;
-    }[];
-    expect(vs[0].heading).toBe('2026-09-01 · Sarac');
-    expect(vs[0].note).toContain('2–1');
+    };
+    expect(vs.heading).toBe('2026-09-01 · Sarac');
+    expect(vs.note).toContain('2-1');
+    const rows = d.blocks.find((b) => b.kind === 'decks') as {
+      heading?: string; note?: string;
+    };
     // The tag when no name was ever stored.
-    expect(vs[1].heading).toContain('#XYZ');
+    expect(rows.heading).toContain('#XYZ');
     // An unverified score is SAID, never printed as 0-0.
-    expect(vs[1].note).toContain('score not stored');
-    expect(vs[1].note).not.toContain('0–0');
+    expect(rows.note).toContain('score not stored');
+    expect(rows.note).not.toContain('0-0');
+  });
+
+  it('caps the loadout tail and says how many it left out', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      id: `n${i}`, startTime: '2026-09-02T10:00:00Z', opponentTag: '#XYZ',
+      opponentName: '#XYZ', source: 'native', format: 'bo3',
+      games: [game(0, 'Loadout', false)],
+      playerWins: null, opponentWins: null, caption: '', won: false,
+    }));
+    const big = duelZoneDoc(zone({ series: many }), 'X');
+    expect(big.blocks.filter((b) => b.kind === 'decks')).toHaveLength(12);
+    const note = big.blocks.find(
+      (b) => b.kind === 'note' && (b as { body?: string }).body?.includes('further duels'),
+    );
+    expect(note).toBeTruthy();
   });
 
   it('distinguishes an observed sequence from a predicted one', () => {
