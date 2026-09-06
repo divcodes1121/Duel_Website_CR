@@ -725,16 +725,80 @@ export function seriesVariants(block: SeriesBlock, ctx: BuildCtx,
     }
   };
 
-  const build = (cols: number, shrink: number, id: string): Variant | null => {
-    const inner = ctx.width - PAD * 2;
-    const deckW = (inner - DECK_GAP * 2) / 3;
-    const cardW = Math.min(CARD_MAX, (deckW - CARD_GAP * (cols - 1)) / cols) * shrink;
-    if (cardW < CARD_MIN) return null;
-    const side = sideHeight(cardW, cols);
+  /* A BO5 IS FIVE DECKS A SIDE, NOT THREE, AND SIZING FOR THREE IS A BUG THAT
+     SHIPPED.
 
-    const atoms: PlacedAtom[] = rows.map((r) => {
+     `deckW` was `(inner - DECK_GAP * 2) / 3` — three decks and two gaps —
+     while `drawSide` lays out however many games the series actually has. A
+     Bo5 then drew an 85 mm card grid into each 49.8 mm slot: every deck
+     overlapped the next and the last ran 35 mm off the page.
+
+     The fixtures missed it because they LABELLED a row Bo5 while still giving
+     it three decks, so the audit was never handed a five-game series to
+     measure. A fixture that does not speak the producer's real vocabulary pins
+     nothing — the same lesson `test_team_analysis.py` already cost this
+     project, in a different file.
+
+     THE TYPICAL ROW SETS THE CARD SIZE; A WIDER ROW SHRINKS TO FIT, AND ONLY
+     IT DOES.
+
+     Sizing the whole block to its widest row was the first fix and it was
+     worse than the fault in a way that only shows on real data: a real account
+     runs 97 Bo3s to 1 Bo5, so one rare five-game duel would have pushed every
+     other row from 55 mm to 90 and added pages to a document where nothing was
+     wrong. The common case sets the size, which keeps the 97 identical to each
+     other — that is what "consistent within a component" is protecting — and
+     the outlier is drawn denser, which is legible as what it is: a longer
+     duel. Nothing overlaps either way; this is about which rows pay. */
+  const counts = rows.map((r) => Math.max(1, r.left.length, r.right.length));
+  const tally = new Map<number, number>();
+  for (const c of counts) tally.set(c, (tally.get(c) ?? 0) + 1);
+  let typical = counts[0];
+  for (const [c, n] of tally) {
+    const best = tally.get(typical) ?? 0;
+    // Ties go to the WIDER row, so the tie-break never shrinks anything.
+    if (n > best || (n === best && c > typical)) typical = c;
+  }
+
+  const inner = ctx.width - PAD * 2;
+  const slotFor = (n: number) => (inner - DECK_GAP * (n - 1)) / n;
+  const cardFor = (n: number, cols: number) =>
+    Math.min(CARD_MAX, (slotFor(n) - CARD_GAP * (cols - 1)) / cols);
+
+  /* THE CARD SIZE IS THE SAME ON EVERY ROW; A WIDE ROW CHANGES ITS SHAPE.
+
+     The version before this let a wide row shrink its own cards, and the
+     rejection cascaded: a Bo5 cannot fit eight-across at a legible size, so
+     the eight-across variant was thrown away WHOLE, and all twenty Bo3s fell
+     back to the tall 4x2 layout to accommodate one row. Twenty-one series came
+     out at fourteen pages instead of six — the same "one rare row dictates the
+     document" fault as before, arriving through a different door.
+
+     Keeping the card fixed and choosing the GRID per row fixes both at once. A
+     Bo3 puts its eight cards in one line of eight; a Bo5, whose slot is 49.8 mm
+     instead of 85, puts the same-size cards in 4x2 and is simply taller. Card
+     sizes match across the whole block, which is what visual consistency
+     actually asks for, and the extra height reads as what it is: a longer
+     duel. */
+  const gridFor = (n: number, card: number): number => {
+    const slot = slotFor(n);
+    for (const c of [8, 4, 2, 1]) {
+      if (card * c + CARD_GAP * (c - 1) <= slot) return c;
+    }
+    return 1;
+  };
+
+  const build = (cols: number, shrink: number, id: string): Variant | null => {
+    const base = cardFor(typical, cols) * shrink;
+    if (base < CARD_MIN) return null;
+    const cardW = base;
+
+    const atoms: PlacedAtom[] = rows.map((r, ri) => {
       const solo = r.right.length === 0;
-      const h = headH + side + (solo ? 0 : 6.6 + side) + PAD + SPACE.snug;
+      const rowCard = base;
+      const rowCols = gridFor(counts[ri], base);
+      const rowSide = sideHeight(rowCard, rowCols);
+      const h = headH + rowSide + (solo ? 0 : 6.6 + rowSide) + PAD + SPACE.snug;
       return px({
         h,
         kind: 'series',
@@ -760,12 +824,12 @@ export function seriesVariants(block: SeriesBlock, ctx: BuildCtx,
               { color: surf.p.red, align: 'right' });
           }
 
-          drawSide(surf, r.left, x + PAD, w - PAD * 2, y + headH, cardW, cols, surf.p.muted);
+          drawSide(surf, r.left, x + PAD, w - PAD * 2, y + headH, rowCard, rowCols, surf.p.muted);
           if (!solo) {
-            const scoreY = y + headH + side;
+            const scoreY = y + headH + rowSide;
             drawScore(surf, r, x + PAD, scoreY, w - PAD * 2);
             drawSide(surf, r.right, x + PAD, w - PAD * 2, scoreY + 6.6,
-                     cardW, cols, surf.p.muted);
+                     rowCard, rowCols, surf.p.muted);
           } else if (r.rightNote) {
             // Said once in the block note, not twenty times on the page.
             void r.rightNote;

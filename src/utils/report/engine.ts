@@ -561,6 +561,8 @@ async function layout(model: ReportDoc, p: Palette, tiles: Map<string, string | 
      same keep-with-next chain as the first row and cannot be separated from
      it by anything. */
   let sectionNo = 0;
+  /** The block whose heading a preceding lead-in already put in the bar. */
+  let borrowedBy = -1;
   const hasDividers = model.blocks.some((b) => b.kind === 'divider');
   for (let i = 0; i < model.blocks.length; i += 1) {
     const block = model.blocks[i];
@@ -605,6 +607,42 @@ async function layout(model: ReportDoc, p: Palette, tiles: Map<string, string | 
       continue;
     }
 
+    /* A HEADING-LESS BLOCK OPENING A PAGE IS A LEAD-IN, NOT A SECTION.
+
+       Every adapter opens with a KPI strip and then names its first real
+       block, so a strip that opens a page would take the sheet under the
+       screen's own name, the headed block after it would not fit in what is
+       left, and the strip would be left alone on a 13%-full page while the
+       series started overleaf. Reported by the audit on all three Duel Zone
+       fixtures, and it is the shape of every real report this thing draws.
+
+       So the strip BORROWS the heading of the block it introduces: the bar
+       reads "01 / THE SERIES LOG", the strip sits under it, and the series
+       follows on the same sheet — which is how the section-divider pages
+       already work, and how the reference document opens a section.
+
+       ONLY `stats` AND `note` BORROW. They are the two kinds an adapter emits
+       without a heading as a preamble; a heading-less table or series is a
+       continuation of something and would mislabel the pages it ran onto. */
+    if (!opened && !hasDividers && !block.heading
+        && (block.kind === 'stats' || block.kind === 'note')) {
+      for (let j = i + 1; j < model.blocks.length; j += 1) {
+        const nb = model.blocks[j];
+        if (nb.kind === 'break' || nb.kind === 'divider') break;
+        if ('heading' in nb && nb.heading) {
+          sectionNo += 1;
+          pg.section = {
+            number: sectionNo,
+            title: nb.heading,
+            hue: model.hue,
+            context: nb.note ?? baseContext,
+          };
+          borrowedBy = j;
+          break;
+        }
+      }
+    }
+
     /* THE SECTION IS SET BY WHICHEVER BLOCK OPENS A PAGE, and `placeBlock`
        decides that — it is the only thing that knows whether the block fits
        where it stands. A document that uses dividers already has its sections
@@ -623,6 +661,15 @@ async function layout(model: ReportDoc, p: Palette, tiles: Map<string, string | 
        starts a page of its own — or when there is no next thing. */
     const next = model.blocks[i + 1];
     const isolated = !next || next.kind === 'break' || next.kind === 'divider';
+
+    if (i === borrowedBy) {
+      // Its heading is already in the bar; draw it without one and let it flow
+      // under the strip that introduced it.
+      openBody();
+      placeBlock(pg, block, { hue: model.hue }, false, promote, true, isolated);
+      pg.y += SPACE.base;
+      continue;
+    }
 
     if (!opened && block.heading && !hasDividers) {
       /* It is opening a page by definition, so it is the section.
