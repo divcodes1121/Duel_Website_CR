@@ -390,7 +390,7 @@ function firstChunk(block: ReportBlock): number {
     case 'note': return 12;
     case 'matrix': return 15 + 11 * 2;   // column heads + two rows
     case 'spread': return 11 + 8;        // the band and its first legend line
-    case 'pairs': return 44;             // one row of three tiles
+    case 'pairs': return 36;             // one row of five tiles
     case 'series': return 35;            // one whole series row
     case 'versus': return 100;           // one full pair — they stand ~94 mm
     default: return 0;
@@ -1213,7 +1213,7 @@ function emptyPlate(ctx: Ctx, x: number, y: number, w: number, h: number, body: 
 }
 
 /**
- * A grid of card pairs. Three across, each tile naming BOTH cards.
+ * A grid of card pairs. Five across, each tile naming BOTH cards.
  *
  * This replaces a five-column text table whose PAIRING column was 40 mm wide,
  * so every entry printed truncated — "Battle Ram + M...", "Hog Rider + Th..."
@@ -1221,18 +1221,40 @@ function emptyPlate(ctx: Ctx, x: number, y: number, w: number, h: number, body: 
  * the two cards costs no more room than the truncated string did and says the
  * thing the string could not.
  *
- * Three columns because the art is the point: at three the cards are ~20 mm
- * and recognisable, at four they are ~14 mm and the tile becomes a caption
- * with a decoration. Nine tiles a sheet.
+ * FIVE COLUMNS AND FOUR ROWS, WHICH IS TWENTY PAIRS A SHEET AGAINST NINE.
+ * It was three across in tiles 48 mm tall, so 72 pairs — three tabs of 24 —
+ * ran to thirteen sheets. Most of that was air, not art: the tile reserved
+ * 12 mm above the cards and 12 below for two lines of type that occupy about
+ * 9, and the card was capped at 20 mm inside an 87 mm column, so the row was
+ * sized by its padding rather than by anything printed in it.
+ *
+ * WHAT WAS ACTUALLY TRADED: the card is 16.2 mm rather than 20 — a fifth
+ * narrower, still about twice the 8.5 mm the series log draws — and the win
+ * rate moved off the name's line down beside the meta. The tile is 33.5 mm
+ * rather than 48. MEASURED, same fixture, same three tabs of 24: **13 pages
+ * to 6**, and the page that used to hold nine pairs holds twenty.
+ *
+ * THE ROW PITCH IS SOLVED AGAINST A HEADING, NOT AGAINST THE BARE BODY. Every
+ * spill page repeats its heading as "(continued)", so the room a row actually
+ * has is 192 - 41 = 151 mm, not the body's 162 — four rows need a pitch under
+ * 37.8 and this is 36. At the first sizing (17.5 mm cards, 38.5 pitch) four
+ * rows measured 154 mm, cleared the body, and never once fitted a real page.
+ *
+ * THE WIN RATE SHARED A LINE WITH THE NAME AND CANNOT ANY MORE. Right-aligned
+ * against a centred name, the two contend for the same middle at any column
+ * width, and at 51 mm the name would have had to be clipped to make room —
+ * reintroducing by arithmetic the exact truncation this block exists to undo.
+ * It leads the meta line instead, in the document's hue, drawn as a measured
+ * group so the pair of runs centres as one.
  */
 function drawPairs(ctx: Ctx, block: PairsBlock) {
   const { doc, p } = ctx;
-  const COLS = 3;
-  const gap = 4;
+  const COLS = 5;
+  const gap = 2.5;
   const tw = (CONTENT_W - gap * (COLS - 1)) / COLS;
-  const cw = Math.min(20, (tw - 14) / 2);
+  const cw = Math.min(16.2, (tw - 8) / 2);
   const ch = cw / CARD_RATIO;
-  const TH = 12 + ch + 12;
+  const TH = 3 + ch + 11;
 
   block.pairs.forEach((pr, i) => {
     const col = i % COLS;
@@ -1247,41 +1269,54 @@ function drawPairs(ctx: Ctx, block: PairsBlock) {
 
     // The two cards, centred, with the plus between them — the same mark the
     // screen uses, so a pair reads identically in both places.
-    const artW = cw * 2 + 6;
+    const artW = cw * 2 + 5;
     const ax = x + (tw - artW) / 2;
     [[pr.a, pr.artA], [pr.b, pr.artB]].forEach(([card, art], n) => {
       const url = artUrl(card as string, art as 'evolution' | 'hero' | undefined);
       const data = ctx.tiles.get(url);
-      const cx = ax + n * (cw + 6);
+      const cx = ax + n * (cw + 5);
       if (data) {
-        doc.addImage(data, 'JPEG', cx, y + 4, cw, ch, url, 'FAST');
+        doc.addImage(data, 'JPEG', cx, y + 3, cw, ch, url, 'FAST');
       } else {
         fill(doc, p.sunken);
-        doc.roundedRect(cx, y + 4, cw, ch, 0.8, 0.8, 'F');
+        doc.roundedRect(cx, y + 3, cw, ch, 0.8, 0.8, 'F');
       }
     });
     setFont(doc, 'display');
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     ink(doc, p.muted);
-    doc.text('+', x + tw / 2, y + 4 + ch / 2 + 1.6, { align: 'center' });
+    doc.text('+', x + tw / 2, y + 3 + ch / 2 + 1.4, { align: 'center' });
 
     // BOTH NAMES, on their own line, never truncated into the first one.
     setFont(doc, 'sans', true);
-    doc.setFontSize(6.6);
+    doc.setFontSize(6.4);
     ink(doc, p.text);
-    doc.text(clip(doc, pr.name, tw - 6), x + tw / 2, y + ch + 9, { align: 'center' });
+    doc.text(clip(doc, pr.name, tw - 5), x + tw / 2, y + ch + 7.2, { align: 'center' });
 
-    if (pr.meta) {
-      setFont(doc, 'sans');
-      doc.setFontSize(5.8);
-      ink(doc, p.muted);
-      doc.text(clip(doc, pr.meta, tw - 6), x + tw / 2, y + ch + 13.5, { align: 'center' });
-    }
+    /* The win rate leads the meta, and the two centre AS A GROUP — measured
+       rather than laid out from the tile's centre, because two independently
+       centred runs would sit on top of each other. */
+    const vy = y + ch + 11.2;
+    setFont(doc, 'display');
+    doc.setFontSize(6.8);
+    const vw = pr.value ? doc.getTextWidth(pdfSafe(pr.value)) : 0;
+    setFont(doc, 'sans');
+    doc.setFontSize(5.1);
+    const meta = pr.meta ? clip(doc, pr.meta, tw - 6 - (vw ? vw + 1.6 : 0)) : '';
+    const mw = meta ? doc.getTextWidth(meta) : 0;
+    let gx = x + (tw - (vw + (vw && mw ? 1.6 : 0) + mw)) / 2;
     if (pr.value) {
       setFont(doc, 'display');
-      doc.setFontSize(9);
+      doc.setFontSize(6.8);
       ink(doc, hueColor(p, ctx.docModel.hue));
-      doc.text(pr.value, x + tw - 4, y + ch + 9, { align: 'right' });
+      doc.text(pdfSafe(pr.value), gx, vy);
+      gx += vw + 1.6;
+    }
+    if (meta) {
+      setFont(doc, 'sans');
+      doc.setFontSize(5.1);
+      ink(doc, p.muted);
+      doc.text(meta, gx, vy);
     }
 
     if (col === COLS - 1 || i === block.pairs.length - 1) ctx.y += TH + gap;
