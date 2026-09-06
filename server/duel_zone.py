@@ -402,6 +402,22 @@ def build_series(rows: list[dict], arch=None) -> list[dict]:
         n = min(dx.SLOTS, len(cards) // dx.DECK_SIZE)
         if n < 1:
             continue
+        # THE OPPONENT'S LOADOUT IS IN THE SAME ROW AND WAS BEING THROWN AWAY.
+        # `opponent` was hardcoded to None here, so every native duel — 92% of
+        # a real player's history — rendered with an empty half on the screen
+        # and in the PDF, as though the other side had never been recorded.
+        #
+        # It was. `battles.opponent_card_keys` carries their whole loadout
+        # exactly as `player_card_keys` carries ours, `read_duel_rows` has
+        # always passed it through as `opp_cards`, and `opponent_evo` carries
+        # their marks. So the opponent's decks slice out of the same row, by
+        # the same arithmetic, and are drawn by the same `_deck_view`.
+        #
+        # A native row still stores no PER-GAME result, so `result` stays None
+        # and the crowns stay absent — the decks are known and the scoreline
+        # is not, and those are different facts.
+        opp_cards = r.get("opp_cards") or []
+        opp_n = len(opp_cards) // dx.DECK_SIZE
         games = []
         for i in range(n):
             deck = cards[i * dx.DECK_SIZE:(i + 1) * dx.DECK_SIZE]
@@ -410,8 +426,15 @@ def build_series(rows: list[dict], arch=None) -> list[dict]:
             # decks, so the row's own column cannot describe deck 2 or 3. Each
             # deck is looked up by its cards instead.
             a = arch(deck) if arch else ""
+            opponent = None
+            if i < opp_n:
+                od = opp_cards[i * dx.DECK_SIZE:(i + 1) * dx.DECK_SIZE]
+                oa = arch(od) if arch else ""
+                opponent = _deck_view(od, r.get("opp_evo"))
+                opponent["archetype"] = oa
+                opponent["deckName"] = deck_label(od, oa)
             g.update({"slot": i, "result": None, "archetype": a,
-                      "deckName": deck_label(deck, a), "opponent": None})
+                      "deckName": deck_label(deck, a), "opponent": opponent})
             games.append(g)
         out.append({
             "id": f"{r['battle_time']}|{r['opponent_tag']}",

@@ -111,87 +111,65 @@ describe('duelZoneDoc', () => {
     expect(tiles[3].value).toBe('15 (75%)');
   });
 
-  it('gives a VS sheet only to duels that HAVE an opponent deck', () => {
-    /* MEASURED ON PRODUCTION: 104 of a real player's 113 duels are native
-       rows, and a native row stores a loadout with no per-game opponent — only
-       9% of games have one at all. Printing every duel as VS draws an empty
-       right-hand plate nine times in ten, which is not a versus. */
-    const vs = d.blocks.filter((b) => b.kind === 'versus');
-    expect(vs).toHaveLength(1);
-    expect((vs[0] as { pairs: unknown[] }).pairs).toHaveLength(3);
+  it('prints every duel as ONE ROW: your loadout, the score, theirs', () => {
+    /* THE LAYOUT UNIT WAS WRONG TWICE. First a text table with no art; then
+       each GAME as a full-width versus pair, which stacked three plates to a
+       sheet and made a 113-duel history a 113-page document — while splitting
+       the comparison a duel invites across three pages. A series is one row. */
+    const s = d.blocks.find((b) => b.kind === 'series') as { rows: unknown[] };
+    expect(s.rows).toHaveLength(2);
   });
 
-  it('prints a loadout-only duel as deck rows, not as empty plates', () => {
-    const decks = d.blocks.filter((b) => b.kind === 'decks');
-    expect(decks).toHaveLength(1);
-    expect((decks[0] as { decks: unknown[] }).decks).toHaveLength(1);
-    // The reason the other half is missing is stated once, not drawn thrice.
-    expect((decks[0] as { note?: string }).note).toContain('one loadout row');
-  });
-
-  it('fits a whole duel on one sheet rather than one pair per sheet', () => {
-    const vs = d.blocks.find((b) => b.kind === 'versus') as { compact?: boolean };
-    expect(vs.compact).toBe(true);
-  });
-
-  it('prints the opponent deck beside the player deck', () => {
-    const vs = d.blocks.find((b) => b.kind === 'versus') as {
-      pairs: { left: { name: string }; right: { name: string; cards: string[] } | null }[];
-      leftLabel?: string; rightLabel?: string;
+  it('puts your three decks and theirs on the same row', () => {
+    const s = d.blocks.find((b) => b.kind === 'series') as {
+      rows: { left: { name: string }[]; right: { name: string }[];
+              leftLabel: string; rightLabel: string }[];
     };
-    expect(vs.leftLabel).toBe('You');
-    expect(vs.rightLabel).toBe('Them');
-    expect(vs.pairs[0].left.name).toBe('Hog 2.6');
-    expect(vs.pairs[0].right?.name).toBe('Golem Beatdown');
-    expect(vs.pairs[0].right?.cards).toHaveLength(8);
+    expect(s.rows[0].left).toHaveLength(3);
+    expect(s.rows[0].right).toHaveLength(3);
+    expect(s.rows[0].leftLabel).toBe('You');
+    expect(s.rows[0].rightLabel).toBe('Sarac');
+    expect(s.rows[0].right[0].name).toBe('Golem Beatdown');
   });
 
-  it('labels each pair with its game number', () => {
-    const vs = d.blocks.find((b) => b.kind === 'versus') as {
-      pairs: { left: { meta?: string } }[];
+  it('carries the per-game score under each deck', () => {
+    const s = d.blocks.find((b) => b.kind === 'series') as {
+      rows: { left: { value?: string }[] }[];
     };
-    expect(vs.pairs[0].left.meta).toContain('G1');
-    expect(vs.pairs[2].left.meta).toContain('G3');
+    expect(s.rows[0].left[0].value).toBe('2-1');
   });
 
-  it('captions an absent deck for THIS document, not the team dossier', () => {
-    /* The empty plate was hardcoded to "Nothing on the squad clears the floor
-       against this" — a team-dossier sentence that appeared on 91% of the
-       plates in a duel report, where there is no squad and no floor. */
-    const vs = d.blocks.find((b) => b.kind === 'versus') as { emptyNote?: string };
-    expect(vs.emptyNote).toContain('without the opponent deck');
-    expect(vs.emptyNote).not.toContain('squad');
-  });
-
-  it('names the duel by date and opponent, with the score in the note', () => {
-    const vs = d.blocks.find((b) => b.kind === 'versus') as {
-      heading?: string; note?: string;
+  it('leaves the right side empty and SAYS WHY when nothing was stored', () => {
+    const s = d.blocks.find((b) => b.kind === 'series') as {
+      rows: { right: unknown[]; rightNote?: string; score: string }[];
     };
-    expect(vs.heading).toBe('2026-09-01 · Sarac');
-    expect(vs.note).toContain('2-1');
-    const rows = d.blocks.find((b) => b.kind === 'decks') as {
-      heading?: string; note?: string;
-    };
-    // The tag when no name was ever stored.
-    expect(rows.heading).toContain('#XYZ');
-    // An unverified score is SAID, never printed as 0-0.
-    expect(rows.note).toContain('score not stored');
-    expect(rows.note).not.toContain('0-0');
+    expect(s.rows[1].right).toHaveLength(0);
+    expect(s.rows[1].rightNote).toContain('never recorded');
+    // An unverified score is EMPTY, never printed as 0-0.
+    expect(s.rows[1].score).toBe('');
   });
 
-  it('caps the loadout tail and says how many it left out', () => {
-    const many = Array.from({ length: 20 }, (_, i) => ({
+  it('names the opponent, or falls back to their tag', () => {
+    const s = d.blocks.find((b) => b.kind === 'series') as {
+      rows: { rightLabel: string }[];
+    };
+    expect(s.rows[0].rightLabel).toBe('Sarac');
+    expect(s.rows[1].rightLabel).toBe('#XYZ');
+  });
+
+  it('caps the log and counts what it left out', () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({
       id: `n${i}`, startTime: '2026-09-02T10:00:00Z', opponentTag: '#XYZ',
       opponentName: '#XYZ', source: 'native', format: 'bo3',
       games: [game(0, 'Loadout', false)],
       playerWins: null, opponentWins: null, caption: '', won: false,
     }));
     const big = duelZoneDoc(zone({ series: many }), 'X');
-    expect(big.blocks.filter((b) => b.kind === 'decks')).toHaveLength(12);
-    const note = big.blocks.find(
-      (b) => b.kind === 'note' && (b as { body?: string }).body?.includes('further duels'),
-    );
-    expect(note).toBeTruthy();
+    const s = big.blocks.find((b) => b.kind === 'series') as { rows: unknown[] };
+    expect(s.rows).toHaveLength(24);
+    expect(big.blocks.some(
+      (b) => b.kind === 'note' && (b as { body?: string }).body?.includes('older duels'),
+    )).toBe(true);
   });
 
   it('distinguishes an observed sequence from a predicted one', () => {

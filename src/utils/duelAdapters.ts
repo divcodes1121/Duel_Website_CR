@@ -44,18 +44,6 @@ function oppName(s: { opponentName: string; opponentTag: string }): string {
     : s.opponentTag;
 }
 
-/** Format, score and shape — and an unverified score is SAID, never 0-0. */
-function seriesNote(s: {
-  format: string; playerWins: number | null; opponentWins: number | null;
-  caption: string; source: string;
-}): string {
-  const score = s.playerWins === null || s.opponentWins === null
-    ? 'score not stored'
-    : `${s.playerWins}-${s.opponentWins}`;
-  return `${s.format === 'bo5' ? 'Bo5' : 'Bo3'} · ${score}`
-    + (s.caption ? ` · ${s.caption}` : '');
-}
-
 /* ------------------------------------------------------------- Duel Zone */
 
 export function duelZoneDoc(r: DuelZoneReport, tag: string): ReportDoc {
@@ -85,100 +73,69 @@ export function duelZoneDoc(r: DuelZoneReport, tag: string): ReportDoc {
     },
   ];
 
-  /* TWO KINDS OF DUEL, AND THE DIFFERENCE IS THE DATA, NOT A PREFERENCE.
+  /* EVERY DUEL AS ONE ROW: your loadout, the score, theirs.
      
-     MEASURED on a real player with 113 duels: 104 of them are NATIVE rows,
-     and a native row stores the whole loadout in one record with NO per-game
-     opponent. Only 25 of 277 games — 9% — have an opponent deck at all.
+     THE LAYOUT UNIT WAS WRONG TWICE BEFORE THIS. First a five-column text
+     table with no card art at all; then each GAME as a full-width versus
+     pair, which stacked three plates to a sheet and turned a 113-duel history
+     into a 113-page document — while splitting the very comparison a duel
+     invites, one loadout against the other, across three pages.
      
-     So a blanket "print every duel as VS" draws an empty right-hand plate on
-     nine games in ten, which is not a versus and reads as broken. Worse, the
-     empty plate was captioned with a sentence written for the team dossier
-     ("nothing on the squad clears the floor"), which is meaningless here.
+     A series is one row. Three deck grids left, the score in the middle,
+     three right, three series to a sheet. That is what the screen does and
+     what the Discord report has always done.
      
-     The two cases are therefore separated:
+     THE SCORE IS PER GAME AND IT PRINTS UNDER EACH DECK, because "which deck
+     took which game" is the question a loadout comparison is actually asking.
      
-       BOTH SIDES STORED  -> a VS sheet, all its games, player against
-                             opponent, which is what was asked for and what
-                             the data can actually support.
-       LOADOUT ONLY       -> the three decks as rows, with the reason the
-                             other half is missing stated once. Printing an
-                             empty plate three times per duel says nothing
-                             the sentence does not say better.
-     
-     It also fixes the page count. 113 duels each owning a sheet is a 113-page
-     PDF; VS sheets go to the duels that can fill them and the rest are rows. */
-  const withOpp = r.series.filter((s) => s.games.some((g) => g.opponent));
-  const loadoutOnly = r.series.filter((s) => !s.games.some((g) => g.opponent));
-
-  for (const s of withOpp) {
-    const pairs = s.games.map((g) => ({
-      left: {
-        name: g.deckName || g.archetype,
-        meta: `G${g.slot + 1} · ${g.avgElixir.toFixed(1)} elixir`,
-        value: g.playerCrowns !== undefined && g.opponentCrowns !== undefined
-          ? `${g.playerCrowns}-${g.opponentCrowns}`
-          : undefined,
-        valueNote: g.result || undefined,
-        cards: g.cards,
-        art: g.art,
-        inferredArt: g.artInferred,
-      },
-      right: g.opponent
-        ? {
-            name: g.opponent.deckName || g.opponent.archetype,
-            meta: g.opponent.avgElixir != null
-              ? `${g.opponent.avgElixir.toFixed(1)} elixir`
-              : undefined,
-            cards: g.opponent.cards,
-            art: g.opponent.art,
-            inferredArt: g.opponent.artInferred,
-          }
-        : null,
-    }));
-    if (!pairs.length) continue;
-    /* A DUEL OWNS ITS SHEET — three games are one duel and splitting them is
-       the thing `compact` exists to stop. */
-    blocks.push({ kind: 'break' });
+     MEASURED ON PRODUCTION: 104 of a real player's 113 duels are native rows,
+     which store a loadout and NO per-game opponent — so the right-hand side
+     is genuinely absent nine times in ten, and it says why rather than
+     drawing an empty grid. */
+  const CAP = 24;
+  const shown = r.series.slice(0, CAP);
+  if (shown.length) {
     blocks.push({
-      kind: 'versus',
-      compact: true,
-      heading: `${DAY(s.startTime)} · ${oppName(s)}`,
-      note: seriesNote(s),
-      leftLabel: 'You',
-      rightLabel: 'Them',
-      emptyNote: 'This game was stored without the opponent deck.',
-      pairs,
-    });
-  }
-
-  /* The rest, as loadouts. Capped, because the tail of a long duel history is
-     the part nobody reads and every sheet of it is weight in a file that has
-     to open on a phone. The cap is STATED, never silent. */
-  const LOADOUT_CAP = 12;
-  const shownLoadouts = loadoutOnly.slice(0, LOADOUT_CAP);
-  if (shownLoadouts.length) {
-    blocks.push({ kind: 'break' });
-    for (const [i, s] of shownLoadouts.entries()) {
-      blocks.push({
-        kind: 'decks',
-        heading: `${DAY(s.startTime)} · ${oppName(s)}`,
-        note: i === 0
-          ? `${seriesNote(s)} — these duels are stored as one loadout row, so the opponent's decks were never recorded.`
-          : seriesNote(s),
-        decks: s.games.map((g) => ({
+      kind: 'series',
+      heading: 'The series log',
+      note: `${shown.length === r.series.length
+        ? `All ${int(r.series.length)}`
+        : `The ${int(shown.length)} most recent of ${int(r.series.length)}`}`
+        + ' · your loadout against theirs',
+      rows: shown.map((s) => ({
+        leftLabel: 'You',
+        rightLabel: oppName(s),
+        score: s.playerWins === null || s.opponentWins === null
+          ? ''
+          : `${s.playerWins}-${s.opponentWins}`,
+        caption: s.caption || '',
+        date: DAY(s.startTime),
+        format: s.format === 'bo5' ? 'Bo5' : 'Bo3',
+        won: s.won,
+        left: s.games.map((g) => ({
           name: g.deckName || g.archetype,
-          meta: `G${g.slot + 1} · ${g.avgElixir.toFixed(1)} elixir`,
+          value: g.playerCrowns !== undefined && g.opponentCrowns !== undefined
+            ? `${g.playerCrowns}-${g.opponentCrowns}`
+            : undefined,
           cards: g.cards,
           art: g.art,
           inferredArt: g.artInferred,
         })),
-      });
-    }
-    if (loadoutOnly.length > LOADOUT_CAP) {
+        right: s.games
+          .filter((g) => g.opponent)
+          .map((g) => ({
+            name: g.opponent!.deckName || g.opponent!.archetype,
+            cards: g.opponent!.cards,
+            art: g.opponent!.art,
+            inferredArt: g.opponent!.artInferred,
+          })),
+        rightNote: 'Stored as one loadout row, so the opponent decks were never recorded.',
+      })),
+    });
+    if (r.series.length > CAP) {
       blocks.push({
         kind: 'note',
-        body: `${int(loadoutOnly.length - LOADOUT_CAP)} further duels are stored the same way and are not printed here.`,
+        body: `${int(r.series.length - CAP)} older duels are not printed here.`,
       });
     }
   }
@@ -213,7 +170,20 @@ export function duelZoneDoc(r: DuelZoneReport, tag: string): ReportDoc {
     });
   }
 
+  /* COUNTED, never asserted. Every clause below is arithmetic over the same
+     rows the pages above print, so a reader can check it from the document
+     itself — the rule the closing band and the release feed follow. */
+  const decided = r.series.filter((s) => s.playerWins !== null).length;
+  const swept = r.series.filter(
+    (s) => s.playerWins !== null && s.opponentWins === 0,
+  ).length;
+  const read = s.duels
+    ? `${int(s.native)} of your ${int(s.duels)} duels are stored as one loadout row`
+      + `${decided ? `; ${int(swept)} of the ${int(decided)} with a recorded score were sweeps` : ''}.`
+    : undefined;
+
   return {
+    read,
     screen: 'Duel Zone',
     subject: `#${tag.replace(/^#/, '')}`,
     hue: 'violet',
@@ -292,7 +262,18 @@ export function duelAnalysisDoc(r: DuelReport, tag: string): ReportDoc {
     });
   }
 
+  const tabs = Object.values(r.tabs ?? {});
+  const best = tabs
+    .flatMap((x) => x?.rows ?? [])
+    .filter((x) => x.games >= r.floors.minGames)
+    .sort((a2, b2) => b2.winRate - a2.winRate)[0];
+  const read = best
+    ? `Your strongest pairing is ${best.name || `${best.aName} + ${best.bName}`}`
+      + ` at ${pct(best.winRate, 1)} over ${int(best.games)} games.`
+    : undefined;
+
   return {
+    read,
     screen: 'Duel Analysis',
     subject: `#${tag.replace(/^#/, '')}`,
     hue: 'violet',

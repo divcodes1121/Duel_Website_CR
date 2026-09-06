@@ -205,6 +205,39 @@ export interface PairsBlock extends BlockBase {
   }[];
 }
 
+/**
+ * A DUEL SERIES AS ONE ROW: your loadout, the score, theirs.
+ *
+ * THE LAYOUT UNIT WAS WRONG BEFORE THIS. Each game was drawn as a full-width
+ * versus pair, so three games stacked to a whole sheet and a 113-duel history
+ * became a 113-page document — while the thing a reader actually compares,
+ * one loadout against the other, was split across three plates.
+ *
+ * A series is ONE ROW: three small deck grids on the left, the score in the
+ * middle, three on the right. Three series to a sheet. That is how the Discord
+ * report has always drawn it and it is right for the same reason the website
+ * is — a duel is a comparison between two LOADOUTS, and a comparison has to
+ * be side by side to be one.
+ */
+export interface SeriesBlock extends BlockBase {
+  kind: 'series';
+  rows: {
+    leftLabel: string;
+    rightLabel: string;
+    /** "2-1", or '' when the server could not verify a score. */
+    score: string;
+    /** "EDGED IT", "SHUT OUT" — the shape of the result, '' when unverified. */
+    caption: string;
+    date: string;
+    format: string;
+    won: boolean;
+    left: DeckLine[];
+    right: DeckLine[];
+    /** Why the right-hand side is empty, when it is. */
+    rightNote?: string;
+  }[];
+}
+
 export interface VersusBlock extends BlockBase {
   kind: 'versus';
   leftLabel?: string;
@@ -255,7 +288,8 @@ export type ReportBlock =
   | MatrixBlock
   | SpreadBlock
   | VersusBlock
-  | PairsBlock;
+  | PairsBlock
+  | SeriesBlock;
 
 
 /**
@@ -340,6 +374,15 @@ export interface ReportDoc {
    *  interpret the numbers, which is why they are on the cover and not omitted
    *  for tidiness. */
   meta: { label: string; value: string }[];
+  /**
+   * One sentence at the foot of the report saying what it MEANS.
+   *
+   * It must be COUNTED from something already on the page — the same rule the
+   * closing band and the release feed follow. A document that states a
+   * conclusion nobody can check from the tables above it is editorialising,
+   * and this is the one line with the standing to do that.
+   */
+  read?: string;
   blocks: ReportBlock[];
   /** Printed at the foot of the last page. The place to say what the report
    *  cannot say. */

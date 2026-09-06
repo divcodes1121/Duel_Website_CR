@@ -18,6 +18,7 @@ import {
   type TableBlock,
   type TableCell,
   type PairsBlock,
+  type SeriesBlock,
   type VersusBlock,
 } from './analyticsReport';
 
@@ -312,6 +313,8 @@ function clip(doc: JsPdfType, text: string, maxWidth: number): string {
 /* ----------------------------------------------------------------- state */
 
 interface Ctx {
+  /** Which numbered section the page belongs to — printed as "03 /". */
+  section: number;
   doc: JsPdfType;
   p: Palette;
   docModel: ReportDoc;
@@ -388,56 +391,148 @@ function firstChunk(block: ReportBlock): number {
     case 'matrix': return 15 + 11 * 2;   // column heads + two rows
     case 'spread': return 11 + 8;        // the band and its first legend line
     case 'pairs': return 44;             // one row of three tiles
+    case 'series': return 35;            // one whole series row
     case 'versus': return 100;           // one full pair — they stand ~94 mm
     default: return 0;
   }
 }
 
+/**
+ * THE FRAME. Every page of every report is drawn inside one panel with
+ * bracketed corners, and it is the whole reason the document reads as a
+ * DOCUMENT rather than as blocks on a background.
+ *
+ * It lives in `paintPage`, which every page calls, so a section added later
+ * inherits the shell without knowing it exists — chrome that has to be
+ * remembered is chrome that eventually is not.
+ */
 function paintPage(ctx: Ctx) {
   const { doc, p } = ctx;
   fill(doc, p.page);
   doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
+
+  // The panel: a hair lighter than the page, so the edge is felt rather than
+  // seen. On light themes `sunken` is a hair darker and the effect inverts
+  // correctly without a per-theme branch.
+  const M = 6;
+  fill(doc, p.sunken);
+  stroke(doc, p.border);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(M, M, PAGE_W - M * 2, PAGE_H - M * 2, 4, 4, 'FD');
+
+  /* CORNER BRACKETS — four L-marks just inside the panel. They cost four
+     strokes and they are what makes a page look composed rather than cropped:
+     the eye reads the bracket as the document's own edge and stops looking for
+     one. Drawn in the report's hue at low weight, so they belong to the
+     section without competing with it. */
+  const B = 9;      // arm length
+  const I = 11;     // inset from the page edge
+  stroke(doc, p.border);
+  doc.setLineWidth(0.8);
+  const corner = (x: number, y: number, sx: number, sy: number) => {
+    doc.line(x, y, x + B * sx, y);
+    doc.line(x, y, x, y + B * sy);
+  };
+  corner(I, I, 1, 1);
+  corner(PAGE_W - I, I, -1, 1);
+  corner(I, PAGE_H - I, 1, -1);
+  corner(PAGE_W - I, PAGE_H - I, -1, -1);
 }
 
+/**
+ * THE SECTION HEAD: a serial number, the title in display caps, the subject on
+ * the right, and a rule under the lot.
+ *
+ * It replaced a filled pill of the section's hue with white lettering. A pill
+ * is a BUTTON's shape — it reads as something to press, and repeating it on
+ * every page of a printed document makes each page look like the start of a
+ * new thing. A numbered rule reads as a section of one document, which is what
+ * these pages are.
+ */
 function header(ctx: Ctx) {
   const { doc, p, docModel } = ctx;
-  const accent = hueColor(p, docModel.hue, true);
+  const accent = hueColor(p, docModel.hue);
 
-  // A solid block of the screen's own hue with white lettering — the painted
-  // heading the app uses for area titles. `--on-solid` is graded so white holds
-  // 5.5:1 on every solid step in both themes, so no per-theme variant here.
+  // The serial. Small, in the section's hue, and it is what tells a reader
+  // three sheets deep which part of the report they are in.
+  setFont(doc, 'sans', true);
+  doc.setFontSize(6.4);
+  ink(doc, accent);
+  doc.text(`${String(ctx.section).padStart(2, '0')} /`, MARGIN, 18.5,
+    { charSpace: 0.4 });
+
   setFont(doc, 'display');
   doc.setFontSize(15);
-  const title = docModel.screen;
-  const tw = doc.getTextWidth(title);
-  fill(doc, accent);
-  doc.roundedRect(MARGIN, 12, tw + 8, 10, 2.5, 2.5, 'F');
-  ink(doc, p.onSolid);
-  doc.text(title, MARGIN + 4, 19.2);
+  ink(doc, p.text);
+  doc.text(docModel.screen.toUpperCase(), MARGIN + 11, 19.4, { charSpace: 0.9 });
 
   if (docModel.subject) {
     setFont(doc, 'sans', true);
-    doc.setFontSize(10);
-    ink(doc, p.text);
-    doc.text(docModel.subject, MARGIN + tw + 14, 19);
+    doc.setFontSize(8);
+    ink(doc, p.muted);
+    doc.text(docModel.subject, PAGE_W - MARGIN, 19, { align: 'right', charSpace: 0.4 });
   }
 
-  stroke(doc, p.border);
-  doc.setLineWidth(0.3);
-  doc.line(MARGIN, 25, PAGE_W - MARGIN, 25);
+  // A rule that STARTS in the section's hue and fades to the border — the one
+  // piece of colour on a body page, and it points along the reading direction.
+  fill(doc, accent);
+  doc.rect(MARGIN, 23.4, 26, 0.7, 'F');
+  fill(doc, p.border);
+  doc.rect(MARGIN + 26, 23.6, CONTENT_W - 26, 0.3, 'F');
 }
 
+/**
+ * THREE THINGS, IN THREE PLACES: who made it, what you are reading, where you
+ * are. The middle one is the addition — a page number tells you how far
+ * through you are and nothing about what you are looking at, and a reader who
+ * opens a 20-page report at page 11 needs the second more than the first.
+ */
 function footer(ctx: Ctx, total: number) {
-  const { doc, p } = ctx;
-  stroke(doc, p.border);
-  doc.setLineWidth(0.3);
-  doc.line(MARGIN, FOOTER_Y - 4, PAGE_W - MARGIN, FOOTER_Y - 4);
+  const { doc, p, docModel } = ctx;
+  fill(doc, p.border);
+  doc.rect(MARGIN, FOOTER_Y - 4, CONTENT_W, 0.25, 'F');
+
+  setFont(doc, 'sans', true);
+  doc.setFontSize(6);
+  ink(doc, p.muted);
+  doc.text('DECKKIES', MARGIN, FOOTER_Y, { charSpace: 0.5 });
+  doc.text((ctx.flow || docModel.screen).toUpperCase(), PAGE_W / 2, FOOTER_Y,
+    { align: 'center', charSpace: 0.5 });
+  doc.text(`PAGE ${ctx.page} / ${total}`, PAGE_W - MARGIN, FOOTER_Y,
+    { align: 'right', charSpace: 0.5 });
+}
+
+/**
+ * THE READ — one sentence at the foot of a section, behind an accent bar.
+ *
+ * It is the only place in the document that says what a page MEANS rather
+ * than what it contains, and it is deliberately one sentence: a reader who
+ * wanted the working has the tables above it, and a reader who wanted the
+ * answer should not have to derive it from them.
+ *
+ * Every sentence comes from an adapter and every adapter builds it by
+ * COUNTING something already on the page. Nothing here is generated and
+ * nothing is inferred — the rule the closing band and the release feed
+ * follow, applied to a document that could otherwise editorialise freely.
+ */
+function drawRead(ctx: Ctx, text: string) {
+  const { doc, p, docModel } = ctx;
+  const H = 13;
+  const y = BODY_BOTTOM - H + 2;
+  fill(doc, p.nested);
+  doc.roundedRect(MARGIN, y, CONTENT_W, H, 2, 2, 'F');
+  fill(doc, hueColor(p, docModel.hue));
+  doc.roundedRect(MARGIN, y, 1.6, H, 0.8, 0.8, 'F');
+
+  setFont(doc, 'sans', true);
+  doc.setFontSize(5.6);
+  ink(doc, hueColor(p, docModel.hue));
+  doc.text('THE READ', MARGIN + 6, y + 7.6, { charSpace: 0.5 });
 
   setFont(doc, 'sans');
-  doc.setFontSize(7.5);
-  ink(doc, p.muted);
-  doc.text('Deckkies', MARGIN, FOOTER_Y);
-  doc.text(`${ctx.page} / ${total}`, PAGE_W - MARGIN, FOOTER_Y, { align: 'right' });
+  doc.setFontSize(8.6);
+  ink(doc, p.text);
+  doc.text(clip(doc, text, CONTENT_W - 40), MARGIN + 30, y + 8);
 }
 
 /* ---------------------------------------------------------------- blocks */
@@ -751,6 +846,8 @@ function drawDecks(ctx: Ctx, decks: DeckLine[]) {
  * recognisable at thumb speed, and a heading in the body text is not one.
  */
 function drawDivider(ctx: Ctx, block: DividerBlock) {
+  // Each divider opens a numbered section — what the header prints as "03 /".
+  ctx.section += 1;
   const { doc, p } = ctx;
   newPage(ctx, 'bare');
   // A divider is not a continuation of anything.
@@ -1192,6 +1289,110 @@ function drawPairs(ctx: Ctx, block: PairsBlock) {
   ctx.y += 2;
 }
 
+
+/**
+ * One duel series as a row: your three decks, the score, their three.
+ *
+ * THE ARITHMETIC, because it is what decides whether this reads at all. The
+ * body is 277 mm. The score column takes 34 and the two gutters 8, leaving
+ * 235 for six deck grids — 39 mm each, four cards across, so a card is 8.5 mm
+ * and a 4x2 grid stands 21. A row is 32 mm and three series fit a sheet.
+ *
+ * Small cards, and deliberately: the comparison a duel invites is between two
+ * LOADOUTS, and a loadout you have to turn a page to finish is not being
+ * compared to anything. Legibility of the individual card is the thing traded
+ * away, and the deck's NAME is printed under it precisely because the art
+ * alone is no longer enough to identify it.
+ */
+function drawSeriesRows(ctx: Ctx, block: SeriesBlock) {
+  const { doc, p } = ctx;
+  const SCORE_W = 34;
+  const GUT = 4;
+  const sideW = (CONTENT_W - SCORE_W - GUT * 2) / 2;
+  const cellW = (sideW - 4) / 3;
+  const cw = (cellW - 3) / 4;
+  const ch = cw / CARD_RATIO;
+  const ROW = 12 + ch * 2 + 1 + 6;
+
+  const grid = (cards: string[], art: Record<string, 'evolution' | 'hero'> | undefined,
+                x: number, y: number) => {
+    cards.slice(0, 8).forEach((card, i) => {
+      const url = artUrl(card, art?.[card]);
+      const data = ctx.tiles.get(url);
+      const gx = x + (i % 4) * (cw + 1);
+      const gy = y + Math.floor(i / 4) * (ch + 1);
+      if (data) doc.addImage(data, 'JPEG', gx, gy, cw, ch, url, 'FAST');
+      else { fill(doc, p.sunken); doc.roundedRect(gx, gy, cw, ch, 0.5, 0.5, 'F'); }
+    });
+  };
+
+  const side = (decks: DeckLine[], x0: number, y: number, hue: ReportHue,
+                label: string, alignRight: boolean) => {
+    fill(doc, p.nested);
+    stroke(doc, p.border);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x0, y, sideW, ROW, 2, 2, 'FD');
+
+    setFont(doc, 'sans', true);
+    doc.setFontSize(5.6);
+    ink(doc, hueColor(p, hue));
+    doc.text(clip(doc, label.toUpperCase(), sideW - 6),
+      alignRight ? x0 + sideW - 3 : x0 + 3, y + 4.4,
+      alignRight ? { align: 'right', charSpace: 0.3 } : { charSpace: 0.3 });
+
+    decks.slice(0, 3).forEach((d, n) => {
+      const cx = x0 + 2 + n * (cellW + 1);
+      grid(d.cards, d.art, cx, y + 6.5);
+      // THE NAME IS NOT OPTIONAL at this card size — it is what identifies the
+      // deck once the art is 8.5 mm.
+      setFont(doc, 'sans', true);
+      doc.setFontSize(5);
+      ink(doc, p.muted);
+      doc.text(clip(doc, `${d.name}${d.value ? `  ${d.value}` : ''}`, cellW),
+        cx, y + ROW - 2.4);
+    });
+  };
+
+  for (const r of block.rows) {
+    reserve(ctx, ROW + 3);
+    const y = ctx.y;
+    side(r.left, MARGIN, y, 'blue', r.leftLabel, false);
+
+    const sx = MARGIN + sideW + GUT;
+    setFont(doc, 'sans', true);
+    doc.setFontSize(5.4);
+    ink(doc, p.muted);
+    doc.text(r.format.toUpperCase(), sx + SCORE_W / 2, y + 4.4,
+      { align: 'center', charSpace: 0.3 });
+
+    // THE SCORE CARRIES THE RESULT IN ITS COLOUR, which is the one thing a
+    // reader scanning a page of duels is looking for.
+    setFont(doc, 'display');
+    doc.setFontSize(16);
+    ink(doc, r.score ? hueColor(p, r.won ? 'green' : 'pink') : p.muted);
+    doc.text(r.score || '—', sx + SCORE_W / 2, y + ROW / 2 + 1, { align: 'center' });
+
+    setFont(doc, 'sans', true);
+    doc.setFontSize(4.8);
+    ink(doc, p.muted);
+    if (r.caption) {
+      doc.text(clip(doc, r.caption.toUpperCase(), SCORE_W),
+        sx + SCORE_W / 2, y + ROW / 2 + 5, { align: 'center', charSpace: 0.3 });
+    }
+    doc.text(r.date.toUpperCase(), sx + SCORE_W / 2, y + ROW - 2.4,
+      { align: 'center', charSpace: 0.2 });
+
+    if (r.right.length) {
+      side(r.right, sx + SCORE_W + GUT, y, 'pink', r.rightLabel, true);
+    } else {
+      emptyPlate(ctx, sx + SCORE_W + GUT, y, sideW, ROW,
+        r.rightNote ?? 'Opponent decks were not stored for this duel.');
+    }
+    ctx.y = y + ROW + 3;
+  }
+  ctx.y += 1;
+}
+
 function drawVersus(ctx: Ctx, block: VersusBlock) {
   const { doc, p } = ctx;
   const GUT = VS_GUTTER;
@@ -1446,6 +1647,8 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
       ? b.decks
       : b.kind === 'versus'
         ? b.pairs.flatMap((pr) => (pr.right ? [pr.left, pr.right] : [pr.left]))
+        : b.kind === 'series'
+          ? b.rows.flatMap((rw) => [...rw.left, ...rw.right])
         : b.kind === 'pairs'
           ? b.pairs.map((pr) => ({
               name: pr.name,
@@ -1464,7 +1667,7 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
     }),
   );
 
-  const ctx: Ctx = { doc, p, docModel, tiles, y: BODY_TOP, page: 1, contents: [], flow: null };
+  const ctx: Ctx = { section: 1, doc, p, docModel, tiles, y: BODY_TOP, page: 1, contents: [], flow: null };
 
   drawCover(ctx);
 
@@ -1534,6 +1737,7 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
       case 'matrix': drawMatrix(ctx, block); break;
       case 'spread': drawSpread(ctx, block); break;
       case 'pairs': drawPairs(ctx, block); break;
+      case 'series': drawSeriesRows(ctx, block); break;
       case 'versus': drawVersus(ctx, block); break;
     }
   }
@@ -1561,6 +1765,14 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
       lines.forEach((ln, i) => doc.text(ln, MARGIN, ctx.y + i * 3.6));
       ctx.y += lines.length * 3.6 + 1.5;
     }
+  }
+
+  /* THE READ, if the adapter supplied one — the one sentence saying what all
+     of this meant, sitting where a reader who has finished will look. */
+  if (docModel.read) {
+    reserve(ctx, 18);
+    drawRead(ctx, docModel.read);
+    ctx.y += 16;
   }
 
   /* A DOCUMENT THAT STOPS HAS NOT ENDED. Forty pages of sections that each
