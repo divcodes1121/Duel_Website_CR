@@ -1911,8 +1911,17 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
   setFont(doc, 'sans');
   doc.setFontSize(7);
   ink(doc, p.muted);
+  /* THE BUILD ID IS HERE SO THE FILE CAN ANSWER "WHICH CODE MADE YOU".
+     Twice now an export has been reported as "still the old layout" against a
+     deploy that was provably current, and settling it meant fetching the
+     served bundle and grepping it for a minified fragment. A stamp that does
+     not match the commit which shipped a change means the browser is running
+     older JS — which is a different problem from a deploy that did not land,
+     and the two are indistinguishable without it. */
   doc.text(
-    `${docModel.screen}${docModel.subject ? ` — ${docModel.subject}` : ''} · generated ${new Date().toLocaleString('en-GB')}`,
+    `${docModel.screen}${docModel.subject ? ` — ${docModel.subject}` : ''}`
+      + ` · generated ${new Date().toLocaleString('en-GB')}`
+      + ` · build ${typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev'}`,
     PAGE_W - MARGIN,
     ctx.y,
     { align: 'right' },
