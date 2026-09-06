@@ -253,32 +253,41 @@ export function duelAnalysisDoc(r: DuelReport, tag: string): ReportDoc {
 
   /* EVERY TAB THE SCREEN HAS, in the order the screen has them — a reader who
      exported "the page" should get the page, not the tab that happened to be
-     open when they pressed the button. */
+     open when the button was pressed.
+
+     AS CARD PAIRS, NOT AS A TABLE. This was five text columns and the PAIRING
+     column was 40 mm, so every entry printed truncated: "Electro Spirit + ...",
+     "Battle Ram + M...", "Hog Rider + Th...". On a report whose whole subject
+     is WHICH TWO CARDS go together, naming only the first of the two is not a
+     cosmetic problem — the document stopped answering its own question. The
+     screen draws both cards for exactly this reason and now so does the PDF.
+
+     Capped at 24 a tab. The tail of a ranked list is where the figures are
+     thinnest and the sheets are heaviest, and the cap is STATED below rather
+     than silently applied. */
+  const PER_TAB = 24;
   for (const tab of Object.values(r.tabs ?? {})) {
     if (!tab?.rows?.length) continue;
+    const shown = tab.rows.slice(0, PER_TAB);
     blocks.push({
-      kind: 'table',
+      kind: 'pairs',
       heading: tab.label,
-      note: `${tab.blurb} ${int(tab.eligible)} ${tab.noun} cleared the floor.`,
-      columns: [
-        { key: 'pair', label: 'Pairing' },
-        { key: 'games', label: 'Games', align: 'right' },
-        { key: 'win', label: 'Win rate', align: 'right' },
-        { key: 'use', label: 'Use rate', align: 'right' },
-        { key: 'decks', label: 'Decks', align: 'right' },
-        { key: 'lock', label: 'Lock' },
-      ],
-      /* API RATES ARE PERCENT (0-100), NOT FRACTIONS. `pct()` FORMATS; it does
-         not convert. Multiplying by 100 here is what once printed 73.5% as
-         "7350.0%" in a shipped report, and both sides are `number` so nothing
-         catches it but reading the payload. */
-      rows: tab.rows.slice(0, 40).map((x) => ({
-        pair: x.name || `${x.aName} + ${x.bName}`,
-        games: int(x.games),
-        win: pct(x.winRate, 1),
-        use: pct(x.useRate, 1),
-        decks: int(x.decks),
-        lock: x.lockClass === 'unknown' ? '—' : x.lockClass,
+      note: `${tab.blurb} ${int(tab.eligible)} cleared the ${r.floors.minGames}-game floor`
+        + (tab.rows.length > PER_TAB
+          ? `; the ${int(shown.length)} most-played are shown.`
+          : '.'),
+      /* API RATES ARE PERCENT (0-100). `pct()` FORMATS and does not convert —
+         dividing here prints 56.5% as "0.6%", and the mirror error once
+         shipped "7350.0%". */
+      pairs: shown.map((x) => ({
+        a: x.a,
+        b: x.b,
+        artA: x.artA,
+        artB: x.artB,
+        name: x.name || `${x.aName} + ${x.bName}`,
+        meta: `${int(x.games)} games · ${pct(x.useRate, 1)} of play · ${int(x.decks)} decks`
+          + (x.lockClass && x.lockClass !== 'unknown' ? ` · ${x.lockClass}` : ''),
+        value: pct(x.winRate, 1),
       })),
     });
   }

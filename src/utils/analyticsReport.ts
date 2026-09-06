@@ -181,6 +181,30 @@ export interface SpreadBlock extends BlockBase {
  * and a list cannot say that. Printed 4x2 a side so the art is large enough to
  * recognise a card from across a table, which is what these get used for.
  */
+/**
+ * A grid of CARD PAIRS, each with its own figures.
+ *
+ * Duel Analysis is a board of two-card combinations and it exported as a
+ * five-column text table, where the PAIRING column was 40 mm wide — so every
+ * name arrived truncated: "Electro Spirit + ...", "Battle Ram + M...",
+ * "Hog Rider + Th...". A report whose subject is which two cards go together
+ * cannot name only the first of the two. The screen draws both cards; so does
+ * this.
+ */
+export interface PairsBlock extends BlockBase {
+  kind: 'pairs';
+  pairs: {
+    a: string;
+    b: string;
+    artA?: 'evolution' | 'hero';
+    artB?: 'evolution' | 'hero';
+    name: string;
+    meta?: string;
+    value?: string;
+    valueNote?: string;
+  }[];
+}
+
 export interface VersusBlock extends BlockBase {
   kind: 'versus';
   leftLabel?: string;
@@ -230,7 +254,8 @@ export type ReportBlock =
   | DividerBlock
   | MatrixBlock
   | SpreadBlock
-  | VersusBlock;
+  | VersusBlock
+  | PairsBlock;
 
 
 /**

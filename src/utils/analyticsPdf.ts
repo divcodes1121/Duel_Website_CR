@@ -17,6 +17,7 @@ import {
   type SpreadBlock,
   type TableBlock,
   type TableCell,
+  type PairsBlock,
   type VersusBlock,
 } from './analyticsReport';
 
@@ -386,6 +387,7 @@ function firstChunk(block: ReportBlock): number {
     case 'note': return 12;
     case 'matrix': return 15 + 11 * 2;   // column heads + two rows
     case 'spread': return 11 + 8;        // the band and its first legend line
+    case 'pairs': return 44;             // one row of three tiles
     case 'versus': return 100;           // one full pair — they stand ~94 mm
     default: return 0;
   }
@@ -1113,6 +1115,83 @@ function emptyPlate(ctx: Ctx, x: number, y: number, w: number, h: number, body: 
   );
 }
 
+/**
+ * A grid of card pairs. Three across, each tile naming BOTH cards.
+ *
+ * This replaces a five-column text table whose PAIRING column was 40 mm wide,
+ * so every entry printed truncated — "Battle Ram + M...", "Hog Rider + Th..."
+ * — on a report whose entire subject is which two cards go together. Drawing
+ * the two cards costs no more room than the truncated string did and says the
+ * thing the string could not.
+ *
+ * Three columns because the art is the point: at three the cards are ~20 mm
+ * and recognisable, at four they are ~14 mm and the tile becomes a caption
+ * with a decoration. Nine tiles a sheet.
+ */
+function drawPairs(ctx: Ctx, block: PairsBlock) {
+  const { doc, p } = ctx;
+  const COLS = 3;
+  const gap = 4;
+  const tw = (CONTENT_W - gap * (COLS - 1)) / COLS;
+  const cw = Math.min(20, (tw - 14) / 2);
+  const ch = cw / CARD_RATIO;
+  const TH = 12 + ch + 12;
+
+  block.pairs.forEach((pr, i) => {
+    const col = i % COLS;
+    if (col === 0) reserve(ctx, TH + gap);
+    const x = MARGIN + col * (tw + gap);
+    const y = ctx.y;
+
+    fill(doc, p.nested);
+    stroke(doc, p.border);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x, y, tw, TH, 2, 2, 'FD');
+
+    // The two cards, centred, with the plus between them — the same mark the
+    // screen uses, so a pair reads identically in both places.
+    const artW = cw * 2 + 6;
+    const ax = x + (tw - artW) / 2;
+    [[pr.a, pr.artA], [pr.b, pr.artB]].forEach(([card, art], n) => {
+      const url = artUrl(card as string, art as 'evolution' | 'hero' | undefined);
+      const data = ctx.tiles.get(url);
+      const cx = ax + n * (cw + 6);
+      if (data) {
+        doc.addImage(data, 'JPEG', cx, y + 4, cw, ch, url, 'FAST');
+      } else {
+        fill(doc, p.sunken);
+        doc.roundedRect(cx, y + 4, cw, ch, 0.8, 0.8, 'F');
+      }
+    });
+    setFont(doc, 'display');
+    doc.setFontSize(10);
+    ink(doc, p.muted);
+    doc.text('+', x + tw / 2, y + 4 + ch / 2 + 1.6, { align: 'center' });
+
+    // BOTH NAMES, on their own line, never truncated into the first one.
+    setFont(doc, 'sans', true);
+    doc.setFontSize(6.6);
+    ink(doc, p.text);
+    doc.text(clip(doc, pr.name, tw - 6), x + tw / 2, y + ch + 9, { align: 'center' });
+
+    if (pr.meta) {
+      setFont(doc, 'sans');
+      doc.setFontSize(5.8);
+      ink(doc, p.muted);
+      doc.text(clip(doc, pr.meta, tw - 6), x + tw / 2, y + ch + 13.5, { align: 'center' });
+    }
+    if (pr.value) {
+      setFont(doc, 'display');
+      doc.setFontSize(9);
+      ink(doc, hueColor(p, ctx.docModel.hue));
+      doc.text(pr.value, x + tw - 4, y + ch + 9, { align: 'right' });
+    }
+
+    if (col === COLS - 1 || i === block.pairs.length - 1) ctx.y += TH + gap;
+  });
+  ctx.y += 2;
+}
+
 function drawVersus(ctx: Ctx, block: VersusBlock) {
   const { doc, p } = ctx;
   const GUT = VS_GUTTER;
@@ -1359,12 +1438,24 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
   // Every card in the report, built once and reused by URL alias. Versus
   // plates hold decks too, so both block kinds are swept — missing the second
   // one would silently draw name-only placeholders for half the document.
+  /* THREE block kinds hold card art, and a kind left out of this sweep draws
+     name-only placeholders for its whole section — silently, because a
+     placeholder is a valid-looking tile. `pairs` is the third. */
   const decks = docModel.blocks.flatMap((b) =>
     b.kind === 'decks'
       ? b.decks
       : b.kind === 'versus'
         ? b.pairs.flatMap((pr) => (pr.right ? [pr.left, pr.right] : [pr.left]))
-        : [],
+        : b.kind === 'pairs'
+          ? b.pairs.map((pr) => ({
+              name: pr.name,
+              cards: [pr.a, pr.b],
+              art: {
+                ...(pr.artA ? { [pr.a]: pr.artA } : {}),
+                ...(pr.artB ? { [pr.b]: pr.artB } : {}),
+              },
+            }))
+          : [],
   );
   const tiles = new Map<string, string | null>();
   await Promise.all(
@@ -1442,6 +1533,7 @@ export async function renderAnalyticsReport(docModel: ReportDoc): Promise<Blob> 
       case 'note': drawNote(ctx, block.body); break;
       case 'matrix': drawMatrix(ctx, block); break;
       case 'spread': drawSpread(ctx, block); break;
+      case 'pairs': drawPairs(ctx, block); break;
       case 'versus': drawVersus(ctx, block); break;
     }
   }

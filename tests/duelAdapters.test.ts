@@ -233,7 +233,7 @@ function analysis(over: Record<string, unknown> = {}) {
         mostUsed: null, perSlot: [],
         rows: [{
           a: 'hog-rider', b: 'fireball', aName: 'Hog Rider', bName: 'Fireball',
-          name: 'Hog Rider + Fireball', games: 120, wins: 74,
+          name: 'Hog Rider + Fireball', games: 120, wins: 74, artB: 'evolution',
           winRate: 61.7, useRate: 28.4, decks: 9, lock: 0.4, lockClass: 'frequent',
         }],
       },
@@ -247,12 +247,30 @@ describe('duelAnalysisDoc', () => {
   const d = duelAnalysisDoc(analysis(), '2PP0PYLQ');
 
   it('passes API percentages straight through — pct() does not convert', () => {
-    const rows = (d.blocks[1] as { rows: Record<string, string>[] }).rows;
-    expect(rows[0].win).toBe('61.7%');
-    expect(rows[0].use).toBe('28.4%');
+    const pr = (d.blocks[1] as { pairs: Record<string, string>[] }).pairs[0];
+    expect(pr.value).toBe('61.7%');
+    expect(pr.meta).toContain('28.4% of play');
     // The classic failure: /100 gives '0.6%', *100 gives '6170.0%'.
-    expect(rows[0].win).not.toBe('0.6%');
-    expect(rows[0].win).not.toBe('6170.0%');
+    expect(pr.value).not.toBe('0.6%');
+    expect(pr.value).not.toBe('6170.0%');
+  });
+
+  it('draws the two CARDS, so a pairing is never truncated to its first half', () => {
+    /* This was a five-column table whose PAIRING column was 40 mm, so every
+       entry printed as "Battle Ram + M..." on a report whose subject is which
+       two cards go together. */
+    const b = d.blocks[1] as {
+      kind: string; pairs: { a: string; b: string; artB?: string; name: string }[];
+    };
+    expect(b.kind).toBe('pairs');
+    expect(b.pairs[0].a).toBe('hog-rider');
+    expect(b.pairs[0].b).toBe('fireball');
+    expect(b.pairs[0].name).toBe('Hog Rider + Fireball');
+  });
+
+  it('carries each card evolution or hero form through to the art', () => {
+    const b = d.blocks[1] as { pairs: { artA?: string; artB?: string }[] };
+    expect(b.pairs[0].artB).toBe('evolution');
   });
 
   it('treats evoCoverage as the 0-100 the screen prints', () => {
@@ -260,9 +278,18 @@ describe('duelAnalysisDoc', () => {
     expect(tiles[3].value).toBe('74%');
   });
 
-  it('uses the pairing name the API supplies', () => {
-    const rows = (d.blocks[1] as { rows: Record<string, string>[] }).rows;
-    expect(rows[0].pair).toBe('Hog Rider + Fireball');
+  it('states the per-tab cap rather than truncating silently', () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({
+      a: 'hog-rider', b: 'fireball', aName: 'Hog Rider', bName: 'Fireball',
+      name: `Pair ${i}`, games: 120, wins: 74,
+      winRate: 61.7, useRate: 28.4, decks: 9, lock: 0.4, lockClass: 'frequent',
+    }));
+    const big = duelAnalysisDoc(
+      analysis({ tabs: { t: { id: 't', label: 'T', blurb: 'B.', noun: 'pairings',
+        eligible: 40, mostUsed: null, perSlot: [], rows: many } } }), 'X');
+    const b = big.blocks[1] as { pairs: unknown[]; note?: string };
+    expect(b.pairs).toHaveLength(24);
+    expect(b.note).toContain('most-played are shown');
   });
 
   it('puts the evidence basis on the cover', () => {
