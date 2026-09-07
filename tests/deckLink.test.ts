@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getClashRoyaleDeckLink, parseClashRoyaleDeckLink } from '../src/utils/deckLink';
+import { getClashRoyaleDeckLink, getDeckLinkFromKeys, parseClashRoyaleDeckLink } from '../src/utils/deckLink';
 import { CARDS, CARDS_BY_KEY } from '../src/data/cards';
 import { createEmptyDeck, createEmptyDuelDeckSet, validateImportedDeck } from '../src/state/deckUtils';
 import type { Deck } from '../src/types/deck';
@@ -118,5 +118,47 @@ describe('validateImportedDeck', () => {
     set.decks[1].slots[0] = keys8[0];
     const result = validateImportedDeck(keys8, CARDS_BY_KEY);
     expect('slots' in result).toBe(true);
+  });
+});
+
+/* THE TWO CARDS ADDED FOR SEASON 87, PINNED.
+ *
+ * The card `id` is the one value here that could not be confirmed against a
+ * public source. Every fact around it was — Rare, 4 elixir, a Troop, a flying
+ * win condition that targets buildings — but no card database on the open web
+ * had published the numeric id yet, and the upstream snapshot this project
+ * refreshes from (`royaleapi.github.io/cr-api-data`) is still on 120 cards.
+ * 26000107 came from the account holder and is consistent with the sequence
+ * (Ronin, the previous troop, is 26000106).
+ *
+ * That matters because the id is not decoration: `deckLink.ts` builds the
+ * official copyDeck deep link out of it and parses incoming links by it, so a
+ * wrong number means "Open in Game" hands the game a card it does not
+ * recognise. Pinning it here means a future correction is a one-line change
+ * with a test that says what it is for, rather than a silent mystery about why
+ * one card breaks a deck link.
+ */
+describe('season 87 cards', () => {
+  it('Minion Giant is in the set with the researched values', () => {
+    const c = CARDS_BY_KEY.get('minion-giant');
+    expect(c).toBeTruthy();
+    expect({
+      elixir: c!.elixir, rarity: c!.rarity, type: c!.type,
+      id: c!.id, win: c!.isWinCondition,
+    }).toEqual({ elixir: 4, rarity: 'Rare', type: 'Troop', id: 26000107, win: true });
+  });
+
+  it('Minion Giant survives a deck-link roundtrip', () => {
+    const keys = ['minion-giant', 'knight', 'archers', 'arrows',
+                  'fireball', 'giant', 'musketeer', 'zap'];
+    const link = getDeckLinkFromKeys(keys);
+    expect(link).toContain('26000107');
+    expect(parseClashRoyaleDeckLink(link!)).toEqual(keys);
+  });
+
+  /* The Hero Ice Wizard is NOT a new card — it is a hero form of the Ice
+     Wizard that already existed, so it is a flag plus a file in `heroes/`. */
+  it('Ice Wizard can now be brought as a hero', () => {
+    expect(CARDS_BY_KEY.get('ice-wizard')!.canBeHero).toBe(true);
   });
 });

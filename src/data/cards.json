@@ -1584,5 +1584,18 @@
     "id": 26000106,
     "evolved_spells_sc_key": "",
     "is_evolved": false
+  },
+  {
+    "key": "minion-giant",
+    "name": "Minion Giant",
+    "sc_key": "MinionGiant",
+    "elixir": 4,
+    "type": "Troop",
+    "rarity": "Rare",
+    "arena": 0,
+    "description": "Minion Giant was mysteriously formed during an attempt to create the very toxin he spits out. He flies, targets buildings, and retches from range.",
+    "id": 26000107,
+    "evolved_spells_sc_key": "",
+    "is_evolved": false
   }
 ]

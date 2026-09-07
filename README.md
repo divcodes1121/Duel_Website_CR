@@ -1632,6 +1632,100 @@ on migration day against ~1,000–2,400 on every day before it. That is the
 backfill, visible in `stored_at` but not in `battle_time`, and reading the wrong
 one of those two columns turns a one-off into a trend.
 
+### Season 87: one new card, and one new form of an old one
+
+Two card renders arrived to be added. They are not the same kind of thing, and
+the difference is the whole shape of the change:
+
+- **Minion Giant** is a new card — a row in `cards.json`, taking the set from
+  122 to **123** (89 Troops + 21 Spells + 13 Buildings).
+- **Hero Ice Wizard** is a new FORM of a card that already existed. Heroes are
+  not separate cards here and never have been: they are a `can_be_hero` flag
+  plus a file in `public/assets/heroes/`, which is how the other sixteen work.
+  So it is one boolean and one image, and `cards.json` does not change.
+
+**What was researched rather than assumed.** Rare, 4 elixir, a Troop, and
+`is_win_condition: true` — a flying win condition that targets buildings, which
+is the entire point of the card. Those agree across RoyaleAPI's season-87 blog,
+deckmelon's card list and Supercell's own release notes, and deckmelon is also
+what confirms the hero is a form of the existing Ice Wizard rather than a card
+in its own right ("Ice Wizard Hero", at `/cards/ice-wizard/hero`).
+
+**The one value no public source would confirm is the card `id`.** The upstream
+snapshot this project refreshes from (`royaleapi.github.io/cr-api-data`) is
+**stale at 120 cards** and has neither card; RoyaleAPI and DeckShop both refuse
+an automated fetch. `26000107` came from the account holder and is consistent
+with the sequence — Ronin, the previous troop added, is 26000106.
+
+That is worth stating plainly because **the id is not decoration**.
+`deckLink.ts` builds the official copyDeck deep link out of it and parses
+incoming links by it, so a wrong number means "Open in Game" hands the game a
+card it does not recognise, on any deck containing this one. It is pinned in
+`tests/deckLink.test.ts` with a roundtrip, so correcting it is a one-line change
+next to a test that says what it is for. **The check that settles it takes ten
+seconds: build a deck with Minion Giant, press Open in Game, see whether the
+game seats the card.**
+
+#### Importing the art was three wrong answers before it was one right one
+
+`import-card-art.py` is new and runs *before* `build-card-art.py`. The
+distinction matters: that script re-encodes art which is already a cutout,
+changing the container and the width. A downloaded render is a picture **on a
+background**, and dropping one in as-is puts a black rectangle in every deck
+strip.
+
+It reuses the two lessons `build-hero-art.py` already records — flood-fill the
+background **connected to the border** rather than colour-keying globally (on a
+black field a global key does not nick an edge, it perforates the subject
+through every outline, pupil and shadow), and decontaminate the boundary so the
+cutout survives both themes. What it had to learn on top:
+
+**The floor is measured per image, and it must be the median, not the maximum.**
+Hero Ice Wizard sits on essentially pure black (border 0–3); Minion Giant sits
+in a flat dark halo reading 25–36. One floor cannot serve both. Taking the
+ring's *maximum* produced a floor of 124 — because the card's own frame reaches
+into row 2, so the brightest "border" pixels were the artwork itself — and that
+shipped a card **38.9% opaque against the Knight's 70%**. A card you could see
+through.
+
+**The ramp width is the kind of edge, and this is the one that only showed on
+the light theme.** Measured going in from the left edge, as distance from the
+backdrop:
+
+```
+Minion Giant   28 28 28 28 28 28 28 31 57 218 241 233 ...
+Hero Ice Wiz    3  6 11 16 24 33 40 53 67  81  95 115 131 153 175 ...
+```
+
+The card is a hard-edged object in a flat drop shadow: eighteen pixels of
+unchanging halo, then a step. The hero is a genuine glow rising over ~80 levels,
+and that corona is part of what the card *is* — the existing hero art keeps it,
+which is why `wizard.webp` is only 4.4% fully transparent against a plain card's
+21–38%. A wide ramp on the card spread partial alpha across its frame and it
+read visibly **washed out** beside the Knight on light — **and looked perfectly
+fine on dark.** `SPAN_HARD = 20` for cards, `SPAN_GLOW = 62` for heroes and
+evolutions.
+
+**No bbox crop here, unlike `build-hero-art.py`.** That script cuts a character
+out of a large arbitrary field, where trimming dead margin is what makes CSS
+sizing honest. These renders are already framed and their transparent margin
+differs per side, so cropping to the bbox **changes the aspect** — it took the
+hero to 302x398, taller than any hero in the directory, and drew the new card
+visibly larger than its neighbours. Scaling alone lands both on sizes already
+present: **302x369** and **302x384**.
+
+**The alpha-profile check is a smell test, not a gate.** The script compares
+the new cutout's % opaque and % transparent against its neighbours, and it
+caught the see-through card instantly. But it also reports OUT OF RANGE for art
+that is perfectly correct, because how much margin a card render carries varies
+a great deal. Every decision here was actually settled by compositing the result
+on both theme grounds and looking at it, which is the same rule the PDF work
+arrived at from the other direction.
+
+Ice Wizard is hero-only — `can_be_hero` without `can_evolve` — which is the
+thirteenth such card and an existing case. The wild-slot form picker's "both
+forms" set stays at exactly the four it has always been.
+
 ### The Vercel storage warning was card art, not code
 
 Vercel mailed to say the free team had used 100% of its 10 GB **Deployment
@@ -11926,6 +12020,11 @@ scripts/
   build-hero-art.py           masters in assets/ -> what public/ serves:
                               keys the character to alpha, re-encodes to WebP
                               (4.2 MB of PNG -> 166 kB). Idempotent.
+  import-card-art.py          ONE downloaded card render -> the served cutout.
+                              Flood-fills the background from the edges and
+                              decontaminates it; floor measured per image, ramp
+                              width per kind of edge. Runs BEFORE the script
+                              below, which assumes art that is already cut out.
   build-card-art.py           card/evolution/hero art -> WebP, capped at the
                               302px card frame (46.1 MB -> 3.27 MB, q88).
                               THE ONLY ART SCRIPT THAT READS public/ RATHER
