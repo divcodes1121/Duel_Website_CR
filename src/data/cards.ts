@@ -52,14 +52,30 @@ export const CARDS: Card[] = (cardsRaw as RawCard[])
 
 export const CARDS_BY_KEY: Map<string, Card> = new Map(CARDS.map((c) => [c.key, c]));
 
+/* CARD ART IS WEBP, NOT PNG, AND THE EXTENSION IS THE WHOLE WIRING.
+ *
+ * Nothing else in `src/` builds a path into these three directories — the PDF
+ * renderer's `utils/report/art.ts` calls straight through to the functions
+ * below — so the served format is decided here and in `scripts/build-card-art.py`
+ * and nowhere else.
+ *
+ * WHY IT CHANGED: the PNGs were 46 MB, which was 94% of every Vercel
+ * deployment's 53 MB build output, and at ~190 retained deployments that was
+ * the entire 10 GB storage allowance. The same art as WebP is 3.3 MB. The
+ * script records the measurements and why the width is capped at the 302px
+ * card frame.
+ *
+ * The rest of the served art — the field book plates, the tool panels, the hero
+ * backdrop, the brand marks — has been WebP for months. This is the last PNG
+ * directory, not a new format for the project to support. */
 export function getCardIconUrl(key: string): string {
-  return `${import.meta.env.BASE_URL}assets/cards/${key}.png`;
+  return `${import.meta.env.BASE_URL}assets/cards/${key}.webp`;
 }
 
 export function getEvolutionIconUrl(key: string): string {
-  return `${import.meta.env.BASE_URL}assets/evolutions/${key}.png`;
+  return `${import.meta.env.BASE_URL}assets/evolutions/${key}.webp`;
 }
 
 export function getHeroIconUrl(key: string): string {
-  return `${import.meta.env.BASE_URL}assets/heroes/${key}.png`;
+  return `${import.meta.env.BASE_URL}assets/heroes/${key}.webp`;
 }

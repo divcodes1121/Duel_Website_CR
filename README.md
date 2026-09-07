@@ -1632,6 +1632,103 @@ on migration day against ~1,000–2,400 on every day before it. That is the
 backfill, visible in `stored_at` but not in `battle_time`, and reading the wrong
 one of those two columns turns a one-off into a trend.
 
+### The Vercel storage warning was card art, not code
+
+Vercel mailed to say the free team had used 100% of its 10 GB **Deployment
+Storage**. Nothing about the site had changed shape, and the instinct — we own a
+VPS, move something onto it — would have been the wrong fix for a problem that
+turned out to be arithmetic.
+
+**A deployment stores its build output, and this one was 53 MB of which 50 MB
+was pictures.** The whole of `dist` broke down as:
+
+| dist/assets | before | after |
+|---|---|---|
+| evolutions (42 files) | 21 MB | 1.1 MB |
+| cards (122 files) | 17 MB | 2.1 MB |
+| heroes (16 files) | 7.5 MB | 396 kB |
+| **all JS + CSS together** | **3.0 MB** | 3.0 MB |
+| **total** | **53 MB** | **12 MB** |
+
+There are **205 commits on `main` since 1 August**, and ~190 retained
+deployments at 53 MB is the 10 GB allowance almost exactly. So the storage
+warning was never about code — and the irony is worth keeping: the main bundle
+this file tracks to the gzip kilobyte, and which three separate pieces of work
+have gone to some trouble to shave by one or two kB, is **6% of what a deploy
+actually costs**. Nothing in the bundle-size discipline was wrong; it was just
+aimed at the smaller number.
+
+**The art was PNG, and it was the last PNG left.** `guide/`, `panels/`,
+`background/` and `brand/` have shipped WebP for months, each built by its own
+script in `scripts/`. Card art simply never got the same pass. Measured on a
+ten-file sample per directory at quality 85, before any resizing: cards
+132.5 -> 14.2 kB, evolutions 487.9 -> 47.1 kB, heroes 483.3 -> 46.1 kB. Roughly
+**-90% for nothing but the container**.
+
+**Evolutions and heroes were 598x730 while ordinary cards are 302x363 — and
+they render in the same slots.** 119 of the 122 cards are exactly 302x363, and
+`utils/report/geometry.ts` hardcodes `CARD_RATIO = 302 / 363` as the shape the
+PDF lays cards out on, so that size is already the project's own answer to how
+big a card is. The largest card box anywhere in the CSS is 6rem (96px), so 302
+wide is about 3x the biggest thing it ever fills; 598 was paying for a display
+size that does not exist. Capping the width took the total to **46.1 MB ->
+3.27 MB, -93%**.
+
+**But the cap is on width alone, and each file keeps its own aspect.** Evolution
+art is 598x730 (0.819) against a card's 302x363 (0.832), and that difference is
+load-bearing — this file already records a browser probe that counted a 4x2 card
+grid as three rows because evolution art sits at a different height. Forcing one
+box would have changed layout, which is not something a storage fix is allowed
+to do. Nothing is ever upscaled either; one evolution is 287x384 and stays that.
+
+**`build-card-art.py` reads `public/`, and it is the only art script that
+does.** Every other one takes a master from `assets/` and writes the served
+file, under a standing rule that the served copy is never hand-edited. For card
+art the masters have **drifted**, and both differences would have shipped:
+
+- `assets/Evolutions/furnance.png` is a typo. The card key, and the file the app
+  requests, is `furnace`.
+- `assets/cards/ronin.png` is **850x850 — square**. The served file is 302x363,
+  so somebody cropped it to the card frame and only the served copy has it.
+
+Converting from the masters would have produced a square Ronin and no Furnace at
+all. The served PNGs were also already normalised to plain sRGB (verified again
+during this pass: zero ICC profiles on either side), so starting from them costs
+nothing. The masters stay as the archive.
+
+**`.vercelignore` is new, and `assets/` is why.** There was no ignore file and
+no `vercel.json`, so every deployment also carried the 91 MB of art masters that
+only the local build scripts ever open — plus `server/`, which is scp'd to the
+VPS and has never been part of a Vercel build. `tsc -b` was checked first: its
+three project references cover `src`, `vite.config.ts` and `api` and nothing
+else, so excluding `tests/` and `scripts/` cannot break the build.
+
+**Why not move the art to the VPS, which was the first idea.** That box already
+carries a 33 GB SQLite, the bot polling the CR API and the analytics service,
+and — recorded a few sections above — **there is still no backup of its
+database**. Putting the site's entire image layer on the same single machine
+means one box going down takes out both the numbers and the pictures, and trades
+a metered resource for a single point of failure. The art was not in the wrong
+place; it was ten times larger than it needed to be.
+
+**Verified in a browser, 12/13.** All 180 files decode in Chromium, none is
+wider than 302, and the PDF tile path — `utils/report/art.ts` loads the art into
+an `Image`, draws it on a canvas over the page colour and reads it back as JPEG
+— produces real tiles for a card, an evolution, a hero and the odd-sized Ronin,
+each checked for luminance range so an alpha-only decode could not pass as a
+tile. Alpha survives: the tile corner is still the painted ground. The one
+failure is `/api/analytics/suggest` returning 500, which is the documented local
+behaviour without the VPS key, and **zero** asset requests failed. Main bundle
+unchanged at **337.97 kB gzip**.
+
+**What this does not fix by itself.** Deployment storage is cumulative across
+retained deployments, so the 10 GB already spent has to be reclaimed by deleting
+old deployments in the Vercel dashboard — there is no Vercel login on this
+machine and the CLI cannot do it from here. And it is **not confirmed whether
+Vercel counts the source checkout or only the build output**; the build-output
+arithmetic matching 10 GB so closely suggests the output, which is the half this
+change definitely shrinks. `.vercelignore` is cheap either way.
+
 ### Still open on the hosting side
 
 - **H: is unplugged and must not be wiped.** The local `battles.db` and
@@ -11829,6 +11926,14 @@ scripts/
   build-hero-art.py           masters in assets/ -> what public/ serves:
                               keys the character to alpha, re-encodes to WebP
                               (4.2 MB of PNG -> 166 kB). Idempotent.
+  build-card-art.py           card/evolution/hero art -> WebP, capped at the
+                              302px card frame (46.1 MB -> 3.27 MB, q88).
+                              THE ONLY ART SCRIPT THAT READS public/ RATHER
+                              THAN assets/, because for card art the masters
+                              have drifted: `furnance.png` is a typo for the
+                              `furnace` key, and `ronin.png` is 850x850 square
+                              upstream against the 302x363 crop that ships.
+                              `--check` verifies every key has a file.
 
 assets/                       SOURCE art (masters, never served)
   panels/                     banner masters -> public/assets/panels/*.webp
@@ -11846,7 +11951,9 @@ public/assets/                what the app actually loads
   fonts/BebasNeue-Regular.ttf the display face, read through --font-display
   background/                 light_background.webp, dark_background.webp,
                               king.webp (alpha) — built by the script above
-  cards/ evolutions/ heroes/  card art, plain sRGB, no ICC profile
+  cards/ evolutions/ heroes/  card art. WEBP, plain sRGB, no ICC profile,
+                              nothing wider than 302px. Was 46 MB of PNG,
+                              which was 94% of every Vercel deployment
   fonts/KidsWord.otf          the display face
 ```
 

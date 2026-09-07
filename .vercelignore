@@ -1,0 +1,31 @@
+# WHAT VERCEL DOES NOT NEED A COPY OF, ON EVERY DEPLOYMENT.
+#
+# Vercel uploads the repository and keeps it with the deployment. Only the Vite
+# build reads anything here, and it reads `src/`, `public/`, `api/` and the
+# config files — nothing else in this list is opened during `npm run build`.
+#
+# The big one is `assets/`: 91 MB of art masters read exclusively by the local
+# `scripts/build-*.py` tools. It has never been part of a build and was being
+# stored with every deploy.
+
+# Art masters. Input to scripts/build-*.py, run by hand on a dev machine.
+assets/
+
+# The Python analytics service. Deployed to the VPS by scp, never by Vercel —
+# see "THE PYTHON API DOES NOT SHIP WITH THE FRONTEND" in CLAUDE.md.
+server/
+
+# Design records and runbooks.
+docs/
+MECHANISM.md
+DECK_TUNER.md
+
+# Tests. Run in CI and locally; the build does not execute them.
+tests/
+supabase/
+
+# Local build tooling.
+scripts/
+
+video/
+dist/
