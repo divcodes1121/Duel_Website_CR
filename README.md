@@ -1815,6 +1815,34 @@ failure is `/api/analytics/suggest` returning 500, which is the documented local
 behaviour without the VPS key, and **zero** asset requests failed. Main bundle
 unchanged at **337.97 kB gzip**.
 
+**`.vercelignore` then took every image off the live site, and the build was
+green throughout.** The first version of that file said `assets/`, meaning the
+91 MB of masters at the repo root. But it uses .gitignore matching rules, where
+a pattern with no leading slash matches a directory of that name **at any
+depth** — so it also matched `public/assets/`, which is everything the app
+serves. The deployment went Ready and then 404'd every card, every field book
+plate, every tool-panel banner and the hero backdrop.
+
+Nothing in `public/` is imported by the bundle — Vite copies it verbatim and
+never opens it — so an empty `public/` is not a build error. `tsc -b`, 474
+vitest and `npm run build` were all green. **A local build cannot catch this at
+all**, because `.vercelignore` is applied by Vercel when it collects the
+deployment, so `dist/` is complete locally whatever the file says. The first
+check that can see it is the deployed URL.
+
+The tell was that **art nobody had touched broke too**: `guide/` and `panels/`
+were not part of the change, so a card-art fault could not explain them. When
+one directory's change breaks a sibling nobody edited, the cause is upstream of
+both.
+
+Every pattern is anchored with a leading slash now, and the fix was verified
+with git rather than by re-reading it — `.vercelignore` shares .gitignore's
+matching rules, so copying it into a scratch repo holding the real paths and
+running `git check-ignore` reproduces the bug in one line and proves the
+correction. The broken patterns exclude `public/assets/cards/knight.webp`; the
+anchored ones keep everything under `public/` and drop only the root
+directories.
+
 **What this does not fix by itself.** Deployment storage is cumulative across
 retained deployments, so the 10 GB already spent has to be reclaimed by deleting
 old deployments in the Vercel dashboard — there is no Vercel login on this

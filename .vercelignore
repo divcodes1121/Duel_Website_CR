@@ -4,28 +4,40 @@
 # build reads anything here, and it reads `src/`, `public/`, `api/` and the
 # config files — nothing else in this list is opened during `npm run build`.
 #
-# The big one is `assets/`: 91 MB of art masters read exclusively by the local
-# `scripts/build-*.py` tools. It has never been part of a build and was being
-# stored with every deploy.
+# EVERY PATTERN IS ANCHORED WITH A LEADING SLASH, AND THAT IS NOT STYLE.
+#
+# This file uses .gitignore matching rules, where a pattern with no leading
+# slash matches a directory of that name AT ANY DEPTH. The first version of
+# this file said `assets/`, meaning to exclude the 91 MB of art masters at the
+# repo root — and it also matched `public/assets/`, which is everything the app
+# serves. It shipped, and every image on the live site 404'd: card art, the
+# field book plates, the tool-panel banners, the hero backdrop. The build
+# succeeded and the deployment went Ready, because nothing here is imported by
+# the bundle — Vite copies `public/` verbatim and never opens it, so an empty
+# `public/` is not a build error.
+#
+# A leading slash anchors the pattern to the repository root, which is the only
+# place any of these actually live. Keep it on every line.
 
 # Art masters. Input to scripts/build-*.py, run by hand on a dev machine.
-assets/
+# NOT public/assets — see above.
+/assets/
 
 # The Python analytics service. Deployed to the VPS by scp, never by Vercel —
 # see "THE PYTHON API DOES NOT SHIP WITH THE FRONTEND" in CLAUDE.md.
-server/
+/server/
 
 # Design records and runbooks.
-docs/
-MECHANISM.md
-DECK_TUNER.md
+/docs/
+/MECHANISM.md
+/DECK_TUNER.md
 
-# Tests. Run in CI and locally; the build does not execute them.
-tests/
-supabase/
+# Tests. `tsc -b` covers only src, vite.config.ts and api, so this is safe.
+/tests/
+/supabase/
 
 # Local build tooling.
-scripts/
+/scripts/
 
-video/
-dist/
+/video/
+/dist/
