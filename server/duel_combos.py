@@ -134,6 +134,11 @@ def _load_cards() -> None:
         m = meta.get(key) or {}
         _CARD_INFO[key] = {
             "name": c.get("name") or key.replace("-", " ").title(),
+            # Supercell's own card id, carried through because the duo deck
+            # board prints it. `key` stays the identifier everything joins on
+            # — it is what art URLs and every other module use — and this rides
+            # alongside rather than replacing it.
+            "id": c.get("id") or 0,
             "elixir": c.get("elixir") or 0,
             # `type` is the game's own answer ("Troop" / "Spell" / "Building"),
             # which is why the bot switched to it: the <=4-elixir proxy it

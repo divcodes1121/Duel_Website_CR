@@ -1,0 +1,39 @@
+[Unit]
+# Keeps the 2v2 pair collection current: folds newly-stored TeamVsTeam payloads
+# into unique teammate pairs, advances the lightweight participation counts,
+# and re-selects the bounded top-N population.
+#
+# IT DOES NOT ENROL ANYBODY. `CLASH_DUO_PROMOTE` is unset in
+# /etc/royalweb.env, so `duo_pairs.PROMOTION_ENABLED` is False and both the
+# bulk and per-battle promotion paths are closed. Turning it on is a separate,
+# deliberate change.
+#
+# IT DOES NOT DELETE ANYTHING from battles.db. The bot's databases are opened
+# mode=ro; the only file this writes is /opt/royalweb/server/.duo_pairs.db.
+Description=Deckkies 2v2 pair collection update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+
+# ONE COMMAND, THE ONE THE TESTS COVER. `--update` folds new payloads and
+# `--reconcile` re-ranks and prunes; both are idempotent, and running them
+# together means the population can never lag the counts that decide it.
+# There is deliberately no second reconciliation implementation here.
+ExecStart=/usr/bin/python3 -u duo_pairs.py --update --reconcile
+
+# FAIL VISIBLY. A non-zero exit marks the unit failed, `systemctl list-timers`
+# and `systemctl --failed` both show it, and the JSON summary each command
+# prints lands in the log beside the failure. A job that swallowed its own
+# errors would leave the collection quietly stale.
+SuccessExitStatus=0
+TimeoutStartSec=3600
+
+StandardOutput=append:/var/log/clashbot/duo.log
+StandardError=append:/var/log/clashbot/duo.log
+
+[Install]
+WantedBy=multi-user.target

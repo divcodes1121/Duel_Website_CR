@@ -6,12 +6,7 @@ series. This one just lists what happened — their deck, the opponent's deck,
 who won, when — and it exists because a reader who does not yet trust an
 aggregate wants to see the rows it was computed from.
 
-THREE THINGS IT DOES NOT DO, each on purpose:
-
-  * **No mode filter.** `duel_combos.read_duel_rows` scopes to duel-like modes,
-    which is right for the duel screens and wrong here: "recent battles" that
-    silently omit every ladder game is not a battle log. Every stored battle in
-    the window is a row.
+TWO THINGS IT DOES NOT DO, each on purpose:
 
   * **No reconstruction.** A native duel row is ONE stored row carrying a whole
     16- or 24-card loadout; it stays one row here rather than being split into
@@ -21,6 +16,22 @@ THREE THINGS IT DOES NOT DO, each on purpose:
   * **No aggregation, so no evidence floor.** A single battle is a fact, not an
     estimate, and the floors that protect the aggregates from thin history have
     nothing to protect here.
+
+ONE THING IT DOES DO, and did not until 2026-09-10: **it asks `battle_modes`
+what each row is before it draws one.** This shipped with no filter at all, on
+the argument that a log silently omitting every ladder game is not a battle
+log. That argument still stands, which is why a mode is dropped for what its
+row would MISSTATE rather than for taste, and why what is dropped is counted
+and reported — `summary.hidden` and `summary.hiddenByMode` put a new Supercell
+mode on the screen as a labelled number instead of as an absence nobody can
+see. The rule and the measurements behind it are in `battle_modes.py`.
+
+2v2 IS NOT DISCARDED, IT IS ROUTED. `TeamVsTeam` rows go to `duo_pairs`,
+which folds them into unique PARTNERSHIPS -- the two teammate decks played
+together -- with an occurrence count. This screen refusing to
+draw them is not the same as the data being thrown away, and the two must not
+be confused: a 2v2 row carries a real deck a real player brought, and the only
+thing wrong with it here is the VS shape this screen would force it into.
 
 PAGED ON THE SERVER. An active player has hundreds of battles in thirty days,
 and each row carries two decks with their art — send them all and the payload
@@ -32,6 +43,7 @@ from __future__ import annotations
 
 import json
 
+import battle_modes as bm
 import clash_data as cd
 import duel_combos as dx
 # THE SINGLE PATH FOR DRAWING A DECK, imported rather than copied. `_deck_view`
@@ -72,8 +84,9 @@ def _mode_label(game_mode: str) -> str:
         return "Challenge"
     if m.startswith(("ranked1v1", "ladder")):
         return "Ladder"
-    if "2v2" in m:
-        return "2v2"
+    # NO 2v2 BRANCH. `battle_modes.classify` routes those rows to `duo_pairs`
+    # before this function is reached, so a branch here would be unreachable
+    # code implying to its next reader that 2v2 appears on this screen.
     # DELIBERATELY "Battle" for an unrecognised mode whose name contains
     # "duel". `is_native_duel` is an allowlist of two verified strings, and a
     # row labelled "Duel" here that the Duel Zone does not list would be a
@@ -104,18 +117,25 @@ def _outcome(result: str, crowns: int, opp_crowns: int) -> str:
 
 
 def _read_rows(tag: str, since: str | None, until: str | None
-               ) -> tuple[list[dict], bool]:
-    """Every stored battle for this tag in the window, newest first.
+               ) -> tuple[list[dict], bool, dict[str, int]]:
+    """Every drawable battle for this tag in the window, newest first.
 
     Walks the same tier partition every other screen does, so a window that
     reaches into the archive reads it here too and says so.
+
+    Returns the rows, whether the archive tier was touched, and a count PER
+    RAW MODE STRING of what was refused. The per-mode breakdown is the point:
+    a single total says "some battles are missing" and leaves the reader to
+    guess, while `{"TeamVsTeam": 34}` says which and lets a new Supercell mode
+    announce itself the first time it appears in anyone's log.
     """
     windows = cd.tier_windows(tag, since, until)
     if not windows:
-        return [], False
+        return [], False, {}
 
     out: list[dict] = []
     archive_used = False
+    hidden: dict[str, int] = {}
     for idx, (path, w_lo, w_hi) in enumerate(windows):
         try:
             con = cd.connect(path)
@@ -139,6 +159,16 @@ def _read_rows(tag: str, since: str | None, until: str | None
 
         kept = 0
         for r in rows:
+            # THE ROUTER RUNS FIRST — before the decks are even parsed, and
+            # before anything gives this row a `player` side and an `opponent`
+            # side. That shape is the misstatement in a 2v2 row, so it must
+            # not be built and then discarded.
+            mode = r["game_mode"] or ""
+            if bm.classify(mode) != bm.OWN_DECK_1V1:
+                # Counted under the RAW string, not the readable label, so a
+                # mode nobody has written a label for is still nameable.
+                hidden[mode or "(unrecorded)"] = hidden.get(mode or "(unrecorded)", 0) + 1
+                continue
             try:
                 cards = json.loads(r["player_card_keys"] or "[]")
             except Exception:
@@ -176,7 +206,7 @@ def _read_rows(tag: str, since: str | None, until: str | None
     # Sorted across tiers, not within one: the hot and archive reads each come
     # back ordered, and concatenating two ordered lists is not ordered.
     out.sort(key=lambda r: r["battle_time"], reverse=True)
-    return out, archive_used
+    return out, archive_used, hidden
 
 
 def _side(cards: list[str], evo_raw, archetype: str) -> dict:
@@ -217,7 +247,7 @@ def report(tag: str, since: str | None = None, until: str | None = None,
     that says thirty days.
     """
     per = max(1, min(MAX_PER_PAGE, per))
-    rows, archive_used = _read_rows(tag, since, until)
+    rows, archive_used, hidden = _read_rows(tag, since, until)
 
     total = len(rows)
     pages = max(1, -(-total // per))  # ceil
@@ -248,5 +278,14 @@ def report(tag: str, since: str | None = None, until: str | None = None,
             "crowns": sum(r["crowns"] for r in rows),
             "opponentCrowns": sum(r["opp_crowns"] for r in rows),
             "archiveUsed": archive_used,
+            # WHAT WAS IN THE WINDOW AND IS NOT ON THE SCREEN. Reported rather
+            # than dropped, because the failure mode of an allowlist is a
+            # correct battle silently missing, and the only defence against
+            # that is making the omission visible where a reader is already
+            # looking. Sorted by count so the biggest exclusion reads first.
+            "hidden": sum(hidden.values()),
+            "hiddenByMode": dict(
+                sorted(hidden.items(), key=lambda kv: (-kv[1], kv[0]))
+            ),
         },
     }

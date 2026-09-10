@@ -236,5 +236,104 @@ check(
 check("...and the archive tier is reported as used", t["summary"]["archiveUsed"] is True)
 
 
+# --- the mode filter --------------------------------------------------------
+#
+# THE FAULT THIS CLOSES IS INVISIBLE IN THE DATA. A `TeamVsTeam` row stores
+# exactly eight player cards, eight opponent cards and one opponent tag, so it
+# is structurally identical to a ladder row — nothing downstream of the read
+# can tell them apart, and a 2v2 battle rendered here as a duel between two
+# people looks entirely correct. On the live database 2v2 went from 2.77% of
+# stored battles in June to 25.11% in September, so this was roughly one row in
+# four, on every player's log, for a month.
+#
+# The mode strings below are real ones, taken from
+# `SELECT DISTINCT game_mode FROM battles` on 2026-09-10.
+
+MIXED = os.path.join(TMP, "modes.db")
+_make_db(MIXED, [
+    row(1, mode="Ranked1v1_NewArena2"),
+    row(2, mode="Ladder"),
+    row(3, mode="CW_Battle_1v1"),
+    row(4, mode="CW_Duel_1v1"),
+    row(5, mode="Friendly"),
+    row(6, mode="Showdown_Friendly"),
+    row(7, mode="TeamVsTeam"),
+    row(8, mode="TeamVsTeam"),
+    row(9, mode="TeamVsTeam_FixedDeckOrder"),
+    row(10, mode="Challenge_AllCards_EventDeck_NoSet"),
+    row(11, mode="PickMode"),
+    row(12, mode="Crazy_Arena"),
+    row(13, mode="MirrorDeck_Friendly"),
+])
+cd.tier_windows = lambda tag, since, until: [(MIXED, "0", "9")]
+m = rb.report(TAG, per=50)
+kept = {b["mode"] for b in m["battles"]}
+
+check(
+    "ranked, ladder, clan war, duel and friendly are all listed",
+    kept == {"Ranked1v1_NewArena2", "Ladder", "CW_Battle_1v1", "CW_Duel_1v1",
+             "Friendly", "Showdown_Friendly"},
+    str(sorted(kept)),
+)
+check("no 2v2 row is drawn as a duel",
+      not any("teamvsteam" in k.lower() for k in kept), str(sorted(kept)))
+check("the event-deck challenge is not listed",
+      "Challenge_AllCards_EventDeck_NoSet" not in kept)
+check("the draft mode is not listed", "PickMode" not in kept)
+check("the mirror-deck friendly is not listed", "MirrorDeck_Friendly" not in kept)
+check("the totals count only what is drawable", m["total"] == 6, str(m["total"]))
+
+# WHAT IS DROPPED IS COUNTED. An allowlist's failure mode is a perfectly good
+# battle going missing in silence, so the omission has to be visible where the
+# reader already is.
+check("the hidden total is every refused row",
+      m["summary"]["hidden"] == 7, str(m["summary"]["hidden"]))
+check("the breakdown names each mode",
+      set(m["summary"]["hiddenByMode"]) ==
+      {"TeamVsTeam", "TeamVsTeam_FixedDeckOrder",
+       "Challenge_AllCards_EventDeck_NoSet", "PickMode", "Crazy_Arena",
+       "MirrorDeck_Friendly"},
+      str(sorted(m["summary"]["hiddenByMode"])))
+check("...with the right counts",
+      m["summary"]["hiddenByMode"]["TeamVsTeam"] == 2,
+      str(m["summary"]["hiddenByMode"]))
+check("...biggest first, so the dominant exclusion reads first",
+      list(m["summary"]["hiddenByMode"].values())[0] == 2,
+      str(m["summary"]["hiddenByMode"]))
+
+# A NEW SUPERCELL MODE MUST ANNOUNCE ITSELF. The whole cost of an allowlist is
+# that a genuinely new competitive mode is excluded until somebody adds it, and
+# this is the line that makes that survivable rather than silent.
+NEW = os.path.join(TMP, "new-mode.db")
+_make_db(NEW, [row(1, mode="Ranked1v1_NewArena2"), row(2, mode="Sparky_Rumble")])
+cd.tier_windows = lambda tag, since, until: [(NEW, "0", "9")]
+n = rb.report(TAG)
+check("an unrecognised mode is refused", n["total"] == 1, str(n["total"]))
+check("...and named, not merely counted",
+      n["summary"]["hiddenByMode"] == {"Sparky_Rumble": 1},
+      str(n["summary"]["hiddenByMode"]))
+
+# A future ranked arena is the case an EXACT allowlist would have broken, on
+# the day a season turned, with nothing raised anywhere.
+FUTURE = os.path.join(TMP, "future.db")
+_make_db(FUTURE, [row(1, mode="Ranked1v1_NewArena3")])
+cd.tier_windows = lambda tag, since, until: [(FUTURE, "0", "9")]
+check("a ranked arena Supercell has not shipped yet is still listed",
+      rb.report(TAG)["total"] == 1)
+
+# A CLEAN LOG SAYS NOTHING ABOUT HIDDEN BATTLES. `hidden` must be 0 rather than
+# absent, or the client cannot tell "none were dropped" from "an old API that
+# does not report it".
+CLEAN = os.path.join(TMP, "clean.db")
+_make_db(CLEAN, [row(d, mode="Ladder") for d in range(1, 5)])
+cd.tier_windows = lambda tag, since, until: [(CLEAN, "0", "9")]
+c = rb.report(TAG)
+check("nothing hidden reports zero, not absence", c["summary"]["hidden"] == 0)
+check("...and an empty breakdown", c["summary"]["hiddenByMode"] == {})
+
+# The label branch for 2v2 was removed as unreachable. Assert the reason holds.
+check("no drawable battle can carry a 2v2 label",
+      all(b["modeLabel"] != "2v2" for b in m["battles"]))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

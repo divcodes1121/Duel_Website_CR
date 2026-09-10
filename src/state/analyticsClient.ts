@@ -856,7 +856,10 @@ export interface RecentBattle {
   battleTime: string;
   /** The raw stored mode string, kept so a reader can check the label. */
   mode: string;
-  /** Ladder / Duel / Friendly / Tournament / Challenge / 2v2 / Battle. */
+  /** Ladder / Duel / Friendly / Tournament / Challenge / Battle.
+   *  NO 2v2 — `battle_modes.classify` routes those rows to the duo-deck
+   *  collection before this screen sees them, because a 2v2 battle had four
+   *  players and this row draws one deck against one. */
   modeLabel: string;
   result: 'win' | 'loss' | 'draw';
   crowns: number;
@@ -883,6 +886,18 @@ export interface RecentBattlesReport {
     crowns: number;
     opponentCrowns: number;
     archiveUsed: boolean;
+    /** Battles that were in the window and are not on the screen: 2v2, and
+     *  the draft, preset and event modes where the deck was not the player's
+     *  own. REPORTED RATHER THAN DROPPED — the failure mode of an allowlist is
+     *  a correct battle silently missing, and the only defence is making the
+     *  omission visible where the reader already is.
+     *
+     *  Optional: an analytics API that has not been redeployed does not send
+     *  it, and the two halves of this project ship separately. */
+    hidden?: number;
+    /** The same figure broken down by raw mode string, biggest first, so a
+     *  mode Supercell ships tomorrow announces itself by name. */
+    hiddenByMode?: Record<string, number>;
   };
   coverage: ApiCoverage;
   window: { from: string | null; to: string | null };

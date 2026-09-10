@@ -289,6 +289,7 @@ happily against a server that never called it.
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
+| `GET /api/analytics/duo-pairs?page=&per=&q=` | **the unique DECK PAIRS played in 2v2** (`duo_pairs.py`), most played first. One record per combination of two teammate decks, with an occurrence count, distinct participants, and first/last seen. Reads a LOCAL collection, not `battle_raw` — the migration is a full scan of a 44.7 GB table and is a job. `q` filters by card key or fingerprint, on the server |
 
 Both `player` and `duels` take the same window: `?days=N`, or `?from=&to=` as
 `YYYY-MM-DD`. `days` counts back from the **last battle stored for that player**
@@ -298,7 +299,91 @@ populated screen.
 Tags are validated against Supercell's 14-symbol alphabet before they reach a
 query (same rule as `clashdb.normalize_tag`), so junk never hits the database.
 
-## Recruiting tags (`recruit.py`)
+## Battle modes, and the 2v2 pairs (`battle_modes.py`, `duo_pairs.py`)
+
+**MODE DETECTION RUNS BEFORE THE DECK PIPELINE, NOT INSIDE IT.** A `TeamVsTeam`
+row stores exactly eight `player_card_keys`, eight `opponent_card_keys` and one
+`opponent_tag` — structurally identical to a ladder row across all 1,356,765 of
+them — so nothing downstream of the read can tell them apart, and a 2v2 battle
+drawn as a duel between two people looks entirely correct.
+
+    raw battles row
+      -> is_own_deck_1v1  -> Recent Battles, drawn as deck vs deck
+      -> is_duo           -> duo_pairs, folded into unique deck PAIRS
+      -> otherwise          counted, named, drawn nowhere
+
+`battle_modes.py` has **no imports at all**, the rule `deck_harmony.py` and
+`tiers.ts` follow. `test_battle_modes.py` pins every one of the 32 mode strings
+the live database holds, with its row count, taken verbatim from
+`SELECT game_mode, COUNT(*) FROM battles GROUP BY game_mode`.
+
+**It is an allowlist on PATTERNS.** `Ranked1v1_NewArena` became
+`Ranked1v1_NewArena2` and both are stored in quantity, so an exact-string list —
+which is what `meta.META_MODES` is — would drop `Ranked1v1_NewArena3` out of
+every player's log in silence on the day a season turned. The cost is paid for
+by `summary.hiddenByMode`: the log prints what it refused and names each mode.
+
+### The 2v2 pair collection
+
+**THE UNIT IS A PARTNERSHIP, NOT A DECK.** A 2v2 battle is four players and four
+decks, and what a 2v2 player chooses is which two decks go together.
+
+    pair identity = canonical( canonical(deck A), canonical(deck B) )
+
+Order-free at both levels: the eight card keys sort, and the two deck
+fingerprints sort. `A + B` and `B + A` are one record.
+
+**IT READS `battle_raw`, NOT `battles`, AND THAT IS WHY IT CAN EXIST AT ALL.** A
+`battles` row holds one player deck, one opponent deck and one opponent tag —
+**the teammate's deck is in no column of it**. The raw API payload carries
+`team: [2 participants]` and `opponent: [2]`, each with eight cards and a tag,
+so one battle yields TWO pair records.
+
+**ONE BATTLE IS ONE OCCURRENCE.** 51,671 2v2 rows have a tracked opponent, so
+the same battle is stored two or four times. `battle_identity` is built from the
+battle's own timestamp and its four sorted tags, and `duo_stage`'s
+`PRIMARY KEY (battle_id, side)` enforces the dedup rather than hoping.
+
+### Running it
+
+    python server/duo_pairs.py --coverage    # how much can be reconstructed
+    python server/duo_pairs.py --migrate     # build the pair collection
+    python server/duo_pairs.py --update      # only payloads stored since
+    python server/duo_pairs.py --show 20     # print the top 20 pairs
+
+**IT DELETES NOTHING. THIS IS PHASE 1 OF THREE.** Phase 2 is a change to the BOT
+(`/opt/clashbot/clashdb.py`) so 2v2 never enters `battles`; phase 3 is the
+historical cleanup, and it must not be attempted until phase 2 has shipped AND
+the aggregates have been rebuilt — `player_stats_agg` demonstrably counts 2v2
+today and `rebuild_aggregates` has no live caller, so deleting rows now would
+leave figures nothing could recompute.
+
+**COVERAGE IS 78.2%.** Of 1,381,535 2v2 rows, 1,080,047 have a surviving raw
+payload and **301,488 do not** — the raw-cap valve purged 1,881,526
+`battle_raw` rows on 2026-09-01 and June predates raw collection. Those are
+reported as `unreconstructable` and no pair is invented for them.
+
+**IT IS SLOW BECAUSE `battle_raw` IS 44.7 GB AND `game_mode` HAS NO INDEX.** A
+single `SELECT DISTINCT game_mode` over it measures **4m05s**, which is why the
+mode list is memoised for the life of the process — un-memoised it ran four
+times in one migration. Budget tens of minutes for a full run, and never put any
+of this on a request.
+
+**THE WATERMARK IS `stored_at`, the arrival time, not `battleTime`.** A battle
+that arrives late carrying an old timestamp still has a current `stored_at`;
+watermarking on battle time is the fault that left `player_stats_agg` 48% short.
+
+**IF IT REPORTS ZERO PAIRS AND EVERYTHING UNREADABLE, THE CARD DATA IS STALE.**
+`duo_pairs` maps the payload's Supercell card ids through
+`duel_combos.card_info`, which gained its `id` field in the same change. Against
+a host that has not been redeployed every deck resolves to nothing. It raises
+`CardDataUnavailable` before the scan starts rather than producing a true
+sentence about a completely broken run.
+
+The collection is `server/.duo_pairs.db`, gitignored, and this module is the
+only thing that writes to it. The bot's databases stay `mode=ro`.
+
+## Recruiting tags (`recruit.py`)## Recruiting tags (`recruit.py`)
 
 Two ways a player gets collected without anyone searching for them: the top of
 the ranked ladder, and the opponents our tracked players are actually meeting.

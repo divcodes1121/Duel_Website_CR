@@ -55,6 +55,7 @@ import meta as meta_board  # noqa: E402
 import coach  # noqa: E402
 import live_player as live  # noqa: E402
 import recent_battles as battles  # noqa: E402
+import duo_pairs as duo  # noqa: E402
 import tracking  # noqa: E402
 import recruit  # noqa: E402
 import team_analysis as teams  # noqa: E402
@@ -510,6 +511,43 @@ class Handler(BaseHTTPRequestHandler):
 
             if path == "/api/analytics/suggest":
                 return self._send({"tags": cd.suggest_tags(5)})
+
+            if path == "/api/analytics/duo-pairs":
+                # THE UNIQUE DECK PAIRS PLAYED IN 2v2, for the admin board.
+                #
+                # A PAIR, NOT A DECK. A 2v2 battle is four players and four
+                # decks; the thing worth recording is which two decks were
+                # brought TOGETHER. An earlier version of this collected
+                # individual decks and was wrong for that reason.
+                #
+                # ITS OWN ROUTE, WHICH IS A DEPARTURE FROM THE LAST TWO
+                # ADDITIONS. `ops_snapshot` and the tracked-player count ride
+                # on `/coverage` precisely to avoid bumping the tripwire, and
+                # that was right for them: both are a fixed blob computed once
+                # per call. This is a PAGED, SEARCHABLE ranking over 364,357
+                # records, so riding on `coverage` would mean `coverage` grew
+                # `page`, `per` and `q` parameters that mean nothing to
+                # coverage, and every console load paid for a board nobody had
+                # opened. The tripwire in `test_api_security` is 22 in this
+                # commit, and the auth list beside it names this path.
+                #
+                # IT READS OUR OWN COLLECTION, NOT `battle_raw`. The
+                # migration parses ~1.08M JSON payloads and is a job — see
+                # `duo_pairs`. This is a millisecond read of a small local
+                # file, which is the only reason it can sit on a request.
+                q = parse_qs(parsed.query)
+                try:
+                    page = int((q.get("page") or ["1"])[0])
+                except ValueError:
+                    page = 1
+                try:
+                    per = int((q.get("per") or [str(duo.PER_PAGE)])[0])
+                except ValueError:
+                    per = duo.PER_PAGE
+                return self._send(
+                    duo.report(page=page, per=per,
+                               query=(q.get("q") or [""])[0])
+                )
 
             if path == "/api/analytics/coverage":
                 q = parse_qs(parsed.query)

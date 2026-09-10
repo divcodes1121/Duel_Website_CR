@@ -466,6 +466,32 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
               </>
             )}
             {summary.archiveUsed ? ' · archive tier included' : ''}
+            {/* WHAT IS NOT ON THIS SCREEN, said on the screen.
+                This log lists battles that can honestly be drawn as one deck
+                against another, so 2v2 and the draft, preset and event modes
+                are routed away from it. That is an ALLOWLIST, and an
+                allowlist's failure mode is a perfectly good battle going
+                missing in silence — the only defence is putting the count
+                where the reader already is. The title names every mode, so a
+                new one Supercell ships announces itself rather than shortening
+                somebody's log without explanation. */}
+            {!!summary.hidden && (
+              <>
+                {' · '}
+                <span
+                  className={styles.hidden}
+                  title={
+                    Object.entries(summary.hiddenByMode ?? {})
+                      .map(([mode, n]) => `${mode}: ${nf.format(n)}`)
+                      .join('\n') ||
+                    'Modes where the deck was not the player’s own.'
+                  }
+                >
+                  {nf.format(summary.hidden)} other-mode{' '}
+                  {summary.hidden === 1 ? 'battle' : 'battles'} not shown
+                </span>
+              </>
+            )}
           </span>
         </footer>
       </section>

@@ -164,7 +164,11 @@ class Authentication(unittest.TestCase):
                   # resolutions and a profile of every blue deck. An unkeyed
                   # caller must not be able to start one.
                   "/api/analytics/teams?blue=%23Y022GRCJQ&red=%23L8GVPJ900",
-                  "/api/analytics/deck?cards=knight"]
+                  "/api/analytics/deck?cards=knight",
+                  # An admin board. It reads a local collection rather than
+                  # the bot's database, which makes it cheap — and cheap is
+                  # not the same as public.
+                  "/api/analytics/duo-pairs"]
         with configured(CLASH_API_KEY=KEY) as mod, serving(mod) as base:
             for path in routes:
                 with self.subTest(path=path):
@@ -707,7 +711,15 @@ class RoutingUnchanged(unittest.TestCase):
         # route on the service - one run resolves up to sixteen players and
         # profiles every deck the blue squad plays - which is exactly why it
         # gets named here rather than slipping in unremarked.
-        self.assertEqual(len(routes), 21)
+        #
+        # 22 on 10 Sep 2026: `/api/analytics/duo-pairs` (the unique DECK
+        # PAIRS played in 2v2). The last two additions to this service — the ops
+        # snapshot and the tracked-player count — deliberately rode on
+        # `/coverage` to keep this number still, so a third one taking its own
+        # path is a decision and not a habit. It is paged and searchable over
+        # 364,357 records, and folding paging parameters into `coverage` would
+        # have made every console load pay for a board nobody had opened.
+        self.assertEqual(len(routes), 22)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]

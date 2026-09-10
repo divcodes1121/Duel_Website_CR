@@ -594,3 +594,13 @@
   padding-top: 0.6rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* The count of battles the mode filter kept off this screen. UNDERLINED
+   RATHER THAN COLOURED, because it is not a warning — it is a footnote whose
+   `title` names every mode, and a hue here would read as an error on a log
+   that is working exactly as intended. */
+.hidden {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}

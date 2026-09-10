@@ -1,0 +1,26 @@
+[Unit]
+Description=Run the Deckkies 2v2 pair collection update hourly
+# If the unit is ever removed, the timer goes with it rather than firing at a
+# service that no longer exists.
+Requires=royalweb-duo.service
+
+[Timer]
+# HOURLY IS AMPLE AND IS NOT THE COST. The bot polls every two hours, so
+# anything faster mostly finds nothing; and the incremental read is an index
+# seek on ix_raw_stored rather than the four-minute scan a full rebuild pays.
+OnCalendar=hourly
+
+# NOT ON THE HOUR. The bot's own poll and this job both touch a 44.7 GB SQLite
+# file on one spinning volume, and overlapping readers are what let the WAL
+# reach 5.66 GB once. A spread start keeps them off each other.
+RandomizedDelaySec=600
+
+# CATCH UP AFTER A REBOOT. The watermark makes a late run identical to an
+# on-time one, so a missed hour costs freshness and nothing else -- but a run
+# that never happens costs freshness forever.
+Persistent=true
+
+Unit=royalweb-duo.service
+
+[Install]
+WantedBy=timers.target

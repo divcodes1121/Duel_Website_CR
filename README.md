@@ -57,6 +57,8 @@ bot's SQLite files read-only.
 | **What's new** (the bell) | **shipped 2026-09-02.** The bell in the top bar sat inert from the day the shell was built; it opens the release feed now, immediately right of the theme switch. Notes live in `src/content/releases.ts` and ship in the same commit as the change they describe, so the two cannot drift. An unread count on the bell and on the profile menu's row, from one hook; a first-time reader is stamped silently rather than greeted with a badge for a product they have never used. Per browser rather than per account — the honest limit, and the upgrade is a `profiles` column. +3.01 kB gzip; 11 unit checks, browser-verified 24/24 |
 | **Team Analysis** (`#/teams`) | **TWO TABS as of 2026-09-02 — Scouting Report and Match Plan.** One roster in gives a scouting report: what they play, and the decks that beat it, drawn from the archetype representatives and ranked through the same matchup ladder — plus a roster-wide read (their whole spread pooled, weighted by games) that a match plan has no equivalent of. Match Plan is the original screen, unchanged. The mode is an ABSENT `blue`, so there is no new route and the tripwire stays at 21. Main bundle 338.43 -> 338.44 kB gzip. **92 Python checks + 387 vitest; browser-verified 40/40.** Below, as before: paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Off the admin shelf and on sale**: everyone sees it, anon and free get a gate card, and the three-day trial opens it along with pro and admin. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
 | **The PDF layout engine** | **rebuilt 2026-09-06.** The renderer was a draw loop that decided page breaks from hardcoded height estimates — `case 'decks': return 34` — which is how it shipped stranded headings, art printed over its own caption, blank pages and a document that simply stopped. It is now MEASURE -> CHOOSE -> PACK -> AUDIT -> DRAW in `src/utils/report/`, and nothing draws before the page it lands on is decided. A component OFFERS compositions and the engine picks against the room actually left, so the same 24 pairs are nine across opening a page and fewer half way down it; a 40-row table becomes two tables side by side rather than two sheets. **The audit runs on every export in production**, reading the boxes actually committed, and caught four real faults on its first run. Main bundle **346.07 -> 337.97 kB gzip (-8.10)** — the old renderer left it and the engine is a lazy chunk. 51 unit checks; nine fixtures rendered and looked at, both themes, all clean |
+| **Recent Battles / 2v2** | **routed, 2026-09-10.** A `TeamVsTeam` row stores eight player cards, eight opponent cards and one opponent tag — structurally identical to a ladder row, so a 2v2 battle drew as a duel between two people who were never alone on the field, and nothing downstream could tell them apart. It went from 2.77% of stored battles in June to **25.11% in September**, i.e. one row in four. `battle_modes.py` now routes on `game_mode` BEFORE the deck pipeline: own-deck 1v1 to the log, 2v2 to a unique-deck collection, everything else counted and named in the footer. An allowlist on PATTERNS, because `Ranked1v1_NewArena` became `_NewArena2` and an exact list would drop a third one in silence. Which modes are out was measured — `PickMode` is 100% distinct decks (a draft), `ClassicDecks_Friendly` has nine decks total (a preset), `Showdown_Friendly` is 10.47% against Ladder's 6.89% and is therefore KEPT. **Not deployed** |
+| **2v2 deck pairs** (Admin) | **PHASE 2 DEPLOYED AND VERIFIED LIVE 2026-09-10 — 2v2 no longer enters `battles`.** Over a full 4,910-player startup sync after the guard: **3,633 new battles, 0 of them 2v2**, 13 modes still landing, 1,164 fresh 2v2 payloads still reaching `battle_raw`, roster unchanged at 4,910. The scheduled job folded them: +1,295 pairs, +2,266 occurrences, +577 participants, retained still 1,000, enrolled 0. `royalweb-duo.timer` is the first scheduled unit on that box; its run went **9m 36s → 18s** once `coverage()` stopped rescanning a 44.7 GB table on every pass. Phase 1 built 2026-09-10 — and it deletes nothing.** The refused rows become unique PARTNERSHIPS, two teammate decks played together, not individual decks. It reads `battle_raw`, because a `battles` row holds one deck and one opponent deck and **the teammate's deck is in no column of it** — the raw payload carries all four players. Identity is order-free at both levels, so `A + B` and `B + A` are one record. **51,671 rows have a tracked opponent**, so a battle is stored up to four times and is folded once by an identity built from its own contents. **Coverage is 78.2%**: 301,488 rows lost their payload to the cap valve and their partner deck is unrecoverable, so they are reported as `unreconstructable` and no pair is invented. **Phase 2 is a bot change** (`/opt/clashbot/clashdb.py` is the writer, not this repo) and **phase 3, the delete, is blocked** on that plus an aggregate rebuild — `player_stats_agg` demonstrably counts 2v2 and has no live rebuild caller. **Measured on live data: 1,080,047 payloads → 935,686 real battles → 1,191,142 unique pairs**, board read 0.53 s. +2.03 kB gzip; 205 new Python checks; **no browser pass** (admin-only, `/api/analytics` 500s locally). **Not deployed** |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -175,6 +177,8 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 38. [Testing and verification](#testing-and-verification)
 39. [The logo, and where it goes](#the-logo-and-where-it-goes)
 40. [Recent Battles — the raw log](#recent-battles--the-raw-log)
+40a. [The 2v2 problem, and the two paths out of it](#the-2v2-problem-and-the-two-paths-out-of-it)
+40b. [2v2 deck pairs — the data is migrated, not deleted](#2v2-deck-pairs--the-data-is-migrated-not-deleted)
 41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
 42. [Two filters and a heading](#two-filters-and-a-heading)
 43. [The account menu is a stack of cards](#the-account-menu-is-a-stack-of-cards)
@@ -11296,6 +11300,449 @@ is worse than not shipping it.
 Verified against the real database before the frontend went out: 666 battles,
 67 pages, 395W/265L/6D, real deck names, evolution art resolved on both sides,
 and 401 without a key.
+
+---
+
+## The 2v2 problem, and the two paths out of it
+
+Recent Battles shipped with no mode filter at all, and the reasoning is still
+in the module's own docstring: *"recent battles" that silently omit every
+ladder game is not a battle log. Every stored battle in the window is a row.*
+
+That was right about ladder and wrong about 2v2, and it took a season for the
+difference to matter.
+
+### Why nothing caught it
+
+A `TeamVsTeam` row is **structurally identical to a ladder row**. It stores
+exactly eight `player_card_keys`, exactly eight `opponent_card_keys`, and one
+`opponent_tag` — measured across all 1,356,765 of them, with no exceptions. So
+a 2v2 battle drawn as one deck against another looks perfectly correct on
+screen. There is no missing column, no malformed payload, nothing to assert
+against.
+
+But four people played it. The row shows one of the two decks on each side, and
+`opponent_tag` names one of two opponents with nothing recording which. Drawing
+it as a duel is not an omission, it is a **misstatement about what happened**.
+
+That is why the fix is a router rather than a filter, and why it runs first:
+
+```
+raw battles row
+  → is_own_deck_1v1  → Recent Battles, drawn as deck vs deck
+  → is_duo           → duo_pairs, folded into unique deck PAIRS
+  → otherwise          counted, named, drawn nowhere
+```
+
+By the time a row has been given a `player` side and an `opponent` side, the
+misstatement is already built and every consumer inherits it. The decision has
+to be made on `game_mode`, before the deck pipeline touches anything.
+
+### It stopped being rare
+
+Share of all stored battles that are 2v2, by month:
+
+| month | 2v2 rows | share of all stored battles |
+|---|---|---|
+| 2026-06 | 455 | 2.77% |
+| 2026-07 | 69,830 | 2.85% |
+| 2026-08 | 246,097 | 3.67% |
+| **2026-09** | **1,046,303** | **25.11%** |
+
+Supercell is running a 2v2 event. Roughly one row in four on every player's log
+was a battle this screen could not honestly draw.
+
+That curve is also the argument against a blocklist. A blocklist is only ever as
+current as the last time somebody looked at the mode table, and the table above
+is what "the last time somebody looked" costs.
+
+### An allowlist on patterns, not on exact strings
+
+`meta.META_MODES` matches exact strings, and for a board that is fine. For a
+log it is not: `Ranked1v1_NewArena` became `Ranked1v1_NewArena2`, both are
+stored in quantity, and a third is a matter of time. An exact allowlist would
+drop `Ranked1v1_NewArena3` out of every player's log **in silence, on the day a
+season turned**, with nothing raised anywhere.
+
+So the families are prefixes and substrings — `ranked1v1`, `ladder`,
+`cw_battle_1v1`, `duel_1v1`, `friendly`, `clanmate`, `tournament` — and a
+second stage takes a mode back when it names a deck the player did not choose.
+
+**Both stages are needed, because the markers combine.**
+`ClassicDecks_Friendly` and `MirrorDeck_Friendly` genuinely are friendlies;
+`CaptureTheEgg_Tournament` genuinely is a tournament. Those four are what the
+second list catches today. The rest of it — `teamvsteam`, `2v2`, `pickmode`,
+`eventdeck` — cannot fire on anything in the database as it stands, because
+stage one already refuses them, and that is exactly why they are there: a 2v2
+mode named `TeamVsTeam_Ladder` would sail through stage one on the word
+"ladder".
+
+### Which modes are out was measured
+
+The database holds 32 distinct mode strings. Deck diversity separated the
+extremes:
+
+| mode | battles | distinct decks | verdict |
+|---|---|---|---|
+| `PickMode` | 55,972 | 100.0% | a draft — the deck is dealt |
+| `ClassicDecks_Friendly` | 5,131 | **9 decks total** | a preset |
+| `Showdown_Friendly` | 501,553 | 10.47% | the player's own deck — **kept** |
+| `Ladder` (control) | 2,497,683 | 6.89% | — |
+
+The ratio is confounded by sample size, so it was only ever used to separate the
+obvious cases. `Showdown_Friendly` sitting beside `Ladder` and `Tournament`
+rather than beside `PickMode` is what kept half a million battles in the log.
+
+The rule that resolves the rest is one this repo had already written down.
+`meta.META_MODES` defines the meta board as *"competitive 1v1 where the player
+chose the deck"* and excludes `TeamVsTeam`, `Crazy_Arena`, `All_Random_Princess`
+and the event modes for exactly this reason. It also excludes friendly and duel
+— but only because those have their own screen, which is not a reason that
+applies to a battle log. So the log's rule is that rule minus its one exclusion.
+
+### What is dropped is counted and named
+
+The footer prints how many battles were kept off the screen, and its `title`
+names every mode with a count.
+
+This is not decoration. **An allowlist's failure mode is a perfectly good
+battle going missing in silence**, and the only defence is putting the omission
+where the reader already is. A mode Supercell ships tomorrow announces itself
+by name the first time it appears in anyone's log, instead of quietly
+shortening it.
+
+`summary.hidden` is `0` rather than absent when nothing was dropped — otherwise
+the client cannot tell "none were hidden" from "an API that has not been
+redeployed yet", and the two halves of this project ship separately.
+
+---
+
+## 2v2 deck pairs — the data is migrated, not deleted
+
+The obvious fix for 2v2 was to stop reading `TeamVsTeam` rows. It was rejected:
+the row carries real decks that real players really brought, and the only thing
+wrong with it is the shape Recent Battles would force it into. So the refused
+rows go somewhere.
+
+The first version of this collected **individual decks**, and that was wrong.
+
+> A 2v2 battle is four players and four decks. What a 2v2 player actually
+> chooses is **which two decks go together** — so the unit worth recording is a
+> partnership, and 364,357 unique individual decks is not an answer to "what do
+> people play in 2v2".
+
+`server/duo_pairs.py` records pairs. `duo_decks.py` is deleted.
+
+### The identity is order-free at two levels
+
+```
+pair identity = canonical( canonical(deck A), canonical(deck B) )
+```
+
+The eight card keys of a deck sort into a deck fingerprint; the two deck
+fingerprints sort into the pair fingerprint. So the same eight cards in any
+order are one deck, and `Deck A + Deck B` and `Deck B + Deck A` are one pair.
+
+The mode is hashed into both, not merely prefixed — a prefix alone is a label
+anyone could strip. A **mirror pair**, two teammates on the same list, is a real
+pairing and gets its own record; the board marks it, because it otherwise reads
+as a rendering bug.
+
+### It reads the raw payload, and that is the only reason it can exist
+
+This is the finding the whole design rests on, and it was checked before a line
+was written.
+
+A `battles` row holds one `player_card_keys`, one `opponent_card_keys` and one
+`opponent_tag`. **The teammate's deck is in no column of it.** A pair cannot be
+reconstructed from that row, and building one from the single deck it does hold
+would be fabricating the other half.
+
+`battle_raw.raw_json` has all of it:
+
+```
+team:     [ {tag, cards[8], crowns}, {tag, cards[8], crowns} ]
+opponent: [ {tag, cards[8], crowns}, {tag, cards[8], crowns} ]
+```
+
+So one battle yields **two** pair records — the team's and the opponents'. Both
+are real partnerships that were really played.
+
+`supportCards` is excluded. It is the tower troop, present on every payload, and
+including it would make every deck nine cards and fork one real deck on tower
+choice alone.
+
+### 78.2% can be reconstructed, and the rest is gone for good
+
+| month | 2v2 rows in `battles` | payload survives | % |
+|---|---|---|---|
+| 2026-06 | 455 | 0 | 0% |
+| 2026-07 | 69,832 | 520 | 0.7% |
+| 2026-08 | 246,118 | 16,568 | 6.7% |
+| 2026-09 | 1,065,130 | 1,062,959 | 99.8% |
+| **total** | **1,381,535** | **1,080,047** | **78.2%** |
+
+The raw-cap valve purged 1,881,526 `battle_raw` rows on 2026-09-01, and June
+predates raw collection entirely.
+
+**Those 301,488 battles are counted and reported as `unreconstructable`, never
+fabricated and never quietly dropped.** The one deck `battles` still holds for
+them is not half a pair; it is a deck whose partner is unknown, and the admin
+board draws that split rather than burying it.
+
+### One battle is one occurrence
+
+**51,671 2v2 rows have a tracked opponent**, so the same underlying battle is
+stored two or four times — once per tracked participant. Counting rows would
+inflate those pairs by up to 4x, and the result would look entirely plausible.
+
+`battle_identity` is built from the battle's own contents — its timestamp plus
+its four sorted tags — so every copy of one battle reduces to the same value
+whichever player's log it came from. The staging table's
+`PRIMARY KEY (battle_id, side)` then enforces the fold, rather than a Python set
+that would have to hold 1.08M identities in memory for the length of the run.
+
+### Nothing is deleted, and this is phase 1 of three
+
+Four independent blockers, each measured rather than asserted:
+
+1. **21.8% of the rows cannot become pairs**, so deleting them destroys the one
+   deck they hold and replaces it with nothing.
+2. **The aggregates already count 2v2, and deleting rows will not unfold them.**
+   Player `#200P8U2QJL` has 73 non-2v2 battles and a `player_stats_agg` figure
+   of **337**. `rebuild_aggregates` has no live caller, so the figures would
+   become permanently wrong and uncomputable from what remained.
+3. **This repository is not the writer.** `battles` is written by
+   `/opt/clashbot/clashdb.py` — the Discord bot, a different codebase on the
+   same VPS. Deleting today means the bot writes fresh 2v2 rows tomorrow. That
+   bot change is phase 2, and it is outside this repo.
+4. **It breaks the `mode=ro` guarantee** stated in both READMEs, which
+   `tracking.py` exists to preserve, against a database with **no backup** — and
+   would not reclaim space anyway, since deletes free pages to the freelist. The
+   raw purge freed 8.52 GiB and the file size did not move.
+
+Phase 3, the historical cleanup, comes after phase 2 has shipped and the
+aggregates have been rebuilt. Not before.
+
+### Measured, against the live database
+
+The catalog was brought to 123 cards and the full reconciliation rerun on
+2026-09-10. **Every side resolved.**
+
+| | first run | after the catalog fix |
+|---|---|---|
+| payloads read | 1,080,047 | 1,080,046 |
+| real battles after dedup | 935,686 | **944,970** |
+| duplicate payloads folded | 144,361 | 135,076 |
+| sides attempted | — | 2,160,092 |
+| sides resolved | — | **2,160,092** |
+| **sides unresolved** | 81,941 | **0** |
+| sides staged | 1,789,431 | 1,889,940 |
+| **unique pairs** | 1,191,142 | **1,246,907** |
+| wall clock | ~20 min | 18m 27s |
+
+**The arithmetic closes exactly**, which is why it is reported this way:
+1,080,046 × 2 = 2,160,092 sides attempted; 135,076 duplicate payloads × 2 =
+270,152 sides dropped by the staging primary key; 2,160,092 − 270,152 =
+1,889,940 staged, which is 944,970 battles × 2. Nothing is unaccounted for.
+
+Every refusal now names its cause — `unknown_card:<id>`, `not_eight_cards:<n>`,
+`duplicate_cards:<n>` — and a test asserts the identity
+
+```
+sides attempted − sides resolved == sum of the reason counters
+```
+
+so a shortfall can never again be visible and unexplainable. That is exactly
+what the first run left: one absent card explained all 81,941 refusals and
+nothing in the output could say so.
+
+### The catalog deploy fixed a live 1v1 bug too
+
+The analytics host was running the 122-card `cards.json` from `e06d5c3^` —
+md5-verified as exactly that commit, so it had not drifted independently, it
+was simply one commit behind.
+
+Meanwhile **the bot already writes `minion-giant` into
+`battles.player_card_keys`, in 114,623 rows.** Every one of those decks was
+getting the wrong name and no win-condition classification on the live site.
+`/status` reports `cardData` 123 now.
+
+### Pair semantics, verified against the raw payloads
+
+Thirty real battles were sampled and each one re-derived **by hand** from the
+JSON, without calling the function under test, confirming that
+`team[0].tag → team[0].deck` and `team[1].tag → team[1].deck` and that the
+stored pair holds exactly those two decks.
+
+**The decisive check is the negative one.** `battles` offers
+`player_card_keys` and `opponent_card_keys` — one deck from each *side*, the
+pairing a lazy implementation would reach for because it sits in a single row.
+The verification asserts the cross-side pairing is **not** what was stored, so
+a pass cannot be explained by the two happening to coincide.
+
+93 checks, all passing. Collection-wide: every deck eight cards, **zero pairs
+stored out of canonical order**, and 3,502 mirror pairs among 1,246,907.
+
+### Tag discovery### Tag discovery
+
+Every participant in a reconstructed battle is queued for tracking, so
+discovering someone's 2v2 activity makes them available for collection.
+
+It is idempotent twice over: it filters against `tracking.bot_tracked_set()`
+first, the way the recruiter does, and `bulk_request` is itself
+`ON CONFLICT DO UPDATE`. A player appearing in a thousand 2v2 battles bumps a
+hit counter and never becomes a second row. It writes to this project's own
+queue file, never to the bot's `tracked_players`.
+
+### 866,226 strangers, and the bound that was put on them
+
+The reconciliation discovered **866,226 distinct 2v2 participants** against a
+tracked roster of **4,910**. Enrolling them on sight would be 176x the roster
+and, at this project's own ~32 MB per player per year, roughly 27.6 TB a year
+against a database with no backup.
+
+So enrolment is qualified: **three distinct battles** to become eligible, the
+existing **12,000 ceiling** as an absolute cap, and over the cap the
+most-observed go first.
+
+| | |
+|---|---|
+| participants discovered | 866,226 |
+| already tracked / queued | 2,339 / 6 |
+| below the 3-battle threshold | 611,760 |
+| eligible | 254,466 |
+| would be enrolled | 7,083 |
+| blocked by the ceiling | 245,038 |
+
+**The effective threshold is 50 battles, not 3.** 254,466 people clear three
+and there are 7,083 slots, so the ranking is what selects and the cut lands at
+50 distinct 2v2 battles. The threshold still does real work — it removes
+611,760 one- and two-off strangers, 70.6% of everyone seen — but anyone reading
+"three battles qualifies you" as the policy will be wrong about who is actually
+tracked.
+
+**Distinct BATTLES, not sightings.** The count comes from a ledger keyed
+`(battle_id, tag)`, because the same battle reaches us once per tracked
+participant — a sightings counter would let one battle seen from three sides
+qualify somebody on its own.
+
+**Not enrolling somebody never discards their pair.** Storing a partnership and
+spending polling on a person are separate decisions, and a test asserts a pair
+survives none of its participants qualifying.
+
+### Two independent bounds
+
+The 2v2 system must never become an unlimited store, so it has two limits that
+do different jobs.
+
+| | |
+|---|---|
+| `DUO_TOP_PLAYERS_LIMIT` = 1000 | bounds expensive per-player 2v2 **detail** |
+| `CLASH_RECRUIT_CEILING` = 12000 | bounds full player **tracking** |
+
+A player can sit in the lightweight tier without being tracked, and **a pair
+exists whether or not either participant is in either**. A partnership is
+evidence about decks; losing one because nobody in it was important enough is
+the opposite of what the board is for.
+
+The lightweight tier is one ~40-byte row per participant — tag, distinct
+battles, first and last seen — and is kept for all 866,226. The per-battle
+ledger is the expensive part, and on the live collection reconciling it took
+
+```
+3,779,880 rows  ->  141,710 rows   (-96.2%, 57 s)
+cut at 102 distinct battles
+```
+
+**Bounded is not frozen.** The ranking reads the lightweight counts, which are
+maintained for everyone, so number 1,001 overtaking number 1,000 is visible and
+is admitted on the next reconcile. Rank from the pruned ledger instead and
+today's population becomes permanent, because nobody outside it could ever
+accumulate another countable battle. A test plays a late starter past an
+incumbent and asserts the slot changes hands.
+
+### The Phase 2 dry run
+
+Measured on the live collection, writing nothing:
+
+| | |
+|---|---|
+| 2v2 payloads observed | 1,080,046 |
+| unique actual battles | 944,970 |
+| duplicate perspectives | 135,076 |
+| unique teammate pairs | 1,246,907 |
+| participants discovered | 866,226 |
+| already tracked | 2,339 |
+| new untracked | 863,887 |
+| at or above 3 battles | 254,466 |
+| eligible, qualified **and** untracked | 252,127 |
+| would enrol | 7,083 |
+| **actually enrolled** | **0** |
+| population retained / cut | 1,000 / 102 battles |
+| unreconstructable historical | 301,488 |
+
+Zero enrolled is by construction. `CLASH_DUO_PROMOTE` is off and gates both the
+bulk and the per-battle path — a flag stopping only the bulk one would let the
+roster fill two players at a time while appearing to be switched off.
+
+### The bot patch, written and not applied
+
+`server/phase2_bot_patch.md` holds it: three lines of guard and a six-line
+predicate in `clashdb.save_battles`, placed **before** the `team[0]` /
+`opponent[0]` extraction, because that extraction is what turns a four-player
+battle into a row indistinguishable from a duel.
+
+`duel_timeline` needs no change — it filters on `is_competitive_practice_match`,
+which never matched `TeamVsTeam`. `battle_raw` keeps its retention policy.
+
+`test_battle_modes.py` hardcodes the bot's marker list and asserts it agrees
+with the router across every live mode string, the arrangement
+`test_tracking.py` already uses: two projects deploy separately, and nothing
+else would notice them diverging.
+
+**Applying the guard first would open a loss window.** 2v2 would stop entering
+`battles` while nothing aggregates it, leaving `battle_raw` — which has its own
+retention — as the only record. The order is: deploy the analytics half, build
+the collection, schedule `update()`, and only then patch the bot. There is no
+cron and no systemd timer on that box today, so the schedule is a new unit.
+
+### It is slow, and the reason is worth knowing
+
+`battle_raw` is **44.7 GB** and `game_mode` carries no index, so a single
+`SELECT DISTINCT game_mode` over it measures **4 minutes 5 seconds**.
+
+The mode list is therefore memoised for the life of the process. Un-memoised it
+ran four times in one migration — twice inside the coverage report and twice
+inside the scan — and the job spent more than six minutes without staging a
+single row. Budget tens of minutes for a full migration, and never put any part
+of it on a request. The board itself reads a small local file.
+
+### The failure that produced a true sentence about a broken run
+
+The migration maps the payload's Supercell card ids through
+`duel_combos.card_info`, which gained its `id` field in this same change.
+
+Run against a host that had not been redeployed, every id lookup returned
+`None`, every deck resolved to `[]`, and the migration was on course to report
+**0 pairs and 1.08M unreadable payloads**. That is a true sentence, and it is
+indistinguishable from a database that genuinely holds no readable 2v2.
+
+It raises `CardDataUnavailable` before the scan starts now. `server/` deploys by
+hand and the two halves of this project always ship separately, so a stale
+sibling module is the normal failure here, not an exotic one.
+
+### The board
+
+**Admin → 2v2 deck pairs**, collapsed and loaded on demand. Each row is two card
+strips with a **`+`** between them — a plus, not a VS, because they are
+teammates and every other VS mark in this project means two sides of a fight —
+plus the occurrence count, distinct participants, first and last seen, and the
+fingerprints in a `title` for reconciliation.
+
+Above the list, a split bar shows how many of the 2v2 rows still in `battles`
+could be reconstructed and how many could not. `Split` gained `format` and label
+props to draw it; without them `bytes(1080047)` printed "1.08 MB" of rows.
 
 ---
 

@@ -52,6 +52,11 @@ server/.counter_snapshot.json
 server/.tracking.db
 server/.tracking.db-wal
 server/.tracking.db-shm
+# The 2v2 unique-deck collection. Derived data, rebuildable from `battles` in
+# 25 s with `python server/duo_decks.py --rebuild`, so it is never source.
+server/.duo_decks.db
+server/.duo_decks.db-wal
+server/.duo_decks.db-shm
 
 # Phase 2 feature cache — derived data, regenerable via `--dump` (8.7 MB)
 server/ml/results/*.jsonl.gz
