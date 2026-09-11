@@ -57,6 +57,21 @@ export const DOCK_PATHS: Record<string, string> = {
 
   /* three bars */
   Meta: 'M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z',
+
+  /* TWO CARDS SIDE BY SIDE — the 2v2 board.
+   *
+   * IT SHIPPED WITHOUT ONE AND THE CELL WENT BLACK. `DOCK_PATHS[label]` is
+   * looked up by the nav item's LABEL, so adding a destination to `TOP_NAV`
+   * without adding its twin here renders `<path d={undefined}>` — an empty
+   * glyph in a cell that still takes its 40px, which reads as a broken icon
+   * rather than as a missing one. **Every new nav item needs an entry here.**
+   *
+   * Two subpaths in one `d`, the same form Team Analysis already takes, so it
+   * still morphs. */
+  '2v2 Decks':
+    'M4 4h6a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 10 20H4a1.5 1.5 0 0 1-1.5-1.5v-13'
+    + 'A1.5 1.5 0 0 1 4 4zM14 4h6a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 20 20h-6a1.5 '
+    + '1.5 0 0 1-1.5-1.5v-13A1.5 1.5 0 0 1 14 4z',
 };
 
 /** The two droplet shapes the source squashes an icon through on its way back.

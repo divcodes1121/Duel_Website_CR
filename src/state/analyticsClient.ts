@@ -1749,6 +1749,11 @@ export interface DuoReport {
    *  refuse an unrecognised key and fall back — the control must show what it
    *  actually got, not what it asked for. */
   sort: string;
+  /** Which card keys the server accepted and filtered by. Echoed back for the
+   *  same reason `sort` is: an unknown key is dropped rather than refused, so a
+   *  control drawing its chips from what it SENT could show a card the board is
+   *  not actually filtered by. */
+  cards?: string[];
   /** The closed vocabulary of orderings the server will accept. */
   sorts: string[];
   summary: {
@@ -1790,16 +1795,23 @@ export interface DuoReport {
  * One page of the unique 2v2 partnerships.
  *
  * EVERY CONTROL IS A SERVER PARAMETER. There are over a million pairs, so
- * paging, ordering and searching all happen in SQL — sorting or filtering what
- * one page returned would silently answer for 25 rows while appearing to
- * answer for the collection. `sort` goes through a closed vocabulary on the
- * server, which is why the response echoes back which ordering it used.
+ * paging, ordering and filtering all happen in SQL — filtering what one page
+ * returned would silently answer for 25 rows while appearing to answer for the
+ * collection. `sort` goes through a closed vocabulary on the server and every
+ * card key is checked against the catalog there, which is why the response
+ * echoes back both.
+ *
+ * `cards` means EVERY card in ONE deck of the pair, not "somewhere in the
+ * partnership" — asking for Hog Rider and Fireball is a question about a deck,
+ * and satisfying it with one card in each teammate's list would match almost
+ * everything.
  */
 export function fetchDuoPairs(
-  page = 1, per = 25, query = '', sort = 'played',
+  page = 1, per = 25, cards: readonly string[] = [], sort = 'played',
 ): Promise<DuoReport> {
   const q = new URLSearchParams({
-    page: String(page), per: String(per), sort, q: query,
+    page: String(page), per: String(per), sort,
   });
+  if (cards.length) q.set('cards', cards.join(','));
   return get<DuoReport>(`/api/analytics/duo-pairs?${q.toString()}`);
 }

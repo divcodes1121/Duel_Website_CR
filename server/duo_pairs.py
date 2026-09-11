@@ -89,6 +89,11 @@ MODE = "2v2"
 PER_PAGE = 25
 MAX_PER_PAGE = 200
 
+# THE SIZE OF A DECK. The card filter is an AND over one deck's eight cards, so
+# a ninth term cannot be true of any row — capping here keeps a pasted query
+# string from building an arbitrarily long WHERE.
+MAX_FILTER_CARDS = 8
+
 #: **A 2v2 PARTICIPANT IS NOT TRACKED ON SIGHT.** The historical
 #: reconciliation found **866,226 distinct participants** against a tracked
 #: roster of **4,910** — 176x — because a 2v2 event puts you in front of three
@@ -1600,22 +1605,64 @@ def _pair_row(row) -> dict:
     }
 
 
+def valid_cards(keys) -> list[str]:
+    """The known card keys out of `keys`, deduplicated, in the order given.
+
+    AN UNKNOWN KEY IS DROPPED, NOT REFUSED. The catalog moves — Minion Giant
+    shipped while this host was a commit behind — and a filter that errors on a
+    card the deploy has not heard of yet is a board that goes blank on the day a
+    season turns. The cards it DOES know still narrow the board.
+
+    Capped at `MAX_FILTER_CARDS`, which is the size of a deck: past eight, every
+    additional clause is a term that cannot be true of any row.
+    """
+    known, out = set(dx.card_keys()), []
+    for k in keys or ():
+        k = (k or "").strip().lower()
+        if k and k in known and k not in out:
+            out.append(k)
+    return out[:MAX_FILTER_CARDS]
+
+
 def report(page: int = 1, per: int = PER_PAGE, query: str = "",
-           sort: str = DEFAULT_SORT) -> dict:
+           sort: str = DEFAULT_SORT, cards=()) -> dict:
     """One page of the unique 2v2 pairs.
 
     `sort` is a KEY into `SORTS`, never a column name — an unrecognised value
     falls back to the default rather than reaching the ORDER BY.
+
+    `cards` narrows to pairs where ONE of the two decks holds every card given.
+    `query` is the older free-text search over the same columns plus the
+    fingerprints; `cards` wins when both are supplied, because it is the
+    precise statement of the same intent.
     """
     _ensure()
     per = max(1, min(MAX_PER_PAGE, per))
     sort = sort if sort in SORTS else DEFAULT_SORT
     order = SORTS[sort]
+    picked = valid_cards(cards)
     con = _connect()
     try:
         where, args = "", []
         q = (query or "").strip().lower()
-        if q:
+        if picked:
+            # EVERY CARD, IN ONE DECK — not "somewhere in the pair". Asking for
+            # Hog Rider and Fireball means a deck that runs both; satisfying it
+            # with one card in each teammate's list would answer a question
+            # nobody asked and would match almost everything.
+            #
+            # THE KEY IS QUOTED, AND THAT IS THE WHOLE CORRECTNESS OF IT. The
+            # column holds a JSON array, so `%"giant"%` has boundaries where a
+            # bare `%giant%` does not: measured against production, `giant`
+            # matches 605,447 pairs — every royal-, goblin-, minion-,
+            # electro-giant and giant-skeleton — against the real Giant's
+            # 45,360.
+            side = lambda col: " AND ".join(  # noqa: E731
+                "{} LIKE ?".format(col) for _ in picked)
+            where = "WHERE (({}) OR ({}))".format(
+                side("deck_a_cards"), side("deck_b_cards"))
+            args = ['%"{}"%'.format(c) for c in picked] * 2
+        elif q:
             # CARD KEY, PAIR FINGERPRINT OR EITHER DECK FINGERPRINT. The deck
             # fingerprints are their own columns, so a search for one has to
             # name them — matching only the pair's would answer "no" for a
@@ -1671,6 +1718,11 @@ def report(page: int = 1, per: int = PER_PAGE, query: str = "",
         "perPage": per,
         "total": total,
         "query": query or "",
+        # ECHOED BACK, like `sort`, because the server decides what it accepted:
+        # an unknown key is dropped rather than refused, so a control that drew
+        # its own chips from what it SENT would show a card the board is not
+        # filtered by.
+        "cards": picked,
         "sort": sort,
         "sorts": sorted(SORTS),
         "summary": {

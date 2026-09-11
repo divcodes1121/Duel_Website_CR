@@ -153,12 +153,55 @@ describe('the page itself', () => {
     expect(page).toContain('Population: Top');
   });
 
-  it('sorts and pages on the SERVER', () => {
+  it('sorts, pages and FILTERS on the server', () => {
     /* There are over a million pairs. Filtering what one page returned would
        quietly answer for 25 rows while appearing to answer for the
        collection. */
     expect(page).not.toMatch(/report\.pairs[\s.]*(filter|sort)\(/);
-    expect(page).toContain('void load(1, query, sort, per)');
+    expect(page).toContain('void load(1, next, sort, per)');
+    expect(client).toContain("q.set('cards', cards.join(','))");
+  });
+
+  it('filters by picked cards, not by a typed string', () => {
+    /* A typed string had to be spelled the way the database spells it —
+       `hog-rider` finds 434,265 pairs and `Hog Rider` finds none, which reads
+       as "there are no hog rider decks". A picked card cannot be misspelled. */
+    expect(page).toContain('<WinConFilter');
+    expect(page).not.toContain('placeholder=');
+    expect(page).not.toMatch(/type="text"|styles\.search/);
+  });
+
+  it('reads the filter back off the response, never off what it sent', () => {
+    /* The server drops an unknown key rather than refusing it — the catalog
+       moves — so a count line quoting the PICKED list could name a card the
+       board is not actually filtered by. */
+    expect(page).toContain('report.cards');
+    expect(page).not.toMatch(/picked\.length\} picked card/);
+  });
+
+  it('shows the measured loading readout while it fetches', () => {
+    /* `ReadingState` counts elapsed time against how long this screen took the
+       last few times on this browser. Its key is its own: a page of pairs is
+       not paced like the Coach's matchup scoring. */
+    expect(page).toContain('<ReadingState k="duo-pairs"');
+    expect(page).toMatch(/\{loading && \(/);
+  });
+
+  it('spends the whole row on the two decks', () => {
+    /* The played / players / first seen / last seen list took about a third of
+       the width to restate what the row's POSITION in a ranking already says. */
+    expect(page).not.toContain('<dl');
+    expect(page).not.toContain('<dt>');
+    /* "First seen" survives as a SORT option, which is the ordering and not a
+       figure printed against every row — so match the figure, not the words. */
+    expect(page).not.toContain('Last seen');
+    expect(page).not.toContain('pair.occurrences');
+    expect(page).not.toContain('pair.players');
+    const css = R('src', 'components', 'Analytics', 'DuoDecks', 'DuoDecks.module.css');
+    expect(css).toMatch(/\.pair \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto minmax\(0, 1fr\)/s);
+    /* Fractions of the column, so the art grows into the space the figures
+       used to hold, rather than a fixed pixel size that would leave it. */
+    expect(css).toMatch(/\.cards \{[^}]*repeat\(4, minmax\(0, 1fr\)\)/s);
   });
 
   it('owns its scroll on a desktop and gives it back on a phone', () => {

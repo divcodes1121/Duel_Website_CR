@@ -104,11 +104,15 @@
 
 /* ── Controls ────────────────────────────────────────────────────────────── */
 
+/* THE FILTER LEADS AND THE TWO SELECTS FOLLOW. `WinConFilter` hangs a 30rem
+   panel from its trigger and this row starts at the left margin, so the panel
+   opens rightwards into the board — `align="start"`, see the note at its call
+   site for why `end` puts it off the screen here. */
 .controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
 }
 
 .control {
@@ -122,8 +126,7 @@
   color: var(--text-muted);
 }
 
-.control select,
-.search {
+.control select {
   padding: 0.4rem 0.55rem;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -133,27 +136,6 @@
   font-size: 0.82rem;
   text-transform: none;
   letter-spacing: normal;
-}
-
-.search {
-  flex: 1 1 12rem;
-  min-width: 0;
-}
-
-.go {
-  padding: 0.4rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-2);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.go:hover {
-  border-color: var(--text-muted);
 }
 
 .count {
@@ -170,43 +152,40 @@
   gap: 0.75rem;
 }
 
+/* TWO DECKS AND A PLUS, AND NOTHING ELSE IN THE ROW.
+ *
+ * A five-item figure list used to sit on the right — played, players, first
+ * seen, last seen — and it took about a third of the width. The board is a
+ * ranking and the sort control names the ordering, so those counts were
+ * restating what the row's POSITION already said, at the price of the space the
+ * decks are read in.
+ *
+ * `minmax(0, 1fr) auto minmax(0, 1fr)`, never `1fr auto 1fr`: a bare `1fr` is
+ * `minmax(auto, 1fr)` and blows a grid out on a wide child without anything
+ * inside appearing to overflow — the children fit their tracks and the tracks
+ * do not fit the grid. This project has hit that three times.
+ */
 .pair {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.85rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  gap: 1.25rem;
+  padding: 1rem 1.1rem;
   border: 1px solid var(--glass-stroke);
-  border-radius: 16px;
+  border-radius: 18px;
   background: var(--glass-bg);
 }
 
-/* THE TRACKS ARE SIZED TO THE STRIPS, NOT TO THE ROW, and that was a real
-   misreading before it was a tidiness point. With `1fr` tracks at 1440 each
-   deck column ran ~500px around a 230px strip, so deck A's average-elixir
-   figure — pushed to the right edge of its own track — printed immediately to
-   the LEFT of the words "DECK B" and read as belonging to it.
-   `minmax(0, max-content)` keeps the wrapper (it is what stops a long strip
-   blowing the grid out, the `1fr` trap this project has hit twice) while
-   letting the column stop where the cards do. */
-.decks {
-  flex: 0 1 auto;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, max-content) auto minmax(0, max-content);
-  justify-content: start;
-  align-items: start;
-  gap: 0.6rem;
-}
-
 /* A PLUS, NOT A VS. They are teammates, and every other VS mark in this
-   project means two sides of a fight. */
+   project means two sides of a fight. Sized up with the decks — at 1.2rem it
+   was a speck between two 460px blocks. */
 .plus {
   align-self: center;
   font-family: var(--font-display);
-  font-size: 1.2rem;
+  font-size: 2rem;
   font-weight: 700;
+  line-height: 1;
   color: var(--text-muted);
 }
 
@@ -218,12 +197,9 @@
      edge. Stretched, the chips centre themselves against the column rather
      than sitting under the cards they act on. */
   align-items: flex-start;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
-/* The elixir figure sits BESIDE the label, not at the far end of the row —
-   see the note on `.decks`. `align-self: stretch` so the two still bracket the
-   strip's width once the column is content-sized. */
 .deckHead {
   align-self: stretch;
   display: flex;
@@ -233,7 +209,7 @@
 }
 
 .deckSide {
-  font-size: 0.66rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -241,57 +217,46 @@
 }
 
 .deckElixir {
-  font-size: 0.72rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--hue-violet);
 }
 
-/* 4x2 ON `minmax(0, 54px)` TRACKS, not eight across and not `1fr` columns.
-   Eight 54px cards plus gaps need ~453px, which no phone has; and four
-   fractions of a phone row make the art LARGER than the desktop board's. */
+/* 4x2 AND THE CARDS FILL THE HALF THEY ARE GIVEN.
+ *
+ * The tracks are fractions of the deck's own column, not a fixed pixel size, so
+ * the art grows with the window instead of leaving a pool of empty panel beside
+ * it — which is what the figure list used to occupy. `max-width` caps it where
+ * a card stops gaining anything: the served art is 302px wide, so past ~150 the
+ * strip is upscaling.
+ *
+ * NOT eight across. Eight cards at this size need well over a thousand pixels,
+ * and dropping them to fit would make "big" smaller than what was there before. */
 .cards {
+  align-self: stretch;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 54px));
-  gap: 0.2rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.3rem;
+  max-width: 39rem;
 }
 
 .card {
   width: 100%;
   height: auto;
-  border-radius: 5px;
+  border-radius: 7px;
 }
 
-/* ── The figures beside a pair ───────────────────────────────────────────── */
-
-.facts {
-  flex: 0 1 auto;
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(6.5rem, 100%), 1fr));
-  gap: 0.5rem 1rem;
-}
-
-.facts dt {
+/* Sits over the row's top-right corner rather than in the flow: it is a note
+   about the pair and there is no longer a column of notes for it to join. */
+.mirror {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.8rem;
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.facts dd {
-  margin: 0;
-  font-size: 0.82rem;
-}
-
-.figure {
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.mirror {
   color: var(--hue-pink);
-  font-weight: 600;
 }
 
 /* ── Pager and messages ──────────────────────────────────────────────────── */
@@ -361,12 +326,20 @@
 
   /* The two decks stack, and the plus becomes the divider between them
      rather than a gap between columns. */
-  .decks {
+  .pair {
     grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.85rem;
   }
 
   .plus {
     justify-self: center;
     padding: 0.1rem 0;
+  }
+
+  /* The cards were already fractions of their column, so nothing about the
+     strip changes on a phone — it simply gets the full width instead of half. */
+  .cards {
+    max-width: none;
   }
 }

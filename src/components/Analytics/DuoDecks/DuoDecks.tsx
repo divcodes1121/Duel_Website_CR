@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { getCardIconUrl } from '../../../data/cards';
-import { type DuoDeck, type DuoPair, type DuoReport, fetchDuoPairs } from '../../../state/analyticsClient';
+import {
+  type DuoDeck,
+  type DuoPair,
+  type DuoReport,
+  fetchDuoPairs,
+} from '../../../state/analyticsClient';
 import { DeckActions } from '../../DeckActions/DeckActions';
+import { WinConFilter } from '../../WinConFilter/WinConFilter';
+import { ReadingState } from '../ReadingState';
 import styles from './DuoDecks.module.css';
 
 /**
@@ -24,6 +31,15 @@ import styles from './DuoDecks.module.css';
  * A "+" SEPARATES THEM, NEVER A "VS". They are teammates. Every other VS mark
  * in this project means two sides of a fight, and reusing it here would state
  * the opposite of what the row says.
+ *
+ * ── THE ROW IS TWO DECKS AND NOTHING ELSE ─────────────────────────────────
+ *
+ * It used to carry a five-item list beside them — played, players, first seen,
+ * last seen — which spent a third of the width on figures nobody came for. The
+ * board is a RANKING, so the order is what those counts were for and the sort
+ * control already names it. The decks take the whole row now and are drawn
+ * large, one left and one right: they are the only thing on this screen anybody
+ * reads card by card.
  */
 
 const SORTS = [
@@ -56,8 +72,8 @@ function Deck({ deck, side }: { deck: DuoDeck; side: string }) {
             alt={c.name}
             title={`${c.name} · ${c.elixir} elixir`}
             loading="lazy"
-            width={54}
-            height={65}
+            width={302}
+            height={363}
           />
         ))}
       </div>
@@ -65,8 +81,9 @@ function Deck({ deck, side }: { deck: DuoDeck; side: string }) {
           order here is the canonical one rather than `arrange_deck`'s, so the
           game seats the deck alphabetically — a legal deck, and the same eight
           cards. Re-sorting it here would only make the link disagree with the
-          strip above it. */}
-      <DeckActions cards={deck.cardKeys} name={side} size="sm" />
+          strip above it. `md` now the decks are large; `sm` chips under a
+          170px-wide card strip read as leftovers. */}
+      <DeckActions cards={deck.cardKeys} name={side} size="md" />
     </div>
   );
 }
@@ -74,48 +91,16 @@ function Deck({ deck, side }: { deck: DuoDeck; side: string }) {
 function Pair({ pair }: { pair: DuoPair }) {
   return (
     <article className={styles.pair}>
-      <div className={styles.decks}>
-        <Deck deck={pair.deckA} side="Deck A" />
-        <span className={styles.plus} aria-label="played together with">
-          +
-        </span>
-        <Deck deck={pair.deckB} side="Deck B" />
-      </div>
-      <dl className={styles.facts}>
-        <div>
-          <dt>Played</dt>
-          <dd className={styles.figure}>{pair.occurrences.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Players</dt>
-          <dd className={styles.figure}>{pair.players.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>First seen</dt>
-          <dd>{stamp(pair.firstSeen)}</dd>
-        </div>
-        <div>
-          <dt>Last seen</dt>
-          <dd>{stamp(pair.lastSeen)}</dd>
-        </div>
-        {pair.mirror && (
-          <div>
-            <dt>Note</dt>
-            {/* Both teammates on the same list. A real pairing, and worth
-                marking because it otherwise reads as a rendering fault. */}
-            <dd className={styles.mirror}>Mirror pair</dd>
-          </div>
-        )}
-      </dl>
+      <Deck deck={pair.deckA} side="Deck A" />
+      <span className={styles.plus} aria-label="played together with">
+        +
+      </span>
+      <Deck deck={pair.deckB} side="Deck B" />
+      {/* Both teammates on the same list. A real pairing, and worth marking
+          because it otherwise reads as a rendering fault. */}
+      {pair.mirror && <span className={styles.mirror}>Mirror pair</span>}
     </article>
   );
-}
-
-/** `20260911T095047.000Z` is Supercell's stamp, not something to show a reader. */
-function stamp(raw: string): string {
-  const m = /^(\d{4})(\d{2})(\d{2})/.exec(raw || '');
-  if (!m) return '—';
-  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 export function DuoDecks() {
@@ -124,26 +109,17 @@ export function DuoDecks() {
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<string>('played');
   const [per, setPer] = useState<number>(25);
-  const [query, setQuery] = useState('');
-  /* The box you type in and the term the server answered for are different
-     things: without the split, every keystroke would either fire a request or
-     silently disagree with the result on screen. */
-  const [applied, setApplied] = useState('');
+  /* The cards the reader has picked. The SERVER decides which of them it
+     accepted — an unknown key is dropped rather than refused — so what the
+     board says it filtered by is read from the response, never from this. */
+  const [picked, setPicked] = useState<string[]>([]);
 
   const load = useCallback(
-    async (page: number, q: string, s: string, n: number) => {
-      /* THE SERVER MATCHES CARD KEYS, and a reader types card names. Measured
-         against production: `hog-rider` finds 434,265 pairs and `Hog Rider`
-         finds none — which reads as "there are no hog rider decks" rather than
-         as "that is not how the field is spelled". The normalised term is what
-         the count line quotes back, so what was searched for is never in
-         doubt. */
-      const term = q.trim().toLowerCase().replace(/\s+/g, '-');
+    async (page: number, cards: string[], s: string, n: number) => {
       setLoading(true);
       setError(null);
       try {
-        setReport(await fetchDuoPairs(page, n, term, s));
-        setApplied(term);
+        setReport(await fetchDuoPairs(page, n, cards, s));
       } catch {
         setError('Could not reach the analytics service.');
       } finally {
@@ -154,8 +130,24 @@ export function DuoDecks() {
   );
 
   useEffect(() => {
-    void load(1, '', 'played', 25);
+    void load(1, [], 'played', 25);
   }, [load]);
+
+  function toggle(key: string) {
+    const next = picked.includes(key)
+      ? picked.filter((k) => k !== key)
+      : [...picked, key];
+    setPicked(next);
+    /* A pick is a new question about 1.4M rows, so it goes back to page 1.
+       Staying on page 900 of a board that now has four would clamp to the end
+       and read as the filter having scrolled somewhere at random. */
+    void load(1, next, sort, per);
+  }
+
+  function clear() {
+    setPicked([]);
+    void load(1, [], sort, per);
+  }
 
   const summary = report?.summary;
 
@@ -190,13 +182,35 @@ export function DuoDecks() {
       )}
 
       <div className={styles.controls}>
+        {/* THE CONTROL META AND DUEL ZONE ALREADY USE, and it replaced a text
+            box. A typed string had to be spelled the way the database spells
+            it — measured against production, `hog-rider` found 434,265 pairs
+            and `Hog Rider` found none, which reads as "there are no hog rider
+            decks". A picked card cannot be misspelled, shows its art, and the
+            panel reaches all 123 of them.
+
+            `start`, AND `end` WAS TRIED AND IS WRONG HERE. The panel is 30rem
+            and `align` says which of ITS edges is pinned to the trigger's — so
+            `end` pins the panel's right edge to the trigger's right edge and it
+            grows LEFTWARDS. This trigger leads the control row at x 290, which
+            put the panel's left edge at -115 and half the cards off the screen.
+            Meta and Duel Zone need `end` because their triggers sit at the far
+            right of a header; this one does not. Measured, not reasoned: the
+            first attempt shipped `end` on the strength of the component's own
+            note and the screenshot showed the panel hanging off the page. */}
+        <WinConFilter
+          selected={picked}
+          onToggle={toggle}
+          onClear={clear}
+          align="start"
+        />
         <label className={styles.control}>
           Sort
           <select
             value={sort}
             onChange={(e) => {
               setSort(e.target.value);
-              void load(1, applied, e.target.value, per);
+              void load(1, picked, e.target.value, per);
             }}
           >
             {SORTS.map((s) => (
@@ -213,7 +227,7 @@ export function DuoDecks() {
             onChange={(e) => {
               const n = Number(e.target.value);
               setPer(n);
-              void load(1, applied, sort, n);
+              void load(1, picked, sort, n);
             }}
           >
             {PER_PAGE.map((n) => (
@@ -223,25 +237,6 @@ export function DuoDecks() {
             ))}
           </select>
         </label>
-        {/* SERVER-SIDE, because there are far more pairs than ever reach this
-            browser — filtering what one page returned would quietly answer for
-            25 rows while appearing to answer for the collection. */}
-        <input
-          className={styles.search}
-          value={query}
-          placeholder="Card, e.g. hog rider…"
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void load(1, query, sort, per);
-          }}
-        />
-        <button
-          type="button"
-          className={styles.go}
-          onClick={() => void load(1, query, sort, per)}
-        >
-          Search
-        </button>
       </div>
 
       {error && <p className={styles.error}>{error}</p>}
@@ -252,28 +247,46 @@ export function DuoDecks() {
         </p>
       )}
 
-      {report && (
+      {/* THE SHARED LOADING STATE, NOT A WORD. `ReadingState` counts elapsed
+          time against how long THIS screen has taken the last few times on this
+          browser, so the number is measured rather than scripted. Its key is
+          its own: a page of 2v2 pairs is not paced like the Coach's matchup
+          scoring, and a shared key would make both readouts wrong. */}
+      {loading && (
+        <ReadingState k="duo-pairs" hue="green">
+          Reading the 2v2 partnerships…
+        </ReadingState>
+      )}
+
+      {report && !loading && (
         <>
           <p className={styles.count}>
-            {loading
-              ? 'Loading…'
-              : `${report.total.toLocaleString()} pair${report.total === 1 ? '' : 's'}`}
-            {applied && ` matching “${applied}”`}
+            {report.total.toLocaleString()} pair
+            {report.total === 1 ? '' : 's'}
+            {/* THE SERVER'S LIST, NOT THE PICKED ONE. An unknown key is dropped
+                rather than refused, so quoting what was SENT could name a card
+                the board is not actually filtered by. */}
+            {!!report.cards?.length && (
+              <> running all {report.cards.length} picked card
+                {report.cards.length === 1 ? '' : 's'} in one deck</>
+            )}
           </p>
           <div className={styles.list}>
             {report.pairs.map((p) => (
               <Pair key={p.pairFingerprint} pair={p} />
             ))}
-            {!report.pairs.length && !loading && (
-              <p className={styles.empty}>Nothing matches that.</p>
+            {!report.pairs.length && (
+              <p className={styles.empty}>
+                No partnership runs all of those cards in one deck.
+              </p>
             )}
           </div>
           {report.pages > 1 && (
             <div className={styles.pager}>
               <button
                 type="button"
-                disabled={report.page <= 1 || loading}
-                onClick={() => void load(report.page - 1, applied, sort, per)}
+                disabled={report.page <= 1}
+                onClick={() => void load(report.page - 1, picked, sort, per)}
               >
                 Previous
               </button>
@@ -282,8 +295,8 @@ export function DuoDecks() {
               </span>
               <button
                 type="button"
-                disabled={report.page >= report.pages || loading}
-                onClick={() => void load(report.page + 1, applied, sort, per)}
+                disabled={report.page >= report.pages}
+                onClick={() => void load(report.page + 1, picked, sort, per)}
               >
                 Next
               </button>

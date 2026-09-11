@@ -615,6 +615,102 @@ def test_the_board_can_be_searched() -> None:
               str(dp.report(query="guards")["total"]))
 
 
+def test_the_board_filters_by_card() -> None:
+    """The board's own control: pick cards, see the partnerships that run them.
+
+    THIS REPLACED A FREE-TEXT BOX, and the two are not the same question. A
+    typed string matched anything in the row; a picked card is an assertion
+    about a DECK, which is what the screen is a list of.
+    """
+    print("\nthe board filters by picked cards")
+    with Fixture():
+        dp.migrate(enrol=False)
+        loose = dp.report(per=50)["total"]
+
+        check("one card narrows the board",
+              0 < dp.report(cards=["hog-rider"])["total"] < loose,
+              str(dp.report(cards=["hog-rider"])["total"]))
+
+        # BOTH CARDS IN ONE DECK. HOG holds hog-rider and fireball, so this is
+        # the same set as hog-rider alone on this fixture.
+        check("two cards from one deck still match",
+              dp.report(cards=["hog-rider", "fireball"])["total"]
+              == dp.report(cards=["hog-rider"])["total"])
+
+        # THE CASE THAT DEFINES THE SEMANTIC. hog-rider and golem are never in
+        # one deck, but they ARE in one pair — "somewhere in the partnership"
+        # would match and is the wrong answer to "show me decks running both".
+        check("two cards from different decks match nothing",
+              dp.report(cards=["hog-rider", "golem"])["total"] == 0,
+              str(dp.report(cards=["hog-rider", "golem"])["total"]))
+
+        check("a card in nothing finds nothing",
+              dp.report(cards=["mega-knight"])["total"] == 0)
+
+        # An unknown key is DROPPED, not refused — the catalog moves, and a
+        # board that goes blank on the day a season turns is worse than one
+        # that filters by the cards it does know.
+        check("an unknown key is dropped, not refused",
+              dp.report(cards=["not-a-real-card"])["total"] == loose)
+        check("...and is not echoed back as accepted",
+              dp.report(cards=["not-a-real-card"])["cards"] == [])
+        check("an accepted key IS echoed back",
+              dp.report(cards=["hog-rider"])["cards"] == ["hog-rider"])
+
+        check("the picked cards win over the older free-text search",
+              dp.report(cards=["hog-rider"], query="golem")["total"]
+              == dp.report(cards=["hog-rider"])["total"])
+
+        check("more cards than a deck holds are capped",
+              len(dp.report(cards=dx.card_keys()[:40])["cards"])
+              == dp.MAX_FILTER_CARDS)
+        check("a duplicate key is not a second clause",
+              dp.report(cards=["hog-rider", "hog-rider"])["cards"] == ["hog-rider"])
+
+
+def test_a_card_key_is_matched_whole_not_as_a_substring() -> None:
+    """`giant` must not match `royal-giant`.
+
+    MEASURED AGAINST PRODUCTION BEFORE IT WAS FIXED: the free-text search for
+    `giant` returned 605,447 pairs — every royal-, goblin-, minion- and
+    electro-giant and giant-skeleton — against the real Giant's 45,360. The
+    column holds a JSON array, so quoting the key is what supplies the
+    boundary.
+
+    The row is inserted AFTER the migration rather than added to the fixture
+    decks, so no other test's arithmetic moves.
+    """
+    print("\na card key matches whole words only")
+    with Fixture():
+        dp.migrate(enrol=False)
+        con = sqlite3.connect(dp.DB_PATH)
+        con.execute(
+            "INSERT INTO duo_pairs (pair_fingerprint, mode, deck_a_fingerprint,"
+            " deck_b_fingerprint, deck_a_cards, deck_b_cards, occurrences,"
+            " distinct_players, first_seen, last_seen)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("2v2:substringprobe", dp.MODE, "2v2d:aaa", "2v2d:bbb",
+             json.dumps(["royal-giant", "fireball", "knight", "archers",
+                         "the-log", "tesla", "ice-spirit", "skeletons"]),
+             json.dumps(GOLEM), 1, 1, "20260101T000000.000Z",
+             "20260101T000000.000Z"))
+        con.commit()
+        con.close()
+
+        giants = dp.report(cards=["giant"], per=50)["total"]
+        royals = dp.report(cards=["royal-giant"], per=50)["total"]
+        check("royal-giant is found by its own key", royals == 1, str(royals))
+        check("giant does NOT match royal-giant",
+              giants == dp.report(cards=["giant"], per=50)["total"] and royals == 1
+              and all("royal-giant" not in [c["key"] for c in p["deckA"]["cards"]]
+                      for p in dp.report(cards=["giant"], per=50)["pairs"]),
+              str(giants))
+        # And the older loose search is the thing that could not tell them apart.
+        check("the free-text search still cannot, which is why it is not the control",
+              dp.report(query="giant", per=50)["total"] > giants,
+              "%d vs %d" % (dp.report(query="giant", per=50)["total"], giants))
+
+
 def test_never_built_is_not_built_and_empty() -> None:
     print("\nnever built reads differently from built and empty")
     with Fixture():
@@ -2252,6 +2348,8 @@ if __name__ == "__main__":
     test_every_row_can_be_drawn()
     test_a_pair_row_carries_what_the_board_draws()
     test_the_board_can_be_searched()
+    test_the_board_filters_by_card()
+    test_a_card_key_is_matched_whole_not_as_a_substring()
     test_never_built_is_not_built_and_empty()
     test_no_payloads_at_all_is_survivable()
     print(f"\n{PASS} passed, {FAIL} failed")

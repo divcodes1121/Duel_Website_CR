@@ -544,9 +544,16 @@ class Handler(BaseHTTPRequestHandler):
                     per = int((q.get("per") or [str(duo.PER_PAGE)])[0])
                 except ValueError:
                     per = duo.PER_PAGE
+                # `cards` IS THE FILTER THE BOARD ACTUALLY USES. Comma-
+                # separated card keys, ANDed within one deck. Every key is
+                # checked against the card catalog inside `duo.report` and an
+                # unknown one is dropped, so nothing from the query string
+                # reaches the SQL except as a bound parameter.
+                cards = [c for c in (q.get("cards") or [""])[0].split(",") if c]
                 return self._send(
                     duo.report(page=page, per=per,
                                query=(q.get("q") or [""])[0],
+                               cards=cards,
                                # A KEY, not a column. `duo.report` maps it
                                # through a closed vocabulary and falls back to
                                # the default, so nothing from the query string
