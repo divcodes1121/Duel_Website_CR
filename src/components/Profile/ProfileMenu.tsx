@@ -44,6 +44,13 @@ const ICON = {
   /* A padlock, for the row that changes the password. Single shackle plus body,
      drawn in the same 24x24 / 1.7 stroke as the rest so it sits level with them. */
   lock: <path d="M6 11V8a6 6 0 0 1 12 0v3M5 11h14a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM12 15v2" />,
+  /* TWO CARDS SIDE BY SIDE, for the 2v2 board. Deliberately NOT `cards`, which
+     is one card with a face on it: the unit on that board is a PAIR of
+     teammate decks, and an icon showing one deck would misname it at a glance.
+     Same 24x24 / 1.7 stroke as the rest so it sits level. */
+  duo: (
+    <path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 9 18H5a1.5 1.5 0 0 1-1.5-1.5zM13.5 7.5A1.5 1.5 0 0 1 15 6h4a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 18h-4a1.5 1.5 0 0 1-1.5-1.5z" />
+  ),
 };
 
 function Glyph({ d }: { d: keyof typeof ICON }) {
@@ -406,6 +413,29 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                   <Glyph d="book" />
                   Field Book
                 </a>
+                {/* THE 2v2 BOARD, WHICH OTHERWISE HAS NO DOOR. It is a
+                    collapsed section inside the console, so reaching it meant
+                    knowing it was there and opening it by hand. This is the
+                    same admin-only guard the Console row uses, and the route
+                    is a sub-path of it — `#/admin/duo` already satisfies
+                    App.tsx's `startsWith('#/admin')`, so no second routing
+                    system is introduced and the console still owns the view.
+
+                    THE LABEL IS "2v2 Decks" AND THE BOARD IS STILL CALLED
+                    "2v2 Deck Pairs". That is deliberate, not a slip: the
+                    sidebar says what a reader is looking for, the board says
+                    exactly what it contains. */}
+                {tier === 'admin' && (
+                  <a
+                    className={styles.item}
+                    role="menuitem"
+                    href="#/admin/duo"
+                    onClick={() => setPos(null)}
+                  >
+                    <Glyph d="duo" />
+                    2v2 Decks
+                  </a>
+                )}
                 {tier === 'admin' && (
                   <a
                     className={styles.item}

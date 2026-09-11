@@ -306,6 +306,32 @@ export function AdminConsole() {
     if (access === 'admin') void load();
   }, [access, load]);
 
+  /* `#/admin/duo` OPENS THE 2v2 BOARD DIRECTLY.
+     The board is a collapsed section of this console, not a page, so the
+     profile menu's "2v2 Decks" row cannot navigate to it — it can only ask
+     for it. A sub-path does that without a second routing system:
+     `startsWith('#/admin')` in App.tsx already matches, so this component
+     stays mounted and simply reads what was asked for.
+
+     LISTENING RATHER THAN READING ONCE, because the common case is choosing
+     the row while the console is ALREADY open. The hash changes, App.tsx
+     re-routes to the same component, and nothing remounts — so a mount-only
+     read would do nothing at all the second time. */
+  useEffect(() => {
+    if (access !== 'admin') return;
+    const wanted = () => window.location.hash.replace(/\/+$/, '').endsWith('/duo');
+    const sync = () => {
+      if (!wanted()) return;
+      setDuoOpen(true);
+      /* Opening it is what fetches it, the same as clicking the header — and
+         the guard is the same too, so asking twice does not fetch twice. */
+      if (!duo && !duoLoading) void loadDuo(1, '', duoSort, duoPer);
+    };
+    sync();
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, [access, duo, duoLoading, loadDuo, duoSort, duoPer]);
+
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return users;
@@ -887,6 +913,14 @@ export function AdminConsole() {
           const next = !duoOpen;
           setDuoOpen(next);
           if (next && !duo && !duoLoading) void loadDuo(1, '', duoSort, duoPer);
+          /* KEEP THE ADDRESS BAR TELLING THE TRUTH. Closing the section while
+             the hash still said `/duo` would mean a refresh silently reopened
+             it, and the sidebar row would look like it had stopped working. */
+          const base = '#/admin';
+          const target = next ? base + '/duo' : base;
+          if (window.location.hash.replace(/\/+$/, '') !== target) {
+            history.replaceState(null, '', target);
+          }
         }}
       >
         <svg className={styles.sectionChev} viewBox="0 0 24 24" width="13" height="13"
