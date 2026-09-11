@@ -347,15 +347,32 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _ART = os.path.join(_ROOT, "public", "assets")
 
 
+# THE EXTENSION IS READ OFF THE DIRECTORY, NOT HARDCODED, AND THAT IS THE WHOLE
+# LESSON OF THIS BLOCK.
+#
+# It said `.png` and the art became WebP in the 2026-09-07 deployment-storage
+# work. Every dict came back EMPTY, and only two of the seven checks below
+# noticed: the other five are set comparisons and "no duplicate" scans, all of
+# which are vacuously true of nothing. So this section reported five passes and
+# two failures while checking absolutely nothing — worse than being deleted,
+# because the suite still printed a healthy total.
+#
+# `_ART_EXT` is therefore derived, and `_digests` refuses a directory it cannot
+# read a single file from, so the next format change fails LOUDLY here instead
+# of quietly emptying the evidence.
+_ART_EXTS = (".webp", ".png")
+
+
 def _digests(kind):
     d = os.path.join(_ART, kind)
     if not os.path.isdir(d):
         return {}
     out = {}
     for f in sorted(os.listdir(d)):
-        if f.endswith(".png"):
+        stem, _, ext = f.rpartition(".")
+        if stem and "." + ext.lower() in _ART_EXTS:
             with open(os.path.join(d, f), "rb") as fh:
-                out[f[:-4]] = hashlib.sha256(fh.read()).hexdigest()
+                out[stem] = hashlib.sha256(fh.read()).hexdigest()
     return out
 
 
@@ -363,7 +380,15 @@ cards = _digests("cards")
 evos = _digests("evolutions")
 heroes = _digests("heroes")
 
-check("the base card art is all present", len(cards) >= 122, f"{len(cards)} files")
+# THE GUARD THAT STOPS THE REST GOING VACUOUS. Every check under this one is a
+# comparison BETWEEN these three sets, and all of them hold trivially when the
+# sets are empty. Assert there is something to compare first.
+check("there is art on disk to check at all",
+      len(cards) > 100 and len(evos) > 10 and len(heroes) > 10,
+      f"cards {len(cards)} evolutions {len(evos)} heroes {len(heroes)}"
+      f" -- looked for {'/'.join(_ART_EXTS)}")
+
+check("the base card art is all present", len(cards) >= 123, f"{len(cards)} files")
 check("every evolution has a card behind it",
       set(evos) <= set(cards), str(sorted(set(evos) - set(cards))))
 check("every hero has a card behind it",

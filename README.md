@@ -57,8 +57,8 @@ bot's SQLite files read-only.
 | **What's new** (the bell) | **shipped 2026-09-02.** The bell in the top bar sat inert from the day the shell was built; it opens the release feed now, immediately right of the theme switch. Notes live in `src/content/releases.ts` and ship in the same commit as the change they describe, so the two cannot drift. An unread count on the bell and on the profile menu's row, from one hook; a first-time reader is stamped silently rather than greeted with a badge for a product they have never used. Per browser rather than per account — the honest limit, and the upgrade is a `profiles` column. +3.01 kB gzip; 11 unit checks, browser-verified 24/24 |
 | **Team Analysis** (`#/teams`) | **TWO TABS as of 2026-09-02 — Scouting Report and Match Plan.** One roster in gives a scouting report: what they play, and the decks that beat it, drawn from the archetype representatives and ranked through the same matchup ladder — plus a roster-wide read (their whole spread pooled, weighted by games) that a match plan has no equivalent of. Match Plan is the original screen, unchanged. The mode is an ABSENT `blue`, so there is no new route and the tripwire stays at 21. Main bundle 338.43 -> 338.44 kB gzip. **92 Python checks + 387 vitest; browser-verified 40/40.** Below, as before: paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Off the admin shelf and on sale**: everyone sees it, anon and free get a gate card, and the three-day trial opens it along with pro and admin. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
 | **The PDF layout engine** | **rebuilt 2026-09-06.** The renderer was a draw loop that decided page breaks from hardcoded height estimates — `case 'decks': return 34` — which is how it shipped stranded headings, art printed over its own caption, blank pages and a document that simply stopped. It is now MEASURE -> CHOOSE -> PACK -> AUDIT -> DRAW in `src/utils/report/`, and nothing draws before the page it lands on is decided. A component OFFERS compositions and the engine picks against the room actually left, so the same 24 pairs are nine across opening a page and fewer half way down it; a 40-row table becomes two tables side by side rather than two sheets. **The audit runs on every export in production**, reading the boxes actually committed, and caught four real faults on its first run. Main bundle **346.07 -> 337.97 kB gzip (-8.10)** — the old renderer left it and the engine is a lazy chunk. 51 unit checks; nine fixtures rendered and looked at, both themes, all clean |
-| **Recent Battles / 2v2** | **routed, 2026-09-10.** A `TeamVsTeam` row stores eight player cards, eight opponent cards and one opponent tag — structurally identical to a ladder row, so a 2v2 battle drew as a duel between two people who were never alone on the field, and nothing downstream could tell them apart. It went from 2.77% of stored battles in June to **25.11% in September**, i.e. one row in four. `battle_modes.py` now routes on `game_mode` BEFORE the deck pipeline: own-deck 1v1 to the log, 2v2 to a unique-deck collection, everything else counted and named in the footer. An allowlist on PATTERNS, because `Ranked1v1_NewArena` became `_NewArena2` and an exact list would drop a third one in silence. Which modes are out was measured — `PickMode` is 100% distinct decks (a draft), `ClassicDecks_Friendly` has nine decks total (a preset), `Showdown_Friendly` is 10.47% against Ladder's 6.89% and is therefore KEPT. **Not deployed** |
-| **2v2 deck pairs** (Admin) | **PHASE 2 DEPLOYED AND VERIFIED LIVE 2026-09-10 — 2v2 no longer enters `battles`.** Over a full 4,910-player startup sync after the guard: **3,633 new battles, 0 of them 2v2**, 13 modes still landing, 1,164 fresh 2v2 payloads still reaching `battle_raw`, roster unchanged at 4,910. The scheduled job folded them: +1,295 pairs, +2,266 occurrences, +577 participants, retained still 1,000, enrolled 0. `royalweb-duo.timer` is the first scheduled unit on that box; its run went **9m 36s → 18s** once `coverage()` stopped rescanning a 44.7 GB table on every pass. Phase 1 built 2026-09-10 — and it deletes nothing.** The refused rows become unique PARTNERSHIPS, two teammate decks played together, not individual decks. It reads `battle_raw`, because a `battles` row holds one deck and one opponent deck and **the teammate's deck is in no column of it** — the raw payload carries all four players. Identity is order-free at both levels, so `A + B` and `B + A` are one record. **51,671 rows have a tracked opponent**, so a battle is stored up to four times and is folded once by an identity built from its own contents. **Coverage is 78.2%**: 301,488 rows lost their payload to the cap valve and their partner deck is unrecoverable, so they are reported as `unreconstructable` and no pair is invented. **Phase 2 is a bot change** (`/opt/clashbot/clashdb.py` is the writer, not this repo) and **phase 3, the delete, is blocked** on that plus an aggregate rebuild — `player_stats_agg` demonstrably counts 2v2 and has no live rebuild caller. **Measured on live data: 1,080,047 payloads → 935,686 real battles → 1,191,142 unique pairs**, board read 0.53 s. +2.03 kB gzip; 205 new Python checks; **no browser pass** (admin-only, `/api/analytics` 500s locally). **Not deployed** |
+| **Recent Battles / 2v2** | **routed and LIVE, 2026-09-10.** A `TeamVsTeam` row stores eight player cards, eight opponent cards and one opponent tag — structurally identical to a ladder row, so a 2v2 battle drew as a duel between two people who were never alone on the field, and nothing downstream could tell them apart. It went from 2.77% of stored battles in June to **25.11% in September**, i.e. one row in four. `battle_modes.py` now routes on `game_mode` BEFORE the deck pipeline: own-deck 1v1 to the log, 2v2 to the partnership collection, everything else counted and named in the footer. An allowlist on PATTERNS, because `Ranked1v1_NewArena` became `_NewArena2` and an exact list would drop a third one in silence. Which modes are out was measured — `PickMode` is 100% distinct decks (a draft), `ClassicDecks_Friendly` has nine decks total (a preset), `Showdown_Friendly` is 10.47% against Ladder's 6.89% and is therefore KEPT. **Proven on a real player**: `#YYPCUUY0` has 800 battles in a 60-day window and the log shows 25, all ranked, **no 2v2**, reporting **745 hidden — TeamVsTeam 741, PickMode 2, Crazy_Arena_EpicOnly 1, Heist_Friendly 1**, every one named. 135 checks (`test_battle_modes.py`) + 40 (`test_recent_battles.py`) |
+| **2v2 Decks** (`#/duo`) | **A SCREEN OF ITS OWN AND LIVE, 2026-09-11.** It was a collapsed section of the admin console for one morning, which put the one board built entirely out of 2v2 behind a door only an operator opens — and nothing on it is operational. It is the tenth card on the landing strip now, gated like Team Analysis (everyone sees it, trial and up open it), and there is exactly ONE board: the console's copy, the profile-menu row and `#/admin/duo` were deleted rather than duplicated. The unit is a **PARTNERSHIP**, two teammate decks played together, not a deck. It reads `battle_raw`, because a `battles` row holds one deck and one opponent deck and **the teammate's deck is in no column of it**. Identity is order-free at both levels, so `A + B` and `B + A` are one record; **51,671 rows have a tracked opponent**, so a battle is stored up to four times and folded once by an identity built from its own contents. Both decks carry their own Copy link and Open in Game — you take ONE of them into the game. Filtering is the card picker Meta and Duel Zone use, reaching all 123 cards, ANDed within ONE deck and matched whole: a bare `giant` matched **605,447** pairs (every royal-, goblin-, minion- and electro-giant) against the real Giant's **45,360**, which is why the key is quoted against the JSON column. Live: **1,483,672 unique partnerships from 1,114,663 battles**; all three sorts are index reads at **9-15 ms** against the 32.4 s an unindexed `last_seen DESC` took. Lazy 2.11 kB gzip; 425 Python checks + 14 vitest; browser-verified 29/29 then 38/38 |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
@@ -92,7 +92,7 @@ bot's SQLite files read-only.
 | UI — the landing banners | **fixed and uniform, 2026-09-01.** They were 90% apart on a phone — 298 / 518 / 298 / 567px, showing 21% to 42% of their own art — from three separate faults: the flipped pair kept the desktop two-column grid at every width (a specificity trap one level below the one already recorded beside it), `.band` was referenced in `Dashboard.tsx` and **never written**, so all four paintings met edge to edge at 1440 as well as 390, and each panel was as tall as its own copy. Now **0px spread at 430/390/360/320**. See [The four banners on a phone](#the-four-banners-on-a-phone-and-the-three-faults-under-one-symptom) |
 | UI — the display face | **scoped to the landing, 2026-09-01, 25/25 browser checks.** Bebas draws lowercase as capital forms, so every heading inside the product read as a poster. One declaration — `:root[data-app-inner] { --font-display: var(--font-body) }` — and the attribute is on `:root` rather than the shell because dialogs portal into `document.body` and inherit nothing from it |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **1,447 Python checks** across **39 suites**, **471 vitest** across 17 files, `tsc -b` and `npm run build` clean. The 2026-09-06 layout engine added 51 vitest (`reportLayout.test.ts`) over the three import-free modules that decide what a page looks like — and NOT over the drawing, which is checked by rendering pages and looking at them, because three of the faults that pass caught this round are invisible to any assertion. The 2026-09-03 console work added 36 Python checks (`test_ops_snapshot.py`) and no vitest — it is one server function and JSX, which is worth saying rather than implying coverage that is not there. The 2026-09-02 two-tab split added 25 Python checks and 9 vitest; the 2026-09-01 work before it added none, being CSS, one effect and one JSX block — worth saying rather than implying coverage that is not there |
+| tests | **2,194 Python checks** across **43 suites**, **500 vitest** across 18 files, `tsc -b` and `npm run build` clean — **every suite green as of 2026-09-11**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -178,7 +178,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 39. [The logo, and where it goes](#the-logo-and-where-it-goes)
 40. [Recent Battles — the raw log](#recent-battles--the-raw-log)
 40a. [The 2v2 problem, and the two paths out of it](#the-2v2-problem-and-the-two-paths-out-of-it)
-40b. [2v2 deck pairs — the data is migrated, not deleted](#2v2-deck-pairs--the-data-is-migrated-not-deleted)
+40b. [2v2 Decks — the data is migrated, not deleted](#2v2-decks--the-data-is-migrated-not-deleted)
 41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
 42. [Two filters and a heading](#two-filters-and-a-heading)
 43. [The account menu is a stack of cards](#the-account-menu-is-a-stack-of-cards)
@@ -207,10 +207,10 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 335 tests over the deck, duel, export, admin and shader logic
+npm run test                      # 500 tests over the deck, duel, export, admin, nav and shader logic
 python server/test_duel_combos.py # 55 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
-python server/test_card_art.py    # 110 checks over deck arrangement and card art
+python server/test_card_art.py    # 111 checks over deck arrangement and card art
 python server/test_duel_zone.py   # 88 checks over the series and sequence rules
 python server/test_player_cards.py # 60 checks over the card board
 python server/test_deck_counter.py # 58 checks over the matchup engine
@@ -218,6 +218,10 @@ python server/test_coach.py       # 69 checks over the Coach Assist rules
 python server/test_live_player.py # 23 checks over the live battlelog reader
 python server/test_recruit.py     # 35 checks over the tag recruiter
 python server/test_team_analysis.py # 92 checks over both tabs of the squad board
+python server/test_battle_modes.py # 135 checks over which game modes go where
+python server/test_duo_pairs.py   # 425 checks over the 2v2 partnership collection
+python server/test_recent_battles.py # 40 checks over the battle log and its mode router
+python server/test_api_security.py # 73 checks over auth, CORS, the rate limit and the route count
 python server/test_ml_22_final.py # 66 checks over the FROZEN production contract
 python server/test_ml_20d.py      # 27 checks that `practice` excludes real duels
 python server/test_ml_21a.py      # 32 checks over the spell feasibility harness
@@ -304,7 +308,7 @@ open, so links and refreshes work.
 | `#/player/<tag>/meta` | **Top Meta Decks** — the global leaderboard (needs no tag) |
 | `#/player/<tag>/duels` | **Duel Analysis** — card combinations in duel play |
 | `#/player/<tag>/duelzone` | **Duel Zone** — the Bo3/Bo5 series log and the deck sequence |
-| `#/player/<tag>/cards` | **Cards** — use rate and win rate for all 122 cards |
+| `#/player/<tag>/cards` | **Cards** — use rate and win rate for all 123 cards |
 | `#/player/<tag>/counter` | **Deck Counter** — player counter, deck vs deck, find counters |
 | `#/player/<tag>/coach` | **Coach Assist** — duel prediction and the next-deck suggestion |
 | `#/player/<tag>/<slug>` | Deck Analysis (a shell, no data yet) |
@@ -2537,7 +2541,7 @@ the date control and the mode control would both be decoration, which is the
 same failure the deck rows had before they moved onto `battles`. The per-player
 index makes the scan ~50 ms, and the previous window costs one more.
 
-**All 122 cards come back, including ones the player has never touched.**
+**All 123 cards come back, including ones the player has never touched.**
 "Which cards do they not play?" is a real question about a card board; a zero
 row answers it, and dropping them would quietly turn the board into "cards they
 play" while the label says otherwise. The screen hides them by default behind a
@@ -2563,7 +2567,7 @@ an unranked card never outranks a ranked one however high its percentage reads.
 window gets no win-rate delta at all rather than a fall to zero — the comparison
 cannot be made, which is different from being made and coming out flat.
 
-**The tile is deliberately small.** 122 cards want a dense grid, so a tile
+**The tile is deliberately small.** 123 cards want a dense grid, so a tile
 carries the art, the name and the two rates on ONE line — use rate in the data
 blue, win rate in the data green, each printing its own figure. Those are the
 app's CVD-validated categorical pair, the same two the duel-analysis meters use;
@@ -4253,7 +4257,7 @@ chips. That fitted when a deck screen was one full-width column; beside a card
 library it wraps to two lines and becomes the largest thing on the page — a
 control for a job most visits do not do, drawn bigger than the decks it filters.
 It is one **Filter** button now, and the panel behind it keeps everything: win
-conditions first, then all 122 cards, with the search that was already there.
+conditions first, then all 123 cards, with the search that was already there.
 Whatever is selected stays out on the bar as a chip, because a filter you cannot
 see is a filter you cannot undo. The panel is **absolutely positioned** — in
 flow it pushed the whole workspace down by its own height on every open, which
@@ -5154,7 +5158,7 @@ itself must not move.
 
 ### 8. Cards, and three sidebar sections that were really filters
 
-Use rate and win rate for all 122 cards per player, with the window and the game
+Use rate and win rate for all 123 cards per player, with the window and the game
 mode actually driving the query. Win Conditions, Champions and Evolutions moved
 out of the sidebar and became tabs on it.
 
@@ -7144,7 +7148,7 @@ in the analytics fetch effects (it is rebuilt every render; the effect keys on
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 335 tests — deck logic, links, PDF export, proxy, admin
+npm run test                      # 500 tests — deck logic, links, PDF export, proxy, admin, nav
 python server/test_duel_combos.py # 55 checks — duel logic, no database needed
 python server/test_meta.py        # 33 checks — meta board + card board, no database
 python server/test_card_art.py    # 110 checks — deck arrangement, evolution/hero art
@@ -11417,7 +11421,7 @@ redeployed yet", and the two halves of this project ship separately.
 
 ---
 
-## 2v2 deck pairs — the data is migrated, not deleted
+## 2v2 Decks — the data is migrated, not deleted
 
 The obvious fix for 2v2 was to stop reading `TeamVsTeam` rows. It was rejected:
 the row carries real decks that real players really brought, and the only thing
@@ -11734,15 +11738,70 @@ sibling module is the normal failure here, not an exotic one.
 
 ### The board
 
-**Admin → 2v2 deck pairs**, collapsed and loaded on demand. Each row is two card
-strips with a **`+`** between them — a plus, not a VS, because they are
-teammates and every other VS mark in this project means two sides of a fight —
-plus the occurrence count, distinct participants, first and last seen, and the
-fingerprints in a `title` for reconciliation.
+**`#/duo`, the tenth card on the landing strip.** It was a collapsed section of
+the admin console for exactly one morning, and that was the wrong home: nothing
+on this board is operational — it is what people play in 2v2 — and behind the
+console it was reachable only by knowing it existed and opening a section by
+hand. There is now exactly ONE board; the console's copy, the profile-menu row
+and `#/admin/duo` were **deleted** rather than left beside the new page.
 
-Above the list, a split bar shows how many of the 2v2 rows still in `battles`
-could be reconstructed and how many could not. `Split` gained `format` and label
-props to draw it; without them `bytes(1080047)` printed "1.08 MB" of rows.
+It takes Team Analysis's arrangement exactly: in neither `FREE_SECTIONS` nor
+`PRO_ONLY_SECTIONS`, so everyone sees the card, anon and free get a gate card,
+and the trial opens it along with pro and admin. `'2v2 Decks'` is in
+`ALL_SECTIONS` in `tests/entitlement.test.ts` — the matrix claims to be
+exhaustive, so a section missing from that list is a section nobody checks.
+
+**A row is two decks and nothing else.** It shipped with a five-item figure list
+beside them — played, players, first seen, last seen — which spent about a third
+of the width restating what the row's POSITION in a ranking already says. The
+decks take the whole row now, one left and one right with a **`+`** between them
+(a plus, not a VS: they are teammates, and every other VS mark in this project
+means two sides of a fight). A card went **54px → 123px** at 1440, because the
+strip is fractions of its own column rather than fixed tracks and grows into the
+space the figures were holding.
+
+**Both halves carry their own Copy link and Open in Game.** You take ONE of them
+into the game, so a single action on the pair would have nothing to copy. The
+card order is the canonical one the fingerprint is taken over rather than
+`arrange_deck`'s, so the game seats the deck alphabetically — a legal deck, the
+same eight cards, and re-deriving an order here would only make the link
+disagree with the strip above it.
+
+**Filtering is the card picker Meta and Duel Zone already use**, reaching all
+123 cards. It replaced a text box, and the two are not the same question: a
+typed string had to be spelled the way the database spells it, and measured
+against production `hog-rider` found 434,265 pairs where `Hog Rider` found
+**none** — which reads as "there are no hog rider decks". A picked card cannot
+be misspelled and shows its art.
+
+Two things about that filter are load-bearing:
+
+* **Every card in ONE deck, not "somewhere in the pair".** Asking for Hog Rider
+  and Fireball is a question about a deck; satisfying it with one card in each
+  teammate's list would match almost everything. Verified on production —
+  `hog-rider,golem` returns 2,225 pairs and every one of them really does run
+  both in a single deck.
+* **The key is matched whole, and that is the whole correctness of it.** The
+  column holds a JSON array, so `%"giant"%` has boundaries a bare `%giant%` does
+  not. Measured: the free-text search for `giant` returns **605,447** pairs —
+  every royal-, goblin-, minion- and electro-giant and giant-skeleton — against
+  the real Giant's **45,360**.
+
+An unknown card key is **dropped, not refused**, and the accepted list is echoed
+back in the response. The catalog moves — Minion Giant shipped while the
+analytics host was a commit behind — so erroring on a card the deploy has not
+heard of yet is a board that goes blank on the day a season turns. The count
+line quotes the SERVER's list, never the picked one, or it could name a card the
+board is not actually filtered by.
+
+The wait is the shared `ReadingState`, keyed `duo-pairs`, so a slow page shows a
+number paced by how long this screen actually took the last few times on this
+browser. Note that **two of them run in sequence** and only the second belongs to
+this screen: the Suspense fallback covers the lazy chunk first. A probe that
+grabs whichever is on screen measures the chunk download.
+
+`cards=` rides on the existing route, so the tripwire in `test_api_security.py`
+stays at **22** and there was nothing new to hand-deploy.
 
 ---
 
@@ -12429,7 +12488,7 @@ src/
     store.ts                  builder store (zustand + persist, v9)
     deckUtils.ts              pure deck logic
     analyticsClient.ts        the ONLY thing that knows the API's shape
-  data/cards.json             122 cards, vendored from RoyaleAPI/cr-api-data
+  data/cards.json             123 cards, vendored from RoyaleAPI/cr-api-data
   data/cardMeta.json          can_evolve / can_be_hero / is_champion / is_win_condition
 
 server/

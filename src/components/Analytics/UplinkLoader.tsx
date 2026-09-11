@@ -142,11 +142,17 @@ export function UplinkLoader({ hue, timingKey }: UplinkLoaderProps) {
     return () => {
       stop();
       document.removeEventListener('visibilitychange', onVisibility);
-      /* UNMOUNT IS COMPLETION. Every one of the twelve call sites renders this
-         while and only while its read is in flight, so the time this component
-         existed for IS the load. `recordDuration` filters the implausible and
-         the store takes a median, which is what absorbs the unmounts that were
-         really a navigation or a fast failure. */
+      /* UNMOUNT IS COMPLETION. Every one of the seventeen call sites renders
+         this while and only while its wait is in flight, so the time this
+         component existed for IS the load. `recordDuration` filters the
+         implausible and the store takes a median, which is what absorbs the
+         unmounts that were really a navigation or a fast failure.
+
+         WHICH IS WHY TWO WAITS MAY NEVER SHARE A KEY. Two of the seventeen are
+         Suspense fallbacks over a lazy chunk rather than reads, and `teams-chunk`
+         was keyed `teams` for a while: a sub-second chunk download fed the same
+         five-sample window as a 45-second analysis, and the bar for the real
+         read would sprint to 100% and sit there. */
       recordDuration(timingKey, performance.now() - started);
     };
   }, [timingKey]);

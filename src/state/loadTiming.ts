@@ -56,6 +56,15 @@ const SEEDS: Record<string, number> = {
      then profiles every deck the blue squad plays. The seed is a starting
      guess only; the median of the last five real runs replaces it. */
   teams: 45_000,
+  /* THE TWO LAZY CHUNKS, WHICH ARE NOT READS AND MUST NOT SHARE A READ'S KEY.
+     These pace the Suspense fallback while a screen's JavaScript downloads —
+     ~13 kB for Team Analysis and ~2 kB for 2v2 Decks, both well under a second
+     on anything but a dead connection. `teams-chunk` used to be `teams`, which
+     fed a sub-second sample into the five-sample window pacing a 45-second
+     analysis every time somebody opened the screen. */
+  'teams-chunk': 1_200,
+  'duo-chunk': 1_200,
+  'duo-pairs': 6_000,
 };
 
 const DEFAULT_SEED = 12_000;

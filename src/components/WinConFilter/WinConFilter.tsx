@@ -76,7 +76,7 @@ interface WinConFilterProps {
  * than the decks it filters.
  *
  * So it is one button now, and the panel behind it keeps everything: the win
- * conditions first because they are what people want, then all 122 cards, with
+ * conditions first because they are what people want, then all 123 cards, with
  * the search that was already there. Whatever IS selected stays out on the bar
  * as a chip, because a filter you cannot see is a filter you cannot undo.
  */

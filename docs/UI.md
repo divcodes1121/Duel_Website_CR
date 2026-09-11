@@ -303,7 +303,7 @@ page they sit on.
 
 `ReadingDeck.tsx` is **deleted**. It drew eight card plates riffling in a
 travelling wave — one instanced draw call, rounded corners from an SDF rather
-than a texture — behind all twelve slow loading states.
+than a texture — behind all twelve slow loading states (seventeen now).
 
 It was not removed for being wrong. It did what it was built to do: a
 thirty-second wait with no feedback reads as hung, and the fan proved the tab was

@@ -187,6 +187,34 @@ describe('the page itself', () => {
     expect(page).toMatch(/\{loading && \(/);
   });
 
+  it('does not share a timing key with the chunk that loads it', () => {
+    /* `UplinkLoader` records how long it was mounted as a sample under its key
+       and the store medians the last five, so a sub-second chunk download and a
+       multi-second read sharing a key make both readouts wrong. Team Analysis
+       shipped that way — `teams` for both — and its 45s bar was being paced by
+       a 13 kB download. */
+    expect(dash).toContain('<ReadingState k="duo-chunk"');
+    expect(dash).not.toContain('<ReadingState k="duo"');
+    const timing = R('src', 'state', 'loadTiming.ts');
+    for (const k of ["'duo-chunk'", "'duo-pairs'", "'teams-chunk'"]) {
+      expect(timing, `${k} has no seed`).toContain(`${k}:`);
+    }
+  });
+
+  it('gives every loading state its own key', () => {
+    /* One shared key silently averages two different waits. Swept across the
+       whole app rather than asserted for this screen alone, because the bug
+       that prompted it was in Team Analysis. */
+    const files = [
+      ['src', 'components', 'Dashboard', 'Dashboard.tsx'],
+      ['src', 'components', 'Analytics', 'TeamAnalysis', 'TeamAnalysis.tsx'],
+      ['src', 'components', 'Analytics', 'DuoDecks', 'DuoDecks.tsx'],
+    ].map((f) => R(...f));
+    const keys = files.flatMap((f) =>
+      [...f.matchAll(/<ReadingState k="([^"]+)"/g)].map((m) => m[1]));
+    expect(new Set(keys).size, keys.join(',')).toBe(keys.length);
+  });
+
   it('spends the whole row on the two decks', () => {
     /* The played / players / first seen / last seen list took about a third of
        the width to restate what the row's POSITION in a ranking already says. */

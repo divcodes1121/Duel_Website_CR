@@ -20,7 +20,7 @@ import { useHeldLoading } from '../../hooks/useHeldLoading';
  * Scoped to a loaded tag on purpose: it answers "what do they run and how does
  * it do for them", which is a different question from the global meta board.
  *
- *   * All 122 cards are listed, including ones they have never played. "Which
+ *   * All 123 cards are listed, including ones they have never played. "Which
  *     cards do they not touch" is a real question about a card board, and a
  *     zero row answers it.
  *   * Win rate is only RANKED where there is evidence behind it — the pair
@@ -30,7 +30,7 @@ import { useHeldLoading } from '../../hooks/useHeldLoading';
  *     sections. They were never separate screens — they are ways of looking at
  *     the card list, so they are tabs here.
  *
- * Every filter runs client-side over 122 rows: type, elixir, rarity and the
+ * Every filter runs client-side over 123 rows: type, elixir, rarity and the
  * three category tabs all come from `cards.json` + `cardMeta.json`, which the
  * browser already has for the art. Only the counts come from the server.
  */

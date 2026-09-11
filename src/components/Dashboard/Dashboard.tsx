@@ -198,7 +198,7 @@ const SECTION_BLURB: Record<string, string> = {
   'Duel Zone': 'Recent Bo3 and Bo5 series, and which decks follow each opener.',
   'Deck Counter': 'What beats this player, a head-to-head between two decks, and what answers a given deck.',
   'Coach Assist': 'Mid-duel help: what they will bring next, and which of your decks answers it.',
-  Cards: 'Use rate and win rate for all 122 cards, filtered how you like — win conditions, champions, evolutions, rarity, elixir.',
+  Cards: 'Use rate and win rate for all 123 cards, filtered how you like — win conditions, champions, evolutions, rarity, elixir.',
   'Team Analysis': 'Paste two rosters. Every opponent gets a folder holding the decks they play and the decks your squad answers them with.',
   '2v2 Decks': 'Which two decks people actually bring together in 2v2, ranked by how often the partnership is played.',
 };
@@ -1036,7 +1036,18 @@ export function Dashboard({
                      second kind of waiting. */
                   <Suspense
                     fallback={
-                      <ReadingState k="teams" hue="pink">
+                      /* `teams-chunk`, NOT `teams`, AND THAT WAS A REAL BUG.
+                         `UplinkLoader` records how long it was mounted for as a
+                         sample under its key, and the store takes a median of
+                         the last five. This fallback covers a ~13 kB chunk
+                         download — well under a second — while `teams` is
+                         seeded at 45 s because it is the most expensive read on
+                         the service. Sharing the key meant every visit fed a
+                         sub-second sample into the window pacing a 45-second
+                         wait, so after a few opens the real analysis bar would
+                         sprint to 100% and sit there. A chunk and a read are
+                         two different waits and need two keys. */
+                      <ReadingState k="teams-chunk" hue="pink">
                         <p>Opening Team Analysis…</p>
                       </ReadingState>
                     }
@@ -1056,7 +1067,7 @@ export function Dashboard({
                 (sectionAllowed(access, '2v2 Decks') ? (
                   <Suspense
                     fallback={
-                      <ReadingState k="duo" hue="green">
+                      <ReadingState k="duo-chunk" hue="green">
                         <p>Opening 2v2 Decks…</p>
                       </ReadingState>
                     }

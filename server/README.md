@@ -289,7 +289,7 @@ happily against a server that never called it.
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
-| `GET /api/analytics/duo-pairs?page=&per=&q=` | **the unique DECK PAIRS played in 2v2** (`duo_pairs.py`), most played first. One record per combination of two teammate decks, with an occurrence count, distinct participants, and first/last seen. Reads a LOCAL collection, not `battle_raw` — the migration is a full scan of a 44.7 GB table and is a job. `q` filters by card key or fingerprint, on the server |
+| `GET /api/analytics/duo-pairs?page=&per=&sort=&cards=` | **the unique DECK PAIRS played in 2v2** (`duo_pairs.py`), 1,483,672 of them. One record per combination of two teammate decks, with an occurrence count, distinct participants, and first/last seen. Reads a LOCAL collection, not `battle_raw` — the migration is a full scan of a 44.7 GB table and is a job. `sort` is a KEY into a closed vocabulary (`played` / `recent` / `first`), never a column, and all three are index reads at 9-15 ms. `cards` is comma-separated card keys, checked against the catalog, ANDed within ONE deck and matched WHOLE — the column is a JSON array so `%"giant"%` has boundaries a bare `%giant%` does not (605,447 pairs against the real Giant's 45,360). An unknown key is dropped rather than refused and the accepted list is echoed back. `q` is the older free-text search over the same columns plus the fingerprints; `cards` wins when both are given |
 
 Both `player` and `duels` take the same window: `?days=N`, or `?from=&to=` as
 `YYYY-MM-DD`. `days` counts back from the **last battle stored for that player**
@@ -350,13 +350,41 @@ battle's own timestamp and its four sorted tags, and `duo_stage`'s
     python server/duo_pairs.py --migrate     # build the pair collection
     python server/duo_pairs.py --update      # only payloads stored since
     python server/duo_pairs.py --show 20     # print the top 20 pairs
+    python server/duo_pairs.py --cursor      # the mark the bot's raw cap reads
 
-**IT DELETES NOTHING. THIS IS PHASE 1 OF THREE.** Phase 2 is a change to the BOT
-(`/opt/clashbot/clashdb.py`) so 2v2 never enters `battles`; phase 3 is the
-historical cleanup, and it must not be attempted until phase 2 has shipped AND
-the aggregates have been rebuilt — `player_stats_agg` demonstrably counts 2v2
-today and `rebuild_aggregates` has no live caller, so deleting rows now would
-leave figures nothing could recompute.
+`--update --reconcile` is what `royalweb-duo.timer` runs hourly. A climbing
+`--cursor` backlog means the fold has stalled and the raw cap is being held off,
+which grows the database — check the timer before anything else.
+
+**PHASES 1 AND 2 ARE LIVE; PHASE 3 IS STILL BLOCKED, AND IT DELETES NOTHING
+YET.**
+
+Phase 2 was a change to the BOT (`/opt/clashbot/clashdb.py`, a different
+codebase on the same box) and shipped 2026-09-10: over a full 4,910-player
+startup sync afterwards, **3,633 new battles and 0 of them 2v2**, with 1,164
+fresh 2v2 payloads still reaching `battle_raw` for the fold to read. The hourly
+`royalweb-duo.timer` is what consumes them.
+
+**PHASE 2 CREATED A NEW HAZARD AND IT NEEDED ITS OWN FIX.** Once 2v2 stopped
+entering `battles`, the `battle_raw` payload became the ONLY copy of a 2v2
+battle between arrival and the next hourly fold — and the bot's raw-cap valve
+deleted 1,136,571 of them on the restart that deployed the guard. `enforce_raw_cap`
+now reads `duo_meta.watermark` and passes it as `stored_through`, so it can only
+purge payloads the fold has already consumed. **It caught a real race on its
+first run**: 20,116 unprocessed 2v2 payloads sat above the cursor and were
+spared while 498,333 at or below it were purged. It fails CLOSED — any error
+returns an empty cursor, which means protect everything, so a stalled fold grows
+the database instead of losing battles.
+
+The bot reads `duo_meta` out of the SQLite file directly rather than importing
+`duo_pairs.py`, which is what makes deploying this module safe.
+
+Phase 3, the historical cleanup, must not be attempted until the aggregates have
+been rebuilt — `player_stats_agg` demonstrably counts 2v2 today and
+`rebuild_aggregates` has no live caller, so deleting rows now would leave figures
+nothing could recompute. 301,488 rows also lost their raw payload before any of
+this and can never become pairs; they are reported as `unreconstructable` and no
+pair is invented for them.
 
 **COVERAGE IS 78.2%.** Of 1,381,535 2v2 rows, 1,080,047 have a surviving raw
 payload and **301,488 do not** — the raw-cap valve purged 1,881,526
@@ -797,7 +825,7 @@ image rather than as a caveat, on cards that are very likely right.
 
 ## The card board (`player_cards.py`)
 
-Use rate and win rate for all 122 cards for one player, over a window, with
+Use rate and win rate for all 123 cards for one player, over a window, with
 movement against the equally long window before it. `?mode=` scopes it to
 `all` / `ranked` / `duel` / `tournament`; each is a Python predicate over the
 stored `game_mode` string, not a SQL clause, for the reason `duel_stats` gives.
@@ -948,7 +976,8 @@ switch rather than a flag. The two modes take the same inputs minus one, return
 the same shape plus one field (`overall`), and publish which they were in
 `mode`. So `/api/analytics/teams` simply stopped requiring `blue`: **no new
 route**, nothing extra to hand-copy to the VPS, and the route-count tripwire in
-`test_api_security.py` stays at 21. It also means the incoherent combination —
+`test_api_security.py` stayed at 21 (it is **22** today — `duo-pairs` took its
+own path on 2026-09-10; see the route table above). It also means the incoherent combination —
 a squad pasted *and* scout mode asked for — cannot be expressed.
 
 With no squad to recommend from, the pool is `deck_counter._representatives()`:
