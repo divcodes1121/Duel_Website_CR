@@ -1329,6 +1329,855 @@ def test_pruning_never_drops_an_uncounted_row() -> None:
               _ledger_rows_for("#T1") == before, str(_ledger_rows_for("#T1")))
 
 
+# --------------------------------------------------------------------------
+# The raw-cap interlock
+# --------------------------------------------------------------------------
+#
+# SINCE PHASE 2, A 2v2 BATTLE HAS A WINDOW WHERE ITS ONLY COPY IS RAW. The bot
+# no longer writes 2v2 into `battles`, and `enforce_raw_cap` deletes non-duel
+# raw to keep the disk bounded — on 2026-09-10 it took 4,763,318 rows including
+# every 2v2 payload then present. Anything it removes before the fold has run
+# is gone from every table.
+#
+# `purge_non_duel_raw` already accepts the cursor that fixes this. These checks
+# pin the property that cursor has to have.
+
+
+def _purgeable(cursor, stored_at):
+    """The bot-side rule, reproduced: a 2v2 raw row may be deleted only when a
+    cursor exists AND the row is at or below it.
+
+    Copied here deliberately rather than imported — the rule lives in the bot's
+    `purge_non_duel_raw`, which is a different codebase deployed separately, so
+    this is the same arrangement `test_battle_modes` uses to pin the 2v2 marker
+    list. If the two drift, a battle is deleted before it is folded.
+    """
+    if not cursor:
+        return False            # empty cursor protects everything
+    if not stored_at:
+        return False            # a row with no arrival stamp cannot be proved safe
+    return stored_at <= cursor
+
+
+def test_an_unprocessed_2v2_payload_is_protected() -> None:
+    """The exact race: raw arrives, the fold has NOT run, the cap fires."""
+    print("")
+    print("2v2 raw that has not been folded is not purgeable")
+    with Fixture() as fx:
+        dp.migrate(enrol=False)
+        cursor = dp.processed_through()
+        check("a cursor exists after a fold", bool(cursor), repr(cursor))
+
+        # A payload stored AFTER everything the fold saw.
+        later = "2026-12-31T23:59:59+00:00"
+        check("it is above the cursor", later > cursor, f"{later} vs {cursor}")
+        check("and is therefore protected", _purgeable(cursor, later) is False)
+
+        _add_raw(fx, "#RACE", payload("20260925T100000.000Z",
+                 [("#RACE", HOG), ("#RACE2", GIANT)],
+                 [("#RACE3", BAIT), ("#RACE4", LAVA)]), stored=later)
+        state = dp.unprocessed_since()
+        check("the operator view counts it as unprocessed",
+              state["unprocessed"] == 1, str(state))
+
+
+def test_a_processed_2v2_payload_becomes_purgeable() -> None:
+    """The other half: once folded, the raw copy is redundant and may go."""
+    print("")
+    print("2v2 raw that has been folded is purgeable")
+    with Fixture() as fx:
+        stored = "2026-09-20T12:00:00+00:00"
+        _add_raw(fx, "#DONE", payload("20260920T120000.000Z",
+                 [("#DONE", HOG), ("#DONE2", GIANT)],
+                 [("#DONE3", BAIT), ("#DONE4", LAVA)]), stored=stored)
+        dp.migrate(enrol=False)
+        cursor = dp.processed_through()
+        check("the cursor reached it", cursor >= stored, f"{cursor} vs {stored}")
+        check("so it is purgeable", _purgeable(cursor, stored) is True)
+        check("and nothing is left unprocessed",
+              dp.unprocessed_since()["unprocessed"] == 0,
+              str(dp.unprocessed_since()))
+        # The pair survives the raw copy being deleted -- that is the point.
+        check("the partnership is durable in duo_pairs",
+              dp.report()["summary"]["uniquePairs"] > 0)
+
+
+def test_the_cursor_fails_closed() -> None:
+    """An empty cursor must read as PROTECT EVERYTHING, never as nothing to
+    protect. That is also how `purge_non_duel_raw` already treats its own empty
+    cursor (`if not stored_through: return 0`)."""
+    print("")
+    print("an absent or unreadable cursor protects everything")
+    check("empty cursor protects an old row",
+          _purgeable("", "2020-01-01T00:00:00+00:00") is False)
+    check("empty cursor protects a new row",
+          _purgeable("", "2099-01-01T00:00:00+00:00") is False)
+    check("a row with no stored_at is never purgeable",
+          _purgeable("2026-09-10T00:00:00+00:00", None) is False)
+
+    was = dp.DB_PATH
+    try:
+        dp.DB_PATH = "/nonexistent/path/that/cannot/be/created/x.db"
+        dp._ready = False
+        check("an unreadable collection yields an empty cursor",
+              dp.processed_through() == "", repr(dp.processed_through()))
+    finally:
+        dp.DB_PATH = was
+        dp._ready = False
+
+
+def test_the_cursor_never_overstates_progress() -> None:
+    """It may lag reality; it must never claim a battle was folded when it was
+    not. Every staged battle must sit at or below the published cursor."""
+    print("")
+    print("the cursor never runs ahead of what was folded")
+    with Fixture():
+        dp.migrate(enrol=False)
+        cursor = dp.processed_through()
+        con = sqlite3.connect(dp.DB_PATH)
+        try:
+            rows = con.execute(
+                "SELECT COUNT(*) FROM duo_stage").fetchone()[0]
+        finally:
+            con.close()
+        check("battles were staged", rows > 0, str(rows))
+        check("the cursor is non-empty", bool(cursor))
+        # Every payload the fixture stored carries the fixture's stored_at,
+        # which must be at or below the cursor.
+        check("every folded payload is at or below the cursor",
+              "2026-09-01T09:00:00+00:00" <= cursor, cursor)
+
+
+def test_folding_twice_still_counts_once() -> None:
+    """The interlock must not disturb deduplication."""
+    print("")
+    print("the interlock does not affect battle deduplication")
+    with Fixture():
+        dp.migrate(enrol=False)
+        pairs = dp.report()["summary"]["uniquePairs"]
+        occ = dp.report()["summary"]["occurrences"]
+        dp.migrate(enrol=False)
+        check("pairs unchanged", dp.report()["summary"]["uniquePairs"] == pairs,
+              str(dp.report()["summary"]["uniquePairs"]))
+        check("occurrences unchanged",
+              dp.report()["summary"]["occurrences"] == occ,
+              str(dp.report()["summary"]["occurrences"]))
+        check("the cursor is still valid", bool(dp.processed_through()))
+
+
+def test_duel_raw_is_not_in_scope() -> None:
+    """`purge_non_duel_raw` only ever touches NON-duel raw, and duel payloads
+    are re-read by the bot's own parser. The interlock must not change that:
+    it narrows what may be purged, never widens it."""
+    print("")
+    print("duel raw is outside this interlock entirely")
+    for mode in ("CW_Duel_1v1", "Duel_1v1_Friendly", "Duel_1v1_Tournament"):
+        check(f"{mode} is not 2v2", not bm.is_duo(mode))
+        check(f"{mode} is own-deck 1v1, so it is in battles too",
+              bm.is_own_deck_1v1(mode))
+
+
+# --------------------------------------------------------------------------
+# The admin board's contract
+# --------------------------------------------------------------------------
+
+def test_the_board_offers_three_orderings() -> None:
+    print("")
+    print("the board sorts three ways, and only three")
+    with Fixture():
+        dp.migrate(enrol=False)
+        for key in ("played", "recent", "first"):
+            rep = dp.report(sort=key, per=50)
+            check(f"{key} is accepted", rep["sort"] == key, rep["sort"])
+            check(f"{key} returns rows", len(rep["pairs"]) > 0)
+        check("the vocabulary is published",
+              dp.report()["sorts"] == ["first", "played", "recent"],
+              str(dp.report()["sorts"]))
+
+
+def test_an_unknown_sort_falls_back_rather_than_reaching_the_sql() -> None:
+    """`sort` arrives from a query string. It is a KEY into a closed map, so an
+    unrecognised value — or an injection attempt — becomes the default instead
+    of reaching the ORDER BY."""
+    print("")
+    print("an unknown sort key falls back to the default")
+    with Fixture():
+        dp.migrate(enrol=False)
+        for bad in ("", "nonsense", "occurrences", "1; DROP TABLE duo_pairs--",
+                    "last_seen DESC"):
+            rep = dp.report(sort=bad, per=5)
+            check(f"{bad!r} -> played", rep["sort"] == "played", rep["sort"])
+        check("the table is still there", dp.report()["total"] > 0)
+
+
+def test_each_ordering_actually_orders() -> None:
+    print("")
+    print("each ordering is monotonic in its own column")
+    with Fixture():
+        dp.migrate(enrol=False)
+        played = [p["occurrences"] for p in dp.report(sort="played", per=50)["pairs"]]
+        check("played descends", played == sorted(played, reverse=True), str(played))
+        recent = [p["lastSeen"] for p in dp.report(sort="recent", per=50)["pairs"]]
+        check("recent descends", recent == sorted(recent, reverse=True), str(recent))
+        first = [p["firstSeen"] for p in dp.report(sort="first", per=50)["pairs"]]
+        check("first ascends", first == sorted(first), str(first))
+
+
+def test_the_default_is_most_played() -> None:
+    print("")
+    print("the default ordering is most played")
+    with Fixture():
+        dp.migrate(enrol=False)
+        check("default key", dp.report()["sort"] == "played")
+        check("...and it is the module default", dp.DEFAULT_SORT == "played")
+
+
+def test_search_finds_a_deck_fingerprint_not_only_a_pair_one() -> None:
+    """The board prints three identifiers per row — the pair's and both decks'.
+    A search that only matched the pair's would answer 'no' for two thirds of
+    what it shows."""
+    print("")
+    print("search covers card keys, the pair fingerprint and both deck ones")
+    with Fixture():
+        dp.migrate(enrol=False)
+        row = dp.report(per=1)["pairs"][0]
+        check("by card key", dp.report(query="hog-rider")["total"] >= 1)
+        check("by pair fingerprint",
+              dp.report(query=row["pairFingerprint"])["total"] == 1,
+              str(dp.report(query=row["pairFingerprint"])["total"]))
+        check("by deck A fingerprint",
+              dp.report(query=row["deckA"]["fingerprint"])["total"] >= 1,
+              str(dp.report(query=row["deckA"]["fingerprint"])["total"]))
+        check("by deck B fingerprint",
+              dp.report(query=row["deckB"]["fingerprint"])["total"] >= 1,
+              str(dp.report(query=row["deckB"]["fingerprint"])["total"]))
+        check("a fingerprint that exists nowhere finds nothing",
+              dp.report(query="2v2:0000000000")["total"] == 0)
+
+
+def test_pagination_is_server_side_and_bounded() -> None:
+    """1.29M pairs must never all cross the wire."""
+    print("")
+    print("paging is bounded and never returns the whole collection")
+    with Fixture():
+        dp.migrate(enrol=False)
+        total = dp.report()["total"]
+        check("more pairs than a page", total > 1, str(total))
+        for per in (1, 25, 50, 100):
+            rep = dp.report(per=per)
+            check(f"per={per} honoured", rep["perPage"] == per, str(rep["perPage"]))
+            check(f"per={per} returns at most that many",
+                  len(rep["pairs"]) <= per, str(len(rep["pairs"])))
+        check("per is capped at MAX_PER_PAGE",
+              dp.report(per=10**9)["perPage"] == dp.MAX_PER_PAGE)
+        check("per below one is clamped up", dp.report(per=0)["perPage"] == 1)
+        check("page below one clamps", dp.report(page=-5, per=1)["page"] == 1)
+        check("page past the end clamps",
+              dp.report(page=10**9, per=1)["page"] == dp.report(per=1)["pages"])
+
+
+def test_the_board_states_the_bounded_population() -> None:
+    """It must not read as a census of all 866k+ participants."""
+    print("")
+    print("the board publishes what population it covers")
+    with Fixture():
+        dp.migrate(enrol=False)
+        summ = dp.report()["summary"]
+        check("the limit is published", summ["populationLimit"] == 1000,
+              str(summ["populationLimit"]))
+        check("the retained count is published", "population" in summ)
+        check("the full participant count is published too",
+              summ["participants"] >= summ["population"],
+              f'{summ["participants"]} vs {summ["population"]}')
+        check("the cut is published", "populationCut" in summ)
+
+
+def test_empty_results_are_a_clean_page() -> None:
+    print("")
+    print("a search matching nothing is an empty page, not an error")
+    with Fixture():
+        dp.migrate(enrol=False)
+        rep = dp.report(query="mega-knight")
+        check("no rows", rep["pairs"] == [])
+        check("total zero", rep["total"] == 0)
+        check("still one page", rep["pages"] == 1, str(rep["pages"]))
+        check("page clamps to one", rep["page"] == 1)
+        check("the summary still describes the collection",
+              rep["summary"]["uniquePairs"] > 0)
+
+
+def test_the_board_preserves_pair_semantics() -> None:
+    """A + B is B + A, card order is irrelevant, and opposing decks are never
+    a pair. Asserted through the board's own output."""
+    print("")
+    print("the board's rows obey the pair rules")
+    with Fixture():
+        dp.migrate(enrol=False)
+        rep = dp.report(per=50)
+        for p in rep["pairs"]:
+            a, b = p["deckA"], p["deckB"]
+            check(f'{p["pairFingerprint"][:12]} deck A is canonically sorted',
+                  a["cardKeys"] == sorted(a["cardKeys"]))
+            check(f'{p["pairFingerprint"][:12]} deck B is canonically sorted',
+                  b["cardKeys"] == sorted(b["cardKeys"]))
+            check(f'{p["pairFingerprint"][:12]} the pair is canonically ordered',
+                  a["fingerprint"] <= b["fingerprint"],
+                  f'{a["fingerprint"]} vs {b["fingerprint"]}')
+            check(f'{p["pairFingerprint"][:12]} recomputes to its own id',
+                  dp.pair_fingerprint(a["fingerprint"], b["fingerprint"])
+                  == p["pairFingerprint"])
+            check(f'{p["pairFingerprint"][:12]} order-swapped gives the same id',
+                  dp.pair_fingerprint(b["fingerprint"], a["fingerprint"])
+                  == p["pairFingerprint"])
+
+
+def test_every_row_can_be_drawn() -> None:
+    """The board renders sixteen card images per row; a row missing art or ids
+    would render as gaps."""
+    print("")
+    print("every row carries what the board draws")
+    with Fixture():
+        dp.migrate(enrol=False)
+        for p in dp.report(per=50)["pairs"]:
+            for side in ("deckA", "deckB"):
+                d = p[side]
+                check(f'{side} has eight cards', len(d["cards"]) == 8)
+                check(f'{side} every card has a key', all(c["key"] for c in d["cards"]))
+                check(f'{side} every card has a real id',
+                      all(c["id"] > 0 for c in d["cards"]), str(d["cardIds"]))
+                check(f'{side} every card is named', all(c["name"] for c in d["cards"]))
+            check("occurrences is a positive count", p["occurrences"] >= 1)
+            check("players is a count", p["players"] >= 0)
+            check("first seen is not after last seen",
+                  p["firstSeen"] <= p["lastSeen"])
+
+
+
+
+def test_the_cursor_stops_at_an_unresolvable_payload() -> None:
+    """THE HOLE THAT WOULD HAVE SHIPPED, caught in the pre-deploy review.
+
+    A 2v2 payload the fold cannot resolve is skipped -- and the first version
+    of the cursor advanced past it anyway, so the raw cap would have deleted a
+    battle that had never been folded. The raw copy is the only record of it.
+
+    THIS IS NOT HYPOTHETICAL. When Minion Giant shipped and this host's card
+    catalog was a commit behind, 81,941 sides resolved to nothing. Under a
+    cursor that advanced regardless, every one of those battles would have been
+    deleted instead of waiting for the catalog fix -- turning "deploy the card
+    file and re-run" into permanent loss.
+    """
+    print("")
+    print("the cursor will not step over a payload it could not read")
+    with Fixture() as fx:
+        bad = payload("20260921T100000.000Z",
+                      [("#BAD1", HOG), ("#BAD2", GIANT)],
+                      [("#BAD3", BAIT), ("#BAD4", LAVA)])
+        bad["team"][0]["cards"][0]["id"] = 99999999      # no catalog knows it
+        bad["opponent"][0]["cards"][0]["id"] = 99999999
+        _add_raw(fx, "#BAD1", bad, stored="2026-09-21T10:00:00+00:00")
+        # ...and a perfectly good payload stored AFTER it, which must not drag
+        # the cursor over the bad one.
+        _add_raw(fx, "#OK1", payload("20260922T100000.000Z",
+                 [("#OK1", MINER), ("#OK2", GOLEM)],
+                 [("#OK3", BAIT), ("#OK4", LAVA)]),
+                 stored="2026-09-22T10:00:00+00:00")
+
+        out = dp.migrate(enrol=False)
+        cursor = dp.processed_through()
+        check("the run reported the unresolved payload",
+              out["sidesUnresolved"] == 2, str(out["sidesUnresolved"]))
+        check("and named where the cursor stopped",
+              out["cursorBlockedAt"] == "2026-09-21T10:00:00+00:00",
+              str(out["cursorBlockedAt"]))
+        check("the cursor did NOT reach the unresolvable payload",
+              cursor < "2026-09-21T10:00:00+00:00", repr(cursor))
+        check("nor the good payload behind it",
+              cursor < "2026-09-22T10:00:00+00:00", repr(cursor))
+        check("so the raw cap would protect both",
+              _purgeable(cursor, "2026-09-21T10:00:00+00:00") is False
+              and _purgeable(cursor, "2026-09-22T10:00:00+00:00") is False)
+        check("but everything before the block stays purgeable",
+              _purgeable(cursor, "2026-09-01T09:00:00+00:00") is True)
+
+
+def test_a_clean_run_reports_no_block() -> None:
+    print("")
+    print("a run with nothing unresolvable reports no block")
+    with Fixture():
+        out = dp.migrate(enrol=False)
+        check("nothing unresolved", out["sidesUnresolved"] == 0,
+              str(out["unresolvedReasons"]))
+        check("no block recorded", out["cursorBlockedAt"] is None,
+              str(out["cursorBlockedAt"]))
+        check("and the cursor advanced", bool(dp.processed_through()))
+
+
+def test_the_cursor_never_regresses() -> None:
+    """A blocked run must not push the cursor BACKWARDS below what an earlier
+    run already proved processed."""
+    print("")
+    print("a blocked run does not move the cursor backwards")
+    with Fixture() as fx:
+        dp.migrate(enrol=False)
+        before = dp.processed_through()
+        bad = payload("20260921T110000.000Z",
+                      [("#BB1", HOG), ("#BB2", GIANT)],
+                      [("#BB3", BAIT), ("#BB4", LAVA)])
+        bad["team"][0]["cards"][0]["id"] = 99999999
+        _add_raw(fx, "#BB1", bad, stored="2026-09-21T11:00:00+00:00")
+        dp.update()
+        after = dp.processed_through()
+        check("the cursor did not regress", after >= before, f"{before} -> {after}")
+        check("and still does not cover the bad row",
+              after < "2026-09-21T11:00:00+00:00", repr(after))
+
+
+
+
+def test_only_a_retryable_refusal_holds_the_cursor() -> None:
+    """THE DESIGN DECISION THAT AVOIDS A PERMANENT JAM.
+
+    `unknown_card` is transient — this host's catalog is behind, and a file
+    copy plus a re-run resolves it. Holding the cursor there is right.
+
+    A malformed payload is not transient. No later deploy makes a one-sided
+    2v2 readable, so blocking on it would jam the cursor forever, stop ALL raw
+    purging and grow the database without bound. A safe direction is not the
+    same as a safe resting place.
+    """
+    print("")
+    print("a permanently unreadable payload does not jam the cursor")
+    with Fixture() as fx:
+        broken = payload("20260923T100000.000Z",
+                         [("#MAL1", HOG), ("#MAL2", GIANT)],
+                         [("#MAL3", BAIT), ("#MAL4", LAVA)])
+        broken["team"] = broken["team"][:1]        # structurally not 2v2
+        broken["opponent"] = broken["opponent"][:1]
+        _add_raw(fx, "#MAL1", broken, stored="2026-09-23T10:00:00+00:00")
+
+        out = dp.migrate(enrol=False)
+        check("it was refused", out["sidesUnresolved"] >= 2,
+              str(out["sidesUnresolved"]))
+        check("for a permanent reason",
+              any(k.startswith("side_not_two_participants")
+                  for k in out["unresolvedReasons"]),
+              str(out["unresolvedReasons"]))
+        check("no retryable refusals", out["retryableRefusals"] == 0,
+              str(out["retryableRefusals"]))
+        check("so the cursor was NOT held", out["cursorBlockedAt"] is None,
+              str(out["cursorBlockedAt"]))
+        check("and it advanced past the malformed row",
+              dp.processed_through() >= "2026-09-23T10:00:00+00:00",
+              repr(dp.processed_through()))
+
+
+def test_one_bad_side_still_holds_the_cursor() -> None:
+    """The case the first version of this check missed: a payload where ONE
+    side carries an unknown card still yields the other side's pair, so the
+    payload looks handled while half of it was dropped."""
+    print("")
+    print("a half-readable payload still holds the cursor")
+    with Fixture() as fx:
+        half = payload("20260924T100000.000Z",
+                       [("#HALF1", HOG), ("#HALF2", GIANT)],
+                       [("#HALF3", BAIT), ("#HALF4", LAVA)])
+        half["team"][0]["cards"][0]["id"] = 99999999   # only the team side
+        _add_raw(fx, "#HALF1", half, stored="2026-09-24T10:00:00+00:00")
+
+        out = dp.migrate(enrol=False)
+        check("one side survived", out["sidesResolved"] > 0)
+        check("one side did not", out["sidesUnresolved"] >= 1,
+              str(out["sidesUnresolved"]))
+        check("it is counted as retryable", out["retryableRefusals"] >= 1,
+              str(out["retryableRefusals"]))
+        check("and the cursor is held at it",
+              out["cursorBlockedAt"] == "2026-09-24T10:00:00+00:00",
+              str(out["cursorBlockedAt"]))
+        check("so the raw cap protects that payload",
+              _purgeable(dp.processed_through(), "2026-09-24T10:00:00+00:00")
+              is False)
+
+
+# --------------------------------------------------------------------------
+# The cursor invariant, case by case
+# --------------------------------------------------------------------------
+#
+# THE CURSOR MEANS: every RETRYABLE piece of 2v2 raw at or before this
+# stored_at has been successfully incorporated. It does NOT mean "the fold read
+# this row", and it must never advance past a retryable refusal.
+#
+# It MAY advance past a permanently malformed payload, because no future
+# catalog or code deploy makes that payload readable — and holding on one would
+# stop all raw purging forever. "Safe to move the cursor past" and
+# "successfully incorporated" are related but not the same claim.
+
+UNKNOWN_ID = 99999999          # no catalog knows it -> retryable
+
+
+def _occ(fp):
+    con = sqlite3.connect(dp.DB_PATH)
+    try:
+        r = con.execute(
+            "SELECT occurrences FROM duo_pairs WHERE pair_fingerprint = ?",
+            (fp,)).fetchone()
+        return r[0] if r else 0
+    finally:
+        con.close()
+
+
+def _sides_staged(bid):
+    con = sqlite3.connect(dp.DB_PATH)
+    try:
+        return {r[0] for r in con.execute(
+            "SELECT side FROM duo_stage WHERE battle_id = ?", (bid,))}
+    finally:
+        con.close()
+
+
+def _broken(p, side, index=0):
+    """Give one participant a card id no catalog knows -> a RETRYABLE refusal."""
+    p[side][index]["cards"][0]["id"] = UNKNOWN_ID
+    return p
+
+
+def _malformed(p):
+    """Structurally not 2v2 -> a PERMANENT refusal."""
+    p["team"] = p["team"][:1]
+    p["opponent"] = p["opponent"][:1]
+    return p
+
+
+def test_case_a_both_sides_valid() -> None:
+    print("")
+    print("CASE A — both sides valid")
+    with Fixture() as fx:
+        stamp = "2026-09-25T10:00:00+00:00"
+        _add_raw(fx, "#A1", payload("20260925T100000.000Z",
+                 [("#A1", HOG), ("#A2", GIANT)],
+                 [("#A3", MINER), ("#A4", GOLEM)]), stored=stamp)
+        out = dp.migrate(enrol=False)
+        check("nothing unresolved", out["sidesUnresolved"] == 0,
+              str(out["unresolvedReasons"]))
+        check("no block", out["cursorBlockedAt"] is None)
+        check("the cursor advanced past it",
+              dp.processed_through() >= stamp, repr(dp.processed_through()))
+        check("so the raw becomes purgeable",
+              _purgeable(dp.processed_through(), stamp) is True)
+
+
+def test_case_b_both_sides_unknown_card() -> None:
+    print("")
+    print("CASE B — both sides carry an unknown card")
+    with Fixture() as fx:
+        stamp = "2026-09-25T11:00:00+00:00"
+        p = payload("20260925T110000.000Z",
+                    [("#B1", HOG), ("#B2", GIANT)],
+                    [("#B3", MINER), ("#B4", GOLEM)])
+        _broken(p, "team"); _broken(p, "opponent")
+        _add_raw(fx, "#B1", p, stored=stamp)
+        out = dp.migrate(enrol=False)
+        check("neither side incorporated", out["sidesUnresolved"] == 2,
+              str(out["sidesUnresolved"]))
+        check("retryable refusals recorded", out["retryableRefusals"] == 2,
+              str(out["retryableRefusals"]))
+        check("the block names the payload", out["cursorBlockedAt"] == stamp,
+              str(out["cursorBlockedAt"]))
+        check("the cursor did not advance past it",
+              dp.processed_through() < stamp, repr(dp.processed_through()))
+        check("so the raw stays protected",
+              _purgeable(dp.processed_through(), stamp) is False)
+
+
+def test_case_c_one_side_unknown_one_valid() -> None:
+    """THE CRITICAL REGRESSION. One teammate pair resolves, the other does not.
+    The successful half must not be double-counted on retry, and the failed
+    half must still be recoverable."""
+    print("")
+    print("CASE C — one side unknown, one side valid (the critical case)")
+    with Fixture() as fx:
+        stamp = "2026-09-25T12:00:00+00:00"
+        p = payload("20260925T120000.000Z",
+                    [("#C1", HOG), ("#C2", GIANT)],
+                    [("#C3", MINER), ("#C4", GOLEM)])
+        _broken(p, "team")
+        _add_raw(fx, "#C1", p, stored=stamp)
+        bid = dp.battle_identity(p)
+        good = dp.pair_fingerprint(dp.deck_fingerprint(MINER), dp.deck_fingerprint(GOLEM))
+        bad = dp.pair_fingerprint(dp.deck_fingerprint(HOG), dp.deck_fingerprint(GIANT))
+
+        out1 = dp.migrate(enrol=False)
+        good1, bad1 = _occ(good), _occ(bad)
+        check("the valid side WAS incorporated", "opponent" in _sides_staged(bid),
+              str(_sides_staged(bid)))
+        check("the unknown side was NOT", "team" not in _sides_staged(bid),
+              str(_sides_staged(bid)))
+        check("it is counted as retryable", out1["retryableRefusals"] == 1,
+              str(out1["retryableRefusals"]))
+        check("the cursor did NOT advance past the payload",
+              dp.processed_through() < stamp, repr(dp.processed_through()))
+        check("so the raw payload stays protected",
+              _purgeable(dp.processed_through(), stamp) is False)
+
+        # The catalog is deployed and the fold is re-run.
+        dp._ID_TO_KEY[UNKNOWN_ID] = "knight"
+        try:
+            out2 = dp.migrate(enrol=False)
+            check("the retry resolved everything", out2["sidesUnresolved"] == 0,
+                  str(out2["unresolvedReasons"]))
+            check("both sides are now staged", _sides_staged(bid) == {"team", "opponent"},
+                  str(_sides_staged(bid)))
+            check("the already-successful side was NOT double-counted",
+                  _occ(good) == good1, f"{good1} -> {_occ(good)}")
+            check("the failed side WAS incorporated", _occ(bad) == bad1 + 1,
+                  f"{bad1} -> {_occ(bad)}")
+            check("every participant counts exactly one battle",
+                  all(_battles_of(t) == 1 for t in ("#C1", "#C2", "#C3", "#C4")),
+                  str([_battles_of(t) for t in ("#C1", "#C2", "#C3", "#C4")]))
+            check("and the cursor may now advance",
+                  dp.processed_through() >= stamp, repr(dp.processed_through()))
+        finally:
+            dp._ID_TO_KEY.pop(UNKNOWN_ID, None)
+
+
+def test_case_d_permanent_malformed_payload() -> None:
+    print("")
+    print("CASE D — permanently malformed payload")
+    with Fixture() as fx:
+        stamp = "2026-09-25T13:00:00+00:00"
+        _add_raw(fx, "#D1", _malformed(payload("20260925T130000.000Z",
+                 [("#D1", HOG), ("#D2", GIANT)],
+                 [("#D3", MINER), ("#D4", GOLEM)])), stored=stamp)
+        out = dp.migrate(enrol=False)
+        check("it was refused", out["sidesUnresolved"] >= 2,
+              str(out["sidesUnresolved"]))
+        check("the refusal is observable and named",
+              any(k.startswith("side_not_two_participants")
+                  for k in out["unresolvedReasons"]),
+              str(out["unresolvedReasons"]))
+        check("it is NOT retryable", out["retryableRefusals"] == 0,
+              str(out["retryableRefusals"]))
+        check("so it does not jam the cursor", out["cursorBlockedAt"] is None)
+        check("the cursor progresses beyond it",
+              dp.processed_through() >= stamp, repr(dp.processed_through()))
+        check("and it was never claimed as incorporated",
+              _sides_staged(dp.battle_identity(payload(
+                  "20260925T130000.000Z",
+                  [("#D1", HOG), ("#D2", GIANT)],
+                  [("#D3", MINER), ("#D4", GOLEM)]))) == set())
+
+
+def test_case_e_permanent_then_valid() -> None:
+    print("")
+    print("CASE E — permanent refusal followed by a valid payload")
+    with Fixture() as fx:
+        _add_raw(fx, "#E0", _malformed(payload("20260925T140000.000Z",
+                 [("#E0", HOG), ("#E9", GIANT)],
+                 [("#E8", MINER), ("#E7", GOLEM)])),
+                 stored="2026-09-25T14:00:00+00:00")
+        later = "2026-09-25T15:00:00+00:00"
+        _add_raw(fx, "#E1", payload("20260925T150000.000Z",
+                 [("#E1", HOG), ("#E2", GIANT)],
+                 [("#E3", MINER), ("#E4", GOLEM)]), stored=later)
+        out = dp.migrate(enrol=False)
+        check("the later payload was processed", out["sidesResolved"] >= 2,
+              str(out["sidesResolved"]))
+        check("the permanent one did not block it",
+              out["cursorBlockedAt"] is None, str(out["cursorBlockedAt"]))
+        check("the cursor progressed normally",
+              dp.processed_through() >= later, repr(dp.processed_through()))
+
+
+def test_case_f_retryable_then_valid() -> None:
+    print("")
+    print("CASE F — retryable refusal followed by a valid payload")
+    with Fixture() as fx:
+        blocked = "2026-09-25T16:00:00+00:00"
+        p = payload("20260925T160000.000Z",
+                    [("#F1", HOG), ("#F2", GIANT)],
+                    [("#F3", MINER), ("#F4", GOLEM)])
+        _broken(p, "team"); _broken(p, "opponent")
+        _add_raw(fx, "#F1", p, stored=blocked)
+        later = "2026-09-25T17:00:00+00:00"
+        _add_raw(fx, "#F5", payload("20260925T170000.000Z",
+                 [("#F5", BAIT), ("#F6", LAVA)],
+                 [("#F7", MINER), ("#F8", GOLEM)]), stored=later)
+
+        out = dp.migrate(enrol=False)
+        check("the cursor stopped at or before the blocked payload",
+              dp.processed_through() < blocked, repr(dp.processed_through()))
+        check("...and therefore also protects the later one",
+              _purgeable(dp.processed_through(), later) is False)
+        check("the later payload may still have been READ and folded",
+              out["sidesResolved"] >= 2, str(out["sidesResolved"]))
+
+        dp._ID_TO_KEY[UNKNOWN_ID] = "knight"
+        try:
+            dp.migrate(enrol=False)
+            check("after the catalog fix the blocked payload is retried",
+                  dp.processed_through() >= later, repr(dp.processed_through()))
+        finally:
+            dp._ID_TO_KEY.pop(UNKNOWN_ID, None)
+
+
+def test_case_g_row_arrives_during_the_fold() -> None:
+    """A row inserted while a fold runs is outside that fold's snapshot, and
+    its stored_at is later than everything in it — so the cursor cannot claim
+    it and the next run collects it."""
+    print("")
+    print("CASE G — a row arrives while the fold is running")
+    with Fixture() as fx:
+        dp.migrate(enrol=False)
+        cursor = dp.processed_through()
+        arrived = "2026-12-01T00:00:00+00:00"          # later than the fold saw
+        _add_raw(fx, "#G1", payload("20261201T000000.000Z",
+                 [("#G1", HOG), ("#G2", GIANT)],
+                 [("#G3", MINER), ("#G4", GOLEM)]), stored=arrived)
+        check("the cursor does not claim it", cursor < arrived, repr(cursor))
+        check("so the raw cap protects it",
+              _purgeable(cursor, arrived) is False)
+        before = dp.report()["summary"]["occurrences"]
+        dp.update()
+        check("the next run processes it",
+              dp.report()["summary"]["occurrences"] > before,
+              str(dp.report()["summary"]["occurrences"]))
+        check("and only then does the cursor cover it",
+              dp.processed_through() >= arrived, repr(dp.processed_through()))
+
+
+def test_case_h_fold_failure_mid_run() -> None:
+    """An exception partway through must not leave the cursor claiming rows
+    that were never incorporated, and re-running must be idempotent."""
+    print("")
+    print("CASE H — the fold raises partway through")
+    with Fixture() as fx:
+        dp.migrate(enrol=False)
+        before_cursor = dp.processed_through()
+        before_occ = dp.report()["summary"]["occurrences"]
+
+        stamp = "2026-11-01T00:00:00+00:00"
+        _add_raw(fx, "#H1", payload("20261101T000000.000Z",
+                 [("#H1", HOG), ("#H2", GIANT)],
+                 [("#H3", MINER), ("#H4", GOLEM)]), stored=stamp)
+
+        real = dp._fold
+        dp._fold = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        try:
+            dp.update()
+            check("the run raised", False, "no exception")
+        except RuntimeError:
+            check("the run raised", True)
+        finally:
+            dp._fold = real
+
+        check("the cursor did NOT advance", dp.processed_through() == before_cursor,
+              f"{before_cursor} -> {dp.processed_through()}")
+        check("so the new payload is still protected",
+              _purgeable(dp.processed_through(), stamp) is False)
+
+        dp.update()
+        check("re-running succeeds", dp.processed_through() >= stamp,
+              repr(dp.processed_through()))
+        after = dp.report()["summary"]["occurrences"]
+        dp.update()
+        check("and is idempotent", dp.report()["summary"]["occurrences"] == after,
+              str(dp.report()["summary"]["occurrences"]))
+        check("nothing was lost", after > before_occ, f"{before_occ} -> {after}")
+
+
+def test_adversarial_sequences() -> None:
+    """Every combination of valid / retryable / permanent, checked for the five
+    properties that matter."""
+    print("")
+    print("adversarial sequences")
+    kinds = ("valid", "unknown", "permanent")
+    n = 0
+    for first in kinds:
+        for second in kinds:
+            n += 1
+            with Fixture() as fx:
+                stamps = []
+                for i, kind in enumerate((first, second)):
+                    stamp = "2026-10-%02dT00:00:00+00:00" % (i + 1)
+                    stamps.append(stamp)
+                    p = payload("202610%02dT000000.000Z" % (i + 1),
+                                [("#S%d1" % i, HOG), ("#S%d2" % i, GIANT)],
+                                [("#S%d3" % i, MINER), ("#S%d4" % i, GOLEM)])
+                    if kind == "unknown":
+                        _broken(p, "team")
+                    elif kind == "permanent":
+                        _malformed(p)
+                    _add_raw(fx, "#S%d1" % i, p, stored=stamp)
+
+                out = dp.migrate(enrol=False)
+                cursor = dp.processed_through()
+                label = f"{first}/{second}"
+
+                # 1. nothing retryable before the cursor is left unresolved
+                if out["cursorBlockedAt"]:
+                    check(f"[{label}] cursor stops before the block",
+                          cursor < out["cursorBlockedAt"],
+                          f'{cursor} vs {out["cursorBlockedAt"]}')
+                else:
+                    check(f"[{label}] no retryable work outstanding",
+                          out["retryableRefusals"] == 0,
+                          str(out["retryableRefusals"]))
+
+                # 2/3. re-running changes no count
+                occ = dp.report()["summary"]["occurrences"]
+                parts = dp.report()["summary"].get("uniquePairs")
+                dp.migrate(enrol=False)
+                check(f"[{label}] occurrences stable on re-run",
+                      dp.report()["summary"]["occurrences"] == occ,
+                      str(dp.report()["summary"]["occurrences"]))
+                check(f"[{label}] pairs stable on re-run",
+                      dp.report()["summary"]["uniquePairs"] == parts)
+
+                # 4. a retryable problem is never silently dropped
+                if "unknown" in (first, second):
+                    check(f"[{label}] the retryable refusal is reported",
+                          out["retryableRefusals"] > 0,
+                          str(out["retryableRefusals"]))
+
+                # 5. permanent data does not jam the cursor
+                if first == "permanent" and second == "permanent":
+                    check(f"[{label}] permanent-only does not block",
+                          out["cursorBlockedAt"] is None,
+                          str(out["cursorBlockedAt"]))
+    print(f"       {n} sequences checked")
+
+
+def test_the_same_battle_from_several_participants_still_counts_once() -> None:
+    print("")
+    print("one battle delivered from several tracked participants")
+    with Fixture() as fx:
+        p = payload("20261010T000000.000Z",
+                    [("#M1", HOG), ("#M2", GIANT)],
+                    [("#M3", MINER), ("#M4", GOLEM)])
+        # the same battle, stored under all four participants
+        for i, tag in enumerate(("#M1", "#M2", "#M3", "#M4")):
+            _add_raw(fx, tag, p, stored="2026-10-10T0%d:00:00+00:00" % i)
+        out = dp.migrate(enrol=False)
+        # MEASURED AGAINST THE FIXTURE'S OWN CONTENTS, not as absolutes. The
+        # fixture ships four payloads covering three battles (one of them
+        # already stored twice), so this test's four copies of one battle take
+        # the totals to eight payloads and four real battles. Asserting the
+        # bare numbers here has caught me out repeatedly and each time the code
+        # was right.
+        check("this battle's four copies were all read",
+              out["payloadsRead"] == 8, str(out["payloadsRead"]))
+        check("and collapsed to one real battle",
+              out["battlesDeduplicated"] == 4, str(out["battlesDeduplicated"]))
+        check("so three of its copies were folded away",
+              out["duplicatePayloads"] == 4, str(out["duplicatePayloads"]))
+        check("each participant counts one battle",
+              all(_battles_of(t) == 1 for t in ("#M1", "#M2", "#M3", "#M4")),
+              str([_battles_of(t) for t in ("#M1", "#M2", "#M3", "#M4")]))
+        bid = dp.battle_identity(p)
+        check("exactly two staged sides", len(_sides_staged(bid)) == 2,
+              str(_sides_staged(bid)))
+
+
 if __name__ == "__main__":
     test_a_deck_is_order_free()
     test_a_pair_is_order_free()
@@ -1367,9 +2216,40 @@ if __name__ == "__main__":
     test_pruning_never_touches_the_pairs()
     test_a_pair_is_valid_whatever_its_players_status()
     test_the_two_bounds_are_independent()
+    test_an_unprocessed_2v2_payload_is_protected()
+    test_a_processed_2v2_payload_becomes_purgeable()
+    test_the_cursor_fails_closed()
+    test_the_cursor_never_overstates_progress()
+    test_the_cursor_stops_at_an_unresolvable_payload()
+    test_a_clean_run_reports_no_block()
+    test_the_cursor_never_regresses()
+    test_only_a_retryable_refusal_holds_the_cursor()
+    test_one_bad_side_still_holds_the_cursor()
+    test_case_a_both_sides_valid()
+    test_case_b_both_sides_unknown_card()
+    test_case_c_one_side_unknown_one_valid()
+    test_case_d_permanent_malformed_payload()
+    test_case_e_permanent_then_valid()
+    test_case_f_retryable_then_valid()
+    test_case_g_row_arrives_during_the_fold()
+    test_case_h_fold_failure_mid_run()
+    test_adversarial_sequences()
+    test_the_same_battle_from_several_participants_still_counts_once()
+    test_folding_twice_still_counts_once()
+    test_duel_raw_is_not_in_scope()
     test_a_pruned_players_count_does_not_go_backwards()
     test_pruning_never_drops_an_uncounted_row()
     test_the_board_ranks_and_pages()
+    test_the_board_offers_three_orderings()
+    test_an_unknown_sort_falls_back_rather_than_reaching_the_sql()
+    test_each_ordering_actually_orders()
+    test_the_default_is_most_played()
+    test_search_finds_a_deck_fingerprint_not_only_a_pair_one()
+    test_pagination_is_server_side_and_bounded()
+    test_the_board_states_the_bounded_population()
+    test_empty_results_are_a_clean_page()
+    test_the_board_preserves_pair_semantics()
+    test_every_row_can_be_drawn()
     test_a_pair_row_carries_what_the_board_draws()
     test_the_board_can_be_searched()
     test_never_built_is_not_built_and_empty()

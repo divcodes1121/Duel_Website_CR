@@ -138,6 +138,35 @@ DUO_TOP_PLAYERS_LIMIT = int(os.getenv("DUO_TOP_PLAYERS_LIMIT", "1000"))
 PROMOTION_ENABLED = os.getenv("CLASH_DUO_PROMOTE", "off").strip().lower() in (
     "1", "on", "true", "yes")
 
+#: THE ORDERINGS THE BOARD OFFERS, and the column each one actually sorts on.
+#: A CLOSED VOCABULARY, mapped here rather than interpolated from the request:
+#: the value reaches this module from a query string, and an ORDER BY built by
+#: string concatenation from user input is the one place a read-only board
+#: could be turned into something else.
+SORTS = {
+    "played": "occurrences DESC, pair_fingerprint",
+    "recent": "last_seen DESC, pair_fingerprint",
+    "first": "first_seen ASC, pair_fingerprint",
+}
+DEFAULT_SORT = "played"
+
+#: WHICH FAILURE REASONS HOLD THE CURSOR BACK, and it is deliberately not all
+#: of them.
+#:
+#: `unknown_card:<id>` is TRANSIENT. It means this host's card catalog is
+#: behind the game, and re-running after the catalog is deployed resolves the
+#: payload. That is not hypothetical: when Minion Giant shipped, 81,974 sides
+#: read as unresolvable here for exactly that reason, and the fix was a file
+#: copy. A cursor that stepped over those would have let the raw cap delete
+#: every affected battle instead of waiting.
+#:
+#: The others -- `side_not_two_participants`, `not_eight_cards`,
+#: `duplicate_cards` -- are PERMANENT properties of the payload. No later
+#: deploy makes them readable. Blocking on those would jam the cursor forever
+#: on one malformed row, which stops ALL raw purging and grows the database
+#: without bound. A safe direction is not the same as a safe resting place.
+RETRYABLE_REASONS = ("unknown_card:",)
+
 #: How many participating tags to keep on a pair record. The tags exist for
 #: reconciliation and for tracking, not as a roster — a pair played 13,000
 #: times would otherwise carry 13,000 of them and the row would be mostly tags.
@@ -387,6 +416,17 @@ def _ensure() -> None:
                 );
                 CREATE INDEX IF NOT EXISTS idx_duo_occ
                     ON duo_pairs(occurrences DESC, pair_fingerprint);
+                -- THE OTHER TWO ORDERINGS THE BOARD OFFERS. Measured on the
+                -- live 1.29M-pair collection, `ORDER BY last_seen DESC` with
+                -- no index is a full scan into a temp B-tree and takes
+                -- **32.4 seconds** for one page of 25. These are not
+                -- speculative indexes; each is the minimum that turns one
+                -- offered sort from a scan into a seek, and each costs about
+                -- the same as `idx_duo_occ` (75 MB).
+                CREATE INDEX IF NOT EXISTS idx_duo_last
+                    ON duo_pairs(last_seen DESC, pair_fingerprint);
+                CREATE INDEX IF NOT EXISTS idx_duo_first
+                    ON duo_pairs(first_seen, pair_fingerprint);
 
                 -- STAGING. One row per (battle, side), with the battle's own
                 -- identity as half the primary key -- so a battle stored under
@@ -578,6 +618,13 @@ def _duo_modes(con) -> list[str]:
     return sorted(m for m in modes if m)
 
 
+def _retryable(problems: dict) -> int:
+    """How many refusals so far might succeed on a later run. See
+    `RETRYABLE_REASONS`."""
+    return sum(v for k, v in problems.items()
+               if k.startswith(RETRYABLE_REASONS))
+
+
 def _stage(con, src, since: str | None) -> dict:
     """Read payloads and stage every partnership in them.
 
@@ -620,6 +667,9 @@ def _stage(con, src, since: str | None) -> dict:
     high = since or ""
     tags: set[str] = set()
     touched: set[str] = set()
+    # THE EARLIEST 2v2 PAYLOAD THIS RUN COULD NOT RESOLVE. The cursor must not
+    # advance past it -- see the note where it is applied.
+    blocked_at: str | None = None
     stage_rows, player_rows, battle_rows = [], [], []
 
     while True:
@@ -647,6 +697,7 @@ def _stage(con, src, since: str | None) -> dict:
                 unreadable += 1
                 continue
             got = False
+            retryable_before = _retryable(problems)
             # Two sides are OFFERED by every 2v2 payload. Counting what was
             # offered as well as what was taken is what makes the shortfall
             # explainable rather than merely visible.
@@ -675,6 +726,17 @@ def _stage(con, src, since: str | None) -> dict:
                     tags.add(t)
             if not got:
                 unreadable += 1
+            # HOLD THE CURSOR AT A PAYLOAD THAT MIGHT YET RESOLVE.
+            #
+            # PER SIDE, NOT PER PAYLOAD: a battle where one side carries an
+            # unknown card still yields the OTHER side's pair, so `got` is
+            # true and the payload looks handled -- while half of it was
+            # silently dropped. The first version of this check tested `got`
+            # and missed exactly that case.
+            if _retryable(problems) > retryable_before:
+                stamp = r["stored_at"] or ""
+                if stamp and (blocked_at is None or stamp < blocked_at):
+                    blocked_at = stamp
 
         if len(stage_rows) >= _READ_BATCH:
             sides += _flush(con, stage_rows, player_rows, battle_rows)
@@ -683,8 +745,30 @@ def _stage(con, src, since: str | None) -> dict:
     if stage_rows:
         sides += _flush(con, stage_rows, player_rows, battle_rows)
 
+    if blocked_at:
+        # THE CURSOR IS A PROMISE THAT EVERYTHING AT OR BELOW IT IS PROCESSED,
+        # so one unresolvable payload caps it for the whole run -- later
+        # successes do not "jump over" it.
+        #
+        # THIS IS NOT HYPOTHETICAL. When Minion Giant shipped and this host's
+        # card catalog was a commit behind, 81,941 sides resolved to nothing.
+        # Under a cursor that advanced anyway, the raw cap would have deleted
+        # every one of those battles instead of waiting for the catalog fix --
+        # turning "deploy the card file and re-run" into permanent loss.
+        #
+        # An index range scan on ix_raw_stored, not a table scan.
+        row = src.execute(
+            "SELECT MAX(stored_at) m FROM battle_raw WHERE stored_at < ?",
+            (blocked_at,),
+        ).fetchone()
+        capped = (row["m"] if row else None) or ""
+        # NEVER REGRESS below where we already were: rows at or below `since`
+        # were processed by an earlier run and are still processed.
+        high = capped if capped and capped >= (since or "") else (since or "")
+
     battles = con.execute("SELECT COUNT(DISTINCT battle_id) c FROM duo_stage").fetchone()["c"]
     return {"payloads": seen_payloads, "battles": battles, "sides": sides,
+            "blockedAt": blocked_at, "retryable": _retryable(problems),
             "unreadable": unreadable, "tags": tags, "watermark": high,
             "sidesAttempted": sides_attempted, "sidesResolved": sides_yielded,
             "touched": touched,
@@ -849,6 +933,84 @@ def _roll_participants(con, replace: bool) -> int:
     con.execute("UPDATE duo_battle_players SET counted = 1 WHERE counted = 0")
     con.commit()
     return con.execute("SELECT COUNT(*) c FROM duo_participants").fetchone()["c"]
+
+
+def processed_through() -> str:
+    """The `stored_at` cursor this pipeline has folded 2v2 raw payloads through.
+
+    **THIS IS A SAFETY INTERLOCK, NOT A STATISTIC.** Since phase 2 the bot no
+    longer writes 2v2 into `battles`, so for a window between arrival and the
+    hourly fold the raw payload in `battle_raw` is the ONLY copy of that battle
+    anywhere. The bot's `enforce_raw_cap` deletes non-duel raw to keep the disk
+    bounded, and on 2026-09-10 it purged 4,763,318 rows including every 2v2
+    payload then present. Anything it takes before this pipeline has folded it
+    is gone from every table.
+
+    `purge_non_duel_raw` in the bot ALREADY takes exactly this cursor — its
+    `stored_through` parameter, documented as "the archive's confirmed raw
+    INSERT cursor" — and its own docstring says that called without one it
+    "deletes non-duel raw regardless of whether the archive has it —
+    data-losing". Production reaches that unguarded path on every maintenance
+    run because `flush_raw_stored` is absent (there is no archive on this host),
+    so the coordinator takes its `else` branch. **The fix is to give that
+    branch a cursor, not to weaken the cap.**
+
+    WHY A ROW AT OR BELOW THIS VALUE IS GENUINELY SAFE TO DELETE. `_stage`
+    reads `WHERE stored_at > watermark ORDER BY stored_at` and advances the
+    high-water mark for EVERY row it reads. `stored_at` is set at INSERT, so it
+    orders with insertion. A row inserted while a fold is running is not in
+    that fold's read snapshot — but its `stored_at` is later than every row
+    that IS in the snapshot, so it lands above the new watermark and the next
+    run picks it up. The cursor can lag reality; it cannot overstate it.
+
+    **FAILS CLOSED.** Any error — missing file, unreadable database, absent
+    key — returns "", and an empty cursor must be read by the caller as
+    "protect everything", never as "nothing to protect". That is the same
+    convention `purge_non_duel_raw` already applies to its own empty cursor:
+    `if not stored_through: return 0`.
+    """
+    try:
+        _ensure()
+        con = _connect()
+        try:
+            return _meta_get(con, "watermark", "") or ""
+        finally:
+            con.close()
+    except Exception:
+        return ""
+
+
+def unprocessed_since(cursor: str = None) -> dict:
+    """How much 2v2 raw is sitting unprocessed, for the operator.
+
+    The figure that says whether the interlock is doing anything: if this
+    stays at zero the fold is keeping up, and if it climbs the raw cap is being
+    held off and the database is growing instead of losing data — the safe
+    direction, and one worth noticing.
+    """
+    cursor = processed_through() if cursor is None else cursor
+    path = cd.resolve_db_path()
+    if not path:
+        return {"cursor": cursor, "unprocessed": None, "error": "no database"}
+    con = cd.connect(path)
+    try:
+        modes = _duo_modes(con)
+        if not modes:
+            return {"cursor": cursor, "unprocessed": 0}
+        ph = ",".join("?" for _ in modes)
+        if cursor:
+            row = con.execute(
+                f"SELECT COUNT(*) c FROM battle_raw WHERE game_mode IN ({ph}) "
+                "AND (stored_at IS NULL OR stored_at > ?)", (*modes, cursor)
+            ).fetchone()
+        else:
+            row = con.execute(
+                f"SELECT COUNT(*) c FROM battle_raw WHERE game_mode IN ({ph})",
+                tuple(modes)
+            ).fetchone()
+        return {"cursor": cursor, "unprocessed": row["c"]}
+    finally:
+        con.close()
 
 
 def reconcile_population(limit: int = None, prune: bool = True) -> dict:
@@ -1175,6 +1337,14 @@ def migrate(since: str | None = None, enrol: bool = True) -> dict:
         "pairOccurrences": occ,
         "duplicateOccurrencesFolded": max(0, occ - pairs),
         "unreadablePayloads": staged["unreadable"],
+        # WHERE THE CURSOR STOPPED, and why. Null means nothing blocked it and
+        # every payload read was folded. A value means the raw cap is being
+        # held off at that point until whatever made the payload unreadable is
+        # fixed -- which is the safe direction, but not a state to sit in.
+        "cursorBlockedAt": staged.get("blockedAt"),
+        # Only retryable refusals hold the cursor; the count of those is what
+        # says whether the block will clear on its own after a deploy.
+        "retryableRefusals": staged.get("retryable", 0),
         "participants": participants,
         "population": population,
         # THE REPORT THE POLICY ASKS FOR, in its own terms. `discovered` is
@@ -1271,25 +1441,30 @@ def observe(payload: dict, game_mode: str = "", enrol: bool = True,
     found = list(pairs_from_payload(payload, problems))
     if not found:
         return {"duo": True, "stored": False, "reason": "no_readable_side",
-                "problems": problems}
+                "problems": problems, "retryable": _retryable(problems)}
 
     when = (payload.get("battleTime") or "").strip()
     con = _connect()
     try:
-        seen = con.execute(
-            "SELECT 1 FROM duo_stage WHERE battle_id = ? LIMIT 1", (bid,)
-        ).fetchone()
-        if seen:
-            # Already folded. NOT an error and not a failure to store: it is
-            # the same battle arriving from a second participant's log.
-            return {"duo": True, "stored": False, "duplicate": True,
-                    "battleId": bid}
+        # PER SIDE, NOT PER BATTLE. The guard used to be
+        # `SELECT 1 FROM duo_stage WHERE battle_id = ?`, which meant a battle
+        # whose team side failed on an unknown card and whose opponent side
+        # succeeded could NEVER be completed: the second call saw the battle
+        # id already present and returned "duplicate", so the missing half was
+        # lost even after the catalog was fixed. The staging key is
+        # `(battle_id, side)` and the retry has to ask the same question.
+        already = {r["side"] for r in con.execute(
+            "SELECT side FROM duo_stage WHERE battle_id = ?", (bid,)).fetchall()}
 
-        pairs, tags = [], []
+        fresh, tags = [], []
         for side, fp_a, fp_b, deck_a, deck_b, side_tags in found:
             pair_fp = pair_fingerprint(fp_a, fp_b)
             if not pair_fp:
+                problems["no_pair_fingerprint"] = problems.get("no_pair_fingerprint", 0) + 1
                 continue
+            tags.extend(side_tags)
+            if side in already:
+                continue                      # this half is already recorded
             con.execute(
                 "INSERT OR IGNORE INTO duo_stage (battle_id, side, pair_fp, "
                 "deck_a_fp, deck_b_fp, deck_a, deck_b, battle_time, game_mode) "
@@ -1297,58 +1472,40 @@ def observe(payload: dict, game_mode: str = "", enrol: bool = True,
                 (bid, side, pair_fp, fp_a, fp_b, json.dumps(deck_a),
                  json.dumps(deck_b), when, mode),
             )
-            con.execute(
-                """
-                INSERT INTO duo_pairs
-                    (pair_fingerprint, mode, deck_a_fingerprint, deck_b_fingerprint,
-                     deck_a_cards, deck_b_cards, occurrences, distinct_players,
-                     player_tags, first_seen, last_seen, source_modes)
-                VALUES (?,?,?,?,?,?,1,0,'[]',?,?,?)
-                ON CONFLICT(pair_fingerprint) DO UPDATE SET
-                    occurrences = duo_pairs.occurrences + 1,
-                    first_seen  = MIN(duo_pairs.first_seen, excluded.first_seen),
-                    last_seen   = MAX(duo_pairs.last_seen, excluded.last_seen)
-                """,
-                (pair_fp, MODE, fp_a, fp_b, json.dumps(deck_a),
-                 json.dumps(deck_b), when, when, mode),
-            )
             for t in side_tags:
                 con.execute(
                     "INSERT OR IGNORE INTO duo_stage_players (pair_fp, tag) VALUES (?,?)",
                     (pair_fp, t))
                 con.execute(
                     "INSERT OR IGNORE INTO duo_battle_players "
-                    "(battle_id, tag, battle_time, counted) VALUES (?,?,?,1)",
+                    "(battle_id, tag, battle_time, counted) VALUES (?,?,?,0)",
                     (bid, t, when))
-                tags.append(t)
-            con.execute(
-                "UPDATE duo_pairs SET distinct_players = "
-                "(SELECT COUNT(*) FROM duo_stage_players WHERE pair_fp = ?) "
-                "WHERE pair_fingerprint = ?", (pair_fp, pair_fp))
-            pairs.append(pair_fp)
-
-        # ONE BATTLE, ONE INCREMENT PER PARTICIPANT. Driven off the ledger
-        # rather than off `tags`, so a participant listed on both sides of a
-        # malformed payload still advances once.
-        con.execute(
-            """
-            INSERT INTO duo_participants (tag, battles, first_seen, last_seen, enrolled_at)
-            SELECT tag, 1, ?, ?, '' FROM duo_battle_players WHERE battle_id = ?
-            ON CONFLICT(tag) DO UPDATE SET
-                battles    = duo_participants.battles + 1,
-                first_seen = MIN(duo_participants.first_seen, excluded.first_seen),
-                last_seen  = MAX(duo_participants.last_seen, excluded.last_seen)
-            """,
-            (when, when, bid),
-        )
+            fresh.append(pair_fp)
         con.commit()
+
+        if not fresh:
+            # Nothing new: the same battle arriving again from another tracked
+            # participant, which is the normal case rather than an error.
+            return {"duo": True, "stored": False, "duplicate": True,
+                    "battleId": bid, "problems": problems,
+                    "retryable": _retryable(problems)}
+
+        # THE SAME TWO CALLS THE BATCH PATH MAKES, on just what changed.
+        # `_fold` RECOMPUTES each touched pair from `duo_stage` rather than
+        # incrementing it, which is what makes completing a half-staged battle
+        # safe: the side already recorded is counted once, not twice. The
+        # earlier hand-rolled `occurrences + 1` upsert here could not have that
+        # property, and keeping two implementations of "what a pair record is"
+        # is how they would eventually disagree.
+        _fold(con, set(fresh))
+        _roll_participants(con, replace=False)
     finally:
         con.close()
 
     enrolled = _enrol_tags(sorted(set(tags)), threshold, ceiling) if enrol else []
-    return {"duo": True, "stored": True, "battleId": bid, "pairs": pairs,
+    return {"duo": True, "stored": True, "battleId": bid, "pairs": fresh,
             "participants": sorted(set(tags)), "enrolled": enrolled,
-            "problems": problems}
+            "problems": problems, "retryable": _retryable(problems)}
 
 
 def update() -> dict:
@@ -1443,18 +1600,32 @@ def _pair_row(row) -> dict:
     }
 
 
-def report(page: int = 1, per: int = PER_PAGE, query: str = "") -> dict:
-    """One page of the unique 2v2 pairs, most played first."""
+def report(page: int = 1, per: int = PER_PAGE, query: str = "",
+           sort: str = DEFAULT_SORT) -> dict:
+    """One page of the unique 2v2 pairs.
+
+    `sort` is a KEY into `SORTS`, never a column name — an unrecognised value
+    falls back to the default rather than reaching the ORDER BY.
+    """
     _ensure()
     per = max(1, min(MAX_PER_PAGE, per))
+    sort = sort if sort in SORTS else DEFAULT_SORT
+    order = SORTS[sort]
     con = _connect()
     try:
         where, args = "", []
         q = (query or "").strip().lower()
         if q:
+            # CARD KEY, PAIR FINGERPRINT OR EITHER DECK FINGERPRINT. The deck
+            # fingerprints are their own columns, so a search for one has to
+            # name them — matching only the pair's would answer "no" for a
+            # deck that really is in the collection, on half the identifiers
+            # the board itself prints.
             where = ("WHERE lower(deck_a_cards) LIKE ? OR lower(deck_b_cards) LIKE ? "
-                     "OR lower(pair_fingerprint) LIKE ?")
-            args = ["%{}%".format(q)] * 3
+                     "OR lower(pair_fingerprint) LIKE ? "
+                     "OR lower(deck_a_fingerprint) LIKE ? "
+                     "OR lower(deck_b_fingerprint) LIKE ?")
+            args = ["%{}%".format(q)] * 5
 
         total = con.execute(
             "SELECT COUNT(*) c FROM duo_pairs " + where, args
@@ -1463,7 +1634,7 @@ def report(page: int = 1, per: int = PER_PAGE, query: str = "") -> dict:
         page = max(1, min(pages, page))
         rows = con.execute(
             "SELECT * FROM duo_pairs " + where +
-            " ORDER BY occurrences DESC, pair_fingerprint LIMIT ? OFFSET ?",
+            " ORDER BY " + order + " LIMIT ? OFFSET ?",
             (*args, per, (page - 1) * per),
         ).fetchall()
 
@@ -1500,6 +1671,8 @@ def report(page: int = 1, per: int = PER_PAGE, query: str = "") -> dict:
         "perPage": per,
         "total": total,
         "query": query or "",
+        "sort": sort,
+        "sorts": sorted(SORTS),
         "summary": {
             "mode": MODE,
             "uniquePairs": agg["pairs"] or 0,
@@ -1608,6 +1781,9 @@ if __name__ == "__main__":  # pragma: no cover - operator entry point
                     help="recompute the bounded top-N population and prune")
     ap.add_argument("--phase2-dry-run", action="store_true",
                     help="the pre-deployment report; writes nothing")
+    ap.add_argument("--cursor", action="store_true",
+                    help="print the stored_at cursor 2v2 raw is safe to purge "
+                         "through, and how much is still unprocessed")
     ap.add_argument("--limit", type=int, default=DUO_TOP_PLAYERS_LIMIT,
                     help="population size (default %d)" % DUO_TOP_PLAYERS_LIMIT)
     ap.add_argument("--show", type=int, default=0, metavar="N",
@@ -1631,6 +1807,8 @@ if __name__ == "__main__":  # pragma: no cover - operator entry point
         print(json.dumps(enrol_policy(threshold=opts.threshold), indent=2))
     if opts.reconcile:
         print(json.dumps(reconcile_population(limit=opts.limit), indent=2))
+    if opts.cursor:
+        print(json.dumps(unprocessed_since(), indent=2))
     if opts.phase2_dry_run:
         print(json.dumps(phase2_dry_run(threshold=opts.threshold,
                                         limit=opts.limit), indent=2))
@@ -1643,5 +1821,5 @@ if __name__ == "__main__":  # pragma: no cover - operator entry point
             print("          B: {}".format(", ".join(p["deckB"]["cardKeys"])))
     if not (opts.migrate or opts.update or opts.show or opts.coverage
             or opts.enrol or opts.enrol_dry or opts.reconcile
-            or opts.phase2_dry_run):
+            or opts.phase2_dry_run or opts.cursor):
         ap.print_help()

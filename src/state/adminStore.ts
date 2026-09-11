@@ -179,6 +179,12 @@ export interface DuoReport {
   perPage: number;
   total: number;
   query: string;
+  /** Which ordering produced this page. Echoed back because the server may
+   *  refuse an unrecognised key and fall back — the control must show what it
+   *  actually got, not what it asked for. */
+  sort: string;
+  /** The closed vocabulary of orderings the server will accept. */
+  sorts: string[];
   summary: {
     mode: string;
     uniquePairs: number;
@@ -233,7 +239,7 @@ interface AdminState {
   duoError: string | null;
 
   load: () => Promise<void>;
-  loadDuo: (page?: number, query?: string) => Promise<void>;
+  loadDuo: (page?: number, query?: string, sort?: string, per?: number) => Promise<void>;
   setRole: (id: string, role: AdminUser['role']) => Promise<string | null>;
   endTrial: (id: string) => Promise<string | null>;
 }
@@ -253,12 +259,17 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
   /** One page of the unique 2v2 pairs. Its own action and its own loading
    *  flag, so a slow or absent board cannot make the rest of the console
    *  look broken — the same independence the four sources in `load` have. */
-  async loadDuo(page = 1, query = '') {
+  async loadDuo(page = 1, query = '', sort = 'played', per = 25) {
     set({ duoLoading: true, duoError: null });
     try {
       const base = import.meta.env.VITE_ANALYTICS_BASE ?? '';
+      /* EVERY CONTROL IS A SERVER PARAMETER. There are ~1.29M pairs, so
+         paging, ordering and searching all have to happen in SQL — sorting or
+         filtering what one page returned would silently answer for 25 rows
+         while appearing to answer for the collection. */
       const res = await fetch(
-        `${base}/api/analytics/duo-pairs?page=${page}&per=25&q=${encodeURIComponent(query)}`,
+        `${base}/api/analytics/duo-pairs?page=${page}&per=${per}` +
+        `&sort=${encodeURIComponent(sort)}&q=${encodeURIComponent(query)}`,
       );
       if (!res.ok) throw new Error(String(res.status));
       set({ duo: (await res.json()) as DuoReport, duoLoading: false });

@@ -848,3 +848,34 @@
     width: 100%;
   }
 }
+
+/* The board's own description. It sits above a ranking of 1.29M partnerships,
+   which without this reads as every 2v2 player in the game. */
+.duoLede {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 0.9rem;
+  margin: 0 0 0.2rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.duoPopulation {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.duoControl {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  /* `flex: none` because `.searchRow` is a flex row whose input grows; without
+     it these labels are the first thing squeezed when the row is narrow. */
+  flex: none;
+}

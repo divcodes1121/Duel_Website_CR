@@ -546,7 +546,12 @@ class Handler(BaseHTTPRequestHandler):
                     per = duo.PER_PAGE
                 return self._send(
                     duo.report(page=page, per=per,
-                               query=(q.get("q") or [""])[0])
+                               query=(q.get("q") or [""])[0],
+                               # A KEY, not a column. `duo.report` maps it
+                               # through a closed vocabulary and falls back to
+                               # the default, so nothing from the query string
+                               # reaches an ORDER BY.
+                               sort=(q.get("sort") or [duo.DEFAULT_SORT])[0])
                 )
 
             if path == "/api/analytics/coverage":

@@ -288,6 +288,8 @@ export function AdminConsole() {
   const [query, setQuery] = useState('');
   const [duoOpen, setDuoOpen] = useState(false);
   const [duoQuery, setDuoQuery] = useState('');
+  const [duoSort, setDuoSort] = useState('played');
+  const [duoPer, setDuoPer] = useState(25);
   const [busyId, setBusyId] = useState<string | null>(null);
   /* Closed by default. Opening the console is usually a health check, not a
      hunt for one person. */
@@ -884,7 +886,7 @@ export function AdminConsole() {
         onClick={() => {
           const next = !duoOpen;
           setDuoOpen(next);
-          if (next && !duo && !duoLoading) void loadDuo(1, '');
+          if (next && !duo && !duoLoading) void loadDuo(1, '', duoSort, duoPer);
         }}
       >
         <svg className={styles.sectionChev} viewBox="0 0 24 24" width="13" height="13"
@@ -892,7 +894,7 @@ export function AdminConsole() {
              strokeLinejoin="round" aria-hidden="true" data-open={duoOpen || undefined}>
           <path d="M9 6l6 6-6 6" />
         </svg>
-        2v2 deck pairs
+        2v2 Deck Pairs
         {duo && (
           <span className={styles.sectionCount}>
             {duo.summary.uniquePairs.toLocaleString()}
@@ -964,19 +966,62 @@ export function AdminConsole() {
                 />
               )}
 
+              {/* WHAT THIS BOARD IS, IN ITS OWN WORDS. A ranking of 1.29M
+                  partnerships could easily read as a census of every 2v2
+                  player alive; it is the retained population and says so. */}
+              <p className={styles.duoLede}>
+                Unique teammate deck combinations from the retained 2v2
+                population.
+                <span className={styles.duoPopulation}>
+                  Population: Top {duo.summary.populationLimit.toLocaleString()}{' '}
+                  2v2 Players
+                </span>
+              </p>
+
               <div className={styles.searchRow}>
+                <label className={styles.duoControl}>
+                  Sort
+                  <select
+                    className={styles.roleSelect}
+                    value={duoSort}
+                    onChange={(e) => {
+                      setDuoSort(e.target.value);
+                      void loadDuo(1, duoQuery, e.target.value, duoPer);
+                    }}
+                  >
+                    <option value="played">Most Played</option>
+                    <option value="recent">Recently Seen</option>
+                    <option value="first">First Seen</option>
+                  </select>
+                </label>
+                <label className={styles.duoControl}>
+                  Per page
+                  <select
+                    className={styles.roleSelect}
+                    value={duoPer}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      setDuoPer(n);
+                      void loadDuo(1, duoQuery, duoSort, n);
+                    }}
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </label>
                 <input
                   className={styles.search}
                   value={duoQuery}
-                  placeholder="Filter by card key, e.g. hog-rider…"
+                  placeholder="Card key, pair or deck fingerprint…"
                   onChange={(e) => setDuoQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') void loadDuo(1, duoQuery); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void loadDuo(1, duoQuery, duoSort, duoPer); }}
                 />
                 {/* SERVER-PAGED, so the filter is a request. There are far more
                     pairs than are ever sent here, and filtering what arrived
                     would quietly search one page of a ranking. */}
                 <button className={styles.refresh} type="button" data-metal
-                        onClick={() => void loadDuo(1, duoQuery)}>
+                        onClick={() => void loadDuo(1, duoQuery, duoSort, duoPer)}>
                   Search
                 </button>
                 <span className={styles.count}>
@@ -999,7 +1044,7 @@ export function AdminConsole() {
                 <div className={styles.duoPager}>
                   <button className={styles.refresh} type="button" data-metal
                           disabled={duo.page <= 1 || duoLoading}
-                          onClick={() => void loadDuo(duo.page - 1, duoQuery)}>
+                          onClick={() => void loadDuo(duo.page - 1, duoQuery, duoSort, duoPer)}>
                     Previous
                   </button>
                   <span className={styles.count}>
@@ -1007,7 +1052,7 @@ export function AdminConsole() {
                   </span>
                   <button className={styles.refresh} type="button" data-metal
                           disabled={duo.page >= duo.pages || duoLoading}
-                          onClick={() => void loadDuo(duo.page + 1, duoQuery)}>
+                          onClick={() => void loadDuo(duo.page + 1, duoQuery, duoSort, duoPer)}>
                     Next
                   </button>
                 </div>
