@@ -133,93 +133,6 @@ export interface Collection {
   ops?: Ops;
 }
 
-/** One deck inside a 2v2 partnership. */
-export interface DuoDeck {
-  /** `2v2d:<sha1 of the sorted card keys>`. Order-free by construction. */
-  fingerprint: string;
-  cards: { key: string; id: number; name: string; elixir: number }[];
-  cardKeys: string[];
-  cardIds: number[];
-  avgElixir: number;
-}
-
-/**
- * One unique 2v2 PARTNERSHIP — two teammate decks played together.
- *
- * THE UNIT IS THE PAIR, NOT THE DECK. A 2v2 battle is four players and four
- * decks, and what a 2v2 player actually chooses is a partnership. The identity
- * is order-free at both levels: the eight cards of a deck sort, and the two
- * deck fingerprints sort, so `A + B` and `B + A` are one record.
- */
-export interface DuoPair {
-  /** `2v2:<sha1 of mode + the two sorted deck fingerprints>`. */
-  pairFingerprint: string;
-  mode: string;
-  deckA: DuoDeck;
-  deckB: DuoDeck;
-  /** How many REAL battles used this partnership. One battle is one
-   *  occurrence even when several tracked participants each stored it. */
-  occurrences: number;
-  /** Exact count of distinct participants. */
-  players: number;
-  /** A capped SAMPLE for reconciliation, not the roster — `players` is the
-   *  count. */
-  playerTags: string[];
-  firstSeen: string;
-  lastSeen: string;
-  sourceModes: string[];
-  /** Both teammates on the same list. A real pairing, not an error. */
-  mirror: boolean;
-}
-
-export interface DuoReport {
-  pairs: DuoPair[];
-  page: number;
-  pages: number;
-  perPage: number;
-  total: number;
-  query: string;
-  /** Which ordering produced this page. Echoed back because the server may
-   *  refuse an unrecognised key and fall back — the control must show what it
-   *  actually got, not what it asked for. */
-  sort: string;
-  /** The closed vocabulary of orderings the server will accept. */
-  sorts: string[];
-  summary: {
-    mode: string;
-    uniquePairs: number;
-    occurrences: number;
-    battlesFolded: number;
-    firstSeen: string;
-    lastSeen: string;
-    sourceModes: string[];
-    builtAt: string;
-    /** NEVER BUILT is not the same as BUILT AND EMPTY. */
-    built: boolean;
-    /** Every 2v2 row still in `battles` — phase 1 deletes nothing. */
-    rows2v2: number;
-    /** How many of those have a surviving raw payload, so their partnership
-     *  could be recovered at all. */
-    reconstructable: number;
-    /** ...and how many do not. Their second deck is gone for good and is NOT
-     *  represented on this board. Reported, never fabricated. */
-    unreconstructable: number;
-    /** 1 while `battles` still holds 2v2. See the module docstring. */
-    phase: number;
-    /** Every 2v2 participant ever seen — the lightweight tier, kept for all. */
-    participants: number;
-    /** ...and the bounded set whose expensive per-battle detail is retained.
-     *  The board shows partnerships from the whole collection; this says which
-     *  players it keeps a history for, so the page cannot be mistaken for a
-     *  complete census of 2v2. */
-    population: number;
-    populationLimit: number;
-    /** Distinct-battle count at the population boundary. "Top 1,000" says how
-     *  many; this says how good you had to be. */
-    populationCut: number;
-  };
-}
-
 interface AdminState {
   users: AdminUser[];
   health: Health | null;
@@ -229,17 +142,7 @@ interface AdminState {
   loading: boolean;
   error: string | null;
 
-  /* THE 2v2 BOARD IS LOADED ON DEMAND, not with the console. It is a paged
-     ranking over hundreds of thousands of partnerships and the console is
-     usually opened to check health, so fetching it up front would make every
-     load pay for a board nobody had opened. `null` means not yet asked for,
-     which the section renders as a prompt rather than as an empty table. */
-  duo: DuoReport | null;
-  duoLoading: boolean;
-  duoError: string | null;
-
   load: () => Promise<void>;
-  loadDuo: (page?: number, query?: string, sort?: string, per?: number) => Promise<void>;
   setRole: (id: string, role: AdminUser['role']) => Promise<string | null>;
   endTrial: (id: string) => Promise<string | null>;
 }
@@ -252,41 +155,6 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
   collection: null,
   loading: false,
   error: null,
-  duo: null,
-  duoLoading: false,
-  duoError: null,
-
-  /** One page of the unique 2v2 pairs. Its own action and its own loading
-   *  flag, so a slow or absent board cannot make the rest of the console
-   *  look broken — the same independence the four sources in `load` have. */
-  async loadDuo(page = 1, query = '', sort = 'played', per = 25) {
-    set({ duoLoading: true, duoError: null });
-    try {
-      const base = import.meta.env.VITE_ANALYTICS_BASE ?? '';
-      /* EVERY CONTROL IS A SERVER PARAMETER. There are ~1.29M pairs, so
-         paging, ordering and searching all have to happen in SQL — sorting or
-         filtering what one page returned would silently answer for 25 rows
-         while appearing to answer for the collection. */
-      const res = await fetch(
-        `${base}/api/analytics/duo-pairs?page=${page}&per=${per}` +
-        `&sort=${encodeURIComponent(sort)}&q=${encodeURIComponent(query)}`,
-      );
-      if (!res.ok) throw new Error(String(res.status));
-      set({ duo: (await res.json()) as DuoReport, duoLoading: false });
-    } catch (e) {
-      /* NAMED, not swallowed. A 404 here means the analytics API has not been
-         redeployed with the route yet, which is a normal state for this
-         project — the two halves ship separately — and it must not read as
-         "there is no 2v2 data". */
-      set({
-        duoLoading: false,
-        duoError:
-          e instanceof Error && e.message === '404'
-            ? 'The analytics API has not been redeployed with this route yet.'
-            : 'Could not reach the analytics API.',
-      });
-    }
-  },
 
   async load() {
     set({ loading: true, error: null });

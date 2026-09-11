@@ -1,0 +1,372 @@
+/* 2v2 Decks — the unique teammate deck pairs.
+ *
+ * THIS SCREEN OWNS ITS SCROLL, and that is the project's standard desktop trap
+ * rather than a preference. `body` is `overflow: hidden` and every route owns
+ * its own scroll region; the host here is `.tool`, which is
+ * `flex: 1; min-height: 0; overflow: hidden` — a card that fills the leftover
+ * height and CLIPS, assuming whatever it hosts runs a scroller inside it. Team
+ * Analysis shipped without one and could not be scrolled at all on a desktop.
+ *
+ * `min-height: 0` is as load-bearing as the height: without it this flex child
+ * refuses to shrink below its content and pushes the overflow back up into
+ * `.tool`, which clips it again exactly as before.
+ *
+ * The scrollbar is hidden to match `.main` and the rest of the shell.
+ */
+.page {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem;
+}
+
+.page::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ── Heading ─────────────────────────────────────────────────────────────── */
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* THE POPULATION IS A CHIP, NOT A FOOTNOTE. The board shows partnerships from
+   the whole collection, but per-player detail is kept only for a bounded top
+   slice — so a page that did not say so could be read as a complete census of
+   2v2, which it is not. */
+.population {
+  align-self: flex-start;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── Summary figures ─────────────────────────────────────────────────────── */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+  gap: 0.75rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 14px;
+  background: var(--glass-bg);
+}
+
+.statValue {
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.statLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.control select,
+.search {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.search {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.go {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.go:hover {
+  border-color: var(--text-muted);
+}
+
+.count {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ── The pairs ───────────────────────────────────────────────────────────── */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 16px;
+  background: var(--glass-bg);
+}
+
+/* THE TRACKS ARE SIZED TO THE STRIPS, NOT TO THE ROW, and that was a real
+   misreading before it was a tidiness point. With `1fr` tracks at 1440 each
+   deck column ran ~500px around a 230px strip, so deck A's average-elixir
+   figure — pushed to the right edge of its own track — printed immediately to
+   the LEFT of the words "DECK B" and read as belonging to it.
+   `minmax(0, max-content)` keeps the wrapper (it is what stops a long strip
+   blowing the grid out, the `1fr` trap this project has hit twice) while
+   letting the column stop where the cards do. */
+.decks {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, max-content) auto minmax(0, max-content);
+  justify-content: start;
+  align-items: start;
+  gap: 0.6rem;
+}
+
+/* A PLUS, NOT A VS. They are teammates, and every other VS mark in this
+   project means two sides of a fight. */
+.plus {
+  align-self: center;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.deck {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* Left-aligned, so the label, the strip and the two action chips share one
+     edge. Stretched, the chips centre themselves against the column rather
+     than sitting under the cards they act on. */
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+/* The elixir figure sits BESIDE the label, not at the far end of the row —
+   see the note on `.decks`. `align-self: stretch` so the two still bracket the
+   strip's width once the column is content-sized. */
+.deckHead {
+  align-self: stretch;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.deckSide {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.deckElixir {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--hue-violet);
+}
+
+/* 4x2 ON `minmax(0, 54px)` TRACKS, not eight across and not `1fr` columns.
+   Eight 54px cards plus gaps need ~453px, which no phone has; and four
+   fractions of a phone row make the art LARGER than the desktop board's. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 54px));
+  gap: 0.2rem;
+}
+
+.card {
+  width: 100%;
+  height: auto;
+  border-radius: 5px;
+}
+
+/* ── The figures beside a pair ───────────────────────────────────────────── */
+
+.facts {
+  flex: 0 1 auto;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(6.5rem, 100%), 1fr));
+  gap: 0.5rem 1rem;
+}
+
+.facts dt {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.figure {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.mirror {
+  color: var(--hue-pink);
+  font-weight: 600;
+}
+
+/* ── Pager and messages ──────────────────────────────────────────────────── */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.pager button {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pager button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.error,
+.empty {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 12px;
+  background: var(--glass-bg);
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--hue-red) 40%, var(--border));
+  color: var(--hue-red);
+}
+
+.note {
+  margin: 0;
+  max-width: 74ch;
+  font-size: 0.74rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* BELOW 62rem THIS SCREEN IS PART OF THE PAGE, not a window. `.tool` stops
+   clipping there (`flex: none; min-height: auto`) and `.main` becomes the
+   page's only scroll region — so a scroller here would be a second one nested
+   inside it, and every flick would be a coin toss about which moves. The
+   desktop rule above and this one must switch together. */
+@media (max-width: 62rem) {
+  .page {
+    height: auto;
+    min-height: auto;
+    overflow: visible;
+    padding: 1rem 0.75rem;
+  }
+
+  /* The two decks stack, and the plus becomes the divider between them
+     rather than a gap between columns. */
+  .decks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plus {
+    justify-self: center;
+    padding: 0.1rem 0;
+  }
+}

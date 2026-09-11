@@ -94,7 +94,7 @@ describe('the shipped feed', () => {
     /* A release note is read by every account at once, so a link that goes
        nowhere is a dead end shown to everybody. `App.tsx` routes on the hash,
        and these are the prefixes it knows. */
-    const ROUTES = ['#/', '#/builder', '#/decks', '#/palette', '#/teams', '#/guide'];
+    const ROUTES = ['#/', '#/builder', '#/decks', '#/palette', '#/teams', '#/duo', '#/guide'];
     for (const r of RELEASES) {
       if (!r.href) continue;
       expect(ROUTES).toContain(r.href);

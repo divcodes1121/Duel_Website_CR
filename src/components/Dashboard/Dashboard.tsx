@@ -39,6 +39,11 @@ import { CounterPalette } from '../CounterPalette/CounterPalette';
 const TeamAnalysis = lazy(() =>
   import('../Analytics/TeamAnalysis/TeamAnalysis').then((m) => ({ default: m.TeamAnalysis })),
 );
+/* Lazy for the same two reasons: it is gated, so most visitors cannot open it,
+   and its board carries eight card images per row. */
+const DuoDecks = lazy(() =>
+  import('../Analytics/DuoDecks/DuoDecks').then((m) => ({ default: m.DuoDecks })),
+);
 import { ReadingState } from '../Analytics/ReadingState';
 import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
 import { DuelAnalysis } from '../Analytics/DuelAnalysis';
@@ -79,6 +84,7 @@ import {
   StarIcon,
   SwordsIcon,
   TeamIcon,
+  DuoIcon,
 } from './icons';
 import styles from './Dashboard.module.css';
 import { Fireflies, type FireflyHue } from '../../three/Fireflies';
@@ -106,6 +112,7 @@ export type DashboardView =
   | 'decks'
   | 'palette'
   | 'teams'
+  | 'duo'
   | 'player';
 
 /* The home route is `#/`, not the empty string.
@@ -137,6 +144,9 @@ const TOP_NAV = [
      has no single subject — it takes two rosters and has nothing to say until
      both are pasted. */
   { label: 'Team Analysis', icon: TeamIcon, hash: '#/teams', home: false },
+  /* Also a tool rather than a player's section: the subject is the whole 2v2
+     population, not a loaded tag. */
+  { label: '2v2 Decks', icon: DuoIcon, hash: '#/duo', home: false },
   /* Meta is a top-level destination now rather than a sidebar row. It is about
      the whole player base, so it never belonged among a player's own sections —
      it was already home-only, and this is the same rule stated in the nav. */
@@ -190,6 +200,7 @@ const SECTION_BLURB: Record<string, string> = {
   'Coach Assist': 'Mid-duel help: what they will bring next, and which of your decks answers it.',
   Cards: 'Use rate and win rate for all 122 cards, filtered how you like — win conditions, champions, evolutions, rarity, elixir.',
   'Team Analysis': 'Paste two rosters. Every opponent gets a folder holding the decks they play and the decks your squad answers them with.',
+  '2v2 Decks': 'Which two decks people actually bring together in 2v2, ranked by how often the partnership is played.',
 };
 
 /* THE GALLERY'S NINTH CARD, and it is not in `AREAS` because it is not one.
@@ -210,6 +221,23 @@ const TEAM_CARD = {
   hue: 'pink',
   icon: TeamIcon,
   hash: '#/teams',
+} as const;
+
+/* AND THE TENTH, for the same reason and by the same route.
+ *
+ * The 2v2 board was a collapsed section of the ADMIN CONSOLE, which put the one
+ * screen built entirely out of 2v2 behind a door only an operator opens — and
+ * nothing on it is operational. It is what people play. It has no single
+ * subject either (its subject is the whole 2v2 population), so it joins the
+ * strip rather than the rail, and opens a route rather than picking a section.
+ *
+ * `green` because the two neighbouring route cards are taken: Team Analysis is
+ * pink and the hue is how a reader tells two same-shaped cards apart. */
+const DUO_CARD = {
+  label: '2v2 Decks',
+  hue: 'green',
+  icon: DuoIcon,
+  hash: '#/duo',
 } as const;
 
 /* Filled from the database at runtime — hardcoded tags would 404 on click. */
@@ -317,11 +345,12 @@ function go(hash: string) {
    but they own identity hues too, on their landing-page panels. Same colours,
    so the backdrop keeps meaning something on all eleven screens rather than
    falling back to ambient on three of them. */
-const TOOL_HUE: Record<'builder' | 'decks' | 'palette' | 'teams', FireflyHue> = {
+const TOOL_HUE: Record<'builder' | 'decks' | 'palette' | 'teams' | 'duo', FireflyHue> = {
   builder: 'violet',
   decks: 'green',
   palette: 'blue',
   teams: 'pink',
+  duo: 'green',
 };
 
 export function Dashboard({
@@ -877,6 +906,16 @@ export function Dashboard({
                 <TeamIcon size={14} />
                 {TEAM_CARD.label}
               </button>
+              <button
+                type="button"
+                className={`${styles.phoneNavItem} ${view === 'duo' ? styles.phoneNavItemOn : ''}`}
+                data-hue={DUO_CARD.hue}
+                aria-current={view === 'duo' || undefined}
+                onClick={() => go(DUO_CARD.hash)}
+              >
+                <DuoIcon size={14} />
+                {DUO_CARD.label}
+              </button>
             </nav>
           )}
 
@@ -1006,6 +1045,26 @@ export function Dashboard({
                   </Suspense>
                 ) : (
                   <GateCard access={access} section="Team Analysis" />
+                ))}
+              {/* THE SECOND GATED TOOL ROUTE, and it is gated for a different
+                  reason than Team Analysis: not cost, but that the board is a
+                  read of the whole collection. It takes the same arrangement —
+                  seen by everyone, opened from the trial up — because an area
+                  somebody could subscribe to and cannot see does not exist to
+                  the person paying. One decision, in `sectionAllowed`. */}
+              {view === 'duo' &&
+                (sectionAllowed(access, '2v2 Decks') ? (
+                  <Suspense
+                    fallback={
+                      <ReadingState k="duo" hue="green">
+                        <p>Opening 2v2 Decks…</p>
+                      </ReadingState>
+                    }
+                  >
+                    <DuoDecks />
+                  </Suspense>
+                ) : (
+                  <GateCard access={access} section="2v2 Decks" />
                 ))}
             </section>
           ) : section === 'Search Player' ? (
@@ -1148,11 +1207,11 @@ export function Dashboard({
                      where you are, and two readouts of the same thing is one
                      too many on a landing screen. */
                   counter={false}
-                  items={[...AREAS, TEAM_CARD].map(
+                  items={[...AREAS, TEAM_CARD, DUO_CARD].map(
                     (item, i) => {
                       const Icon = item.icon;
-                      /* The only card in the strip that is a route rather than
-                         a section of the loaded player — see `TEAM_CARD`. */
+                      /* The last two cards are routes rather than sections of
+                         the loaded player — see `TEAM_CARD` and `DUO_CARD`. */
                       const isRoute = 'hash' in item;
                       return {
                         key: item.label,

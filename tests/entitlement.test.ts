@@ -50,6 +50,11 @@ const ALL_SECTIONS = [
      Analysis screen — this list is a tripwire, so a new area has to be
      enumerated here before the matrix below can claim to be exhaustive. */
   'Team Analysis',
+  /* The 2v2 pair board, moved off the admin console onto the landing strip on
+     11 Sep 2026. In neither `FREE_SECTIONS` nor `PRO_ONLY_SECTIONS`, so it
+     takes Team Analysis's arrangement exactly: seen by everyone, opened from
+     the trial up, gated for anon and free. */
+  '2v2 Decks',
 ] as const;
 
 const PAID: Access[] = ['trial', 'pro', 'admin'];

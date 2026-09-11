@@ -1,7 +1,6 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 
-import { type AdminUser, type DuoDeck, type DuoPair, useAdminStore } from '../../state/adminStore';
-import { getCardIconUrl } from '../../data/cards';
+import { type AdminUser, useAdminStore } from '../../state/adminStore';
 import { LiquidMetal } from '../../three/LiquidMetal';
 import { useAccountStore } from '../../state/accountStore';
 import { ago, bytes, until } from '../../utils/format';
@@ -129,29 +128,11 @@ function hoursSince(iso: string | null | undefined): number | null {
  * is not spare capacity in the way the disk meter's remainder is — it is space
  * already charged to this file that the file has not given back.
  */
-function Split({
-  live,
-  free,
-  label,
-  note,
-  /* THE DEFAULTS ARE THE STORAGE METER THIS WAS WRITTEN FOR, so its two
-     existing callers are unchanged. They are props because the same two-part
-     bar now also draws a COUNT — the 2v2 rows that can and cannot be
-     reconstructed — and `bytes(1080047)` would print "1.08 MB" of rows, which
-     is a wrong number rather than a wrong label. */
-  format = bytes,
-  liveLabel = 'data',
-  freeLabel = 'free',
-  pctLabel = 'reclaimable',
-}: {
+function Split({ live, free, label, note }: {
   live: number;
   free: number;
   label: string;
   note?: string;
-  format?: (n: number) => string;
-  liveLabel?: string;
-  freeLabel?: string;
-  pctLabel?: string;
 }) {
   const total = live + free;
   const pct = total > 0 ? (free / total) * 100 : 0;
@@ -161,8 +142,8 @@ function Split({
       <div className={styles.meterHead}>
         <span>{label}</span>
         <span className={styles.meterFigure}>
-          {format(live)} {liveLabel} · {format(free)} {freeLabel} ·{' '}
-          {pct.toFixed(1)}% {pctLabel}
+          {bytes(live)} data · {bytes(free)} free ·{' '}
+          {pct.toFixed(1)}% reclaimable
         </span>
       </div>
       {/* FLEX, not the scale transform `.meterFill` uses. That one grows from
@@ -174,93 +155,6 @@ function Split({
         <div className={styles.splitFree} style={{ flexGrow: free }} />
       </div>
       {note && <p className={styles.meterNote}>{note}</p>}
-    </div>
-  );
-}
-
-/** The eight cards of one deck in a partnership. */
-function DuoDeckStrip({ deck, label }: { deck: DuoDeck; label: string }) {
-  return (
-    <div className={styles.duoDeck}>
-      <span className={styles.duoDeckLabel}>
-        {label}
-        <span className={styles.duoElixir}>{deck.avgElixir}</span>
-      </span>
-      <div className={styles.duoCards}>
-        {/* CANONICAL (sorted) order, which is the order the fingerprint is
-            computed from. A play order would be invented — `arrange_deck`
-            needs per-battle art marks a deduplicated deck does not have — and
-            this row's whole job is to state an identity exactly. */}
-        {deck.cards.map((c) => (
-          <img
-            key={c.key}
-            className={styles.duoCard}
-            src={getCardIconUrl(c.key)}
-            alt={c.name}
-            title={`${c.name} · id ${c.id} · ${c.elixir} elixir`}
-            loading="lazy"
-            width={34}
-            height={41}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * One unique 2v2 partnership.
- *
- * TWO DECKS, NOT ONE. The unit of this board is a combination of two teammate
- * decks — that is what a 2v2 player actually chooses, and a board of single
- * decks cannot express it. The identity is order-free at both levels, so the
- * two strips below are shown in canonical order rather than in the order
- * anyone happened to play them.
- */
-function DuoPairRow({ pair }: { pair: DuoPair }) {
-  return (
-    <div className={styles.duoPair}>
-      <div className={styles.duoPairDecks}>
-        <DuoDeckStrip deck={pair.deckA} label="Deck A" />
-        <span className={styles.duoVs} aria-hidden="true">+</span>
-        <DuoDeckStrip deck={pair.deckB} label="Deck B" />
-      </div>
-      <dl className={styles.duoFacts}>
-        <div>
-          <dt>Played</dt>
-          <dd className={styles.duoFigure}>{pair.occurrences.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Players</dt>
-          <dd className={styles.duoFigure}>{pair.players.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>First seen</dt>
-          <dd>{ago(pair.firstSeen)}</dd>
-        </div>
-        <div>
-          <dt>Last seen</dt>
-          <dd>{ago(pair.lastSeen)}</dd>
-        </div>
-        <div>
-          <dt>Pair</dt>
-          {/* Everything needed to reconcile this row against the database by
-              hand, without spending the width on any of it. */}
-          <dd
-            className={styles.mono}
-            title={`${pair.pairFingerprint}
-A ${pair.deckA.fingerprint}
-B ${pair.deckB.fingerprint}
-from: ${pair.sourceModes.join(', ') || '—'}
-tags: ${pair.playerTags.join(', ') || '—'}`}
-          >
-            {pair.pairFingerprint.replace(/^2v2:/, '').slice(0, 10)}
-            {/* Both teammates on the same list. A real pairing, and worth
-                marking because it otherwise reads as a rendering bug. */}
-            {pair.mirror && <span className={styles.you}>mirror</span>}
-          </dd>
-        </div>
-      </dl>
     </div>
   );
 }
@@ -283,13 +177,9 @@ export function AdminConsole() {
      outright, so this only stops you discovering that by being told no — the
      database is the rule, this is the courtesy. */
   const meId = useAccountStore((s) => s.userId);
-  const { users, health, analytics, analyticsMs, collection, loading, error, load, setRole, endTrial,
-          duo, duoLoading, duoError, loadDuo } = useAdminStore();
+  const { users, health, analytics, analyticsMs, collection, loading, error, load, setRole,
+          endTrial } = useAdminStore();
   const [query, setQuery] = useState('');
-  const [duoOpen, setDuoOpen] = useState(false);
-  const [duoQuery, setDuoQuery] = useState('');
-  const [duoSort, setDuoSort] = useState('played');
-  const [duoPer, setDuoPer] = useState(25);
   const [busyId, setBusyId] = useState<string | null>(null);
   /* Closed by default. Opening the console is usually a health check, not a
      hunt for one person. */
@@ -305,32 +195,6 @@ export function AdminConsole() {
   useEffect(() => {
     if (access === 'admin') void load();
   }, [access, load]);
-
-  /* `#/admin/duo` OPENS THE 2v2 BOARD DIRECTLY.
-     The board is a collapsed section of this console, not a page, so the
-     profile menu's "2v2 Decks" row cannot navigate to it — it can only ask
-     for it. A sub-path does that without a second routing system:
-     `startsWith('#/admin')` in App.tsx already matches, so this component
-     stays mounted and simply reads what was asked for.
-
-     LISTENING RATHER THAN READING ONCE, because the common case is choosing
-     the row while the console is ALREADY open. The hash changes, App.tsx
-     re-routes to the same component, and nothing remounts — so a mount-only
-     read would do nothing at all the second time. */
-  useEffect(() => {
-    if (access !== 'admin') return;
-    const wanted = () => window.location.hash.replace(/\/+$/, '').endsWith('/duo');
-    const sync = () => {
-      if (!wanted()) return;
-      setDuoOpen(true);
-      /* Opening it is what fetches it, the same as clicking the header — and
-         the guard is the same too, so asking twice does not fetch twice. */
-      if (!duo && !duoLoading) void loadDuo(1, '', duoSort, duoPer);
-    };
-    sync();
-    window.addEventListener('hashchange', sync);
-    return () => window.removeEventListener('hashchange', sync);
-  }, [access, duo, duoLoading, loadDuo, duoSort, duoPer]);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -893,220 +757,6 @@ export function AdminConsole() {
           </tbody>
         </table>
       </div>
-        </>
-      )}
-
-      {/* --- 2v2 deck pairs ------------------------------------------------ */}
-      {/* WHERE THE 2v2 DATA WENT, rather than where it was deleted from.
-          Recent Battles refuses a `TeamVsTeam` row because that screen draws
-          one deck against one deck and four people played it. The battle is
-          not discarded: the two decks on each side are folded into a unique
-          PARTNERSHIP with an occurrence count.
-
-          NOTHING HAS BEEN DELETED. This is phase 1 — `battles` still holds
-          every 2v2 row, and the summary says so. */}
-      <button
-        type="button"
-        className={styles.sectionToggle}
-        aria-expanded={duoOpen}
-        onClick={() => {
-          const next = !duoOpen;
-          setDuoOpen(next);
-          if (next && !duo && !duoLoading) void loadDuo(1, '', duoSort, duoPer);
-          /* KEEP THE ADDRESS BAR TELLING THE TRUTH. Closing the section while
-             the hash still said `/duo` would mean a refresh silently reopened
-             it, and the sidebar row would look like it had stopped working. */
-          const base = '#/admin';
-          const target = next ? base + '/duo' : base;
-          if (window.location.hash.replace(/\/+$/, '') !== target) {
-            history.replaceState(null, '', target);
-          }
-        }}
-      >
-        <svg className={styles.sectionChev} viewBox="0 0 24 24" width="13" height="13"
-             fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"
-             strokeLinejoin="round" aria-hidden="true" data-open={duoOpen || undefined}>
-          <path d="M9 6l6 6-6 6" />
-        </svg>
-        2v2 Deck Pairs
-        {duo && (
-          <span className={styles.sectionCount}>
-            {duo.summary.uniquePairs.toLocaleString()}
-          </span>
-        )}
-      </button>
-
-      {duoOpen && (
-        <>
-          {duoError && <p className={styles.error}>{duoError}</p>}
-
-          {duo && !duo.summary.built && !duoError && (
-            <p className={styles.hint}>
-              The pair collection has never been built. Run{' '}
-              <code>python server/duo_pairs.py --migrate</code> on the analytics
-              host to fold the surviving 2v2 payloads into unique partnerships.
-              It deletes nothing.
-            </p>
-          )}
-
-          {duo && duo.summary.built && (
-            <>
-              <div className={styles.stats}>
-                <Stat label="Unique pairs" value={duo.summary.uniquePairs.toLocaleString()}
-                      note="one record per combination of two teammate decks" />
-                <Stat label="Battles folded" value={duo.summary.battlesFolded.toLocaleString()}
-                      note="real battles, deduplicated across participants" />
-                <Stat
-                  label="Battles per pair"
-                  value={
-                    duo.summary.uniquePairs
-                      ? (duo.summary.occurrences / duo.summary.uniquePairs).toFixed(1)
-                      : '—'
-                  }
-                  note="how much the deduplication collapsed"
-                />
-                <Stat label="Built" value={duo.summary.builtAt ? ago(duo.summary.builtAt) : '—'}
-                      note={`phase ${duo.summary.phase} · nothing deleted`} />
-                {/* WHAT THIS BOARD IS A CENSUS OF, said plainly. 866,226 people
-                    have played a 2v2 that reached us; per-battle detail is kept
-                    for the top N only, and a page that showed a ranking without
-                    saying so would read as the complete population. */}
-                <Stat
-                  label="Population"
-                  value={`Top ${duo.summary.populationLimit.toLocaleString()}`}
-                  note={
-                    duo.summary.participants
-                      ? `${duo.summary.population.toLocaleString()} of ${duo.summary.participants.toLocaleString()} participants · cut at ${duo.summary.populationCut.toLocaleString()} battles`
-                      : 'bounded 2v2 player detail'
-                  }
-                />
-              </div>
-
-              {/* THE HONEST HALF, AND IT IS NOT A WARNING — it is the state of
-                  the data. 21.8% of the 2v2 rows lost their raw payload to the
-                  cap valve, so their teammate's deck is unrecoverable and no
-                  pair exists for them. Saying so beside the figures is the
-                  difference between a migration and a claim about one. */}
-              {duo.summary.rows2v2 > 0 && (
-                <Split
-                  label="2v2 rows still in battles"
-                  live={duo.summary.reconstructable}
-                  free={duo.summary.unreconstructable}
-                  format={(n) => n.toLocaleString()}
-                  liveLabel="reconstructable"
-                  freeLabel="payload gone"
-                  pctLabel="unrecoverable"
-                  note={`All ${duo.summary.rows2v2.toLocaleString()} rows remain in the battles table — phase 1 deletes nothing. The ${duo.summary.unreconstructable.toLocaleString()} whose raw payload was purged have no recoverable partner deck, so no pair exists for them and none was invented.`}
-                />
-              )}
-
-              {/* WHAT THIS BOARD IS, IN ITS OWN WORDS. A ranking of 1.29M
-                  partnerships could easily read as a census of every 2v2
-                  player alive; it is the retained population and says so. */}
-              <p className={styles.duoLede}>
-                Unique teammate deck combinations from the retained 2v2
-                population.
-                <span className={styles.duoPopulation}>
-                  Population: Top {duo.summary.populationLimit.toLocaleString()}{' '}
-                  2v2 Players
-                </span>
-              </p>
-
-              <div className={styles.searchRow}>
-                <label className={styles.duoControl}>
-                  Sort
-                  <select
-                    className={styles.roleSelect}
-                    value={duoSort}
-                    onChange={(e) => {
-                      setDuoSort(e.target.value);
-                      void loadDuo(1, duoQuery, e.target.value, duoPer);
-                    }}
-                  >
-                    <option value="played">Most Played</option>
-                    <option value="recent">Recently Seen</option>
-                    <option value="first">First Seen</option>
-                  </select>
-                </label>
-                <label className={styles.duoControl}>
-                  Per page
-                  <select
-                    className={styles.roleSelect}
-                    value={duoPer}
-                    onChange={(e) => {
-                      const n = Number(e.target.value);
-                      setDuoPer(n);
-                      void loadDuo(1, duoQuery, duoSort, n);
-                    }}
-                  >
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </label>
-                <input
-                  className={styles.search}
-                  value={duoQuery}
-                  placeholder="Card key, pair or deck fingerprint…"
-                  onChange={(e) => setDuoQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') void loadDuo(1, duoQuery, duoSort, duoPer); }}
-                />
-                {/* SERVER-PAGED, so the filter is a request. There are far more
-                    pairs than are ever sent here, and filtering what arrived
-                    would quietly search one page of a ranking. */}
-                <button className={styles.refresh} type="button" data-metal
-                        onClick={() => void loadDuo(1, duoQuery, duoSort, duoPer)}>
-                  Search
-                </button>
-                <span className={styles.count}>
-                  {duoLoading
-                    ? 'Loading…'
-                    : `${duo.total.toLocaleString()} pair${duo.total === 1 ? '' : 's'}`}
-                </span>
-              </div>
-
-              <div className={styles.duoList}>
-                {duo.pairs.map((p) => <DuoPairRow key={p.pairFingerprint} pair={p} />)}
-                {!duo.pairs.length && (
-                  <p className={styles.empty}>
-                    {duoLoading ? 'Loading…' : 'Nothing matches that.'}
-                  </p>
-                )}
-              </div>
-
-              {duo.pages > 1 && (
-                <div className={styles.duoPager}>
-                  <button className={styles.refresh} type="button" data-metal
-                          disabled={duo.page <= 1 || duoLoading}
-                          onClick={() => void loadDuo(duo.page - 1, duoQuery, duoSort, duoPer)}>
-                    Previous
-                  </button>
-                  <span className={styles.count}>
-                    Page {duo.page.toLocaleString()} of {duo.pages.toLocaleString()}
-                  </span>
-                  <button className={styles.refresh} type="button" data-metal
-                          disabled={duo.page >= duo.pages || duoLoading}
-                          onClick={() => void loadDuo(duo.page + 1, duoQuery, duoSort, duoPer)}>
-                    Next
-                  </button>
-                </div>
-              )}
-
-              <p className={styles.hint}>
-                Showing every unique partnership; detailed per-player 2v2
-                history is retained for the top{' '}
-                {duo.summary.populationLimit.toLocaleString()} participants by
-                distinct battles, recalculated rather than frozen. Folded from{' '}
-                {duo.summary.sourceModes.join(' and ') || '2v2 battles'},
-                read from the raw API payload rather than from{' '}
-                <code>battles</code> — a battle row holds one deck and one
-                opponent deck, and the teammate&rsquo;s deck is in no column of
-                it. Each battle contributes two partnerships, theirs and yours,
-                counted once however many participants stored it. Card order and
-                deck order do not affect identity.
-              </p>
-            </>
-          )}
         </>
       )}
 

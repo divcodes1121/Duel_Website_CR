@@ -27,6 +27,7 @@ function viewFor(hash: string): DashboardView {
   if (hash.startsWith('#/decks')) return 'decks';
   if (hash.startsWith('#/palette')) return 'palette';
   if (hash.startsWith('#/teams')) return 'teams';
+  if (hash.startsWith('#/duo')) return 'duo';
   if (hash.startsWith('#/player/')) return 'player';
   return 'home';
 }

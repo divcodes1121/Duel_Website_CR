@@ -82,6 +82,20 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-11-duo-decks',
+    date: '2026-09-11',
+    kind: 'new',
+    title: 'See which decks people bring together in 2v2',
+    body: [
+      '2v2 Decks is a new screen. It ranks the teammate deck combinations people actually play — the two decks a pair brought into the same battle, not one deck against another — with how many battles each partnership has and how many players ran it.',
+      'Both halves of a pair get their own Copy link and Open in Game, so you can take either deck straight into the game. Sort by most played, most recent or first seen, and search by card to find every partnership running it.',
+      'It reads from the raw battle record rather than from the battle list, because a battle row stores your deck and your opponent\u2019s — a teammate\u2019s deck is in no column of it.',
+    ],
+    href: '#/duo',
+    hrefLabel: 'Open 2v2 Decks',
+    needs: 'trial',
+  },
+  {
     id: '2026-09-04-guide-zoom',
     date: '2026-09-04',
     kind: 'fixed',

@@ -290,6 +290,22 @@ export function TeamIcon({ size = 17 }: P) {
   );
 }
 
+/* TWO CARDS SIDE BY SIDE — the 2v2 board.
+ *
+ * Deliberately NOT the deck icon, which is one card: the unit on that board is
+ * a PAIR of teammate decks, and a glyph showing one deck would misname it at a
+ * glance. Not the roster icon either — that is two PEOPLE, and this screen is
+ * about what they brought, not who they are. Same 24x24 / 1.8 stroke as the
+ * rest, so it sits level in the strip. */
+export function DuoIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <rect x="3" y="5" width="7.5" height="14" rx="1.6" />
+      <rect x="13.5" y="5" width="7.5" height="14" rx="1.6" />
+    </svg>
+  );
+}
+
 export function StarIcon({ size = 14 }: P) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
