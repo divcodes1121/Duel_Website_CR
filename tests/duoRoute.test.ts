@@ -77,11 +77,30 @@ describe('the landing strip carries the card', () => {
     expect(dash).toMatch(/'2v2 Decks': '[^']{40,}'/);
   });
 
-  it('puts it on the phone strip too', () => {
-    /* Below 860px `.phoneNav` IS the navigation — the sidebar and the top nav
-       are both `display: none` — so a tool missing from it has no way in on a
-       phone at all. */
-    expect(dash).toContain('go(DUO_CARD.hash)');
+  it('is reachable on a phone, through the dock rather than the strip', () => {
+    /* THIS USED TO ASSERT `go(DUO_CARD.hash)` IN `.phoneNav`, and the reason
+       has moved rather than gone. Below 860px the strip was the whole of a
+       phone's navigation, because `.topDock` was `display: none` there — so a
+       destination missing from the strip had no way in at all, and Team
+       Analysis and 2v2 Decks were appended to it for exactly that reason.
+       The dock renders on phones now (2026-09-12), on a row of its own, and it
+       carries both. Keeping them in the strip as well would put one
+       destination on screen twice in two different navigation levels.
+       So the property to pin is unchanged — 2v2 has a door on a phone — and
+       only the door moved. Both halves are checked, because either one alone
+       passes against a dock that is hidden again. */
+    expect(dash).toContain("label: '2v2 Decks'");
+    const css = R('src', 'components', 'Dashboard', 'Dashboard.module.css');
+    const phone = css.slice(css.indexOf('@media (max-width: 860px)'));
+    /* The dock must be PLACED at this width, not merely absent from a hide
+       list: `grid-area: dock` is what says the row exists for it. */
+    expect(phone).toContain('grid-area: dock');
+    /* And the dock itself must not be hidden at this width. `\s*\{` and not
+       `[^{]*\{` deliberately: the loose form also matches
+       `.topDock::-webkit-scrollbar { display: none }`, which is the correct
+       way to hide a scrollbar and has nothing to do with hiding the dock. It
+       failed on exactly that. */
+    expect(phone).not.toMatch(/\.topDock\s*\{[^}]*display:\s*none/);
   });
 
   it('uses its own glyph, not the deck or roster one', () => {

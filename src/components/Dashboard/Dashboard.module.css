@@ -150,6 +150,16 @@
   flex-shrink: 0;
 }
 
+/* A HANDLE FOR THE TIER BADGE, and nothing else. `TierBadge` renders a shader
+   button that owns its own geometry and takes no className, so the phone's hide
+   rule needs a box of ours to hang on. `inline-flex` rather than `contents`
+   because a `display: contents` box cannot be hidden — the rule would have to
+   reach the badge itself, which is the thing this exists to avoid. */
+.tierSlot {
+  display: inline-flex;
+  align-items: center;
+}
+
 /* The tag search's own styles are GONE with the form. It is vengenceui's
    GooeySearch now, which paints itself from two tokens mapped in
    `TopSearch.module.css`; the field, its hover, its focus-within, the submit
@@ -2418,17 +2428,94 @@
   }
 
   .sidebar,
-  /* THE DOCK GOES AT THIS WIDTH, AND FORGETTING IT COST EVERY SCREEN.
-     `.topNav` used to be here, from a nav two rewrites ago; the class was dead
-     and nothing wore it, so when the GlassDock replaced the labelled dock it
-     inherited no hide rule and simply stayed. Measured on every route: 252px of
-     dock in a 390px bar pushed the document to 431px, so EVERY page on EVERY
-     phone scrolled sideways. `.phoneNav` below is the navigation at this size,
-     which is why the dock can go rather than shrink. */
-  .topDock,
   /* The rail is already gone at this width, so a control for hiding it would
      do nothing on press. */
   .railToggle {
+    display: none;
+  }
+
+  /* --- THE DOCK IS BACK ON PHONES, ON A ROW OF ITS OWN (2026-09-12) ---------
+   *
+   * IT WAS HIDDEN HERE, AND HIDING IT WAS RIGHT FOR THE WRONG DURATION.
+   * `.topNav` used to carry this rule, from a nav two rewrites ago; the class
+   * was dead, so when the GlassDock replaced the labelled dock it inherited no
+   * hide rule and simply stayed — 252px of dock sharing a 390px bar with the
+   * brand and the actions, which pushed every page to 431px and made every
+   * screen on every phone scroll sideways. Hiding it stopped that.
+   *
+   * WHAT IT COST is that the dock is the OUTER navigation level — Home,
+   * Analytics, the three deck tools, Team Analysis, 2v2, Meta — and `.phoneNav`
+   * is the INNER one, a loaded player's sections. Hiding the outer level left a
+   * phone with only the inner one, so standing in the duel builder there was no
+   * way to any other tool: the strip offered eleven analytics areas and not one
+   * of the three tools. They were reachable only from the landing page or from
+   * inside the profile menu, which is an account menu.
+   *
+   * THE ROW WAS NEVER THE PROBLEM — SHARING ONE WAS. Measured: the dock is a
+   * fixed 337px of eight 40px cells and does not reflow, so it cannot fit
+   * beside a 137px brand and a 278px action row, and it fits easily on a line
+   * of its own at 390 and 360. Below that it scrolls within itself, the way
+   * `.topActions` already does.
+   *
+   * `display: contents` ON `.brandCluster` IS WHAT MAKES THIS TWO LINES OF CSS
+   * RATHER THAN A COMPONENT CHANGE. The dock is nested inside that cluster (it
+   * belongs to the brand — see the note beside it in `Dashboard.tsx`), so it
+   * cannot be placed in a grid area of `.topbar` while the cluster is a box.
+   * Dissolving the cluster into its parent makes the brand and the dock direct
+   * grid children here and nothing at all above this width. */
+  .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'brand actions'
+      'dock  dock';
+    align-items: center;
+    row-gap: 0.5rem;
+  }
+
+  .brandCluster {
+    display: contents;
+  }
+
+  .brand {
+    grid-area: brand;
+    min-width: 0;
+  }
+
+  .topActions {
+    grid-area: actions;
+  }
+
+  .topDock {
+    grid-area: dock;
+    /* Sized to content and allowed to shrink, so at 320px — where 337px of
+       dock does not fit 320px of screen — it overflows to the RIGHT where a
+       swipe can reach it. `flex-end` would spill it past the start edge, which
+       is not scrollable and is not counted in `scrollWidth`; that trap is
+       recorded on `.topActions` above and applies identically here. */
+    justify-self: stretch;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .topDock::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* A scrolling row whose children shrink to fit is not a scrolling row. */
+  .topDock > * {
+    flex: none;
+  }
+
+  /* THE TIER BADGE GOES, and the bell's argument is the whole argument.
+     `.topActions` needed 278px in the 235px it had at 390px, and at 112px this
+     is the widest thing in it — and the only one that is a STATUS rather than a
+     control. The profile menu's tier row carries the same live badge at every
+     width, so nothing is lost; a top bar that has to be swiped is worse than
+     one status fewer. */
+  .tierSlot {
     display: none;
   }
 

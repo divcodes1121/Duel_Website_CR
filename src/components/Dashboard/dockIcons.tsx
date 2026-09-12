@@ -36,17 +36,17 @@ export const DOCK_PATHS: Record<string, string> = {
     + '17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z',
 
   /* a card with a face on it — rect plus inner rect, closed as one path */
-  'Deck Vault':
+  "Deck's Home":
     'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-3 '
     + '12H8V9h8v6z',
 
   /* crossed swords, drawn as four blades in one path so it can still morph */
-  'Duel Builder':
+  'Royal Duels':
     'M6.5 3H3v3.5l8 8L14.5 11l-8-8zM17.5 3 13 7.5 15.5 10 21 4.5V3h-3.5zM8.5 14 3 '
     + '19.5V21h1.5L10 15.5 8.5 14zm7 0L13 16.5 17.5 21H21v-3.5L16.5 13l-1 1z',
 
-  /* the folder the stroked Counter Hub icon already is */
-  'Counter Hub':
+  /* the folder the stroked Counter Palette icon already is */
+  'Counter Palette':
     'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z',
 
   /* two figures — the roster, as one closed outline so it can morph */

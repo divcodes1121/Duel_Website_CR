@@ -203,15 +203,15 @@ export const PLATES: Plate[] = [
         <h2 className="pl-h">The workshop</h2>
         <dl className="pl-defs">
           <div>
-            <dt>Duel Builder</dt>
+            <dt>Royal Duels</dt>
             <dd>Five decks of eight, no card twice across the whole collection.</dd>
           </div>
           <div>
-            <dt>Deck Vault</dt>
+            <dt>Deck's Home</dt>
             <dd>Unlimited single decks that save themselves as you build, filtered by win condition.</dd>
           </div>
           <div>
-            <dt>Counter Hub</dt>
+            <dt>Counter Palette</dt>
             <dd>Archetype folders, so the answer to Golem is somewhere you can find it again.</dd>
           </div>
         </dl>

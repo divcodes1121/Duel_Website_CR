@@ -136,9 +136,17 @@ const TOP_NAV = [
      importantly, from the home screen itself, where moving the URL to the route
      it is already on was a no-op that looked like a dead button. */
   { label: 'Analytics', icon: AnalyticsIcon, hash: HOME, home: false, scrollTo: 'analytics' },
-  { label: 'Deck Vault', icon: DeckIcon, hash: '#/decks', home: false },
-  { label: 'Duel Builder', icon: SwordsIcon, hash: '#/builder', home: false },
-  { label: 'Counter Hub', icon: PaletteIcon, hash: '#/palette', home: false },
+  /* THE DOCK CALLS THE THREE TOOLS WHAT THE REST OF THE APP CALLS THEM.
+     These read `Deck Vault` / `Duel Builder` / `Counter Hub` until 2026-09-12,
+     and every other surface disagreed: the screens' own `<h1>`s say Deck's
+     Home and Counter Palette, their cross-links say `Royal Duels →`, the
+     landing panels' kickers say all three, and so does the profile menu. Four
+     surfaces against one, so the one moved. It only became visible when the
+     dock started rendering on phones — before that the dock and the profile
+     menu were never on screen together at this width. */
+  { label: "Deck's Home", icon: DeckIcon, hash: '#/decks', home: false },
+  { label: 'Royal Duels', icon: SwordsIcon, hash: '#/builder', home: false },
+  { label: 'Counter Palette', icon: PaletteIcon, hash: '#/palette', home: false },
   /* A TOOL, NOT AN ANALYTICS AREA, which is why it is here rather than in
      SIDE_NAV: the rail lists the sections of ONE loaded player, and this screen
      has no single subject — it takes two rosters and has nothing to say until
@@ -607,11 +615,11 @@ export function Dashboard({
   // Home when the landing search is showing and Analytics once an area is.
   const topNav =
     view === 'builder'
-      ? 'Duel Builder'
+      ? 'Royal Duels'
       : view === 'decks'
-        ? 'Deck Vault'
+        ? "Deck's Home"
         : view === 'palette'
-          ? 'Counter Hub'
+          ? 'Counter Palette'
           : view === 'player' || view !== 'home'
             ? 'Analytics'
             : section === 'Top Meta Decks'
@@ -746,7 +754,17 @@ export function Dashboard({
                   It replaced three separate pill spans — the tier is one idea
                   and it now has one component. `trial` renders as MEMBER; see
                   the note in TierBadge. */}
-              <TierBadge tier={access} trialDaysLeft={trialLeft} />
+              {/* WRAPPED SO THE PHONE CAN DROP IT. `TierBadge` takes no
+                  className — it is a shader button whose geometry is its own —
+                  so the hide rule needs a box of ours to hang on.
+                  It goes below 860px for the same reason the bell does, and
+                  with the same justification: at 112px it is the widest thing
+                  in a row that was 43px over at 390px, and it is a STATUS
+                  rather than a control. Nothing is lost — the profile menu's
+                  tier row carries the same live badge, at every width. */}
+              <span className={styles.tierSlot}>
+                <TierBadge tier={access} trialDaysLeft={trialLeft} />
+              </span>
               <ProfileMenu triggerClassName={styles.avatar} />
             </>
           )}
@@ -867,8 +885,19 @@ export function Dashboard({
               right so that a tap can reach every link. A strip is always
               visible, needs none of them, and shows you where you are without
               being opened. It carries the same items through the same
-              `openArea`, so it cannot disagree with the sidebar. */}
-          {!landing && (
+              `openArea`, so it cannot disagree with the sidebar.
+
+              IT IS THE INNER LEVEL, AND IT ONLY RENDERS WHERE THAT LEVEL
+              EXISTS. Until 2026-09-12 this was `!landing`, so it also drew on
+              the three deck tools, on `#/teams` and on `#/duo` — screens with
+              no loaded player, where every chip in it was a jump OUT of the
+              tool you were standing in, and where it was the only navigation
+              on the page because the dock was hidden at this width. The dock
+              is the outer level and it renders on phones now, so the two
+              levels are stacked the way the dock and the rail already are on a
+              desktop, and this one says nothing on screens that have no
+              sections. See `.topDock` in the stylesheet. */}
+          {(view === 'player' || (view === 'home' && !landing)) && (
             <nav className={styles.phoneNav} aria-label="Analytics areas">
               {sideNav.map((item) => {
                 const Icon = item.icon;
@@ -888,34 +917,18 @@ export function Dashboard({
                   </button>
                 );
               })}
-              {/* LAST, AND ON EVERY PHONE SCREEN THIS STRIP APPEARS ON.
-                  Below 860px this strip IS the navigation — the sidebar and the
-                  top nav are both `display: none` — so a tool missing from it
-                  is a tool with no way in on a phone at all. It goes at the end
-                  rather than in `sideNav` for the same reason it is not in the
-                  rail: those entries are the loaded player's sections and this
-                  one is a route, which is why it calls `go` rather than
-                  `openArea`. */}
-              <button
-                type="button"
-                className={`${styles.phoneNavItem} ${view === 'teams' ? styles.phoneNavItemOn : ''}`}
-                data-hue={TEAM_CARD.hue}
-                aria-current={view === 'teams' || undefined}
-                onClick={() => go(TEAM_CARD.hash)}
-              >
-                <TeamIcon size={14} />
-                {TEAM_CARD.label}
-              </button>
-              <button
-                type="button"
-                className={`${styles.phoneNavItem} ${view === 'duo' ? styles.phoneNavItemOn : ''}`}
-                data-hue={DUO_CARD.hue}
-                aria-current={view === 'duo' || undefined}
-                onClick={() => go(DUO_CARD.hash)}
-              >
-                <DuoIcon size={14} />
-                {DUO_CARD.label}
-              </button>
+              {/* TEAM ANALYSIS AND 2v2 DECKS USED TO BE APPENDED HERE, and
+                  they are gone because the reason for them is gone. Both are
+                  routes rather than sections, and they were bolted onto the end
+                  of a strip of sections purely because this strip was the only
+                  navigation a phone had — a tool missing from it was a tool
+                  with no way in at all. The dock renders at this width now and
+                  carries both, so keeping them here would put the same two
+                  destinations on screen twice, in two different navigation
+                  levels, one of which cannot show them as active.
+                  TypeScript is what caught it: with this strip scoped to the
+                  player and home views, `view === 'teams'` no longer narrows
+                  and the active state was unreachable code. */}
             </nav>
           )}
 

@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-12-phone-nav',
+    date: '2026-09-12',
+    kind: 'fixed',
+    title: 'The navigation bar is back on phones',
+    body: [
+      'On a phone the top navigation was hidden, and the strip that replaced it listed a player’s analytics sections rather than the places you can go. So standing in a deck tool there was no way to reach another one: Royal Duels, Deck’s Home and Counter Palette could only be opened from the home screen or from inside the account menu.',
+      'The navigation bar now sits on its own row under the wordmark, on every screen and at every width, carrying the same eight destinations it does on a desktop. The section strip stays where it belongs, on the screens that have sections.',
+      'The bar also fits properly now. The wordmark was being painted under the buttons beside it at every phone size; those controls had 43 more pixels of content than room at 390px wide.',
+    ],
+    href: '#/',
+    hrefLabel: 'Go home',
+  },
+  {
     id: '2026-09-11-duo-decks',
     date: '2026-09-11',
     kind: 'new',
