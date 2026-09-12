@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **The phone’s navigation bar** | **back, and on a row of its own, 2026-09-12.** Reported as "there is no top tab bar". This shell has TWO navigation levels — `TOP_NAV` is destinations, `SIDE_NAV` is one loaded player’s sections — and hiding `.topDock` below 860px deleted the OUTER one, so the strip that replaced it offered eleven analytics areas and **not one of the three deck tools**. They were reachable from the landing page or from inside the account menu, and nowhere else. Hiding it was right when written: the dock is a fixed **337px of eight 40px cells** and does not reflow, so beside a 137px brand and a 278px action row it pushed every page to 431px. The shared row was the problem, not the row — on a line of its own it fits 390 and 360 outright. `display: contents` on `.brandCluster` is what makes that two lines of CSS rather than a component change. The bar had to be fixed first: `.topActions` was **+43px** at 390 and `.brandCluster` **+23px**, so the last letter of DECKKIES was painted under the field-book button at every phone width. The dock also now calls the three tools what the screens, their cross-links, the landing kickers and the profile menu already called them. **98/98 then 11/11 locally, both themes, and 8/8 against production including a real tap.** Main bundle 338.95 -> 339.17 kB gzip |
 | **The field book on a phone** | **zooms now, 2026-09-04.** Reported as "the guide page doesn't respond to zoom on mobile" and it was two faults under one symptom. `touch-action: pan-y` on the book was there to stop a swipe-to-turn being read as a scroll, and `pinch-zoom` is a separate keyword — so it had also disabled the browser's own pinch, on the one screen made of small print, whose magnifying glass is hidden on a touch device by design. And the `−  100%  +` controls had been dead since the phone pass: `.tilt`'s single `transform` carries the pointer lean *and* the zoom scale, and the coarse block blanked the property to drop the lean. **Verified 26/26**, and the proof is `visualViewport.scale` going 1 → 5 and back rather than the declaration reading correctly. Main bundle unchanged at 342.52 kB gzip |
 | **What's new** (the bell) | **shipped 2026-09-02.** The bell in the top bar sat inert from the day the shell was built; it opens the release feed now, immediately right of the theme switch. Notes live in `src/content/releases.ts` and ship in the same commit as the change they describe, so the two cannot drift. An unread count on the bell and on the profile menu's row, from one hook; a first-time reader is stamped silently rather than greeted with a badge for a product they have never used. Per browser rather than per account — the honest limit, and the upgrade is a `profiles` column. +3.01 kB gzip; 11 unit checks, browser-verified 24/24 |
 | **Team Analysis** (`#/teams`) | **TWO TABS as of 2026-09-02 — Scouting Report and Match Plan.** One roster in gives a scouting report: what they play, and the decks that beat it, drawn from the archetype representatives and ranked through the same matchup ladder — plus a roster-wide read (their whole spread pooled, weighted by games) that a match plan has no equivalent of. Match Plan is the original screen, unchanged. The mode is an ABSENT `blue`, so there is no new route and the tripwire stays at 21. Main bundle 338.43 -> 338.44 kB gzip. **92 Python checks + 387 vitest; browser-verified 40/40.** Below, as before: paste two rosters, get a folder per opponent: their decks left, the decks your squad answers with right, one uniform row per teammate expanding to that player’s own top 3. **Save and re-open** an analysis — a restored board says how old its figures are and Re-run reuses the stored paste. The extractor **reads tags out of links**, so a Discord roster (`*1.* Name — [#TAG](https://royaleapi.com/player/TAG)`) works; a clan link is refused on purpose. **10 a side**, up from 8. The two paste boxes wear an **electric border** in the side’s hue — React Bits’ ElectricBorder, gated on visibility and off entirely under reduced motion. **Export PDF** prints the whole board as a match dossier — a section for every player on both sides, a heatmap, head-to-head spreads and a method section; 27 pages at 2v2 up to 115 at 10v10, in the reader’s own theme. **Off the admin shelf and on sale**: everyone sees it, anon and free get a gate card, and the three-day trial opens it along with pro and admin. 67 Python checks + 58 vitest; browser-verified 29/29, 46/46, 37/38, 14/14 and 21/21 rendered-page checks |
@@ -12636,11 +12637,24 @@ vendored code every screen depends on, so it is recorded rather than applied in
 a commit about something else — see
 [A render loop that starves Suspense](#a-render-loop-that-starves-suspense).
 
-**`.topActions` overflows its box at 390px** by 43px (278 into 235), noticed
-during the Team Analysis phone pass. Pre-existing; the phone pass dropped the
-notification bell specifically so this would fit, and it still does not. That
-is also why the bell stays hidden there now that it opens the release feed —
-it is not a control to put back until this is closed.
+~~**`.topActions` overflows its box at 390px** by 43px (278 into 235)~~ —
+**closed 2026-09-12**, and it had a twin nobody had measured. The phone pass
+dropped the notification bell specifically so this would fit and it still did
+not; what closed it is the tier badge, which goes below 860px on exactly the
+bell's argument — at 112px it was the widest thing in that row and the only one
+that is a *status* rather than a control, and the profile menu's tier row
+carries the same live badge at every width. Measured after: 0px over at 430,
+390, 360 and 320.
+
+**The twin was `.brandCluster`, over by 23px at 390**, which was never recorded
+here. The wordmark ran to x=157 inside a cluster clipped to 134, so the last
+letter of DECKKIES was painted under the field-book button on every phone —
+visible in any screenshot, and missed for as long as the bar was only ever
+measured on the actions side.
+
+The bell is still hidden below 860px. That is now a choice about what belongs
+in a phone's top bar rather than a debt, and the room it would take is spent on
+the navigation row instead.
 
 **No sweep has been run for CSS-module classes that do not exist**, and one of
 them had been live on the landing page for an unknown length of time.
