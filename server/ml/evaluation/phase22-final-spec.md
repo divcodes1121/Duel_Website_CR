@@ -45,7 +45,7 @@ invariant the entire programme supports.
 |---|---|
 | artifact | `ml/artifacts/m2-change-v1.json` |
 | model version | `m2-change-v1` |
-| feature version | `phase2-21` (21 features, order is part of the contract) |
+| feature version | `phase2-21-reqstamp-utc` (21 features, order is part of the contract; formerly `phase2-21`, which fed features 9 and 10 the unparseable stamp `"9999"` — see §7) |
 | inputs | the player's SHELL (cluster containing the most recent play), not the whole history |
 | output | `P(change)` ∈ [0, 1] |
 | class weighting | **off**, on evidence — it damaged PR-AUC, ROC-AUC, F1 and Brier |
@@ -224,7 +224,7 @@ what the shadow log records:
 | axis | frozen value |
 |---|---|
 | model | `m2-change-v1` |
-| features | `phase2-21` |
+| features | `phase2-21-reqstamp-utc` |
 | policy | `phase17a-calibrated` |
 | calibration | `band-calibration-v1` |
 | candidates | `c1-wide-playerpool` |
@@ -264,6 +264,21 @@ Ordered by what blocks a rollout.
 
 **Not on this list, deliberately:** any retraining, any recalibration, any new
 feature, any new model. The research phase is closed.
+
+**Timestamp input correction (2026-09-15, Brain Phases 8, 8b, 8c, 10 and 11).**
+`predictor.predict` used to build its example with `timestamp="9999"`, which
+`features._parse` cannot read, so `log_hours_since_change` and
+`log_hours_since_last_play` were 0 on every read. It now passes the caller's
+`cutoff_ts` when supplied, otherwise the request wall clock in UTC
+(`%Y%m%dT%H%M%S.000Z`). This is an **input/timestamp correction**: it is **not
+model retraining** (`m2-change-v1` is unchanged) and **not recalibration**
+(`band-calibration-v1` is unchanged); no feature was added, removed or
+reordered, and `ALTERNATIVE_CAPS` and the candidate generator are unchanged.
+The primary deck is unaffected. The feature version moves to
+`phase2-21-reqstamp-utc` so no log mixes the two semantics. Validated in
+production order before implementation (Brain Phase 8b gate PASS 8/8); the
+resulting reduction in shown alternatives was accepted explicitly by the
+account holder (Brain Phase 8c).
 
 ---
 

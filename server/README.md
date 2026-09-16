@@ -1223,6 +1223,22 @@ degraded read and a confidently wrong one.
 | `shadow` | unchanged | records | nothing |
 | `on` | unchanged | records | fetched separately |
 
+**The prediction moment is the request, not a placeholder (2026-09-15, NOT
+DEPLOYED).** `predict()` used to build its example with `timestamp="9999"`,
+which `features._parse` cannot read, so `log_hours_since_change` and
+`log_hours_since_last_play` were 0 on every live read. It now passes the
+caller's `cutoff_ts` when given, else `_request_stamp()` — the wall clock **in
+UTC**, formatted like `battle_time` (`20260915T120500.000Z`). UTC is
+load-bearing: `battle_time` is UTC and the parser ignores the `Z`, so a local
+stamp would shift every gap by the host's offset without an error. No weight,
+feature order, calibration cut, cap or candidate changed; the recent-deck
+primary is identical under any stamp; bands and therefore the number of shown
+alternatives do move, and that cost was measured and accepted (Brain Phases 8b,
+8c, 10). `VERSIONS["features"]` is `phase2-21-reqstamp-utc`. Tests pin
+`_request_stamp` rather than reading the calendar. **Committed locally only: the
+VPS copy still sends `"9999"`, and `CLASH_OIE` stays `off`.** Deploying it dark
+is a separate approval; so are `shadow` and `on`.
+
 **The Coach never waits for the engine.** It used to attach the read inline, so
 a cold spinning-disk read delayed the whole screen for a purely additive
 enhancement. Now `GET /api/analytics/coach/opponent-read/<tag>` is its own

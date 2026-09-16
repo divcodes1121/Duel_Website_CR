@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 
 from .. import candidates as C
 from .. import change_detector as CD
@@ -79,6 +80,19 @@ def _change_probability(view: dict, example) -> tuple[float, bool]:
     return min(1.0, len(edits) / n), False
 
 
+def _request_stamp() -> str:
+    """The prediction moment for a live read: the request wall clock, in UTC,
+    in battle_time's own format.
+
+    UTC IS LOAD-BEARING. `battle_time` is UTC and `features._parse` ignores the
+    `Z`, so a local-time stamp would shift every gap by the host's offset
+    without an error. Brain Phases 8, 8b, 8c and 10 validated exactly this
+    stamp; `"9999"` fed features 9 and 10 an unparseable value and zeroed both.
+    Tests pin this function rather than reading the calendar.
+    """
+    return time.strftime("%Y%m%dT%H%M%S", time.gmtime()) + ".000Z"
+
+
 def predict(tag: str, domain: str, plays, cutoff_ts: str | None = None,
             max_alternatives: int = policy.MAX_ALTERNATIVES):
     """The Coach's single entry point. Never raises."""
@@ -100,8 +114,10 @@ def predict(tag: str, domain: str, plays, cutoff_ts: str | None = None,
         cluster_plays = tuple(DeckPlay(battle_time=p.battle_time, mode=p.mode,
                                        cards=p.cards, result=p.result)
                               for p in shell)
+        # THE PREDICTION MOMENT: the caller's cutoff when it supplies one,
+        # otherwise the request itself. Never a placeholder.
         example = PredictionExample(
-            player_tag=tag, timestamp="9999", domain=domain,
+            player_tag=tag, timestamp=cutoff_ts or _request_stamp(), domain=domain,
             history=cluster_plays,
             truth=DeckPlay(battle_time="9999", mode="", cards=()),
             cluster_history=cluster_plays)

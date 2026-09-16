@@ -62,6 +62,7 @@ bot's SQLite files read-only.
 | **2v2 Decks** (`#/duo`) | **A SCREEN OF ITS OWN AND LIVE, 2026-09-11.** It was a collapsed section of the admin console for one morning, which put the one board built entirely out of 2v2 behind a door only an operator opens — and nothing on it is operational. It is the tenth card on the landing strip now, gated like Team Analysis (everyone sees it, trial and up open it), and there is exactly ONE board: the console's copy, the profile-menu row and `#/admin/duo` were deleted rather than duplicated. The unit is a **PARTNERSHIP**, two teammate decks played together, not a deck. It reads `battle_raw`, because a `battles` row holds one deck and one opponent deck and **the teammate's deck is in no column of it**. Identity is order-free at both levels, so `A + B` and `B + A` are one record; **51,671 rows have a tracked opponent**, so a battle is stored up to four times and folded once by an identity built from its own contents. Both decks carry their own Copy link and Open in Game — you take ONE of them into the game. Filtering is the card picker Meta and Duel Zone use, reaching all 123 cards, ANDed within ONE deck and matched whole: a bare `giant` matched **605,447** pairs (every royal-, goblin-, minion- and electro-giant) against the real Giant's **45,360**, which is why the key is quoted against the JSON column. Live: **1,483,672 unique partnerships from 1,114,663 battles**; all three sorts are index reads at **9-15 ms** against the 32.4 s an unindexed `last_seen DESC` took. Lazy 2.11 kB gzip; 425 Python checks + 14 vitest; browser-verified 29/29 then 38/38 |
 | Export PDF (print-exact, every section) | shipped |
 | Opponent Intelligence Engine | **research CLOSED, model FROZEN**, flagged off (`CLASH_OIE=off`) |
+| OIE prediction timestamp | **fixed locally, NOT DEPLOYED, 2026-09-15.** A live read built its change-model input with the placeholder stamp `"9999"`, which does not parse, so features 9 and 10 (hours since the last deck change, hours since the last play) were always zero. `predictor.predict` now uses the caller's `cutoff_ts`, or the request clock in UTC in `battle_time`'s own format. An input correction, not a retrain or recalibration: weights, feature order, calibration cuts, caps and the candidate generator are untouched, and the primary (most recent) deck is identical under any stamp. Validated in Brain Phases 8, 8b, 8c and 10 (competitive AUC 0.619 -> 0.673, Brier macro 0.371 -> 0.275) at a known, accepted cost of fewer shown alternatives (alternative hits 1.85% -> 1.06% of reads); implemented in Phase 11 and proved equal to the validated condition offline on 357,426 reads with 0 mismatches. Feature version `phase2-21` -> `phase2-21-reqstamp-utc`. **The VPS still runs the old stamp and `CLASH_OIE` stays `off`**; a dark deploy (Brain Phase 13, still `off`) is a separate approval, and `shadow` and `on` are separate again. See `DECKKIES_BRAIN_README.md` |
 | OIE reconciliation (19D) | **done** — 364 competitive / 151 practice predictions scored against real later battles |
 | Phases 20A–21A | **all four branches closed on measurements**, not on effort |
 | Phase 22 | final production specification, frozen and tested |
@@ -223,7 +224,7 @@ python server/test_battle_modes.py # 135 checks over which game modes go where
 python server/test_duo_pairs.py   # 425 checks over the 2v2 partnership collection
 python server/test_recent_battles.py # 40 checks over the battle log and its mode router
 python server/test_api_security.py # 73 checks over auth, CORS, the rate limit and the route count
-python server/test_ml_22_final.py # 66 checks over the FROZEN production contract
+python server/test_ml_22_final.py # 67 checks over the FROZEN production contract
 python server/test_ml_20d.py      # 27 checks that `practice` excludes real duels
 python server/test_ml_21a.py      # 32 checks over the spell feasibility harness
 npm run lint
@@ -10150,6 +10151,24 @@ negative results took the most work and are the easiest to accidentally redo.
 `CLASH_OIE` gates the whole thing and defaults to **`off`**. Nothing below is
 live.
 
+**The prediction timestamp was corrected on 2026-09-15 and the correction is
+NOT DEPLOYED.** A live read used to hand the change model the placeholder
+`"9999"` as the prediction moment; it does not parse, so the two gap features
+(hours since the last deck change, hours since the last play) were zero on every
+live read, while the model had been trained on real gaps. (The shipped bands
+were validated on the `"9999"` outputs, deliberately reproduced — which is why
+the fix needed its own re-validation, Brain Phase 8b.)
+`predictor.predict` now passes the caller's `cutoff_ts` when there is one and
+otherwise the request clock, in UTC, in `battle_time`'s own format (UTC is
+load-bearing: `battle_time` is UTC and the parser ignores the `Z`). Nothing was
+retrained or recalibrated, and the recent-deck primary cannot move. The cost is
+known and was accepted: bands drop, so fewer alternatives are shown and fewer of
+them hit (Brain Phase 8c). The feature version is now `phase2-21-reqstamp-utc`,
+so `shadow.checkpoint()` marks a log mixing the two stamps inconsistent and not ready (`drift()` does not
+check versions — Brain KNOWN BUGS #26 — so do not run it over a mixed log). The full
+record is `DECKKIES_BRAIN_README.md`; the VPS still serves `"9999"` until a
+separately approved dark deploy.
+
 ### What it does, and what it refuses to do
 
 | | |
@@ -12235,6 +12254,13 @@ docs/
                               replaced — kept because what it proved about
                               app.py is still true
 
+DECKKIES_BRAIN_README.md      the Brain research record: every phase, known
+                              bug and decision behind the OIE timestamp fix
+brain-evidence/phase8/
+  MANIFEST.md                 hashes of the Phase 8b/8c evidence. The evidence
+                              itself is gitignored: it holds REAL PLAYER TAGS
+                              and cannot be regenerated. Never commit it
+
 supabase/
   001_accounts.sql            profiles, tiers, the three-day trial, device
                               slots and the three admin functions. Idempotent;
@@ -12541,7 +12567,7 @@ server/
 
   test_ml_20b/20c/20d/21a.py  127 checks over the four closed branches
                               (38 + 30 + 27 + 32, re-run 2026-08-30)
-  test_ml_22_final.py         66 checks. The FROZEN CONTRACT, not the
+  test_ml_22_final.py         67 checks. The FROZEN CONTRACT, not the
                               implementation -- a failure here means the
                               contract moved
 

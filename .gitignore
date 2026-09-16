@@ -81,6 +81,17 @@ server/ml/results/cohorts/checkpoint-*.json
 # Shadow-mode observation log (diagnostic, regenerable)
 server/ml/results/shadow-log.jsonl*
 
+# Brain evidence (Brain Phase 12). The Phase 8b/8c production-order extracts
+# the timestamp fix was validated against. They hold REAL PLAYER TAGS and are
+# NOT regenerable (the VPS arrival data they came from is destroyed at every bot
+# restart), so they live here, locally, and are never source. Only the
+# integrity manifest is tracked. Default-deny, same /* convention as
+# ml/results above: ignore the CONTENTS so a negation can re-include a file.
+/brain-evidence/*
+!/brain-evidence/phase8/
+/brain-evidence/phase8/*
+!/brain-evidence/phase8/MANIFEST.md
+
 # Local environment. The Supabase URL and publishable key are public by design,
 # but a .env file is exactly where a secret ends up by accident one day.
 .env

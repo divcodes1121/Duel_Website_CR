@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import unittest
 
@@ -25,10 +26,39 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ml import features as F                                 # noqa: E402
 from ml.dataset import DeckPlay                              # noqa: E402
-from ml.production import calibration, policy, predictor      # noqa: E402
+from ml.production import calibration, policy, predictor, shadow  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SPEC = os.path.join(HERE, "ml", "evaluation", "phase22-final-spec.md")
+
+#: The frozen version stamp, exactly. Brain Phase 11 moved `features` from
+#: `phase2-21` when `predict` stopped passing timestamp="9999".
+FROZEN_VERSIONS = {"model": "m2-change-v1",
+                   "features": "phase2-21-reqstamp-utc",
+                   "policy": "phase17a-calibrated",
+                   "calibration": "band-calibration-v1",
+                   "candidates": "c1-wide-playerpool"}
+FROZEN_API_CONTRACT = "opponent-read-v1"
+
+#: KNOWN BUGS #24. `predict` stamps a live read with the request wall clock, so
+#: every test here runs on a pinned one: five minutes after the latest fixture
+#: play in this module (20260609T000000).
+PINNED_REQUEST_STAMP = "20260609T000500.000Z"
+_REAL_REQUEST_STAMP = predictor._request_stamp
+
+
+def setUpModule():
+    predictor._request_stamp = lambda: PINNED_REQUEST_STAMP
+
+
+def tearDownModule():
+    predictor._request_stamp = _REAL_REQUEST_STAMP
+
+
+def spec_version_table(spec):
+    """Section 6's version table, parsed row by row into {axis: value}."""
+    section = spec.split("## 6. Versioning", 1)[1].split("\n## ", 1)[0]
+    return dict(re.findall(r"^\| ([^|`]+?) \| `([^`]+)` \|\s*$", section, re.M))
 
 RECENT = ["knight", "archers", "musketeer", "valkyrie", "mini-pekka",
           "skeletons", "ice-spirit", "bats"]
@@ -325,11 +355,11 @@ class TestSpecDocument(unittest.TestCase):
         self.assertIn("FINAL MODEL DIRECTION: FROZEN", self._spec())
 
     def test_every_version_axis_is_named(self):
-        s = self._spec()
-        for v in ("m2-change-v1", "phase2-21", "phase17a-calibrated",
-                  "band-calibration-v1", "c1-wide-playerpool",
-                  "opponent-read-v1"):
-            self.assertIn(v, s, v)
+        """KNOWN BUGS #25. Exact values from the parsed table, never a
+        substring: `phase2-21` would pass an assertIn against any value that
+        merely begins with it."""
+        expected = dict(FROZEN_VERSIONS, **{"API contract": FROZEN_API_CONTRACT})
+        self.assertEqual(spec_version_table(self._spec()), expected)
 
     def test_all_closed_branches_are_recorded(self):
         s = self._spec().lower()
@@ -338,15 +368,28 @@ class TestSpecDocument(unittest.TestCase):
             self.assertIn(branch.lower(), s, branch)
 
     def test_the_version_stamp_matches_what_the_log_records(self):
-        """Attribution is only meaningful if the spec and the log agree."""
+        """Attribution is only meaningful if the spec and the log agree.
+
+        KNOWN BUGS #25. This used to check hardcoded strings against the spec
+        by substring and never read `shadow.VERSIONS`, so a changed log stamp
+        passed. It now compares the live stamp, exactly, with the spec's
+        section 6 table and its section 2.2 feature-version row.
+        """
         s = self._spec()
-        stamp = {"calibration": "band-calibration-v1",
-                 "candidates": "c1-wide-playerpool",
-                 "features": "phase2-21",
-                 "model": "m2-change-v1",
-                 "policy": "phase17a-calibrated"}
-        for value in stamp.values():
-            self.assertIn(value, s)
+        self.assertEqual(shadow.VERSIONS, FROZEN_VERSIONS)
+        table = spec_version_table(s)
+        self.assertEqual({axis: table.get(axis) for axis in shadow.VERSIONS},
+                         shadow.VERSIONS)
+        row = re.search(r"^\| feature version \| `([^`]+)`", s, re.M)
+        self.assertIsNotNone(row, "section 2.2 must state the feature version")
+        self.assertEqual(row.group(1), shadow.VERSIONS["features"])
+        self.assertNotEqual(shadow.VERSIONS["features"], "phase2-21",
+                            "the stamp must not describe the timestamp=\"9999\" engine")
+
+    def test_this_module_runs_on_a_pinned_request_clock(self):
+        """KNOWN BUGS #24."""
+        self.assertIsNot(predictor._request_stamp, _REAL_REQUEST_STAMP)
+        self.assertEqual(predictor._request_stamp(), PINNED_REQUEST_STAMP)
 
 
 # --------------------------------------------------------------------------

@@ -6,15 +6,21 @@ the prediction, and the ML layer may only add to it.
 
     python server/test_ml_production.py
 """
+import calendar
+import datetime
 import json
+import math
 import os
 import sys
+import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from ml import features as F               # noqa: E402
 from ml.dataset import DeckPlay            # noqa: E402
-from ml.production import adapter, policy  # noqa: E402
+from ml.production import adapter, calibration, policy  # noqa: E402
 from ml.production import predictor as P   # noqa: E402
 
 CORE = ["hog", "cannon", "skeletons", "musketeer", "log", "fireball", "ice-spirit"]
@@ -29,6 +35,29 @@ def history(n=12):
     out = [play(d, "knight") for d in range(1, n - 2)]
     out += [play(n - 2, "ice-golem"), play(n - 1, "knight"), play(n, "ice-golem")]
     return out
+
+
+#: KNOWN BUGS #24 (Brain Phase 10). `predict` stamps a live read with the
+#: request wall clock, so a fixture dated in the past reads as a shell idle for
+#: however long ago it was written, and an assertion about it becomes a
+#: property of the calendar. Every test here runs on a pinned request clock:
+#: five minutes after `history()`'s last play. A test whose fixture ends later
+#: pins its own stamp with `request_at`.
+PINNED_REQUEST_STAMP = "20260812T120500.000Z"
+_REAL_REQUEST_STAMP = P._request_stamp
+
+
+def setUpModule():
+    P._request_stamp = lambda: PINNED_REQUEST_STAMP
+
+
+def tearDownModule():
+    P._request_stamp = _REAL_REQUEST_STAMP
+
+
+def request_at(stamp):
+    """Pin the request clock to `stamp` for the length of a `with` block."""
+    return mock.patch.object(P, "_request_stamp", lambda: stamp)
 
 
 class Rule1_RecentIsNeverReplaced(unittest.TestCase):
@@ -83,7 +112,8 @@ class ShadowFoundRegressions(unittest.TestCase):
 
     def test_primary_never_needs_resetting_on_a_multi_shell_player(self):
         h = self._two_shells()
-        r = P.predict("#A", "competitive", h)
+        with request_at("20260814T120500.000Z"):     # the fixture's last play + 5 min
+            r = P.predict("#A", "competitive", h)
         self.assertEqual(r.primary_deck, sorted(h[-1].cards))
         self.assertNotIn("reset", r.reason)
 
@@ -96,7 +126,12 @@ class ShadowFoundRegressions(unittest.TestCase):
 
     def test_change_probability_is_not_pegged_for_a_steady_player(self):
         steady = [play(d, "knight") for d in range(1, 15)]
-        r = P.predict("#A", "competitive", steady)
+        # Pinned to the fixture (last play + 5 min). Unpinned, a wall-clock
+        # stamp reads this shell as idle for weeks and the assertion fails from
+        # 2026-09-27T18:51:45Z (KNOWN BUGS #24) - which is the model being right
+        # about an idle shell, not the whole-history bug this test guards.
+        with request_at("20260814T120500.000Z"):
+            r = P.predict("#A", "competitive", steady)
         self.assertLess(r.change_probability, 0.5,
                         "a player who never edits must not read as volatile")
 
@@ -186,6 +221,190 @@ class Rule7_ProductionDoesNotTrain(unittest.TestCase):
             self.skipTest("artifact not present")
         with self.assertRaises(RuntimeError):
             m.fit([], [])
+
+
+I9 = F.FEATURE_NAMES.index("log_hours_since_change")
+I10 = F.FEATURE_NAMES.index("log_hours_since_last_play")
+
+#: Request stamps against `history()`, whose last play is 20260812T120000: the
+#: anchor itself, then 5 min, 4 h, 36 h and 40 days later. On this fixture they
+#: land in the high, high, medium, low and low bands.
+STAMPS = ("20260812T120000.000Z", "20260812T120500.000Z", "20260812T160000.000Z",
+          "20260814T000000.000Z", "20260921T120000.000Z")
+
+
+def uncapped():
+    """Bypass ONLY the band cap, in this process, to see the whole generated list."""
+    return mock.patch.object(policy, "cap_alternatives",
+                             lambda result, limit=policy.MAX_ALTERNATIVES: result)
+
+
+def identity(alternatives):
+    return [(tuple(a["cards"]), tuple(a["out"]), tuple(a["in"])) for a in alternatives]
+
+
+class TimestampCorrection(unittest.TestCase):
+    """Brain Phases 8-11. `predict` used to build its example with
+    timestamp="9999", which `features._parse` cannot read, so features 9 and 10
+    were 0 on every read. It now passes `cutoff_ts`, or the request clock in
+    UTC. That may move the band, the number of alternatives shown, their labels
+    and the note - and nothing else."""
+
+    def _extracted(self, tag, domain, plays, **kw):
+        """(result, stamp, feature vector) for the one example `predict` scores."""
+        seen = []
+        real = F.extract
+
+        def spy(example):
+            vec = real(example)
+            seen.append((example.timestamp, vec))
+            return vec
+        with mock.patch.object(P.F, "extract", spy):
+            result = P.predict(tag, domain, plays, **kw)
+        self.assertEqual(len(seen), 1, "the change model reads exactly one example")
+        return result, seen[0][0], seen[0][1]
+
+    # T1 ---------------------------------------------------------------------
+    def test_request_stamp_is_utc_in_battle_time_format(self):
+        epoch = calendar.timegm((2026, 9, 14, 18, 52, 53, 0, 0, 0))
+        real_gmtime = time.gmtime
+        # localtime is moved 5.5 h away: a stamp built from it would show.
+        with mock.patch.object(P.time, "gmtime", lambda *a: real_gmtime(epoch)), \
+                mock.patch.object(P.time, "localtime", lambda *a: real_gmtime(epoch + 19800)):
+            stamp = _REAL_REQUEST_STAMP()
+        self.assertEqual(stamp, "20260914T185253.000Z")
+        self.assertEqual(F._parse(stamp), datetime.datetime(2026, 9, 14, 18, 52, 53))
+
+    def test_request_stamp_reads_the_real_clock_in_utc(self):
+        stamp = _REAL_REQUEST_STAMP()
+        parsed = F._parse(stamp)
+        self.assertIsNotNone(parsed, stamp)
+        now = datetime.datetime.fromtimestamp(time.time(), datetime.timezone.utc)
+        drift = abs((parsed - now.replace(tzinfo=None)).total_seconds())
+        self.assertLessEqual(drift, 120, "a local-time stamp is off by the host's UTC offset")
+
+    # T2 ---------------------------------------------------------------------
+    def test_predict_never_passes_the_placeholder_stamp(self):
+        _r, pinned, _x = self._extracted("#A", "competitive", history())
+        self.assertEqual(pinned, PINNED_REQUEST_STAMP)
+        with mock.patch.object(P, "_request_stamp", _REAL_REQUEST_STAMP):
+            _r, live, _x = self._extracted("#A", "competitive", history())
+        for stamp in (pinned, live):
+            self.assertNotEqual(stamp, "9999")
+            self.assertIsNotNone(F._parse(stamp), stamp)
+
+    def test_explicit_cutoff_wins_over_the_request_clock(self):
+        reads = []
+
+        def clock():
+            reads.append(1)
+            return PINNED_REQUEST_STAMP
+        h = history()
+        with mock.patch.object(P, "_request_stamp", clock):
+            _r, stamp, _x = self._extracted("#A", "competitive", h,
+                                            cutoff_ts=h[-1].battle_time)
+        self.assertEqual(stamp, h[-1].battle_time)
+        self.assertEqual(reads, [], "the request clock is not read when a cutoff is supplied")
+
+    # T3 ---------------------------------------------------------------------
+    def test_temporal_features_are_populated_together(self):
+        # a shell edited on day 6 and unchanged through day 12
+        plays = ([play(d, "knight") for d in range(1, 6)]
+                 + [play(d, "ice-golem") for d in range(6, 13)])
+        with request_at("20260812T180000.000Z"):             # 6 h after the last play
+            _r, _s, late = self._extracted("#A", "competitive", plays)
+        self.assertAlmostEqual(late[I10], math.log1p(6.0), places=9)
+        self.assertAlmostEqual(late[I9], math.log1p(150.0), places=9)   # 6 d 6 h since the edit
+        self.assertGreater(late[I10], 0.0)
+        self.assertGreaterEqual(late[I9], late[I10])
+        with request_at(plays[-1].battle_time):              # the anchor
+            _r, _s, anchor = self._extracted("#A", "competitive", plays)
+        self.assertEqual(anchor[I10], 0.0)
+        self.assertAlmostEqual(anchor[I9], math.log1p(144.0), places=9)
+        others = [i for i in range(F.N_FEATURES) if i not in (I9, I10)]
+        self.assertEqual([late[i] for i in others], [anchor[i] for i in others],
+                         "only features 9 and 10 read the stamp")
+
+    # T4 ---------------------------------------------------------------------
+    def test_primary_deck_is_identical_under_every_stamp(self):
+        h = history()
+        for domain in ("competitive", "practice"):
+            decks = set()
+            for stamp in STAMPS:
+                with request_at(stamp):
+                    r = P.predict("#A", domain, h)
+                self.assertEqual(r.primary_deck, sorted(h[-1].cards), (domain, stamp))
+                self.assertFalse(r.degraded, (domain, stamp))
+                decks.add(tuple(r.primary_deck))
+            self.assertEqual(len(decks), 1, domain)
+
+    # T5 ---------------------------------------------------------------------
+    def test_generated_alternatives_are_identical_under_every_stamp(self):
+        h = history()
+        generated, shown = [], []
+        for stamp in STAMPS:
+            with request_at(stamp):
+                with uncapped():
+                    generated.append(identity(P.predict("#A", "competitive", h).alternatives))
+                shown.append(identity(P.predict("#A", "competitive", h).alternatives))
+        self.assertTrue(generated[0], "the fixture must generate alternatives or this proves nothing")
+        for lst in generated[1:]:
+            self.assertEqual(lst, generated[0])
+        for lst in shown:
+            self.assertEqual(lst, generated[0][:len(lst)],
+                             "what is shown is a prefix of the unchanged generated list")
+
+    # T6 ---------------------------------------------------------------------
+    def test_count_moves_only_with_the_corrected_band(self):
+        self.assertEqual(policy.ALTERNATIVE_CAPS, {"high": 2, "medium": 1, "low": 0})
+        h = history()
+        by_band = {}
+        for stamp in STAMPS:
+            with request_at(stamp):
+                with uncapped():
+                    generated = len(P.predict("#A", "competitive", h).alternatives)
+                r = P.predict("#A", "competitive", h)
+            self.assertEqual(r.primary_confidence,
+                             calibration.band("competitive", r.change_probability), stamp)
+            self.assertEqual(len(r.alternatives),
+                             min(policy.ALTERNATIVE_CAPS[r.primary_confidence], generated), stamp)
+            by_band[r.primary_confidence] = len(r.alternatives)
+        self.assertEqual(by_band, {"high": 2, "medium": 1, "low": 0},
+                         "the stamps must reach every band, or the cap is not exercised")
+
+    # T7 ---------------------------------------------------------------------
+    def test_payload_degradation_and_practice_are_unchanged(self):
+        class Bad:
+            battle_time = "20260801T120000.000Z"
+            cards = None
+        degrading = {"empty": [], "single play": [play(1, "knight")], "broken": [Bad()]}
+        h = history()
+        outcomes = {}
+        for stamp in STAMPS:
+            with request_at(stamp):
+                r = P.predict("#A", "competitive", h)
+                d = r.as_dict()
+                self.assertEqual(set(d), {"primary", "alternatives", "note", "degraded", "bandShown"})
+                self.assertNotIn("changeProbability", d)
+                self.assertEqual((r.degraded, r.reason), (False, ""))
+                practice = P.predict("#A", "practice", h).as_dict()
+                self.assertEqual(set(practice["primary"]), {"cards", "basis"})
+                self.assertEqual(practice["alternatives"], [])
+                self.assertFalse(practice["bandShown"])
+                for name, plays in degrading.items():
+                    x = P.predict("#A", "competitive", plays)
+                    outcomes.setdefault(name, set()).add(
+                        (x.degraded, x.reason, tuple(x.primary_deck), len(x.alternatives)))
+        for name, seen in outcomes.items():
+            self.assertEqual(len(seen), 1, name)
+            self.assertTrue(next(iter(seen))[0], name)
+
+    # KNOWN BUGS #24 ---------------------------------------------------------
+    def test_this_module_runs_on_a_pinned_request_clock(self):
+        """If this fails, something unpinned the clock, and every assertion on a
+        dated fixture here has become a property of the calendar."""
+        self.assertIsNot(P._request_stamp, _REAL_REQUEST_STAMP)
+        self.assertEqual(P._request_stamp(), PINNED_REQUEST_STAMP)
 
     def test_forbid_training_is_idempotent(self):
         class M:
