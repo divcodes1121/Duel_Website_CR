@@ -25,6 +25,18 @@ EnvironmentFile=/etc/royalweb.env
 # There is deliberately no second reconciliation implementation here.
 ExecStart=/usr/bin/python3 -u duo_pairs.py --update --reconcile
 
+# THEN BOUND THE COLLECTION (Brain Phase 13A). The fold above records every
+# partnership it sees; this keeps only the 50 most-used pairs per canonical win
+# condition and the battles belonging to them, which is what stops a census
+# that grew by ~137,000 rows a day. `--maintain` counts the staged sides the
+# fold just added, reranks the buckets that moved, and `--prune` drops the tail.
+#
+# THE GATE IS ON THE UNIT, NOT THE ENVIRONMENT FILE, deliberately: only this
+# job may delete. `royalweb` itself reads the same database and must never be
+# able to prune it, so CLASH_DUO_RETENTION stays absent from /etc/royalweb.env.
+Environment=CLASH_DUO_RETENTION=on
+ExecStart=/usr/bin/python3 -u duo_retention.py --maintain --prune
+
 # FAIL VISIBLY. A non-zero exit marks the unit failed, `systemctl list-timers`
 # and `systemctl --failed` both show it, and the JSON summary each command
 # prints lands in the log beside the failure. A job that swallowed its own

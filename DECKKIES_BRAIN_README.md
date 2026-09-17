@@ -1412,7 +1412,81 @@ local only**) and the frozen conclusions are in `phase22-final-spec.md`.
 | **Brain 12** | commit the Phase 11 implementation and preserve the Phase 8b/8c evidence durably | **DONE — ONE local commit (not pushed, not deployed; hash in the Phase 12 artifact) holding the 5 Phase 11 files, `.gitignore`, `README.md`, `server/README.md`, this README, the Phase 11 artifact and `brain-evidence/phase8/MANIFEST.md`. Evidence: 34 files, 132,283,959 bytes, copied byte-identical (SHA-256, MD5, sizes, mtimes) to the gitignored `brain-evidence/phase8/`; `git check-ignore` covers all 34, only the manifest is tracked; no real tag staged. 27 suites re-run: 767 unittest + 69 homegrown, identical to Phase 11; only failure `test_ml_21a` (123 != 122). Shadow log unchanged. VPS untouched, `CLASH_OIE` off** | `DECKKIES_BRAIN_PHASE12_COMMIT_EVIDENCE.md` (local, untracked) |
 | **Brain 13A** | retain only the top 50 most-used 2v2 decks per each of six win conditions (≤ 300 records), delete the long tail, keep it updating | **BLOCKED — nothing implemented, nothing deleted.** (1) **There is no six-way win-condition taxonomy in the code**: 23 win-condition CARDS (`cardMeta`), 16 archetypes + `other` = 17 (`deck_counter.WIN_CONDITION_MAP`, the bot's map, stored in `battles`), and 6 editorial play STYLES (`deck_counter.STYLE`) whose own source says the stored taxonomy "is a card, not a play style" and one of whose six (`Mixed`) means *no* single win condition. (2) **No 2v2 data exists locally** — `resolve_db_path()` → None and `.duo_pairs.db` is on the VPS — so the counts, rebuild, verification and before/after measurement all need VPS access this phase forbids. (3) **The store holds PAIRS, not decks**, by the explicit decision that deleted `duo_decks.py`; a pair has two decks and so up to two win conditions. Finding: the target is ~1 GB of the ~78 GB 2v2 occupies. Three decisions owed | `DECKKIES_BRAIN_PHASE13A_2V2_TOP50_STORAGE.md` (local, untracked) |
 | **Brain 13A (corrected)** | for EVERY canonical win condition keep the 50 most-used 2v2 pairs **and the actual battles belonging to them**; delete the tail; keep updating | **CONDITIONAL — implemented, measured, tested; cleanup PREPARED and NOT executed.** The "six" reading was wrong: there are **17** canonical win conditions and all 17 fill. Read-only VPS measurement: `battles.db` **77.06 GB** (not the documented 33), `battle_raw` **32.3 GB / 3,046,896 rows** (930,940 are 2v2), `.duo_pairs.db` **5.14 GB / 2,493,481 pairs**, growing **+200k pairs a day** with **86.2% seen exactly once**. Census: 17×50 = 850 slots hold **736 distinct pairs**, carrying **162,274 of 1,968,156 battles (8.24%)**. **THE FINDING: `battle_raw` cannot be credited to this work** — the bot's own cap drops non-duel (= 2v2) raw, runs only at bot startup, has not run in 14 days, and will delete all 930,940 2v2 payloads at the next restart, retained ones included; so "keep their battles" means the `duo_stage` record, not raw JSON. New: `duo_retention.py` + 64 passing checks, ships dark. Projected 5.14 GB → ~1.2 GB | `DECKKIES_BRAIN_PHASE13A_2V2_TOP50_RETENTION.md` (local, untracked) |
+| **Brain 13A (executed)** | execute the approved 2v2 retention cleanup on production | **PASS — the tail is deleted and the collection is bounded.** Backup first (hash-verified, re-verified after), then an **exact** rebuild (17/17 buckets at 50, 850 rows = **736 distinct pairs**, 0 overstated, `verify() ok`), then the delete: **duo_pairs 2,544,874 → 736**, **duo_stage 4,025,218 → 176,995**, **166,962 battles retained**, `integrity_check ok`, four orphan checks all 0. The hourly unit now runs `duo_retention.py --maintain --prune` with the gate on the unit (so only that job may delete) — **proven live**: the fold added 24,863 pairs, maintenance pruned exactly those in 5.5 s while retained pairs *gained* 1,648 battles, and systemd ran the unit to `success`. Free pages 1,853 → **1,010,447 (4.14 GB)**; **file size unchanged — VACUUM not run, no physical saving claimed**. `battles.db` never written to (mode=ro; its freelist is already 11.7 GB, and the bot's own cap reclaims 2v2 raw at the next restart) | `DECKKIES_BRAIN_PHASE13A_2V2_TOP50_RETENTION.md` §0 |
 | **Brain 14** | a user with 111 saved Duel sets saves one more: UI shows 112, refresh shows 111, the new set is gone | **PASS — root cause proven by measurement and fixed.** A saved versus set is **~2,216 bytes**, so the sync payload crossed `api/decks.ts`'s **250 kB cap at ~110 sets** (111 = 251,762 B → **413**). `pushRemoteDecks` ignored the response, so the failure was silent, and `hydrateFromRemote` — which runs on **every page load** — replaced the correct local 112 with the frozen remote 111, which persist then wrote back over localStorage. Cases **A and D together**. Fix: cap → 1 MB, the push now reports whether it landed, and a durable pending marker makes the load path **keep local and retry** rather than adopt a blob missing changes (new pure `syncPolicy.ts`). 16 regression tests reproduce the bug against the old policy and prove `111→112→113→refresh→113`; suite 500 → 516 | `DECKKIES_BRAIN_PHASE14_SAVED_DUEL_PERSISTENCE.md` (local, untracked) |
+
+### Brain Phase 13A (executed) — full entry
+
+```
+Date          2026-09-17
+Question      Execute the approved 2v2 retention cleanup on production: for EVERY
+              canonical win condition keep the 50 most-used pairs and the actual
+              battles belonging to them; delete the tail; keep it updating.
+
+RESULT        PASS. Tail deleted, retained set exact and independently verified, the
+              collection is bounded and maintains itself hourly under systemd.
+              battles.db was NEVER written to. VACUUM NOT run - 4.14 GB pending.
+
+ORDER         quiesce -> backup -> deploy -> rebuild -> verify -> plan -> delete ->
+              verify -> wire -> live-test -> measure. Nothing was deleted until the
+              backup was hash-verified and verify() returned ok.
+
+BACKUP        /var/backups/clashbot/20260917T061905Z/duo_pairs.db
+              5,244,731,392 B  sha256 27628942fbd76f893883cc773ddc7b195b5a814c72b32e58f4c75922f0f4fb25
+              integrity_check ok; holds the pre-cleanup 2,544,874 / 4,025,218 rows.
+              Re-verified AFTER the cleanup: identical size and hash.
+
+CENSUS        17/17 buckets filled to exactly 50. 850 rows = 736 DISTINCT pairs
+              (114 pairs are top-50 in two buckets). #50 cuts 13 (3-musk) to 399
+              (other); #1 up to 10,074. duo_candidates 85,000 (bounded).
+              overstated = 0 -> the historical rebuild is EXACT.
+              verify() ok=True, 0 mismatches, 0 buckets over depth, 17 checked -
+              it re-derives from duo_pairs rather than re-running the builder.
+
+DELETED       duo_pairs  2,544,874 -> 736        (-2,544,138)
+              duo_stage  4,025,218 -> 176,995    (-3,848,223)
+              distinct battles retained: 166,962. integrity_check ok.
+              Four orphan checks all 0; max rows per bucket 50.
+
+CONTINUOUS    royalweb-duo.service gained a second ExecStart:
+              Environment=CLASH_DUO_RETENTION=on
+              ExecStart=/usr/bin/python3 -u duo_retention.py --maintain --prune
+              The gate is on the UNIT, not /etc/royalweb.env, so only this job may
+              delete and royalweb never can. Unit backed up as
+              .bak-20260917-preretention.
+              PROVEN LIVE: the fold added 24,863 pairs / 35,059 staged sides;
+              maintenance counted them, reranked and pruned exactly those in 5.5 s;
+              retained pairs GAINED 1,648 battles (duo_stage 176,995 -> 178,643);
+              0 uncounted, 0 overstated. Then systemd ran the whole unit itself to
+              Result=success / ExecMainStatus=0.
+
+STORAGE       .duo_pairs.db file 5,244,731,392 -> 5,254,283,264 B (UNCHANGED, as
+              expected). Free pages inside it 1,853 -> 1,010,447 = 4.14 GB.
+              Live data ~5.23 GB -> ~1.12 GB. duo_stage+indexes 2,186 -> 111 MB.
+              NO physical saving is claimed: VACUUM was not run.
+
+NOT TOUCHED   battles (1,415,839 2v2 rows) and battle_raw (930,940 2v2 payloads) -
+              same bot database, opened mode=ro here. Deleting there frees pages
+              into a freelist ALREADY 11.7 GB, so the 77 GB file would not shrink
+              without a 77 GB VACUUM under an exclusive lock on production; the
+              bot's own enforce_raw_cap targets exactly that data and will delete
+              it at the next restart anyway; and that file has no backup. Zero
+              physical gain, real risk, redundant.
+              duo_stage_players (5,351,497 rows, 694 MB with its index) is now the
+              largest object and is mostly orphans - an untested delete path, so it
+              was left alone and recommended alongside the VACUUM.
+
+TESTS         duo_pairs 425, battle_modes 135, recent_battles 40, duo_retention 76,
+              coach 69, tracking 8, duel_combos 55, ml_production 91 OK,
+              ml_22_final 67 OK, api_security 73 OK. test_ml_21a keeps its
+              unrelated 123 != 122.
+
+STATE         CLASH_OIE off (absent from the env). predictor.py on the VPS still
+              reads timestamp="9999" and shadow.py still stamps phase2-21, so the
+              timestamp fix remains published-but-inactive. royalweb, clashbot and
+              the duo timer all active; duo service not failed.
+Artifact      DECKKIES_BRAIN_PHASE13A_2V2_TOP50_RETENTION.md section 0 (tracked)
+```
 
 ### Brain Phase 14 — full entry
 
