@@ -1,0 +1,26 @@
+[Unit]
+Description=Run the Deckkies 2v2 raw payload window daily
+Requires=royalweb-duo-raw.service
+
+[Timer]
+# DAILY, NOT HOURLY, AND THE COST IS THE REASON. The purge verifies itself by
+# counting duel raw before and after, which is a full scan of battle_raw each
+# time; hourly would spend most of an hour scanning to delete one hour of
+# payloads. At the measured 144,463 2v2 arrivals a day, a daily run holds the
+# window at roughly 1.8 GB.
+OnCalendar=daily
+
+# NOT ON THE STROKE OF MIDNIGHT. The bot's own poll, the hourly duo fold and
+# this job all touch one SQLite file on one volume; a spread start keeps them
+# off each other, the same reasoning royalweb-duo.timer records.
+RandomizedDelaySec=1800
+
+# CATCH UP AFTER A REBOOT. The window is defined by the fold cursor and a clock,
+# so a late run is identical to an on-time one — but a run that never happens is
+# exactly the failure this unit exists to fix.
+Persistent=true
+
+Unit=royalweb-duo-raw.service
+
+[Install]
+WantedBy=timers.target

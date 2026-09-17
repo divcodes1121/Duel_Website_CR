@@ -1,0 +1,42 @@
+[Unit]
+# Keeps only a rolling 24 hours of 2v2 RAW payloads in the bot's battle_raw.
+#
+# WHY THIS UNIT EXISTS RATHER THAN THE BOT'S OWN VALVE. `clashdb.enforce_raw_cap`
+# already drops non-duel raw — which is exactly 2v2 — but it is reached only from
+# `_run_startup_maintenance_inner`, i.e. AT BOT STARTUP. The bot had been up
+# since 2026-09-12 with no purge in fourteen days of logs, and battle_raw grew to
+# 32.3 GB against a 25 GiB cap. A timer does not depend on anyone restarting
+# anything.
+#
+# WHAT IT MAY DELETE, and all three must hold: the row is 2v2 by
+# `battle_modes.is_duo`, so duel and 1v1 raw are out of reach by construction;
+# its `stored_at` is at or before `duo_pairs.processed_through()`, so the
+# retention system has already folded it into the top-50 census; and it is older
+# than the window. It counts duel raw before and after and raises if the number
+# moved. An unreadable or empty cursor means delete nothing.
+#
+# THIS IS THE ONLY UNIT IN THIS PROJECT THAT WRITES TO THE BOT'S DATABASE. Every
+# other path opens it mode=ro, which is why the gate lives on this unit and not
+# in /etc/royalweb.env: `royalweb` itself must never be able to delete.
+Description=Deckkies 2v2 raw payload window (24h)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+Environment=CLASH_DUO_RAW_PURGE=on
+ExecStart=/usr/bin/python3 -u duo_raw_purge.py --purge
+
+# FAIL VISIBLY, the same rule royalweb-duo.service follows: a non-zero exit
+# marks the unit failed and `systemctl --failed` shows it, with the JSON summary
+# in the log beside it.
+SuccessExitStatus=0
+TimeoutStartSec=7200
+
+StandardOutput=append:/var/log/clashbot/duo-raw.log
+StandardError=append:/var/log/clashbot/duo-raw.log
+
+[Install]
+WantedBy=multi-user.target
