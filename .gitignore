@@ -57,6 +57,14 @@ server/.tracking.db-shm
 server/.duo_decks.db
 server/.duo_decks.db-wal
 server/.duo_decks.db-shm
+# The 2v2 PAIR collection — the store `duo_pairs.py` and `duo_retention.py`
+# actually use. It was missing here while its deleted predecessor above was
+# listed, so a test run that creates one locally offered it up to `git add`.
+# On production it is 313 MB and holds real player tags; it is derived data,
+# rebuildable with `python server/duo_pairs.py --migrate`, and is never source.
+server/.duo_pairs.db
+server/.duo_pairs.db-wal
+server/.duo_pairs.db-shm
 
 # Phase 2 feature cache — derived data, regenerable via `--dump` (8.7 MB)
 server/ml/results/*.jsonl.gz
