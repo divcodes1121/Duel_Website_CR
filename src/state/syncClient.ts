@@ -49,15 +49,26 @@ export async function pullRemoteDecks(): Promise<SyncPayload | null> {
   }
 }
 
-/** Pushes the current deck state to the account's synced storage. Best-effort, never throws. */
-export async function pushRemoteDecks(payload: SyncPayload): Promise<void> {
+/**
+ * Pushes the current deck state to the account's synced storage. Never throws.
+ *
+ * **RETURNS WHETHER IT LANDED, and that return value is load-bearing.** This
+ * used to be `Promise<void>` and ignored the response entirely, so a 413 from
+ * the payload cap — or a 500, or an expired token — was indistinguishable from
+ * success. The remote copy silently stopped advancing while the app went on
+ * replacing local state with it on every load, which deleted saved duels one
+ * refresh later. The caller keeps a "not yet accepted" flag on `false` and
+ * refuses to adopt the remote blob until a push succeeds.
+ */
+export async function pushRemoteDecks(payload: SyncPayload): Promise<boolean> {
   const token = await bearer();
-  if (!token) return;
-  await safeFetch('/api/decks', {
+  if (!token) return false;
+  const res = await safeFetch('/api/decks', {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+  return Boolean(res?.ok);
 }
 
 /**

@@ -31,6 +31,7 @@ import {
 import { CARDS_BY_KEY } from '../data/cards';
 import { buildDuelImport, type DuelSaveOutcome, type PlayedGame } from './duelImport';
 import { pullRemoteDecks, pushRemoteDecks, type SyncPayload } from './syncClient';
+import { decideSync } from './syncPolicy';
 import { useAccountStore } from './accountStore';
 
 /** Duel collections (Deck's Home excluded — it manages its own deck list). */
@@ -868,16 +869,66 @@ function currentSyncPayload(): SyncPayload {
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let suppressNextPush = false;
 
+/**
+ * Local changes the remote has not accepted yet.
+ *
+ * PERSISTED, because the whole point is surviving the refresh. A push that fails
+ * is followed by a page load that pulls the remote blob, and without a durable
+ * record that local is ahead, that load adopts a copy which is missing the
+ * change — which is exactly how a saved duel disappeared one refresh after being
+ * saved (see `syncPolicy.ts`). Its own key rather than a field in the persisted
+ * slice: this is sync bookkeeping, not deck data, and it must not travel to
+ * another device inside the payload.
+ */
+const PENDING_KEY = 'royal-duels-sync-pending';
+
+function markPending() {
+  try {
+    localStorage.setItem(PENDING_KEY, '1');
+  } catch {
+    /* Storage disabled. Nothing is persisted in that browser anyway, so there is
+       no local copy for a stale remote to overwrite. */
+  }
+}
+
+function clearPending() {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* As above. */
+  }
+}
+
+function hasPending(): boolean {
+  try {
+    return localStorage.getItem(PENDING_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Push now, and remember whether it landed. */
+async function pushNow() {
+  const ok = await pushRemoteDecks(currentSyncPayload());
+  if (ok) clearPending();
+  else markPending();
+  return ok;
+}
+
 function schedulePush() {
   if (suppressNextPush) {
     suppressNextPush = false;
     return;
   }
   if (!useAccountStore.getState().userId) return;
+  /* MARKED BEFORE THE DEBOUNCE, not after the push fails. The refresh that
+     matters can happen during the 1.5 s window, before the request is even
+     made, and local is already ahead of the remote at that point. */
+  markPending();
   if (pushTimer) clearTimeout(pushTimer);
   pushTimer = setTimeout(() => {
     pushTimer = null;
-    void pushRemoteDecks(currentSyncPayload());
+    void pushNow();
   }, 1500);
 }
 
@@ -931,13 +982,31 @@ async function hydrateFromRemote(userId: string) {
   /* CLEAR BEFORE FETCHING, not after. The pull is a round trip, and for that
      whole window the previous account's decks are on screen and editable — an
      edit during it would be pushed to the NEW account. */
-  if (localOwner() !== userId) {
+  const sameOwner = localOwner() === userId;
+  if (!sameOwner) {
     resetLocalDecks();
     setLocalOwner(userId);
+    /* A different account's unsynced changes are not this account's to push. */
+    clearPending();
   }
 
   const remote = await pullRemoteDecks();
-  if (remote) {
+  const action = decideSync({
+    sameOwner,
+    hasRemote: Boolean(remote),
+    pendingLocalChanges: hasPending(),
+  });
+
+  /* LOCAL IS AHEAD: keep it and try again. Adopting the remote here is what
+     deleted a saved duel — the blob is missing whatever the failed push was
+     carrying, and the persist middleware would then write the loss over the
+     good local copy. Retrying also self-heals the moment the cause clears. */
+  if (action === 'keep-local-and-push') {
+    void pushNow();
+    return;
+  }
+
+  if (remote && action === 'adopt-remote') {
     // A pull-driven update shouldn't immediately bounce back up as a push.
     suppressNextPush = true;
     const paletteFolders = remote.paletteFolders ?? [];
@@ -969,7 +1038,7 @@ async function hydrateFromRemote(userId: string) {
        because the owner check above has already reset it if it belonged to
        anyone else — otherwise this is the line that copies one person's decks
        into another person's cloud storage. */
-    void pushRemoteDecks(currentSyncPayload());
+    void pushNow();
   }
 }
 

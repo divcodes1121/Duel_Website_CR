@@ -1410,6 +1410,205 @@ local only**) and the frozen conclusions are in `phase22-final-spec.md`.
 | **Brain 10** | can the Phase 8/8b timestamp fix be approved for implementation despite the Phase 8c alternative regression, and what is the minimal contract? | **CONDITIONAL (Phase 8c mapping, applied unchanged) — approvable. Phase 8b gate PASS 8/8 and Phase 8c rule CONDITIONAL both RECOMPUTED EXACTLY from recorded per-read data with new code (AUC +0.0545 [+0.0381, +0.0698]; Brier −0.0963 [−0.1103, −0.0828]; hits −0.91 pts [−1.41, −0.51]; removed 1.97% vs retained 0.74%; primary and alternative identity 128,816/128,816). Code unchanged since 2026-08-23. Contract: `predictor.py:104` → `cutoff_ts or _request_stamp()` (UTC), features version `phase2-21-reqstamp-utc`, 7 tests + 2 tightened pins + stamp pinning (a committed test fails from 2026-09-27T18:51:45Z otherwise), offline equivalence before deploy. Open condition: explicit acceptance** | `DECKKIES_BRAIN_PHASE10_TIMESTAMP_FIX_DECISION.md` |
 | **Brain 11** | implement the approved timestamp fix locally and validate it completely | **PASS — implemented exactly per Phase 10 (local working tree; NOT committed, NOT deployed, VPS untouched). Offline equivalence 357,426/357,426 reads (`pB` max \|Δ\| 4.44e-16) and 128,816/128,816 condition-B records (band, note, capped list, count, uncapped list + labels), 0 mismatches. 767 unittest + 69 homegrown pass; only failure the pre-existing `test_ml_21a` (123 != 122), byte-identical to baseline. 10 new tests + 1 guard, exact version pins (#25), stamp pinned (#24), calendar-independent to 2030, 6 mutants all caught. Shadow log untouched** | `DECKKIES_BRAIN_PHASE11_TIMESTAMP_FIX_IMPLEMENTATION.md` |
 | **Brain 12** | commit the Phase 11 implementation and preserve the Phase 8b/8c evidence durably | **DONE — ONE local commit (not pushed, not deployed; hash in the Phase 12 artifact) holding the 5 Phase 11 files, `.gitignore`, `README.md`, `server/README.md`, this README, the Phase 11 artifact and `brain-evidence/phase8/MANIFEST.md`. Evidence: 34 files, 132,283,959 bytes, copied byte-identical (SHA-256, MD5, sizes, mtimes) to the gitignored `brain-evidence/phase8/`; `git check-ignore` covers all 34, only the manifest is tracked; no real tag staged. 27 suites re-run: 767 unittest + 69 homegrown, identical to Phase 11; only failure `test_ml_21a` (123 != 122). Shadow log unchanged. VPS untouched, `CLASH_OIE` off** | `DECKKIES_BRAIN_PHASE12_COMMIT_EVIDENCE.md` (local, untracked) |
+| **Brain 13A** | retain only the top 50 most-used 2v2 decks per each of six win conditions (≤ 300 records), delete the long tail, keep it updating | **BLOCKED — nothing implemented, nothing deleted.** (1) **There is no six-way win-condition taxonomy in the code**: 23 win-condition CARDS (`cardMeta`), 16 archetypes + `other` = 17 (`deck_counter.WIN_CONDITION_MAP`, the bot's map, stored in `battles`), and 6 editorial play STYLES (`deck_counter.STYLE`) whose own source says the stored taxonomy "is a card, not a play style" and one of whose six (`Mixed`) means *no* single win condition. (2) **No 2v2 data exists locally** — `resolve_db_path()` → None and `.duo_pairs.db` is on the VPS — so the counts, rebuild, verification and before/after measurement all need VPS access this phase forbids. (3) **The store holds PAIRS, not decks**, by the explicit decision that deleted `duo_decks.py`; a pair has two decks and so up to two win conditions. Finding: the target is ~1 GB of the ~78 GB 2v2 occupies. Three decisions owed | `DECKKIES_BRAIN_PHASE13A_2V2_TOP50_STORAGE.md` (local, untracked) |
+| **Brain 13A (corrected)** | for EVERY canonical win condition keep the 50 most-used 2v2 pairs **and the actual battles belonging to them**; delete the tail; keep updating | **CONDITIONAL — implemented, measured, tested; cleanup PREPARED and NOT executed.** The "six" reading was wrong: there are **17** canonical win conditions and all 17 fill. Read-only VPS measurement: `battles.db` **77.06 GB** (not the documented 33), `battle_raw` **32.3 GB / 3,046,896 rows** (930,940 are 2v2), `.duo_pairs.db` **5.14 GB / 2,493,481 pairs**, growing **+200k pairs a day** with **86.2% seen exactly once**. Census: 17×50 = 850 slots hold **736 distinct pairs**, carrying **162,274 of 1,968,156 battles (8.24%)**. **THE FINDING: `battle_raw` cannot be credited to this work** — the bot's own cap drops non-duel (= 2v2) raw, runs only at bot startup, has not run in 14 days, and will delete all 930,940 2v2 payloads at the next restart, retained ones included; so "keep their battles" means the `duo_stage` record, not raw JSON. New: `duo_retention.py` + 64 passing checks, ships dark. Projected 5.14 GB → ~1.2 GB | `DECKKIES_BRAIN_PHASE13A_2V2_TOP50_RETENTION.md` (local, untracked) |
+| **Brain 14** | a user with 111 saved Duel sets saves one more: UI shows 112, refresh shows 111, the new set is gone | **PASS — root cause proven by measurement and fixed.** A saved versus set is **~2,216 bytes**, so the sync payload crossed `api/decks.ts`'s **250 kB cap at ~110 sets** (111 = 251,762 B → **413**). `pushRemoteDecks` ignored the response, so the failure was silent, and `hydrateFromRemote` — which runs on **every page load** — replaced the correct local 112 with the frozen remote 111, which persist then wrote back over localStorage. Cases **A and D together**. Fix: cap → 1 MB, the push now reports whether it landed, and a durable pending marker makes the load path **keep local and retry** rather than adopt a blob missing changes (new pure `syncPolicy.ts`). 16 regression tests reproduce the bug against the old policy and prove `111→112→113→refresh→113`; suite 500 → 516 | `DECKKIES_BRAIN_PHASE14_SAVED_DUEL_PERSISTENCE.md` (local, untracked) |
+
+### Brain Phase 14 — full entry
+
+```
+Date          2026-09-17
+Question      A user with 111 saved Duel sets saves one more: the UI shows 112, a
+              refresh shows 111, and the new set is gone. Find and fix it.
+
+RESULT        PASS. Root cause proven by measurement, fixed, 16 regression tests.
+
+ROOT CAUSE    Two defects; only the pair loses data.
+  (a) api/decks.ts capped the sync payload at MAX_BODY_BYTES = 250_000 and answered
+      413 above it. A saved VERSUS set is ~2,216 bytes of JSON (13 UUIDs, two 5-deck
+      collections, 80 card keys), so the payload crosses 250 kB at ~110 saved sets:
+          100 sets = 227,309 B  accepted
+          111 sets = 251,762 B  413 Payload too large
+      The reported failure sits exactly on that boundary.
+  (b) pushRemoteDecks was Promise<void> and never read the response, so the 413 was
+      silent - and hydrateFromRemote, which runs on EVERY page load, replaced local
+      state with the remote blob unconditionally. The persist middleware then wrote
+      that loss back over a localStorage copy that was correct.
+  So (a) stopped the write and (b) deleted the record of it. Prompt cases A AND D.
+
+WHERE IT WAS  saveCurrent was never at fault (it prepends immutably with a fresh
+NOT           UUID). localStorage always held 112. No dedup, no pagination, no
+              filter, no quota problem, no stale React state.
+
+FIX           1. MAX_BODY_BYTES 250_000 -> 1_000_000 (~450 sets; inside Upstash's
+                 most restrictive documented request limit and Vercel's 4.5 MB body).
+              2. pushRemoteDecks returns whether the PUT landed.
+              3. A durable `royal-duels-sync-pending` marker, set when a push is
+                 SCHEDULED (the refresh can land inside the 1.5 s debounce) and
+                 cleared only on success; hydrateFromRemote keeps local state and
+                 retries instead of adopting a remote blob that is missing changes.
+              4. New src/state/syncPolicy.ts - the decision as a pure, import-free
+                 module (the tiers.ts / deviceIdentity.ts pattern), so it is testable
+                 without a Supabase client or a store subscription.
+              The SECOND HALF is the real fix: raising the cap alone just moves the
+              same silent failure to the next limit. Now any failed push costs cloud
+              sync until it heals and never costs data the user can see.
+
+TESTS         tests/syncPolicy.test.ts, 16 tests. Reproduces 111 -> 112 -> refresh ->
+              111 against the OLD cap and policy, then proves the acceptance
+              sequence 111 -> 112 -> 113 -> refresh -> 113 under the new one; six
+              consecutive refreshes; a push that fails for ANY reason; the client
+              constant is checked against the number api/decks.ts enforces; user
+              isolation. Suite 500 -> 516 across 19 files. tsc and build clean.
+
+MISTAKE       The first fixture used short fake ids where the store uses 36-char
+              UUIDs. A saved set carries 13 of them, so the model measured 214 kB for
+              111 sets against production's 252 kB - putting the library UNDER the old
+              cap and making the bug untestable. Fixed; the note is in the file.
+
+DATA          Nothing deleted, reset or migrated. No production data touched. The
+              already-lost 112th set is NOT recoverable; re-saving it now persists.
+LIMITS        A user whose pushes keep failing stops receiving cross-device updates
+              until one succeeds (deliberate). Last-write-wins is unchanged. 1 MB is
+              ~450 sets; past that sync stops loudly rather than silently.
+STATE         NOT DEPLOYED, uncommitted. Needs one push to main (client and the cap
+              ship in the same deploy). No VPS, no migration.
+Artifact      DECKKIES_BRAIN_PHASE14_SAVED_DUEL_PERSISTENCE.md (local, untracked)
+```
+
+### Brain Phase 13A (corrected) — full entry
+
+```
+Date          2026-09-17
+Question      For EVERY canonical win condition keep the 50 most-used 2v2 pairs and the
+              actual battles belonging to them; delete the tail; keep it updating.
+
+CORRECTION    The first Phase 13A read the requirement as SIX win conditions and was
+              BLOCKED. That reading was wrong. The requirement is ALL canonical win
+              conditions. There are 17, all 17 occur in the live 2v2 data, and all 17
+              are supported. The blocked artifact is kept unchanged as the record.
+
+RESULT        CONDITIONAL. Mechanism implemented, measured and tested locally; the
+              destructive cleanup is PREPARED and NOT executed.
+
+VPS (READ-ONLY measurement, 2026-09-16/17 - no write, no delete, no restart):
+  battles.db                 77.06 GB (docs said ~33 GB), freelist 11.7 GB
+    battle_raw               32.3 GB, 3,046,896 rows, 930,940 of them 2v2 (30.6%)
+    battles                  10.4 GB, 6,694,125 rows, 1,415,839 of them 2v2
+  .duo_pairs.db              5.14 GB
+    duo_pairs                2,493,481 rows / 1,819 MB with indexes
+    duo_stage                3,936,312 rows / 2,186 MB with indexes  <- the biggest
+  GROWTH                     1,483,672 pairs on 09-11 -> 2,493,481 on 09-16
+                             = +200k pairs a day, and 86.2% are seen exactly ONCE
+
+CENSUS        17/17 win conditions fill. 17 x 50 = 850 slots hold 736 DISTINCT pair
+              identities (114 pairs are top-50 in both of their win conditions).
+              Battles belonging to them: 162,274 of 1,968,156 folded = 8.24%
+              (172,001 duo_stage rows of 3,936,312 = 4.37%).
+              Cuts range from #50 = 13 uses (3-musk) to #50 = 392 (other).
+
+THE FINDING   battle_raw CANNOT be reduced by this work and must not be touched by it.
+              CLASH_RAW_CAP_BYTES is 25 GiB, the DB is 77 GB, and enforce_raw_cap drops
+              NON-DUEL raw - which is exactly 2v2. It runs only from
+              _run_startup_maintenance_inner (bot.py:5798), i.e. AT BOT STARTUP, and the
+              bot has been up since 2026-09-12 with no purge line in 14 days of logs.
+              The duo cursor equals MAX(stored_at), so every 2v2 payload is already
+              folded and purgeable. At the next restart the bot deletes all 930,940 2v2
+              payloads (~11.7 GB) BY ITSELF - including those of retained pairs.
+              => no battle_raw saving may be credited to this phase, and "keep their
+                 battles" cannot mean keeping raw JSON. It means the duo_stage record.
+
+IMPLEMENTED   server/duo_retention.py (new) + server/test_duo_retention.py (new, 64
+              checks, all pass). Reuses deck_counter's taxonomy and duo_pairs' identity
+              - no second classifier, no second identity, no second database. Two new
+              tables inside .duo_pairs.db: duo_retained (<= 850 rows) and duo_candidates
+              (<= 85,000 rows, the counter that outlives an evicted record).
+              Ranking: occurrences DESC, pair_fingerprint ASC. Ships DARK: apply_prune
+              refuses unless confirm=True AND CLASH_DUO_RETENTION is on.
+
+EXACTNESS     Rebuild is exact (overstated = 0). Incremental is Space-Saving: overstated
+              by at most the evicted minimum, never understated, and the error is stored
+              per row. Effectively exact today: only 22,058 pairs have ever reached 13
+              uses (the lowest top-50 cut) against a 5,000-per-bucket candidate pool.
+
+PROJECTED     .duo_pairs.db 5.14 GB -> ~1.2 GB live data (~3.9 GB, 76%, freed logically).
+              Physical shrink needs VACUUM, which was NOT run and is not approved.
+
+NOT DONE      No deletion anywhere. battles 2v2 rows untouched (mode=ro here; the four
+              measured blockers stand). The ingestion hook is implemented but NOT wired
+              into observe() - that line belongs in the change that deploys it.
+
+NEW BUGS      1. The bot's raw purge is STARTUP-ONLY and the bot rarely restarts, so
+                 battle_raw grows unbounded between restarts. That is why the database
+                 is 77 GB rather than the documented 33 GB. Bot-side, not fixed here.
+              2. sqlite_stat1 is stale by ~7x (estimates battle_raw at 414,053 rows
+                 against an actual 3,046,896).
+Artifact      DECKKIES_BRAIN_PHASE13A_2V2_TOP50_RETENTION.md (local, untracked)
+```
+
+### Brain Phase 13A (blocked, superseded) — full entry
+
+```
+Date          2026-09-17
+Question      Retain only the top 50 most-used 2v2 decks for each of six win conditions
+              (<= 300 records), delete the long tail, and keep the lists updating.
+
+Approved      implementation of the smallest safe mechanism, local only.
+NOT approved  deployment, VPS contact, CLASH_OIE, prediction logic, Coach Assist, the
+              timestamp fix, frontend changes beyond keeping the 2v2 UI working.
+
+RESULT        BLOCKED. Nothing implemented. Nothing deleted. No source file touched.
+              Three of the brief's own stop conditions fired:
+
+  1. THE SIX WIN CONDITIONS DO NOT EXIST. Three taxonomies are in the code and none
+     is a set of six win conditions:
+       A  23 win-condition CARDS      cardMeta.json is_win_condition
+       B  16 archetypes + `other`     deck_counter.WIN_CONDITION_MAP (the bot's map,
+          = 17                        and what `battles.player_win_condition` stores)
+       C  6 play STYLES               deck_counter.STYLE - Beatdown / Bridge Spam /
+                                      Control / Cycle / Mixed / Siege
+     C is the only six and it is NOT a win-condition taxonomy: its own source calls it
+     "counter types", says the stored taxonomy "is a card, not a play style", and calls
+     the mapping editorial opinion - and one of its six, `Mixed`, means the deck has NO
+     single win condition. Using C redefines "win condition"; cutting B to six redefines
+     the six; grouping A into six invents. All three were forbidden, so none was done.
+
+  2. NO 2v2 DATA EXISTS ON THIS MACHINE. Probed: clash_data.resolve_db_path() -> None
+     (H: unplugged), and server/.duo_pairs.db does not exist - the collection is on the
+     VPS. So the current counts, the historical rebuild, the independent verification
+     and the before/after storage measurement are all impossible locally, and doing them
+     needs the VPS, which this phase forbids.
+
+  3. THE 2v2 STORE HOLDS PAIRS, NOT DECKS, BY AN EXPLICIT PAST DECISION. The unit is
+     canonical(canonical(deckA), canonical(deckB)); duo_pairs.py contains no reference
+     to win conditions or archetypes at all; and the per-deck module that once existed
+     (`duo_decks.py`) was DELETED because "364,357 individual decks is not an answer to
+     what do people play in 2v2". A pair holds two decks, so it has up to two win
+     conditions, and assigning it one is a new rule.
+
+FINDING       The target layer is ~1 GB of the ~78 GB that 2v2 occupies. The bulk is
+              `battle_raw` (44.7 GB, the only place a teammate's deck exists) and the
+              ~1.38M historical 2v2 rows inside the 33 GB `battles.db` - which this repo
+              cannot delete at all (`mode=ro`) and which four measured blockers already
+              stop. `duo_stage` (~1.89M rows, unbounded, never pruned) is a larger and
+              far safer target inside duo_pairs.db than the census is.
+
+COST OF THE   #/duo is PUBLIC (trial and up) since 2026-09-11, not an admin page. Its
+CHANGE        card filter reaches all 123 cards server-side; against <= 300 retained
+              records most cards return nothing (hog-rider alone matches 434,265 pairs
+              today), and the header total goes 1,483,672 -> <= 300.
+
+BASELINE      test_duo_pairs 425, test_battle_modes 135, test_recent_battles 40, all
+              green and untouched.
+
+DECISIONS     1. Which taxonomy are "the six"? Recommended: B (17 buckets, nothing
+OWED             invented) with a per-bucket cap - 17 x 20 ~= 340 records lands near the
+                 300 target while keeping every archetype.
+              2. Retain top-50 PAIRS (existing unit, existing counter) or reverse the
+                 earlier decision and build a per-deck 2v2 collection?
+              3. Is duo_pairs even the right target, given finding above?
+Artifact      DECKKIES_BRAIN_PHASE13A_2V2_TOP50_STORAGE.md (local, untracked)
+```
 
 ### Brain Phase 12 — full entry
 
@@ -3993,6 +4192,12 @@ to its own `.tracking.db`, never to the bot's. **The Brain must not break this.*
 | `shadow-log.jsonl` | JSONL, locked, rotated | `shadow.py` | 2,620 entries |
 | `brain-evidence/phase8/` | 34 files, 132 MB, gitignored | Brain Phase 12 (copied, never written to) | the Phase 8b/8c extract — **real player tags**, the only copy, hashes in its tracked `MANIFEST.md` |
 
+**No file size has ever been recorded for `.duo_pairs.db`** (found Brain Phase 13A): the
+documented figures are 1,483,672 pairs and ~75 MB per index × 3, and nothing anywhere
+states the file's size. Inside it, `duo_stage` (~1.89M rows, one per battle per side) is
+**unbounded and never pruned** — the largest unmanaged structure in the collection, and
+a safer storage target than the census itself.
+
 ### Rules the Brain store must follow
 
 1. Its **own file**, gitignored, never a table inside `battles.db` (A8).
@@ -4302,6 +4507,66 @@ Only after Phase 9 shows the offline result holds on live traffic.
 ---
 
 ## 31. CURRENT PHASE
+
+```
+PHASE:      13A (corrected) - 2v2 retention: top 50 most-used pairs per canonical win
+            condition, plus the battles belonging to them
+STATUS:     COMPLETE (2026-09-17)  -  CONDITIONAL. Implemented + tested locally;
+            destructive cleanup PREPARED and NOT executed; nothing deployed.
+
+CORRECTION: the earlier "six win conditions" reading was WRONG. It is ALL canonical win
+            conditions - 17 - and all 17 fill on the live data.
+
+MEASURED    (read-only VPS, 2026-09-16/17; no write, no delete, no restart)
+  battles.db      77.06 GB   battle_raw 32.3 GB / 3,046,896 rows (930,940 are 2v2)
+                             battles    10.4 GB / 6,694,125 rows (1,415,839 are 2v2)
+  .duo_pairs.db    5.14 GB   duo_pairs 2,493,481 rows; duo_stage 3,936,312 rows
+  growth          +200,000 pairs/day; 86.2% of all pairs seen exactly ONCE
+  census          17/17 win conditions; 850 slots -> 736 distinct pairs;
+                  162,274 of 1,968,156 battles retained (8.24%)
+
+THE FINDING battle_raw cannot be reduced by this work. The bot's own cap targets
+            non-duel (= 2v2) raw, runs ONLY at bot startup, has not run in 14 days, and
+            at the next restart deletes all 930,940 2v2 payloads - retained ones too.
+            So "keep their battles" = the duo_stage record, never raw JSON.
+
+BUILT       server/duo_retention.py + test_duo_retention.py (64 checks, all pass).
+            Reuses deck_counter's 17 win conditions and duo_pairs' pair identity.
+            Two bounded tables inside the existing .duo_pairs.db. Ships DARK.
+PROJECTED   5.14 GB -> ~1.2 GB live (~76% freed logically; VACUUM not run, not approved)
+NEXT        approval for the destructive cleanup (backup -> rebuild -> verify -> plan ->
+            prune), wiring the one-line hook, and the #/duo copy decision.
+```
+
+### Phase 13A (blocked, superseded), preserved
+
+```
+PHASE:      13A - 2v2 top-50-per-win-condition storage compaction (READ-ONLY outcome)
+STATUS:     COMPLETE (2026-09-17)  -  BLOCKED, nothing implemented, nothing deleted
+
+BLOCKED ON: 1. the six win conditions do not exist in this codebase (23 cards / 17
+               archetypes / 6 editorial play styles - see the Phase 13A entry in 19)
+            2. no 2v2 data on this machine (resolve_db_path() -> None; .duo_pairs.db
+               is on the VPS), so counts, rebuild, verification and before/after
+               measurement all need VPS access this phase forbids
+            3. the 2v2 store holds PAIRS, not decks, by the decision that deleted
+               duo_decks.py; a pair has two decks and so up to two win conditions
+
+DECISIONS   1. which taxonomy are "the six"? (recommended: the canonical 17 with a
+OWED           per-bucket cap; 17 x 20 ~= 340 records, nothing invented)
+            2. retain top-50 PAIRS, or reverse the decision and build per-deck 2v2?
+            3. is duo_pairs the right target at all - it is ~1 GB of the ~78 GB that
+               2v2 occupies (battle_raw 44.7 GB; ~1.38M rows in battles, mode=ro here)
+
+CHANGED:    nothing in source. Artifact + this README only.
+BASELINE:   test_duo_pairs 425, test_battle_modes 135, test_recent_battles 40, green.
+STATE:      Production UNCHANGED. VPS untouched. CLASH_OIE=off. The Phase 12 timestamp
+            commit (a9cdbb7) is untouched and still not deployed.
+NEXT:       the three decisions above; and, separately and still pending, Phase 13 -
+            the dark deployment of the timestamp fix.
+```
+
+### Phase 12, preserved
 
 ```
 PHASE:      12 - Commit the timestamp fix + preserve the Phase 8b/8c evidence
@@ -4878,6 +5143,34 @@ NEXT PHASE: NONE. The programme is at a decision point that is not technical.
 
 ## 32. NEXT EXACT TASK
 
+> ### ⚠ UPDATED BY PHASE 13A (2026-09-17) — read this first
+>
+> **A 2v2 storage phase ran and is BLOCKED. Nothing was implemented and nothing was
+> deleted.** The request was: keep the top 50 most-used 2v2 decks for each of six win
+> conditions, ≤ 300 records, delete the rest, keep it updating.
+>
+> **Three preconditions are false**, each verified in source rather than assumed:
+> there is no six-way win-condition taxonomy (23 cards / 17 archetypes / 6 editorial
+> play styles); there is no 2v2 data on this machine (it is all on the VPS); and the
+> 2v2 store holds teammate PAIRS, not decks, by the decision that deleted
+> `duo_decks.py`. Full reasoning: `DECKKIES_BRAIN_PHASE13A_2V2_TOP50_STORAGE.md`.
+>
+> **Exact next task — a decision, not engineering.** Nothing can be built until the
+> account holder answers: (1) which taxonomy the "six" means — recommended is the
+> canonical 17 archetypes with a per-bucket cap, since 17 × 20 ≈ 340 records lands near
+> 300 without inventing or redefining anything; (2) whether the retained unit is the
+> existing PAIR or a new per-deck record; (3) whether `duo_pairs` is the right target,
+> given it is ~1 GB of the ~78 GB 2v2 occupies — `battle_raw` (44.7 GB) and `duo_stage`
+> (~1.89M rows, unbounded, never pruned) are both larger and safer.
+>
+> **Once decided**, the implementation is small: a bounded heavy-hitters counter hooked
+> into `observe()`/`_fold()`, a new bounded table inside `.duo_pairs.db`, the ten
+> behavioural tests plus the 6 × 50 boundary, and a rebuild-verify-then-delete sequence
+> that must run **on the VPS**, which is its own approval.
+>
+> **The timestamp fix is untouched by all of this.** Phase 13 — its dark deployment —
+> is still the pending engineering approval, described immediately below.
+
 > ### ⚠ UPDATED BY PHASE 12 (2026-09-15) — read this first
 >
 > **The timestamp fix is COMMITTED (one local commit on `main`, parent `c4fc65e`, NOT pushed) and the
@@ -5348,6 +5641,15 @@ Both predate Phase 3, are unaffected by it, and remain unapproved:
 - **Committing, moving or deleting anything under `brain-evidence/`.** It holds real player tags, the
   repository is public, and it is the only copy. Only `brain-evidence/phase8/MANIFEST.md` is tracked;
   verify with `git check-ignore -v` before any `git add`, and never use `git add -A` here.
+- **(Phase 13A) Inventing or re-labelling a six-way win-condition taxonomy** to unblock
+  the 2v2 top-50 work. There are 23 win-condition cards, 17 archetypes and 6 editorial
+  play styles, and none of those is "the six win conditions". It needs a decision.
+- **Deleting the 2v2 census before a compact replacement is built AND independently
+  verified.** It cannot be rebuilt: 21.8% of the historical battles already have no
+  surviving payload, and the share shrinks at every bot restart.
+- **Deleting 2v2 rows from `battles`.** This repo opens it `mode=ro`, and the four
+  measured blockers on that deletion (unreconstructable rows, aggregates that count 2v2
+  and cannot be unfolded, the bot being the writer, no backup) all still stand.
 - **Regenerating a substitute for that evidence if it is ever lost.** Record the loss instead: the
   arrival data it came from is destroyed at every bot restart (#18), so a rebuild would be a
   DIFFERENT dataset wearing the same name.
@@ -5376,6 +5678,99 @@ Both predate Phase 3, are unaffected by it, and remain unapproved:
 ```
 ============================================================
 LATEST SESSION HANDOFF
+============================================================
+
+SESSION DATE: 2026-09-17
+
+SESSION OBJECTIVE:
+  Phase 13A: retain only the top 50 most-used 2v2 decks for each of six win
+  conditions (max 300 records), delete the long tail, and keep the lists
+  updating as new 2v2 battles arrive. Implementation was authorised, narrowly
+  scoped, local only. Deployment, VPS, CLASH_OIE, prediction logic, Coach
+  Assist and the timestamp fix were all out of scope.
+
+CURRENT PHASE:
+  13A - 2v2 top-50 storage compaction. COMPLETE. STATUS: BLOCKED.
+  Nothing implemented. Nothing deleted. No source file changed.
+
+WORK COMPLETED:
+  - Read this README, README.md, server/README.md, CLAUDE.md, and the 2v2
+    code: duo_pairs.py (1,877 lines), battle_modes.py, the app.py route, the
+    #/duo screen, and both 2v2 test suites.
+  - Traced the pipeline: bot -> battle_raw/battles -> battle_modes.classify ->
+    duo_pairs._stage/observe -> duo_stage -> _fold -> duo_pairs table ->
+    report() -> /api/analytics/duo-pairs -> #/duo. The table `duo_pairs` in
+    server/.duo_pairs.db is the sole store behind the UI.
+  - Searched every module, the frontend, cardMeta.json and all 14 Brain
+    artifacts for a six-way win-condition taxonomy. THERE IS NONE.
+  - Probed for local data: resolve_db_path() -> None; .duo_pairs.db absent.
+  - Ran the 2v2 suites as a baseline: 425 / 135 / 40, all green.
+  - Wrote the 32-section artifact; updated this README.
+
+BLOCKED ON (each verified in source, not assumed):
+  1. The six win conditions do not exist. 23 win-condition CARDS
+     (cardMeta.is_win_condition); 16 archetypes + `other` = 17
+     (deck_counter.WIN_CONDITION_MAP - the bot's map, stored in
+     battles.player_win_condition); 6 editorial play STYLES
+     (deck_counter.STYLE), whose own source says the stored taxonomy "is a
+     card, not a play style" and one of whose six (`Mixed`) means NO single
+     win condition. Using the styles redefines "win condition"; cutting the 17
+     to six redefines the six; grouping the 23 cards invents. All forbidden.
+  2. No 2v2 data on this machine - it is on the VPS, which this phase forbids
+     contacting. So current counts, historical rebuild, independent
+     verification and before/after storage measurement are all impossible.
+  3. The store holds PAIRS, not decks. canonical(canonical(A), canonical(B));
+     duo_pairs.py has no win-condition concept at all; the per-deck module
+     duo_decks.py was deleted because "364,357 individual decks is not an
+     answer to what do people play in 2v2". A pair has two decks, so up to two
+     win conditions, and assigning it one is a new rule.
+
+FINDINGS WORTH KEEPING:
+  - The target layer is ~1 GB of the ~78 GB 2v2 occupies. battle_raw is
+    44.7 GB and is the ONLY place a teammate's deck exists; the ~1.38M
+    historical 2v2 rows live in battles, which this repo opens mode=ro and
+    cannot delete from, and which four measured blockers already stop.
+  - duo_stage (~1.89M rows) is unbounded and never pruned - a larger and far
+    safer target inside duo_pairs.db than the census.
+  - #/duo is PUBLIC (trial and up) since 2026-09-11. Its card filter reaches
+    all 123 cards server-side; at <= 300 retained records most cards would
+    return nothing (hog-rider alone matches 434,265 pairs today).
+  - The eviction/re-entry problem is solvable with a bounded heavy-hitters
+    (Space-Saving) counter, designed in the artifact 9, NOT implemented.
+
+FILES CHANGED:
+  DECKKIES_BRAIN_PHASE13A_2V2_TOP50_STORAGE.md   (new, untracked)
+  DECKKIES_BRAIN_README.md                       (this entry)
+  Nothing else. No source, no schema, no database, no commit.
+
+DECISIONS OWED (nothing can be built until these are answered):
+  1. Which taxonomy are "the six"? Recommended: the canonical 17 with a
+     per-bucket cap - 17 x 20 ~= 340 records, nothing invented or redefined.
+  2. Retain top-50 PAIRS (existing unit and counter), or reverse the earlier
+     decision and build a per-deck 2v2 collection?
+  3. Is duo_pairs the right target at all, given the finding above?
+
+CURRENT SYSTEM STATE:
+  Production UNCHANGED. VPS untouched. CLASH_OIE=off. The Phase 12 timestamp
+  commit a9cdbb7 is untouched, uncommitted work is nil, and it is still not
+  deployed.
+
+NEXT EXACT TASK:
+  The three decisions above (product, not engineering). Separately and still
+  pending: Phase 13, the dark deployment of the timestamp fix.
+
+DO NOT DO:
+  - Do not invent a six-way win-condition taxonomy to unblock this.
+  - Do not delete the 2v2 census before a compact state is built AND verified;
+    the inputs for older battles no longer exist (coverage is already 78.2%).
+  - Do not delete 2v2 rows from `battles` - mode=ro here, and four measured
+    blockers stand.
+  - Everything in the Phase 0-12 DO NOT lists applies.
+```
+
+```
+============================================================
+PREVIOUS SESSION HANDOFF  (Phase 12 - archived, never delete)
 ============================================================
 
 SESSION DATE: 2026-09-15

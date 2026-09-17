@@ -3,7 +3,29 @@ import { Redis } from '@upstash/redis';
 import { createHash } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-const MAX_BODY_BYTES = 250_000;
+/**
+ * The largest sync payload this endpoint accepts.
+ *
+ * WAS 250_000, AND IT SILENTLY DELETED SAVED DUELS. A saved duel set is ~2.2 kB
+ * of JSON, so a library of ~110 filled the old cap; every PUT after that
+ * answered 413, the client ignored the response, and the remote copy froze at
+ * the last blob that fitted. Because every page load replaces local state with
+ * the remote blob, the next refresh then overwrote the newly saved set with the
+ * stale copy — reported as "111 saved duels, save one, it shows 112, refresh and
+ * it is 111 again".
+ *
+ * 1 MB is ~450 saved sets, inside the most restrictive documented Upstash REST
+ * request limit and well inside Vercel's 4.5 MB body limit. The client now
+ * checks the response, so passing this cap stops sync loudly instead of eating
+ * data: `src/state/syncPolicy.ts` keeps local state and retries rather than
+ * adopting a remote blob that is missing changes.
+ *
+ * Mirrored as `SYNC_MAX_BYTES` in `src/state/syncPolicy.ts` — it cannot be
+ * imported across that boundary (Node ESM does not resolve extensionless
+ * relative imports here, see the auth note below), and `tests/syncPolicy.test.ts`
+ * asserts the two numbers agree.
+ */
+const MAX_BODY_BYTES = 1_000_000;
 
 /* ---------------------------------------------------------------- auth ----
  *
