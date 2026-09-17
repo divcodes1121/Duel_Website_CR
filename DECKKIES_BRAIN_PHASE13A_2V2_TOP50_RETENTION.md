@@ -230,6 +230,372 @@ single operation.
 
 ---
 
+# 0.10b COMPACTION EXECUTED — 2026-09-17 07:44–07:55 UTC
+
+> Both approved operations were performed: the proven orphan prune, then
+> `VACUUM INTO` with a verified swap. **The database went 5,254,283,264 →
+> 312,922,112 bytes — 4.94 GB, 94.0% of the file — with sub-second downtime.**
+> Sections 0.11 and 0.12 below are the pre-approval audit, kept as written.
+
+## Pre-flight (07:44 UTC) — matched the audit exactly, nothing had drifted
+
+```
+file 5,254,283,264 B | live 1,115,492,352 | free pages 4,138,790,912 | disk 224 GB free
+pairs 736 | stage 178,643 | stage_players 5,351,497 | retained 850 / 736 distinct
+candidates 85,000 | buckets 17 | max per bucket 50 | participants 1,413,984
+royalweb, clashbot, duo timer all active; duo service not failed; CLASH_OIE absent
+backup 20260917T061905Z re-verified: 5,244,731,392 B, sha256 27628942…, integrity ok,
+        holds the pre-cleanup 2,544,874 / 4,025,218
+```
+
+The retained set was captured before touching anything —
+850 rows, `sha256 b67ab2a476529119c9db8ba21d612744417878463f89e5965a732455fb579a8f` —
+and used as the comparison key at every later stage.
+
+## Orphan prune (STEP 4)
+
+Writer stopped first (`royalweb-duo.timer`), no active writer confirmed. Deleted
+**transactionally** on the approved referential predicate only — never age, never
+a LIMIT:
+
+```sql
+DELETE FROM duo_stage_players
+ WHERE NOT EXISTS (SELECT 1 FROM duo_stage s  WHERE s.pair_fp = duo_stage_players.pair_fp)
+   AND NOT EXISTS (SELECT 1 FROM duo_pairs  p WHERE p.pair_fingerprint = duo_stage_players.pair_fp);
+```
+
+```
+DELETED           5,290,445 rows in 136 s   (exactly the audited count)
+duo_stage_players 5,351,497 -> 61,052
+orphans remaining 0
+unchanged         duo_pairs 736 | duo_stage 178,643 | duo_retained 850 | duo_candidates 85,000
+integrity_check   ok
+retained set      sha256 b67ab2a4… — IDENTICAL to the pre-prune capture
+rows whose pair no longer exists: 0
+after the prune   live 396,623,872 B | free pages 4,857,659,392 B
+```
+
+## `VACUUM INTO` and verification (STEPS 6–9)
+
+```
+PRAGMA wal_checkpoint(TRUNCATE)  ->  0|0|0
+VACUUM INTO '/opt/royalweb/server/.duo_pairs.db.vacuumed'   1.5 s
+copy 312,922,112 B          original untouched at 5,254,283,264 B
+```
+
+Every check passed **before** the swap:
+
+| check | result |
+|---|---|
+| `integrity_check` / `quick_check` on the copy | ok / ok |
+| all 8 table row counts, source vs copy | identical (736 / 178,643 / 61,052 / 241,446 / 1,413,984 / 850 / 85,000 / 11) |
+| schema and indexes | identical (`diff` over `sqlite_master`) |
+| retained set fingerprints | identical, `sha256 b67ab2a4…` |
+| buckets / max / min / distinct pairs | 17 / 50 / 50 / 736 |
+| `EXCEPT` set comparison | pairs missing **0**, battles missing **0**, player rows missing **0** |
+
+## Swap (STEP 10) and services (STEP 11)
+
+```
+07:53:06  systemctl stop royalweb
+          mv .duo_pairs.db          .duo_pairs.db.pre-vacuum   <- rollback, NOT deleted
+          mv .duo_pairs.db.vacuumed .duo_pairs.db
+          rm -f .duo_pairs.db-wal .duo_pairs.db-shm            <- stale, belonged to the old file
+          chown/chmod --reference=.pre-vacuum                  <- root:root -rw-r--r-- preserved
+07:53:06  systemctl start royalweb          => sub-second downtime
+          systemctl start royalweb-duo.timer
+```
+
+royalweb, royalweb-duo.timer and clashbot all `active`; clashbot was never stopped.
+
+## Post-swap verification (STEPS 12–13)
+
+```
+/duo            total 736, 368 pages, page 2 served, 8-card decks, avgElixir 4.25,
+                players 1,640, firstSeen rendered
+card filter     cards=hog-rider -> 88 pairs
+sort            sort=recent -> 736
+dedup           replaying an existing (battle_id, side): 178,643 -> 178,643  PASS
+maintenance     duo_retention.py --maintain --prune on the compacted file: 1.3 s, retained 736
+```
+
+## Final measurements (STEP 14)
+
+| | before | after |
+|---|---:|---:|
+| `.duo_pairs.db` | **5,254,283,264 B** | **312,922,112 B** |
+| page_count | 1,282,784 | **76,397** |
+| freelist | 1,010,447 | **0** |
+| live data | 1,115,492,352 B | 312,922,112 B |
+| `duo_stage_players` | 5,351,497 rows | **61,052** |
+| `duo_stage` | 178,643 | 178,643 (unchanged) |
+| `duo_pairs` | 736 | 736 (unchanged) |
+
+```
+PHYSICAL SAVING   4,941,361,152 B  =  4.94 GB  =  94.0% of the file
+largest objects now  duo_participants 90.8 MB | duo_stage 83.5 MB
+                     duo_stage_players 3.9 MB | duo_pairs 0.4 MB
+```
+
+**Filesystem free space has not risen yet (223 GB), and that is deliberate**: the
+5.25 GB rollback copy `.duo_pairs.db.pre-vacuum` is still on disk by instruction.
+Deleting it later realises the full 4.94 GB.
+
+## Safety (STEPS 15–16)
+
+`battles.db` 77,057,064,960 B — unchanged, never written. `duel_timeline` 887,368
+rows unchanged. `battle_raw` untouched. `predictor.py` still reads
+`timestamp="9999"` and `CLASH_OIE` is still absent from the environment, so the
+timestamp fix remains published-but-inactive.
+
+**Rollback available**: `/opt/royalweb/server/.duo_pairs.db.pre-vacuum`
+(5,254,283,264 B, the exact post-prune pre-VACUUM state) plus the older
+pre-cleanup backup at `/var/backups/clashbot/20260917T061905Z/`. Neither was
+deleted. Restoring is `systemctl stop royalweb` + one `mv` back + start.
+
+## Rollback copy released, and the space actually landed (08:08–08:14 UTC)
+
+The rollback copy was held until **one full hourly cycle ran naturally on the
+compacted database**, which is the only evidence that mattered — the earlier
+08:53 run had been a catch-up triggered by restarting the timer, not a normal
+firing.
+
+```
+08:07:58  timer fired on its own schedule
+08:08:07  Result=success, ExecMainStatus=0, not failed
+          retention step: deleted 0, stageDeleted 0, refused false, distinctPairs 736
+          (nothing to prune — the fold found no new battles in that short window)
+verified  integrity_check ok
+          736 pairs | 736 retained | 850 memberships | 17 buckets | max 50
+          duo_stage 178,643 | duo_stage_players 61,052 | candidates 85,000 | overstated 0
+          file still 312,922,112 B, freelist 0 — NO growth, no corruption
+          /duo serving 736 with 8-card decks; royalweb, clashbot, timer all active
+```
+
+Only then was the copy deleted:
+
+```
+disk avail before  239,277,731,840 B
+rm /opt/royalweb/server/.duo_pairs.db.pre-vacuum
+disk avail after   244,531,998,720 B
+RECLAIMED          5,254,266,880 B = 5.25 GB   (223 GB -> 228 GB free)
+```
+
+That 5.25 GB is the temporary copy. **Measured against where this started, the
+net filesystem gain is 4,941,361,152 B (4.94 GB)**: the database itself went
+5,254,283,264 → 312,922,112 bytes and the copy is gone.
+
+`/var/backups/clashbot/20260917T061905Z/duo_pairs.db` (5,244,731,392 B, the
+**pre-cleanup** census with 2,544,874 pairs) is **kept**, `quick_check ok`, as the
+historical rollback. The only file now in the server directory is the live
+312 MB database.
+
+---
+
+# 0.10c THE BOT'S DATABASE — 2v2 RAW WINDOWED AND COMPACTED (2026-09-17)
+
+> The second half of the storage problem, and the larger one. `battles.db` went
+> **77,057,064,960 → 52,979,597,312 bytes** and the 2v2 raw payloads are now
+> bounded by a rolling 24-hour window that maintains itself. **`battles` rows
+> were deliberately NOT deleted** — see below.
+
+## Why a window rather than a one-off delete
+
+2v2 raw arrives at **144,463 payloads a day costing 1.81 GB a day** (measured).
+The bot's own valve (`enforce_raw_cap` → `purge_non_duel_raw`) targets exactly
+this data, but is reached only from `_run_startup_maintenance_inner` — **at bot
+startup**. The bot had been up since 2026-09-12 with no purge line in fourteen
+days of logs, which is why the file reached 77 GB against a 25 GiB cap.
+
+Once the hourly fold has counted a battle into the top-50 census, its raw copy
+is redundant. A day is 24 folds of margin.
+
+## What may be deleted, and the three conditions
+
+Implemented in `server/duo_raw_purge.py` (commit `7e9c558`, 35 tests):
+
+1. **it is 2v2** by `battle_modes.is_duo` — so duel and 1v1 raw are out of reach
+   by construction, not by care;
+2. **`stored_at` ≤ `duo_pairs.processed_through()`** — the fold cursor, the same
+   interlock the bot's own valve uses, because since the 2026-09-10 guard an
+   unfolded 2v2 payload is the ONLY copy of that battle;
+3. **older than the window**. The boundary is the **earlier** of the cursor and
+   the window floor, so a change to either can only make it safer.
+
+An unreadable cursor, an empty cursor or a missing collection all mean delete
+nothing. Deletion needs `CLASH_DUO_RAW_PURGE` **and** an explicit confirm, it
+batches so the bot never waits long for the write lock, and it **counts duel raw
+before and after and raises if the number moved**.
+
+## Execution
+
+```
+backup      /var/backups/clashbot/20260917T0830Z-battles/battles.db
+            77,057,064,960 B, page_count 2,351,595 identical to source,
+            battle_raw 3,296,615 / battles 16,247,663 / duel_timeline 887,368 all matching
+dry run     860,243 deletable | 144,463 kept (the 24h window) | 115,168 duel untouched
+purge       678,510 deleted in the completing run (an earlier attempt died with its
+            SSH session and had already committed ~191,000 — each batch is its own
+            transaction, so the partial state was consistent, not corrupt)
+result      remainingOlderThanBoundary 0 | duelRawUnchanged TRUE | duelRawRows 115,402
+battle_raw  3,296,615 -> 2,484,635
+freelist    269,421 -> 658,279 pages = 21.6 GB reclaimable
+```
+
+## Compaction
+
+The bot was stopped first, so no battle written during the copy could be lost:
+
+```
+VACUUM INTO /var/clashbot/battles.db.vacuumed      53.0 GB, freelist 0
+verified    battles 16,296,806 | battle_raw 2,484,635 | duel_timeline 889,906
+            decks 2,623,855 | player_stats_agg 354,272 | tracked_players 5,323
+            — every count identical to the source; schema and indexes identical
+swap        13:44:08 -> 13:44:08, under one second
+            old file kept as .pre-vacuum until the bot proved it could write
+writes      +15,253 battles and +30,004 raw rows in the first ten minutes
+release     .pre-vacuum deleted; disk 107 GB -> 178 GB free
+```
+
+| | before | after |
+|---|---:|---:|
+| `battles.db` | **77,057,064,960 B** | **52,979,597,312 B** |
+| page_count | 2,351,595 | 1,616,809 |
+| freelist | 269,421 (8.2 GB) | **0** |
+| `battle_raw` rows | 3,296,615 | 2,484,635 |
+| disk free | 228 GB (start of day) | **178 GB** (holding a 72 GB backup) |
+
+**~24 GB came off the database file**, and the freelist is empty.
+
+## Kept bounded, not just cleaned
+
+`royalweb-duo-raw.timer` (daily, `RandomizedDelaySec=1800`, `Persistent=true`)
+runs the purge from `royalweb-duo-raw.service`, which carries the
+`CLASH_DUO_RAW_PURGE=on` gate on the unit itself — **this is the only unit in
+the project that writes to the bot's database, and `royalweb` must never be able
+to**. Installed, enabled, next run 2026-09-18 00:03 UTC. Commit `1667aa5`.
+
+## What was NOT done, and why
+
+**The 1,415,839 2v2 rows in `battles` were not deleted.** They are only ~0.9 GB,
+and every per-player aggregate counts them — confirmed live: one player has 534
+rows of which **308 are 2v2** while `player_stats_agg` reports **473**. Deleting
+them without a full rebuild leaves figures permanently wrong and no longer
+recomputable, and `rebuild_aggregates`'s own source says it "can only be used
+while every source battle still exists" while its only caller builds the
+*archive's* tables on the unplugged H: drive. That is a separate decision with a
+separate cost.
+
+---
+
+# 0.11 VACUUM — PREPARED, NOT EXECUTED (audited 2026-09-17, after commit cf87f0b)
+
+Measured read-only on the live file:
+
+```
+integrity_check   ok            journal_mode   wal
+page_size         4,096         auto_vacuum    0   (free pages are never returned by itself)
+page_count        1,282,784     freelist       1,010,447
+live data         1,115,492,352 B   (1.12 GB)
+free pages        4,138,790,912 B   (4.14 GB, 78.8% of the file)
+file              5,254,283,264 B   (5.25 GB)
+-wal 0 B (checkpointed)   -shm 32 KB   disk free 224 GB
+```
+
+**Recommended method: `VACUUM INTO`, not in-place `VACUUM`.** In-place holds an
+exclusive lock on the live database for the whole rebuild and leaves nothing to
+inspect if it goes wrong. `VACUUM INTO` writes a compacted *copy* and does not
+modify the original at all, so the result can be integrity-checked and
+row-counted **before** anything is swapped, and the original file is its own
+rollback. It also needs only a read lock, so `/duo` keeps serving throughout.
+
+```
+expected temp/target space   ~1.12 GB   (the compacted copy)
+peak disk during the run     ~6.4 GB    (5.25 GB original + 1.12 GB copy) = 0.5% of free space
+expected final size          ~1.12 GB   -> ~4.1 GB returned to the filesystem
+                             ~0.40 GB   if duo_stage_players is pruned first (0.12)
+```
+
+**Concurrency.** `lsof` reports no process holding the file open: `royalweb`
+opens a connection per request and closes it, and `clashbot` never touches this
+database (it reads `duo_meta.watermark` out of its own path only). The one real
+writer is the hourly `royalweb-duo.service`. So the procedure is:
+
+```
+1. systemctl stop royalweb-duo.timer          # the only writer; no downtime
+2. sqlite3 .duo_pairs.db "PRAGMA wal_checkpoint(TRUNCATE);"
+3. sqlite3 .duo_pairs.db "VACUUM INTO '/opt/royalweb/server/.duo_pairs.db.vacuumed';"
+4. verify the copy:  PRAGMA integrity_check;  and row counts against the live file
+     duo_pairs 736 | duo_retained 850 | duo_candidates 85,000 | duo_stage ~178k
+5. systemctl stop royalweb                    # seconds
+6. mv .duo_pairs.db .duo_pairs.db.pre-vacuum  # instant rollback, not a delete
+   mv .duo_pairs.db.vacuumed .duo_pairs.db
+   rm -f .duo_pairs.db-wal .duo_pairs.db-shm  # stale, belong to the old file
+7. systemctl start royalweb                   # verify /duo answers 736
+8. systemctl start royalweb-duo.timer
+9. after one clean hourly run, remove .pre-vacuum
+```
+
+**Service impact: a few seconds**, confined to step 5-7. Steps 3-4 are
+zero-downtime. **Nothing is deleted at any point** — the original is renamed,
+not removed, so rollback is one `mv` back.
+
+**Backup.** The pre-cleanup backup is intact and re-verified
+(`/var/backups/clashbot/20260917T061905Z/duo_pairs.db`, 5,244,731,392 B, sha256
+`27628942fbd76f893883cc773ddc7b195b5a814c72b32e58f4c75922f0f4fb25`,
+`integrity_check ok`, 2,544,874 pairs) but it holds the **pre-cleanup** state. A
+fresh copy is **not** required for `VACUUM INTO`, because the untouched original
+plays that role through step 9 — which is stronger than a backup, since it is
+the live file itself.
+
+# 0.12 `duo_stage_players` — AUDITED, NOT PRUNED
+
+```
+CREATE TABLE duo_stage_players (pair_fp TEXT NOT NULL, tag TEXT NOT NULL,
+                                PRIMARY KEY (pair_fp, tag));
+```
+
+| | |
+|---|---|
+| indexes | the primary-key autoindex only |
+| foreign keys | **none declared**, and `PRAGMA foreign_keys` is 0 |
+| writers | `duo_pairs.py:805` (`_flush`, batch) and `:1482` (`observe`, live) — both `INSERT OR IGNORE` |
+| readers | **exactly one**: `_fold`, at `duo_pairs.py:858` and `:860`, computing `distinct_players` and the capped `player_tags` sample |
+| referenced by `duo_retention.py` | no |
+| referenced by any test | no (0 matches in `test_duo_pairs.py`) |
+| required for deduplication | **no** — dedup is `duo_stage`'s `PRIMARY KEY (battle_id, side)` and `battle_identity`; this table is participant *attribution* |
+| required by `/duo` | indirectly: `_fold` writes `distinct_players`/`player_tags` into `duo_pairs`, which the board renders |
+
+**Orphan definition, from the referential relationship rather than from age.**
+The only reader selects `WHERE p.pair_fp = s.pair_fp` with `s` drawn `FROM
+duo_stage`. So a row is **live** if its `pair_fp` still exists in the collection,
+and **orphaned** if it exists in neither `duo_stage` nor `duo_pairs` — no code
+path can reach it, now or later.
+
+```
+total rows                       5,351,497
+reachable from duo_pairs            61,052
+reachable from duo_stage            61,052   (identical — both hold the same 736 pairs)
+ORPHANS                          5,290,445   (98.86%)
+distinct pair_fp referenced      2,566,357   against 736 pairs that exist
+size                             342,175,744 B table + 386,740,224 B index = 728,915,968 B
+projected saving                 ~720 MB of the 729 MB
+```
+
+**Safe to prune: yes**, on this evidence — no foreign keys, one reader that
+cannot see them, no role in deduplication, and no test or module depends on
+them. One extra argument in favour: if a pruned pair ever returns, its
+`occurrences` restart from its new staging rows while its `distinct_players`
+would still be computed over its entire historical tag set, so leaving the
+orphans makes a returning pair internally inconsistent. Pruning them makes the
+two agree.
+
+**It was not pruned**, per this phase's instruction to audit only. It should be
+done immediately **before** the `VACUUM`, so both are reclaimed in one pass —
+that ordering turns the expected final size from ~1.12 GB into ~0.40 GB.
+
+---
+
 # 1. Exact user requirement
 
 For **every** canonical win condition already supported by Deckkies, keep the

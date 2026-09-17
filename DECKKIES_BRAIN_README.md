@@ -1488,6 +1488,136 @@ STATE         CLASH_OIE off (absent from the env). predictor.py on the VPS still
 Artifact      DECKKIES_BRAIN_PHASE13A_2V2_TOP50_RETENTION.md section 0 (tracked)
 ```
 
+### Brain Phase 13A — compaction, full entry
+
+```
+Date          2026-09-17 07:44-07:55 UTC
+Approved      exactly two operations: prune the proven orphan duo_stage_players rows,
+              then VACUUM INTO a compact copy and swap it in after verification.
+
+RESULT        PASS. .duo_pairs.db 5,254,283,264 -> 312,922,112 bytes.
+              PHYSICAL saving 4,941,361,152 B = 4.94 GB = 94.0% of the file.
+              Sub-second downtime. Nothing outside the two approvals was touched.
+
+PRE-FLIGHT    Matched the audit exactly - nothing had drifted. file 5,254,283,264;
+              live 1,115,492,352; free pages 4,138,790,912; disk 224 GB.
+              The retained set was captured first: 850 rows,
+              sha256 b67ab2a476529119c9db8ba21d612744417878463f89e5965a732455fb579a8f,
+              and used as the comparison key at every later stage.
+              Backup 20260917T061905Z re-verified before any write.
+
+PRUNE         Writer stopped, no active writer confirmed. Transactional DELETE on the
+              approved REFERENTIAL predicate only (pair_fp in neither duo_stage nor
+              duo_pairs) - never age, never a LIMIT.
+                deleted 5,290,445 rows in 136 s - exactly the audited count
+                duo_stage_players 5,351,497 -> 61,052, orphans remaining 0
+                duo_pairs / duo_stage / duo_retained / duo_candidates unchanged
+                integrity ok; retained-set sha256 unchanged
+
+VACUUM INTO   1.5 s, copy 312,922,112 B, original untouched. Verified BEFORE the swap:
+              integrity ok/ok; all 8 row counts identical; schema and indexes identical
+              by diff over sqlite_master; retained fingerprints identical (same sha256);
+              17 buckets / 50 max / 736 distinct; EXCEPT comparison found 0 pairs,
+              0 battles and 0 player rows missing.
+
+SWAP          07:53:06 stop royalweb -> mv old to .pre-vacuum (kept, NOT deleted) ->
+              mv compact into place -> remove stale -wal/-shm -> chown/chmod by
+              reference -> start royalweb. Started and stopped in the same second.
+              clashbot was never stopped.
+
+VERIFIED      /duo 736 total, 368 pages, page 2 served, 8-card decks, avgElixir, players
+              and firstSeen rendered; cards=hog-rider -> 88; sort=recent -> 736;
+              dedup replay 178,643 -> 178,643 PASS; maintenance on the compacted file
+              1.3 s, retained 736.
+
+AFTER         page_count 1,282,784 -> 76,397, freelist 1,010,447 -> 0.
+              Largest objects now duo_participants 90.8 MB, duo_stage 83.5 MB,
+              duo_stage_players 3.9 MB, duo_pairs 0.4 MB.
+              Filesystem free is still 223 GB ON PURPOSE: the 5.25 GB rollback copy
+              .duo_pairs.db.pre-vacuum is retained by instruction. Deleting it later
+              realises the full 4.94 GB.
+
+UNTOUCHED     battles.db 77,057,064,960 B never written; duel_timeline 887,368 rows;
+              battle_raw; 1v1; predictor.py still timestamp="9999"; CLASH_OIE absent.
+ROLLBACK      .duo_pairs.db.pre-vacuum (post-prune, pre-VACUUM state) AND the older
+              pre-cleanup backup. Restore = stop royalweb, one mv, start.
+
+RELEASED      The rollback copy was held until ONE FULL HOURLY CYCLE ran naturally on the
+              compacted database - the earlier run had been a restart catch-up, not a
+              normal firing. 08:07:58 fired, 08:08:07 Result=success; integrity ok;
+              736 pairs / 850 memberships / 17 buckets / max 50; stage 178,643;
+              file still 312,922,112 with freelist 0 (no growth); /duo serving.
+              Then deleted: disk avail 239,277,731,840 -> 244,531,998,720 B
+              = 5,254,266,880 B (5.25 GB) reclaimed, 223 GB -> 228 GB free.
+              NET gain against the starting state: 4,941,361,152 B (4.94 GB).
+              /var/backups/clashbot/20260917T061905Z/duo_pairs.db is KEPT (5,244,731,392 B,
+              the pre-cleanup 2,544,874-pair census, quick_check ok) for history.
+Artifact      DECKKIES_BRAIN_PHASE13A_2V2_TOP50_RETENTION.md section 0.10b
+```
+
+### Brain Phase 13A — the bot database, full entry
+
+```
+Date          2026-09-17 (afternoon)
+Approved      "delete all the 2v2 and keep just the win cons top 50", refined by the
+              account holder into a rolling 24-hour window: store a day of 2v2, rank it
+              against the existing top 50, promote what grows, delete the rest.
+
+RESULT        PASS. battles.db 77,057,064,960 -> 52,979,597,312 bytes (~24 GB off the
+              file), freelist 8.2 GB -> 0, and 2v2 raw is now bounded by a daily timer
+              instead of waiting for a bot restart that never came.
+
+THE FINDING   2v2 raw arrives at 144,463 payloads / 1.81 GB A DAY. The bot's own valve
+              (enforce_raw_cap -> purge_non_duel_raw) drops exactly this data but is
+              reached only from _run_startup_maintenance_inner - AT BOT STARTUP. The bot
+              had been up since 2026-09-12 with no purge in 14 days of logs. That, not
+              the pair census, is why the file reached 77 GB against a 25 GiB cap.
+
+SAFETY        A row may go only if all three hold: it is 2v2 by battle_modes.is_duo (so
+              duel and 1v1 are out of reach BY CONSTRUCTION); stored_at <=
+              duo_pairs.processed_through() (the fold cursor - since the 2026-09-10 guard
+              an unfolded 2v2 payload is the ONLY copy of that battle); and it is older
+              than the window. The boundary is the EARLIER of cursor and floor, so a
+              change to either can only make it safer. No cursor = delete nothing.
+              It counts duel raw before and after and RAISES if the number moved.
+
+EXECUTED      backup 77,057,064,960 B, page_count identical, 3 row counts matching
+              dry run  860,243 deletable | 144,463 kept | 115,168 duel untouched
+              purge    678,510 deleted in the completing run; an earlier attempt died
+                       with its SSH session having already committed ~191,000 - each
+                       batch is its own transaction, so that partial state was
+                       consistent, not corrupt
+              result   remainingOlderThanBoundary 0, duelRawUnchanged TRUE
+              battle_raw 3,296,615 -> 2,484,635; freelist 269,421 -> 658,279 pages
+
+COMPACTED     Bot stopped first so no battle written during the copy could be lost.
+              VACUUM INTO -> 53.0 GB, freelist 0. Verified BEFORE the swap: battles
+              16,296,806 | battle_raw 2,484,635 | duel_timeline 889,906 | decks
+              2,623,855 | player_stats_agg 354,272 | tracked_players 5,323 - every count
+              identical, schema and indexes identical. Swap 13:44:08 -> 13:44:08, under
+              a second. Old file kept until the bot proved it could write: +15,253
+              battles and +30,004 raw rows in ten minutes. Then released.
+              Disk 107 GB -> 178 GB free.
+
+BOUNDED       royalweb-duo-raw.timer (daily, RandomizedDelaySec=1800, Persistent=true)
+              runs duo_raw_purge.py --purge. The CLASH_DUO_RAW_PURGE gate is on the UNIT,
+              not /etc/royalweb.env: this is the only unit in the project that writes to
+              the bot's database and royalweb must never be able to. Next run
+              2026-09-18 00:03 UTC. Commits 7e9c558 (module + 35 tests) and 1667aa5.
+
+NOT DONE      The 1,415,839 2v2 rows in `battles` were NOT deleted. They are ~0.9 GB and
+              every per-player aggregate counts them - confirmed live: one player has 534
+              rows of which 308 are 2v2 while player_stats_agg reports 473. Deleting them
+              without a full rebuild leaves figures permanently wrong and uncomputable,
+              and rebuild_aggregates' own source says it "can only be used while every
+              source battle still exists" while its only caller builds the ARCHIVE's
+              tables on the unplugged H: drive. Separate decision.
+
+ALSO          .gitignore listed .duo_decks.db (a module deleted weeks ago) but not
+              .duo_pairs.db, the database actually in use - a test run created one
+              locally and git offered it up. Fixed in 7e9c558.
+```
+
 ### Brain Phase 14 — full entry
 
 ```
