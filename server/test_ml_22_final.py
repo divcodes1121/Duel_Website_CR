@@ -34,7 +34,7 @@ SPEC = os.path.join(HERE, "ml", "evaluation", "phase22-final-spec.md")
 #: The frozen version stamp, exactly. Brain Phase 11 moved `features` from
 #: `phase2-21` when `predict` stopped passing timestamp="9999".
 FROZEN_VERSIONS = {"model": "m2-change-v1",
-                   "features": "phase2-21-reqstamp-utc",
+                   "features": "phase2-21-reqstamp-utc-x9zero",
                    "policy": "phase17a-calibrated",
                    "calibration": "band-calibration-v1",
                    "candidates": "c1-wide-playerpool"}

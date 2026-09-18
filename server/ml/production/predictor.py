@@ -66,12 +66,36 @@ def _load_change_model():
         return _model
 
 
+#: Features the served model reads as 0, whatever `features.extract` computed.
+#:
+#: BRAIN PHASE 20 (RQ3). `log_hours_since_change` (x9) is still computed — its
+#: definition is unchanged — but serving it hurts calibration. With x9 held at 0
+#: and x10 live from the request stamp, on a window later than the one that
+#: suggested it (2026-09-18, 1,686 players): macro Brier -0.0137 [-0.0186,
+#: -0.0089], ECE 0.182 -> 0.142, ROC-AUC -0.0029 [-0.0077, +0.0020]. This is an
+#: input override on the frozen artifact, not a retrained model: M2 learnt x9 at
+#: the moment of the battle being predicted, and at a request hours later its
+#: value sits far outside that fit. Holding it at 0 is what `"9999"` did to it.
+SERVED_AS_ZERO = (F.FEATURE_NAMES.index("log_hours_since_change"),)
+
+
+def _served_vector(example) -> list[float]:
+    """The feature vector the frozen model actually scores.
+
+    A COPY. `features.extract`'s own output is left exactly as computed, so
+    anything else reading it still sees x9's real value."""
+    x = list(F.extract(example))
+    for i in SERVED_AS_ZERO:
+        x[i] = 0.0
+    return x
+
+
 def _change_probability(view: dict, example) -> tuple[float, bool]:
     """(P(change), used_artifact). Falls back to counted churn."""
     model = _load_change_model()
     if model is not None and example is not None:
         try:
-            dist = model.predict(F.extract(example))
+            dist = model.predict(_served_vector(example))
             return 1.0 - dist.get(0, 0.0), True
         except Exception:
             pass

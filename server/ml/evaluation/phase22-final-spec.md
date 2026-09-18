@@ -45,7 +45,7 @@ invariant the entire programme supports.
 |---|---|
 | artifact | `ml/artifacts/m2-change-v1.json` |
 | model version | `m2-change-v1` |
-| feature version | `phase2-21-reqstamp-utc` (21 features, order is part of the contract; formerly `phase2-21`, which fed features 9 and 10 the unparseable stamp `"9999"` — see §7) |
+| feature version | `phase2-21-reqstamp-utc-x9zero` (21 features, order is part of the contract; x9 is computed and served as 0 — see §7; formerly `phase2-21-reqstamp-utc`, and before that `phase2-21`, which fed features 9 and 10 the unparseable stamp `"9999"`) |
 | inputs | the player's SHELL (cluster containing the most recent play), not the whole history |
 | output | `P(change)` ∈ [0, 1] |
 | class weighting | **off**, on evidence — it damaged PR-AUC, ROC-AUC, F1 and Brier |
@@ -224,7 +224,7 @@ what the shadow log records:
 | axis | frozen value |
 |---|---|
 | model | `m2-change-v1` |
-| features | `phase2-21-reqstamp-utc` |
+| features | `phase2-21-reqstamp-utc-x9zero` |
 | policy | `phase17a-calibrated` |
 | calibration | `band-calibration-v1` |
 | candidates | `c1-wide-playerpool` |
@@ -279,6 +279,17 @@ The primary deck is unaffected. The feature version moves to
 production order before implementation (Brain Phase 8b gate PASS 8/8); the
 resulting reduction in shown alternatives was accepted explicitly by the
 account holder (Brain Phase 8c).
+
+**x9 input override (Brain Phase 20, RQ3; implemented locally, not deployed).** The served model
+reads `log_hours_since_change` (feature 9) as 0; `features.extract` still computes it, unchanged.
+`log_hours_since_last_play` (feature 10) stays live from the request stamp. Evidence, on a
+production-order window later than the one that suggested it (2026-09-18, exact arrival, 1,686
+players, 34,391 competitive reads): macro Brier −0.0137 [−0.0186, −0.0089], ECE 0.182 → 0.142,
+ROC-AUC −0.0029 [−0.0077, +0.0020] (inside the −0.010 non-inferiority margin), band ordering
+held. This is an **input override on the frozen artifact**: **not retraining** (`m2-change-v1`
+unchanged), **not recalibration** (`band-calibration-v1` unchanged), no feature added, removed or
+reordered. The primary deck, the candidate generator and `ALTERNATIVE_CAPS` are unaffected. The
+feature version moves to `phase2-21-reqstamp-utc-x9zero` so no log mixes the two semantics.
 
 ---
 

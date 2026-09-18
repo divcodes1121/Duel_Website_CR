@@ -1234,7 +1234,11 @@ stamp would shift every gap by the host's offset without an error. No weight,
 feature order, calibration cut, cap or candidate changed; the recent-deck
 primary is identical under any stamp; bands and therefore the number of shown
 alternatives do move, and that cost was measured and accepted (Brain Phases 8b,
-8c, 10). `VERSIONS["features"]` is `phase2-21-reqstamp-utc`. Tests pin
+8c, 10). **Feature 9 is served as 0** (2026-09-19, uncommitted): `features.extract` is
+unchanged, and `_change_probability` scores `_served_vector(example)`, a COPY with
+`log_hours_since_change` zeroed (`SERVED_AS_ZERO`). Brain Phase 20 RQ3: macro Brier -0.0137
+[-0.0186, -0.0089], ROC-AUC -0.0029 [-0.0077, +0.0020] on a later window; offline equivalence
+exact on 357,426 + 196,781 reads. `VERSIONS["features"]` is `phase2-21-reqstamp-utc-x9zero`. Tests pin
 `_request_stamp` rather than reading the calendar. **Committed locally only: the
 VPS copy still sends `"9999"`, and `CLASH_OIE` stays `off`.** Deploying it dark
 is a separate approval; so are `shadow` and `on`.

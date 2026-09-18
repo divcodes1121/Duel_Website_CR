@@ -406,6 +406,57 @@ class TimestampCorrection(unittest.TestCase):
         self.assertIsNot(P._request_stamp, _REAL_REQUEST_STAMP)
         self.assertEqual(P._request_stamp(), PINNED_REQUEST_STAMP)
 
+    # X9 (Brain Phase 20, RQ3) ----------------------------------------------
+    def _edited_shell(self):
+        # a shell edited on day 6 and unchanged since, so x9 is well above 0
+        return ([play(d, "knight") for d in range(1, 6)]
+                + [play(d, "ice-golem") for d in range(6, 13)])
+
+    def test_only_x9_is_served_as_zero(self):
+        self.assertEqual(P.SERVED_AS_ZERO, (I9,))
+
+    def test_served_vector_differs_from_extract_only_at_x9(self):
+        plays = self._edited_shell()
+        with request_at("20260812T180000.000Z"):
+            _r, _s, extracted = self._extracted("#A", "competitive", plays)
+        self.assertGreater(extracted[I9], 0.0, "extract still computes x9")
+        self.assertGreater(extracted[I10], 0.0, "x10 still reads the stamp")
+        seen = []
+        real = P._served_vector
+
+        def spy(example):
+            vec = real(example)
+            seen.append(vec)
+            return vec
+        with request_at("20260812T180000.000Z"), mock.patch.object(P, "_served_vector", spy):
+            P.predict("#A", "competitive", plays)
+        served = seen[0]
+        self.assertEqual(served[I9], 0.0)
+        self.assertEqual([served[i] for i in range(F.N_FEATURES) if i != I9],
+                         [extracted[i] for i in range(F.N_FEATURES) if i != I9])
+
+    def test_change_probability_scores_the_served_vector(self):
+        model = P._load_change_model()
+        if model is None:
+            self.skipTest("artifact not present")
+        plays = self._edited_shell()
+        with request_at("20260812T180000.000Z"):
+            _r, _s, extracted = self._extracted("#A", "competitive", plays)
+            r = P.predict("#A", "competitive", plays)
+        served = list(extracted)
+        served[I9] = 0.0
+        self.assertAlmostEqual(r.change_probability, 1 - model.predict(served)[0], places=12)
+        self.assertNotAlmostEqual(r.change_probability, 1 - model.predict(extracted)[0], places=6,
+                                  msg="the fixture must make x9 matter, or this proves nothing")
+
+    def test_x10_still_moves_the_probability(self):
+        plays = self._edited_shell()
+        ps = set()
+        for stamp in ("20260812T120500.000Z", "20260814T000000.000Z"):
+            with request_at(stamp):
+                ps.add(round(P.predict("#A", "competitive", plays).change_probability, 9))
+        self.assertEqual(len(ps), 2, "holding x9 at 0 must not freeze the stamp's effect")
+
     def test_forbid_training_is_idempotent(self):
         class M:
             def fit(self, *a):

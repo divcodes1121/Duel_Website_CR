@@ -63,7 +63,7 @@ def deck_hash(cards) -> str:
 #: two systems in one log. Bump whichever part actually changed.
 VERSIONS = {
     "model": "m2-change-v1",
-    "features": "phase2-21-reqstamp-utc",
+    "features": "phase2-21-reqstamp-utc-x9zero",
     "policy": "phase17a-calibrated",
     "candidates": "c1-wide-playerpool",
     "calibration": "band-calibration-v1",
