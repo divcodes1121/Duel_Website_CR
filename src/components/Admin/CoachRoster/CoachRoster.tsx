@@ -8,13 +8,14 @@ import {
   coachHref,
   parseCoachRoute,
   playerLabel,
+  type CoachWindow,
 } from '../../../state/coachRoster';
 import { useCoachRoster } from '../../../state/coachRosterStore';
 import { ThemeToggle } from '../../Theme/ThemeToggle';
 import { Dropdown } from '../../ui/dropdown-menu-14';
 import { TeamIcon } from '../../Dashboard/icons';
 import { AddPlayerDialog } from './AddPlayerDialog';
-import { PlayerOverview } from './PlayerOverview';
+import { PlayerWorkspace } from './PlayerWorkspace';
 import styles from './CoachRoster.module.css';
 
 /**
@@ -33,8 +34,9 @@ import styles from './CoachRoster.module.css';
  *
  * THE URL IS THE SELECTION. `#/admin/coach/<TAG>/<section>` — a refresh keeps
  * the player and the section, and switching player keeps the section. There
- * is one section in Phase 1; the rest arrive with their phases rather than as
- * placeholders that promise screens which do not exist yet.
+ * are only the sections that exist: Phase 2 adds Battles, Decks, Cards and
+ * Opponents, and later phases add theirs rather than shipping placeholders
+ * that promise screens which do not exist yet.
  */
 
 function useHash(): string {
@@ -62,6 +64,9 @@ export function CoachRoster() {
   const { players, loaded, loading, error, repoKind, load } = useCoachRoster();
   const [adding, setAdding] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  /* The window lives HERE, above the workspace, so it survives switching
+     player: Rahul at 90 days, then Arjun, is still 90 days. */
+  const [win, setWin] = useState<CoachWindow>(30);
 
   useEffect(() => {
     if (access === 'admin') void load();
@@ -227,7 +232,9 @@ export function CoachRoster() {
             </section>
           )}
 
-          {selected && <PlayerOverview key={selected.id} player={selected} />}
+          {selected && (
+            <PlayerWorkspace key={selected.id} player={selected} section={section} win={win} onWindow={setWin} />
+          )}
         </main>
       </div>
 

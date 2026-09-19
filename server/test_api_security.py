@@ -23,7 +23,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import app as app_module  # noqa: E402
@@ -168,7 +168,11 @@ class Authentication(unittest.TestCase):
                   # An admin board. It reads a local collection rather than
                   # the bot's database, which makes it cheap — and cheap is
                   # not the same as public.
-                  "/api/analytics/duo-pairs"]
+                  "/api/analytics/duo-pairs",
+                  # Coach Roster's admin-only route. Its second gate (the
+                  # Supabase admin check) sits BEHIND this one, so an unkeyed
+                  # caller is refused here before Supabase is ever asked.
+                  "/api/analytics/admin/coach/intel/%23Y022GRCJQ"]
         with configured(CLASH_API_KEY=KEY) as mod, serving(mod) as base:
             for path in routes:
                 with self.subTest(path=path):
@@ -719,7 +723,13 @@ class RoutingUnchanged(unittest.TestCase):
         # path is a decision and not a habit. It is paged and searchable over
         # 364,357 records, and folding paging parameters into `coverage` would
         # have made every console load pay for a board nobody had opened.
-        self.assertEqual(len(routes), 22)
+        #
+        # 23 on 20 Sep 2026: `/api/analytics/admin/coach/intel/<tag>` (Coach
+        # Roster, Phase 2 — one player's daily results, modes, archetypes and
+        # opponents). The FIRST route here that is admin-only: past the key
+        # gate it asks Supabase whether the caller's own token is an admin's
+        # (`admin_auth.py`), and `CoachRosterAdminGate` below pins that.
+        self.assertEqual(len(routes), 23)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]
@@ -738,6 +748,116 @@ class RoutingUnchanged(unittest.TestCase):
         self.assertIn("_gate", src)
         self.assertIn("if self._gate(", src)
         self.assertIn("self._route()", src)
+
+
+# ---------------------------------------------------------------------------
+# Coach Roster's admin-only route — the second gate
+# ---------------------------------------------------------------------------
+
+class _FakeSupabase(BaseHTTPRequestHandler):
+    """PostgREST's `rpc/coach_is_admin`, answering by token."""
+
+    def do_POST(self):  # noqa: N802
+        token = (self.headers.get("Authorization") or "")[7:]
+        status, body = {
+            "a.b.admin": (200, b"true"),
+            "a.b.member": (200, b"false"),
+        }.get(token, (401, b'{"message":"JWT expired"}'))
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a, **k):
+        pass
+
+
+@contextlib.contextmanager
+def fake_supabase():
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _FakeSupabase)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        yield "http://127.0.0.1:%d" % srv.server_address[1]
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+class CoachRosterAdminGate(unittest.TestCase):
+    """The key says a request came through the edge; this says WHO sent it."""
+
+    PATH = "/api/analytics/admin/coach/intel/%23Y022GRCJQ"
+
+    def setUp(self):
+        import admin_auth
+        admin_auth.clear_cache()
+        self._env = {k: os.environ.get(k) for k in ("SUPABASE_URL", "SUPABASE_ANON_KEY")}
+
+    def tearDown(self):
+        for k, v in self._env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def _serve(self, mod):
+        # The data half is not under test here: stub it, so a 200 means the
+        # gate let the request through rather than that a database existed.
+        mod.cd.coverage = lambda tag=None: {"start": None, "end": None, "days": 0}
+        mod.coach_intel.report = lambda tag, since=None, until=None: {"player": {"tag": tag}}
+        return serving(mod)
+
+    def test_no_coach_token_is_401(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, body = fetch(base, self.PATH, headers=keyed())
+                self.assertEqual(status, 401)
+                self.assertIn("unauthorized", body)
+
+    def test_a_signed_in_non_admin_is_403(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, body = fetch(base, self.PATH, headers={**keyed(), "X-Coach-Token": "a.b.member"})
+                self.assertEqual(status, 403)
+                self.assertIn("forbidden", body)
+
+    def test_an_expired_token_is_401(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, _ = fetch(base, self.PATH, headers={**keyed(), "X-Coach-Token": "a.b.stale"})
+                self.assertEqual(status, 401)
+
+    def test_an_admin_gets_through(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, body = fetch(base, self.PATH, headers={**keyed(), "X-Coach-Token": "a.b.admin"})
+                self.assertEqual(status, 200)
+                self.assertIn("#Y022GRCJQ", body)
+
+    def test_an_admin_token_without_the_key_is_still_401(self):
+        """The admin check is IN ADDITION to the key, never instead of it."""
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, _ = fetch(base, self.PATH, headers={"X-Coach-Token": "a.b.admin"})
+                self.assertEqual(status, 401)
+
+    def test_unconfigured_supabase_fails_closed_503(self):
+        os.environ.pop("SUPABASE_URL", None)
+        os.environ.pop("SUPABASE_ANON_KEY", None)
+        with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+            status, _, body = fetch(base, self.PATH, headers={**keyed(), "X-Coach-Token": "a.b.admin"})
+            self.assertEqual(status, 503)
+            self.assertIn("not_configured", body)
+
+    def test_the_coach_header_is_allowed_by_cors(self):
+        self.assertIn("X-Coach-Token", app_module.ALLOWED_HEADERS)
 
 
 if __name__ == "__main__":

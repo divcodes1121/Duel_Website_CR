@@ -9,85 +9,33 @@ import {
   type RosterPlayer,
 } from '../../../state/coachRoster';
 import { useCoachRoster } from '../../../state/coachRosterStore';
-import {
-  fetchPlayerReport,
-  isLiveReport,
-  type AnalyticsError,
-  type PlayerReport,
-} from '../../../state/analyticsClient';
+import { isLiveReport, type CoachIntel, type PlayerReport } from '../../../state/analyticsClient';
 import { ago } from '../../../utils/format';
 import { CardArt } from '../../Analytics/CardArt';
-import { ReadingState } from '../../Analytics/ReadingState';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import styles from './CoachRoster.module.css';
 
 const nf = new Intl.NumberFormat('en-US');
 
-/**
- * Phase 1's player view: who they are, where their data stands, their record,
- * and the deck they play most — all read from the existing player report.
- *
- * NOTHING HERE IS COMPUTED THAT THE REPORT DOES NOT ALREADY CARRY. The win
- * rate is `wins / battles`, the same definition Player Analysis prints, so the
- * two screens cannot disagree about one player. A figure the report does not
- * have is left out rather than estimated.
- *
- * STORED OR LIVE, AND IT SAYS WHICH. A tag the collector has not picked up yet
- * answers from the live battlelog (at most ~25 battles), which is a much
- * thinner reading than months of stored history; the badge makes that visible
- * rather than letting 25 battles pass for a record.
- */
-export function PlayerOverview({ player }: { player: RosterPlayer }) {
-  const [report, setReport] = useState<PlayerReport | null>(null);
-  const [error, setError] = useState<AnalyticsError | null>(null);
+/* The parts of a roster player's page that are about WHO they are — header,
+   record tiles, the coach's own fields. `PlayerWorkspace` composes them with
+   the Phase 2 tabs and owns the reads.
 
-  useEffect(() => {
-    let live = true;
-    setReport(null);
-    setError(null);
-    fetchPlayerReport(player.playerTag)
-      .then((r) => live && setReport(r))
-      .catch((e) => live && setError(e as AnalyticsError));
-    return () => {
-      live = false;
-    };
-  }, [player.playerTag]);
+   NOTHING HERE IS COMPUTED THAT THE REPORT DOES NOT ALREADY CARRY. The win
+   rate is `wins / battles`, the same definition Player Analysis prints, so the
+   two screens cannot disagree about one player. STORED OR LIVE, AND IT SAYS
+   WHICH: a tag the collector has not picked up yet answers from its live
+   battlelog (~25 battles), and a badge stops that passing for a record. */
 
-  return (
-    <div className={styles.overview}>
-      <PlayerHeader player={player} report={report} />
-      <CoachControls player={player} />
-
-      {!report && !error && (
-        <ReadingState k="player" hue="violet">
-          Reading {playerLabel(player)}’s record…
-        </ReadingState>
-      )}
-
-      {error && (
-        <section className={styles.notice}>
-          <h3>{error.kind === 'offline' ? 'Analytics service is not running' : 'No data for this tag yet'}</h3>
-          <p>
-            {error.kind === 'offline'
-              ? error.message
-              : 'Neither stored history nor the live battlelog has anything for this tag. If it was just added, collection has been requested — stored battles appear after the collector’s next pass.'}
-          </p>
-        </section>
-      )}
-
-      {report && <PlayerRecord report={report} />}
-    </div>
-  );
-}
-
-function PlayerHeader({ player, report }: { player: RosterPlayer; report: PlayerReport | null }) {
+export function PlayerHeader({ player, report }: { player: RosterPlayer; report: PlayerReport | null }) {
   const inGame = report?.profile?.name ?? (report && !isLiveReport(report) ? report.player.name : null);
   const label = playerLabel(player);
   return (
     <header className={styles.playerHead}>
       <div className={styles.playerIdentity}>
         <h2 className={styles.playerName}>{label}</h2>
-        <span className={styles.playerTag}>{player.playerTag}</span>
+        {/* With no display name the heading IS the tag — once is enough. */}
+        {label !== player.playerTag && <span className={styles.playerTag}>{player.playerTag}</span>}
         {/* The in-game name, when the coach calls them something else — the
             one place both names are side by side. */}
         {inGame && inGame !== label && <span className={styles.inGame}>in game: {inGame}</span>}
@@ -100,19 +48,21 @@ function PlayerHeader({ player, report }: { player: RosterPlayer; report: Player
   );
 }
 
-function PlayerRecord({ report }: { report: PlayerReport }) {
+/* WHO THEY ARE comes from the player report — rank, trophies, clan, whether
+   they are being collected. WHAT THEY DID comes from the coach intelligence,
+   which counts OWN-DECK 1v1 battles only: the report's own battle count and
+   win rate include 2v2 (measured on one player, most of their battles), and
+   the tiles here must agree with the Battles, Decks and Opponents tabs beside
+   them. Until the intelligence arrives, or if it cannot, those tiles are left
+   out rather than filled from the all-mode figures. */
+export function PlayerRecord({ report, intel }: { report: PlayerReport; intel: CoachIntel | null }) {
   const p = report.profile;
   const live = isLiveReport(report);
-
-  const battles = live ? report.battles : report.player.battles;
-  const wins = live ? report.wins : report.player.wins;
-  const losses = live ? report.losses : report.player.losses;
-  const draws = live ? report.draws : report.player.draws;
-  const winRate = battles ? (wins / battles) * 100 : null;
-  const lastDay = live ? report.span.to : report.coverage.end;
-  const firstDay = live ? report.span.from : report.coverage.start;
-  const topDeck = report.decks[0];
-  const topLast = topDeck ? battleTimeToIso(topDeck.lastSeen) ?? topDeck.lastSeen : null;
+  const s = intel?.summary;
+  const winRate = s && s.battles ? (s.wins / s.battles) * 100 : null;
+  const lastDay = intel?.timeline.length ? intel.timeline[intel.timeline.length - 1].day : null;
+  const topDeck = intel?.decks[0];
+  const topLast = topDeck ? battleTimeToIso(topDeck.last) : null;
 
   return (
     <>
@@ -122,8 +72,10 @@ function PlayerRecord({ report }: { report: PlayerReport }) {
         </span>
         <span className={styles.sourceNote}>
           {live
-            ? `The collector has not stored this player yet, so this is their last ${nf.format(battles)} battles from Clash Royale directly.`
-            : `${nf.format(battles)} battles stored, ${firstDay ?? '—'} to ${lastDay ?? '—'}.`}
+            ? 'The collector has not stored this player yet — the figures below fill in once it has.'
+            : intel
+              ? `Own-deck 1v1 battles, ${intel.window.from ?? '—'} to ${intel.window.to ?? '—'}.`
+              : 'Reading their battles…'}
         </span>
         <span className={styles.trackState} data-state={report.tracking.state}>
           Collection: {report.tracking.state}
@@ -145,44 +97,63 @@ function PlayerRecord({ report }: { report: PlayerReport }) {
             note={p.bestTrophies != null ? `best ${nf.format(p.bestTrophies)}` : undefined}
           />
         )}
-        <Tile
-          label={live ? 'Battles in the log' : 'Battles stored'}
-          value={nf.format(battles)}
-          note={`${nf.format(wins)}W · ${nf.format(losses)}L${draws ? ` · ${nf.format(draws)}D` : ''}`}
-        />
-        <Tile label="Win rate" value={winRate == null ? '—' : `${winRate.toFixed(1)}%`} note="wins ÷ battles" />
-        <Tile label="Last battle" value={lastDay ?? '—'} note={live ? 'in the live log' : 'latest stored'} />
+        {s && (
+          <>
+            <Tile
+              label="1v1 battles"
+              value={nf.format(s.battles)}
+              note={`${nf.format(s.wins)}W · ${nf.format(s.losses)}L${s.draws ? ` · ${nf.format(s.draws)}D` : ''}`}
+            />
+            <Tile label="Win rate" value={winRate == null ? '—' : `${winRate.toFixed(1)}%`} note="wins ÷ battles" />
+            <Tile label="Last battle" value={lastDay ?? '—'} note="in this window" />
+          </>
+        )}
         {(p?.arena || p?.clan) && <Tile label="Arena · clan" value={p?.arena ?? '—'} note={p?.clan ?? 'no clan'} />}
       </div>
 
-      <section className={styles.block}>
-        <h3 className={styles.blockTitle}>Most-played deck</h3>
-        {!topDeck ? (
-          <p className={styles.muted}>No complete deck in the data yet.</p>
-        ) : (
-          <div className={styles.deckRow}>
-            <div className={styles.deckCards}>
-              {topDeck.cards.map((c) => (
-                <CardArt key={c} card={c} variant={topDeck.art?.[c]} className={styles.deckCard} />
-              ))}
+      {intel && intel.hidden > 0 && (
+        <p className={styles.hiddenNote} title={Object.entries(intel.hiddenByMode).map(([m, n]) => `${m}: ${n}`).join('\n')}>
+          {nf.format(intel.hidden)} battles in other modes (2v2, drafts, events) are not counted here — the same
+          ones the battle log leaves out.
+        </p>
+      )}
+
+      {intel && (
+        <section className={styles.block}>
+          <h3 className={styles.blockTitle}>Most-played deck</h3>
+          {!topDeck ? (
+            <p className={styles.muted}>No complete 1v1 deck in this window.</p>
+          ) : (
+            <div className={styles.deckRow}>
+              <DeckStrip deck={topDeck} />
+              <div className={styles.deckMeta}>
+                <span className={styles.deckName}>{topDeck.deckName}</span>
+                <span className={styles.muted}>
+                  {nf.format(topDeck.battles)} battles · {((topDeck.wins / topDeck.battles) * 100).toFixed(1)}% won
+                  {topLast ? ` · last ${ago(topLast)}` : ''}
+                </span>
+                <DeckActions cards={topDeck.cards} name={topDeck.deckName} />
+              </div>
             </div>
-            <div className={styles.deckMeta}>
-              <span className={styles.deckName}>{topDeck.name}</span>
-              <span className={styles.muted}>
-                {nf.format(live ? (topDeck as { games: number }).games : (topDeck as { matches: number }).matches)} battles ·{' '}
-                {topDeck.winRate.toFixed(1)}% won
-                {topLast ? ` · last ${ago(topLast)}` : ''}
-              </span>
-              <DeckActions cards={topDeck.cards} name={topDeck.name} />
-            </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
     </>
   );
 }
 
-function Tile({ label, value, note }: { label: string; value: string; note?: string }) {
+/** Eight cards in one line, with the art the battle log would draw. */
+export function DeckStrip({ deck }: { deck: CoachIntel['decks'][number] }) {
+  return (
+    <div className={styles.deckCards}>
+      {deck.cards.map((c) => (
+        <CardArt key={c} card={c} variant={deck.art?.[c]} inferred={deck.artInferred} className={styles.deckCard} />
+      ))}
+    </div>
+  );
+}
+
+export function Tile({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className={styles.tile}>
       <span className={styles.tileLabel}>{label}</span>
@@ -195,7 +166,7 @@ function Tile({ label, value, note }: { label: string; value: string; note?: str
 /* The coach's own fields — name and notes — plus archive and remove. The
    database refuses anything a non-admin sends; these controls only decide
    what an admin is offered. */
-function CoachControls({ player }: { player: RosterPlayer }) {
+export function CoachControls({ player }: { player: RosterPlayer }) {
   const update = useCoachRoster((s) => s.update);
   const remove = useCoachRoster((s) => s.remove);
   const [editing, setEditing] = useState(false);

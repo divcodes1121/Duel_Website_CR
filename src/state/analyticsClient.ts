@@ -760,10 +760,10 @@ export class AnalyticsError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
+async function get<T>(path: string, headers?: Record<string, string>): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`);
+    res = await fetch(`${BASE}${path}`, headers ? { headers } : undefined);
   } catch {
     // Nothing listening — the local API is not running.
     throw new AnalyticsError(
@@ -808,6 +808,62 @@ export function fetchPlayerReport(tag: string, win: DateWindow = {}): Promise<Pl
  *  where stored history exists. */
 export function fetchLivePlayer(tag: string): Promise<LivePlayerReport> {
   return get<LivePlayerReport>(`/api/analytics/live/${encodeURIComponent(tag)}`);
+}
+
+/* ── Coach Roster, Phase 2 ──────────────────────────────────────────────── */
+
+export interface CoachTally {
+  battles: number;
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+export interface CoachIntel {
+  player: { tag: string; name: string | null };
+  window: { from: string | null; to: string | null };
+  archiveUsed: boolean;
+  summary: CoachTally;
+  /** Newest first, at most 10: 'win' | 'loss' | 'draw'. */
+  form: string[];
+  /** One entry per day from the first battle to the last, ZERO-FILLED. */
+  timeline: (CoachTally & { day: string })[];
+  modes: (CoachTally & { key: string; name: string })[];
+  /** The player's own win conditions, most-played first. */
+  archetypes: (CoachTally & { key: string; name: string })[];
+  /** What they were up against. */
+  opponentArchetypes: (CoachTally & { key: string; name: string })[];
+  /** OWN-DECK 1v1 decks, most-played first, capped at 25 — counted from the
+   *  same battles as everything else here, NOT the player report's decks,
+   *  which include 2v2. Drawn by the battle log's own helper. */
+  decks: (CoachTally & {
+    key: string;
+    cards: string[];
+    art?: Record<string, 'evolution' | 'hero'>;
+    artInferred?: boolean;
+    avgElixir: number | null;
+    deckName: string;
+    archetype: string;
+    last: string;
+  })[];
+  decksTotal: number;
+  /** Most-met first, capped at 50; `last` is battle-log format. */
+  opponents: (CoachTally & { tag: string; name: string | null; last: string })[];
+  opponentsTotal: number;
+  opponentsRepeat: number;
+  hidden: number;
+  hiddenByMode: Record<string, number>;
+}
+
+/** ADMIN-ONLY. The Supabase access token goes in `X-Coach-Token`; the server
+ *  asks Supabase whether it belongs to an admin (see `server/admin_auth.py`)
+ *  and refuses otherwise — 401 no/expired token, 403 not an admin, 503 when
+ *  it cannot check. Those arrive here as `server` errors carrying the code. */
+export function fetchCoachIntel(tag: string, win: DateWindow, token: string | null): Promise<CoachIntel> {
+  return get<CoachIntel>(
+    `/api/analytics/admin/coach/intel/${encodeURIComponent(tag)}?${windowQuery(win)}`,
+    token ? { 'X-Coach-Token': token } : undefined,
+  );
 }
 
 /** Where a tag stands with collection, enrolling it if it is new. */

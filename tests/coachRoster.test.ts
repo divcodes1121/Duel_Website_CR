@@ -91,6 +91,12 @@ describe('the route', () => {
     expect(parseCoachRoute(href)).toEqual({ tag: '#Y022GRCJQ', section: 'overview' });
   });
 
+  it('keeps every Phase 2 section through the hash', () => {
+    for (const section of ['overview', 'battles', 'decks', 'cards', 'opponents'] as const) {
+      expect(parseCoachRoute(coachHref('#Y022GRCJQ', section)).section).toBe(section);
+    }
+  });
+
   it('falls back to no player and Overview for anything it does not recognise', () => {
     expect(parseCoachRoute('#/admin/coach')).toEqual({ tag: null, section: 'overview' });
     expect(parseCoachRoute('#/admin/coach/not-a-tag/nowhere')).toEqual({ tag: null, section: 'overview' });

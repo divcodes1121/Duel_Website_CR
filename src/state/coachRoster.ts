@@ -133,8 +133,22 @@ export function sortRoster(players: RosterPlayer[]): RosterPlayer[] {
  * written without its '#', which would otherwise start a second fragment. */
 
 export const COACH_ROUTE = '#/admin/coach';
-export const COACH_SECTIONS = ['overview'] as const;
+export const COACH_SECTIONS = ['overview', 'battles', 'decks', 'cards', 'opponents'] as const;
 export type CoachSection = (typeof COACH_SECTIONS)[number];
+
+export const SECTION_LABEL: Record<CoachSection, string> = {
+  overview: 'Overview',
+  battles: 'Battles',
+  decks: 'Decks',
+  cards: 'Cards',
+  opponents: 'Opponents',
+};
+
+/** The shared window for Overview, Decks and Opponents. `0` is "all stored",
+ *  sent to the server as a span longer than any storage tier holds. */
+export const COACH_WINDOWS = [7, 30, 90, 0] as const;
+export type CoachWindow = (typeof COACH_WINDOWS)[number];
+export const windowDays = (w: CoachWindow): number => (w === 0 ? 4000 : w);
 
 export function parseCoachRoute(hash: string): { tag: string | null; section: CoachSection } {
   const rest = hash.startsWith(COACH_ROUTE) ? hash.slice(COACH_ROUTE.length) : '';

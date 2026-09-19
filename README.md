@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Coach Roster** | **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. Later phases add the deck arsenal, opponent scout, recommendations, match plans and outcomes. See [Coach Roster](#coach-roster-admin-only-experimental) |
+| **Coach Roster** | **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 BUILT, NOT DEPLOYED (2026-09-20):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. Later phases add the deck arsenal, opponent scout, recommendations, match plans and outcomes. See [Coach Roster](#coach-roster-admin-only-experimental) |
 | **One dropdown, everywhere** | **LIVE 2026-09-20 (`c28acba`).** Every select-style control — 13 of them, from the card library's filters to onboarding's country list — is the vendored watermelon.sh `dropdown-menu-14`, ported by hand: an icon tile, the value over a caption and an up/down chevron; a panel in the site's theme with a heading, a line of explanation per option and a tick on the chosen one. It is a real listbox with the keyboard a native select has (arrows, Home/End, type-ahead, Esc) plus a search field for long lists, anchored to its trigger, flipping above when there is no room below and never leaving the viewport. `SeasonMenu` is a thin wrapper over it now. Verified in a browser on real data in both themes and at 390; the admin role picker is the one not seen in a browser |
 | **2v2 pairs as strips** | **LIVE 2026-09-19 (`9053943`).** Deck A pinned to the left edge, deck B to the right, each deck's eight cards on one line with its label, elixir and two actions on the line above. A pair went from a ~300px block to a 128px strip at 1440 — about seven to a screen instead of one and a half. Stacks below 62rem, still eight across. Verified 20/20 in a browser, both themes, 1440/1024/390 |
 | **Full contrast, everywhere** | **swept 2026-09-19.** A browser probe read every visible text node on 18 routes, five home sections and two dialogs in both themes, compositing each one's ink with the opacity of every ancestor — which is how text goes grey without its `color` saying so. The fixes: date chips past a player's stored history (six screens) were faded to 55% and are full ink with a dashed edge; the 2nd/3rd place ranks were the gold chip at reduced opacity and are a tint and an outline with full-contrast digits; the top bar's Search label, the banner copy and two placeholders. Left deliberately: disabled controls, the filmstrip's depth fade, the field book's sepia paper. **2v2** lost its three summary figures and its footnote, and its decks are capped at 22rem (cards 123 → 85px). **Pager cells are 2.5rem max**, not upstream's 4rem |
@@ -12137,7 +12137,7 @@ report, Coach Assist's `suggest`, Team Analysis's scorer, the deck tuner — and
 adds only the coaching layer: the roster, and (in later phases) each player's
 deck arsenal, match plans and results.
 
-**Phase 1 is built: the roster, the switcher, and a basic profile.**
+**Phase 1 is live: the roster, the switcher, and a basic profile. Phase 2 — the player intelligence — is built and not yet deployed.**
 
 ### Where the data lives, and what enforces "admin-only"
 
@@ -12201,6 +12201,68 @@ by sidebar and by dropdown, edit, archive, restore, remove.
 
 No release note: the What's-new feed speaks to every account, and an admin
 tool is not something to announce to them.
+
+### Phase 2: the player intelligence (built 2026-09-20, not deployed)
+
+Five tabs under each player — **Overview, Battles, Decks, Cards, Opponents** —
+each a URL, and one window (7 / 30 / 90 days / all) shared by the three that
+read it. The window lives above the player, so switching player keeps it.
+
+**Every battle figure is own-deck 1v1, from one reader.** Phase 1's tiles
+came from the player report, and the report counts EVERY mode — on a real
+player most of those battles were 2v2. So the tiles, the chart, the decks and
+the opponents all come from `coach_intel.report`, one pass over the same
+reader Recent Battles uses (`recent_battles._read_rows`, behind the mode
+router). Four tabs cannot disagree about a number they all read from one
+place. What the router drops is counted and named under the tiles, the same
+sentence and the same modes the battle log shows. Rank, trophies and clan
+still come from the report, because they are about the person rather than
+their battles.
+
+**Overview**: the tiles, the most-played deck with its actions, a day-by-day
+chart, three share lists (modes, their win conditions, what they face) and
+the insights. The chart draws battles per day as bars and the day's win rate
+as a line **only through days with three or more battles, broken across the
+rest** — a day with one battle has a 0% or 100% win rate that means nothing,
+and joining it into a line draws movement that did not happen. Its viewBox is
+the measured width: a fixed one stretched the axis type to 17px in a wide
+column.
+
+**Insights are sentences with their evidence under them** (`coachInsights.ts`,
+no imports, 9 tests). Each is a count or a ratio of stored battles compared
+against the player's OWN rate in the same window, never a population, and
+each has a floor below which it is simply not said: ten battles before
+anything, twenty behind an archetype share, fifteen behind a deck and a
+five-point gap, ten behind a matchup and a ten-point gap, three meetings for a
+repeat opponent, a full ten for current form, fourteen days before a deck
+with history is called unused. A test holds the wording to what a count can
+carry — no "dominant", "weak", "best" or "struggles".
+
+**Battles and Cards are the existing screens**, embedded, with their own date
+controls. **Decks** lists every deck (8 distinct cards, order-free) with its
+record, share and last use, each opening to its actions. **Opponents** is the
+most-met fifty with their record against this player; a head-to-head win rate
+prints only from three meetings (`n=2` otherwise), and each links to the full
+analysis — the scout workflow is Phase 4.
+
+**Admin-only at the origin, not only on screen.** Caddy injects the analytics
+key on every path, so to the Python service every route is public. The intel
+route therefore has a second gate: the page sends the Supabase session's
+access token as `X-Coach-Token`, and `admin_auth.py` asks Supabase's own
+`coach_is_admin()` — the function migration 004's RLS uses — whether that
+token belongs to an admin. No token, a bad token, a non-admin, a service that
+is not configured and a Supabase that cannot be reached all refuse, and the
+screen words each one instead of showing a status code. Nothing is added to
+Caddy.
+
+**Verified 37/37 in a browser**, real production data for the report, the
+battle log and the card pool; the intel route, not yet deployed, replayed from
+a payload produced by the real `coach_intel.report` over a synthetic table
+(never a hand-written fixture). Tiles match the payload, one bar per day, the
+window re-reads, the window survives a tab change, deck art has real boxes, a
+403 is worded, exactly one scroller above the embedded battle log and a real
+wheel moves it, nothing off screen at 390px. Coaching chunk 7.18 → 11.85 kB
+gzip; main bundle +0.28.
 
 ---
 

@@ -290,6 +290,7 @@ happily against a server that never called it.
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
 | `GET /api/analytics/duo-pairs?page=&per=&sort=&cards=` | **the unique DECK PAIRS played in 2v2** (`duo_pairs.py`), 1,483,672 of them. One record per combination of two teammate decks, with an occurrence count, distinct participants, and first/last seen. Reads a LOCAL collection, not `battle_raw` — the migration is a full scan of a 44.7 GB table and is a job. `sort` is a KEY into a closed vocabulary (`played` / `recent` / `first`), never a column, and all three are index reads at 9-15 ms. `cards` is comma-separated card keys, checked against the catalog, ANDed within ONE deck and matched WHOLE — the column is a JSON array so `%"giant"%` has boundaries a bare `%giant%` does not (605,447 pairs against the real Giant's 45,360). An unknown key is dropped rather than refused and the accepted list is echoed back. `q` is the older free-text search over the same columns plus the fingerprints; `cards` wins when both are given |
+| `GET /api/analytics/admin/coach/intel/<tag>?days=` | **Coach Roster's player intelligence, ADMIN ONLY** (`coach_intel.py`). One pass over the Recent Battles reader (`recent_battles._read_rows`), so only OWN-DECK 1v1 is counted and 2v2/drafts/events are reported as `hidden` / `hiddenByMode` exactly as the battle log reports them: a zero-filled daily timeline, the last ten results, modes, the player's archetypes and the ones they face, their decks (8 distinct cards, sorted-key identity, top 25 of `decksTotal`) and their opponents (top 50 by meetings of `opponentsTotal`, `opponentsRepeat` met twice or more). **This is the one route with a SECOND gate**: Caddy injects `X-Analytics-Key` on every path, so the key makes every route public; `admin_auth.verify` takes the caller's Supabase access token from `X-Coach-Token` and asks Supabase's own `coach_is_admin()` (migration 004) whether it belongs to an admin — 401 unauthorized, 403 forbidden, 503 not_configured / unavailable, and every failure closes. Verdicts are cached 60 s by token hash, 256 entries. Needs `SUPABASE_URL` + `SUPABASE_ANON_KEY` in the service's environment |
 
 Both `player` and `duels` take the same window: `?days=N`, or `?from=&to=` as
 `YYYY-MM-DD`. `days` counts back from the **last battle stored for that player**
@@ -976,7 +977,7 @@ switch rather than a flag. The two modes take the same inputs minus one, return
 the same shape plus one field (`overall`), and publish which they were in
 `mode`. So `/api/analytics/teams` simply stopped requiring `blue`: **no new
 route**, nothing extra to hand-copy to the VPS, and the route-count tripwire in
-`test_api_security.py` stayed at 21 (it is **22** today — `duo-pairs` took its
+`test_api_security.py` stayed at 21 (it is **23** today — `duo-pairs` took the 22nd, Coach Roster's admin intel the 23rd; `duo-pairs` took its
 own path on 2026-09-10; see the route table above). It also means the incoherent combination —
 a squad pasted *and* scout mode asked for — cannot be expressed.
 

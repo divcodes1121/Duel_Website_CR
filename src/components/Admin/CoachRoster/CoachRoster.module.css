@@ -620,3 +620,412 @@
   justify-content: flex-end;
   gap: 0.5rem;
 }
+
+/* ── phase 2: tabs, window, charts, tables ───────────────────────────── */
+
+/* The sections are LINKS, so a tab is a URL a coach can reload or share
+   (`#/admin/coach/<tag>/<section>`). The window chips sit on the same row
+   and only where the tab reads the windowed intelligence. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--glass-stroke);
+}
+
+.tab {
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.tab:hover {
+  border-color: var(--glass-stroke);
+}
+
+.tab[aria-current='page'] {
+  border-color: var(--accent-select-edge);
+  background: var(--accent-select-wash);
+}
+
+.windowChips {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.windowChip {
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--glass-stroke);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.windowChip[aria-pressed='true'] {
+  border-color: var(--accent-select-edge);
+  background: var(--accent-select-wash);
+}
+
+/* An embedded screen (Battles, Cards) keeps its own layout; this only stops
+   it widening the column it sits in. */
+.embed {
+  min-width: 0;
+}
+
+.blockHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+}
+
+.hiddenNote {
+  margin: 0;
+  font-size: 0.8rem;
+  cursor: help;
+}
+
+.shareGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 0.9rem;
+}
+
+/* chart */
+
+.chartWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.gridLine {
+  stroke: var(--glass-stroke);
+  stroke-width: 1;
+}
+
+.axisText {
+  fill: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dayBar {
+  fill: var(--hue-blue);
+  opacity: 0.55;
+}
+
+.dayBar[data-on] {
+  opacity: 1;
+}
+
+.rateLine {
+  fill: none;
+  stroke: var(--hue-green);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.rateDot {
+  fill: var(--hue-green);
+}
+
+.chartLegend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1rem;
+  font-size: 0.76rem;
+}
+
+.chartLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.keyBar,
+.keyLine {
+  display: inline-block;
+  width: 0.8rem;
+}
+
+.keyBar {
+  height: 0.6rem;
+  background: var(--hue-blue);
+  opacity: 0.55;
+}
+
+.keyLine {
+  height: 2px;
+  background: var(--hue-green);
+}
+
+.chartReadout {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-height: 1.1em;
+}
+
+/* form */
+
+.form {
+  display: inline-flex;
+  gap: 0.2rem;
+}
+
+.formChip {
+  display: inline-grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 5px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  border: 1px solid var(--glass-stroke);
+}
+
+.formChip[data-r='win'] {
+  color: var(--hue-green);
+  border-color: color-mix(in srgb, var(--hue-green) 55%, transparent);
+}
+
+.formChip[data-r='loss'] {
+  color: var(--hue-red);
+  border-color: color-mix(in srgb, var(--hue-red) 55%, transparent);
+}
+
+/* share bars */
+
+.shareList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.shareRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.6rem;
+  grid-template-areas:
+    'name figure'
+    'track track'
+    'note note';
+  gap: 0.15rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+.shareName {
+  grid-area: name;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shareFigure {
+  grid-area: figure;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.shareTrack {
+  grid-area: track;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.shareFill {
+  display: block;
+  height: 100%;
+  background: var(--hue-blue);
+}
+
+.shareNote {
+  grid-area: note;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shareRest {
+  font-size: 0.74rem;
+}
+
+/* insights: the kind is a 3px edge, never a filled badge — the sentence is
+   the content, and the evidence sits under it in the same weight as a note. */
+
+.insights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.insight {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid var(--glass-stroke);
+  background: var(--surface-sunken);
+  border-radius: 0 8px 8px 0;
+}
+
+.insight[data-kind='strength'] {
+  border-left-color: var(--hue-green);
+}
+
+.insight[data-kind='weakness'] {
+  border-left-color: var(--hue-red);
+}
+
+.insightText {
+  font-size: 0.88rem;
+}
+
+.insightEvidence {
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* decks */
+
+.deckList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.deckItem {
+  border: 1px solid var(--glass-stroke);
+  border-radius: 12px;
+  background: var(--surface-sunken);
+}
+
+.deckItem[data-open] {
+  border-color: var(--accent-select-edge);
+}
+
+.deckItemHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.deckFigures {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.deckDetail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.2rem;
+  padding: 0 0.7rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+/* opponents */
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th {
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--glass-stroke);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--glass-stroke);
+  white-space: nowrap;
+}
+
+.table td:first-child {
+  white-space: normal;
+}
+
+.oppName {
+  display: block;
+  font-weight: 600;
+}
+
+.oppTag {
+  display: block;
+  font-size: 0.74rem;
+}
+
+.rowLink {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .windowChips {
+    margin-left: 0;
+  }
+
+  .chartReadout {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}

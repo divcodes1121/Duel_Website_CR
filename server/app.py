@@ -59,6 +59,8 @@ import duo_pairs as duo  # noqa: E402
 import tracking  # noqa: E402
 import recruit  # noqa: E402
 import team_analysis as teams  # noqa: E402
+import admin_auth  # noqa: E402
+import coach_intel  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
@@ -100,7 +102,11 @@ PUBLIC_PATHS = frozenset({"/api/analytics/status"})
 
 #: Request headers a cross-origin caller may send. This used to be `*`, which
 #: pre-authorises every header a browser is willing to attach.
-ALLOWED_HEADERS = "Authorization, Content-Type, X-Analytics-Key"
+# `X-Coach-Token` carries a SUPABASE access token to the Coach Roster's
+# admin-only routes (see admin_auth.py). Its own header rather than
+# `Authorization`, which this service already reads as a carrier for the
+# analytics key.
+ALLOWED_HEADERS = "Authorization, Content-Type, X-Analytics-Key, X-Coach-Token"
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 
@@ -860,6 +866,32 @@ class Handler(BaseHTTPRequestHandler):
                 rep["tracking"] = _enrol(tag)
                 rep["profile"] = cd.cr_profile(tag)
                 return self._send(rep)
+
+            # COACH ROSTER, PHASE 2 — one player's intelligence, ADMIN-ONLY.
+            #
+            # A SECOND GATE, after the key gate above. The analytics key is
+            # injected by Caddy on every path, so it identifies the edge, not
+            # a person; this route additionally asks Supabase whether the
+            # caller's own token belongs to an admin (`admin_auth.verify`),
+            # using migration 004's `coach_is_admin` — the same test the
+            # coaching tables' Row Level Security applies. No token 401, a
+            # non-admin 403, and an unconfigured or unreachable Supabase 503:
+            # it fails CLOSED.
+            #
+            # The data itself is counts over the player's own battles, read
+            # through the Recent Battles reader (see coach_intel.py), so it
+            # cannot disagree with the battle log about which battles exist.
+            if path.startswith("/api/analytics/admin/coach/intel/"):
+                verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
+                if verdict != "ok":
+                    self._outcome = "auth_failed"
+                    return self._send({"error": verdict}, admin_auth.STATUS[verdict])
+                raw = unquote(path[len("/api/analytics/admin/coach/intel/"):])
+                tag = cd.normalize_tag(raw)
+                if not tag:
+                    return self._send({"error": "invalid_tag", "input": raw}, 400)
+                since, until = _window(parse_qs(parsed.query), cd.coverage(tag))
+                return self._send(coach_intel.report(tag, since, until))
 
             if path.startswith("/api/analytics/player/"):
                 raw = unquote(path[len("/api/analytics/player/"):])
