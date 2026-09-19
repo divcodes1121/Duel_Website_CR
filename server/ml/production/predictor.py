@@ -95,7 +95,9 @@ def _change_probability(view: dict, example) -> tuple[float, bool]:
     model = _load_change_model()
     if model is not None and example is not None:
         try:
-            dist = model.predict(_served_vector(example))
+            x = _served_vector(example)
+            _tls.served = list(x)
+            dist = model.predict(x)
             return 1.0 - dist.get(0, 0.0), True
         except Exception:
             pass
@@ -127,10 +129,20 @@ def last_stamp() -> str:
     return getattr(_tls, "stamp", "")
 
 
+def last_served():
+    """A COPY of the vector the model scored in the last `predict` on this
+    thread, or None if it fell back before scoring. R3 sampler: the paired
+    "9999" baseline is this vector with x10 also zeroed. Never read back by
+    the engine."""
+    v = getattr(_tls, "served", None)
+    return list(v) if v is not None else None
+
+
 def predict(tag: str, domain: str, plays, cutoff_ts: str | None = None,
             max_alternatives: int = policy.MAX_ALTERNATIVES):
     """The Coach's single entry point. Never raises."""
     _tls.stamp = ""
+    _tls.served = None
     try:
         safe_plays = policy.assert_no_future(plays, cutoff_ts) if cutoff_ts else list(plays)
         if not safe_plays:
@@ -211,12 +223,18 @@ def predict(tag: str, domain: str, plays, cutoff_ts: str | None = None,
 
 
 def predict_for_tag(tag: str, domain: str, record_shadow: bool = False,
-                    max_alternatives: int = policy.MAX_ALTERNATIVES):
+                    max_alternatives: int = policy.MAX_ALTERNATIVES,
+                    measurement_extra=None):
     """Load a player's history and predict. THE production entry point.
 
     Serves BOTH domains. Phase 14 measured competitive as the stronger case
     (88.7% shortlist coverage against duel's 61.6%), so a duel-only rollout
     would have shipped the weaker half.
+
+    `measurement_extra` (R3 sampler): a callable `f(result) -> dict` run after
+    the prediction and before the shadow record, on this thread, whose dict
+    joins the record's measurement fields (whitelisted by `shadow`). It cannot
+    change the result: it is handed it only after it is final.
     """
     import time as _t
     from . import source
@@ -250,6 +268,10 @@ def predict_for_tag(tag: str, domain: str, record_shadow: bool = False,
             measurement = dict(read, requestedAt=requested_at,
                                requestStamp=last_stamp(),
                                tracked=source.tracked_state(tag))
+            if measurement_extra is not None:
+                # Extra fields may ADD, never overwrite the measured clocks.
+                for k, v in (measurement_extra(result) or {}).items():
+                    measurement.setdefault(k, v)
             shadow.record(tag, domain, result, len(plays),
                           (view or {}).get("cluster_size", 0), latency_ms,
                           anchor_ts=(view or {}).get("ts", ""),

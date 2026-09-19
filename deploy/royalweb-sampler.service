@@ -1,0 +1,28 @@
+[Unit]
+# R3 labelled shadow sampler: ONE tick (brain-evidence/r3_sampler_design/PREREGISTRATION.md).
+#
+# Executes the due moments of the active cohort through the same
+# `predictor.predict_for_tag` the Coach observer calls, writing ONLY
+# ml/results/shadow-log-sampler-<cohort>.jsonl (origin="sampler", schema 3).
+# Nothing is returned to any user; no route, no socket, no enrolment.
+#
+# IT HOLDS NO WRITABLE DATABASE HANDLE: every connection is SQLite `mode=ro`.
+# It never touches clashbot; clashbot's PID is one of its stop conditions.
+# Any stop condition writes <cohort>.STOPPED and disables royalweb-sampler.timer.
+# Nothing restarts it: a human must.
+Description=R3 labelled shadow sampler (one tick)
+After=royalweb.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+# THE KILL SWITCH. Anything but "on" makes every tick a no-op.
+Environment=CLASH_OIE_SAMPLER=on
+ExecStart=/usr/bin/python3 -B -m ml.production.sampler tick
+# P5: never competes with request handling or the bot's poll for CPU or disk.
+Nice=19
+IOSchedulingClass=idle
+# P5: the tick stops itself at 240 s; this is the hard ceiling behind it.
+TimeoutStartSec=300
+# P5: no retries. A failed tick is not re-run; the next one is 5 minutes away.
+Restart=no

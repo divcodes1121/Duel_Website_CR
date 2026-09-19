@@ -73,20 +73,33 @@ VERSIONS = {
 
 #: R3. The record layout, separate from `VERSIONS`: the system that made the
 #: prediction did not change, only what is written about it. Schema-1 records
-#: (the phase2-21 log, and R3 until this ships) carry no `schema` key.
-SCHEMA = 2
+#: (the phase2-21 log) carry no `schema` key; schema 2 added the clocks;
+#: schema 3 adds `origin` and the sampler's fields (R3 sampler design, P6).
+SCHEMA = 3
+
+#: Where an observation came from. Absent on schema 1/2 records, which all
+#: predate the sampler and are therefore organic by construction.
+ORIGINS = ("coach", "sampler")
+_COHORT = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 
 #: The only measurement keys that reach the log, each checked for shape, so a
 #: caller cannot route a raw tag (or anything else) into it by accident.
 _STAMP = re.compile(r"^\d{8}T\d{6}\.\d{3}Z$")
 _STAMP_FIELDS = ("requestedAt", "requestStamp", "visibleAsOf",
-                 "latestVisibleBattle")
+                 "latestVisibleBattle", "scheduledAt", "horizonUntil")
 _READ_PATHS = ("miss", "hit", "probe", "uncached")
 
 
+def _prob(v):
+    """A probability kept at full float precision, or None."""
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) \
+        and 0.0 <= v <= 1.0 else None
+
+
 def _measurement(m) -> dict:
-    """Schema-2 fields, every one present. A missing or malformed value is
-    written EMPTY - never guessed - and the evaluator excludes what it needs."""
+    """Schema-3 fields, every one present. A missing or malformed value is
+    written EMPTY - never guessed - and the evaluator excludes what it needs.
+    `origin` defaults to "coach": only the sampler passes anything else."""
     m = m if isinstance(m, dict) else {}
     out = {"schema": SCHEMA}
     for k in _STAMP_FIELDS:
@@ -99,6 +112,15 @@ def _measurement(m) -> dict:
     out["readPath"] = path if path in _READ_PATHS else ""
     tracked = m.get("tracked")
     out["tracked"] = tracked if isinstance(tracked, bool) else None
+    origin = m.get("origin", "coach")
+    out["origin"] = origin if origin in ORIGINS else ""
+    cohort = m.get("cohort")
+    out["cohort"] = cohort if isinstance(cohort, str) and _COHORT.match(cohort) else ""
+    moment = m.get("moment")
+    out["moment"] = moment if isinstance(moment, int) and not isinstance(moment, bool) \
+        and 0 <= moment < 100 else None
+    out["pChangeExact"] = _prob(m.get("pChangeExact"))
+    out["pChange9999Exact"] = _prob(m.get("pChange9999Exact"))
     return out
 
 
@@ -714,6 +736,13 @@ def reconcile_from_tags(tags, load_plays, entries=None) -> dict:
 # EVERY record, so "no outcome yet" can never be counted as a wrong answer.
 # --------------------------------------------------------------------------
 
+def _stamp_plus(stamp: str, seconds: float) -> str:
+    """A battle_time stamp moved by `seconds` (UTC, whole seconds)."""
+    import calendar
+    t = calendar.timegm(time.strptime(stamp[:15], "%Y%m%dT%H%M%S")) + int(seconds)
+    return time.strftime("%Y%m%dT%H%M%S", time.gmtime(t)) + ".000Z"
+
+
 OUTCOME_STATUSES = ("scored", "censored", "malformed_outcome", "ambiguous_outcome",
                     "unresolvable", "missing_fields", "order_violation", "ambiguous_id")
 
@@ -732,13 +761,18 @@ def measurement_order_ok(e) -> bool:
 
 
 def outcomes_v2(entries, plays_by_key, observed_until: str,
-                target: str = "T1") -> dict:
+                target: str = "T1", max_after_s: float | None = None) -> dict:
     """{id: {"status", "hash", "battleTime", "t2BeforeRequest"}} for every
     record that has an id.
 
     T1: first same-domain battle with requestStamp < battle_time <= observed_until.
     T2: the same after anchorTs (schema 1's target). `observed_until` is where
     the caller's data ends, in battle_time format, and is required.
+
+    PER-OBSERVATION HORIZON (schema 3): a record's own `horizonUntil`, fixed
+    when it was written, bounds its outcome as well; `max_after_s` bounds it
+    at the cut + that many seconds (the 24 h sensitivity). An outcome beyond
+    either is CENSORED - a horizon is never extended for a record without one.
     """
     if target not in ("T1", "T2"):
         raise ValueError("target must be T1 or T2")
@@ -769,12 +803,18 @@ def outcomes_v2(entries, plays_by_key, observed_until: str,
         if player not in plays_by_key:
             res["status"] = "unresolvable"
             continue
+        hi = observed_until
+        own = e.get("horizonUntil") or ""
+        if isinstance(own, str) and _STAMP.match(own):
+            hi = min(hi, own)
+        if max_after_s is not None:
+            hi = min(hi, _stamp_plus(cut, max_after_s))
         plays = (plays_by_key.get(player) or {}).get(e.get("domain")) or []
         nxt = None
         for p in sorted(plays, key=lambda p: getattr(p, "battle_time", "") or ""):
             bt = getattr(p, "battle_time", "") or ""
-            if bt > observed_until:
-                break                     # beyond the data horizon
+            if bt > hi:
+                break                     # beyond the data / observation horizon
             if bt > cut:                  # STRICTLY later; ties are not "next"
                 nxt = p
                 break
@@ -997,6 +1037,7 @@ def verify_log(path: str = LOG_PATH) -> dict:
         "records": 0, "malformed": 0, "malformedLines": [],
         "duplicateIds": 0, "missingIds": 0, "withoutAnchor": 0,
         "earliest": "", "latest": "", "versionStamps": {}, "schemaVersions": {},
+        "origins": {},
         "archives": [], "ok": False, "problems": [],
     }
     if not out["exists"]:
@@ -1036,6 +1077,8 @@ def verify_log(path: str = LOG_PATH) -> dict:
                 stamps[key] = stamps.get(key, 0) + 1
                 sv = str(rec.get("schema", 1))
                 out["schemaVersions"][sv] = out["schemaVersions"].get(sv, 0) + 1
+                og = rec.get("origin") or "organic-pre-schema3"
+                out["origins"][og] = out["origins"].get(og, 0) + 1
     except Exception as exc:
         out["problems"].append("unreadable: %s" % type(exc).__name__)
         return out

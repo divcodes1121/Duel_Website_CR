@@ -1,0 +1,14 @@
+[Unit]
+Description=R3 labelled shadow sampler, every 5 minutes (PREREGISTRATION P4)
+Requires=royalweb-sampler.service
+
+[Timer]
+# P4: a moment runs at the first tick at or after it.
+OnCalendar=*:0/5
+AccuracySec=1s
+# A missed tick is LATE, never replayed in a burst after a reboot.
+Persistent=false
+Unit=royalweb-sampler.service
+
+[Install]
+WantedBy=timers.target

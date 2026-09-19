@@ -1397,6 +1397,42 @@ records still flow through every existing function unchanged; T1 refuses them.
 `test_ml_shadow_measurement.py` (14 tests) pins it, and every mutation in
 `brain-evidence/r3_measurement/mutation_tests.py` fails the suite.
 
+### The labelled sampler (R3, schema 3)
+
+Organic Coach traffic is ~0.5 new subjects a day, so the preregistered sampler
+(`brain-evidence/r3_sampler_design/PREREGISTRATION.md`) makes shadow-only
+predictions for a seeded random 520 of `tracked_players`, 4 moments each over 7
+days, through the SAME `predictor.predict_for_tag` the Coach observer calls.
+`ml/production/sampler.py`, run by `deploy/royalweb-sampler.{service,timer}`
+(oneshot every 5 min, nice 19, idle IO, no retries).
+
+- **Its own log**, `ml/results/shadow-log-sampler-<cohort>.jsonl`, set before
+  `shadow` is imported; every record `origin: "sampler"`, schema 3. The Coach
+  path now writes `origin: "coach"`. Schema 1/2 records have no `origin` and all
+  predate the sampler.
+- **The paired baseline is one extra `model.predict`** on a copy of the served
+  vector with x10 also zeroed — exactly the `"9999"` engine (x9 = x10 = 0).
+  `predictor.last_served()` hands the copy over; `measurement_extra` lets the
+  sampler add fields after the prediction is final, and may never overwrite the
+  measured clocks.
+- **Every record carries `horizonUntil`** (request stamp + 7 d); `outcomes_v2`
+  censors beyond it, and `max_after_s` gives the 24 h sensitivity.
+- **It cannot write the database, enrol anyone or answer anyone**: `mode=ro`
+  connections only, no `tracking` import, no socket, no route.
+- **Every preregistered stop condition** writes `<cohort>.STOPPED` and disables
+  the timer; nothing restarts it. Kill switch `CLASH_OIE_SAMPLER=on|off` in the
+  unit.
+- `test_ml_sampler.py` (53 tests) pins it; mutation tests in
+  `brain-evidence/r3_sampler_run/`.
+- **Amendment 1 (approved 2026-09-19) replaced one broken MECHANISM, nothing
+  else.** P12 checked "database writes by the sampler" with `PRAGMA
+  data_version`, which moves only for OTHER connections' commits and never for
+  a connection's own: it could not see a sampler write, and during a bot poll it
+  moved 172 times in 180 s. The rule is now enforced by `mode=ro` plus
+  `total_changes == 0` on every sampler-owned connection (any non-zero = stop);
+  `data_version` is logged per tick as `dataVersionMoved`, information only.
+  The gate, population, randomization and outcome are untouched.
+
 ### What the checkpoint reports, and why each column is there
 
 `checkpoint_report()` prints, per domain: population (observed / resolvable /

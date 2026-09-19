@@ -176,7 +176,8 @@ class Clocks(TempWorld):
                 mock.patch.object(source, "_wall_stamp", lambda: "20990101T000003.000Z"):
             P.predict_for_tag(TAG, "competitive", record_shadow=True)
         e = self.log()[-1]
-        self.assertEqual(e["schema"], 2)
+        self.assertEqual(e["schema"], shadow.SCHEMA)
+        self.assertGreaterEqual(shadow.SCHEMA, 2)
         self.assertEqual(e["requestedAt"], "20990101T000000.000Z")
         self.assertEqual(e["requestStamp"], "20990101T000007.000Z")
         self.assertEqual(e["visibleAsOf"], "20990101T000003.000Z")
@@ -380,7 +381,7 @@ class LogShape(TempWorld):
             fh.write(json.dumps(dict(v1, versions=dict(shadow.VERSIONS))) + "\n")
         P.predict_for_tag(TAG, "competitive", record_shadow=True)
         v = shadow.verify_log(shadow.LOG_PATH)
-        self.assertEqual(v["schemaVersions"], {"1": 1, "2": 1})
+        self.assertEqual(v["schemaVersions"], {"1": 1, str(shadow.SCHEMA): 1})
         self.assertTrue(v["ok"])
         self.assertIn("schemas", shadow.verify_report(v))
         # engine fallback: no stamp was used, so T1 must refuse it
