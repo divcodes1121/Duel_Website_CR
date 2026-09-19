@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-20-dropdowns',
+    date: '2026-09-20',
+    kind: 'improved',
+    title: 'Every dropdown on the site works the same way now',
+    body: [
+      'Sort, per-page, rarity, elixir, game mode, season and the rest all open the same panel: in the site’s own light or dark theme instead of your system’s, with a short explanation under the choices that need one — what each sort order actually ranks by, which months a season covers — and a tick on the one that is picked.',
+      'They work from the keyboard too — arrow keys to move, a letter to jump, Enter to pick, Escape to close — and the country list when you set up an account has a search box, so you can type to find yours.',
+    ],
+    href: '#/duo',
+    hrefLabel: 'Try one on 2v2 Decks',
+  },
+  {
     id: '2026-09-19-contrast-duo',
     date: '2026-09-19',
     kind: 'improved',

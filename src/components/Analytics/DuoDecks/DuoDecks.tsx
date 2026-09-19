@@ -8,6 +8,8 @@ import {
   fetchDuoPairs,
 } from '../../../state/analyticsClient';
 import { DeckActions } from '../../DeckActions/DeckActions';
+import { Dropdown } from '../../ui/dropdown-menu-14';
+import { BarsIcon, ListIcon } from '../../Dashboard/icons';
 import { ContinuousPagination } from '../../ui/continuous-pagination';
 import { revealListTop } from '../../../utils/revealListTop';
 import { WinConFilter } from '../../WinConFilter/WinConFilter';
@@ -45,9 +47,10 @@ import styles from './DuoDecks.module.css';
  */
 
 const SORTS = [
-  { key: 'played', label: 'Most played' },
-  { key: 'recent', label: 'Recently seen' },
-  { key: 'first', label: 'First seen' },
+  { key: 'played', label: 'Most played', hint: 'Partnerships seen in the most battles first' },
+  { key: 'recent', label: 'Recently seen', hint: 'The latest battle a pair appeared in, newest first' },
+  /* ASC on the server (`duo_pairs.SORTS`): the longest-standing pairs first. */
+  { key: 'first', label: 'First seen', hint: 'The longest-standing partnerships first' },
 ] as const;
 
 const PER_PAGE = [25, 50, 100] as const;
@@ -215,39 +218,35 @@ export function DuoDecks() {
           onClear={clear}
           align="start"
         />
-        <label className={styles.control}>
-          Sort
-          <select
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value);
-              void load(1, picked, e.target.value, per);
-            }}
-          >
-            {SORTS.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={styles.control}>
-          Per page
-          <select
-            value={per}
-            onChange={(e) => {
-              const n = Number(e.target.value);
-              setPer(n);
-              void load(1, picked, sort, n);
-            }}
-          >
-            {PER_PAGE.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* THE SHARED DROPDOWN, like every select on the site. Each change is
+            a new question about the whole collection, so it goes back to
+            page 1. */}
+        <Dropdown
+          size="sm"
+          caption="Sort"
+          icon={<BarsIcon />}
+          heading="Sort partnerships"
+          subheading="The order the whole collection is ranked in"
+          value={sort}
+          onChange={(v) => {
+            setSort(v);
+            void load(1, picked, v, per);
+          }}
+          options={SORTS.map((s) => ({ value: s.key, label: s.label, description: s.hint }))}
+        />
+        <Dropdown
+          size="sm"
+          caption="Per page"
+          icon={<ListIcon />}
+          heading="Pairs per page"
+          value={String(per)}
+          onChange={(v) => {
+            const n = Number(v);
+            setPer(n);
+            void load(1, picked, sort, n);
+          }}
+          options={PER_PAGE.map((n) => ({ value: String(n), label: `${n} pairs` }))}
+        />
       </div>
 
       {error && <p className={styles.error}>{error}</p>}

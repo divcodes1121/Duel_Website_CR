@@ -219,58 +219,12 @@
   gap: 0.35rem;
 }
 
-.fieldLabel {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-/* The chip is the wrapper; the <select> is transparent on top of it and sized
-   to it, so the thing you click is exactly the thing you see — and the platform
-   control keeps its keyboard behaviour and its native picker on a phone. */
-.select {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.28rem 0.5rem 0.28rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-sunken);
-  color: var(--text);
-}
-
-.select select {
-  appearance: none;
-  border: none;
-  background: none;
-  outline: none;
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 650;
-  color: inherit;
-  padding: 0;
-  padding-right: 0.1rem;
-  cursor: pointer;
-  min-width: 3.4rem;
-}
-
-.select[data-narrow='true'] select {
-  min-width: 1.9rem;
-}
-
-/* A narrowed value is the state worth seeing from across the panel. */
-.select:has(select[data-on]) {
-  color: var(--accent-select);
+/* A dropdown that is narrowing the grid is lit — the state worth seeing from
+   across the panel. Doubled class to outrank the component's own trigger rule
+   whichever stylesheet loads last. */
+.on.on {
   border-color: var(--accent-select-edge);
   background: var(--accent-select-fill-sunken);
-}
-
-.select svg {
-  color: var(--text-muted);
-  flex-shrink: 0;
 }
 
 .direction {

@@ -129,26 +129,6 @@
   margin-left: auto;
 }
 
-.sortLabel {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.sort select {
-  font: inherit;
-  font-size: 0.76rem;
-  font-weight: 650;
-  color: var(--text);
-  background: var(--surface-sunken);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  padding: 0.3rem 0.5rem;
-  cursor: pointer;
-}
-
 .note,
 .formNote {
   margin: 0;

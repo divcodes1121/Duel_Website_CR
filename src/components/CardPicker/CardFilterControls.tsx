@@ -4,7 +4,9 @@ import { elixirCosts, hasActiveFilters } from '../../utils/filter';
 import type { RarityFilter } from '../../utils/filter';
 import type { Rarity } from '../../types/card';
 import type { SortKey } from '../../utils/sort';
-import { SearchIcon, ChevronDownIcon, CloseIcon } from '../DuelDeckBuilder/icons';
+import { SearchIcon, CloseIcon } from '../DuelDeckBuilder/icons';
+import { Dropdown } from '../ui/dropdown-menu-14';
+import { BarsIcon, CardsIcon, DropIcon } from '../Dashboard/icons';
 import styles from './CardPicker.module.css';
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -19,12 +21,13 @@ const COSTS = elixirCosts(CARDS);
 /**
  * The library's control row: Reset, sort, the two value filters and search.
  *
- * These are real `<select>` elements rather than the portalled menus the rest of
- * the app builds by hand. A dropdown over a list of five fixed values is the one
- * case the platform control already answers — it is keyboard-navigable, it
- * type-aheads, and on a phone it opens the native wheel. The chip look is a
- * wrapper plus a caret; the select itself is transparent on top of it, so what
- * you click is the control you see.
+ * THE SHARED DROPDOWN NOW, NOT NATIVE SELECTS (2026-09-20). These were real
+ * `<select>` elements for what the platform gives a select: keyboard
+ * navigation, type-ahead, a picker on a phone. The shared `Dropdown` keeps the
+ * first two — arrows, Home/End, Enter, Esc and type-ahead — and draws its open
+ * list in the app's theme and font, which the operating system's never did.
+ * A trigger that is narrowing the grid is lit violet (`.on`), the cue the old
+ * chips carried.
  */
 export function CardFilterControls() {
   const sortKey = useBuilderStore((s) => s.sortKey);
@@ -56,27 +59,19 @@ export function CardFilterControls() {
         Reset
       </button>
 
-      <label className={styles.field}>
-        <span className={styles.fieldLabel}>Sort</span>
-        <span className={styles.select}>
-          <select
-            value={sortKey}
-            onChange={(e) => {
-              const next = e.target.value as SortKey;
-              // setSort flips direction when the key is unchanged, so only call
-              // it for a real change — otherwise picking the current option out
-              // of the list would silently reverse the grid.
-              if (next !== sortKey) setSort(next);
-            }}
-          >
-            {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
-              <option key={key} value={key}>
-                {SORT_LABELS[key]}
-              </option>
-            ))}
-          </select>
-          <ChevronDownIcon />
-        </span>
+      <span className={styles.field}>
+        <Dropdown<SortKey>
+          size="sm"
+          caption="Sort"
+          icon={<BarsIcon />}
+          heading="Sort the library"
+          value={sortKey}
+          // setSort flips direction when the key is unchanged, so only call it
+          // for a real change — the Dropdown already skips re-picking the
+          // current option, so picking it cannot silently reverse the grid.
+          onChange={(next) => setSort(next)}
+          options={(Object.keys(SORT_LABELS) as SortKey[]).map((key) => ({ value: key, label: SORT_LABELS[key] }))}
+        />
         <button
           type="button"
           className={styles.direction}
@@ -86,45 +81,35 @@ export function CardFilterControls() {
         >
           {sortDirection === 'asc' ? '↑' : '↓'}
         </button>
-      </label>
+      </span>
 
-      <label className={styles.field}>
-        <span className={styles.fieldLabel}>Elixir</span>
-        <span className={styles.select} data-narrow="true">
-          <select
-            value={String(elixir)}
-            onChange={(e) => setElixir(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-            data-on={elixir !== 'all' || undefined}
-          >
-            <option value="all">All</option>
-            {COSTS.map((cost) => (
-              <option key={cost} value={cost}>
-                {cost}
-              </option>
-            ))}
-          </select>
-          <ChevronDownIcon />
-        </span>
-      </label>
+      <Dropdown
+        size="sm"
+        caption="Elixir"
+        icon={<DropIcon />}
+        heading="Elixir cost"
+        className={elixir !== 'all' ? styles.on : undefined}
+        value={String(elixir)}
+        onChange={(v) => setElixir(v === 'all' ? 'all' : Number(v))}
+        options={[
+          { value: 'all', label: 'All costs', icon: '∗' },
+          ...COSTS.map((cost) => ({ value: String(cost), label: `${cost} elixir`, icon: String(cost) })),
+        ]}
+      />
 
-      <label className={styles.field}>
-        <span className={styles.fieldLabel}>Rarity</span>
-        <span className={styles.select}>
-          <select
-            value={rarity}
-            onChange={(e) => setRarity(e.target.value as RarityFilter)}
-            data-on={rarity !== 'all' || undefined}
-          >
-            <option value="all">All</option>
-            {RARITIES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-          <ChevronDownIcon />
-        </span>
-      </label>
+      <Dropdown<RarityFilter>
+        size="sm"
+        caption="Rarity"
+        icon={<CardsIcon />}
+        heading="Rarity"
+        className={rarity !== 'all' ? styles.on : undefined}
+        value={rarity}
+        onChange={setRarity}
+        options={[
+          { value: 'all', label: 'All rarities', icon: '∗' },
+          ...RARITIES.map((r) => ({ value: r, label: r, icon: r === 'Champion' ? 'Ch' : r[0] })),
+        ]}
+      />
 
       <div className={styles.search}>
         <span className={styles.searchIcon} aria-hidden="true">

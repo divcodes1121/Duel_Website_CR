@@ -7,6 +7,8 @@ import {
   type GlobalCardBoard,
 } from '../../state/analyticsClient';
 import { CardArt } from './CardArt';
+import { Dropdown } from '../ui/dropdown-menu-14';
+import { BarsIcon } from '../Dashboard/icons';
 import styles from './GlobalCards.module.css';
 
 const pct = (v: number) => `${v.toFixed(1)}%`;
@@ -174,13 +176,25 @@ export function GlobalCards() {
           ))}
         </div>
 
-        <label className={styles.sort}>
-          <span className={styles.sortLabel}>Sort</span>
-          <select value={sort} onChange={(e) => setSort(e.target.value as 'use' | 'win')}>
-            <option value="use">Use rate</option>
-            <option value="win">Win rate</option>
-          </select>
-        </label>
+        <div className={styles.sort}>
+          <Dropdown<'use' | 'win'>
+            size="sm"
+            align="end"
+            caption="Sort"
+            icon={<BarsIcon />}
+            heading="Sort cards"
+            value={sort}
+            onChange={setSort}
+            options={[
+              { value: 'use', label: 'Use rate', description: 'What people actually play, most first' },
+              {
+                value: 'win',
+                label: 'Win rate',
+                description: 'Highest first — cards with too few battles to rate go last',
+              },
+            ]}
+          />
+        </div>
       </div>
 
       {failed && (

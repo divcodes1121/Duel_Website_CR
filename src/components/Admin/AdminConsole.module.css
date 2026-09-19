@@ -541,16 +541,11 @@
 
 /* The two controls sit on one line and wrap together, so a narrow screen drops
    the button under the select rather than shearing the column. */
+/* The role Dropdown keeps only its spacing from the End-trial button beside
+   it; everything else is the shared component's. */
 .roleSelect {
-  padding: 0.3rem 0.5rem;
   margin-right: 0.35rem;
-  border-radius: 9px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  font: inherit;
-  font-size: 0.8rem;
-  color: var(--text);
-  cursor: pointer;
+  vertical-align: middle;
 }
 
 /* QUIETER THAN THE ROLE SELECT, deliberately. Ending a trial is destructive in

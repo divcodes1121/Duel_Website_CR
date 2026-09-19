@@ -237,40 +237,13 @@
 
 .filters {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
   padding: 0.7rem 0.8rem;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--surface-sunken);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 8.5rem;
-}
-
-.fieldLabel {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.field select {
-  padding: 0.42rem 0.55rem;
-  border-radius: 9px;
-  border: 1px solid var(--border);
-  background: var(--surface-nested);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .toggle {

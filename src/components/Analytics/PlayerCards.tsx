@@ -11,6 +11,8 @@ import {
   type CardMode,
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
+import { Dropdown } from '../ui/dropdown-menu-14';
+import { BarsIcon, CardsIcon, DropIcon, SwordsIcon } from '../Dashboard/icons';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './PlayerCards.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
@@ -572,51 +574,57 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
         </header>
 
         <div className={styles.filters}>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Game Mode</span>
-            <select value={mode} onChange={(e) => setMode(e.target.value as CardMode)}>
-              {MODES.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Elixir Cost</span>
-            <select value={elixir} onChange={(e) => setElixir(e.target.value)}>
-              <option value="all">All</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                <option key={n} value={String(n)}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Rarity</span>
-            <select value={rarity} onChange={(e) => setRarity(e.target.value)}>
-              <option value="all">All</option>
-              {RARITIES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Sort by</span>
-            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-              {SORTS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* THE SHARED DROPDOWN. Four questions, four glyphs, so the row
+              reads as four different filters rather than four identical
+              boxes. Row tiles carry the value itself where it is short — the
+              cost, the rarity's initial — the way the template's rows carry a
+              workspace's initials. */}
+          <Dropdown<CardMode>
+            size="sm"
+            caption="Game mode"
+            icon={<SwordsIcon />}
+            heading="Game mode"
+            value={mode}
+            onChange={setMode}
+            options={MODES.map((m) => ({ value: m.id, label: m.label }))}
+          />
+          <Dropdown
+            size="sm"
+            caption="Elixir cost"
+            icon={<DropIcon />}
+            heading="Elixir cost"
+            value={elixir}
+            onChange={setElixir}
+            options={[
+              { value: 'all', label: 'All costs', icon: '∗' },
+              ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({
+                value: String(n),
+                label: `${n} elixir`,
+                icon: String(n),
+              })),
+            ]}
+          />
+          <Dropdown
+            size="sm"
+            caption="Rarity"
+            icon={<CardsIcon />}
+            heading="Rarity"
+            value={rarity}
+            onChange={setRarity}
+            options={[
+              { value: 'all', label: 'All rarities', icon: '∗' },
+              ...RARITIES.map((r) => ({ value: r, label: r, icon: r === 'Champion' ? 'Ch' : r[0] })),
+            ]}
+          />
+          <Dropdown<Sort>
+            size="sm"
+            caption="Sort by"
+            icon={<BarsIcon />}
+            heading="Sort cards"
+            value={sort}
+            onChange={setSort}
+            options={SORTS.map((x) => ({ value: x.id, label: x.label }))}
+          />
 
           <label className={styles.toggle}>
             <input

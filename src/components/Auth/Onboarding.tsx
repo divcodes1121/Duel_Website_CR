@@ -3,6 +3,8 @@ import { type FormEvent, useMemo, useState } from 'react';
 import { Fireflies } from '../../three/Fireflies';
 import { useAccountStore } from '../../state/accountStore';
 import { countries, guessCountry } from './countries';
+import { Dropdown } from '../ui/dropdown-menu-14';
+import { GlobeIcon } from '../Dashboard/icons';
 import loginStyles from '../Login/Login.module.css';
 import styles from './Onboarding.module.css';
 
@@ -103,26 +105,31 @@ export function Onboarding() {
             )}
 
             {step === 1 && (
-              <label className={loginStyles.field}>
+              <div className={loginStyles.field}>
                 <span className={loginStyles.fieldLabel}>Country</span>
-                {/* A native select, not a custom listbox. 200 options with
-                    type-ahead is a thing the platform already does better than
-                    anything hand-rolled, on every device, including with a
-                    screen reader. */}
-                <select
-                  className={`${loginStyles.input} ${styles.select}`}
+                {/* THE SHARED DROPDOWN, with its search field — which is what a
+                    native select was kept here for: 200 options want finding by
+                    typing. The panel does type-ahead and a filter box, draws in
+                    the site's theme rather than the operating system's, and is a
+                    real listbox to a screen reader. Each row's tile is the
+                    two-letter code, the way the template's rows carry a
+                    workspace's initials; flag emoji would render as bare
+                    letters on Windows anyway. */}
+                <Dropdown
+                  className={styles.dropdown}
+                  caption="Country"
+                  icon={<GlobeIcon />}
+                  heading="Country"
+                  subheading="Optional — type to find yours"
+                  searchable
                   value={country}
-                  autoFocus
-                  onChange={(e) => setCountry(e.target.value)}
-                >
-                  <option value="">Prefer not to say</option>
-                  {list.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={setCountry}
+                  options={[
+                    { value: '', label: 'Prefer not to say', icon: '—' },
+                    ...list.map((c) => ({ value: c.code, label: c.name, icon: c.code })),
+                  ]}
+                />
+              </div>
             )}
 
             {step === 2 && (

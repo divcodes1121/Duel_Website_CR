@@ -1,0 +1,303 @@
+/* The stylesheet for the vendored dropdown-menu-14.
+ *
+ * Upstream is Tailwind; this is its look written out onto this app's tokens.
+ * Every class is prefixed `dd14-` because the panel is portalled to <body> and
+ * cannot be scoped under a wrapper the way `.glass-dock-scope` or `.footer-5`
+ * are — a prefix is the only scope a portal can have.
+ */
+
+/* ── the trigger ─────────────────────────────────────────────────────── */
+
+.dd14-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  width: 260px;
+  max-width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface-strong);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--highlight);
+  transition:
+    border-color var(--dur-2) var(--ease),
+    background var(--dur-2) var(--ease);
+}
+
+.dd14-trigger:hover:not(:disabled),
+.dd14-trigger[data-open] {
+  border-color: var(--border-strong);
+}
+
+/* A disabled control keeps its dimming — there, the dimming is the message. */
+.dd14-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Upstream's `bg-primary` tile: the violet SOLID step, graded to carry white. */
+.dd14-tile {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.375rem;
+  background: var(--solid-violet);
+  color: var(--on-solid);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dd14-tile svg {
+  width: 55%;
+  height: 55%;
+}
+
+.dd14-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.dd14-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dd14-caption {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.dd14-chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.dd14-chevron svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* The compact trigger: the same four parts at toolbar height. */
+.dd14-trigger[data-size='sm'] {
+  width: auto;
+  gap: 0.5rem;
+  padding: 0.3rem 0.45rem 0.3rem 0.3rem;
+}
+
+.dd14-trigger[data-size='sm'] .dd14-tile {
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 0.72rem;
+}
+
+.dd14-trigger[data-size='sm'] .dd14-value {
+  font-size: 0.8rem;
+}
+
+.dd14-trigger[data-size='sm'] .dd14-caption {
+  font-size: 0.66rem;
+}
+
+.dd14-trigger[data-size='sm'] .dd14-chevron svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ── the panel ───────────────────────────────────────────────────────── */
+
+/* Opaque on purpose: it floats over arbitrary content, and a translucent
+   dropdown is a bug rather than an effect (see the surface ladder). */
+.dd14-panel {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface-strong);
+  color: var(--text);
+  font-family: var(--font-body);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+  transform-origin: top center;
+  animation: dd14-in var(--dur-2) var(--ease) both;
+}
+
+.dd14-panel[data-flip] {
+  transform-origin: bottom center;
+}
+
+@keyframes dd14-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dd14-panel {
+    animation: none;
+  }
+}
+
+.dd14-head {
+  padding: 0.5rem;
+}
+
+.dd14-heading {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dd14-sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.dd14-sep {
+  flex: none;
+  margin: 0.25rem -0.5rem;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.dd14-search {
+  flex: none;
+  margin: 0.25rem 0 0.4rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.dd14-search::placeholder {
+  color: var(--text-muted);
+}
+
+.dd14-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: none;
+}
+
+.dd14-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.dd14-label svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.dd14-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* The active row — pointer or keyboard — takes the neutral hover wash; the
+   CHOSEN row carries the check. Two different facts, two different marks. */
+.dd14-item[data-active] {
+  background: var(--neutral-wash);
+}
+
+/* Upstream's `bg-muted` row tile. */
+.dd14-item-tile {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.375rem;
+  background: var(--surface-sunken);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.dd14-item-tile svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.dd14-item[aria-selected='true'] .dd14-item-tile {
+  background: color-mix(in srgb, var(--solid-violet) 14%, var(--surface-strong));
+  color: var(--accent-select);
+}
+
+.dd14-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dd14-item-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.dd14-item-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.dd14-item-meta {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.dd14-check {
+  flex: none;
+  display: inline-flex;
+  color: var(--accent-select);
+}
+
+.dd14-check svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.dd14-empty {
+  margin: 0;
+  padding: 0.6rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

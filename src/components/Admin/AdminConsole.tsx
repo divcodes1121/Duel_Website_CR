@@ -7,6 +7,8 @@ import { ago, bytes, until } from '../../utils/format';
 import { useAccess } from '../../state/gate';
 import { TIER_ADMIN_LABEL } from '../../state/tiers';
 import { ThemeToggle } from '../Theme/ThemeToggle';
+import { Dropdown } from '../ui/dropdown-menu-14';
+import { BadgeIcon } from '../Dashboard/icons';
 import styles from './AdminConsole.module.css';
 
 /** Thousands separators, so 3278 reads as 3,278 at a glance. */
@@ -699,11 +701,21 @@ export function AdminConsole() {
                 <td>{ago(u.last_sign_in_at)}</td>
                 <td>{u.devices}</td>
                 <td>
-                  <select
+                  {/* THE SHARED DROPDOWN. Disabled exactly where the select
+                      was — mid-change, your own row, the owner's row — and the
+                      title still says why, because a control that silently
+                      refuses reads as broken. */}
+                  <Dropdown
                     className={styles.roleSelect}
+                    size="sm"
+                    align="end"
+                    caption="Role"
+                    icon={<BadgeIcon />}
+                    heading="Role"
+                    subheading={u.email ?? undefined}
                     value={u.role}
                     disabled={busyId === u.id || u.id === meId || !!u.is_owner}
-                    onChange={(e) => void change(u, e.target.value)}
+                    onChange={(v) => void change(u, v)}
                     title={
                       u.is_owner
                         ? "The owner's role cannot be changed by anyone, including another owner session. Moving it means editing supabase/002_owner.sql and re-running it in the dashboard"
@@ -711,11 +723,12 @@ export function AdminConsole() {
                           ? 'You cannot change your own role — the database refuses it, so a misclick cannot lock you out of this console'
                           : 'Grant paid Pro, make an admin, or drop back to free'
                     }
-                  >
-                    <option value="free">free</option>
-                    <option value="pro">pro — paid</option>
-                    <option value="admin">admin</option>
-                  </select>
+                    options={[
+                      { value: 'free', label: 'Free', description: 'The free areas only' },
+                      { value: 'pro', label: 'Pro — paid', description: 'Every area, Coach Assist included' },
+                      { value: 'admin', label: 'Admin', description: 'Everything, plus this console' },
+                    ]}
+                  />
 
                   {/* ENDING A TRIAL IS AN ACTION, SO IT IS A BUTTON.
                       It used to be a fourth <option> in the select above,

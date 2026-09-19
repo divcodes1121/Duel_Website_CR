@@ -313,3 +313,54 @@ export function StarIcon({ size = 14 }: P) {
     </svg>
   );
 }
+
+/* ── The dropdowns' trigger tiles (2026-09-20). One glyph per kind of choice,
+   so a row of dropdowns reads as a row of different questions. ─────────── */
+
+export function CalendarIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+/* An elixir drop. */
+export function DropIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <path d="M12 3.2c3.4 4.3 6 7.6 6 10.9a6 6 0 0 1-12 0c0-3.3 2.6-6.6 6-10.9z" />
+    </svg>
+  );
+}
+
+export function GlobeIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.4 2.4 3.6 5.2 3.6 8.5s-1.2 6.1-3.6 8.5c-2.4-2.4-3.6-5.2-3.6-8.5S9.6 5.9 12 3.5z" />
+    </svg>
+  );
+}
+
+export function ListIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <path d="M9 6h11M9 12h11M9 18h11" />
+      <circle cx="4.5" cy="6" r="1" />
+      <circle cx="4.5" cy="12" r="1" />
+      <circle cx="4.5" cy="18" r="1" />
+    </svg>
+  );
+}
+
+/* A badge — who an account is, for the admin console's role control. */
+export function BadgeIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <path d="M12 3 5 6v5.5c0 4.2 2.9 7.9 7 9.5 4.1-1.6 7-5.3 7-9.5V6z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}

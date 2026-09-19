@@ -47,12 +47,13 @@ uniforms, so a theme flip re-pushes them **without rebuilding the context** —
 recompiling to change five vec3s would drop the liquid's level, tilt and slosh
 mid-motion.
 
-**Five vendored registry components now sit in `src/components/ui/`** —
+**Six vendored registry components now sit in `src/components/ui/`** —
 vengenceui's GlassDock (the top nav) and GooeySearch (the tag field), React
 Bits' ElectricBorder (the squad boxes), and watermelon.sh's
 ContinuousPagination (every numbered pager — see "One pager, everywhere" in the
-README) and Footer5 (the landing footer, which takes no canvas and does not
-move — noted here only so the list is complete). Their deviations from upstream are listed in their own file headers,
+README), Footer5 (the landing footer) and dropdown-menu-14 (every select-style
+dropdown). The last two take no canvas; they are noted here only so the list is
+complete. Their deviations from upstream are listed in their own file headers,
 and `glass-dock.tsx` is excluded from eslint as vendored code.
 
 GlassDock, GooeySearch and ContinuousPagination take no canvas and are noted
