@@ -1223,8 +1223,8 @@ degraded read and a confidently wrong one.
 | `shadow` | unchanged | records | nothing |
 | `on` | unchanged | records | fetched separately |
 
-**The prediction moment is the request, not a placeholder (2026-09-15, NOT
-DEPLOYED).** `predict()` used to build its example with `timestamp="9999"`,
+**The prediction moment is the request, not a placeholder (2026-09-15,
+deployed 2026-09-18).** `predict()` used to build its example with `timestamp="9999"`,
 which `features._parse` cannot read, so `log_hours_since_change` and
 `log_hours_since_last_play` were 0 on every live read. It now passes the
 caller's `cutoff_ts` when given, else `_request_stamp()` — the wall clock **in
@@ -1234,14 +1234,14 @@ stamp would shift every gap by the host's offset without an error. No weight,
 feature order, calibration cut, cap or candidate changed; the recent-deck
 primary is identical under any stamp; bands and therefore the number of shown
 alternatives do move, and that cost was measured and accepted (Brain Phases 8b,
-8c, 10). **Feature 9 is served as 0** (2026-09-19, uncommitted): `features.extract` is
+8c, 10). **Feature 9 is served as 0** (committed `ce85bca`): `features.extract` is
 unchanged, and `_change_probability` scores `_served_vector(example)`, a COPY with
 `log_hours_since_change` zeroed (`SERVED_AS_ZERO`). Brain Phase 20 RQ3: macro Brier -0.0137
 [-0.0186, -0.0089], ROC-AUC -0.0029 [-0.0077, +0.0020] on a later window; offline equivalence
 exact on 357,426 + 196,781 reads. `VERSIONS["features"]` is `phase2-21-reqstamp-utc-x9zero`. Tests pin
-`_request_stamp` rather than reading the calendar. **Committed locally only: the
-VPS copy still sends `"9999"`, and `CLASH_OIE` stays `off`.** Deploying it dark
-is a separate approval; so are `shadow` and `on`.
+`_request_stamp` rather than reading the calendar. **Deployed as `ce85bca`
+(2026-09-18, R1 dark), and `CLASH_OIE=shadow` since 2026-09-18 21:29 UTC (R3)**,
+logging to `shadow-log-r3-ce85bca.jsonl`. `on` is a separate approval.
 
 **The Coach never waits for the engine.** It used to attach the read inline, so
 a cold spinning-disk read delayed the whole screen for a purely additive
@@ -1357,6 +1357,45 @@ every observed player to produce an outcome waits on inactive accounts forever:
 ```
 players observed | resolvable | with outcomes | reconciled predictions
 ```
+
+### Shadow schema 2: the three clocks (R3 measurement, 2026-09-18 UTC)
+
+A schema-1 record could not be scored against "what they bring next from the
+request": it did not hold the stamp the model used, when the rows behind it were
+read, or whether the player was tracked, and `outcomes_from_history` keys on
+`(player, ts)`, which **collides for two observations in one second — 110 of the
+2,620 records in the phase2-21 log**. Schema 2 adds, on every record, `schema: 2`
+and:
+
+| field | what it is |
+|---|---|
+| `requestedAt` | request clock, taken before the read |
+| `visibleAsOf` | when the database RETURNED the rows. A cache hit or probe-extended lease keeps the ORIGINAL read's time — that is when the visible set was fixed |
+| `readPath` | `miss` / `hit` / `probe` / `uncached` |
+| `latestVisibleBattle`, `visibleRows` | newest battle_time among all rows read, and how many |
+| `requestStamp` | the exact `timestamp` the model scored (x10's "now"); `""` if it fell back before scoring |
+| `tracked` | `True` / `False` / `None` — `None` is a failed lookup, never "untracked" (`source.tracked_state`, not `tracking.bot_tracked`, which says False on failure) |
+
+The hooks are thread-local (`source.last_read()`, `predictor.last_stamp()`)
+because the observer runs one daemon thread per request; nothing in the engine
+reads them back. `shadow._measurement` whitelists and shape-checks every field,
+so no caller can route a raw tag into the log. `VERSIONS` did NOT move: the
+prediction is byte-identical, only the record grew.
+
+`outcomes_v2(entries, plays_by_key, observed_until, target)` joins on the record
+`id`, gives EVERY record one status (`scored`, `censored`, `malformed_outcome`,
+`ambiguous_outcome` — one instant, two different decks — `unresolvable`,
+`missing_fields`, `order_violation`, `ambiguous_id`), and takes a
+required data horizon so "not yet" is never scored as wrong. **T1** is the first
+battle after `requestStamp`; **T2** the first after `anchorTs` (schema 1's target,
+which can land before the request when the read was stale — `t2BeforeRequest`).
+A schema-2 record must satisfy `anchorTs <= latestVisibleBattle <= visibleAsOf
+<= requestStamp` and `requestedAt <= requestStamp`, or it is excluded. Schema-1
+records still flow through every existing function unchanged; T1 refuses them.
+`reconcile_v2` adds the status census and `playersScored` against the same
+100-player gate. The contract is `brain-evidence/r3_measurement/MEASUREMENT_CONTRACT.md`;
+`test_ml_shadow_measurement.py` (14 tests) pins it, and every mutation in
+`brain-evidence/r3_measurement/mutation_tests.py` fails the suite.
 
 ### What the checkpoint reports, and why each column is there
 

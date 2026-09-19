@@ -117,9 +117,20 @@ def _request_stamp() -> str:
     return time.strftime("%Y%m%dT%H%M%S", time.gmtime()) + ".000Z"
 
 
+#: R3 MEASUREMENT. The prediction moment the last `predict` on THIS thread
+#: actually used, or "" if it fell back before scoring. Recorded, never read
+#: back by the engine.
+_tls = threading.local()
+
+
+def last_stamp() -> str:
+    return getattr(_tls, "stamp", "")
+
+
 def predict(tag: str, domain: str, plays, cutoff_ts: str | None = None,
             max_alternatives: int = policy.MAX_ALTERNATIVES):
     """The Coach's single entry point. Never raises."""
+    _tls.stamp = ""
     try:
         safe_plays = policy.assert_no_future(plays, cutoff_ts) if cutoff_ts else list(plays)
         if not safe_plays:
@@ -140,8 +151,10 @@ def predict(tag: str, domain: str, plays, cutoff_ts: str | None = None,
                               for p in shell)
         # THE PREDICTION MOMENT: the caller's cutoff when it supplies one,
         # otherwise the request itself. Never a placeholder.
+        stamp = cutoff_ts or _request_stamp()
+        _tls.stamp = stamp
         example = PredictionExample(
-            player_tag=tag, timestamp=cutoff_ts or _request_stamp(), domain=domain,
+            player_tag=tag, timestamp=stamp, domain=domain,
             history=cluster_plays,
             truth=DeckPlay(battle_time="9999", mode="", cards=()),
             cluster_history=cluster_plays)
@@ -208,10 +221,23 @@ def predict_for_tag(tag: str, domain: str, record_shadow: bool = False,
     import time as _t
     from . import source
     started = _t.time()
+    # R3: the request clock, taken BEFORE the read, so the record can show how
+    # stale the visible rows were. Only on the shadow path.
+    requested_at, read = "", {}
+    if record_shadow:
+        try:
+            requested_at = _request_stamp()
+        except Exception:
+            pass
     try:
         plays = source.load_plays(tag, domain)
     except Exception:
         plays = []
+    if record_shadow:
+        try:
+            read = source.last_read()
+        except Exception:
+            read = {}
     if not plays:
         return policy.safe_fallback([], "no history for %s" % domain, domain)
 
@@ -220,10 +246,14 @@ def predict_for_tag(tag: str, domain: str, record_shadow: bool = False,
         try:
             from . import shadow
             view = adapter.build_view(tag, domain, plays)
+            latency_ms = 1000.0 * (_t.time() - started)
+            measurement = dict(read, requestedAt=requested_at,
+                               requestStamp=last_stamp(),
+                               tracked=source.tracked_state(tag))
             shadow.record(tag, domain, result, len(plays),
-                          (view or {}).get("cluster_size", 0),
-                          1000.0 * (_t.time() - started),
-                          anchor_ts=(view or {}).get("ts", ""))
+                          (view or {}).get("cluster_size", 0), latency_ms,
+                          anchor_ts=(view or {}).get("ts", ""),
+                          measurement=measurement)
         except Exception:
             pass
     return result

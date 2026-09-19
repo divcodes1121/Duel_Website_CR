@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import threading
 import uuid
 import time
@@ -70,9 +71,40 @@ VERSIONS = {
 }
 
 
+#: R3. The record layout, separate from `VERSIONS`: the system that made the
+#: prediction did not change, only what is written about it. Schema-1 records
+#: (the phase2-21 log, and R3 until this ships) carry no `schema` key.
+SCHEMA = 2
+
+#: The only measurement keys that reach the log, each checked for shape, so a
+#: caller cannot route a raw tag (or anything else) into it by accident.
+_STAMP = re.compile(r"^\d{8}T\d{6}\.\d{3}Z$")
+_STAMP_FIELDS = ("requestedAt", "requestStamp", "visibleAsOf",
+                 "latestVisibleBattle")
+_READ_PATHS = ("miss", "hit", "probe", "uncached")
+
+
+def _measurement(m) -> dict:
+    """Schema-2 fields, every one present. A missing or malformed value is
+    written EMPTY - never guessed - and the evaluator excludes what it needs."""
+    m = m if isinstance(m, dict) else {}
+    out = {"schema": SCHEMA}
+    for k in _STAMP_FIELDS:
+        v = m.get(k)
+        out[k] = v if isinstance(v, str) and _STAMP.match(v) else ""
+    rows = m.get("visibleRows")
+    out["visibleRows"] = rows if isinstance(rows, int) and not isinstance(rows, bool) \
+        and rows >= 0 else None
+    path = m.get("readPath")
+    out["readPath"] = path if path in _READ_PATHS else ""
+    tracked = m.get("tracked")
+    out["tracked"] = tracked if isinstance(tracked, bool) else None
+    return out
+
+
 def record(tag: str, domain: str, result, n_plays: int, cluster_size: int,
            latency_ms: float, n_candidates: int = 0,
-           anchor_ts: str = "") -> None:
+           anchor_ts: str = "", measurement: dict | None = None) -> None:
     """Append one observation. Never raises.
 
     `anchor_ts` is the BATTLE TIME of the play the prediction was made from,
@@ -80,6 +112,11 @@ def record(tag: str, domain: str, result, n_plays: int, cluster_size: int,
     observation time in a different format entirely; matching against it would
     compare "2026-08-19T12:00:00Z" with "20260819T120000.000Z" and silently
     find nothing.
+
+    `measurement` carries the R3 clocks (MEASUREMENT_CONTRACT): the request
+    clock, the stamp the model used, the visibility cutoff of the read, and
+    whether the player was tracked. Whitelisted and shape-checked by
+    `_measurement`.
     """
     try:
         entry = {
@@ -100,6 +137,7 @@ def record(tag: str, domain: str, result, n_plays: int, cluster_size: int,
             "primaryHash": deck_hash(result.primary_deck),
             "altHashes": [deck_hash(a["cards"]) for a in result.alternatives],
         }
+        entry.update(_measurement(measurement))
         entry["id"] = uuid.uuid4().hex[:16]
         _append(entry)
     except Exception:
@@ -434,7 +472,7 @@ def drift(entries=None) -> dict:
     return out
 
 
-def reconcile(entries, actual_next_hash_by_key) -> dict:
+def reconcile(entries, actual_next_hash_by_key, key=None) -> dict:
     """Live accuracy per confidence band, from recorded hashes.
 
     `actual_next_hash_by_key` maps (player, ts) -> the deck hash the player
@@ -458,9 +496,9 @@ def reconcile(entries, actual_next_hash_by_key) -> dict:
     # the expensive half of reconciliation.
     scored = []
 
+    key_of = key or (lambda e: (e.get("player"), e.get("ts")))
     for e in entries:
-        key = (e.get("player"), e.get("ts"))
-        actual = actual_next_hash_by_key.get(key)
+        actual = actual_next_hash_by_key.get(key_of(e))
         if actual is None:
             continue
         total += 1
@@ -666,6 +704,122 @@ def reconcile_from_tags(tags, load_plays, entries=None) -> dict:
     return out
 
 
+# --------------------------------------------------------------------------
+# R3 - SCHEMA-2 OUTCOMES, keyed by observation id
+#
+# `outcomes_from_history` keys on (player, ts), which collides when one player
+# is observed twice in a second, and it knows only the anchor-relative target.
+# It is kept exactly as it was, for schema-1 logs. This is the evaluator for
+# the measurement contract: two named targets, a data horizon, and a status on
+# EVERY record, so "no outcome yet" can never be counted as a wrong answer.
+# --------------------------------------------------------------------------
+
+OUTCOME_STATUSES = ("scored", "censored", "malformed_outcome", "ambiguous_outcome",
+                    "unresolvable", "missing_fields", "order_violation", "ambiguous_id")
+
+
+def measurement_order_ok(e) -> bool:
+    """anchorTs <= latestVisibleBattle <= visibleAsOf <= requestStamp and
+    requestedAt <= requestStamp. Every stamp is battle_time format, so string
+    order IS time order. Only the fields present are compared."""
+    anchor = e.get("anchorTs") or ""
+    latest = e.get("latestVisibleBattle") or ""
+    vis = e.get("visibleAsOf") or ""
+    req = e.get("requestedAt") or ""
+    stamp = e.get("requestStamp") or ""
+    pairs = ((anchor, latest), (latest, vis), (vis, stamp), (req, stamp))
+    return all(a <= b for a, b in pairs if a and b)
+
+
+def outcomes_v2(entries, plays_by_key, observed_until: str,
+                target: str = "T1") -> dict:
+    """{id: {"status", "hash", "battleTime", "t2BeforeRequest"}} for every
+    record that has an id.
+
+    T1: first same-domain battle with requestStamp < battle_time <= observed_until.
+    T2: the same after anchorTs (schema 1's target). `observed_until` is where
+    the caller's data ends, in battle_time format, and is required.
+    """
+    if target not in ("T1", "T2"):
+        raise ValueError("target must be T1 or T2")
+    if not (isinstance(observed_until, str) and _STAMP.match(observed_until)):
+        raise ValueError("observed_until must be a battle_time stamp")
+    import collections
+    ids = collections.Counter(e.get("id") for e in entries if e.get("id"))
+    out = {}
+    for e in entries:
+        rid = e.get("id")
+        if not rid:
+            continue                      # cannot be joined to anything
+        res = {"status": "", "hash": None, "battleTime": "",
+               "t2BeforeRequest": False}
+        out[rid] = res
+        if ids[rid] > 1:
+            res["status"] = "ambiguous_id"
+            continue
+        schema2 = (e.get("schema") or 1) >= 2
+        cut = e.get("requestStamp") if target == "T1" else e.get("anchorTs")
+        if not cut or (target == "T1" and not schema2):
+            res["status"] = "missing_fields"
+            continue
+        if schema2 and not measurement_order_ok(e):
+            res["status"] = "order_violation"
+            continue
+        player = e.get("player")
+        if player not in plays_by_key:
+            res["status"] = "unresolvable"
+            continue
+        plays = (plays_by_key.get(player) or {}).get(e.get("domain")) or []
+        nxt = None
+        for p in sorted(plays, key=lambda p: getattr(p, "battle_time", "") or ""):
+            bt = getattr(p, "battle_time", "") or ""
+            if bt > observed_until:
+                break                     # beyond the data horizon
+            if bt > cut:                  # STRICTLY later; ties are not "next"
+                nxt = p
+                break
+        if nxt is None:
+            res["status"] = "censored"
+            continue
+        cards = getattr(nxt, "cards", None)
+        if not cards or len(set(cards)) != 8:
+            res["status"] = "malformed_outcome"
+            continue
+        # Two stored battles at the same instant with DIFFERENT decks cannot
+        # both be "the next one", and nothing in `battles` says which came
+        # first. The same deck twice is one answer (a duplicate row).
+        rivals = {deck_hash(getattr(p, "cards", None)) for p in plays
+                  if getattr(p, "battle_time", "") == nxt.battle_time}
+        if len(rivals) > 1:
+            res["status"] = "ambiguous_outcome"
+            continue
+        res.update(status="scored", hash=deck_hash(cards), battleTime=nxt.battle_time)
+        stamp = e.get("requestStamp") or ""
+        res["t2BeforeRequest"] = bool(stamp and nxt.battle_time <= stamp)
+    return out
+
+
+def reconcile_v2(entries, outcomes: dict) -> dict:
+    """`reconcile` on id-keyed outcomes, plus a status census, per domain."""
+    import collections
+    by_domain = collections.defaultdict(list)
+    for e in entries:
+        by_domain[e.get("domain", "?")].append(e)
+    truth = {rid: o["hash"] for rid, o in outcomes.items() if o["status"] == "scored"}
+    out = {}
+    for domain, rs in by_domain.items():
+        res = reconcile(rs, truth, key=lambda e: e.get("id"))
+        status = collections.Counter(
+            outcomes.get(e.get("id"), {}).get("status", "no_id") for e in rs)
+        scored_players = {e.get("player") for e in rs
+                          if outcomes.get(e.get("id"), {}).get("status") == "scored"}
+        res["statuses"] = dict(status)
+        res["playersScored"] = len(scored_players)
+        res["enoughPlayers"] = len(scored_players) >= MIN_PLAYERS_FOR_CONCLUSION
+        out[domain] = res
+    return out
+
+
 def population_line(res: dict) -> str:
     """One line stating which population a checkpoint actually rests on."""
     p = res.get("population") or {}
@@ -842,7 +996,7 @@ def verify_log(path: str = LOG_PATH) -> dict:
         "path": path, "exists": os.path.exists(path), "sizeBytes": 0,
         "records": 0, "malformed": 0, "malformedLines": [],
         "duplicateIds": 0, "missingIds": 0, "withoutAnchor": 0,
-        "earliest": "", "latest": "", "versionStamps": {},
+        "earliest": "", "latest": "", "versionStamps": {}, "schemaVersions": {},
         "archives": [], "ok": False, "problems": [],
     }
     if not out["exists"]:
@@ -880,6 +1034,8 @@ def verify_log(path: str = LOG_PATH) -> dict:
                     times.append(rec["ts"])
                 key = json.dumps(rec.get("versions") or {}, sort_keys=True)
                 stamps[key] = stamps.get(key, 0) + 1
+                sv = str(rec.get("schema", 1))
+                out["schemaVersions"][sv] = out["schemaVersions"].get(sv, 0) + 1
     except Exception as exc:
         out["problems"].append("unreadable: %s" % type(exc).__name__)
         return out
@@ -916,6 +1072,9 @@ def verify_report(v: dict) -> str:
          "  no anchor   %d" % v["withoutAnchor"],
          "  window      %s -> %s" % (v["earliest"] or "-", v["latest"] or "-"),
          "  versions    %d distinct" % len(v["versionStamps"]),
+         "  schemas     %s" % (", ".join("v%s: %d" % kv for kv in
+                                         sorted(v.get("schemaVersions", {}).items()))
+                               or "-"),
          "  archives    %s" % (", ".join(v["archives"]) or "none")]
     o.append("  STATUS      %s" % ("OK" if v["ok"] else
                                    "CORRUPT - " + "; ".join(v["problems"])))

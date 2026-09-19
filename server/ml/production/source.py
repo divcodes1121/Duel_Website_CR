@@ -70,6 +70,27 @@ _cache: dict = {}
 _cache_lock = threading.Lock()
 _stats = {"hit": 0, "probe": 0, "miss": 0}
 
+#: R3 MEASUREMENT. What the most recent `load_plays` on THIS thread actually
+#: saw. Thread-local because the shadow observer runs one daemon thread per
+#: request, and a module global would let two concurrent reads trade answers.
+_tls = threading.local()
+
+
+def _wall_stamp() -> str:
+    """UTC wall clock in battle_time's own format, so it compares directly."""
+    return time.strftime("%Y%m%dT%H%M%S", time.gmtime()) + ".000Z"
+
+
+def last_read() -> dict:
+    """The visibility cutoff of the last read on this thread.
+
+    `visibleAsOf` is when the ROWS were returned by the database - on a cache
+    hit or a probe-extended lease that is the ORIGINAL read, not this call,
+    because that is the moment the visible set was fixed. `readPath` says
+    which. Measurement only: nothing in the engine reads this back.
+    """
+    return dict(getattr(_tls, "meta", None) or {})
+
 
 def cache_stats() -> dict:
     with _cache_lock:
@@ -138,24 +159,30 @@ def load_plays(tag: str, domain: str, since: str | None = None,
     key = (tag, since, until, limit)
     cacheable = use_cache and bounded
     rows = None
+    _tls.meta = {}
     if cacheable:
         now = time.monotonic()
         with _cache_lock:
             hit = _cache.get(key)
         if hit:
-            loaded_at, cached_rows, seen_max = hit
+            loaded_at, cached_rows, seen_max, read_at = hit
             if now - loaded_at < SOFT_TTL_S:
                 with _cache_lock:
                     _stats["hit"] += 1
-                rows = cached_rows
+                rows, path = cached_rows, "hit"
             elif _latest_battle_time(tag) == seen_max:
                 with _cache_lock:
-                    _cache[key] = (now, cached_rows, seen_max)
+                    # The lease moves; the visibility cutoff does not. These
+                    # are still the rows that read returned.
+                    _cache[key] = (now, cached_rows, seen_max, read_at)
                     _stats["probe"] += 1
-                rows = cached_rows
+                rows, path = cached_rows, "probe"
 
     if rows is None:
         rows = _read_rows(tag, since, limit)
+        read_at = _wall_stamp()
+        seen_max = max((r[0] for r in rows), default="")
+        path = "miss" if cacheable else "uncached"
         if cacheable:
             with _cache_lock:
                 _stats["miss"] += 1
@@ -164,9 +191,10 @@ def load_plays(tag: str, domain: str, since: str | None = None,
                     # need per-hit bookkeeping for no measurable gain here.
                     oldest = min(_cache, key=lambda k: _cache[k][0])
                     _cache.pop(oldest, None)
-                _cache[key] = (time.monotonic(), rows,
-                               max((r[0] for r in rows), default=""))
+                _cache[key] = (time.monotonic(), rows, seen_max, read_at)
 
+    _tls.meta = {"visibleAsOf": read_at, "visibleRows": len(rows),
+                 "latestVisibleBattle": seen_max, "readPath": path}
     return _rows_to_plays(rows, domain, limit)
 
 
@@ -229,6 +257,29 @@ def _rows_to_plays(rows, domain: str, limit: int = MAX_ROWS) -> list:
 
     out.sort(key=lambda p: p.battle_time)
     return out[-limit:]
+
+
+def tracked_state(tag: str):
+    """True / False if the bot's `tracked_players` does / does not hold `tag`,
+    None when that cannot be read.
+
+    Not `tracking.bot_tracked`, which answers False on failure: a measurement
+    must not record "untracked" for "the lookup failed". Same read-only path.
+    """
+    try:
+        path = cd.resolve_db_path()
+        if not path:
+            return None
+        con = cd.connect(path)
+        try:
+            row = con.execute(
+                "SELECT 1 FROM tracked_players WHERE tag = ? LIMIT 1",
+                (tag,)).fetchone()
+            return row is not None
+        finally:
+            con.close()
+    except Exception:
+        return None
 
 
 def available() -> bool:
