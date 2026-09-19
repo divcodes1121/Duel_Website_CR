@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getCardIconUrl } from '../../../data/cards';
 import {
@@ -8,6 +8,8 @@ import {
   fetchDuoPairs,
 } from '../../../state/analyticsClient';
 import { DeckActions } from '../../DeckActions/DeckActions';
+import { ContinuousPagination } from '../../ui/continuous-pagination';
+import { revealListTop } from '../../../utils/revealListTop';
 import { WinConFilter } from '../../WinConFilter/WinConFilter';
 import { ReadingState } from '../ReadingState';
 import styles from './DuoDecks.module.css';
@@ -113,17 +115,33 @@ export function DuoDecks() {
      accepted — an unknown key is dropped rather than refused — so what the
      board says it filtered by is read from the response, never from this. */
   const [picked, setPicked] = useState<string[]>([]);
+  /* The page ASKED FOR, set on the click, so the pager's slab moves at once
+     rather than a round trip later. The server clamps a page past the end,
+     so the answer's own page replaces it when it lands. */
+  const [page, setPage] = useState(1);
+  const listRef = useRef<HTMLDivElement>(null);
+  /* Only the newest request may write. Clicking through pages faster than
+     they arrive used to be impossible — the loader covered the pager — and
+     now it is not, so an older, slower answer must not land on top of a
+     newer one and leave the board showing a page the pager is not on. */
+  const seq = useRef(0);
 
   const load = useCallback(
-    async (page: number, cards: string[], s: string, n: number) => {
+    async (p: number, cards: string[], s: string, n: number) => {
+      const id = ++seq.current;
+      setPage(p);
       setLoading(true);
       setError(null);
       try {
-        setReport(await fetchDuoPairs(page, n, cards, s));
+        const r = await fetchDuoPairs(p, n, cards, s);
+        if (id !== seq.current) return;
+        setReport(r);
+        setPage(r.page);
       } catch {
+        if (id !== seq.current) return;
         setError('Could not reach the analytics service.');
       } finally {
-        setLoading(false);
+        if (id === seq.current) setLoading(false);
       }
     },
     [],
@@ -252,55 +270,57 @@ export function DuoDecks() {
           browser, so the number is measured rather than scripted. Its key is
           its own: a page of 2v2 pairs is not paced like the Coach's matchup
           scoring, and a shared key would make both readouts wrong. */}
-      {loading && (
+      {/* THE FIRST READ ONLY. A page turn, a pick or a new sort keeps the
+          board on screen dimmed instead, the way Recent Battles does: swapping
+          the whole board for a loader on every click would unmount the pager
+          under the pointer that just pressed it, and read as navigating away
+          rather than as using a control. */}
+      {loading && !report && (
         <ReadingState k="duo-pairs" hue="green">
           Reading the 2v2 partnerships…
         </ReadingState>
       )}
 
-      {report && !loading && (
+      {report && (
         <>
-          <p className={styles.count}>
-            {report.total.toLocaleString()} pair
-            {report.total === 1 ? '' : 's'}
-            {/* THE SERVER'S LIST, NOT THE PICKED ONE. An unknown key is dropped
-                rather than refused, so quoting what was SENT could name a card
-                the board is not actually filtered by. */}
-            {!!report.cards?.length && (
-              <> running all {report.cards.length} picked card
-                {report.cards.length === 1 ? '' : 's'} in one deck</>
-            )}
-          </p>
-          <div className={styles.list}>
-            {report.pairs.map((p) => (
-              <Pair key={p.pairFingerprint} pair={p} />
-            ))}
-            {!report.pairs.length && (
-              <p className={styles.empty}>
-                No partnership runs all of those cards in one deck.
-              </p>
-            )}
-          </div>
-          {report.pages > 1 && (
-            <div className={styles.pager}>
-              <button
-                type="button"
-                disabled={report.page <= 1}
-                onClick={() => void load(report.page - 1, picked, sort, per)}
-              >
-                Previous
-              </button>
-              <span>
-                Page {report.page.toLocaleString()} of {report.pages.toLocaleString()}
-              </span>
-              <button
-                type="button"
-                disabled={report.page >= report.pages}
-                onClick={() => void load(report.page + 1, picked, sort, per)}
-              >
-                Next
-              </button>
+          <div className={styles.results} data-busy={loading || undefined}>
+            <p className={styles.count}>
+              {report.total.toLocaleString()} pair
+              {report.total === 1 ? '' : 's'}
+              {/* THE SERVER'S LIST, NOT THE PICKED ONE. An unknown key is dropped
+                  rather than refused, so quoting what was SENT could name a card
+                  the board is not actually filtered by. */}
+              {!!report.cards?.length && (
+                <> running all {report.cards.length} picked card
+                  {report.cards.length === 1 ? '' : 's'} in one deck</>
+              )}
+            </p>
+            <div ref={listRef} className={styles.list}>
+              {report.pairs.map((p) => (
+                <Pair key={p.pairFingerprint} pair={p} />
+              ))}
+              {!report.pairs.length && (
+                <p className={styles.empty}>
+                  No partnership runs all of those cards in one deck.
+                </p>
+              )}
             </div>
+          </div>
+          {/* A WINDOW, NOT EVERY PAGE: the board runs to tens of thousands of
+              pages at 25 a page, and the pager draws first, last and the pages
+              around this one in a fixed number of slots. It used to be
+              Previous / Next only, so page 40 was forty clicks away. */}
+          {report.pages > 1 && (
+            <ContinuousPagination
+              className={styles.pager}
+              totalPages={report.pages}
+              page={Math.min(page, report.pages)}
+              onPageChange={(p) => {
+                void load(p, picked, sort, per);
+                revealListTop(listRef.current);
+              }}
+              label="2v2 pair pages"
+            />
           )}
         </>
       )}

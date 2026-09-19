@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-19-pagination',
+    date: '2026-09-19',
+    kind: 'improved',
+    title: 'Jump straight to any page of a long list',
+    body: [
+      'The battle log and 2v2 Decks share one new page picker. 2v2 Decks used to have only Previous and Next, so reaching a page further down meant clicking through every page before it; now the first page, the last page and the pages around the one you are on are always a click away.',
+      'Turning a page from the bottom of a list takes you back to the top of the new page, and the list stays on screen while the next page loads instead of disappearing behind a loading screen.',
+    ],
+    href: '#/duo',
+    hrefLabel: 'Open 2v2 Decks',
+  },
+  {
     id: '2026-09-12-phone-nav',
     date: '2026-09-12',
     kind: 'fixed',

@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CardArt } from './CardArt';
+import { ContinuousPagination } from '../ui/continuous-pagination';
+import { revealListTop } from '../../utils/revealListTop';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { ReadingState } from './ReadingState';
 import { VsMark } from '../VsMark/VsMark';
@@ -56,16 +58,6 @@ const ICONS = {
   chevron: (
     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M6 9l6 6 6-6" />
-    </svg>
-  ),
-  prev: (
-    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M15 18l-6-6 6-6" />
-    </svg>
-  ),
-  next: (
-    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 6l6 6-6 6" />
     </svg>
   ),
 };
@@ -191,85 +183,21 @@ function BattleRow({ battle, you, youTag }: { battle: RecentBattle; you: string;
   );
 }
 
-/* The pager. Numbered rather than "load more": the log is ordered by time, and
- * a reader looking for a battle from last Tuesday wants to jump, not to press
- * a button eleven times. Windows around the current page so the control does
- * not grow with the history. */
-function Pager({
-  page,
-  pages,
-  onGo,
-  busy,
-}: {
-  page: number;
-  pages: number;
-  onGo: (p: number) => void;
-  busy: boolean;
-}) {
-  if (pages <= 1) return null;
-
-  const span = 2;
-  const nums: (number | 'gap')[] = [];
-  let last = 0;
-  for (let i = 1; i <= pages; i++) {
-    const near = Math.abs(i - page) <= span;
-    if (i === 1 || i === pages || near) {
-      if (last && i - last > 1) nums.push('gap');
-      nums.push(i);
-      last = i;
-    }
-  }
-
-  return (
-    <nav className={styles.pager} aria-label="Battle log pages">
-      <button
-        type="button"
-        className={styles.pageStep}
-        disabled={page <= 1 || busy}
-        onClick={() => onGo(page - 1)}
-        aria-label="Previous page"
-      >
-        {ICONS.prev}
-      </button>
-
-      {nums.map((n, i) =>
-        n === 'gap' ? (
-          <span key={`gap-${i}`} className={styles.pageGap}>
-            …
-          </span>
-        ) : (
-          <button
-            key={n}
-            type="button"
-            className={`${styles.pageNum} ${n === page ? styles.pageNumOn : ''}`}
-            aria-current={n === page ? 'page' : undefined}
-            disabled={busy}
-            onClick={() => onGo(n)}
-          >
-            {n}
-          </button>
-        ),
-      )}
-
-      <button
-        type="button"
-        className={styles.pageStep}
-        disabled={page >= pages || busy}
-        onClick={() => onGo(page + 1)}
-        aria-label="Next page"
-      >
-        {ICONS.next}
-      </button>
-    </nav>
-  );
-}
-
 export function RecentBattles({ tag, season = 'Current Season' }: { tag: string; season?: Season }) {
   const [report, setReport] = useState<RecentBattlesReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const listRef = useRef<HTMLElement>(null);
+
+  /* The pager sits under the list, so the reader asks for the next page from
+     the bottom of this one. Bring the top of the list back into view, or the
+     new rows arrive with the reader already at their foot. */
+  const turn = (p: number) => {
+    setPage(p);
+    revealListTop(listRef.current);
+  };
   /* HELD ONLY ON THE FIRST READ. Turning a page is a fetch too, but replacing
      the whole panel with a loader every time would make the pager feel like a
      navigation instead of a control — the rows dim in place instead. */
@@ -444,7 +372,7 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
           </div>
         </header>
 
-        <section className={styles.body} data-busy={loading || undefined}>
+        <section ref={listRef} className={styles.body} data-busy={loading || undefined}>
           {report.battles.length === 0 ? (
             <p className={styles.empty}>
               No battles stored in this window. Widen the range, or check back after the next
@@ -456,7 +384,24 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
         </section>
 
         <footer className={styles.foot}>
-          <Pager page={report.page} pages={report.pages} onGo={setPage} busy={loading} />
+          {/* Numbered rather than "load more": the log is ordered by time, and
+              a reader looking for a battle from last Tuesday wants to jump, not
+              to press a button eleven times.
+
+              `page`, NOT `report.page`, so the slab moves on the click rather
+              than a round trip later; the fetch effect adopts the server's page
+              if it clamped. Not disabled while a page loads — the effect's
+              `live` guard already drops a superseded response, and greying the
+              whole control out on every click reads as a flicker. */}
+          {report.pages > 1 && (
+            <ContinuousPagination
+              className={styles.pager}
+              totalPages={report.pages}
+              page={Math.min(page, report.pages)}
+              onPageChange={turn}
+              label="Battle log pages"
+            />
+          )}
           <span className={styles.count}>
             {report.total > 0 && (
               <>

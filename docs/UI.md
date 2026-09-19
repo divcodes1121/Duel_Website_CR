@@ -47,14 +47,18 @@ uniforms, so a theme flip re-pushes them **without rebuilding the context** —
 recompiling to change five vec3s would drop the liquid's level, tilt and slosh
 mid-motion.
 
-**Three vendored registry components now sit in `src/components/ui/`** —
-vengenceui's GlassDock (the top nav) and GooeySearch (the tag field), and React
-Bits' ElectricBorder (the squad boxes). Their deviations from upstream are
-listed in their own file headers, and `glass-dock.tsx` is excluded from eslint
-as vendored code.
+**Four vendored registry components now sit in `src/components/ui/`** —
+vengenceui's GlassDock (the top nav) and GooeySearch (the tag field), React
+Bits' ElectricBorder (the squad boxes), and watermelon.sh's
+ContinuousPagination (every numbered pager — see "One pager, everywhere" in the
+README). Their deviations from upstream are listed in their own file headers,
+and `glass-dock.tsx` is excluded from eslint as vendored code.
 
-The first two take no canvas and are noted here only because they are the other
-things in the shell that move. **ElectricBorder does**, and it is the first
+GlassDock, GooeySearch and ContinuousPagination take no canvas and are noted
+here only because they are the other things in the shell that move. The pager
+is framer-motion springs and one shared-layout slab; its upstream sheen looped
+forever and runs once here, for the same reason every loop in this file is
+gated. **ElectricBorder does**, and it is the first
 thing outside `src/three/` and `components/TierBadge/` to draw one — so it is
 held to the same rules, and gets them by importing `runtime.ts` rather than by
 reimplementing them:

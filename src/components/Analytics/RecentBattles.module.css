@@ -536,63 +536,23 @@
   color: var(--text-muted);
 }
 
+/* The pager is the vendored ContinuousPagination. It sizes itself from its
+   own width (a container query), so it takes a full row of the footer and
+   the count sits under it, right-aligned, rather than the two sharing a line
+   the pager would then be squeezed to fit. */
 .pager {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-  padding-top: 0.6rem;
-}
-
-.pageStep,
-.pageNum {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.9rem;
-  height: 1.9rem;
-  padding: 0 0.4rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 0.76rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-}
-
-.pageStep:hover:not(:disabled),
-.pageNum:hover:not(:disabled) {
-  background: var(--neutral-wash);
-  color: var(--text);
-}
-
-.pageStep:disabled,
-.pageNum:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* Violet, because this is selection and selection is violet everywhere in the
-   app — the current page is chosen, not highlighted. */
-.pageNumOn,
-.pageNumOn:hover {
-  background: var(--accent-select-fill);
-  border-color: var(--accent-select-edge);
-  color: var(--accent-select);
-  opacity: 1;
-}
-
-.pageGap {
-  padding: 0 0.15rem;
-  color: var(--text-muted);
+  flex: 1 1 100%;
+  padding-top: 0.35rem;
 }
 
 .count {
+  margin-left: auto;
   padding-top: 0.6rem;
   font-variant-numeric: tabular-nums;
+}
+
+.pager + .count {
+  padding-top: 0;
 }
 
 /* The count of battles the mode filter kept off this screen. UNDERLINED

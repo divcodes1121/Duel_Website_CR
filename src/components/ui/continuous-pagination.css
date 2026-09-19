@@ -1,0 +1,192 @@
+/* The stylesheet for the vendored ContinuousPagination.
+ *
+ * Upstream is Tailwind utilities; this project has no Tailwind, so the look is
+ * written out here instead — value for value where a value could survive, and
+ * as a token wherever the upstream literal was a colour. Same arrangement as
+ * `glass-dock.css`: every rule hangs off `.continuous-pagination`, so nothing
+ * here can reach outside the component.
+ *
+ * THE SIZE IS A CONTAINER QUERY. The root is an inline-size container, and a
+ * cell is whatever share of that width its row allows, clamped between 2rem
+ * (a comfortable finger, well over the 24px floor) and upstream's 4rem. A
+ * footer beside a count and a full-width phone row both get a pager that fits,
+ * with no viewport breakpoint pretending to know how wide either is.
+ */
+
+.continuous-pagination {
+  container-type: inline-size;
+  width: 100%;
+  min-width: 0;
+}
+
+.continuous-pagination .cp-row {
+  --cp-gap: clamp(0.3rem, 1.6cqi, 0.75rem);
+  --cp-cell: clamp(
+    2rem,
+    calc((100cqi - (var(--cp-cells) - 1) * var(--cp-gap)) / var(--cp-cells)),
+    4rem
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The last resort, and only reachable with a five-digit page count on a
+     320px screen: a row that cannot fit wraps rather than pushing the page
+     sideways. At every width the product actually meets, it is one line. */
+  flex-wrap: wrap;
+  gap: var(--cp-gap);
+  /* Room for the hover lift, so a clipping parent does not shave the top
+     off a raised button. */
+  padding-block: 0.5rem;
+}
+
+.continuous-pagination .cp-pages {
+  position: relative;
+  display: flex;
+  gap: var(--cp-gap);
+}
+
+/* ── the cells ───────────────────────────────────────────────────────── */
+
+.continuous-pagination .cp-cell {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--cp-cell);
+  height: var(--cp-cell);
+  padding: 0;
+  border-radius: calc(var(--cp-cell) * 0.19);
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  /* Colour and shadow only. `transform` belongs to framer-motion, which
+     writes it inline; a CSS transition on it would fight the springs. */
+  transition:
+    box-shadow var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Upstream's hover shadow, per theme — it read `resolvedTheme` for this. */
+.continuous-pagination .cp-cell:not(:disabled):not(.cp-active):not(.cp-gap):hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme='dark'] .continuous-pagination .cp-cell:not(:disabled):not(.cp-active):not(.cp-gap):hover {
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* On a disabled control the dimming IS the affordance — the one place this
+   app leaves neutral type below full contrast on purpose. */
+.continuous-pagination .cp-cell:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
+}
+
+.continuous-pagination .cp-chevron {
+  width: calc(var(--cp-cell) * 0.44);
+  height: calc(var(--cp-cell) * 0.44);
+}
+
+.continuous-pagination .cp-label {
+  position: relative;
+  z-index: 1;
+  line-height: 1;
+  /* Upstream's text-xl at 4rem, scaled with the cell — and shrunk further
+     when the longest page number on the row would not fit its square, but
+     never below 0.7rem; past that `.cp-num` widens instead. */
+  font-size: max(
+    0.7rem,
+    min(
+      1.25rem,
+      calc(var(--cp-cell) * 0.34),
+      calc((var(--cp-cell) - 0.5rem) / (var(--cp-chars) * 0.62))
+    )
+  );
+}
+
+/* A page number may outgrow its square rather than shrink below the type
+   floor: `min-width` keeps every short number square, and a long one becomes
+   a slightly wider tile. */
+.continuous-pagination .cp-num {
+  width: auto;
+  min-width: var(--cp-cell);
+  padding-inline: calc(var(--cp-cell) * 0.06);
+}
+
+/* The ellipsis. Same footprint as a page, so the row keeps its rhythm, but no
+   surface: it is not a control. */
+.continuous-pagination .cp-gap {
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  cursor: default;
+  font-size: calc(var(--cp-cell) * 0.34);
+  letter-spacing: 0.08em;
+}
+
+/* ── the active slab ─────────────────────────────────────────────────── */
+
+.continuous-pagination .cp-active {
+  color: var(--on-solid);
+  border-color: transparent;
+  background: transparent;
+  cursor: default;
+}
+
+.continuous-pagination .cp-slab {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+/* Upstream's layering, cut from `--solid-violet` instead of near-black: a
+   lit top-left, the body, a deep bottom-right, a 1px lighter rim, a white
+   hairline across the top and a hard drop shadow. The glow is dark-only
+   through `--glow-core`, which light sets to 0%. */
+.continuous-pagination .cp-slab-body {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--solid-violet) 84%, #ffffff) 0%,
+    var(--solid-violet) 50%,
+    color-mix(in srgb, var(--solid-violet) 62%, #000000) 100%
+  );
+  border: 1px solid color-mix(in srgb, var(--solid-violet) 70%, #ffffff);
+  box-shadow:
+    0 8px 16px -4px rgba(0, 0, 0, 0.45),
+    0 0 18px color-mix(in srgb, var(--hue-violet) var(--glow-core), transparent),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.continuous-pagination .cp-sheen {
+  position: absolute;
+  inset: -100%;
+  background: linear-gradient(
+    to top right,
+    transparent 40%,
+    color-mix(in srgb, var(--on-solid) 16%, transparent) 50%,
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+.continuous-pagination .cp-slab-shade {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 -4px 8px 0 rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}

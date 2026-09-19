@@ -203,7 +203,18 @@ describe('the page itself', () => {
        last few times on this browser. Its key is its own: a page of pairs is
        not paced like the Coach's matchup scoring. */
     expect(page).toContain('<ReadingState k="duo-pairs"');
-    expect(page).toMatch(/\{loading && \(/);
+    /* On the FIRST read only. After that a page turn, a pick or a sort dims
+       the board in place: the loader replacing it would unmount the pager
+       under the pointer that just pressed it. */
+    expect(page).toMatch(/\{loading && !report && \(/);
+    expect(page).toContain('data-busy={loading || undefined}');
+  });
+
+  it('pages with the shared ContinuousPagination, driven by its own page state', () => {
+    expect(page).toContain('<ContinuousPagination');
+    expect(page).toContain('page={Math.min(page, report.pages)}');
+    /* An older, slower answer must not overwrite a newer page. */
+    expect(page).toMatch(/if \(id !== seq\.current\) return;/);
   });
 
   it('does not share a timing key with the chunk that loads it', () => {

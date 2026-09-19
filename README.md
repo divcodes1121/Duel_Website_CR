@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Pagination** | **one component everywhere, 2026-09-19 (not yet committed).** Both numbered pagers — Recent Battles and 2v2 Decks — are the vendored `ContinuousPagination` from watermelon.sh, ported by hand rather than through `npx shadcn add` (no Tailwind here, and three new packages for one pager). It is controlled and windowed where upstream is neither: a fixed number of slots, so the arrows never move, over 2v2's page count. It sizes from its own width with a container query, the active slab is violet rather than black, and upstream's endless sheen runs once. 2v2 went from Previous/Next only to jumpable pages, and stopped replacing the board with a loader on every turn. **44/44 in a browser on real production pages**, both themes, 1440/390/320. Main bundle +1.55 kB gzip. See [One pager, everywhere](#one-pager-everywhere) |
 | **The phone’s navigation bar** | **back, and on a row of its own, 2026-09-12.** Reported as "there is no top tab bar". This shell has TWO navigation levels — `TOP_NAV` is destinations, `SIDE_NAV` is one loaded player’s sections — and hiding `.topDock` below 860px deleted the OUTER one, so the strip that replaced it offered eleven analytics areas and **not one of the three deck tools**. They were reachable from the landing page or from inside the account menu, and nowhere else. Hiding it was right when written: the dock is a fixed **337px of eight 40px cells** and does not reflow, so beside a 137px brand and a 278px action row it pushed every page to 431px. The shared row was the problem, not the row — on a line of its own it fits 390 and 360 outright. `display: contents` on `.brandCluster` is what makes that two lines of CSS rather than a component change. The bar had to be fixed first: `.topActions` was **+43px** at 390 and `.brandCluster` **+23px**, so the last letter of DECKKIES was painted under the field-book button at every phone width. The dock also now calls the three tools what the screens, their cross-links, the landing kickers and the profile menu already called them. **98/98 then 11/11 locally, both themes, and 8/8 against production including a real tap.** Main bundle 338.95 -> 339.17 kB gzip |
 | **The field book on a phone** | **zooms now, 2026-09-04.** Reported as "the guide page doesn't respond to zoom on mobile" and it was two faults under one symptom. `touch-action: pan-y` on the book was there to stop a swipe-to-turn being read as a scroll, and `pinch-zoom` is a separate keyword — so it had also disabled the browser's own pinch, on the one screen made of small print, whose magnifying glass is hidden on a touch device by design. And the `−  100%  +` controls had been dead since the phone pass: `.tilt`'s single `transform` carries the pointer lean *and* the zoom scale, and the coarse block blanked the property to drop the lean. **Verified 26/26**, and the proof is `visualViewport.scale` going 1 → 5 and back rather than the declaration reading correctly. Main bundle unchanged at 342.52 kB gzip |
 | **What's new** (the bell) | **shipped 2026-09-02.** The bell in the top bar sat inert from the day the shell was built; it opens the release feed now, immediately right of the theme switch. Notes live in `src/content/releases.ts` and ship in the same commit as the change they describe, so the two cannot drift. An unread count on the bell and on the profile menu's row, from one hook; a first-time reader is stamped silently rather than greeted with a badge for a product they have never used. Per browser rather than per account — the honest limit, and the upgrade is a `profiles` column. +3.01 kB gzip; 11 unit checks, browser-verified 24/24 |
@@ -183,6 +184,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 40b. [2v2 Decks — the data is migrated, not deleted](#2v2-decks--the-data-is-migrated-not-deleted)
 41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
 42. [Two filters and a heading](#two-filters-and-a-heading)
+42a. [One pager, everywhere](#one-pager-everywhere)
 43. [The account menu is a stack of cards](#the-account-menu-is-a-stack-of-cards)
 43a. [What's new — the bell finally opens something](#whats-new--the-bell-finally-opens-something)
 44. [The phone pass — one scroll, and it is the page](#the-phone-pass--one-scroll-and-it-is-the-page)
@@ -209,7 +211,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 500 tests over the deck, duel, export, admin, nav and shader logic
+npm run test                      # 524 tests over the deck, duel, export, admin, nav, pager and shader logic
 python server/test_duel_combos.py # 55 checks over the duel logic, no DB needed
 python server/test_meta.py        # 33 checks over the meta board and card rules
 python server/test_card_art.py    # 111 checks over deck arrangement and card art
@@ -11967,6 +11969,99 @@ a `Range` over the element's contents gives the glyphs.
 
 ---
 
+## One pager, everywhere
+
+Every numbered pager on the site is one component now:
+`components/ui/continuous-pagination.tsx`, vendored from
+[watermelon.sh](https://registry.watermelon.sh/r/continuous-pagination.json).
+There were two, and they did not agree — Recent Battles had a hand-rolled
+windowed pager, and 2v2 Decks had only **Previous / Page X of Y / Next**, so
+page 40 was forty clicks away. The "Show N more" lists on Deck Counter and
+Cards are not pagers and were left as they are.
+
+**It was ported by hand, not installed.** `npx shadcn add` needs a
+`components.json` this project does not have, emits Tailwind this project does
+not use, and would add `motion`, `lucide-react` and `next-themes` for one
+control. `framer-motion` is already a dependency and exports the same `motion`
+and `AnimatePresence`; two chevrons are inline SVG; the one thing `next-themes`
+was for — a darker hover shadow on dark — is a `[data-theme]` rule. The eight
+deviations are listed in the file's own header, as for every vendored component.
+
+**Controlled and windowed, where upstream is neither.** Upstream keeps the page
+in its own state and draws one button per page. The server here pages and
+*clamps*, so the page shown has to come from outside — `page` +
+`onPageChange` — and 2v2 can run to thousands of pages at 25 a page.
+`utils/pageWindow.ts` draws first, last and the pages around the current one
+in a **fixed number of slots**: once there are more pages than slots the item
+count is always `2 × siblings + 5`, so the control is the same width on page 1
+as on page 30,000 and the arrows never move out from under a pointer clicking
+them. Measured in a browser: the row's left and right edges identical to the
+pixel across page 1, the middle and the last page. A gap never stands in for a
+single page — that is a click the reader could have had for free. It has no
+imports and its own tests.
+
+**It sizes from its container, not the viewport.** Upstream is 40px below
+Tailwind's `sm` and 64px above, and a viewport breakpoint does not describe a
+footer that is part of a panel. The root is an inline-size container and a
+cell is its row's share of that width, clamped between 2rem and upstream's
+4rem; below 408px *of container* the neighbouring pages go first. Measured:
+64px cells at 1440, 43 at 390 and 33 at 320, no sideways overflow at any of
+them. The corollary for a call site: give it a full row. As a content-sized
+flex item, size containment would give it nothing to measure.
+
+**Long page numbers were the part that passed while wrong.** The first cut
+shrank the type to fit the square, and a "labels fit" check passed with
+"59,337" drawn at **6.8px** on a 320px phone — fitting is not legibility. Now
+the square carries no grouping separator (`59337`, as page numbers are
+written; the accessible name keeps the comma), the type stops at a 0.7rem
+floor, and past that the cell widens instead. Only a five-digit page count on
+a 320px screen wraps the row, which is the last resort and not a case the site
+meets today — production runs to 48 pages in the battle log and 30 in 2v2.
+
+**The active slab is violet, not black.** Upstream's is near-black with white
+type, which works when the other pages are grey. Here every neutral figure is
+already full-contrast white on dark, so a black slab would differ from its
+neighbours only by being darker and read as a hole. Selection is violet
+everywhere in this app, so the slab keeps the authored layering — lit corner,
+body, deep corner, rim, top hairline, bottom shade — cut from `--solid-violet`,
+the step graded to carry white type. Its glow is dark-only, via `--glow-core`.
+
+**Upstream's sheen repeats forever, and here it runs once**, when a page
+becomes active: infinite animation is banned project-wide. Under
+`prefers-reduced-motion` there is no sheen, and `MotionConfig` turns off the
+lifts, the squash and the slide. The shared-layout slab is scoped per instance
+with `useId`, because upstream's literal `layoutId` would fling one slab
+between two pagers on the same screen.
+
+**2v2 had to stop swapping its board for a loader.** It replaced the whole
+board with `ReadingState` on every read, which unmounts the pager under the
+pointer that just pressed it — the slab could never be seen to move. The
+loader now covers the first read only, and later reads dim the board in place,
+which is what Recent Battles already did and says why. Keeping the pager
+mounted made rapid clicks possible for the first time, so a slower, older
+answer must not land on a newer page: a request counter drops superseded
+responses. Three fast Next clicks were verified to land on the right page.
+
+**A turn from the foot of a list goes back to its top.** The pager sits under
+the list, so page 2 is always asked for from the bottom of page 1, and without
+this the new rows arrive with the reader already past them.
+`utils/revealListTop.ts` scrolls only if the list's top is out of view,
+measured against the nearest ancestor that actually scrolls — `.page` on a
+desktop, `.main` below 62rem.
+
+Both screens' pagers set their page on the click, so the slab moves at once,
+and adopt the server's page when the answer lands, because the server clamps.
+
+**Verified 44/44 in a browser against real production pages**, proxied through
+Playwright's `route` to `api.deckkies.com`: both themes, 1440 / 390 / 320,
+reduced motion, the fetch asked for the right page, the list top brought back
+into view, prev and next disabled at the ends, no infinite animation left in
+the document, no page errors — plus a separate run with the page count
+rewritten to 59,337 for the long-number case. Main bundle **339.57 → 341.12 kB
+gzip (+1.55)**, release note included; it is eager because Recent Battles is.
+
+---
+
 ## The account menu is a stack of cards
 
 The profile dropdown was a list: a name, a tier pill, a few links. It is now
@@ -12367,6 +12462,10 @@ src/
   state/duelImport.ts         a played duel -> a Versus group. What counts as a
                               real deck, and what counts as the same set twice.
                               Pure, so both can be tested without a store
+  utils/pageWindow.ts         which page numbers a pager draws. NO IMPORTS. A
+                              FIXED number of slots, so the arrows never move
+  utils/revealListTop.ts      after a page turn, scroll the list's top into
+                              view — only if the reader is past it
   utils/format.ts             ago / until / bytes. NO imports, deliberately —
                               importing the store to test a date formatter
                               constructs a Supabase client
@@ -12436,6 +12535,10 @@ src/
                               #/teams. Ported to `runLoop`, so it is gated on
                               visibility and renders NOTHING under
                               prefers-reduced-motion
+      continuous-pagination.tsx
+                              watermelon.sh's ContinuousPagination — EVERY
+                              numbered pager. Controlled, windowed, sized by a
+                              container query; ported by hand, no new packages
     Dashboard/                top bar, sidebar, landing screen, content panel
       Dashboard.tsx           the shell; `landing` decides whether a rail exists.
                               Also owns `.phoneNav`, the chip strip that IS the

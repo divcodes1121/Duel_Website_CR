@@ -152,6 +152,21 @@
   gap: 0.75rem;
 }
 
+/* The count and the board, dimmed together while a newer page, pick or sort
+   is being read — the pager stays live beside them, so a reader can keep
+   clicking. Opacity only, one-shot. */
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.results[data-busy] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 /* TWO DECKS AND A PLUS, AND NOTHING ELSE IN THE ROW.
  *
  * A five-item figure list used to sit on the right — played, players, first
@@ -261,30 +276,10 @@
 
 /* ── Pager and messages ──────────────────────────────────────────────────── */
 
+/* The vendored ContinuousPagination, which sizes itself from its own width —
+   so it only needs the full width of the column to size against. */
 .pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.pager button {
-  padding: 0.35rem 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-2);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.pager button:disabled {
-  opacity: 0.45;
-  cursor: default;
+  width: 100%;
 }
 
 .error,
