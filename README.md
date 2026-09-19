@@ -53,6 +53,8 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Full contrast, everywhere** | **swept 2026-09-19.** A browser probe read every visible text node on 18 routes, five home sections and two dialogs in both themes, compositing each one's ink with the opacity of every ancestor — which is how text goes grey without its `color` saying so. The fixes: date chips past a player's stored history (six screens) were faded to 55% and are full ink with a dashed edge; the 2nd/3rd place ranks were the gold chip at reduced opacity and are a tint and an outline with full-contrast digits; the top bar's Search label, the banner copy and two placeholders. Left deliberately: disabled controls, the filmstrip's depth fade, the field book's sepia paper. **2v2** lost its three summary figures and its footnote, and its decks are capped at 22rem (cards 123 → 85px). **Pager cells are 2.5rem max**, not upstream's 4rem |
+| **Footer** | **added to the landing page, 2026-09-19.** The vendored watermelon.sh `Footer5`, ported by hand and filled with nothing invented: X and email as the only socials, the real "Write to me" dialog instead of a sales team with a response time, every tool and screen in three columns wearing its own icon and hue, and credits in place of legal pages the site does not have. The Supercell fan-content line is back in its copyright row — flagged, one line to remove. **44/44 in a browser**, both themes, 1440/1024/390/320. See [The footer](#the-footer) |
 | **Pagination** | **one component everywhere, LIVE 2026-09-19 (`6900fe1`)**, confirmed in the served bundle and by `/api/health`. Both numbered pagers — Recent Battles and 2v2 Decks — are the vendored `ContinuousPagination` from watermelon.sh, ported by hand rather than through `npx shadcn add` (no Tailwind here, and three new packages for one pager). It is controlled and windowed where upstream is neither: a fixed number of slots, so the arrows never move, over 2v2's page count. It sizes from its own width with a container query, the active slab is violet rather than black, and upstream's endless sheen runs once. 2v2 went from Previous/Next only to jumpable pages, and stopped replacing the board with a loader on every turn. **44/44 in a browser on real production pages**, both themes, 1440/390/320. Main bundle +1.55 kB gzip. See [One pager, everywhere](#one-pager-everywhere) |
 | **The phone’s navigation bar** | **back, and on a row of its own, 2026-09-12.** Reported as "there is no top tab bar". This shell has TWO navigation levels — `TOP_NAV` is destinations, `SIDE_NAV` is one loaded player’s sections — and hiding `.topDock` below 860px deleted the OUTER one, so the strip that replaced it offered eleven analytics areas and **not one of the three deck tools**. They were reachable from the landing page or from inside the account menu, and nowhere else. Hiding it was right when written: the dock is a fixed **337px of eight 40px cells** and does not reflow, so beside a 137px brand and a 278px action row it pushed every page to 431px. The shared row was the problem, not the row — on a line of its own it fits 390 and 360 outright. `display: contents` on `.brandCluster` is what makes that two lines of CSS rather than a component change. The bar had to be fixed first: `.topActions` was **+43px** at 390 and `.brandCluster` **+23px**, so the last letter of DECKKIES was painted under the field-book button at every phone width. The dock also now calls the three tools what the screens, their cross-links, the landing kickers and the profile menu already called them. **98/98 then 11/11 locally, both themes, and 8/8 against production including a real tap.** Main bundle 338.95 -> 339.17 kB gzip |
 | **The field book on a phone** | **zooms now, 2026-09-04.** Reported as "the guide page doesn't respond to zoom on mobile" and it was two faults under one symptom. `touch-action: pan-y` on the book was there to stop a swipe-to-turn being read as a scroll, and `pinch-zoom` is a separate keyword — so it had also disabled the browser's own pinch, on the one screen made of small print, whose magnifying glass is hidden on a touch device by design. And the `−  100%  +` controls had been dead since the phone pass: `.tilt`'s single `transform` carries the pointer lean *and* the zoom scale, and the coarse block blanked the property to drop the lean. **Verified 26/26**, and the proof is `visualViewport.scale` going 1 → 5 and back rather than the declaration reading correctly. Main bundle unchanged at 342.52 kB gzip |
@@ -185,6 +187,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
 42. [Two filters and a heading](#two-filters-and-a-heading)
 42a. [One pager, everywhere](#one-pager-everywhere)
+42b. [The footer](#the-footer)
 43. [The account menu is a stack of cards](#the-account-menu-is-a-stack-of-cards)
 43a. [What's new — the bell finally opens something](#whats-new--the-bell-finally-opens-something)
 44. [The phone pass — one scroll, and it is the page](#the-phone-pass--one-scroll-and-it-is-the-page)
@@ -12003,10 +12006,9 @@ imports and its own tests.
 **It sizes from its container, not the viewport.** Upstream is 40px below
 Tailwind's `sm` and 64px above, and a viewport breakpoint does not describe a
 footer that is part of a panel. The root is an inline-size container and a
-cell is its row's share of that width, clamped between 2rem and upstream's
-4rem; below 408px *of container* the neighbouring pages go first. Measured:
-64px cells at 1440, 43 at 390 and 33 at 320, no sideways overflow at any of
-them. The corollary for a call site: give it a full row. As a content-sized
+cell is its row's share of that width, clamped between 2rem and 2.5rem — upstream's 4rem was 64px squares under a list, reported as too
+large; below 408px *of container* the neighbouring pages go first. Measured
+after the cap: 40px cells at 1440 and 390, 33 at 320, no sideways overflow. The corollary for a call site: give it a full row. As a content-sized
 flex item, size containment would give it nothing to measure.
 
 **Long page numbers were the part that passed while wrong.** The first cut
@@ -12059,6 +12061,63 @@ into view, prev and next disabled at the ends, no infinite animation left in
 the document, no page errors — plus a separate run with the page count
 rewritten to 59,337 for the long-number case. Main bundle **339.57 → 341.12 kB
 gzip (+1.55)**, release note included; it is eager because Recent Battles is.
+
+---
+
+## The footer
+
+The landing page ends in a footer now: `components/ui/footer-5.tsx`, vendored
+from [watermelon.sh](https://registry.watermelon.sh/r/footer-5.json) and ported
+by hand for the same reasons as the pager, filled by `Dashboard/SiteFooter.tsx`.
+It is on the **landing screen only** — every other route is a window that owns
+its own scroll region, and a footer under a deck workspace is a band of links
+nobody scrolls past.
+
+**Everything in it is real, which is the whole brief for a footer here.** The
+template ships Instagram and LinkedIn buttons, a sales team that "typically
+responds within 2 hours" and Terms / Privacy / Cookie links. None of those exist
+for this site, and a footer is exactly where a reader goes to check what a site
+is. So:
+
+| template | here |
+|---|---|
+| five social buttons | **X and email**, the two channels `ProContact` has always offered |
+| "Talk to our sales team", a response time | **Write to me** — opens that same dialog, and says Pro is set up by hand |
+| Products / Learn / Support | **Deck tools / Analytics / Learn** — every destination, each with the glyph and identity hue it wears in the dock and the rail |
+| Terms / Privacy / Cookies | **Fan Content Policy** and **Card data: RoyaleAPI** — credits, not legal pages the site does not have |
+
+The contact details moved into `content/contact.ts`, so the dialog and the
+footer read one copy — a second copy of an email address is the kind of thing
+updated in one place and left stale in the other.
+
+**The Supercell fan-content line is back on the landing page**, in the
+copyright row. It was taken out of the closing band on request on 2026-09-01;
+the Fan Content Policy asks for it and a footer's legal row is where readers
+expect it. It is one line in `SiteFooter.tsx` if it should go again.
+
+**Some links are actions, not routes.** Top Meta Decks is a section of the home
+screen rather than a URL, and What's new is a dialog, so a footer link takes an
+`onClick` as well as or instead of an `href`, and one with no `href` renders as
+a button. The links reuse the shell's own navigation — `goAnalytics`, the Meta
+section the dock opens — so the footer cannot disagree with it.
+
+**The watermark fades by mask.** Upstream lays a `from-background` gradient over
+the word's lower half. That was built first, and on this page it erased the
+fireflies drifting behind the word in a visible rectangle — the gradient's
+colour matched the ground exactly, so it looked like a colour bug and was not
+one. A `mask-image` fades the letters themselves and paints nothing. The logo
+beside the word is the raster mark used as a mask too, so it takes the same
+ghost ink instead of printing in full colour.
+
+**It sizes from its own width.** Breakpoints are container queries, and the
+watermark is 17% of the footer's width between 2.5rem and upstream's 14rem.
+Upstream's smallest step ran "DECKKIES" to 267px and cut it off on a 390 and a
+320 phone — caught by measuring the word against its box, not by looking.
+
+**Verified 44/44 in a browser**, both themes at 1440, 1024, 390 and 320: every
+link lands where it says, both dialogs open, no two controls overlap, nothing
+scrolls sideways and the word is never clipped. Main bundle **341.12 → 342.90 kB
+gzip (+1.78)**, CSS **+1.01**.
 
 ---
 
@@ -12539,6 +12598,8 @@ src/
                               watermelon.sh's ContinuousPagination — EVERY
                               numbered pager. Controlled, windowed, sized by a
                               container query; ported by hand, no new packages
+      footer-5.tsx            watermelon.sh's Footer5 — the landing footer.
+                              Links may be actions; the watermark fades by mask
     Dashboard/                top bar, sidebar, landing screen, content panel
       Dashboard.tsx           the shell; `landing` decides whether a rail exists.
                               Also owns `.phoneNav`, the chip strip that IS the
@@ -12550,7 +12611,9 @@ src/
                               path, and `icons.tsx` is stroked multi-element
       TopSearch.tsx           the tag field's adapter. Owns Enter-to-submit,
                               which the vendored component cannot do itself
-      ClosingBand.tsx         the page ending — a COMING SOON placeholder
+      SiteFooter.tsx          the landing footer's CONTENT: real contacts
+                              (content/contact.ts), every destination, credits
+      ClosingBand.tsx         a COMING SOON placeholder, above the footer
                               shuffled, all counted from CARDS at render time
     VsMark/VsMark.tsx         the word VS standing between two decks, drawn large
     Analytics/

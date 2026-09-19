@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './ProContact.module.css';
+import { EMAIL, TWITTER_HANDLE, TWITTER_URL } from '../../content/contact';
 
-const TWITTER_URL = 'https://x.com/CaptainFrozeCR';
-const TWITTER_HANDLE = '@CaptainFrozeCR';
-const EMAIL = 'singh.divyanshu1121@gmail.com';
-
-function XIcon({ size = 18 }: { size?: number }) {
+/* Exported for the landing page's footer, which offers the same two links —
+   the same glyphs, so the two surfaces read as one set of contacts. */
+export function XIcon({ size = 18 }: { size?: number }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
       <path d="M17.2 3h3.3l-7.2 8.2L21.8 21h-6.6l-5.2-6.7L4.1 21H.8l7.7-8.8L.5 3h6.8l4.7 6.2L17.2 3zm-1.2 16h1.8L7.9 4.9H6L16 19z" />
@@ -14,7 +13,7 @@ function XIcon({ size = 18 }: { size?: number }) {
   );
 }
 
-function MailIcon({ size = 18 }: { size?: number }) {
+export function MailIcon({ size = 18 }: { size?: number }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3" y="5" width="18" height="14" rx="2" />

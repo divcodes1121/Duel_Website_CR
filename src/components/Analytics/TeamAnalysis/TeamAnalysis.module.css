@@ -266,7 +266,6 @@
 
 .paste::placeholder {
   color: var(--text-muted);
-  opacity: 0.75;
 }
 
 .paste:focus-within,

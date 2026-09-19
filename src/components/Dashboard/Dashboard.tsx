@@ -63,6 +63,7 @@ import { SeasonMenu } from '../Analytics/SeasonMenu';
 import { fetchSuggestedTags } from '../../state/analyticsClient';
 import { useReveal } from '../../hooks/useReveal';
 import { ClosingBand } from './ClosingBand';
+import { SiteFooter } from './SiteFooter';
 import { RecentBattles } from '../Analytics/RecentBattles';
 import {
   AnalyticsIcon,
@@ -1365,9 +1366,24 @@ export function Dashboard({
               })}
               </div>
 
-              {/* Ends the page: what the numbers rest on, and a real chart of
-                  the card set — counted at render time, never asserted. */}
               <ClosingBand />
+
+              {/* THE FOOTER ENDS THE PAGE, on the landing screen only. Every
+                  other screen is a window that owns its own scroll region, and
+                  a footer inside a deck builder is a band of links under a
+                  workspace nobody scrolls past. Its links reuse the shell's
+                  own navigation — `goAnalytics` for the search, the Meta
+                  section the dock opens — so it cannot disagree with them. */}
+              <SiteFooter
+                onSearch={goAnalytics}
+                onMeta={() => {
+                  setSection('Top Meta Decks');
+                  requestAnimationFrame(() =>
+                    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }),
+                  );
+                }}
+                onContact={() => setProContact(true)}
+              />
             </>
           )}
         </main>

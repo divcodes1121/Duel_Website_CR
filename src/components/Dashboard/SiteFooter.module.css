@@ -1,0 +1,46 @@
+/* The footer closes the landing column, so it takes a little air above it
+   rather than butting against the closing band. */
+.footer {
+  margin-top: 1.5rem;
+}
+
+/* The brand tile, value for value the top bar's `.brandMark`: the favicon's
+   ground, a 1px ring on dark where the tile would otherwise vanish into the
+   black page, and the violet glow that is dark-only through `--glow-core`. */
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0.18rem;
+  border-radius: 11px;
+  background: #0c1222;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--solid-violet) var(--glow-core), transparent);
+}
+
+:global([data-theme='dark']) .mark {
+  border: 1px solid var(--border);
+}
+
+.mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* The watermark's mark: the logo's alpha as a mask, filled with whatever ink
+   the watermark row sets. */
+.ghost {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}

@@ -50,8 +50,9 @@ import './continuous-pagination.css';
  * 6. **IT SIZES ITSELF TO ITS CONTAINER.** Upstream is 40px below the `sm`
  *    breakpoint and 64px above. A viewport breakpoint does not describe a
  *    footer that is half the viewport, so the cells are sized from the
- *    component's own width (a container query) between 2rem and upstream's
- *    4rem, and a narrow container drops the neighbouring pages first. Long
+ *    component's own width (a container query) between 2rem and 2.5rem —
+ *    upstream's 4rem was reported as too large — and the hover lift is scaled
+ *    down with it (3px, not 6). A narrow container drops the neighbours first. Long
  *    page numbers shrink their type down to a 0.7rem floor, and past that the
  *    square widens instead — type smaller than that is a number nobody reads.
  *
@@ -115,7 +116,7 @@ const PageButton: FC<PageButtonProps> = ({ children, onClick, disabled, label })
     disabled={disabled}
     aria-label={label}
     className="cp-cell cp-step"
-    whileHover={disabled ? undefined : { scale: 1.08, y: -6 }}
+    whileHover={disabled ? undefined : { scale: 1.08, y: -3 }}
     whileTap={disabled ? undefined : { scale: 0.92 }}
     transition={{ type: 'spring', stiffness: 400, damping: 20 }}
   >
@@ -201,7 +202,7 @@ export const ContinuousPagination: FC<ContinuousPaginationProps> = ({
                     aria-label={`Page ${item.toLocaleString()}`}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn('cp-cell cp-num', isActive && 'cp-active')}
-                    whileHover={!isActive && !disabled ? { y: -6 } : undefined}
+                    whileHover={!isActive && !disabled ? { y: -3 } : undefined}
                     whileTap={disabled ? undefined : { scale: 0.92 }}
                     transition={{ type: 'spring', stiffness: 260, damping: 18 }}
                   >

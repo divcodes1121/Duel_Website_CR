@@ -184,21 +184,6 @@ export function DuoDecks() {
         )}
       </header>
 
-      {summary && (
-        <div className={styles.stats}>
-          <Stat label="Unique pairs" value={summary.uniquePairs.toLocaleString()} />
-          <Stat label="Battles folded" value={summary.battlesFolded.toLocaleString()} />
-          <Stat
-            label="Battles per pair"
-            value={
-              summary.uniquePairs
-                ? (summary.occurrences / summary.uniquePairs).toFixed(1)
-                : '—'
-            }
-          />
-        </div>
-      )}
-
       <div className={styles.controls}>
         {/* THE CONTROL META AND DUEL ZONE ALREADY USE, and it replaced a text
             box. A typed string had to be spelled the way the database spells
@@ -325,21 +310,6 @@ export function DuoDecks() {
         </>
       )}
 
-      <p className={styles.note}>
-        Read from the raw battle payload, because a battle row stores one deck
-        and one opponent deck — a teammate&rsquo;s deck is in no column of it.
-        Each battle counts once however many of its four players are tracked,
-        and card order does not affect a deck&rsquo;s identity.
-      </p>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.stat}>
-      <span className={styles.statValue}>{value}</span>
-      <span className={styles.statLabel}>{label}</span>
     </div>
   );
 }

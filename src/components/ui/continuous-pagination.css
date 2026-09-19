@@ -8,7 +8,7 @@
  *
  * THE SIZE IS A CONTAINER QUERY. The root is an inline-size container, and a
  * cell is whatever share of that width its row allows, clamped between 2rem
- * (a comfortable finger, well over the 24px floor) and upstream's 4rem. A
+ * (a comfortable finger, well over the 24px floor) and 2.5rem. A
  * footer beside a count and a full-width phone row both get a pager that fits,
  * with no viewport breakpoint pretending to know how wide either is.
  */
@@ -20,11 +20,15 @@
 }
 
 .continuous-pagination .cp-row {
-  --cp-gap: clamp(0.3rem, 1.6cqi, 0.75rem);
+  --cp-gap: clamp(0.3rem, 1.2cqi, 0.5rem);
+  /* CAPPED AT 2.5rem, not upstream's 4rem (2026-09-19). 64px squares under a
+     list read as the loudest thing on the screen — reported as "too large".
+     2.5rem is the old hand-rolled pager's size plus a little, and still well
+     over the 24px touch floor at the 2rem minimum. */
   --cp-cell: clamp(
     2rem,
     calc((100cqi - (var(--cp-cells) - 1) * var(--cp-gap)) / var(--cp-cells)),
-    4rem
+    2.5rem
   );
   display: flex;
   align-items: center;
@@ -36,7 +40,7 @@
   gap: var(--cp-gap);
   /* Room for the hover lift, so a clipping parent does not shave the top
      off a raised button. */
-  padding-block: 0.5rem;
+  padding-block: 0.35rem;
 }
 
 .continuous-pagination .cp-pages {

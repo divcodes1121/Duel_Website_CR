@@ -256,9 +256,12 @@ describe('the page itself', () => {
     expect(page).not.toContain('pair.occurrences');
     expect(page).not.toContain('pair.players');
     const css = R('src', 'components', 'Analytics', 'DuoDecks', 'DuoDecks.module.css');
-    expect(css).toMatch(/\.pair \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto minmax\(0, 1fr\)/s);
-    /* Fractions of the column, so the art grows into the space the figures
-       used to hold, rather than a fixed pixel size that would leave it. */
+    /* Two capped deck tracks around the plus, centred. They were half the row
+       each (`minmax(0, 1fr)`) until 2026-09-19, which drew 123px cards at 1440
+       and was reported as too large; still `minmax(0, …)`, never a bare track
+       that a wide child could blow out. */
+    expect(css).toMatch(/\.pair \{[^}]*grid-template-columns: minmax\(0, 22rem\) auto minmax\(0, 22rem\)/s);
+    /* Fractions of the deck's track, so the eight cards share it evenly. */
     expect(css).toMatch(/\.cards \{[^}]*repeat\(4, minmax\(0, 1fr\)\)/s);
   });
 

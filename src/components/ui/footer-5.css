@@ -1,0 +1,424 @@
+/* The stylesheet for the vendored Footer5.
+ *
+ * Upstream is Tailwind utilities; this project has no Tailwind, so the look is
+ * written out here — value for value where a value could survive (the 7xl
+ * measure, the 2.5rem/1.5rem padding steps, the 12-column split, rounded-2xl,
+ * the layered button shadows) and as a token wherever the upstream literal was
+ * a colour. Every rule hangs off `.footer-5`, the same arrangement as
+ * `glass-dock.css` and `continuous-pagination.css`.
+ *
+ * THE BREAKPOINTS ARE CONTAINER QUERIES, not viewport ones. Upstream's `sm` /
+ * `md` / `lg` describe the window; this footer's width is whatever column it is
+ * put in, and the root is an inline-size container so it asks that instead.
+ */
+
+.footer-5 {
+  container-type: inline-size;
+  width: 100%;
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+.footer-5 *,
+.footer-5 *::before,
+.footer-5 *::after {
+  box-sizing: border-box;
+}
+
+.footer-5 .f5-wrap {
+  width: 100%;
+  max-width: 80rem;
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+}
+
+@container (min-width: 48rem) {
+  .footer-5 .f5-wrap {
+    padding-inline: 3rem;
+  }
+}
+
+/* ── brand row ───────────────────────────────────────────────────────── */
+
+.footer-5 .f5-top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 2.5rem;
+  padding-bottom: 1.5rem;
+}
+
+@container (min-width: 40rem) {
+  .footer-5 .f5-top {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.footer-5 .f5-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.footer-5 .f5-brand-name {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.footer-5 .f5-connect {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.footer-5 .f5-connect-label {
+  display: none;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+@container (min-width: 40rem) {
+  .footer-5 .f5-connect-label {
+    display: inline;
+  }
+}
+
+.footer-5 .f5-socials {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Upstream's outline icon button: a pale surface, a hairline, a soft drop and
+   a lit inner top edge. The edge is `--highlight`, which is already white at a
+   strength graded per theme — upstream kept two literals for the same job. */
+.footer-5 .f5-social {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: var(--text);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.03),
+    0 2px 4px 0 rgba(0, 0, 0, 0.05),
+    inset 0 2px 0 0 var(--highlight);
+  transition:
+    border-color var(--dur-2) var(--ease),
+    background var(--dur-2) var(--ease);
+}
+
+.footer-5 .f5-social:hover {
+  border-color: var(--border-strong);
+}
+
+.footer-5 .f5-social svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.footer-5 .f5-rule {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+/* ── contact card and link columns ───────────────────────────────────── */
+
+.footer-5 .f5-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3rem;
+  padding-block: 3rem;
+}
+
+@container (min-width: 48rem) {
+  .footer-5 .f5-body {
+    padding-block: 4rem;
+  }
+}
+
+@container (min-width: 64rem) {
+  .footer-5 .f5-body {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    gap: 4rem;
+  }
+}
+
+.footer-5 .f5-heading {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.footer-5 .f5-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.footer-5 .f5-cta {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  width: 100%;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.03),
+    0 2px 4px 0 rgba(0, 0, 0, 0.05),
+    inset 0 2px 0 0 var(--highlight);
+  transition: border-color var(--dur-2) var(--ease);
+}
+
+.footer-5 .f5-cta:hover {
+  border-color: var(--border-strong);
+}
+
+/* Upstream's `bg-primary` tile. The primary action here is the maroon SOLID
+   step, the one graded to carry white — never the pastel ink. */
+.footer-5 .f5-cta-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  background: var(--accent-action-solid);
+  color: var(--on-solid);
+  box-shadow:
+    0 2px 4px 0 rgba(0, 0, 0, 0.05),
+    inset 0 2px 0 0 rgba(255, 255, 255, 0.25),
+    0 0 18px color-mix(in srgb, var(--accent-action) var(--glow-core), transparent);
+}
+
+.footer-5 .f5-cta-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.footer-5 .f5-cta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.footer-5 .f5-cta-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: color var(--dur-2) var(--ease);
+}
+
+.footer-5 .f5-cta:hover .f5-cta-title {
+  color: var(--accent-action);
+}
+
+.footer-5 .f5-cta-desc {
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.footer-5 .f5-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem;
+}
+
+@container (min-width: 40rem) {
+  .footer-5 .f5-groups {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 48rem) {
+  .footer-5 .f5-groups {
+    gap: 3rem;
+  }
+}
+
+.footer-5 .f5-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.footer-5 .f5-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A link or a button, drawn identically — some destinations here are
+   actions (a dialog, a section of the home screen) rather than routes. */
+.footer-5 .f5-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* Neutral type is already full contrast in this app, so upstream's hover
+   recolour would change nothing; the underline is the hover. */
+.footer-5 .f5-link:hover .f5-link-text {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The tool's own glyph in its own identity hue — the INK step, since an icon
+   is a bare mark that has to read against the ground. */
+.footer-5 .f5-link-icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.footer-5 .f5-link-icon[data-hue='violet'] { color: var(--hue-violet); }
+.footer-5 .f5-link-icon[data-hue='blue'] { color: var(--hue-blue); }
+.footer-5 .f5-link-icon[data-hue='pink'] { color: var(--hue-pink); }
+.footer-5 .f5-link-icon[data-hue='green'] { color: var(--hue-green); }
+.footer-5 .f5-link-icon[data-hue='red'] { color: var(--hue-red); }
+
+/* ── watermark and legal line ────────────────────────────────────────── */
+
+.footer-5 .f5-foot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.footer-5 .f5-watermark {
+  position: relative;
+  overflow: hidden;
+  max-width: 100%;
+  user-select: none;
+}
+
+/* The page's own ink at a few percent: upstream's `text-muted` is shadcn's
+   pale surface grey used as a text colour, which is the same idea but is a
+   different token in each theme there. This is one declaration for both. */
+.footer-5 .f5-watermark-row {
+  --f5-ghost: color-mix(in srgb, var(--text) 8%, transparent);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(1rem, 2.5cqi, 1.5rem);
+  padding-top: 1rem;
+  color: var(--f5-ghost);
+  /* The fade into the page, as a MASK on the letters rather than upstream's
+     `from-background` overlay: an opaque gradient erased the fireflies behind
+     the word in a visible rectangle, and a mask paints nothing at all. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 45%, transparent 100%);
+}
+
+.footer-5 .f5-watermark-mark {
+  flex: none;
+  width: clamp(2rem, 11cqi, 10rem);
+  height: clamp(2rem, 11cqi, 10rem);
+}
+
+.footer-5 .f5-watermark-mark > * {
+  width: 100%;
+  height: 100%;
+}
+
+.footer-5 .f5-watermark-word {
+  font-family: var(--font-display);
+  /* A SHARE OF THE FOOTER, with a low floor. Upstream's smallest step is
+     `text-7xl` (4.5rem), which in Bebas runs "DECKKIES" to 267px — wider than
+     a 320px phone's footer, so the word was cut off. The word measures 3.71em,
+     so 17cqi plus the 11cqi mark and the gap is ~77% of the footer at every
+     width, and the 14rem ceiling is upstream's. */
+  font-size: clamp(2.5rem, 17cqi, 14rem);
+  font-weight: 700;
+  line-height: 0.8;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+/* Laid over the watermark's faded foot on a wide footer, as upstream does; on
+   a narrow one it drops into flow under it instead of upstream's 1.25rem
+   nudge, which on a phone put the copyright over the letters. */
+.footer-5 .f5-legal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 1rem 0 1.5rem;
+  text-align: center;
+}
+
+@container (min-width: 40rem) {
+  .footer-5 .f5-legal {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 0 3rem 0.75rem;
+    text-align: left;
+  }
+}
+
+.footer-5 .f5-copyright {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.footer-5 .f5-legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 1.5rem;
+}
+
+.footer-5 .f5-legal-link {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.footer-5 .f5-legal-link:hover .f5-link-text {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

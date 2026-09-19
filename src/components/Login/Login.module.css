@@ -287,7 +287,7 @@
 }
 
 .input::placeholder {
-  color: color-mix(in srgb, var(--text-muted) 60%, transparent);
+  color: var(--text-muted);
   font-weight: 500;
 }
 

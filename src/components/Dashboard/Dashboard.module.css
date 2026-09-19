@@ -1996,11 +1996,11 @@
    ground here is a photograph rather than a surface token. */
 .toolPanel[data-banner] .toolTitle,
 .toolPanel[data-banner] .toolBody {
-  color: #f6f7f8;
+  color: #ffffff;
 }
 
 .toolPanel[data-banner] .toolChip {
-  color: #f6f7f8;
+  color: #ffffff;
   border-color: rgb(255 255 255 / 0.28);
   background: rgb(255 255 255 / 0.12);
 }

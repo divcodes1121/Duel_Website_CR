@@ -24,6 +24,9 @@
  *      site for weeks, and the cost was not the component's alone: a React
  *      tree that never settles never commits a resolved Suspense boundary, so
  *      `React.lazy` was unusable anywhere inside the Dashboard shell.
+ *   6. The collapsed pill's "Search" label is full contrast. Upstream fades it
+ *      to 0.72, which reads as grey type, and every neutral label in this app
+ *      is pure black on light and pure white on dark.
  *
  * WHAT IT DOES NOT DO, and why the adapter exists: there is no way to submit
  * the text you typed. `onSelect` fires only for a result the component itself
@@ -404,7 +407,10 @@ export function GooeySearch({
                 position: "relative",
                 left: 4,
                 color: "var(--background)",
-                opacity: 0.72,
+                /* DEVIATION 6: full contrast. Upstream fades this label to
+                   0.72, which reads grey; every neutral label in this app is
+                   full black on light and full white on dark. */
+                opacity: 1,
                 fontSize: 14,
                 display: "block",
               }}

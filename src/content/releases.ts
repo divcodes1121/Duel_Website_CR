@@ -82,6 +82,30 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-19-contrast-duo',
+    date: '2026-09-19',
+    kind: 'improved',
+    title: 'Every label is full black or full white now',
+    body: [
+      'A few labels were still drawn faded — the date chips that reach past a player’s stored history, the 2nd and 3rd place ranks on a player’s deck board, and the Search label in the top bar. They are all full black on the light theme and full white on the dark one. A date chip beyond the stored history is marked with a dashed edge instead of being greyed out.',
+      '2v2 Decks is tighter: smaller cards, so more partnerships fit on a screen, with the summary figures and the footnote removed. The page buttons under long lists are smaller too.',
+    ],
+    href: '#/duo',
+    hrefLabel: 'Open 2v2 Decks',
+  },
+  {
+    id: '2026-09-19-footer',
+    date: '2026-09-19',
+    kind: 'new',
+    title: 'The home page has a proper footer now',
+    body: [
+      'At the bottom of the home page: every deck tool and analytics screen in one place, a link to the field book and to this feed, and the two ways to reach me — on X or by email.',
+      'It also says plainly that Deckkies is an unofficial fan project, not affiliated with Supercell, and where the card data comes from.',
+    ],
+    href: '#/',
+    hrefLabel: 'Go home',
+  },
+  {
     id: '2026-09-19-pagination',
     date: '2026-09-19',
     kind: 'improved',

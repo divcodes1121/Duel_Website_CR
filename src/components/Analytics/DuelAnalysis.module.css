@@ -330,8 +330,12 @@
 }
 
 .rangeChip[data-beyond] {
-  color: var(--text-muted);
-  opacity: 0.6;
+  /* A DASHED EDGE, NOT A FADE (2026-09-19). This chip reaches past the
+     player's stored history, and it said so by dropping to 55% opacity — grey
+     type, which is what the full-contrast pass removes everywhere. The label
+     stays full black / full white; the dashed border carries the caveat and
+     the `title` still says how many days are stored. */
+  border-style: dashed;
 }
 
 .rangeChip:hover {
