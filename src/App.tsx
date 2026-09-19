@@ -16,6 +16,10 @@ const Sketchbook = lazy(() =>
   import('./components/Sketchbook/Sketchbook').then((m) => ({ default: m.Sketchbook })),
 );
 
+/* COACH ROSTER, lazy for the same reason: an admin's tool, and nothing in the
+   public bundle should pay for it. */
+const CoachRoster = lazy(() => import('./components/Admin/CoachRoster/CoachRoster'));
+
 /* One shell for every signed-in route. The builder, Deck's Home and Counter
  * Palette used to be separate full pages, each with its own nav bar; they now
  * open inside the dashboard as scrolling panels, so the top bar and sidebar
@@ -96,6 +100,22 @@ function App() {
             furniture before a book opens is worse than one quiet frame. */}
         <Suspense fallback={null}>
           <Sketchbook />
+        </Suspense>
+      </div>
+    );
+  }
+
+  /* COACH ROSTER — BEFORE the `#/admin` console below, which matches this
+     route's prefix and would otherwise swallow it. OUTSIDE the Supabase branch
+     so a checkout without Supabase can open it (the gate answers `admin`
+     there, and the screen runs on an in-memory roster it labels as such). In
+     production the screen refuses non-admins itself, and the database —
+     `coach_players`' Row Level Security — refuses them underneath. */
+  if (route.startsWith('#/admin/coach')) {
+    return (
+      <div className={styles.app}>
+        <Suspense fallback={null}>
+          <CoachRoster />
         </Suspense>
       </div>
     );

@@ -1,0 +1,622 @@
+/* Coach Roster — an admin's working screen. Dense like the console: a place
+ * for reading a player quickly, not for being impressed by. Every colour is a
+ * token; no component here names one of its own.
+ *
+ * THE PAGE OWNS ITS SCROLL, like the console: `body` is `overflow: hidden`, so
+ * a route that does not scroll itself is a route whose bottom is unreachable.
+ * `min-height: 0` is what lets it shrink and scroll rather than clip. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.4rem clamp(1rem, 3vw, 2rem) 3rem;
+  color: var(--text);
+}
+
+/* ── top bar ─────────────────────────────────────────────────────────── */
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.42rem 0.85rem 0.42rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
+}
+
+.back:hover {
+  border-color: var(--text-muted);
+  transform: translateX(-2px);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+}
+
+.experimental {
+  padding: 0.2rem 0.55rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
+.previewBanner {
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+
+/* ── the two columns ─────────────────────────────────────────────────── */
+
+.body {
+  display: grid;
+  grid-template-columns: 15.5rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.roster {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.rosterHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.rosterTitle {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rosterCount {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rosterList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A player card: the name, the tag under it. Selection is violet, as it is
+   everywhere in this app — a leading edge and a tinted fill, not colour alone. */
+.rosterItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-nested);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    background var(--dur-2) var(--ease);
+}
+
+.rosterItem:hover {
+  border-color: var(--border-strong);
+}
+
+.rosterItem[data-on] {
+  border-color: var(--accent-select-edge);
+  background: var(--accent-select-fill-sunken);
+  box-shadow: inset 3px 0 0 var(--accent-select);
+}
+
+.rosterItem[data-dim] .rosterName {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.rosterName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.rosterTag {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.addButton {
+  padding: 0.55rem 0.7rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.addButton:hover {
+  border-style: solid;
+}
+
+.archivedWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.archivedToggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.76rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+/* The switcher is the phone's roster; on a desktop the sidebar is. */
+.switcher {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.switcherDropdown.switcherDropdown {
+  flex: 1;
+  width: auto;
+}
+
+@media (max-width: 860px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .roster {
+    display: none;
+  }
+
+  .switcher {
+    display: flex;
+  }
+}
+
+/* ── the player ──────────────────────────────────────────────────────── */
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.playerHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.playerIdentity {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.playerName {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.6vw, 1.9rem);
+  font-weight: 700;
+}
+
+.playerTag {
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.inGame {
+  font-size: 0.82rem;
+}
+
+.archivedBadge {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.linkButton {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.linkButton:hover {
+  border-color: var(--text-muted);
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.notes {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.controlRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sourceRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+}
+
+.sourceBadge {
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Live is the thinner reading, and says so with a dashed edge. */
+.sourceBadge[data-basis='live'] {
+  border-style: dashed;
+}
+
+.sourceNote {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.trackState {
+  font-size: 0.74rem;
+  text-transform: capitalize;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.6rem;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.tileLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tileValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tileNote {
+  font-size: 0.74rem;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.9rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.blockTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.deckRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.deckCards {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.2rem;
+  width: min(100%, 30rem);
+}
+
+.deckCard {
+  width: 100%;
+  height: auto;
+}
+
+.deckMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.deckName {
+  font-weight: 700;
+}
+
+.muted {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.notice,
+.empty,
+.denied {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 1.2rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.notice h3,
+.empty h2,
+.denied h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.notice p,
+.empty p,
+.denied p {
+  margin: 0;
+  max-width: 60ch;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.denied {
+  align-self: center;
+  margin: 15vh auto 0;
+  max-width: 36rem;
+}
+
+/* ── buttons and fields ──────────────────────────────────────────────── */
+
+.primaryButton,
+.ghostButton,
+.dangerGhost,
+.dangerButton {
+  padding: 0.45rem 0.9rem;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid transparent;
+  background: var(--accent-action-solid);
+  color: var(--on-solid);
+}
+
+.primaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ghostButton {
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text);
+}
+
+.ghostButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.dangerGhost {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--error);
+}
+
+.dangerButton {
+  border: 1px solid transparent;
+  background: var(--solid-red);
+  color: var(--on-solid);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.fieldLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.input,
+.textarea {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--error);
+}
+
+.hint {
+  font-size: 0.74rem;
+}
+
+.hint[data-bad] {
+  color: var(--error);
+}
+
+.formError {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--error);
+}
+
+/* ── the add dialog ──────────────────────────────────────────────────── */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: min(100%, 28rem);
+  padding: 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-strong);
+  color: var(--text);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.3);
+}
+
+.dialogTitle {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}

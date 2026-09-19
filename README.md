@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Coach Roster** | **Phase 1 built 2026-09-20 (not yet committed): admin-only, experimental.** `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. Later phases add the deck arsenal, opponent scout, recommendations, match plans and outcomes. See [Coach Roster](#coach-roster-admin-only-experimental) |
 | **One dropdown, everywhere** | **LIVE 2026-09-20 (`c28acba`).** Every select-style control — 13 of them, from the card library's filters to onboarding's country list — is the vendored watermelon.sh `dropdown-menu-14`, ported by hand: an icon tile, the value over a caption and an up/down chevron; a panel in the site's theme with a heading, a line of explanation per option and a tick on the chosen one. It is a real listbox with the keyboard a native select has (arrows, Home/End, type-ahead, Esc) plus a search field for long lists, anchored to its trigger, flipping above when there is no room below and never leaving the viewport. `SeasonMenu` is a thin wrapper over it now. Verified in a browser on real data in both themes and at 390; the admin role picker is the one not seen in a browser |
 | **2v2 pairs as strips** | **LIVE 2026-09-19 (`9053943`).** Deck A pinned to the left edge, deck B to the right, each deck's eight cards on one line with its label, elixir and two actions on the line above. A pair went from a ~300px block to a 128px strip at 1440 — about seven to a screen instead of one and a half. Stacks below 62rem, still eight across. Verified 20/20 in a browser, both themes, 1440/1024/390 |
 | **Full contrast, everywhere** | **swept 2026-09-19.** A browser probe read every visible text node on 18 routes, five home sections and two dialogs in both themes, compositing each one's ink with the opacity of every ancestor — which is how text goes grey without its `color` saying so. The fixes: date chips past a player's stored history (six screens) were faded to 55% and are full ink with a dashed edge; the 2nd/3rd place ranks were the gold chip at reduced opacity and are a tint and an outline with full-contrast digits; the top bar's Search label, the banner copy and two placeholders. Left deliberately: disabled controls, the filmstrip's depth fade, the field book's sepia paper. **2v2** lost its three summary figures and its footnote, and its decks are capped at 22rem (cards 123 → 85px). **Pager cells are 2.5rem max**, not upstream's 4rem |
@@ -190,6 +191,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 42. [Two filters and a heading](#two-filters-and-a-heading)
 42a. [One pager, everywhere](#one-pager-everywhere)
 42b. [The footer](#the-footer)
+42c. [Coach Roster (admin-only, experimental)](#coach-roster-admin-only-experimental)
 43. [The account menu is a stack of cards](#the-account-menu-is-a-stack-of-cards)
 43a. [What's new — the bell finally opens something](#whats-new--the-bell-finally-opens-something)
 44. [The phone pass — one scroll, and it is the page](#the-phone-pass--one-scroll-and-it-is-the-page)
@@ -274,8 +276,9 @@ booleans and never as values. It exists because "the JWT check is wrong" and
 "the function cannot see its configuration" are indistinguishable from outside,
 and one boolean settles it.
 
-**Database setup** is two files, in order: `supabase/001_accounts.sql` then
-`supabase/002_owner.sql`, both in the Supabase SQL editor. Both are idempotent,
+**Database setup** is three files, in order: `supabase/001_accounts.sql`,
+`supabase/002_owner.sql`, then `supabase/004_coach_roster.sql` (the Coach
+Roster's tables), all in the Supabase SQL editor. Both are idempotent,
 so re-running either after an edit is safe. **002 is what stops an admin you
 promote from demoting you** — see
 [The owner is above admin](#the-owner-is-above-admin).
@@ -324,6 +327,7 @@ open, so links and refreshes work.
 | `#/signin` | Sign in / sign up, then the three-step onboarding form |
 | `#/reset` | Set a new password, at the end of a recovery link |
 | `#/admin` | The admin console. Not linked from anywhere a non-admin sees |
+| `#/admin/coach` | **Coach Roster** — admin-only, experimental coaching workspace |
 
 The analytics areas are **Search Player · Top Meta Decks · Deck Analysis · Duel
 Analysis · Duel Zone · Cards · Deck Counter · Coach Assist**, each with its own
@@ -12120,6 +12124,83 @@ Upstream's smallest step ran "DECKKIES" to 267px and cut it off on a 390 and a
 link lands where it says, both dialogs open, no two controls overlap, nothing
 scrolls sideways and the word is never clipped. Main bundle **341.12 → 342.90 kB
 gzip (+1.78)**, CSS **+1.01**.
+
+---
+
+## Coach Roster (admin-only, experimental)
+
+`#/admin/coach`, reached from the console's header. A private coaching
+workspace for a small roster of players the account holder coaches: choose a
+player, understand them, prepare against an opponent, record what happened.
+It is built in phases on top of the analytics that already exist — the player
+report, Coach Assist's `suggest`, Team Analysis's scorer, the deck tuner — and
+adds only the coaching layer: the roster, and (in later phases) each player's
+deck arsenal, match plans and results.
+
+**Phase 1 is built: the roster, the switcher, and a basic profile.**
+
+### Where the data lives, and what enforces "admin-only"
+
+The coaching state is in Supabase — `supabase/004_coach_roster.sql` — and
+nothing else is. Battles, decks, matchups and predictions stay in the bot's
+database on the VPS, which this project only opens `mode=ro`; no table here
+references, copies or writes to it. The bot's own `recommendation_events` /
+`recommendation_outcomes` (4 rows / 0) were left alone on purpose: writing
+there would break the read-only guarantee and mix an experimental workflow
+into the data the prediction engine is measured against. A match plan keeps
+its own snapshot of what was recommended and why.
+
+**Row Level Security is the boundary, not the screen.** Every row requires
+the caller to be an admin — through `effective_tier`, the one definition of a
+tier — and to own the row (`coach_id = auth.uid()`), so a roster is personal
+and a non-admin reads and writes nothing. Children reference parents by
+`(id, coach_id)` composite keys, because a foreign-key check runs without RLS
+and could otherwise attach a deck to another coach's player. Plans and results
+are `ON DELETE RESTRICT`: a player with history is archived, not deleted.
+`anon` has no grant at all.
+
+**Verified against production**, by `004_coach_roster_verify.sql` run in the
+SQL editor: 14 of 14 checks OK — anon refused on the table grant, a non-admin
+refused by RLS, a malformed tag and a 7-card or repeated-card deck refused by
+check constraints, a reordered duplicate by the deck key, a delete with
+history by the foreign key, and a deck hung off another coach's player by the
+composite key. Each refusal only counts for its named reason — "refused" for
+any error would have passed if the editor merely could not switch role.
+
+Two things the verify itself got wrong first, both worth knowing: `text[] ||
+'literal'` reads the bare literal as a second array and fails at run time
+("malformed array literal"), which no parser catches; and an unconditional
+"OK refused" would have graded an unrelated error as a pass.
+
+### The screen
+
+A route of its own, like the console — not a Dashboard section, and lazy, so
+the public bundle carries none of it (checked in the build: the only roster
+string in the main chunk is the console's link). The URL is the selection,
+`#/admin/coach/<TAG>/<section>`: a refresh keeps the player and the section,
+and switching player keeps the section. Desktop has a sidebar; below 860px it
+becomes the shared dropdown, searchable once the roster passes eight.
+
+**Adding a player also asks the collector to follow them**, through the same
+`/track/<tag>` queue a player search enrols through — no second enrolment
+path. The profile is the existing player report, stored history or the live
+battlelog, and says which: a tag not yet collected answers from its last ~25
+battles, and a badge stops that passing for a record. The win rate is `wins ÷
+battles`, Player Analysis's own definition, so the two screens cannot disagree
+about one player.
+
+**It waits for the account to resolve before judging it.** `ready` turns true
+before the profile arrives and `tier` defaults to `free` until it does, so an
+admin would otherwise be shown "not your roster" for a beat on every load.
+
+**A checkout without Supabase gets an in-memory roster**, labelled on screen
+as unsaved, applying the same rules as the table. That is what made the UI
+verifiable here: 33 of 33 browser checks on real production player data, both
+themes and at 390px — add with live validation, duplicate refused, switching
+by sidebar and by dropdown, edit, archive, restore, remove.
+
+No release note: the What's-new feed speaks to every account, and an admin
+tool is not something to announce to them.
 
 ---
 

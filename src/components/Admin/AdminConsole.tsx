@@ -264,6 +264,12 @@ export function AdminConsole() {
         <h2 className={styles.title}>Console</h2>
 
         <div className={styles.headActions}>
+          {/* ADMIN → COACH ROSTER. The console is one page with no menu, so the
+              way into the coaching tool is a link here, where only an admin
+              ever stands. */}
+          <a className={styles.coachLink} href="#/admin/coach">
+            ⚔ Coach Roster
+          </a>
           {/* Every colour here is already a token, so the console follows the
               theme — but the control to CHANGE it lives in the Dashboard header
               this route does not render. */}
