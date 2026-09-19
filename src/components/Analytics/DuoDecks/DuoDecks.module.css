@@ -151,53 +151,89 @@
 .pair {
   position: relative;
   display: grid;
-  /* Each deck is capped at 22rem and the pair sits centred in the row. It
-     used to fill half the row each, which at 1440 drew every card 123px wide
-     — a screen read card by card does not need cards that large, and it put
-     two pairs on a screen where there is room for four. */
-  grid-template-columns: minmax(0, 22rem) auto minmax(0, 22rem);
-  justify-content: center;
-  align-items: start;
-  gap: 1rem 1.5rem;
-  padding: 0.8rem 1rem;
+  /* DECK A AT THE LEFT EDGE, DECK B AT THE RIGHT, eight cards to a line
+     (2026-09-19). Two fractional tracks, each deck capped at 34rem and pinned
+     to its OUTER edge, so on a wide screen the gap opens in the middle around
+     the plus and on a narrow one the decks simply fill their halves. Each pair
+     is a strip about 110px tall at 1440 — five or six to a screen, against
+     one and a half as 4x2 blocks. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  padding: 0.6rem 0.9rem;
   border: 1px solid var(--glass-stroke);
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--glass-bg);
 }
 
-/* A PLUS, NOT A VS. They are teammates, and every other VS mark in this
-   project means two sides of a fight. Sized up with the decks — at 1.2rem it
-   was a speck between two 460px blocks. */
+/* The middle column: the plus, and the mirror note under it when there is
+   one. A PLUS, NOT A VS — they are teammates, and every other VS mark in this
+   project means two sides of a fight. */
+.join {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
 .plus {
-  align-self: center;
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 700;
   line-height: 1;
   color: var(--text-muted);
 }
 
-.deck {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  /* Left-aligned, so the label, the strip and the two action chips share one
-     edge. Stretched, the chips centre themselves against the column rather
-     than sitting under the cards they act on. */
-  align-items: flex-start;
-  gap: 0.5rem;
+.mirror {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hue-pink);
 }
 
-.deckHead {
-  align-self: stretch;
+.deck {
+  min-width: 0;
+  width: 100%;
+  max-width: 34rem;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.deck[data-align='start'] {
+  justify-self: start;
+}
+
+.deck[data-align='end'] {
+  justify-self: end;
+}
+
+/* Label, elixir, then the actions pushed to the far end — and mirrored for
+   deck B, so its label sits at the row's right edge the way deck A's sits at
+   the left. */
+.deckHead {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
+  min-height: 1.6rem;
+}
+
+.deck[data-align='end'] .deckHead {
+  flex-direction: row-reverse;
+}
+
+.deckActions {
+  margin-left: auto;
+}
+
+.deck[data-align='end'] .deckActions {
+  margin-left: 0;
+  margin-right: auto;
 }
 
 .deckSide {
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -205,45 +241,24 @@
 }
 
 .deckElixir {
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--hue-violet);
 }
 
-/* 4x2 AND THE CARDS FILL THE HALF THEY ARE GIVEN.
- *
- * The tracks are fractions of the deck's own column, not a fixed pixel size, so
- * the art grows with the window instead of leaving a pool of empty panel beside
- * it — which is what the figure list used to occupy. `max-width` caps it where
- * a card stops gaining anything: the served art is 302px wide, so past ~150 the
- * strip is upscaling.
- *
- * NOT eight across. Eight cards at this size need well over a thousand pixels,
- * and dropping them to fit would make "big" smaller than what was there before. */
+/* EIGHT ACROSS, as fractions of the deck's width, so the strip is always one
+   line and the cards size to it — ~64px each at a 1440 window, ~40px on a
+   phone where the two decks stack. */
 .cards {
-  align-self: stretch;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.25rem;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.2rem;
 }
 
 .card {
   width: 100%;
   height: auto;
-  border-radius: 6px;
-}
-
-/* Sits over the row's top-right corner rather than in the flow: it is a note
-   about the pair and there is no longer a column of notes for it to join. */
-.mirror {
-  position: absolute;
-  top: 0.55rem;
-  right: 0.8rem;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--hue-pink);
+  border-radius: 5px;
 }
 
 /* ── Pager and messages ──────────────────────────────────────────────────── */
@@ -283,17 +298,30 @@
     padding: 1rem 0.75rem;
   }
 
-  /* The two decks stack, and the plus becomes the divider between them
-     rather than a gap between columns. */
+  /* The two decks stack, each still eight across the full width, and the
+     plus becomes the divider between them. Both read left to right here — a
+     mirrored deck B makes sense at the far end of a row, not under deck A. */
   .pair {
-    grid-template-columns: minmax(0, 22rem);
-    gap: 0.75rem;
-    padding: 0.85rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.45rem;
+    padding: 0.7rem;
   }
 
-  .plus {
-    justify-self: center;
-    padding: 0.1rem 0;
+  .deck {
+    max-width: none;
+  }
+
+  .deck[data-align='end'] {
+    justify-self: stretch;
+  }
+
+  .deck[data-align='end'] .deckHead {
+    flex-direction: row;
+  }
+
+  .deck[data-align='end'] .deckActions {
+    margin-left: auto;
+    margin-right: 0;
   }
 
 }

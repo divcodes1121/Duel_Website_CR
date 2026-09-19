@@ -256,13 +256,12 @@ describe('the page itself', () => {
     expect(page).not.toContain('pair.occurrences');
     expect(page).not.toContain('pair.players');
     const css = R('src', 'components', 'Analytics', 'DuoDecks', 'DuoDecks.module.css');
-    /* Two capped deck tracks around the plus, centred. They were half the row
-       each (`minmax(0, 1fr)`) until 2026-09-19, which drew 123px cards at 1440
-       and was reported as too large; still `minmax(0, …)`, never a bare track
-       that a wide child could blow out. */
-    expect(css).toMatch(/\.pair \{[^}]*grid-template-columns: minmax\(0, 22rem\) auto minmax\(0, 22rem\)/s);
-    /* Fractions of the deck's track, so the eight cards share it evenly. */
-    expect(css).toMatch(/\.cards \{[^}]*repeat\(4, minmax\(0, 1fr\)\)/s);
+    /* Deck A pinned left, deck B pinned right, the plus between — never a
+       bare `1fr`, which a wide child could blow out. */
+    expect(css).toMatch(/\.pair \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto minmax\(0, 1fr\)/s);
+    expect(css).toMatch(/\.deck\[data-align='end'\] \{[^}]*justify-self: end/s);
+    /* Eight to a line, so a pair is a strip and many fit on a screen. */
+    expect(css).toMatch(/\.cards \{[^}]*repeat\(8, minmax\(0, 1fr\)\)/s);
   });
 
   it('owns its scroll on a desktop and gives it back on a phone', () => {

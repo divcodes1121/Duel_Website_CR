@@ -52,14 +52,26 @@ const SORTS = [
 
 const PER_PAGE = [25, 50, 100] as const;
 
-function Deck({ deck, side }: { deck: DuoDeck; side: string }) {
+/* ONE DECK IS ONE LINE: a head carrying the label, the elixir and the two
+   actions, then the eight cards in a single row. It was a 4x2 block with the
+   actions underneath, which made every pair about 300px tall and put two on a
+   screen; as a strip a pair is about a third of that. `side` mirrors deck B so
+   its head and its cards run from the right edge, and the two decks read as
+   the two ends of one row rather than two blocks meeting in the middle. */
+function Deck({ deck, side, align }: { deck: DuoDeck; side: string; align: 'start' | 'end' }) {
   return (
-    <div className={styles.deck}>
+    <div className={styles.deck} data-align={align}>
       <div className={styles.deckHead}>
         <span className={styles.deckSide}>{side}</span>
         <span className={styles.deckElixir} title="Average elixir">
           {deck.avgElixir}
         </span>
+        {/* PASSED THROUGH UNTOUCHED, which is `DeckActions`'s standing rule.
+            The order here is the canonical one rather than `arrange_deck`'s, so
+            the game seats the deck alphabetically — a legal deck, and the same
+            eight cards. `sm` in the head line: under a strip of small cards the
+            `md` chips were taller than the cards' own row. */}
+        <DeckActions cards={deck.cardKeys} name={side} size="sm" className={styles.deckActions} />
       </div>
       <div className={styles.cards}>
         {/* CANONICAL ORDER, which is the order the fingerprint is taken over.
@@ -79,13 +91,6 @@ function Deck({ deck, side }: { deck: DuoDeck; side: string }) {
           />
         ))}
       </div>
-      {/* PASSED THROUGH UNTOUCHED, which is `DeckActions`'s standing rule. The
-          order here is the canonical one rather than `arrange_deck`'s, so the
-          game seats the deck alphabetically — a legal deck, and the same eight
-          cards. Re-sorting it here would only make the link disagree with the
-          strip above it. `md` now the decks are large; `sm` chips under a
-          170px-wide card strip read as leftovers. */}
-      <DeckActions cards={deck.cardKeys} name={side} size="md" />
     </div>
   );
 }
@@ -93,14 +98,17 @@ function Deck({ deck, side }: { deck: DuoDeck; side: string }) {
 function Pair({ pair }: { pair: DuoPair }) {
   return (
     <article className={styles.pair}>
-      <Deck deck={pair.deckA} side="Deck A" />
-      <span className={styles.plus} aria-label="played together with">
-        +
+      <Deck deck={pair.deckA} side="Deck A" align="start" />
+      <span className={styles.join}>
+        <span className={styles.plus} aria-label="played together with">
+          +
+        </span>
+        {/* Both teammates on the same list. A real pairing, and worth marking
+            because it otherwise reads as a rendering fault. Under the plus now:
+            the top-right corner it used to sit in is deck B's head. */}
+        {pair.mirror && <span className={styles.mirror}>Mirror</span>}
       </span>
-      <Deck deck={pair.deckB} side="Deck B" />
-      {/* Both teammates on the same list. A real pairing, and worth marking
-          because it otherwise reads as a rendering fault. */}
-      {pair.mirror && <span className={styles.mirror}>Mirror pair</span>}
+      <Deck deck={pair.deckB} side="Deck B" align="end" />
     </article>
   );
 }
