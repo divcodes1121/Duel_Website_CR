@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Coach Roster** | **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 LIVE 2026-09-20 (`ed04b98`, server by scp first):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. **Phase 3 LIVE 2026-09-20 (`a1ac2e0`):** the Deck Arsenal — the decks a coach has approved for a player, built by hand, pasted as a link or taken from their battles, ranked and tagged, on 004's `coach_decks` plus one column from 005. **Phase 4 LIVE 2026-09-20 (`7f54bb2`):** the opponent scout — what an opponent plays, on stored history or a live snapshot with the difference stated, plus the head-to-head from the roster player's own battles. **Phase 5 BUILT, NOT DEPLOYED (2026-09-20):** what to play — the existing team-analysis engine's ranking for one player against one opponent, joined to the arsenal, with "not picked" and "could not be scored" kept apart. Later phases add match plans and outcomes. See [Coach Roster](#coach-roster-admin-only-experimental) |
+| **Coach Roster** | **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 LIVE 2026-09-20 (`ed04b98`, server by scp first):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. **Phase 3 LIVE 2026-09-20 (`a1ac2e0`):** the Deck Arsenal — the decks a coach has approved for a player, built by hand, pasted as a link or taken from their battles, ranked and tagged, on 004's `coach_decks` plus one column from 005. **Phase 4 LIVE 2026-09-20 (`7f54bb2`):** the opponent scout — what an opponent plays, on stored history or a live snapshot with the difference stated, plus the head-to-head from the roster player's own battles. **Phase 5 LIVE 2026-09-20 (`a19eea9`):** what to play — the existing team-analysis engine's ranking for one player against one opponent, joined to the arsenal, with "not picked" and "could not be scored" kept apart. Later phases add match plans and outcomes. See [Coach Roster](#coach-roster-admin-only-experimental) |
 | **One dropdown, everywhere** | **LIVE 2026-09-20 (`c28acba`).** Every select-style control — 13 of them, from the card library's filters to onboarding's country list — is the vendored watermelon.sh `dropdown-menu-14`, ported by hand: an icon tile, the value over a caption and an up/down chevron; a panel in the site's theme with a heading, a line of explanation per option and a tick on the chosen one. It is a real listbox with the keyboard a native select has (arrows, Home/End, type-ahead, Esc) plus a search field for long lists, anchored to its trigger, flipping above when there is no room below and never leaving the viewport. `SeasonMenu` is a thin wrapper over it now. Verified in a browser on real data in both themes and at 390; the admin role picker is the one not seen in a browser |
 | **2v2 pairs as strips** | **LIVE 2026-09-19 (`9053943`).** Deck A pinned to the left edge, deck B to the right, each deck's eight cards on one line with its label, elixir and two actions on the line above. A pair went from a ~300px block to a 128px strip at 1440 — about seven to a screen instead of one and a half. Stacks below 62rem, still eight across. Verified 20/20 in a browser, both themes, 1440/1024/390 |
 | **Full contrast, everywhere** | **swept 2026-09-19.** A browser probe read every visible text node on 18 routes, five home sections and two dialogs in both themes, compositing each one's ink with the opacity of every ancestor — which is how text goes grey without its `color` saying so. The fixes: date chips past a player's stored history (six screens) were faded to 55% and are full ink with a dashed edge; the 2nd/3rd place ranks were the gold chip at reduced opacity and are a tint and an outline with full-contrast digits; the top bar's Search label, the banner copy and two placeholders. Left deliberately: disabled controls, the filmstrip's depth fade, the field book's sepia paper. **2v2** lost its three summary figures and its footnote, and its decks are capped at 22rem (cards 123 → 85px). **Pager cells are 2.5rem max**, not upstream's 4rem |
@@ -12137,7 +12137,7 @@ report, Coach Assist's `suggest`, Team Analysis's scorer, the deck tuner — and
 adds only the coaching layer: the roster, and (in later phases) each player's
 deck arsenal, match plans and results.
 
-**Phase 1 (roster) and Phase 2 (player intelligence) are live. Phase 3 (deck arsenal) is live. Phase 4 (opponent scout) is live. Phase 5 — what to play — is built and not yet deployed.**
+**Phase 1 (roster) and Phase 2 (player intelligence) are live. Phase 3 (deck arsenal) is live. Phase 4 (opponent scout) is live. Phase 5 — what to play — is live.**
 
 ### Where the data lives, and what enforces "admin-only"
 
@@ -12398,7 +12398,7 @@ apply.
 similar-deck generation, no outcomes. The scout is the bridge into phase 5,
 not phase 5.
 
-### Phase 5: what to play (built 2026-09-20, not deployed)
+### Phase 5: what to play (live 2026-09-20, `a19eea9`)
 
 `#/admin/coach/<PLAYER>/assist/<OPPONENT>` — the engine's ranking for this
 player against this opponent, joined to the decks the coach has approved.
@@ -12444,6 +12444,15 @@ two suggestion rows with almost no card art, which looked like a real fault
 and was a capture taken mid-load. The check now waits for every image and
 measures the drawn boxes — a screenshot is evidence about a moment, not about
 a screen.
+
+**Checked in production after the deploy**: the served chunk carries every
+string on the screen, and the data path answers live — the engine returns
+three ranked decks for a real pairing (67.7 / 59.5 / 56.2% expected, 100%
+coverage, 147-165 practice games) in 1.8s warm, over six opponent decks. That
+exact payload was then run through the real join code: the top pick is matched
+to an approved deck in any card order, a played-but-unpicked deck reads
+`scored_lower` while an unplayed one reads `never_played`, and the arsenal
+keeps the coach's order rather than the engine's.
 
 **Not built, deliberately:** no match plans, no outcomes, no learning loop.
 Those are phases 6 to 8.
