@@ -89,7 +89,17 @@ describe('the route', () => {
   it('round-trips a player and a section through the hash, without the #', () => {
     const href = coachHref('#Y022GRCJQ', 'overview');
     expect(href).toBe('#/admin/coach/Y022GRCJQ/overview');
-    expect(parseCoachRoute(href)).toEqual({ tag: '#Y022GRCJQ', section: 'overview' });
+    expect(parseCoachRoute(href)).toEqual({ tag: '#Y022GRCJQ', section: 'overview', arg: null });
+  });
+
+  it('carries a scouted opponent as a third segment, so a scout is a real URL', () => {
+    const href = coachHref('#Y022GRCJQ', 'scout', '#2PYLQ0');
+    expect(href).toBe('#/admin/coach/Y022GRCJQ/scout/2PYLQ0');
+    expect(parseCoachRoute(href)).toEqual({ tag: '#Y022GRCJQ', section: 'scout', arg: '#2PYLQ0' });
+  });
+
+  it('drops a third segment that is not a tag rather than passing it on', () => {
+    expect(parseCoachRoute('#/admin/coach/Y022GRCJQ/scout/not-a-tag').arg).toBeNull();
   });
 
   it('keeps every section through the hash, arsenal included', () => {
@@ -99,8 +109,8 @@ describe('the route', () => {
   });
 
   it('falls back to no player and Overview for anything it does not recognise', () => {
-    expect(parseCoachRoute('#/admin/coach')).toEqual({ tag: null, section: 'overview' });
-    expect(parseCoachRoute('#/admin/coach/not-a-tag/nowhere')).toEqual({ tag: null, section: 'overview' });
+    expect(parseCoachRoute('#/admin/coach')).toEqual({ tag: null, section: 'overview', arg: null });
+    expect(parseCoachRoute('#/admin/coach/not-a-tag/nowhere')).toEqual({ tag: null, section: 'overview', arg: null });
   });
 });
 

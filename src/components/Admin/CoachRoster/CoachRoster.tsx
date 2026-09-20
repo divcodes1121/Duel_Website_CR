@@ -72,7 +72,7 @@ export function CoachRoster() {
     if (access === 'admin') void load();
   }, [access, load]);
 
-  const { tag, section } = parseCoachRoute(hash);
+  const { tag, section, arg } = parseCoachRoute(hash);
   const active = useMemo(() => players.filter((p) => p.isActive), [players]);
   const archived = useMemo(() => players.filter((p) => !p.isActive), [players]);
   const selected = players.find((p) => p.playerTag === tag) ?? null;
@@ -233,7 +233,14 @@ export function CoachRoster() {
           )}
 
           {selected && (
-            <PlayerWorkspace key={selected.id} player={selected} section={section} win={win} onWindow={setWin} />
+            <PlayerWorkspace
+              key={selected.id}
+              player={selected}
+              section={section}
+              win={win}
+              onWindow={setWin}
+              opponent={arg}
+            />
           )}
         </main>
       </div>

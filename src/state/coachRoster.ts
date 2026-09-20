@@ -136,12 +136,13 @@ export const COACH_ROUTE = '#/admin/coach';
 /* The route key `decks` is the player's BATTLE HISTORY and predates the
    arsenal; it keeps its key so old links still open, and its label says which
    of the two deck screens it is. */
-export const COACH_SECTIONS = ['overview', 'arsenal', 'battles', 'decks', 'cards', 'opponents'] as const;
+export const COACH_SECTIONS = ['overview', 'arsenal', 'scout', 'battles', 'decks', 'cards', 'opponents'] as const;
 export type CoachSection = (typeof COACH_SECTIONS)[number];
 
 export const SECTION_LABEL: Record<CoachSection, string> = {
   overview: 'Overview',
   arsenal: 'Arsenal',
+  scout: 'Scout',
   battles: 'Battles',
   decks: 'Decks played',
   cards: 'Cards',
@@ -154,19 +155,25 @@ export const COACH_WINDOWS = [7, 30, 90, 0] as const;
 export type CoachWindow = (typeof COACH_WINDOWS)[number];
 export const windowDays = (w: CoachWindow): number => (w === 0 ? 4000 : w);
 
-export function parseCoachRoute(hash: string): { tag: string | null; section: CoachSection } {
+/** A THIRD segment, `arg`, carries the SUBJECT of a section — today only the
+ *  opponent a scout is about. It is in the URL so a scout can be reloaded,
+ *  shared and returned to, the same reason the player and section are. It is
+ *  normalised as a tag and is null unless it reads as one. */
+export function parseCoachRoute(hash: string): { tag: string | null; section: CoachSection; arg: string | null } {
   const rest = hash.startsWith(COACH_ROUTE) ? hash.slice(COACH_ROUTE.length) : '';
-  const [, rawTag = '', rawSection = ''] = rest.split('/');
+  const [, rawTag = '', rawSection = '', rawArg = ''] = rest.split('/');
   const tag = rawTag ? normalizeTag(decodeURIComponent(rawTag)) : null;
   const section = (COACH_SECTIONS as readonly string[]).includes(rawSection)
     ? (rawSection as CoachSection)
     : 'overview';
-  return { tag, section };
+  const arg = rawArg ? normalizeTag(decodeURIComponent(rawArg)) : null;
+  return { tag, section, arg };
 }
 
-export function coachHref(tag: string | null, section: CoachSection = 'overview'): string {
+export function coachHref(tag: string | null, section: CoachSection = 'overview', arg?: string | null): string {
   if (!tag) return COACH_ROUTE;
-  return `${COACH_ROUTE}/${encodeURIComponent(tag.replace(/^#/, ''))}/${section}`;
+  const base = `${COACH_ROUTE}/${encodeURIComponent(tag.replace(/^#/, ''))}/${section}`;
+  return arg ? `${base}/${encodeURIComponent(arg.replace(/^#/, ''))}` : base;
 }
 
 /* ── the in-memory repository ──────────────────────────────────────────────

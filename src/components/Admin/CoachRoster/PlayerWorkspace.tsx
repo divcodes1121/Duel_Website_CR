@@ -20,13 +20,14 @@ import {
   type RosterPlayer,
 } from '../../../state/coachRoster';
 import { buildInsights } from '../../../state/coachInsights';
-import { supabase } from '../../../state/supabase';
+import { coachToken } from '../../../state/coachToken';
 import { ago } from '../../../utils/format';
 import { ReadingState } from '../../Analytics/ReadingState';
 import { RecentBattles } from '../../Analytics/RecentBattles';
 import { PlayerCards } from '../../Analytics/PlayerCards';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ArsenalTab } from './ArsenalTab';
+import { ScoutTab } from './ScoutTab';
 import { DailyChart, FormStrip, ShareBars } from './IntelCharts';
 import { CoachControls, DeckStrip, PlayerHeader, PlayerRecord } from './PlayerOverview';
 import styles from './CoachRoster.module.css';
@@ -46,15 +47,10 @@ const nf = new Intl.NumberFormat('en-US');
  *
  * WHY THE INTEL SENDS A TOKEN. `/api/analytics/admin/coach/intel` is the one
  * analytics route that asks Supabase whether the caller is an admin; the
- * session's access token goes in `X-Coach-Token`. Every refusal is worded
- * below rather than shown as a status code.
+ * session's access token goes in `X-Coach-Token` (`coachToken()`, shared with
+ * the scout). Every refusal is worded below rather than shown as a status
+ * code.
  */
-
-async function accessToken(): Promise<string | null> {
-  if (!supabase) return null;
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
-}
 
 function intelProblem(e: AnalyticsError): string {
   if (e.kind === 'offline') return e.message;
@@ -80,11 +76,14 @@ export function PlayerWorkspace({
   section,
   win,
   onWindow,
+  opponent,
 }: {
   player: RosterPlayer;
   section: CoachSection;
   win: CoachWindow;
   onWindow: (w: CoachWindow) => void;
+  /** The scouted opponent, from the route's third segment. */
+  opponent?: string | null;
 }) {
   const tag = player.playerTag;
   const [report, setReport] = useState<PlayerReport | null>(null);
@@ -105,7 +104,7 @@ export function PlayerWorkspace({
       .catch((e) => live && setReportError(e as AnalyticsError));
     void (async () => {
       try {
-        const r = await fetchCoachIntel(tag, { days }, await accessToken());
+        const r = await fetchCoachIntel(tag, { days }, await coachToken());
         if (live) setIntel(r);
       } catch (e) {
         if (live) setIntelError(e instanceof AnalyticsError ? intelProblem(e) : 'Could not read their battles.');
@@ -118,7 +117,7 @@ export function PlayerWorkspace({
     };
   }, [tag, win]);
 
-  const windowed = section === 'overview' || section === 'decks' || section === 'opponents';
+  const windowed = section === 'overview' || section === 'decks' || section === 'opponents' || section === 'scout';
 
   return (
     <div className={styles.overview}>
@@ -160,6 +159,12 @@ export function PlayerWorkspace({
           intelligence read — it renders whether or not the battles answered.
           The intel is passed only so a deck can be taken FROM their history. */}
       {section === 'arsenal' && <ArsenalTab player={player} intel={intel} />}
+      {/* The scout reads a DIFFERENT player through the same admin route. The
+          roster player's own intel is passed because head to head is their
+          record against that opponent, which only their battles can say. */}
+      {section === 'scout' && (
+        <ScoutTab player={player} playerIntel={intel} win={win} opponentTag={opponent} />
+      )}
       {section === 'battles' && (
         <div className={styles.embed}>
           <RecentBattles tag={tag} />
@@ -172,7 +177,9 @@ export function PlayerWorkspace({
       )}
       {section === 'decks' && <IntelGate intel={intel} error={intelError} loading={intelLoading}>{(i) => <DecksTab intel={i} />}</IntelGate>}
       {section === 'opponents' && (
-        <IntelGate intel={intel} error={intelError} loading={intelLoading}>{(i) => <OpponentsTab intel={i} />}</IntelGate>
+        <IntelGate intel={intel} error={intelError} loading={intelLoading}>
+          {(i) => <OpponentsTab intel={i} playerTag={tag} />}
+        </IntelGate>
       )}
     </div>
   );
@@ -373,7 +380,7 @@ function DecksTab({ intel }: { intel: CoachIntel }) {
 /** Meetings before a head-to-head win rate is printed. */
 const H2H_FLOOR = 3;
 
-function OpponentsTab({ intel }: { intel: CoachIntel }) {
+function OpponentsTab({ intel, playerTag }: { intel: CoachIntel; playerTag: string }) {
   if (!intel.opponents.length) {
     return (
       <section className={styles.notice}>
@@ -419,10 +426,11 @@ function OpponentsTab({ intel }: { intel: CoachIntel }) {
                   <td>{o.battles >= H2H_FLOOR ? `${((o.wins / o.battles) * 100).toFixed(0)}%` : <span className={styles.muted}>n={o.battles}</span>}</td>
                   <td>{last ? ago(last) : '—'}</td>
                   <td>
-                    {/* The scout workflow is Phase 4; until then the full
-                        analysis is the honest place to send a coach. */}
-                    <a className={styles.rowLink} href={`#/player/${encodeURIComponent(o.tag)}`}>
-                      Analyse →
+                    {/* Into the scout, which is this workspace's own reading
+                        of them and carries the head to head; the full public
+                        analysis is one link further on from there. */}
+                    <a className={styles.rowLink} href={coachHref(playerTag, 'scout', o.tag)}>
+                      Scout →
                     </a>
                   </td>
                 </tr>

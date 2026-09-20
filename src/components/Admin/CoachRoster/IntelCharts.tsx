@@ -167,7 +167,11 @@ export function ShareBars({
           <li key={r.key} className={styles.shareRow}>
             <span className={styles.shareName}>{r.name}</span>
             <span className={styles.shareTrack}>
-              <span className={styles.shareFill} style={{ width: `${share}%` }} />
+              {/* CLAMPED. A share cannot exceed the whole, and a caller that
+                  passes a total from a different count would otherwise lay out
+                  a fill wider than its track — clipped on screen, so it would
+                  never be noticed, and wrong. */}
+              <span className={styles.shareFill} style={{ width: `${Math.min(100, share)}%` }} />
             </span>
             <span className={styles.shareFigure}>{share.toFixed(0)}%</span>
             <span className={styles.shareNote}>

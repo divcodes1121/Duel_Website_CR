@@ -1377,3 +1377,94 @@ span.tagChip {
     order: 2;
   }
 }
+
+/* ── phase 4: the opponent scout ─────────────────────────────────────────── */
+
+.scoutForm {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.scoutForm .input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  max-width: 22rem;
+}
+
+.scoutHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+}
+
+/* who they keep meeting */
+
+.metList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.metRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.84rem;
+}
+
+.metRow:hover {
+  border-color: var(--accent-select-edge);
+}
+
+.metName {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-weight: 700;
+}
+
+/* what they play */
+
+.scoutDecks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.scoutDeck {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 12px;
+  background: var(--surface-sunken);
+}
+
+@media (max-width: 560px) {
+  .scoutHead {
+    flex-direction: column;
+  }
+
+  .scoutForm {
+    flex-wrap: wrap;
+  }
+}
