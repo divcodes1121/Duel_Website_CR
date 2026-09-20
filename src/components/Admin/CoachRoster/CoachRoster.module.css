@@ -1468,3 +1468,53 @@ span.tagChip {
     flex-wrap: wrap;
   }
 }
+
+/* ── phase 6: match plans ────────────────────────────────────────────────── */
+
+.planHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* A slot is a labelled decision, so it gets its own bounded box rather than
+   being a run of rows a reader has to group by eye. */
+.slotBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 12px;
+  background: var(--surface-sunken);
+}
+
+.pickerBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--accent-select-edge);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+/* The picker's rows are buttons here and links in the chooser; both must sit
+   the same way, so the shared row style is reset for a button's defaults. */
+button.metRow {
+  width: 100%;
+  border: 1px solid var(--glass-stroke);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}

@@ -28,6 +28,7 @@ import { PlayerCards } from '../../Analytics/PlayerCards';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ArsenalTab } from './ArsenalTab';
 import { AssistTab } from './AssistTab';
+import { PlansTab } from './PlansTab';
 import { ScoutTab } from './ScoutTab';
 import { DailyChart, FormStrip, ShareBars } from './IntelCharts';
 import { CoachControls, DeckStrip, PlayerHeader, PlayerRecord } from './PlayerOverview';
@@ -173,6 +174,9 @@ export function PlayerWorkspace({
       {section === 'assist' && (
         <AssistTab player={player} playerIntel={intel} win={win} opponentTag={opponent} />
       )}
+      {/* A plan is the coach's own record; it needs no analytics read of its
+          own, because everything it shows was frozen when it was made. */}
+      {section === 'plans' && <PlansTab player={player} />}
       {section === 'battles' && (
         <div className={styles.embed}>
           <RecentBattles tag={tag} />

@@ -8,8 +8,10 @@ import {
   type TeamReport,
 } from '../../../state/analyticsClient';
 import { coachHref, playerLabel, windowDays, type CoachWindow, type RosterPlayer } from '../../../state/coachRoster';
-import { deckLabel } from '../../../state/coachArsenal';
+import { deckKey, deckLabel } from '../../../state/coachArsenal';
 import { useCoachArsenal } from '../../../state/coachArsenalStore';
+import { buildSnapshot } from '../../../state/coachPlans';
+import { useCoachPlans } from '../../../state/coachPlansStore';
 import {
   assistRows,
   assistSourceRef,
@@ -70,6 +72,9 @@ export function AssistTab({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState<TeamRecommendation | null>(null);
+  const createPlan = useCoachPlans((s) => s.create);
+  const [saving, setSaving] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
 
   const windowLabel = win === 0 ? 'all stored battles' : `the last ${win} days`;
   const days = windowDays(win);
@@ -125,6 +130,35 @@ export function AssistTab({
   }
 
   const opponentName = folder?.player.name || opponentTag;
+
+  /* FREEZING, NOT LINKING. The plan keeps its own copy of every candidate and
+     of which engine and window produced the ranking — the engines move on,
+     and a plan that pointed at today's numbers would quietly change its own
+     reasoning. */
+  async function saveAsPlan() {
+    setSaving(true);
+    setPlanError(null);
+    try {
+      const played = playerIntel ? new Map(playerIntel.decks.map((d) => [deckKey(d.cards), d.battles])) : null;
+      await createPlan(player.id, {
+        opponentTag: opponentTag!,
+        opponentName: folder?.player.name ?? null,
+        recommendations: buildSnapshot(recs, arsenal, played),
+        engine: {
+          name: 'team_analysis',
+          route: '/api/analytics/teams',
+          days,
+          opponentTag: opponentTag!,
+          at: new Date().toISOString(),
+        },
+        generatedAt: new Date().toISOString(),
+      });
+      window.location.hash = coachHref(player.playerTag, 'plans');
+    } catch (e) {
+      setPlanError(e instanceof Error ? e.message : 'Could not save that plan.');
+      setSaving(false);
+    }
+  }
   const why = emptyReason(mine?.reason ?? report?.pool?.reason, playerLabel(player));
 
   return (
@@ -140,6 +174,9 @@ export function AssistTab({
             </span>
           </div>
           <div className={styles.controlRow}>
+            <button type="button" className={styles.primaryButton} disabled={saving} onClick={() => void saveAsPlan()}>
+              {saving ? 'Saving…' : 'Save as match plan'}
+            </button>
             <a className={styles.linkButton} href={coachHref(player.playerTag, 'scout', opponentTag)}>
               Scout them →
             </a>
@@ -149,6 +186,7 @@ export function AssistTab({
           </div>
         </div>
         {error && <p className={styles.formError}>{error}</p>}
+        {planError && <p className={styles.formError}>{planError}</p>}
         {why && <p className={styles.hint}>{why}</p>}
       </section>
 
