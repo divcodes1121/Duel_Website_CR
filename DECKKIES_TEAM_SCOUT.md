@@ -1,9 +1,11 @@
 # Team Scout — the coaching brain
 
-**Status: implemented, tested, NOT DEPLOYED.** `server/` is copied to the VPS by
-hand and this change touches four server modules, so the analytics half must
-land before the frontend or every folder falls back to the pre-brain shape. See
-[Deploying](#deploying).
+**Status: LIVE (2026-09-21).** Server scp'd first (backups
+`team_analysis.py.bak-20260921-prescout` and `-prelabel`), frontend deployed as
+`a370e30`. Verified after: `/api/analytics/status` reports `cardData` 123, the
+live `/teams` route answers `brain: team-scout-2.0` with a 12-entry projection
+in **1.84 s mean / 2.7 s max** across 30 opponents, and the served
+`TeamAnalysis` chunk carries every new string.
 
 `server/team_scout.py` + `server/test_team_scout.py` (107 checks, no database),
 wired through `server/team_analysis.py`. Brain version **`team-scout-2.0`**,
@@ -330,15 +332,80 @@ it are three rows that all say `hog` — so that key is no longer unique and Rea
 would reuse the wrong row. It keys on `m.threat` now, falling back to the index
 for a payload from a server that predates the brain.
 
-## 10. Still owed
+## 10. The production review, and what the browser pass caught
 
-- **No browser pass.** `/api/analytics` needs the VPS key and 500s under
-  `vite dev`, which is the standing reason these screens are checked against
-  production. The projection block and the badges have been typechecked and
-  unit-tested; they have not been **looked at**.
-- **The 30-case review ran against a stand-in seed pool.** Worth re-running
-  against the live route after deploy, where `seeds()` is the real 680-deck pool
-  — the variant count is the figure that should move.
-- **`PER_PLAYER_TOP_N` is 5 and unverified on a wide board.** Ten teammates at
-  five rows each is a taller board than the one that shipped; it may want to be
-  4, and that is a judgement to make while looking at it.
+Re-run against the **live route and the real 680-deck seed pool**. The figure
+that moved is the one the stand-in was predicted to understate:
+
+| | stand-in (50 decks) | LIVE (680 decks) |
+|---|---:|---:|
+| variants present in the projection | 11/30 | **23/30** |
+| mass on variants | 0.109 | **0.238** |
+| mass on observed | 0.714 | 0.594 |
+| distinct archetypes per list | 6.50 | 6.03 |
+| pairwise diversity | 0.983 | 0.976 |
+| response time | — | **1.84 s mean, 2.7 s max** |
+
+Portfolio sizes: 5 for 13 opponents, 6 for 2, 7 for 15 — 30/30 inside the band.
+Projection sums to 1.0 on 30/30, inference distinguishable from observation on
+30/30, confidence vocabulary closed on 30/30. **0/30 lists were entirely decks
+the opponent already used**, and 0/30 put all the mass on their most-played
+deck.
+
+### Two things the screenshot caught that nothing else did
+
+**Generated rows printed the raw archetype key.** `team_scout` has no imports
+by design and so cannot reach `deck_counter._label`; it leaves `name` empty on
+anything it generates, the client fell back to the archetype, and the
+projection printed `xbow`, `bridge-spam` and `drill` in a column whose observed
+rows said "X-Bow", "Royal Hogs" and "Hog Rider". Two naming conventions in one
+list, with the raw one landing on exactly the rows a reader is least sure
+about. `_threats()` labels them now and `test_team_analysis.py` pins it.
+**107 unit checks and a clean typecheck all passed on this** — it was only ever
+visible in a picture.
+
+**The roster-wide scout block had no projection at all.** `Threats` was mounted
+inside the opened folder and not in `Overall`, which in a scouting report is the
+first thing on screen — so the most prominent block showed a portfolio with no
+statement of what it had been chosen against.
+
+### Browser pass: 23 of 25
+
+Both themes, 1440 and 390, against the live API. The two failures are
+`eb-canvas-container` over by 20px and 28px — the vendored ElectricBorder
+canvas, whose `BORDER_OFFSET = 40` makes it deliberately wider than its box, on
+a component this change never touched.
+
+Verified: every threat row carries a kind, a confidence and a likelihood; every
+generated row is drawn dashed and no observed row is; a variant names its parent
+and says it was never seen; the portfolio is 5–7 with a reason on each row; the
+new labels clear 4.5:1 in **both** themes; the projection restacks to two
+columns at 390px.
+
+### Three probe bugs, all from families this repo already records
+
+- A `/analys|scout/` regex matched the **sidebar's "Deck Analysis"** before the
+  tool's own button, navigated away, and then reported the projection missing.
+- `x === nRows` is true of **zero rows**: the first run reported three checks
+  green against an empty screen.
+- The theme control is `role="switch"` whose accessible name is **"Dark mode"**
+  from its `aria-label`, not the visible "DARK"; and the theme persists in
+  `localStorage` under `royal-duels-theme`, so the run pins it to dark first and
+  then measures both.
+
+## 11. Still owed
+
+- **`PER_PLAYER_TOP_N` is 5 and unverified on a wide board.** A scouting report
+  has no per-player board, so the browser pass never exercised it. Ten teammates
+  at five rows each is taller than what shipped; it may want to be 4, and that
+  is a judgement to make while looking at a Match Plan.
+- **`type` and `confidence` are near-constant in production.** 140 ROBUST + 42
+  COUNTER across 182 recommendations, **never more than one type inside a single
+  portfolio**, `CONTINGENCY` never fired at all, and all 182 came back `known`.
+  Both fields are *truthful* — at the top of a 204-deck pool everything beats
+  everything in the projection, so coverage sits at ~1.00 and the evidence is
+  the deck rung — but a field that never varies is decoration. Either
+  `classify` should discriminate on something with variance, or the badges
+  should go and the sentence should stay. **Deliberately not changed here**: it
+  is a judgement about what a label ought to mean, not a defect, and it wants
+  the account holder's call.

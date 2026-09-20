@@ -105,6 +105,15 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
           ))}
         </ul>
 
+        {/* THE ROSTER'S POOLED PROJECTION, and it was missing here for one
+            build. The opened folder had it and this block did not, which is
+            the worse of the two places to leave it out: in a scouting report
+            this is the first thing on the screen, and it was showing a
+            portfolio with no statement of what the portfolio was chosen
+            against. Same component, same labelling, one pooled distribution
+            instead of one opponent's. */}
+        <Threats threats={overall.threats ?? []} churn={overall.churn} />
+
         {overall.reason === 'no_evidence' ? (
           <p className={styles.warn}>
             No deck has a measured record against this roster&apos;s spread, so nothing is ranked.

@@ -453,7 +453,25 @@ def _threats(decks: list[dict], seeds: dict | None) -> dict:
     `threat_space` returns the observed decks alone, which is exactly the old
     behaviour, stated as a degradation rather than arrived at silently.
     """
-    return scout.threat_space(decks, seeds, veto=_VETO)
+    out = scout.threat_space(decks, seeds, veto=_VETO)
+
+    # THE ARCHETYPE KEY IS NOT ITS NAME, and a screenshot is what caught it.
+    # `team_scout` has no imports by design, so it cannot reach `_label` and
+    # leaves `name` empty on anything it generates; the client falls back to
+    # the archetype, and the projection printed "xbow", "bridge-spam" and
+    # "drill" in a list whose OBSERVED rows said "X-Bow", "Royal Hogs" and
+    # "Hog Rider". Two naming conventions in one column, and the raw one
+    # landed on exactly the rows a reader is least sure about.
+    #
+    # Filled here rather than in the brain because this is the module that
+    # already owns the vocabulary — `_archetypes_for` does the same job for
+    # the decks on the left of the folder.
+    for th in out.get("threats") or []:
+        if not th.get("name"):
+            th["name"] = dcx._label(th.get("archetype") or "other")
+        if th.get("basis") and not th.get("basisName"):
+            th["basisName"] = dcx._label(th.get("archetype") or "other")
+    return out
 
 
 # ── The candidate pool, profiled once ───────────────────────────────────────

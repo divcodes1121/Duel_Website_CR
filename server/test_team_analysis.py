@@ -487,6 +487,33 @@ check("a scout folder recommends up to the portfolio size",
       f"{len(scout_folder['recommended'])} of {ta.SCOUT_TOP_N}")
 check("the per-teammate board stays shorter than the squad-wide portfolio",
       ta.PER_PLAYER_TOP_N < ta.TOP_N)
+# EVERY THREAT CARRIES A DISPLAY NAME, NOT AN ARCHETYPE KEY.
+#
+# Found in a SCREENSHOT, not here and not by tsc. `team_scout` has no imports
+# by design and so cannot reach `_label`, which means it leaves `name` empty on
+# everything it generates; the client fell back to the raw archetype and the
+# projection printed "xbow", "bridge-spam" and "drill" in a column whose
+# observed rows said "X-Bow", "Royal Hogs" and "Hog Rider". Two naming
+# conventions in one list, with the raw one landing on exactly the rows a
+# reader is least certain about.
+print(NL + "the projection speaks the same vocabulary as the rest of the screen")
+_proj = ta._threats([
+    deck("Hog", HOG, matches=60, wc="hog"),
+    deck("Golem", GOLEM, matches=20, wc="golem"),
+], ta.dcx.seeds() or None)
+_threat_rows = _proj["threats"]
+check("there are threats to check", bool(_threat_rows), str(len(_threat_rows)))
+check("every threat has a name",
+      all((r.get("name") or "").strip() for r in _threat_rows),
+      str([r.get("name") for r in _threat_rows][:4]))
+check("no threat prints its raw archetype key as its name",
+      all(r["name"] != r["archetype"] or r["archetype"] == ta.dcx._label(r["archetype"])
+          for r in _threat_rows),
+      str([(r["archetype"], r["name"]) for r in _threat_rows][:4]))
+check("a variant names the deck it came from",
+      all(r.get("basisName") for r in _threat_rows if r.get("basis")),
+      "basisName is what the row prints after 'shared with'")
+
 check("the scout pool is wider than one deck per archetype",
       len(scout_pool) > len(dcx._representatives() or {}) or not dcx.seeds(),
       f"{len(scout_pool)} candidates")
