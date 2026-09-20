@@ -850,7 +850,6 @@
 
 .theirs,
 .recs,
-.recRows,
 .spread {
   display: flex;
   flex-direction: column;
@@ -1040,45 +1039,6 @@
 
 .recEdge[data-up] {
   color: var(--success);
-}
-
-/* FOUR COLUMNS SIZED TO WHAT THEY HOLD. `minmax(0, 1fr)` for the evidence cell
-   let it be squeezed under its own text — "11,918 games · high" overflowed its
-   track at every width below 1440. The two figure columns are `auto` (they are
-   short and their width is knowable), the two text columns take what is left. */
-.recRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(3.2rem, auto) auto;
-  align-items: baseline;
-  gap: 0.35rem 0.5rem;
-  font-size: 0.74rem;
-  color: var(--text-muted);
-}
-
-/* Withheld, not hidden. The reader has to see which part of their play could
-   not be read rather than find a shorter list than they expected. */
-.recRow[data-unknown] {
-  opacity: 0.62;
-}
-
-.recRowName {
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.recRowRate {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  color: var(--text);
-}
-
-.recRowSrc {
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ── Your players: one row each, uniform, expanding to their own top 3 ──── */
@@ -1289,24 +1249,6 @@
  *
  * Name and rate stay on the first line (the two things being read together);
  * the share and the evidence drop underneath. */
-@media (max-width: 82rem) {
-  .recRow {
-    grid-template-columns: minmax(0, 1fr) auto;
-    row-gap: 0.1rem;
-  }
-
-  .recRowShare,
-  .recRowSrc {
-    grid-column: 1 / -1;
-    text-align: left;
-  }
-
-  .recRowName {
-    overflow-wrap: anywhere;
-    white-space: normal;
-  }
-}
-
 /* ── THE PROJECTION ─────────────────────────────────────────────────────────
  *
  * What the opponent is LIKELY TO BRING, drawn under what they were seen
@@ -1486,22 +1428,6 @@
   flex: 1 1 14rem;
   min-width: 0;
   color: var(--text-muted);
-}
-
-/* A matchup row answering something they have NOT been seen playing. Same
-   dashed device as the projection above, for the same reason. */
-.recRow[data-inferred] .recRowName {
-  font-style: italic;
-}
-
-.recRowKind {
-  margin-left: 0.3rem;
-  font-size: 0.6rem;
-  font-style: normal;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--hue-blue);
 }
 
 /* The projection is a stack on a phone: three columns at 390px crush the

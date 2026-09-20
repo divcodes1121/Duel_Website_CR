@@ -391,50 +391,17 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
         </p>
       )}
 
-      <ul className={styles.recRows}>
-        {rec.matchups.map((m, i) => (
-          /* KEYED ON THE THREAT, NOT THE ARCHETYPE. The projection holds
-             several decks of one archetype — an observed Hog list and two real
-             variants of it are three rows that all say "hog" — so keying on
-             the archetype would hand React duplicate keys and let it reuse the
-             wrong row. Falls back to the index for a payload from a server
-             that predates the brain, where one archetype really is one row. */
-          <li
-            key={m.threat ?? `${m.archetype}:${i}`}
-            className={styles.recRow}
-            data-unknown={m.winRate === null || undefined}
-            data-inferred={m.evidence && m.evidence !== 'OBSERVED' ? '' : undefined}
-          >
-            <span className={styles.recRowName}>
-              {m.name}
-              {/* WHICH KIND OF THREAT THIS ROW ANSWERS. An inferred deck must
-                  never read as one they were seen playing. */}
-              {m.evidence === 'VARIANT' && (
-                <em className={styles.recRowKind} title="A real deck close enough to one they play to be a version of it — not something they were seen bringing.">variant</em>
-              )}
-              {m.evidence === 'INFERRED' && (
-                <em className={styles.recRowKind} title="An archetype their play implies. Never observed.">inferred</em>
-              )}
-            </span>
-            <span className={styles.recRowShare}>
-              {m.likelihood !== undefined
-                ? `${(100 * m.likelihood).toFixed(0)}% of their likely pool`
-                : `${m.share.toFixed(0)}% of their play`}
-            </span>
-            <span className={styles.recRowRate}>
-              {m.winRate === null ? 'no evidence' : pct(m.winRate)}
-            </span>
-            {/* The rung the number came from, never hidden — a figure off this
-                exact deck and one off the archetype matrix are different
-                claims wearing the same percentage. */}
-            <span className={styles.recRowSrc} title={m.sourceText ?? undefined}>
-              {m.winRate === null
-                ? '—'
-                : `${(m.games ?? 0).toLocaleString()} games${m.tier ? ` · ${m.tier}` : ''}`}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {/* THE PER-THREAT BREAKDOWN IS GONE, and the projection above is why.
+          It listed one row per threat — the threat's name, its share of the
+          likely pool, this deck's rate against it and the rung that came from
+          — which was the right shape when the opponent model was one row per
+          ARCHETYPE. The projection is one row per DECK now, and
+          `matchup_ladder` still answers per archetype, so four Mixed threats
+          produced four rows carrying the identical `57.2% · 8,390 games`. The
+          list restated the projection directly above it and then repeated
+          itself inside that. The headline, the coverage note and the
+          explanation carry the same claim once each; the evidence trail
+          survives in `matchups` on the payload and in the PDF. */}
     </li>
   );
 }

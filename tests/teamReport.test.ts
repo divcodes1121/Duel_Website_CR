@@ -410,3 +410,70 @@ describe('teamAnalysisReport — what the page will look like', () => {
     }
   });
 });
+
+describe('teamAnalysisReport — the evidence table after the coaching brain', () => {
+  /* `matchups` IS ONE ROW PER THREAT NOW, NOT PER ARCHETYPE.
+   *
+   * The projection holds several decks of one archetype — an observed list
+   * plus real variants of it — and `matchup_ladder` still answers per
+   * ARCHETYPE, so those entries carry the identical rate, denominator and
+   * rung. Printed straight, the table repeated itself verbatim and its own
+   * heading ("Each row is one archetype of their play") stopped being true of
+   * it. The screen dropped this list entirely; the PDF keeps it, deduped,
+   * because it is the only place the rungs appear once the projection block
+   * is not on the page. */
+  const threatShaped = () => {
+    const r = rec('#B1', 'Ravi');
+    r.matchups = [
+      { archetype: 'log-bait', name: 'Log Bait', share: 22, likelihood: 0.22,
+        evidence: 'OBSERVED', threat: 'a', winRate: 57.2, source: 'deck',
+        sourceText: 'this deck vs this archetype', games: 8390, tier: 'high' },
+      { archetype: 'log-bait', name: 'Log Bait', share: 19, likelihood: 0.19,
+        evidence: 'VARIANT', threat: 'b', winRate: 57.2, source: 'deck',
+        sourceText: 'this deck vs this archetype', games: 8390, tier: 'high' },
+      { archetype: 'log-bait', name: 'Log Bait', share: 8, likelihood: 0.08,
+        evidence: 'VARIANT', threat: 'c', winRate: 57.2, source: 'deck',
+        sourceText: 'this deck vs this archetype', games: 8390, tier: 'high' },
+      { archetype: 'golem', name: 'Golem', share: 7, likelihood: 0.07,
+        evidence: 'INFERRED', threat: 'd', winRate: 49.3, source: 'archetype',
+        sourceText: 'archetype vs archetype', games: 4270, tier: 'high' },
+    ] as TeamRecommendation['matchups'];
+    return teamAnalysisReport(
+      { ...report(), folders: [folder('#R1', 'Kenji', { recommended: [r] })] },
+      '#B1',
+    );
+  };
+
+  function evidenceTable(doc: ReturnType<typeof teamAnalysisReport>) {
+    return doc.blocks.find(
+      (b): b is Extract<ReportBlock, { kind: 'table' }> =>
+        b.kind === 'table' && /the rung behind every archetype/i.test(b.heading ?? ''),
+    );
+  }
+
+  it('prints one row per archetype, not one per threat', () => {
+    const table = evidenceTable(threatShaped());
+    expect(table).toBeTruthy();
+    expect(table!.rows).toHaveLength(2);
+    expect(table!.rows.map((r) => r.arch)).toEqual(['Log Bait', 'Golem']);
+  });
+
+  it('sums the shares, so an archetype is not understated by its leader alone', () => {
+    const table = evidenceTable(threatShaped());
+    // 22 + 19 + 8 = 49, not 22.
+    expect(String(table!.rows[0].share)).toContain('49');
+  });
+
+  it('keeps the first occurrence, which is the likeliest threat of that archetype', () => {
+    const table = evidenceTable(threatShaped());
+    const wr = table!.rows[0].wr as { text: string };
+    expect(wr.text).toContain('57.2');
+  });
+
+  it('a payload from a server without the brain is unchanged', () => {
+    /* One row per archetype already, so the dedupe is a no-op there — the
+     * two halves deploy separately and the old shape must still print. */
+    const table = evidenceTable(teamAnalysisReport(report(), '#B1'));
+    expect(table!.rows.map((r) => r.arch)).toEqual(['Log Bait', 'X-Bow']);
+  });
+});

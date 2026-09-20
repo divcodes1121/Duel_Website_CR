@@ -589,7 +589,31 @@ function folderBlocks(
     // The evidence behind the top pick. This is the part a sceptical reader
     // goes to, and the part a screenshot of the screen loses.
     const top = folder.recommended[0];
-    if (top.matchups.length) {
+    /* ONE ROW PER ARCHETYPE, WHICH IS WHAT THE NOTE BELOW CLAIMS.
+     *
+     * `matchups` is one row per THREAT now, and the projection holds several
+     * decks of one archetype — an observed Mixed list plus two real variants
+     * of it are three entries that all say "Mixed". `matchup_ladder` still
+     * answers per ARCHETYPE, so those three carried the identical rate, the
+     * identical denominator and the identical rung: the table repeated itself
+     * verbatim and its own heading was no longer true of it.
+     *
+     * The FIRST occurrence is kept because `matchups` arrives in projection
+     * order, so it is the likeliest threat of that archetype; the shares are
+     * summed, because the archetype's real weight in the projection is all of
+     * its decks together and printing only the leader's would understate it. */
+    const byArchetype: typeof top.matchups = [];
+    const seenArch = new Map<string, number>();
+    for (const m of top.matchups) {
+      const at = seenArch.get(m.archetype);
+      if (at === undefined) {
+        seenArch.set(m.archetype, byArchetype.length);
+        byArchetype.push({ ...m });
+      } else {
+        byArchetype[at].share += m.share;
+      }
+    }
+    if (byArchetype.length) {
       blocks.push({
         kind: 'table',
         heading: `Why ${top.name} — the rung behind every archetype`,
@@ -605,7 +629,7 @@ function folderBlocks(
           { key: 'src', label: 'Measured on', width: 60 },
           { key: 'tier', label: 'Evidence', width: 26 },
         ],
-        rows: top.matchups.map((m): TableRow => ({
+        rows: byArchetype.map((m): TableRow => ({
           arch: m.name,
           share: pct(m.share, 1),
           wr:
