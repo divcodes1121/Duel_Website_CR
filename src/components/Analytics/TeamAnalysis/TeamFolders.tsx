@@ -319,8 +319,18 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
               recommendation: on the day, somebody has to pilot it. A scouting
               report has nobody, and says what the deck is instead of
               inventing an owner for it. */}
+          {/* THREE STATES, NOT TWO. An owned deck names its pilot; a scouting
+              row is an archetype representative nobody owns; a FILL is a deck
+              nobody on this squad plays, offered because the teammate's own
+              list ran short. The middle and the last are both ownerless and
+              they are different claims — saying "most-played list of this
+              archetype" about a fill would hide that nobody here flies it. */}
           <span className={styles.recOwner}>
-            {rec.owner ? `${rec.owner.name} plays it` : 'Most-played list of this archetype'}
+            {rec.owner
+              ? `${rec.owner.name} plays it`
+              : rec.fill
+                ? 'Nobody on your squad plays this yet'
+                : 'Most-played list of this archetype'}
           </span>
         </div>
         <div className={styles.recFigures}>
@@ -434,6 +444,12 @@ function PlayerRow({ row, open, onToggle }: {
 }) {
   const best = row.decks[0];
   const id = `team-opts-${row.owner.tag.replace(/[^A-Za-z0-9]/g, '')}`;
+  /* HOW MANY OF THESE ARE ACTUALLY THEIRS. The list is topped up when their
+     own qualifying decks run short, and the collapsed row must not present a
+     top-up as something this teammate flies — that is the whole reason a fill
+     is marked rather than just appended. */
+  const own = row.decks.filter((d) => !d.fill).length;
+  const filled = row.decks.length - own;
 
   return (
     <li className={styles.mate} data-open={open || undefined}>
@@ -452,9 +468,13 @@ function PlayerRow({ row, open, onToggle }: {
         <span className={styles.mateWho}>
           <span className={styles.mateName}>{row.owner.name}</span>
           <span className={styles.mateSub}>
-            {best
-              ? `${best.name}${row.considered > row.decks.length ? ` · ${row.considered} decks weighed` : ''}`
-              : NO_OPTIONS[row.reason ?? ''] ?? 'No options'}
+            {!best
+              ? NO_OPTIONS[row.reason ?? ''] ?? 'No options'
+              : own === 0
+                ? `${NO_OPTIONS[row.reason ?? ''] ?? 'Nothing of their own'} · ${filled} suggested`
+                : `${best.name}${filled ? ` · ${filled} suggested` : ''}${
+                    row.considered > own ? ` · ${row.considered} decks weighed` : ''
+                  }`}
           </span>
         </span>
 

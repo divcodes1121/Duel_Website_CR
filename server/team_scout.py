@@ -259,6 +259,15 @@ ARCHETYPE_REPEAT_PENALTY = 2.5
 MIN_RECOMMENDATIONS = 5
 MAX_RECOMMENDATIONS = 7
 
+#: Shared cards at which two lists ARE the same deck.
+#:
+#: `duel_zone.COUNTER_MIN_OVERLAP`, which `!counter`, the clusterer, the duel
+#: matcher and `coach._fills` all already use. Mirrored rather than imported
+#: because this module has no imports — and mirrored rather than re-chosen,
+#: because a second definition of "the same deck" is how two screens end up
+#: disagreeing about whether they showed you one option or two.
+SAME_DECK_OVERLAP = 6
+
 #: A candidate this far in points below the best one is not preparation, it is
 #: padding. The list is allowed to come back short of `MIN_RECOMMENDATIONS`
 #: rather than reach for filler — "here are five" is a promise about relevance,
@@ -893,6 +902,54 @@ def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
         rest = [r for r in rest if r["key"] != pick["key"]]
 
     return chosen
+
+
+# ── 4b. Topping up a list that is too short to be a choice ──────────────────
+
+
+def fills(existing, pool, need: int, *, min_overlap: int = SAME_DECK_OVERLAP):
+    """Rows from `pool` to top up a short list, skipping what is already there.
+
+    THIS IS `coach._fills`, AND THE PRECEDENT IS THE POINT. Coach Assist has
+    shipped this since it was written: when a player's own history cannot fill
+    the candidate list it tops up from the population, marks what it added, and
+    keeps the reader's own decks ahead of the additions. It is the same problem
+    one level up — a teammate with two qualifying decks gets a two-row board
+    and a reason, which reads as the tool having nothing to say about them.
+
+    IT NEVER DISPLACES AN OWNED DECK. `existing` is passed in whole and comes
+    back untouched; this only ever appends. That is what keeps
+    `team_analysis`'s standing argument intact — a recommendation nobody on the
+    team can pilot is worth less on the day than one somebody flies — while
+    still answering the case where there is nothing to pilot.
+
+    THE SKIP IS A HARD ONE, not a penalty. `diversify` grades similarity
+    because it is choosing among options that all deserve to be there; this is
+    choosing filler, and filler that is a near-copy of a real recommendation is
+    the reader being shown the same deck twice with one of them labelled as a
+    guess. Six shared cards IS the same deck (`SAME_DECK_OVERLAP`).
+    """
+    if need <= 0:
+        return []
+    seen = [set(r.get("cards") or []) for r in existing]
+    out = []
+    for cand in pool:
+        cards = set(cand.get("cards") or [])
+        if not cards:
+            continue
+        if any(len(cards & s) >= min_overlap for s in seen):
+            continue
+        row = dict(cand)
+        # THE MARK IS ON THE ROW, not inferred from a missing owner. A scouting
+        # report's rows are ownerless too and are not fills; conflating them
+        # would make "nobody plays this" and "nobody on YOUR SQUAD plays this"
+        # the same sentence, and they are different claims.
+        row["fill"] = True
+        out.append(row)
+        seen.append(cards)
+        if len(out) >= need:
+            break
+    return out
 
 
 # ── 5. Saying why, from the evidence and nothing else ───────────────────────

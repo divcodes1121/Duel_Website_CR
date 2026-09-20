@@ -487,6 +487,51 @@ check("a scout folder recommends up to the portfolio size",
       f"{len(scout_folder['recommended'])} of {ta.SCOUT_TOP_N}")
 check("the per-teammate board stays shorter than the squad-wide portfolio",
       ta.PER_PLAYER_TOP_N < ta.TOP_N)
+# A TEAMMATE WITH A SHORT LIST IS TOPPED UP, NOT LEFT WITH A REASON.
+#
+# `coach._fills` has answered this since Coach Assist was written: when a
+# player's own history cannot fill the candidate list, top up from the
+# population, MARK what was added, and never displace one of their own. A
+# teammate with two qualifying decks used to get a two-row board and a teammate
+# with none got a bare sentence, which reads as the tool having nothing to say
+# about that person rather than as that person having nothing stored.
+#
+# THE REASON STILL SHIPS. It explains why none of the rows are theirs, which is
+# a different fact from there being no rows, and the screen prints both.
+print(NL + "a short per-player board is topped up, and the top-ups are marked")
+_thin_mate = {
+    "tag": "#B9", "name": "Newcomer", "basis": "stored",
+    "decks": [],  # nothing of their own at all
+}
+_thin_folder = ta._folder(opp, [_thin_mate], pool, None, ta.TOP_N,
+                          ta.dcx.seeds() or None)
+_thin_row = _thin_folder["perPlayer"][0]
+check("a teammate with no decks still gets options",
+      len(_thin_row["decks"]) > 0, str(len(_thin_row["decks"])))
+check("every one of them is marked as a fill",
+      all(d.get("fill") for d in _thin_row["decks"]),
+      str([d.get("fill") for d in _thin_row["decks"]]))
+check("and the reason why none are theirs is still published",
+      _thin_row["reason"] == "no_history", str(_thin_row["reason"]))
+check("a fill carries no comfort block, because nobody has piloted it",
+      all(d["comfort"] is None for d in _thin_row["decks"]))
+check("no two fills are the same deck",
+      len({",".join(sorted(set(d["cards"]))) for d in _thin_row["decks"]})
+      == len(_thin_row["decks"]))
+
+# AND A TEAMMATE WHO HAS THEIR OWN DECKS KEEPS THEM AT THE TOP.
+_rich_row = next(r for r in folder["perPlayer"] if r["owner"]["tag"] == "#B1")
+_owned = [d for d in _rich_row["decks"] if not d.get("fill")]
+check("an owned deck is never displaced by a fill",
+      not _rich_row["decks"] or not _rich_row["decks"][0].get("fill"),
+      "fills are appended, never ranked in")
+check("owned decks come before any fill",
+      [bool(d.get("fill")) for d in _rich_row["decks"]]
+      == sorted(bool(d.get("fill")) for d in _rich_row["decks"]),
+      str([bool(d.get("fill")) for d in _rich_row["decks"]]))
+check("the owned half is what `considered` counts",
+      _rich_row["considered"] >= len(_owned))
+
 # EVERY THREAT CARRIES A DISPLAY NAME, NOT AN ARCHETYPE KEY.
 #
 # Found in a SCREENSHOT, not here and not by tsc. `team_scout` has no imports

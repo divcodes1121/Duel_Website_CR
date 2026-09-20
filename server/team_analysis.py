@@ -896,6 +896,22 @@ def _distinct(rows: list[dict]) -> list[dict]:
     return out
 
 
+def _topped_up(own: list[dict], pool) -> list[dict]:
+    """A teammate's own picks, topped up to `PER_PLAYER_TOP_N` with fills.
+
+    `pool` is a callable so the fill candidates are scored only when somebody
+    is actually short — on a roster where everyone has decks this never runs.
+    """
+    need = PER_PLAYER_TOP_N - len(own)
+    if need <= 0:
+        return own
+    try:
+        return own + scout.fills(own, pool(), need)
+    except Exception:  # noqa: BLE001 - a fill must never take the board down
+        traceback.print_exc()
+        return own
+
+
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             snap: dict | None, top_n: int = TOP_N,
             seeds: dict | None = None) -> dict:
@@ -953,6 +969,36 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         if row["owner"]:
             by_tag.setdefault(row["owner"]["tag"], []).append(row)
 
+    # THE FILL POOL, SCORED ONCE PER FOLDER AND ONLY IF SOMEBODY NEEDS IT.
+    #
+    # A fill is not owner-specific — it is "a real deck nobody on this squad
+    # plays that answers this opponent" — so the same ranked list serves every
+    # teammate who is short. Scoring it per teammate would be ten identical
+    # passes over ~200 candidates.
+    #
+    # LAZY, because the common case on a healthy roster is that nobody is
+    # short and this costs nothing at all.
+    _fill_pool: list[dict] | None = None
+
+    def fill_pool() -> list[dict]:
+        nonlocal _fill_pool
+        if _fill_pool is None:
+            scored_fills = []
+            # NOT GATED ON `seeds`. That argument is the THREAT projection's
+            # source; the fill CANDIDATES come from `_scout_candidates()`,
+            # which falls back to the archetype representatives when the
+            # snapshot predates the seed pool. Gating on `seeds` silently
+            # switched fills off on exactly the deployment that needs them
+            # most, and `_scout_candidates()` already returns [] when there is
+            # no snapshot at all — which is the right degradation and says so.
+            for card in _scout_candidates():
+                row = _score(card, threats, snap)
+                if row:
+                    scored_fills.append(row)
+            scored_fills.sort(key=lambda r: (-r["score"], r["name"]))
+            _fill_pool = _distinct(scored_fills)
+        return _fill_pool
+
     per_player = []
     for mate in blue:
         rows = by_tag.get(mate["tag"], [])
@@ -964,15 +1010,30 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         per_player.append({
             "owner": {"tag": mate["tag"], "name": mate["name"]},
             "basis": mate["basis"],
-            # DIVERSIFIED, NOT TRUNCATED. `rows` is already sorted and the
-            # grouping preserved that order, so slicing it returned this
-            # teammate's N highest-scoring decks — which, once the pool is
-            # wider than three, is reliably N versions of whatever archetype
-            # happens to beat the opponent's core. The reader gains rows and
-            # no new information. `diversify` applies a redundancy penalty so
-            # the list spans the threat space instead of repeating itself.
-            "decks": scout.diversify(rows, limit=PER_PLAYER_TOP_N,
-                                     minimum=1),
+            # DIVERSIFIED, NOT TRUNCATED, THEN TOPPED UP IF IT IS STILL SHORT.
+            #
+            # `rows` is already sorted and the grouping preserved that order,
+            # so slicing it returned this teammate's N highest-scoring decks —
+            # which, once the pool is wider than three, is reliably N versions
+            # of whatever archetype happens to beat the opponent's core.
+            # `diversify` applies a redundancy penalty so the list spans the
+            # threat space instead of repeating itself.
+            #
+            # THE FILL IS `coach._fills`, AND IT REOPENS SOMETHING THIS
+            # MODULE'S OWN DOCSTRING ARGUED. That docstring says the pool is
+            # "exactly the decks the blue squad has ALREADY PLAYED", because a
+            # recommendation nobody can pilot is worth nothing on the day. That
+            # is still right about RANKING and it is wrong about an EMPTY
+            # BOARD: a teammate with two qualifying decks got two rows, and one
+            # with none got a bare reason, which reads as the tool having
+            # nothing to say about that person. Coach Assist has answered this
+            # the other way since it was written — top up from the population,
+            # mark what was added, never displace an owned deck — and the same
+            # answer belongs here. An owned deck always outranks a fill because
+            # fills are only ever appended.
+            "decks": _topped_up(scout.diversify(rows, limit=PER_PLAYER_TOP_N,
+                                                minimum=1),
+                                fill_pool),
             "considered": len(rows),
             # WHICH empty state this is, said rather than inferred from a
             # missing list. The three are genuinely different problems: nothing

@@ -169,6 +169,51 @@ in a commit about something else.
 cluster6 0.45, archetype 0.25. An unrecognised source scores as the weakest, so
 a new rung added upstream makes this cautious rather than breaking the request.
 
+## 4b. A short per-teammate board is topped up, the way Coach Assist does
+
+`coach._fills` has answered this since Coach Assist was written: when a
+player's own history cannot fill the candidate list, top up from the
+population, **mark what was added**, and never displace one of their own.
+`opponent_next` does the same on the other side, keeping `OPP_HISTORY_MASS`
+(0.7) of the probability on what they have actually shown.
+
+Team Scout's per-teammate board had no equivalent. A teammate with two
+qualifying decks got a two-row board; one with none got a bare `reason`. That
+reads as the tool having nothing to say about that person, rather than as that
+person having nothing stored.
+
+**This reopens something this module's own docstring argued**, and the
+resolution is worth stating rather than burying. The docstring says the pool is
+"exactly the decks the blue squad has ALREADY PLAYED", because a recommendation
+nobody can pilot is worth nothing on the day. That is still right about
+**ranking** and wrong about an **empty board**. So:
+
+- fills are **appended, never ranked in** — an owned deck always comes first,
+  even when the fill scores higher (measured live: a teammate's own best was
+  67.7% and the two fills behind it were 71.7% and 71.3%);
+- every fill carries `fill: true`, and the screen says "Nobody on your squad
+  plays this yet" rather than the scouting report's "Most-played list of this
+  archetype" — *nobody plays this* and *nobody on YOUR SQUAD plays this* are
+  different claims;
+- the `reason` still ships, because "why none of these are theirs" is a
+  different fact from "there are no rows";
+- the skip is **hard, not a penalty**: `SAME_DECK_OVERLAP = 6`, mirroring
+  `duel_zone.COUNTER_MIN_OVERLAP`, which `!counter`, the clusterer, the duel
+  matcher and `coach._fills` all already use. `diversify` grades similarity
+  because it is choosing among options that all deserve to be there; this is
+  choosing filler, and filler that is a near-copy of a real recommendation
+  shows the same deck twice with one of them labelled a guess.
+
+The fill pool is scored **once per folder and only when somebody is short** — a
+fill is not owner-specific, so one ranked list serves every teammate who needs
+one, and on a healthy roster it is never built at all.
+
+**A bug the test caught before deploy:** the pool was gated on `seeds`, which
+is the *threat projection's* source. The fill *candidates* come from
+`_scout_candidates()`, which falls back to the archetype representatives when
+the snapshot predates the seed pool — so the gate silently switched fills off
+on exactly the deployment that needs them most.
+
 ## 5. Diversity — and the defect the case review found
 
 Greedy MMR with a superlinear card-overlap similarity, **plus an archetype

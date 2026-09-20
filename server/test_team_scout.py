@@ -610,6 +610,56 @@ def property_portfolio_is_not_padded():
     check("and never exceeds the ceiling", len(picked) <= ts.MAX_RECOMMENDATIONS)
 
 
+def property_fills_follow_coach_assist():
+    print("")
+    print("property — topping up a short list, the way Coach Assist does")
+    sp = ts.threat_space([deck(HOG, 50, wc="hog")], SEEDS, now=NOW)
+
+    own = [ts.score(rate_all(60.0), sp["threats"], cards=GIANT,
+                    archetype="giant", fit_games=20)]
+    pool = [ts.score(rate_all(58.0), sp["threats"], cards=c, archetype=a)
+            for c, a in ((LAVA, "lava-hound"), (GRAVE, "graveyard"),
+                         (HOG, "hog"))]
+
+    got = ts.fills(own, pool, 2)
+    check("it returns exactly what was asked for", len(got) == 2, str(len(got)))
+    check("every filled row is marked", all(r["fill"] for r in got))
+    check("nothing already chosen is returned again",
+          all(r["key"] != own[0]["key"] for r in got))
+    check("asking for none returns none", ts.fills(own, pool, 0) == [])
+    check("an empty pool is not an error", ts.fills(own, [], 3) == [])
+
+    # THE HARD SKIP, which is what separates this from `diversify`.
+    near = ts.score(rate_all(99.0), sp["threats"], cards=HOG_V1, archetype="hog")
+    base = ts.score(rate_all(50.0), sp["threats"], cards=HOG, archetype="hog")
+    only_near = ts.fills([base], [near], 1)
+    check("a near-copy of an existing row is SKIPPED, not merely penalised",
+          only_near == [],
+          "six shared cards is the same deck — filler that repeats a real "
+          "recommendation shows one deck twice, one of them labelled a guess")
+    check("and a genuinely different deck from the same pool is taken",
+          len(ts.fills([base], [near, pool[0]], 1)) == 1)
+
+    # IT MAY ONLY APPEND. The whole reason team_analysis's argument survives.
+    check("the caller's own rows are never reordered or dropped",
+          (own + got)[0]["key"] == own[0]["key"])
+    check("a fill never carries an owner's practice figure",
+          all(r.get("playerFit") in (None, 0.0) for r in got),
+          str([r.get("playerFit") for r in got]))
+
+    # AND IT IS NOT THE SAME THING AS BEING OWNERLESS.
+    scoutish = ts.score(rate_all(58.0), sp["threats"], cards=LAVA,
+                        archetype="lava-hound")
+    check("an ownerless SCOUT row is not a fill",
+          "fill" not in scoutish,
+          "a scouting report's rows are ownerless too; conflating the two "
+          "makes 'nobody plays this' and 'nobody on YOUR squad plays this' "
+          "one sentence")
+
+    check("the same-deck threshold matches duel_zone.COUNTER_MIN_OVERLAP",
+          ts.SAME_DECK_OVERLAP == 6)
+
+
 def main() -> int:
     print("team_scout — the coaching brain")
     case_1_many_known_decks()
@@ -628,6 +678,7 @@ def main() -> int:
     property_types_and_explanations()
     property_degradation()
     property_portfolio_is_not_padded()
+    property_fills_follow_coach_assist()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 

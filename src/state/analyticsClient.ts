@@ -1715,6 +1715,19 @@ export interface TeamRecommendation {
   /** The brain that produced it. */
   brain?: string;
   /**
+   * A TOP-UP, NOT ONE OF THE SQUAD'S OWN DECKS.
+   *
+   * Set only on the per-teammate board, when that teammate's own qualifying
+   * decks could not fill the list. It is the same device `coach._fills`
+   * marks a population deck with, and it means something narrower than a
+   * missing `owner`: a scouting report's rows are ownerless too and are NOT
+   * fills. "Nobody plays this" and "nobody on YOUR SQUAD plays this" are
+   * different claims and the screen has to be able to tell them apart.
+   *
+   * A fill is always appended, never ranked above an owned deck.
+   */
+  fill?: boolean;
+  /**
    * SCOUT ONLY: this deck's own win rate across the whole field.
    *
    * The denominator the headline is missing on its own. A deck expected to win
