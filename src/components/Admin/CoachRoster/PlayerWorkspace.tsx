@@ -27,6 +27,7 @@ import { RecentBattles } from '../../Analytics/RecentBattles';
 import { PlayerCards } from '../../Analytics/PlayerCards';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ArsenalTab } from './ArsenalTab';
+import { AssistTab } from './AssistTab';
 import { ScoutTab } from './ScoutTab';
 import { DailyChart, FormStrip, ShareBars } from './IntelCharts';
 import { CoachControls, DeckStrip, PlayerHeader, PlayerRecord } from './PlayerOverview';
@@ -117,7 +118,8 @@ export function PlayerWorkspace({
     };
   }, [tag, win]);
 
-  const windowed = section === 'overview' || section === 'decks' || section === 'opponents' || section === 'scout';
+  const windowed =
+    section === 'overview' || section === 'decks' || section === 'opponents' || section === 'scout' || section === 'assist';
 
   return (
     <div className={styles.overview}>
@@ -164,6 +166,12 @@ export function PlayerWorkspace({
           record against that opponent, which only their battles can say. */}
       {section === 'scout' && (
         <ScoutTab player={player} playerIntel={intel} win={win} opponentTag={opponent} />
+      )}
+      {/* The engine's ranking joined to the arsenal. It reads the PLAYER's
+          intel for "have they ever played this", and the team-analysis route
+          for the ranking itself — no scoring happens in the client. */}
+      {section === 'assist' && (
+        <AssistTab player={player} playerIntel={intel} win={win} opponentTag={opponent} />
       )}
       {section === 'battles' && (
         <div className={styles.embed}>

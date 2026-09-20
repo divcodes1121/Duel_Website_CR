@@ -136,13 +136,14 @@ export const COACH_ROUTE = '#/admin/coach';
 /* The route key `decks` is the player's BATTLE HISTORY and predates the
    arsenal; it keeps its key so old links still open, and its label says which
    of the two deck screens it is. */
-export const COACH_SECTIONS = ['overview', 'arsenal', 'scout', 'battles', 'decks', 'cards', 'opponents'] as const;
+export const COACH_SECTIONS = ['overview', 'arsenal', 'scout', 'assist', 'battles', 'decks', 'cards', 'opponents'] as const;
 export type CoachSection = (typeof COACH_SECTIONS)[number];
 
 export const SECTION_LABEL: Record<CoachSection, string> = {
   overview: 'Overview',
   arsenal: 'Arsenal',
   scout: 'Scout',
+  assist: 'What to play',
   battles: 'Battles',
   decks: 'Decks played',
   cards: 'Cards',

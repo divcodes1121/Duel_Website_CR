@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   AnalyticsError,
@@ -8,14 +8,7 @@ import {
   type CoachIntel,
   type PlayerReport,
 } from '../../../state/analyticsClient';
-import {
-  coachHref,
-  normalizeTag,
-  playerLabel,
-  windowDays,
-  type CoachWindow,
-  type RosterPlayer,
-} from '../../../state/coachRoster';
+import { coachHref, playerLabel, windowDays, type CoachWindow, type RosterPlayer } from '../../../state/coachRoster';
 import { battleTimeToIso } from '../../../state/coachRoster';
 import { coachToken } from '../../../state/coachToken';
 import {
@@ -24,7 +17,6 @@ import {
   headToHead,
   leadArchetype,
   scoutBasis,
-  scoutCandidates,
   scoutDecks,
   type ScoutDeck,
 } from '../../../state/coachScout';
@@ -33,6 +25,7 @@ import { CardArt } from '../../Analytics/CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ReadingState } from '../../Analytics/ReadingState';
 import { FormStrip, ShareBars } from './IntelCharts';
+import { OpponentChooser } from './OpponentChooser';
 import { Tile } from './PlayerOverview';
 import styles from './CoachRoster.module.css';
 
@@ -75,7 +68,6 @@ export function ScoutTab({
   win: CoachWindow;
   opponentTag?: string | null;
 }) {
-  const [draft, setDraft] = useState('');
   const [intel, setIntel] = useState<CoachIntel | null>(null);
   const [report, setReport] = useState<PlayerReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +78,6 @@ export function ScoutTab({
      whichever answers first is drawn and the other fills in behind it. */
   const [pending, setPending] = useState({ intel: false, report: false });
 
-  const candidates = useMemo(() => scoutCandidates(playerIntel), [playerIntel]);
   const windowLabel = win === 0 ? 'all stored battles' : `the last ${win} days`;
 
   useEffect(() => {
@@ -140,79 +131,19 @@ export function ScoutTab({
     };
   }, [opponentTag, win]);
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    const tag = normalizeTag(draft);
-    if (!tag) {
-      setError('That is not a Clash Royale player tag — # followed by 5 to 12 of 0 2 8 9 P Y L Q G R J C U V.');
-      return;
-    }
-    setError(null);
-    setDraft('');
-    window.location.hash = coachHref(player.playerTag, 'scout', tag);
-  }
-
   if (!opponentTag) {
     return (
-      <div className={styles.arsenal}>
-        <section className={styles.block}>
-          <h3 className={styles.blockTitle}>Scout an opponent</h3>
-          <p className={styles.muted}>
-            What the person on the other side actually plays, read from the same battles as everything else here.
-            Nothing is saved — the preparation you write from it belongs to a match plan.
-          </p>
-          <form className={styles.scoutForm} onSubmit={submit}>
-            <input
-              className={styles.input}
-              value={draft}
-              placeholder="#XXXXXXXX"
-              aria-label="Opponent player tag"
-              onChange={(e) => setDraft(e.target.value)}
-            />
-            <button type="submit" className={styles.primaryButton} disabled={!draft.trim()}>
-              Scout
-            </button>
-          </form>
-          {error && <p className={styles.formError}>{error}</p>}
-        </section>
-
-        <section className={styles.block}>
-          <div className={styles.blockHead}>
-            <h3 className={styles.blockTitle}>Who {playerLabel(player)} keeps meeting</h3>
-            <span className={styles.muted}>{windowLabel}, opponents met more than once</span>
-          </div>
-          {candidates.length === 0 ? (
-            <p className={styles.muted}>
-              {playerIntel
-                ? 'Nobody in this window has been met twice. Widen the window, or scout a tag directly.'
-                : 'Their battles have not been read yet, so there is nobody to suggest. Scout a tag directly.'}
-            </p>
-          ) : (
-            <ul className={styles.metList}>
-              {candidates.map((o) => (
-                <li key={o.tag}>
-                  <a className={styles.metRow} href={coachHref(player.playerTag, 'scout', o.tag)}>
-                    <span className={styles.metName}>
-                      {o.name || o.tag}
-                      {o.name && <span className={styles.oppTag}>{o.tag}</span>}
-                    </span>
-                    <span className={styles.muted}>
-                      {o.battles} meeting{o.battles === 1 ? '' : 's'} · {playerLabel(player)} {o.wins}W {o.losses}L
-                      {o.draws ? ` ${o.draws}D` : ''}
-                    </span>
-                    <span className={styles.rowLink}>Scout →</span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+      <OpponentChooser
+        player={player}
+        playerIntel={playerIntel}
+        section="scout"
+        windowLabel={windowLabel}
+        title="Scout an opponent"
+        blurb="What the person on the other side actually plays, read from the same battles as everything else here. Nothing is saved — the preparation you write from it belongs to a match plan."
+      />
     );
   }
 
-  /* Only while NOTHING has answered yet. Once the intelligence is in, the
-     scout draws and the profile's collection chip appears when it lands. */
   if (pending.intel && pending.report) {
     return (
       <ReadingState k="coach-scout" hue="violet">
