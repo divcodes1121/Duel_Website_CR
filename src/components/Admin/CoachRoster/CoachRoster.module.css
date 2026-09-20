@@ -1518,3 +1518,25 @@ button.metRow {
   text-align: left;
   cursor: pointer;
 }
+
+/* ── phase 7: results ────────────────────────────────────────────────────── */
+
+.crownRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+}
+
+/* A chosen row in the record dialog reads as chosen rather than merely
+   hovered — the dialog is answered with clicks, not with a cursor. */
+.metRow[data-on] {
+  border-color: var(--accent-select-edge);
+  background: var(--accent-select-wash);
+}

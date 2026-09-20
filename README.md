@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Coach Roster** | **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 LIVE 2026-09-20 (`ed04b98`, server by scp first):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. **Phase 3 LIVE 2026-09-20 (`a1ac2e0`):** the Deck Arsenal — the decks a coach has approved for a player, built by hand, pasted as a link or taken from their battles, ranked and tagged, on 004's `coach_decks` plus one column from 005. **Phase 4 LIVE 2026-09-20 (`7f54bb2`):** the opponent scout — what an opponent plays, on stored history or a live snapshot with the difference stated, plus the head-to-head from the roster player's own battles. **Phase 5 LIVE 2026-09-20 (`a19eea9`):** what to play — the existing team-analysis engine's ranking for one player against one opponent, joined to the arsenal, with "not picked" and "could not be scored" kept apart. **Phase 6 LIVE 2026-09-20 (`7cca499`):** match plans — three slots against one opponent, with everything the screen showed frozen beside them. A later phase adds outcomes. See [Coach Roster](#coach-roster-admin-only-experimental) |
+| **Coach Roster** | **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 LIVE 2026-09-20 (`ed04b98`, server by scp first):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. **Phase 3 LIVE 2026-09-20 (`a1ac2e0`):** the Deck Arsenal — the decks a coach has approved for a player, built by hand, pasted as a link or taken from their battles, ranked and tagged, on 004's `coach_decks` plus one column from 005. **Phase 4 LIVE 2026-09-20 (`7f54bb2`):** the opponent scout — what an opponent plays, on stored history or a live snapshot with the difference stated, plus the head-to-head from the roster player's own battles. **Phase 5 LIVE 2026-09-20 (`a19eea9`):** what to play — the existing team-analysis engine's ranking for one player against one opponent, joined to the arsenal, with "not picked" and "could not be scored" kept apart. **Phase 6 LIVE 2026-09-20 (`7cca499`):** match plans — three slots against one opponent, with everything the screen showed frozen beside them. **Phase 7 BUILT, NOT DEPLOYED (2026-09-20):** results and the learning loop — what was actually played, with the slot inferred from the cards, and rates withheld under their floors. See [Coach Roster](#coach-roster-admin-only-experimental) |
 | **One dropdown, everywhere** | **LIVE 2026-09-20 (`c28acba`).** Every select-style control — 13 of them, from the card library's filters to onboarding's country list — is the vendored watermelon.sh `dropdown-menu-14`, ported by hand: an icon tile, the value over a caption and an up/down chevron; a panel in the site's theme with a heading, a line of explanation per option and a tick on the chosen one. It is a real listbox with the keyboard a native select has (arrows, Home/End, type-ahead, Esc) plus a search field for long lists, anchored to its trigger, flipping above when there is no room below and never leaving the viewport. `SeasonMenu` is a thin wrapper over it now. Verified in a browser on real data in both themes and at 390; the admin role picker is the one not seen in a browser |
 | **2v2 pairs as strips** | **LIVE 2026-09-19 (`9053943`).** Deck A pinned to the left edge, deck B to the right, each deck's eight cards on one line with its label, elixir and two actions on the line above. A pair went from a ~300px block to a 128px strip at 1440 — about seven to a screen instead of one and a half. Stacks below 62rem, still eight across. Verified 20/20 in a browser, both themes, 1440/1024/390 |
 | **Full contrast, everywhere** | **swept 2026-09-19.** A browser probe read every visible text node on 18 routes, five home sections and two dialogs in both themes, compositing each one's ink with the opacity of every ancestor — which is how text goes grey without its `color` saying so. The fixes: date chips past a player's stored history (six screens) were faded to 55% and are full ink with a dashed edge; the 2nd/3rd place ranks were the gold chip at reduced opacity and are a tint and an outline with full-contrast digits; the top bar's Search label, the banner copy and two placeholders. Left deliberately: disabled controls, the filmstrip's depth fade, the field book's sepia paper. **2v2** lost its three summary figures and its footnote, and its decks are capped at 22rem (cards 123 → 85px). **Pager cells are 2.5rem max**, not upstream's 4rem |
@@ -12137,7 +12137,7 @@ report, Coach Assist's `suggest`, Team Analysis's scorer, the deck tuner — and
 adds only the coaching layer: the roster, and (in later phases) each player's
 deck arsenal, match plans and results.
 
-**Phase 1 (roster) and Phase 2 (player intelligence) are live. Phase 3 (deck arsenal) is live. Phase 4 (opponent scout) is live. Phase 5 (what to play) is live. Phase 6 — match plans — is live.**
+**Phase 1 (roster) and Phase 2 (player intelligence) are live. Phase 3 (deck arsenal) is live. Phase 4 (opponent scout) is live. Phase 5 (what to play) is live. Phase 6 (match plans) is live. Phase 7 — results and the learning loop — is built and not yet deployed.**
 
 ### Where the data lives, and what enforces "admin-only"
 
@@ -12506,6 +12506,51 @@ change, so this shipped as one push.
 
 **Not built, deliberately:** no results and no learning loop — the screen says
 outright that the result belongs to a later phase.
+
+### Phase 7: results and the learning loop (built 2026-09-20, not deployed)
+
+The end of the chain: recommendation → decision → deck played → result.
+Phases 5 and 6 recorded the first two and froze the reasoning; this is the
+only phase that can say whether any of it helped. **No migration** — 004
+already defined `coach_match_results`, including the nullable plan link, the
+played slot with its `other` value, crowns and the test flag.
+
+**THE CARDS DECIDE WHICH SLOT WAS PLAYED.** Recording a loss is the least
+reliable moment to ask a coach "was that the backup or the alternative?", so
+the deck they pick is matched against the plan's own slots by the order-free
+key, and the dialog says which it landed on before anything is saved —
+including *"recorded as off-plan, because this plan does not name it"*. A
+misremembered slot would corrupt the one figure this phase exists to produce.
+
+**NOTHING IS CLAIMED UNDER A FLOOR, and the withheld sentence is the
+feature.** Under ten recorded matches there is no rate at all: the screen says
+*"2 matches recorded. Rates appear at 10 — below that one match moves the
+figure by ten points."* Not a percentage with a caveat beside it, because a
+percentage with a caveat is read as a percentage. Per source the floor is
+five, and each row says so rather than showing a number.
+
+**Test plans and test results are excluded from every figure** — both the
+result's own flag and the plan's. Trying the tool out must not become evidence
+about the advice.
+
+**The by-source split is the question the whole feature was built to ask**:
+how decks the engine suggested did, against decks from the arsenal, against
+going off-plan. It is labelled as counts of what the player did, not a verdict
+on the engine — *"a deck is only ever here because somebody chose it"*.
+
+**Off-plan decks get no invented provenance.** `playedSource` returns null
+when the plan never named the deck, and the bucket is "Played off-plan"
+rather than a guess.
+
+Verified **21/21** in a browser: the slot inferred from the cards both ways,
+the floors holding at two matches, a test result listed but excluded from the
+figures, both themes and 390px. 660 vitest (20 new). Coaching chunk 27.37 →
+31.13 kB gzip; main bundle unchanged.
+
+**Not built, deliberately:** nothing reads these results back into the
+recommendations. The loop is closed for a human to read, not for the engine
+to train on — that would be phase 8, and it needs far more than a handful of
+matches.
 
 ---
 
