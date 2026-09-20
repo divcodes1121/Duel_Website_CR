@@ -1306,3 +1306,212 @@
     white-space: normal;
   }
 }
+
+/* ── THE PROJECTION ─────────────────────────────────────────────────────────
+ *
+ * What the opponent is LIKELY TO BRING, drawn under what they were seen
+ * playing. The two are separate blocks on purpose: a generated deck sitting in
+ * the observed list would be a claim that somebody watched them play it, and
+ * that is the one dishonesty this whole feature is built to avoid.
+ *
+ * COLOUR IS `--hue-*`, NOT `--solid-*`. These are small coloured labels — ink
+ * at body size — and the `--hue-*` ramp is the step graded to hold 4.5:1 at
+ * 14px. `--solid-*` is graded to carry WHITE TEXT, which makes it darker than
+ * the surface and unreadable as ink; this project has now picked the wrong hue
+ * step four separate times and the rule is written in `index.css` beside the
+ * tokens. */
+
+.threats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.threatsTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.threatsNote {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.threatList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.threatRow {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.3rem 0.5rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 7px;
+  background: var(--surface-nested);
+}
+
+/* A DASHED EDGE FOR ANYTHING NOT OBSERVED, and it carries real meaning rather
+   than decoration: it is the same device the "beyond stored history" date
+   chips use, where a solid edge means measured and a dashed one means
+   reconstructed. Never opacity — the contrast sweep took every faded neutral
+   in this project to full ink, and a projection that is harder to read than
+   the history would be the wrong way round anyway. */
+.threatRow[data-evidence='VARIANT'],
+.threatRow[data-evidence='INFERRED'] {
+  background: none;
+  border: 1px dashed var(--border);
+}
+
+.threatLike {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 0.78rem;
+  color: var(--text);
+  text-align: right;
+}
+
+.threatBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.threatName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.threatKind {
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.threatKind[data-evidence='OBSERVED'] {
+  color: var(--hue-green);
+}
+
+.threatKind[data-evidence='VARIANT'] {
+  color: var(--hue-blue);
+}
+
+.threatKind[data-evidence='INFERRED'] {
+  color: var(--hue-violet);
+}
+
+.threatWhy {
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.threatConf,
+.recConf {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* The two weakest words are the ones worth marking, because they are the ones
+   a reader must not mistake for evidence. */
+.threatConf[data-conf='speculative'],
+.recConf[data-conf='speculative'],
+.threatConf[data-conf='possible'],
+.recConf[data-conf='possible'] {
+  color: var(--hue-violet);
+}
+
+/* ── WHY A RECOMMENDATION IS ON THE LIST ────────────────────────────────── */
+
+.recWhy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.recType {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.recType[data-type='COUNTER'] {
+  color: var(--hue-green);
+}
+
+.recType[data-type='ROBUST'] {
+  color: var(--hue-blue);
+}
+
+.recType[data-type='CONTINGENCY'] {
+  color: var(--hue-violet);
+}
+
+.recSay {
+  flex: 1 1 14rem;
+  min-width: 0;
+  color: var(--text-muted);
+}
+
+/* A matchup row answering something they have NOT been seen playing. Same
+   dashed device as the projection above, for the same reason. */
+.recRow[data-inferred] .recRowName {
+  font-style: italic;
+}
+
+.recRowKind {
+  margin-left: 0.3rem;
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hue-blue);
+}
+
+/* The projection is a stack on a phone: three columns at 390px crush the
+   reason line to a word a row. */
+@media (max-width: 34rem) {
+  .threatRow {
+    grid-template-columns: 2.4rem minmax(0, 1fr);
+  }
+
+  .threatConf {
+    grid-column: 2;
+  }
+}

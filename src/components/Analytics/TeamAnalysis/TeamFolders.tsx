@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import type {
+  RecommendationType,
+  TeamChurn,
   TeamFolder,
   TeamMode,
   TeamOverall,
   TeamPlayerOptions,
   TeamRecommendation,
   TeamReport,
+  TeamThreat,
 } from '../../../state/analyticsClient';
 import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
@@ -193,6 +196,91 @@ export function FolderGallery({
   );
 }
 
+/** What a recommendation is FOR, in a coach's words rather than the enum's. */
+const REC_TYPE_LABEL: Record<RecommendationType, string> = {
+  COUNTER: 'Counter',
+  ROBUST: 'Robust',
+  CONTINGENCY: 'Contingency',
+};
+
+/** What each kind of projected threat is, said once, where it is drawn. */
+const THREAT_LABEL: Record<string, string> = {
+  OBSERVED: 'Seen playing',
+  VARIANT: 'Close variant',
+  INFERRED: 'Plausible',
+};
+
+/**
+ * WHAT THEY ARE LIKELY TO BRING — the projection, beside the history.
+ *
+ * The list above this is `theirDecks`: decks they were actually observed
+ * playing. This is the threat space the recommendations were scored against,
+ * which is a different and larger thing — their decks, real variants of those
+ * decks, and the archetypes their behaviour implies.
+ *
+ * THE TWO ARE DRAWN SEPARATELY AND LABELLED SEPARATELY, and that is the whole
+ * honesty of the screen. A generated deck shown in the observed list would be
+ * a claim that somebody watched them play it. Every row here says which kind
+ * it is and how confident that is, and a variant names the deck it came from.
+ */
+function Threats({ threats, churn }: { threats: TeamThreat[]; churn?: TeamChurn }) {
+  if (!threats.length) return null;
+  return (
+    <div className={styles.threats}>
+      <h5 className={styles.threatsTitle}>
+        Likely to bring
+        {churn && (
+          <span
+            className={styles.threatsNote}
+            title={
+              churn.evidence === 'thin'
+                ? 'Too little play to measure how much they switch, so the projection is deliberately wider than their history.'
+                : churn.evidence === 'none'
+                  ? 'No play at all to measure. The projection is as wide as it gets.'
+                  : 'Measured from how their own play is spread across decks.'
+            }
+          >
+            {churn.evidence === 'measured'
+              ? `${Math.round(100 * churn.switch)}% chance of something off-book`
+              : 'little history — projection widened'}
+          </span>
+        )}
+      </h5>
+      <ul className={styles.threatList}>
+        {threats.map((t) => (
+          <li key={t.key} className={styles.threatRow} data-evidence={t.evidence}>
+            <span className={styles.threatLike}>{(100 * t.likelihood).toFixed(0)}%</span>
+            <span className={styles.threatBody}>
+              <span className={styles.threatName}>
+                {t.name || t.archetype}
+                <em className={styles.threatKind} data-evidence={t.evidence}>
+                  {THREAT_LABEL[t.evidence] ?? t.evidence}
+                </em>
+              </span>
+              {/* THE EVIDENCE, NEVER DRESSED UP. An observed deck quotes the
+                  battles it was seen in; a variant names its parent and how
+                  many cards it shares; an inferred entry says plainly that it
+                  has never been seen. */}
+              <span className={styles.threatWhy}>
+                {t.evidence === 'OBSERVED'
+                  ? `${t.observedCount} battle${t.observedCount === 1 ? '' : 's'} on record`
+                  : t.evidence === 'VARIANT'
+                    ? `${t.overlap ?? 0} of 8 cards shared with ${t.basisName || 'a deck they play'} — never seen from them`
+                    : t.why === 'own_archetype'
+                      ? 'An archetype they play, in a configuration not seen from them'
+                      : 'Widely played, and nothing in their history rules it out'}
+              </span>
+            </span>
+            <span className={styles.threatConf} data-conf={t.confidence}>
+              {t.confidence}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /**
  * One recommended deck, with the reasoning it was chosen on.
  *
@@ -261,21 +349,69 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
         name={rec.owner ? `${rec.owner.name} — ${rec.name}` : rec.name}
       />
 
+      {/* WHY THIS DECK IS ON THE LIST, and how much is actually known.
+          A portfolio of five to seven only reads as preparation if each row
+          says what job it is doing; without this it reads as a longer ranking,
+          which is the failure the longer list was supposed to fix. Both are
+          optional — a server predating the brain sends neither, and the row
+          then draws exactly as it always did. */}
+      {(rec.type || rec.confidence) && (
+        <p className={styles.recWhy}>
+          {rec.type && (
+            <span className={styles.recType} data-type={rec.type}>
+              {REC_TYPE_LABEL[rec.type]}
+            </span>
+          )}
+          {rec.confidence && (
+            <span className={styles.recConf} data-conf={rec.confidence}>
+              {rec.confidence}
+            </span>
+          )}
+          {rec.explanation && <span className={styles.recSay}>{rec.explanation}</span>}
+        </p>
+      )}
+
       {/* HOW MUCH OF THEIR PLAY THIS COVERS. An expected rate computed over
           40% of what they bring is a different claim from one computed over
           all of it, and the difference is invisible in the headline. */}
       {rec.spreadCovered < 100 && (
         <p className={styles.recCover}>
-          Measured against {pct(rec.spreadCovered)} of what they play — the rest has no matchup
-          evidence and was left out rather than counted as even.
+          Measured against {pct(rec.spreadCovered)} of{' '}
+          {rec.threatCovered !== undefined ? 'their likely pool' : 'what they play'} — the rest
+          has no matchup evidence and was left out rather than counted as even.
         </p>
       )}
 
       <ul className={styles.recRows}>
-        {rec.matchups.map((m) => (
-          <li key={m.archetype} className={styles.recRow} data-unknown={m.winRate === null || undefined}>
-            <span className={styles.recRowName}>{m.name}</span>
-            <span className={styles.recRowShare}>{m.share.toFixed(0)}% of their play</span>
+        {rec.matchups.map((m, i) => (
+          /* KEYED ON THE THREAT, NOT THE ARCHETYPE. The projection holds
+             several decks of one archetype — an observed Hog list and two real
+             variants of it are three rows that all say "hog" — so keying on
+             the archetype would hand React duplicate keys and let it reuse the
+             wrong row. Falls back to the index for a payload from a server
+             that predates the brain, where one archetype really is one row. */
+          <li
+            key={m.threat ?? `${m.archetype}:${i}`}
+            className={styles.recRow}
+            data-unknown={m.winRate === null || undefined}
+            data-inferred={m.evidence && m.evidence !== 'OBSERVED' ? '' : undefined}
+          >
+            <span className={styles.recRowName}>
+              {m.name}
+              {/* WHICH KIND OF THREAT THIS ROW ANSWERS. An inferred deck must
+                  never read as one they were seen playing. */}
+              {m.evidence === 'VARIANT' && (
+                <em className={styles.recRowKind} title="A real deck close enough to one they play to be a version of it — not something they were seen bringing.">variant</em>
+              )}
+              {m.evidence === 'INFERRED' && (
+                <em className={styles.recRowKind} title="An archetype their play implies. Never observed.">inferred</em>
+              )}
+            </span>
+            <span className={styles.recRowShare}>
+              {m.likelihood !== undefined
+                ? `${(100 * m.likelihood).toFixed(0)}% of their likely pool`
+                : `${m.share.toFixed(0)}% of their play`}
+            </span>
             <span className={styles.recRowRate}>
               {m.winRate === null ? 'no evidence' : pct(m.winRate)}
             </span>
@@ -467,6 +603,10 @@ export function OpenFolder({
                   </li>
                 ))}
               </ul>
+
+              {/* Below the history, because it is derived from it and a reader
+                  should meet the evidence before the projection built on it. */}
+              <Threats threats={folder.threats ?? []} churn={folder.churn} />
             </section>
 
             <div className={styles.boardVs}>

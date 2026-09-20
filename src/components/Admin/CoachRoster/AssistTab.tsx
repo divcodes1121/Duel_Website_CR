@@ -16,6 +16,7 @@ import {
   assistRows,
   assistSourceRef,
   coverNote,
+  REC_TYPE_NOTE,
   emptyReason,
   suggestedDecks,
   type ArsenalRow,
@@ -150,6 +151,12 @@ export function AssistTab({
           days,
           opponentTag: opponentTag!,
           at: new Date().toISOString(),
+          // WHICH BRAIN RANKED IT. Read off the report rather than written as
+          // a literal here: a client hardcoding the version would keep
+          // claiming it after the server moved on, which is exactly the drift
+          // the field exists to make visible. Null when the server predates
+          // the brain — a real answer, not a default.
+          brain: report?.brain ?? null,
         },
         generatedAt: new Date().toISOString(),
       });
@@ -270,6 +277,19 @@ function SuggestionRow({ suggestion, onApprove }: { suggestion: SuggestedDeck; o
             {rec.comfort ? ` · they have played it ${rec.comfort.games} times` : ''}
           </span>
           <span className={styles.muted}>{coverNote(rec)}</span>
+          {/* WHAT JOB THIS DECK IS DOING, and how much is actually known.
+              A list of five to seven only reads as preparation if each row
+              says why it is there; without it the longer list reads as a
+              longer ranking, which is the failure it was meant to fix.
+              Both are absent on a payload from a server predating the brain,
+              and the row then draws exactly as it always did. */}
+          {(rec.type || rec.confidence) && (
+            <span className={styles.muted}>
+              {rec.type ? REC_TYPE_NOTE[rec.type] ?? rec.type : null}
+              {rec.type && rec.confidence ? ' · ' : null}
+              {rec.confidence ? `confidence: ${rec.confidence}` : null}
+            </span>
+          )}
           <span className={styles.tagRow}>
             {arsenal ? (
               <span className={styles.tagChip} data-role>

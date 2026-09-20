@@ -27,7 +27,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deck_counter as dcx  # noqa: E402
-import team_analysis as ta  # noqa: E402
+import team_analysis as ta
+import team_scout as ts  # noqa: E402
 
 PASS = 0
 FAIL = 0
@@ -301,9 +302,32 @@ check("the recommendation names the teammate who plays it",
       hog_row["owner"] == {"tag": "#B1", "name": "Ravi"})
 check("the comfort bonus is stated rather than buried in the score",
       hog_row["comfort"]["bonus"] == round(ta._comfort(40), 2))
-check("score is the expected rate plus exactly that bonus",
-      abs(hog_row["score"] - (hog_row["expectedWinRate"] + hog_row["comfort"]["bonus"]))
-      < 1e-9)
+# THE SCORE IS A DECOMPOSITION NOW, AND EVERY TERM OF IT IS PUBLISHED.
+#
+# It was `expectedWinRate + comfort` exactly, and that identity was worth
+# pinning while those were the only two things the ranking knew. The brain adds
+# two penalties the old scorer could not express — how much of the projected
+# threat space a deck was actually measurable against, and what rungs of the
+# evidence ladder those measurements came off — so the identity is wider. It is
+# still an identity, and it is still checked to the floating-point bit, which
+# is the property that mattered: no term may enter the ranking without
+# appearing in the payload beside it.
+def _rebuilt(r):
+    import team_scout as _ts
+    fit = r.get("playerFit") or 0.0
+    return (r["matchupValue"]
+            - _ts.COVERAGE_WEIGHT * (1.0 - r["threatCovered"])
+            + _ts.FIT_WEIGHT * fit
+            - _ts.EVIDENCE_WEIGHT * (1.0 - r["evidenceStrength"]))
+
+
+check("the score is exactly its published terms, and nothing else",
+      abs(hog_row["score"] - round(_rebuilt(hog_row), 3)) < 1e-9,
+      f"{hog_row['score']} vs {round(_rebuilt(hog_row), 3)}")
+check("the comfort bonus still reports the practice tiebreak in points",
+      hog_row["comfort"]["bonus"] == round(ta._comfort(40), 2))
+check("expectedWinRate survives as the headline for existing readers",
+      hog_row["expectedWinRate"] == hog_row["matchupValue"])
 
 
 print(NL + "comfort cannot overturn a real matchup difference")
@@ -454,16 +478,26 @@ check("a scout folder has no per-player board",
       scout_folder["perPlayer"] == [],
       "with no blue roster the loop has nothing to iterate — it is not "
       "special-cased, it falls out empty")
-check("it recommends up to SCOUT_TOP_N, which is more than TOP_N",
+# BOTH SQUAD-WIDE LISTS ARE PORTFOLIOS NOW, so the two counts converged — see
+# the note on SCOUT_TOP_N. What is still worth pinning is that the scouting
+# report is not silently capped below the portfolio it is meant to be.
+check("a scout folder recommends up to the portfolio size",
       len(scout_folder["recommended"]) <= ta.SCOUT_TOP_N
-      and ta.SCOUT_TOP_N > ta.TOP_N)
+      and ta.SCOUT_TOP_N == ts.MAX_RECOMMENDATIONS,
+      f"{len(scout_folder['recommended'])} of {ta.SCOUT_TOP_N}")
+check("the per-teammate board stays shorter than the squad-wide portfolio",
+      ta.PER_PLAYER_TOP_N < ta.TOP_N)
+check("the scout pool is wider than one deck per archetype",
+      len(scout_pool) > len(dcx._representatives() or {}) or not dcx.seeds(),
+      f"{len(scout_pool)} candidates")
 check("a scout recommendation carries no owner",
       all(r["owner"] is None for r in scout_folder["recommended"]))
 check("and no comfort block",
       all(r["comfort"] is None for r in scout_folder["recommended"]))
-check("so its rank is the matchup alone",
-      all(abs(r["score"] - r["expectedWinRate"]) < 1e-9
-          for r in scout_folder["recommended"]),
+check("so the practice tiebreak contributes nothing to its rank",
+      all(r["playerFit"] is None for r in scout_folder["recommended"])
+      and all(abs(r["score"] - round(_rebuilt(r), 3)) < 1e-9
+              for r in scout_folder["recommended"]),
       "with no owner there is nothing to be practised at, so the tiebreak "
       "must contribute exactly nothing")
 check("the same scorer produced it — every row still names its rung",

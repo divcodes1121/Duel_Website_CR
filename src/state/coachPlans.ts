@@ -119,6 +119,22 @@ export interface PlanEngine {
   /** What the ranking was against. */
   opponentTag: string;
   at: string;
+  /**
+   * THE COACHING BRAIN THAT RANKED IT, e.g. `team-scout-2.0`.
+   *
+   * The module name above says WHERE the ranking came from; this says WHAT
+   * REASONING produced it, and the two move independently — `team_analysis`
+   * is the same module before and after the brain replaced its opponent
+   * model, so a plan frozen last week and one frozen today would be
+   * indistinguishable without this.
+   *
+   * THAT MATTERS BECAUSE OF PHASE 7. Results are read back against the plan
+   * that produced them, and comparing the old scorer's outcomes with the new
+   * one's in a single pool would average two different systems into one
+   * meaningless rate. Optional, because plans frozen before this existed
+   * genuinely have no answer and a default would invent one.
+   */
+  brain?: string | null;
 }
 
 export interface NewMatchPlan {

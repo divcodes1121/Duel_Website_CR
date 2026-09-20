@@ -8187,6 +8187,75 @@ left and theirs on the right, press Analyse, and every opponent comes back as a
 **folder** — open it and their decks are on the left, the decks your squad
 should answer them with on the right, the word VS between.
 
+### The opponent model is a projection now (`team_scout.py`, 2026-09-21)
+
+**It used to rank decks against what the opponent had already played, and
+nothing else.** `_spread()` was the whole model: archetype shares by raw game
+count over their top six decks, with anything under two games dropped. Three
+faults followed, and the third is the one that made the screen read like a
+database query rather than a coach:
+
+1. **`lastSeen` was carried on every deck row and read by nothing** — a deck
+   abandoned in week one weighed as much as the one they played yesterday;
+2. **dropping the tail and renormalising handed that mass back to the decks
+   they play most**, so the LESS evidence there was the MORE confident the
+   model became — exactly backwards;
+3. **there was no term for a deck they had not already played**, so every
+   recommendation was an answer to the easy case.
+
+`server/team_scout.py` replaces the model, not the scorer. It projects what
+they are likely to **bring** — their decks, real variants of them, and the
+archetypes their play implies — as a distribution summing to 1.0, and the
+recommendations are scored against that and returned **5–7 at a time**,
+diversified. Every threat says which kind it is and how confident that is, and
+**an inferred deck can never present itself as one they were seen playing**:
+it carries `observedCount: 0` and no `lastSeen`, and the screen draws it under
+a dashed edge with its own label.
+
+**Observed always keeps the majority of the mass** (`SWITCH_MAX` 0.45). That
+ceiling is this project's own research talking: *"Recent is undefeated as THE
+prediction"* at 0.9678 / 0.8710 Jaccard, and Phases 4, 5, 6 and 7 each lost
+trying to overrule the player's current deck. Do not raise it past 0.5 without
+reopening that.
+
+**Thin evidence widens the projection rather than sharpening it**, which is the
+direct inversion of fault 2. Measured on one real deck at varying game counts:
+2 games → switch 0.450, 20 → 0.330, 60 → 0.183, 400 → 0.150.
+
+**Variants come from `deck_counter.seeds()`, not from `deck_tuner.neighbours()`,
+and that is a performance decision with a stated cost.** `neighbours()` is the
+better finder and is a ~2.6 s sibling scan; ten opponents at two decks each is
+twenty of them, about a minute added to a route that answers in 1.5 s warm. The
+seed pool is already in the snapshot — forty real decks per archetype, each with
+60+ games and its own matchup record, at **zero database cost per request**. The
+cost is that a rare variant nobody else plays will not be found, which is the
+right thing to give up: this must never invent a deck.
+
+**The scouting pool went from 17 decks to ~200** for the same reason — it was
+one representative per archetype, so "top 5" was five archetypes wearing deck
+art, and with one candidate per archetype there is no such thing as a portfolio.
+
+**Measured against the old brain on thirty real production opponents**, with the
+old answers captured live from `api.deckkies.com` rather than reimplemented:
+recommendations 5.00 → 7.00, distinct archetypes **5.00 → 6.50**, pairwise
+diversity **0.973 → 0.983**, opponent decks modelled 8.43 → 11.07. 0 of 30 lists
+were entirely decks the opponent already used; 0 of 30 put all the mass on their
+most-played deck.
+
+**The case review found a real defect that the design had missed**, which is
+what it is for: pairwise similarity does not catch same-archetype repetition.
+Two Royal Hogs lists sharing three of eight cards score 0.34, a 2.0-point
+penalty, so three of them took three of seven slots — every pair genuinely
+dissimilar in cards, and the list still three answers to one plan.
+`ARCHETYPE_REPEAT_PENALTY` charges 2.5 points per deck of that archetype already
+chosen. It is an occupancy cost and not a cap, because a defensive Hog list and
+a cycle Hog list really are different preparations.
+
+`DECKKIES_TEAM_SCOUT.md` is the full record, including what was deliberately
+NOT done — no model was trained, the OIE is not called, and the bot's
+`recommendation_events` are not written to. **Not deployed:** `server/` goes by
+hand and must land before the frontend.
+
 ### Two tabs, and why they are tabs rather than two routes
 
 **They are named for the document, not the form.** "Single" and "dual" describe

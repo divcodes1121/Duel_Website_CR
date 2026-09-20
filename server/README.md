@@ -285,7 +285,7 @@ happily against a server that never called it.
 | `GET /api/analytics/deck?cards=&wild=` | how one pasted deck draws — slots + art (`wild=evolution` or `wild=hero` picks slot 3) |
 | `GET /api/analytics/matchup?a=&b=` | head-to-head for two decks (comma-separated keys) |
 | `GET /api/analytics/counters?deck=` | what beats a deck |
-| `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, and the decks that answer it. With `blue` those are the top 3 the blue squad already plays; **omit `blue` entirely** and they are the top 5 archetype representatives, plus an `overall` block ranking the same pool against the whole roster's pooled spread. `mode` says which. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
+| `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, **the projected threat space (`threats`), and 5–7 decks that answer it**. With `blue` those come from the squad's own lists; **omit `blue` entirely** and they come from the snapshot's seed pool (~200 real decks), plus an `overall` block ranking the same pool against the whole roster's pooled projection. `mode` says which, and `brain` says which reasoning produced it (`team-scout-2.0`). See `DECKKIES_TEAM_SCOUT.md`. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
@@ -966,11 +966,27 @@ twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
 
 
-## Team analysis (`team_analysis.py`)
+## Team analysis (`team_analysis.py`) and the coaching brain (`team_scout.py`)
 
 Two rosters in, a folder per opponent out — **or one roster in, on its own.**
 The scoring rule and its floors are in the module docstring; four things matter
 from outside it.
+
+**THE OPPONENT MODEL IS A PROJECTION NOW, NOT A HISTORY.** `team_scout.py` is
+the brain: it takes their observed decks and returns a distribution over what
+they are LIKELY TO BRING — the decks themselves, real variants of them out of
+the seed pool, and archetypes their play implies — summing to 1.0, every entry
+labelled `OBSERVED` / `VARIANT` / `INFERRED` and confidence-rated. The
+recommendations are scored against that, diversified, and returned 5–7 at a
+time. `_spread()` survives as the DISPLAYED archetype breakdown and is still
+what the screen draws on the left.
+
+It has **no imports beyond the standard library**, the rule `deck_harmony.py`
+and `battle_modes.py` follow, so all 107 of its checks run against literals with
+no database. `DECKKIES_TEAM_SCOUT.md` is the design record — read it before
+changing a weight, and in particular before raising `SWITCH_MAX` past 0.5, which
+would let the model overrule the player's own most-played deck and reopen a
+question Phases 4–7 closed with evidence.
 
 **An empty `blue_tags` IS the scouting report**, and that absence is the mode
 switch rather than a flag. The two modes take the same inputs minus one, return

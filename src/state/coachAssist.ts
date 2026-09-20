@@ -151,10 +151,27 @@ export const THIN_COVER = 50;
 
 export function coverNote(rec: TeamRecommendation): string {
   const cover = Math.round(rec.spreadCovered);
+  /* WHAT THE FIGURE IS MEASURED OVER CHANGED, so the sentence has to.
+     It used to be the opponent's observed archetype spread; with the coaching
+     brain it is their PROJECTED pool, which also holds real variants of those
+     decks and archetypes their play implies. Saying "what they actually play"
+     about a number computed over inferred decks would be the one thing this
+     feature is built not to do — quietly presenting inference as observation.
+     `threatCovered` is the tell: a server predating the brain does not send
+     it, and the old sentence is still exactly right there. */
+  const projected = rec.threatCovered !== undefined;
+  const what = projected ? 'their likely pool' : 'what they actually play';
   return cover >= THIN_COVER
-    ? `Covers ${cover}% of what they actually play.`
-    : `Covers only ${cover}% of what they actually play — the rest is unmeasured, not lost.`;
+    ? `Covers ${cover}% of ${what}.`
+    : `Covers only ${cover}% of ${what} — the rest is unmeasured, not lost.`;
 }
+
+/** What a recommendation is FOR, in a coach's words rather than the enum's. */
+export const REC_TYPE_NOTE: Record<string, string> = {
+  COUNTER: 'Answers what they have been playing',
+  ROBUST: 'Holds up across their variants too',
+  CONTINGENCY: 'Cover for what they have not shown',
+};
 
 /** The engine's empty states, in words. Three different problems; a screen
  *  that prints one sentence for all three tells the coach to do the wrong

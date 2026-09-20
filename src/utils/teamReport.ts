@@ -545,9 +545,15 @@ function folderBlocks(
     blocks.push({
       kind: 'decks',
       heading: 'What your squad should bring',
+      // THE COUNT IS NOT WRITTEN INTO THE SENTENCE ANY MORE. It said "top
+      // three" and the list is five to seven now, sized by the brain's own
+      // diversity pass rather than by a constant — so a printed number here
+      // would go stale the next time that pass changes its mind, and a PDF is
+      // the one surface nobody re-reads to notice.
       note:
-        'The squad-wide top three, deduplicated by deck. Every one is a list somebody on your ' +
-        'side already flies, with the games behind it printed beside the name.',
+        'The squad-wide portfolio, deduplicated by deck and chosen to cover what they are ' +
+        'likely to bring rather than to repeat one answer. Every one is a list somebody on ' +
+        'your side already flies, with the games behind it printed beside the name.',
       decks: folder.recommended.map((r) => recLine(r, { showOwner: true })),
     });
 

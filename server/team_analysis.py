@@ -122,7 +122,19 @@ import clash_data as cd
 import deck_counter as dcx
 import duel_combos as dx
 import live_player as live
+import team_scout as scout
 import tracking
+
+#: The composition veto, if the deployment has it. IMPORTED SOFTLY, the same
+#: rule `coach.tune` follows: `deck_harmony` loads three JSON files at import
+#: and a deployment missing `cardRoles.json` must cost the variant filter and
+#: nothing else. With no veto the projection still runs; it simply cannot drop
+#: an incoherent seed, and every seed is a real deck with 60+ games anyway.
+try:
+    import deck_harmony as _harmony
+    _VETO = _harmony.veto
+except Exception:  # noqa: BLE001 - deployment shape
+    _VETO = None
 
 # ── Floors ──────────────────────────────────────────────────────────────────
 
@@ -154,25 +166,67 @@ COMFORT_FULL = 25
 #: points of expected win rate. Sized to lose to any real matchup difference.
 COMFORT_WEIGHT = 1.5
 
-#: How many blue decks a folder recommends. The user-facing promise is "top 3".
-TOP_N = 3
-
-#: How many decks a SCOUT folder recommends. More than `TOP_N`, deliberately.
+#: How many blue decks a folder recommends.
 #:
-#: In Match Plan three is the right number because the list is per teammate and
-#: the reader is choosing a person, not a deck — a fourth option for one player
-#: is noise beside a fifth player with none. A scouting report has no players to
-#: split by, so the same three rows would be the entire answer, and the reader
-#: here is choosing a deck to go and learn: they want to see where the ranking
-#: flattens out. Five is enough rows for that to be visible and still short
-#: enough to read at a glance.
-SCOUT_TOP_N = 5
+#: WAS 3, AND THE NUMBER WAS NEVER THE PROBLEM — the reasoning behind it was.
+#: Three decks chosen against an opponent model made only of their observed
+#: history is three answers to the easy case. Now that `_threats()` projects
+#: variants and inferred archetypes as well, there are genuinely different
+#: things to prepare for, and a portfolio has room for a counter to their core,
+#: something robust across its variants, and a contingency for what they have
+#: not shown. `scout.diversify` decides the actual count between
+#: `MIN_RECOMMENDATIONS` and this; it is allowed to come back short rather than
+#: pad the list with decks nobody should prepare.
+TOP_N = scout.MAX_RECOMMENDATIONS
+
+#: Per teammate, on the match-plan board. SMALLER THAN `TOP_N` DELIBERATELY:
+#: the squad-wide list answers "what should be practised", and this answers
+#: "what should Ravi bring", asked once per person. Ten teammates at seven rows
+#: each is a wall, and the fourth option for one player is still noise beside a
+#: fifth player with none — the original note's argument, which survives the
+#: change to the scorer because it was about the board and not about the model.
+PER_PLAYER_TOP_N = 5
+
+#: How many decks a SCOUT folder recommends.
+#:
+#: THE SAME AS `TOP_N` NOW, AND THE DISTINCTION DISSOLVING IS THE CHANGE.
+#: It used to be larger: match plan showed three as a HEADLINE over a
+#: per-teammate board, and a scouting report — which has no players to split
+#: by — showed five because those five were the entire answer. Both are
+#: portfolios drawn from the same projection now, sized by `scout.diversify`
+#: between `MIN_RECOMMENDATIONS` and this, so there is nothing left for the two
+#: numbers to disagree about. They are kept as two names because `limits`
+#: publishes both and a client reading `scoutTopN` should not break.
+#:
+#: The per-teammate board keeps its own, smaller number — see
+#: `PER_PLAYER_TOP_N`, whose argument was about the board and not the model.
+SCOUT_TOP_N = scout.MAX_RECOMMENDATIONS
 
 #: Opponent decks shown on the left of a folder, and the spread they weight.
 #: Their long tail is noise for this purpose: a deck played once tells you
 #: nothing about what they will bring to a match.
 OPPONENT_DECKS = 6
+
+#: THIS FLOOR NOW APPLIES ONLY TO THE DISPLAYED SPREAD, NOT TO THE PROJECTION.
+#:
+#: It used to gate the opponent model itself, and that was the quiet fault at
+#: the centre of this screen: `_spread` dropped every deck under two games and
+#: then RENORMALISED, which handed the dropped mass straight back to the decks
+#: they played most. The less history there was, the more confident the model
+#: became. `scout.threat_space` keeps the whole tail and expresses a one-game
+#: deck as a small weight instead, which is what it is.
 MIN_OPPONENT_DECK_GAMES = 2
+
+#: Seeds per archetype the SCOUT pool draws from. The full pool is 40 x ~17;
+#: this trims it to the most-played dozen of each, which is ~200 real decks
+#: and still two orders of magnitude wider than the one-representative-per-
+#: archetype pool it replaces.
+#:
+#: IT COSTS NO DATABASE READS. A seed arrives from the snapshot carrying its
+#: own per-archetype record, so a scout candidate is scored straight off that
+#: rather than through `_DeckProfile`'s three queries — which is the only
+#: reason a pool this size can sit on a request at all.
+SCOUT_SEEDS_PER_ARCHETYPE = 12
 
 #: Candidate decks taken from each blue player, best-played first. A cap
 #: exists because the candidate pool is what the run's cost is linear in.
@@ -370,11 +424,36 @@ def _spread(decks: list[dict]) -> list[dict]:
         return []
     out = [
         {"archetype": wc, "name": dcx._label(wc), "style": dcx.style_of(wc),
-         "games": n, "weight": n / total, "share": round(100 * n / total, 1)}
+         "games": n, "weight": n / total, "share": round(100 * n / total, 1),
+         # A SPREAD IS ALSO A VALID THREAT LIST, and that is deliberate rather
+         # than incidental. `_score` iterates `likelihood` and reads `evidence`
+         # now, so the same function serves the displayed archetype breakdown
+         # and the real projection and there is exactly one scorer. Without
+         # these three keys there would be two, which is the fault this module
+         # already avoids between its own two modes.
+         "key": f"archetype:{wc}", "evidence": scout.OBSERVED,
+         "likelihood": n / total}
         for wc, n in per.items()
     ]
     out.sort(key=lambda s: (-s["games"], s["archetype"]))
     return out
+
+
+def _threats(decks: list[dict], seeds: dict | None) -> dict:
+    """The projection: what this opponent is likely to BRING.
+
+    The displayed `spread` above says what they HAVE played, as archetype
+    shares. This says what they are likely to bring, as a distribution over
+    actual decks — their own, real variants of them, and archetypes their
+    behaviour implies. The two are different questions and the screen shows
+    both; only this one is scored against.
+
+    `seeds` is `deck_counter.seeds()`, which is snapshot data and costs no
+    query. With none — a deployment whose snapshot predates the seed pool —
+    `threat_space` returns the observed decks alone, which is exactly the old
+    behaviour, stated as a degradation rather than arrived at silently.
+    """
+    return scout.threat_space(decks, seeds, veto=_VETO)
 
 
 # ── The candidate pool, profiled once ───────────────────────────────────────
@@ -435,6 +514,53 @@ class _DeckProfile:
         m = self._c6.get(other)
         if m:
             return {"source": dcx.SOURCE_C6, "decks": self._c6_decks, **m}
+        if snap:
+            m = dcx._symmetric(snap, self.archetype, other)
+            if m:
+                return {"source": dcx.SOURCE_ARCHETYPE, "decks": None, **m}
+        return None
+
+
+class _SeedProfile:
+    """A snapshot seed's own records, behind `_DeckProfile`'s interface.
+
+    WHY THIS EXISTS AT ALL: the scouting pool used to be
+    `deck_counter._representatives()` — ONE deck per archetype, seventeen in
+    total — and a pool that small cannot produce a portfolio. Widening it to
+    the seed pool (forty real decks per archetype) through `_DeckProfile` would
+    cost three database reads each, six hundred on a request that answers in
+    1.5 s warm today, and would thrash a cluster cache that holds 32 entries
+    and CLEARS ITSELF WHOLE on overflow.
+
+    A seed does not need them. `deck_counter._build_seeds` already attached
+    each one's per-archetype record on the background snapshot thread, from the
+    same symmetrised pass over `pair_matchup_agg` that `deck_profile` reads. So
+    the figures are the same figures, and this class costs NO QUERY AT ALL.
+
+    IT REPORTS `SOURCE_DECK`, WHICH IS WHAT IT IS — this exact list against
+    that archetype — and falls to the archetype matrix when the seed has no
+    record for an archetype, exactly as the real ladder does. It cannot offer
+    the two cluster rungs, because a seed carries no cluster; that is a real
+    narrowing of the evidence and it is visible in the `source` on every row
+    rather than hidden behind a rung that was never read.
+    """
+
+    __slots__ = ("archetype", "_records", "overall")
+
+    def __init__(self, seed: dict, archetype: str):
+        self.archetype = archetype
+        self._records = seed.get("archetypes") or {}
+        games = int(seed.get("games") or 0)
+        wins = sum(int(r.get("wins") or 0) for r in self._records.values())
+        decided = sum(int(r.get("wins") or 0) + int(r.get("losses") or 0)
+                      for r in self._records.values())
+        self.overall = ({"winRate": round(100 * wins / decided, 1),
+                         "games": games} if decided else None)
+
+    def against(self, other: str, snap: dict | None) -> dict | None:
+        m = self._records.get(other)
+        if m:
+            return {"source": dcx.SOURCE_DECK, "decks": 1, **m}
         if snap:
             m = dcx._symmetric(snap, self.archetype, other)
             if m:
@@ -540,27 +666,39 @@ _SCOUT_POOL: tuple[object, list["_Candidate"]] | None = None
 
 
 def _scout_candidates() -> list["_Candidate"]:
-    """The archetype representatives, profiled — the scouting report's pool.
+    """The scouting report's pool: real decks out of the snapshot's seeds.
 
-    ONE DECK PER ARCHETYPE, from `deck_counter._representatives()`. See the
-    module docstring for why these and not the meta board's top 50.
+    WAS ONE DECK PER ARCHETYPE — `deck_counter._representatives()`, seventeen
+    in total. That is why the old scouting report could only ever be a ranking
+    of archetypes wearing deck art: with one candidate per archetype there is
+    no such thing as a variant, a second opinion inside an archetype, or a
+    portfolio. Asking it for five recommendations returned the five best
+    archetypes, which is a different and much weaker answer than five decks.
 
-    THE PROFILES ARE BUILT IN ONE PASS AND HELD, which is not merely an
-    optimisation here — it is required. `_CLUSTER_CACHE` upstream is 32 entries
-    and CLEARS ITSELF WHOLE when it overflows; seventeen decks at two cluster
-    levels is thirty-four, so the cache would empty mid-build. That costs
-    nothing while the build walks each deck exactly once and never returns to
-    it (which is what this loop does), and it would cost a full rescan per deck
-    if anything ever looped opponents on the outside. Do not restructure this
-    into "score each opponent, widening as needed" — that is the same trap the
-    blue pool's note describes, with a cache too small to absorb it.
+    NOW `SCOUT_SEEDS_PER_ARCHETYPE` PER ARCHETYPE, ~200 real lists, every one
+    with 60+ games and its own per-archetype record already attached by the
+    background snapshot thread.
+
+    IT COSTS NO DATABASE READS, which is the only reason a pool this size can
+    sit on a request. See `_SeedProfile` for why, and for what evidence is
+    given up in exchange (the two cluster rungs, which a seed has no cluster
+    for and which the `source` on every row now says plainly).
+
+    THE REPRESENTATIVES ARE STILL FIRST. `_build_seeds` sorts each archetype's
+    list by games, so seed[0] IS the most-played deck of that archetype — the
+    same deck `_representatives()` returned. Nothing was lost; the tail was
+    added behind it.
+
+    FALLS BACK TO THE REPRESENTATIVES when the snapshot predates the seed pool.
+    A deployment mid-upgrade gets the old, narrower answer rather than an empty
+    screen, and the pool size is published so the difference is visible.
     """
     global _SCOUT_POOL
 
     snap = dcx._snap()
-    # The snapshot's own build time IS the identity of the representatives.
-    # `None` when there is no snapshot at all, which is a state the caller has
-    # to report rather than serve an empty ranking for.
+    # The snapshot's own build time IS the identity of the pool. `None` when
+    # there is no snapshot at all, which is a state the caller has to report
+    # rather than serve an empty ranking for.
     key = (snap or {}).get("computedAt")
     if key is None:
         return []
@@ -568,29 +706,65 @@ def _scout_candidates() -> list["_Candidate"]:
         return _SCOUT_POOL[1]
 
     out: list["_Candidate"] = []
-    for arch, rep in (dcx._representatives() or {}).items():
-        cards = list(rep.get("cards") or [])
-        if len(set(cards)) != 8:
-            continue
-        try:
-            prof = _DeckProfile(cards, arch)
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
-            continue
-        out.append(_Candidate(
-            {
-                "cards": cards,
-                "art": rep.get("art") or {},
-                "winCondition": arch,
-                "name": rep.get("name") or dcx._label(arch),
-                # No owner means no games piloted and no win rate of anyone's
-                # own. Left at zero rather than invented; `_score` never reads
-                # them for an ownerless candidate.
-                "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
-            },
-            None,
-            prof,
-        ))
+    seeds = dcx.seeds() or {}
+
+    for arch, decks in seeds.items():
+        for seed in decks[:SCOUT_SEEDS_PER_ARCHETYPE]:
+            cards = list(seed.get("cards") or [])
+            if len(set(cards)) != 8:
+                continue
+            try:
+                prof = _SeedProfile(seed, arch)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                continue
+            out.append(_Candidate(
+                {
+                    "cards": cards,
+                    "art": {},
+                    "winCondition": arch,
+                    "name": dcx._label(arch),
+                    # No owner means no games piloted and no win rate of
+                    # anyone's own. Left at zero rather than invented; `_score`
+                    # never reads them for an ownerless candidate.
+                    "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
+                },
+                None,
+                prof,
+            ))
+
+    if not out:
+        # THE PRE-SEED SNAPSHOT PATH, kept because a deployment can be mid
+        # upgrade. `_DeckProfile` here is the expensive read, and it is
+        # affordable only because this pool is seventeen decks.
+        #
+        # THE PROFILES ARE BUILT IN ONE PASS AND HELD, which is required rather
+        # than an optimisation: `_CLUSTER_CACHE` upstream is 32 entries and
+        # CLEARS ITSELF WHOLE when it overflows, and seventeen decks at two
+        # cluster levels is thirty-four. That costs nothing while the build
+        # walks each deck once and never returns to it, and it would cost a
+        # full rescan per deck if anything ever looped opponents on the
+        # outside. Do not restructure this into "score each opponent, widening
+        # as needed".
+        for arch, rep in (dcx._representatives() or {}).items():
+            cards = list(rep.get("cards") or [])
+            if len(set(cards)) != 8:
+                continue
+            try:
+                prof = _DeckProfile(cards, arch)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                continue
+            out.append(_Candidate(
+                {
+                    "cards": cards, "art": rep.get("art") or {},
+                    "winCondition": arch,
+                    "name": rep.get("name") or dcx._label(arch),
+                    "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
+                },
+                None,
+                prof,
+            ))
 
     _SCOUT_POOL = (key, out)
     return out
@@ -603,74 +777,57 @@ def _comfort(games: int) -> float:
     return COMFORT_WEIGHT * min(1.0, games / COMFORT_FULL)
 
 
-def _score(card: _Candidate, spread: list[dict], snap: dict | None) -> dict | None:
-    """One candidate against one opponent's whole spread.
+def _score(card: _Candidate, threats: list[dict], snap: dict | None) -> dict | None:
+    """One candidate against a whole projected threat space.
 
-    Returns None when NOTHING in the spread could be answered — no rung of the
-    ladder had evidence for any archetype they play. That is a real state on a
-    thin database and it must not be rendered as 50.0%, which is what averaging
-    over an empty set would produce.
+    `threats` IS EITHER. A `_spread()` row carries `likelihood` and `evidence`
+    now, so the displayed archetype breakdown and the real projection from
+    `_threats()` are both valid inputs and there is one scorer for both. That
+    matters more here than it looks: this module's own docstring records that
+    a second scorer for the second tab would let the same deck read differently
+    depending on which tab you stood in, and a second scorer for the second
+    OPPONENT MODEL would be the same fault one level down.
 
-    `weighted` renormalises over the archetypes that DID answer. The
-    alternative — treating an unanswerable archetype as even — silently pulls
-    every deck toward 50 and makes the ranking flatter the less evidence there
-    is, which is exactly backwards.
+    THE ARITHMETIC IS `team_scout.score` AND NOT A COPY OF IT. Everything below
+    the call is presentation — the owner, the practice tiebreak, the art, and
+    the two fields a scouting row carries instead of an owner. The decision of
+    what a recommendation is worth lives in one file with no imports, where it
+    can be tested against literals.
+
+    Returns None when NOTHING in the projection could be answered. That is a
+    real state on a thin database and it must not be rendered as 50.0%, which
+    is what averaging over an empty set produces.
     """
-    rows = []
-    answered = 0.0
-    total_win = 0.0
-    for s in spread:
-        m = card.against(s["archetype"], snap)
-        if not m:
-            rows.append({
-                "archetype": s["archetype"], "name": s["name"],
-                "share": s["share"], "winRate": None, "source": None,
-                "games": 0, "tier": None,
-            })
-            continue
-        w = s["weight"]
-        answered += w
-        total_win += w * float(m.get("winRate") or 0.0)
-        rows.append({
-            "archetype": s["archetype"], "name": s["name"], "share": s["share"],
-            "winRate": m.get("winRate"), "source": m.get("source"),
-            "sourceText": dcx.SOURCE_TEXT.get(m.get("source")),
-            # `games`, NOT `battles`. Every rung of the ladder — the exact
-            # deck profile, both clusters and the archetype matrix — publishes
-            # its denominator as `games`; `battles` is a field on the profile
-            # WRAPPER, not on a per-archetype record, so reading it here gave
-            # null on every rung and the client then called
-            # `.toLocaleString()` on it. Found by calling the real endpoint,
-            # not by the unit tests, whose fixture had invented the name.
-            "games": m.get("games") or 0, "tier": m.get("tier"),
-            "interval": m.get("interval"), "decks": m.get("decks"),
-        })
-
-    if answered <= 0:
+    base = scout.score(
+        lambda arch: card.against(arch, snap),
+        threats,
+        cards=card.cards,
+        archetype=card.archetype,
+        # NO OWNER MEANS NO FIT, and `None` rather than 0. An archetype
+        # representative is nobody's deck, so there is nothing to be practised
+        # at; publishing a zero would state that somebody has piloted it none
+        # of the time, which is a claim about a roster that was never pasted.
+        fit_games=card.games if card.owner else None,
+    )
+    if base is None:
         return None
 
-    expected = total_win / answered
-
-    # NO OWNER MEANS NO COMFORT, and the ranking is then the matchup alone.
-    # A scout row is an archetype representative — nobody's deck — so there is
-    # nothing to be practised at and no tiebreak to apply. Defaulting the bonus
-    # to zero would give the same ordering, but publishing `comfort: {games: 0}`
-    # would state that somebody has piloted it zero times, which is a claim
-    # about a roster that was never pasted.
     comfort = _comfort(card.games) if card.owner else 0.0
 
-    # THE DECK'S OWN RECORD ACROSS THE FIELD, for scout rows only. It is the
-    # denominator the headline is missing on its own: a deck expected to win
-    # 58% against this opponent while winning 57% against everybody is barely a
-    # counter, and one at 58% against a 49% baseline is a real answer. The
-    # screen shows the difference; this ships both halves rather than the
-    # subtraction, so the two numbers can be read separately.
-    overall = card.profile.overall if not card.owner else None
+    # `scout.score` ranks on `playerFit` in [0, 1] scaled by `FIT_WEIGHT`,
+    # which is the same quantity and the same weight `_comfort` produced in
+    # points. Publishing the points as well keeps the existing contract: a
+    # reader comparing two rows can still see whether the order came from the
+    # matchup or from the practice.
+    for row, t in zip(base["matchups"], threats):
+        # The spread fields the client has always drawn, beside the new ones.
+        row["share"] = t.get("share", round(100 * float(t.get("likelihood") or 0), 1))
+        row["name"] = t.get("name") or row.get("name") or ""
+        row["sourceText"] = dcx.SOURCE_TEXT.get(row.get("source"))
 
-    out = {
-        "cards": card.cards,
+    out = dict(base)
+    out.update({
         "art": card.art,
-        "archetype": card.archetype,
         "name": card.name,
         "avgElixir": dcx._avg_elixir(card.cards),
         "owner": {"tag": card.owner["tag"], "name": card.owner["name"]}
@@ -680,19 +837,19 @@ def _score(card: _Candidate, spread: list[dict], snap: dict | None) -> dict | No
             "wins": card.wins,
             "winRate": card.win_rate,
             "useRate": card.use_rate,
-            # What the tiebreak was worth here, stated rather than buried in
-            # `score`. A reader comparing two rows can see whether the order
-            # came from the matchup or from the practice.
             "bonus": round(comfort, 2),
         } if card.owner else None,
-        # The headline. Weighted over the archetypes that had evidence.
-        "expectedWinRate": round(expected, 1),
-        # How much of their play this figure actually covers. A deck scored on
-        # 40% of their spread is a different claim from one scored on all of it.
-        "spreadCovered": round(100 * answered, 1),
-        "score": round(expected + comfort, 3),
-        "matchups": rows,
-    }
+        # WHY THIS DECK IS ON THE LIST — counter, robust, or contingency. Read
+        # from which KINDS of threat it actually beats, never from its rank.
+        "type": scout.classify(base, threats),
+    })
+    out["explanation"] = scout.explain(out, threats)
+
+    # THE DECK'S OWN RECORD ACROSS THE FIELD, for ownerless rows only. It is
+    # the denominator the headline is missing on its own: a deck expected to
+    # win 58% against this opponent while winning 57% against everybody is
+    # barely a counter, and one at 58% against a 49% baseline is a real answer.
+    overall = card.profile.overall if not card.owner else None
     if overall:
         out["overallWinRate"] = overall.get("winRate")
         out["overallGames"] = overall.get("games")
@@ -722,7 +879,8 @@ def _distinct(rows: list[dict]) -> list[dict]:
 
 
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
-            snap: dict | None, top_n: int = TOP_N) -> dict:
+            snap: dict | None, top_n: int = TOP_N,
+            seeds: dict | None = None) -> dict:
     """One opponent, and what should be brought against them.
 
     BOTH MODES COME THROUGH HERE. In a scouting report `blue` is empty, so
@@ -734,18 +892,24 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     """
     decks = (opponent.get("decks") or [])[:OPPONENT_DECKS]
     _archetypes_for(decks)
+    # WHAT THEY HAVE PLAYED. Still shown, because a coach wants to see the
+    # history as well as the projection, and still an archetype breakdown.
     spread = _spread(decks)
+    # WHAT THEY ARE LIKELY TO BRING. The whole opponent's deck list goes in,
+    # not the displayed six: the tail is small weight in a projection and it
+    # was never noise, only weak evidence.
+    projection = _threats(opponent.get("decks") or [], seeds)
+    threats = projection["threats"]
 
     scored: list[dict] = []
-    if spread:
+    if threats:
         for card in cards:
-            row = _score(card, spread, snap)
+            row = _score(card, threats, snap)
             if row:
                 scored.append(row)
         # The second key is games piloted, which a scout row does not have —
         # `comfort` is None there and reading it subscripts a None. Falling
-        # back to 0 keeps ownerless rows ordered by score then by name, which
-        # is a total order because the pool is one deck per archetype.
+        # back to 0 keeps ownerless rows ordered by score then by name.
         scored.sort(key=lambda r: (-r["score"],
                                    -((r["comfort"] or {}).get("games") or 0),
                                    r["name"]))
@@ -782,8 +946,15 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         per_player.append({
             "owner": {"tag": mate["tag"], "name": mate["name"]},
             "basis": mate["basis"],
-            # `scored` is already sorted and grouping preserves that order.
-            "decks": rows[:TOP_N],
+            # DIVERSIFIED, NOT TRUNCATED. `rows` is already sorted and the
+            # grouping preserved that order, so slicing it returned this
+            # teammate's N highest-scoring decks — which, once the pool is
+            # wider than three, is reliably N versions of whatever archetype
+            # happens to beat the opponent's core. The reader gains rows and
+            # no new information. `diversify` applies a redundancy penalty so
+            # the list spans the threat space instead of repeating itself.
+            "decks": scout.diversify(rows, limit=PER_PLAYER_TOP_N,
+                                     minimum=1),
             "considered": len(rows),
             # WHICH empty state this is, said rather than inferred from a
             # missing list. The three are genuinely different problems: nothing
@@ -818,19 +989,37 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # deck per archetype — and is left in the path anyway rather than
         # branched around, because a pool that ever gained a second deck of an
         # archetype should still collapse it here.
-        "recommended": _distinct(scored)[:top_n],
+        # THE PROJECTION. What they are likely to BRING — their observed decks,
+        # real variants of them, and the archetypes their behaviour implies —
+        # as a distribution summing to 1.0, every entry labelled with which
+        # kind it is and how confident that is. This is what `recommended` was
+        # scored against, and it is published so the reader can check the
+        # reasoning rather than take the ranking on faith.
+        "threats": threats,
+        "churn": projection["churn"],
+        "mass": projection.get("mass"),
+        # RIGHT SIDE: what to bring, best first.
+        #
+        # FIVE TO SEVEN, DIVERSIFIED, and the diversity is what makes the
+        # longer list worth having. Taking the top seven by score returns seven
+        # answers to the same threat; `scout.diversify` penalises redundancy so
+        # the portfolio covers the observed core, the variants around it and
+        # the thing they have not shown. It may return FEWER than five rather
+        # than pad the list with decks nobody should prepare.
+        "recommended": scout.diversify(_distinct(scored), limit=top_n),
         "perPlayer": per_player,
         "considered": len(cards),
+        "brain": scout.BRAIN_VERSION,
         # Said out loud rather than left to be inferred from an empty list.
         "reason": (
             None if scored else
-            "no_history" if not spread else "no_evidence"
+            "no_history" if not threats else "no_evidence"
         ),
     }
 
 
 def _combined(red: list[dict], cards: list[_Candidate],
-              snap: dict | None) -> dict:
+              snap: dict | None, seeds: dict | None = None) -> dict:
     """The whole opposing roster as ONE spread, and what answers all of it.
 
     THE QUESTION A SCOUTING REPORT CAN ASK AND A MATCH PLAN CANNOT. A match
@@ -848,23 +1037,33 @@ def _combined(red: list[dict], cards: list[_Candidate],
     handed every considered deck on the roster at once.
     """
     decks: list[dict] = []
+    pooled: list[dict] = []
     for opp in red:
         own = (opp.get("decks") or [])[:OPPONENT_DECKS]
         _archetypes_for(own)
         decks.extend(own)
+        # The PROJECTION pools every deck, not the displayed six. See `_folder`.
+        pooled.extend(opp.get("decks") or [])
 
     spread = _spread(decks)
-    if not spread:
-        return {"players": len(red), "spread": [], "recommended": [],
-                "reason": "no_history"}
+    projection = _threats(pooled, seeds)
+    threats = projection["threats"]
+    if not threats:
+        return {"players": len(red), "spread": [], "threats": [],
+                "recommended": [], "reason": "no_history",
+                "brain": scout.BRAIN_VERSION}
 
-    scored = [row for row in (_score(c, spread, snap) for c in cards) if row]
+    scored = [row for row in (_score(c, threats, snap) for c in cards) if row]
     scored.sort(key=lambda r: (-r["score"], r["name"]))
     return {
         "players": len(red),
         "spread": spread,
-        "recommended": _distinct(scored)[:SCOUT_TOP_N],
+        "threats": threats,
+        "churn": projection["churn"],
+        "mass": projection.get("mass"),
+        "recommended": scout.diversify(_distinct(scored), limit=SCOUT_TOP_N),
         "reason": None if scored else "no_evidence",
+        "brain": scout.BRAIN_VERSION,
     }
 
 
@@ -884,7 +1083,10 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     Tags arrive already normalised by the caller (`app._route` runs every one
     through `cd.normalize_tag`), so nothing here reaches a query unvalidated.
     """
-    scout = not blue_tags
+    # `is_scout`, NOT `scout` — that name is the team_scout module now, and
+    # shadowing it here would make the brain unreachable from inside the one
+    # function that orchestrates it.
+    is_scout = not blue_tags
 
     blue = [_resolve(t, days) for t in blue_tags[:MAX_SQUAD]]
     red = [_resolve(t, days) for t in red_tags[:MAX_SQUAD]]
@@ -893,10 +1095,15 @@ def analyze(blue_tags: list[str], red_tags: list[str],
         _archetypes_for(p.get("decks") or [])
 
     snap = dcx._snap()
-    cards = _scout_candidates() if scout else _candidates(blue)
-    top_n = SCOUT_TOP_N if scout else TOP_N
+    # READ ONCE FOR THE WHOLE RUN. `seeds()` is a dictionary off the snapshot,
+    # so this is a reference rather than a copy and costs nothing — but asking
+    # per folder would re-enter `_snap()` ten times for an answer that cannot
+    # change inside one request.
+    seeds = dcx.seeds() or None
+    cards = _scout_candidates() if is_scout else _candidates(blue)
+    top_n = SCOUT_TOP_N if is_scout else TOP_N
 
-    folders = [_folder(opp, blue, cards, snap, top_n) for opp in red]
+    folders = [_folder(opp, blue, cards, snap, top_n, seeds) for opp in red]
 
     # A pool with nothing in it is the one failure the screen cannot recover
     # from, and it is worth naming ONCE at the top: every folder below it would
@@ -910,13 +1117,13 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     pool_reason = None
     if not cards:
         pool_reason = (
-            "no_matchup_data" if scout else
+            "no_matchup_data" if is_scout else
             "no_blue_history" if not any(p["decks"] for p in blue)
             else "no_blue_comfort"
         )
 
     out = {
-        "mode": "scout" if scout else "squads",
+        "mode": "scout" if is_scout else "squads",
         "blue": [_side_summary(p) for p in blue],
         "red": [_side_summary(p) for p in red],
         "folders": folders,
@@ -928,15 +1135,21 @@ def analyze(blue_tags: list[str], red_tags: list[str],
         "days": days,
         "limits": {
             "maxSquad": MAX_SQUAD, "topN": TOP_N, "scoutTopN": SCOUT_TOP_N,
+            "perPlayerTopN": PER_PLAYER_TOP_N,
+            "minRecommendations": scout.MIN_RECOMMENDATIONS,
             "minComfortGames": MIN_COMFORT_GAMES,
             "minOpponentDeckGames": MIN_OPPONENT_DECK_GAMES,
         },
+        # WHICH BRAIN PRODUCED THIS. Frozen into `coach_match_plans.engine` by
+        # the Coach Roster, so a plan made today can still be told apart from
+        # one made by the old scorer when phase 7 reads its results back.
+        "brain": scout.BRAIN_VERSION,
     }
     # THE ROSTER-WIDE READ, scout only. In a match plan every recommendation
     # belongs to a named teammate, so a squad-wide answer would be advice with
     # nobody to take it. See `_combined`.
-    if scout:
-        out["overall"] = _combined(red, cards, snap)
+    if is_scout:
+        out["overall"] = _combined(red, cards, snap, seeds)
     return out
 
 

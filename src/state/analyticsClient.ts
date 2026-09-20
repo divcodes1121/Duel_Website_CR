@@ -1553,11 +1553,81 @@ export interface TeamSpreadRow {
   share: number;
 }
 
+/**
+ * WHY A PROJECTED THREAT IS IN THE LIST.
+ *
+ * These three never convert into one another, and that is the single most
+ * important property of the whole payload. `OBSERVED` is a deck the opponent
+ * was actually seen playing; `VARIANT` is a real deck close enough to one of
+ * those to be a version of it; `INFERRED` is an archetype their behaviour
+ * implies. An inferred deck carries `observedCount: 0` and no `lastSeen`, so
+ * it cannot present itself as something that was watched happening.
+ */
+export type ThreatEvidence = 'OBSERVED' | 'VARIANT' | 'INFERRED';
+
+/** How much is actually known, in the order of how much that is. */
+export type ScoutConfidence = 'known' | 'likely' | 'possible' | 'speculative';
+
+/** Why one of OUR decks is on the list. */
+export type RecommendationType = 'COUNTER' | 'ROBUST' | 'CONTINGENCY';
+
+/**
+ * ONE DECK THE OPPONENT MIGHT BRING.
+ *
+ * The projection, not the history — `TeamFolder.theirDecks` and `spread` are
+ * still the history. Likelihoods across a folder's `threats` sum to 1.0.
+ */
+export interface TeamThreat {
+  /** Order-free deck identity, matching the server's deck hash. */
+  key: string;
+  cards: string[];
+  art: Record<string, WildForm>;
+  archetype: string;
+  name: string;
+  evidence: ThreatEvidence;
+  /** Share of the projected pool. The `threats` array sums to 1.0. */
+  likelihood: number;
+  /** Battles this deck was actually seen in. ZERO for anything generated. */
+  observedCount: number;
+  wins: number;
+  winRate: number | null;
+  /** NULL for anything generated — never a guessed date. */
+  lastSeen: string | null;
+  /** 1.0 for an observed deck, the card overlap for a variant, 0 for inferred. */
+  similarityToObserved: number;
+  /** For a VARIANT: the key of the observed deck it is a version of. */
+  basis: string | null;
+  basisName?: string;
+  /** For a VARIANT: shared cards out of eight. */
+  overlap?: number;
+  /** For an INFERRED entry: `own_archetype` or `meta`. */
+  why?: string;
+  confidence: ScoutConfidence;
+}
+
+/** How much this opponent deviates from their own most-played decks. */
+export interface TeamChurn {
+  /** Share of the projection that is NOT their observed decks. */
+  switch: number;
+  /** 1 - Herfindahl over their deck shares. Null with no history. */
+  diversity: number | null;
+  decks: number;
+  games: number;
+  /** `measured` once there is enough play; `thin` while the prior dominates;
+   *  `none` with nothing at all. A thin read produces a WIDER projection. */
+  evidence: 'measured' | 'thin' | 'none';
+}
+
 /** One candidate deck against one archetype of the opponent's spread. */
 export interface TeamMatchupRow {
   archetype: string;
   name: string;
   share: number;
+  /** The projected threat this row answers, and how much of the pool it is.
+   *  Absent only on a payload from a server that predates the coaching brain. */
+  threat?: string;
+  evidence?: ThreatEvidence;
+  likelihood?: number;
   /** NULL when no rung of the ladder had evidence. Withheld, never 50. */
   winRate: number | null;
   source: string | null;
@@ -1597,12 +1667,53 @@ export interface TeamRecommendation {
     /** What the practice tiebreak was worth here, in points. */
     bonus: number;
   } | null;
-  /** Spread-weighted expected win rate against this opponent. The headline. */
+  /** Spread-weighted expected win rate against this opponent. The headline.
+   *  IDENTICAL to `matchupValue`; kept under both names so a reader written
+   *  against the old payload is not broken by a rename carrying no new
+   *  information. */
   expectedWinRate: number;
   /** How much of their play that figure actually covers, as a percentage. */
   spreadCovered: number;
   score: number;
   matchups: TeamMatchupRow[];
+
+  /* ── THE COACHING BRAIN'S SEPARATED SIGNALS ──────────────────────────────
+   *
+   * All optional, because a deployment can be mid-upgrade: the frontend ships
+   * from a git push in a minute and `server/` is copied by hand, so there is
+   * always a window where the two halves disagree. A reader that requires
+   * these would blank the screen during it.
+   *
+   * THE POINT OF THEM IS THAT THEY STAY APART. One scalar could not express
+   * "they will probably bring this, and you should prepare something else" —
+   * likelihood was multiplied into the win rate and the two could never be
+   * read separately again. */
+
+  /** How well it does against the projection. Same number as `expectedWinRate`. */
+  matchupValue?: number;
+  /** Share of the projected threat mass this figure was measured over, 0..1.
+   *  `spreadCovered` is the same quantity as a percentage. */
+  threatCovered?: number;
+  /** What rungs of the evidence ladder those measurements came off, 0..1.
+   *  1.0 is exact pair records; 0.25 is the archetype matrix. */
+  evidenceStrength?: number;
+  /** How practised our player is on it, 0..1. NULL when nobody owns it —
+   *  a scouting row has no owner, and a zero would claim somebody has piloted
+   *  it none of the time. */
+  playerFit?: number | null;
+  /** The composite the list is ranked on, before the diversity penalty. */
+  recommendationScore?: number;
+  /** Similarity to the highest-ranked deck already chosen, 0..1. */
+  redundancy?: number;
+  /** `recommendationScore` after the redundancy penalty. What decided the order. */
+  adjustedScore?: number;
+  /** Why this deck is on the list — read from which KINDS of threat it beats. */
+  type?: RecommendationType;
+  confidence?: ScoutConfidence;
+  /** One sentence, assembled from the evidence fields above and nothing else. */
+  explanation?: string;
+  /** The brain that produced it. */
+  brain?: string;
   /**
    * SCOUT ONLY: this deck's own win rate across the whole field.
    *
@@ -1619,7 +1730,8 @@ export interface TeamRecommendation {
 export interface TeamPlayerOptions {
   owner: { tag: string; name: string };
   basis: TeamBasis;
-  /** Their own best decks against this opponent, best first, at most 3. */
+  /** Their own best decks against this opponent, best first, diversified,
+   *  at most `limits.perPlayerTopN`. */
   decks: TeamRecommendation[];
   /** How many of their decks could be scored at all. */
   considered: number;
@@ -1646,12 +1758,33 @@ export interface TeamFolder {
   };
   /** LEFT side of an opened folder: the decks they actually play. */
   theirDecks: ApiDeck[];
+  /** Their archetype breakdown — what they HAVE played. Still the history. */
   spread: TeamSpreadRow[];
-  /** The squad-wide top 3, deduplicated by deck. The folder card's face. */
+  /**
+   * THE PROJECTION — what they are likely to BRING.
+   *
+   * Their observed decks, real variants of them, and the archetypes their
+   * behaviour implies, as a distribution summing to 1.0. This is what
+   * `recommended` was scored against, published so the reasoning can be
+   * checked rather than taken on faith.
+   *
+   * Optional: a server predating the coaching brain sends no `threats`, and
+   * the screen falls back to drawing `spread` alone.
+   */
+  threats?: TeamThreat[];
+  /** How much this opponent deviates from their own most-played decks. */
+  churn?: TeamChurn;
+  /** The projection's split by evidence kind. Sums to 1.0. */
+  mass?: { observed: number; variant: number; inferred: number };
+  /** The squad-wide portfolio, deduplicated by deck — 5 to 7, diversified so
+   *  it covers the threat space rather than repeating its best answer. It may
+   *  be SHORTER than five rather than pad the list with weak options. */
   recommended: TeamRecommendation[];
+  /** The brain that produced this folder. */
+  brain?: string;
   /**
    * RIGHT side of the board: one row per blue player, in roster order, each
-   * holding THAT player's own top 3 against this opponent.
+   * holding THAT player's own diversified portfolio against this opponent.
    *
    * Every teammate appears even when they have nothing to offer — a roster of
    * five must not render as a roster of three — and `reason` says which of the
@@ -1686,8 +1819,13 @@ export type TeamMode = 'scout' | 'squads';
 export interface TeamOverall {
   players: number;
   spread: TeamSpreadRow[];
+  /** The whole roster pooled into ONE projection. Same shape as a folder's. */
+  threats?: TeamThreat[];
+  churn?: TeamChurn;
+  mass?: { observed: number; variant: number; inferred: number };
   recommended: TeamRecommendation[];
   reason: 'no_history' | 'no_evidence' | null;
+  brain?: string;
 }
 
 export interface TeamReport {
@@ -1712,9 +1850,19 @@ export interface TeamReport {
     topN: number;
     /** Absent on a server that predates the two modes. */
     scoutTopN?: number;
+    /** The per-teammate board's cap. Smaller than `topN` on purpose — the
+     *  squad-wide list answers "what should be practised", this answers "what
+     *  should Ravi bring", and ten teammates at seven rows each is a wall. */
+    perPlayerTopN?: number;
+    /** The floor a portfolio aims for. A folder may still return FEWER, and
+     *  that is the list refusing to pad itself rather than a fault. */
+    minRecommendations?: number;
     minComfortGames: number;
     minOpponentDeckGames: number;
   };
+  /** The coaching brain that produced this report. Absent on a server that
+   *  predates it, which is how a client tells the two payload shapes apart. */
+  brain?: string;
   /** Tags the server could not read, per side. Named so a paste can be fixed. */
   rejected: { blue: string[]; red: string[] };
   status: CounterStatus;

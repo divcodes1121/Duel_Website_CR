@@ -6,6 +6,7 @@ import {
   assistRows,
   assistSourceRef,
   coverNote,
+  REC_TYPE_NOTE,
   emptyReason,
   suggestedDecks,
   unapproved,
@@ -140,6 +141,22 @@ describe('what gets stored when a suggestion is approved', () => {
 describe('how much of the opponent a figure covers', () => {
   it('says so plainly, and says when it is thin', () => {
     expect(coverNote(rec(HOG, { spreadCovered: 80 }))).toBe('Covers 80% of what they actually play.');
+
+    /* THE SENTENCE FOLLOWS WHAT THE FIGURE IS MEASURED OVER.
+     *
+     * With the coaching brain the coverage is over the opponent's PROJECTED
+     * pool — their decks, real variants of them, and archetypes their play
+     * implies — and calling that "what they actually play" would present
+     * inference as observation, which is the one thing this feature exists
+     * not to do. `threatCovered` is the tell: a server predating the brain
+     * does not send it, and the original sentence is still exactly right. */
+    expect(coverNote(rec(HOG, { spreadCovered: 80, threatCovered: 0.8 }))).toBe(
+      'Covers 80% of their likely pool.',
+    );
+    expect(coverNote(rec(HOG, { spreadCovered: 21, threatCovered: 0.21 }))).toMatch(
+      /only 21% of their likely pool/,
+    );
+    expect(coverNote(rec(HOG, { spreadCovered: 80 }))).not.toMatch(/likely pool/);
     expect(coverNote(rec(HOG, { spreadCovered: 21 }))).toMatch(/only 21%.*unmeasured, not lost/);
   });
 
@@ -168,5 +185,34 @@ describe('the engine’s empty states', () => {
   it('has nothing to say when there is no problem', () => {
     expect(emptyReason(null, 'Rahul')).toBeNull();
     expect(emptyReason(undefined, 'Rahul')).toBeNull();
+  });
+});
+
+describe('the coaching brain row labels', () => {
+  it('names every recommendation type the server can send', () => {
+    /* A TRIPWIRE, deliberately. `team_scout.REC_*` is the vocabulary and this
+     * is the only place it is turned into words a coach reads; a type the
+     * server starts sending and this map has never heard of would render as
+     * the raw enum on screen. Bump both in the same change. */
+    expect(Object.keys(REC_TYPE_NOTE).sort()).toEqual(['CONTINGENCY', 'COUNTER', 'ROBUST']);
+  });
+
+  it('says what the deck is for without claiming an unmeasured tendency', () => {
+    for (const note of Object.values(REC_TYPE_NOTE)) {
+      expect(note).not.toMatch(/(always|never|prefers|tends to|likes|favou?rs)/i);
+      expect(note.length).toBeLessThan(60);
+    }
+  });
+
+  it('a row from a server without the brain carries neither type nor confidence', () => {
+    /* The two halves deploy separately — Vercel builds from a push in a
+     * minute and `server/` is copied by hand — so there is always a window
+     * where the client is ahead. A reader that REQUIRED these would blank the
+     * screen during it, which is why every one of them is optional. */
+    const old = rec(HOG);
+    expect(old.type).toBeUndefined();
+    expect(old.confidence).toBeUndefined();
+    expect(old.threatCovered).toBeUndefined();
+    expect(coverNote(old)).toContain('what they actually play');
   });
 });
