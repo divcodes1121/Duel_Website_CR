@@ -9,6 +9,7 @@ import { TIER_ADMIN_LABEL } from '../../state/tiers';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import { Dropdown } from '../ui/dropdown-menu-14';
 import { BadgeIcon } from '../Dashboard/icons';
+import { ConsoleSummary } from './ConsoleSummary';
 import styles from './AdminConsole.module.css';
 
 /** Thousands separators, so 3278 reads as 3,278 at a glance. */
@@ -286,38 +287,18 @@ export function AdminConsole() {
 
       {error && <p className={styles.error}>{error}</p>}
 
-      {/* --- accounts ------------------------------------------------------ */}
-      <div className={styles.stats}>
-        <Stat label="Accounts" value={String(users.length)} />
-        {/* The two are no longer the same product, so the tiles say so. A
-            trial is everything for three days EXCEPT Coach Assist; paid Pro is
-            the only tier that opens it. */}
-        <Stat label="Members" value={String(counts.trial)} note="no Coach Assist" tone="good" />
-        <Stat label="Pro" value={String(counts.pro)} note="paid · full access" tone="good" />
-        <Stat label="Free" value={String(counts.free)} />
-        <Stat
-          label="Signed in today"
-          value={String(counts.recent)}
-          note="last sign-in, not presence"
-        />
-        <Stat label="Device slots held" value={String(counts.devices)} note="max 2 per account" />
-        {/* THE COLLECTION, not the accounts. Everything else on this row counts
-            people who signed up; this counts the players the bot is polling,
-            which is what the whole analytics half is built on and is a far
-            bigger number. Searching an untracked tag enrols it here, so it is
-            also the figure that moves when the site is used. */}
-        {collection && (
-          <Stat
-            label="Tracked players"
-            value={nf.format(collection.trackedPlayers)}
-            note={
-              collection.global?.days
-                ? `${collection.global.days} days of battles stored`
-                : 'collected by the bot'
-            }
-          />
-        )}
-      </div>
+      {/* --- the summary, on the bionis dashboard --------------------------- */}
+      {/* WHAT THIS REPLACED: one flat row of tiles that mixed accounts with the
+          collection. The operational sections below are deliberately NOT
+          re-skinned — they are what tells a dead collector from a healthy one
+          writing into reclaimed pages, and each figure there carries reasoning
+          a summary cannot. */}
+      <ConsoleSummary
+        accounts={users.length}
+        counts={counts}
+        collection={collection}
+        analytics={analytics}
+      />
 
       {/* --- is the collection alive -------------------------------------- */}
       {/* FIRST, ABOVE EVERYTHING ELSE, because it is the question the console

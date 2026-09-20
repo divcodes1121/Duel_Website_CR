@@ -1608,3 +1608,9 @@ a.rosterTitle[aria-current='page'] {
 .flagLabel {
   font-weight: 700;
 }
+
+/* The roster overview is the bionis dashboard now; it brings its own column
+   and spacing, so this only gives it room to breathe inside the workspace. */
+.overview {
+  padding-bottom: 0.5rem;
+}

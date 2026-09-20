@@ -139,6 +139,16 @@ bad, poor, lazy, behind, failing* from both maps. `not_collected` is
 **withheld** when the tracked set is unknown — absence of knowledge is not
 evidence.
 
+> **Presentation changed 2026-09-20** (the shared dashboard layout). The
+> roster overview now leads with a ring, a metric grid, two charts and three
+> insight cards. **Every contract in 2.3 and 2.4 was re-verified in a
+> browser against the new screen**: the ring shows the coach's own coverage
+> as a fraction (`n/m active players have nothing outstanding`), never a
+> score; a check asserts the printed value matches `^\d+/\d+$` and that no
+> score, readiness or grade wording appears anywhere on the page; the order
+> is still the roster's own. `coachOverview.ts` was not modified, so the
+> tests behind these contracts still describe exactly what they described.
+
 ### 2.5 Results do not feed recommendations
 
 The learning loop is **read-only by design**. Nothing in `coachResults.ts` or

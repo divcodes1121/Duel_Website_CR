@@ -1,0 +1,643 @@
+/* BIONIS DASHBOARD — the stylesheet the registry never shipped.
+ *
+ * The source is Tailwind utilities end to end and this project has no
+ * Tailwind, so every one of them is written out here. Classes are prefixed
+ * `bd-` and NOT hashed by CSS Modules, matching `glass-dock.css`,
+ * `footer-5.css` and `continuous-pagination.css`.
+ *
+ * Colour is read from `index.css`'s tokens. Tone is a `data-tone` attribute
+ * resolved once, at the bottom, so nothing in the TSX branches on the theme.
+ * The three hue STEPS matter here and are easy to get wrong: `--solid-*` is a
+ * fill that carries white text, `--hue-*` is ink at body size, and a bar is a
+ * bare graphic mark that only needs 3:1 — so fills take `--solid-*` and text
+ * takes `--hue-*`.
+ */
+
+.bd-root {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  min-width: 0;
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+
+.bd-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bd-headerText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bd-title {
+  margin: 0;
+  min-width: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.bd-subtitle,
+.bd-cardNote {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.bd-headerControl {
+  flex: none;
+}
+
+/* ── hero ───────────────────────────────────────────────────────────────── */
+
+.bd-hero {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.bd-heroText {
+  display: flex;
+  min-width: min(20rem, 100%);
+  flex: 1 1 20rem;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.bd-heroHeading {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.bd-heroBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+/* A pill in the tone's wash with the tone's ink — the source's
+   `bg-(--live)/10 text-(--live)`, expressed in tokens. */
+.bd-heroBadge {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 12px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.bd-heroCopy {
+  margin: 0;
+  max-width: 34rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.bd-heroFigure {
+  display: flex;
+  flex: 1 1 12rem;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── the ring ───────────────────────────────────────────────────────────── */
+
+.bd-donut {
+  display: flex;
+  margin: 0;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bd-donutSvg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.bd-donutTrack {
+  fill: none;
+  stroke: var(--surface-sunken);
+  stroke-width: 12;
+}
+
+.bd-donutFill {
+  fill: none;
+  stroke-width: 12;
+  transition: stroke-dasharray var(--dur-3) var(--ease);
+}
+
+.bd-donutValue {
+  fill: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.85rem;
+  font-weight: 700;
+}
+
+.bd-donutCaption {
+  max-width: 15rem;
+  text-align: center;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* ── metric cards ───────────────────────────────────────────────────────── */
+
+.bd-metricGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 40rem) {
+  .bd-metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 72rem) {
+  .bd-metricGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.bd-metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.3rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 0.85rem 0.95rem;
+}
+
+.bd-metricHead {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bd-metricIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.bd-metricIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.bd-metricLabel {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.bd-metricValue {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.bd-metricDelta {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.bd-metricNote {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* ── chart cards ────────────────────────────────────────────────────────── */
+
+.bd-chartGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 72rem) {
+  .bd-chartGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.bd-chartCard,
+.bd-insight {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1.1rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.bd-chartCard {
+  background: var(--surface);
+}
+
+.bd-cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bd-cardHeadText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.bd-cardTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.bd-chartBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.bd-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  padding: 0.35rem 0.6rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-muted);
+}
+
+.bd-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ── bars ───────────────────────────────────────────────────────────────── */
+
+.bd-bars {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.bd-bar {
+  display: grid;
+  align-items: center;
+  gap: 0.6rem;
+  /* minmax(0, …) on the label or a long one blows the grid out — the `1fr`
+     trap this project has hit three times. */
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr) auto;
+}
+
+.bd-barLabel {
+  overflow: hidden;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bd-barTrack {
+  overflow: hidden;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+}
+
+.bd-barFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width var(--dur-3) var(--ease);
+}
+
+.bd-barValue {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── columns ────────────────────────────────────────────────────────────── */
+
+.bd-columns {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 0.5rem;
+  min-height: 11rem;
+}
+
+.bd-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.bd-columnValue {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bd-columnTrack {
+  display: flex;
+  width: 100%;
+  flex: 1;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--surface-sunken);
+}
+
+/* A ZERO MUST DRAW NOTHING. The floor keeps a small non-zero value visible,
+   but applied to zero it paints a bar where there is no data — the same fault
+   a round line-cap causes on a zero-length ring. */
+.bd-columnFill {
+  display: block;
+  width: 100%;
+  min-height: 3px;
+  border-radius: 8px;
+  transition: height var(--dur-3) var(--ease);
+}
+
+.bd-columnFill[data-empty] {
+  min-height: 0;
+}
+
+.bd-columnLabel {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.74rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+/* ── insight cards ──────────────────────────────────────────────────────── */
+
+.bd-insightGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 72rem) {
+  .bd-insightGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.bd-insightTitle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The source's `size-7 rounded-md bg-(--insight-x) text-white`. */
+.bd-insightIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 8px;
+  color: var(--on-solid);
+}
+
+.bd-insightIcon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.bd-insightBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bd-insightRow {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.7rem;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  padding: 0.55rem 0.7rem;
+}
+
+.bd-rowIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.bd-rowIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.bd-rowText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bd-rowTitle {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.bd-rowNote {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* ── readout list ───────────────────────────────────────────────────────── */
+
+.bd-readout {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  padding: 0.6rem 0.75rem;
+}
+
+.bd-readoutRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.3rem 0;
+}
+
+.bd-readoutLabel {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.bd-readoutValue {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── tone ───────────────────────────────────────────────────────────────── *
+ * Resolved once. FILLS take `--solid-*` (graded to hold white); INK takes
+ * `--hue-*` (graded to hold 4.5:1 at body size). Mixing the two up is this
+ * project's most repeated colour bug.
+ */
+
+/* A BAR IS A BARE GRAPHIC MARK, SO IT TAKES THE `--hue-*` STEP, NOT
+   `--solid-*`. Measured against the track on dark: `--solid-violet` is
+   2.40:1 and `--solid-green` 3.11:1 — the fill step is graded to carry WHITE
+   TEXT, which makes it darker than the surface it sits on. `--hue-*` is
+   graded as ink and clears 3:1 in both themes. This is the third time this
+   project has picked the wrong hue step. */
+.bd-barFill[data-tone='info'],
+.bd-columnFill[data-tone='info'] { background: var(--hue-violet); }
+.bd-barFill[data-tone='good'],
+.bd-columnFill[data-tone='good'] { background: var(--hue-green); }
+.bd-barFill[data-tone='warn'],
+.bd-columnFill[data-tone='warn'] { background: var(--warning); }
+.bd-barFill[data-tone='bad'],
+.bd-columnFill[data-tone='bad'] { background: var(--hue-red); }
+/* NOT `--border-strong`: that is a BORDER colour and measures 2.8:1 against
+   the track on light, under the 3:1 a bare graphic mark needs — and it reads
+   as the empty track rather than as a value. A mix of the ink into the track
+   is symmetric in both themes (5.0:1 dark, 3.2:1 light). */
+.bd-barFill[data-tone='neutral'],
+.bd-columnFill[data-tone='neutral'] {
+  background: color-mix(in srgb, var(--text-muted) 45%, var(--surface-sunken));
+}
+
+.bd-donut[data-tone='info'] .bd-donutFill { stroke: var(--hue-violet); }
+.bd-donut[data-tone='good'] .bd-donutFill { stroke: var(--hue-green); }
+.bd-donut[data-tone='warn'] .bd-donutFill { stroke: var(--warning); }
+.bd-donut[data-tone='bad'] .bd-donutFill { stroke: var(--hue-red); }
+.bd-donut[data-tone='neutral'] .bd-donutFill { stroke: color-mix(in srgb, var(--text-muted) 45%, var(--surface-sunken)); }
+
+.bd-heroBadge[data-tone='good'] { background: var(--green-wash); color: var(--hue-green); }
+.bd-heroBadge[data-tone='info'] { background: var(--violet-wash); color: var(--hue-violet); }
+.bd-heroBadge[data-tone='warn'] { background: var(--neutral-wash); color: var(--warning); }
+.bd-heroBadge[data-tone='bad'] { background: var(--red-wash); color: var(--hue-red); }
+.bd-heroBadge[data-tone='neutral'] { background: var(--neutral-wash); color: var(--text); }
+
+.bd-rowIcon[data-tone='good'],
+.bd-readoutValue[data-tone='good'],
+.bd-metric[data-tone='good'] .bd-metricDelta { color: var(--hue-green); }
+.bd-rowIcon[data-tone='warn'],
+.bd-readoutValue[data-tone='warn'],
+.bd-metric[data-tone='warn'] .bd-metricDelta { color: var(--warning); }
+.bd-rowIcon[data-tone='bad'],
+.bd-readoutValue[data-tone='bad'],
+.bd-metric[data-tone='bad'] .bd-metricDelta { color: var(--hue-red); }
+.bd-rowIcon[data-tone='info'],
+.bd-readoutValue[data-tone='info'],
+.bd-metric[data-tone='info'] .bd-metricDelta { color: var(--hue-violet); }
+.bd-rowIcon[data-tone='neutral'],
+.bd-readoutValue[data-tone='neutral'],
+.bd-metric[data-tone='neutral'] .bd-metricDelta { color: var(--text); }
+
+/* The insight card's tint: the source's
+   `bg-[linear-gradient(180deg,rgb(x)/0.08_0%,transparent_42%)]`. The solid
+   goes on the icon tile, the wash on the card. */
+.bd-insight[data-tone='info'] {
+  background: linear-gradient(180deg, var(--violet-wash) 0%, transparent 42%);
+}
+.bd-insight[data-tone='info'] .bd-insightIcon { background: var(--solid-violet); }
+
+.bd-insight[data-tone='good'] {
+  background: linear-gradient(180deg, var(--green-wash) 0%, transparent 42%);
+}
+.bd-insight[data-tone='good'] .bd-insightIcon { background: var(--solid-green); }
+
+.bd-insight[data-tone='warn'] {
+  background: linear-gradient(180deg, var(--neutral-wash) 0%, transparent 42%);
+}
+/* Dark ink on amber, light ink on the deep orange light-mode value — which
+   is exactly what `--bg-1` is in each theme. */
+.bd-insight[data-tone='warn'] .bd-insightIcon { background: var(--warning); color: var(--bg-1); }
+
+.bd-insight[data-tone='bad'] {
+  background: linear-gradient(180deg, var(--red-wash) 0%, transparent 42%);
+}
+.bd-insight[data-tone='bad'] .bd-insightIcon { background: var(--solid-red); }
+
+.bd-insight[data-tone='neutral'] {
+  background: var(--surface);
+}
+.bd-insight[data-tone='neutral'] .bd-insightIcon { background: color-mix(in srgb, var(--text-muted) 45%, var(--surface-sunken)); }
+
+/* Glow is dark-mode only and static — `--glow-core`/`--glow-halo` are 0% on
+   light, so this one declaration serves both themes. */
+.bd-insightIcon {
+  box-shadow: 0 0 10px color-mix(in srgb, currentColor var(--glow-core), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bd-barFill,
+  .bd-columnFill,
+  .bd-donutFill {
+    transition: none;
+  }
+}
