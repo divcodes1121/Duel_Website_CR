@@ -139,7 +139,7 @@ bad, poor, lazy, behind, failing* from both maps. `not_collected` is
 **withheld** when the tracked set is unknown — absence of knowledge is not
 evidence.
 
-> **Presentation changed 2026-09-20** (the shared dashboard layout). The
+> **Presentation changed 2026-09-20** (the shared dashboard layout, live as `762a8b6`). The
 > roster overview now leads with a ring, a metric grid, two charts and three
 > insight cards. **Every contract in 2.3 and 2.4 was re-verified in a
 > browser against the new screen**: the ring shows the coach's own coverage
