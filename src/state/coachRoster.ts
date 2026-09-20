@@ -133,13 +133,17 @@ export function sortRoster(players: RosterPlayer[]): RosterPlayer[] {
  * written without its '#', which would otherwise start a second fragment. */
 
 export const COACH_ROUTE = '#/admin/coach';
-export const COACH_SECTIONS = ['overview', 'battles', 'decks', 'cards', 'opponents'] as const;
+/* The route key `decks` is the player's BATTLE HISTORY and predates the
+   arsenal; it keeps its key so old links still open, and its label says which
+   of the two deck screens it is. */
+export const COACH_SECTIONS = ['overview', 'arsenal', 'battles', 'decks', 'cards', 'opponents'] as const;
 export type CoachSection = (typeof COACH_SECTIONS)[number];
 
 export const SECTION_LABEL: Record<CoachSection, string> = {
   overview: 'Overview',
+  arsenal: 'Arsenal',
   battles: 'Battles',
-  decks: 'Decks',
+  decks: 'Decks played',
   cards: 'Cards',
   opponents: 'Opponents',
 };

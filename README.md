@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Coach Roster** | **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 LIVE 2026-09-20 (`ed04b98`, server by scp first):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. Later phases add the deck arsenal, opponent scout, recommendations, match plans and outcomes. See [Coach Roster](#coach-roster-admin-only-experimental) |
+| **Coach Roster** | **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 LIVE 2026-09-20 (`ed04b98`, server by scp first):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. **Phase 3 BUILT, NOT DEPLOYED (2026-09-20):** the Deck Arsenal — the decks a coach has approved for a player, built by hand, pasted as a link or taken from their battles, ranked and tagged, on 004's `coach_decks` plus one column from 005. Later phases add the opponent scout, recommendations, match plans and outcomes. See [Coach Roster](#coach-roster-admin-only-experimental) |
 | **One dropdown, everywhere** | **LIVE 2026-09-20 (`c28acba`).** Every select-style control — 13 of them, from the card library's filters to onboarding's country list — is the vendored watermelon.sh `dropdown-menu-14`, ported by hand: an icon tile, the value over a caption and an up/down chevron; a panel in the site's theme with a heading, a line of explanation per option and a tick on the chosen one. It is a real listbox with the keyboard a native select has (arrows, Home/End, type-ahead, Esc) plus a search field for long lists, anchored to its trigger, flipping above when there is no room below and never leaving the viewport. `SeasonMenu` is a thin wrapper over it now. Verified in a browser on real data in both themes and at 390; the admin role picker is the one not seen in a browser |
 | **2v2 pairs as strips** | **LIVE 2026-09-19 (`9053943`).** Deck A pinned to the left edge, deck B to the right, each deck's eight cards on one line with its label, elixir and two actions on the line above. A pair went from a ~300px block to a 128px strip at 1440 — about seven to a screen instead of one and a half. Stacks below 62rem, still eight across. Verified 20/20 in a browser, both themes, 1440/1024/390 |
 | **Full contrast, everywhere** | **swept 2026-09-19.** A browser probe read every visible text node on 18 routes, five home sections and two dialogs in both themes, compositing each one's ink with the opacity of every ancestor — which is how text goes grey without its `color` saying so. The fixes: date chips past a player's stored history (six screens) were faded to 55% and are full ink with a dashed edge; the 2nd/3rd place ranks were the gold chip at reduced opacity and are a tint and an outline with full-contrast digits; the top bar's Search label, the banner copy and two placeholders. Left deliberately: disabled controls, the filmstrip's depth fade, the field book's sepia paper. **2v2** lost its three summary figures and its footnote, and its decks are capped at 22rem (cards 123 → 85px). **Pager cells are 2.5rem max**, not upstream's 4rem |
@@ -12137,7 +12137,7 @@ report, Coach Assist's `suggest`, Team Analysis's scorer, the deck tuner — and
 adds only the coaching layer: the roster, and (in later phases) each player's
 deck arsenal, match plans and results.
 
-**Phase 1 is live: the roster, the switcher, and a basic profile. Phase 2 — the player intelligence — is live.**
+**Phase 1 (roster) and Phase 2 (player intelligence) are live. Phase 3 — the deck arsenal — is built and not yet deployed.**
 
 ### Where the data lives, and what enforces "admin-only"
 
@@ -12271,6 +12271,61 @@ reads its Supabase settings and can reach it; the CORS preflight from
 `deckkies.com` admits `X-Coach-Token`; existing routes unchanged. The served
 bundle carries the route in the main chunk (the client module is shared) and
 every screen string in the lazy Coach Roster chunk.
+
+### Phase 3: the deck arsenal (built 2026-09-20, not deployed)
+
+**An arsenal is a judgement, not a history.** The Decks-played tab already
+lists every deck the player has actually run — often fifty, most of them once.
+That is evidence. The Arsenal is the handful the coach considers them ready to
+take into a match: named, ranked, rated for comfort, tagged, annotated. The two
+tabs are named apart for exactly this reason, and nothing is ever copied from
+one to the other automatically — a historical deck enters only by being
+chosen, and its source records that it came from one.
+
+**No new table.** Migration 004 already held the arsenal: the cards with an
+order-free key, the name, archetype, comfort 1–5, tags, active/archived, the
+source (`manual` / `link` / `history` / `coach_assist` / `variant`), a
+`source_ref` and notes. **005 adds one column, `sort_order`** — the coach's own
+ranking, which nothing else in the schema could express: comfort is how well
+they play a deck, `updated_at` is when it was last edited, and a Primary tag
+marks one deck rather than ordering the rest. No policy change (the ownership
+policy is a table policy and covers new columns), no grant change (004 grants
+on the table, and a table grant extends to later columns — a column-level one
+would not), no new index. Verified 9/9 in production before any UI was built.
+
+**Three ways a deck gets in, and the record of which.** Built card by card,
+pasted as a Clash Royale deck link, or taken from a deck they have actually
+played — and the source is stored, because phases 4 and 5 must be able to tell
+a coach's choice from an engine's suggestion, which is impossible to
+reconstruct afterwards. Taking one from their battles opens the editor
+pre-filled rather than adding it: nothing enters unreviewed.
+
+**It does not use the builder's card library, and that is not duplication.**
+`CardLibrary`, `CardGrid`, `useFilteredCards` and `CardFilterTabs` all read
+*and write* `useBuilderStore` — `selectedSlot`, `sets`, `assignCard` — so
+mounting them here would make editing a coaching deck mutate the account's own
+saved duel decks, which persist and sync across devices. What is reused is
+everything beneath that coupling: `CardTile`, the pure `filterCards` /
+`sortCards`, the catalogue, the deck-link parser, `DeckActions` and `CardArt`.
+The eight slots are local state.
+
+**The duplicate rule is the table's, said early.** `coach_deck_key` is the
+sorted cards joined by commas, and `deckKey()` mirrors it exactly — so the same
+eight cards in another order are refused by NAME (“already in this arsenal as
+Hog 2.6”) instead of arriving as a Postgres 23505. A different player may of
+course hold the same deck.
+
+**Verified 40/40 in a browser**, both themes and at 390px, and two of those
+checks are fixes rather than passes. The deck's Archive and Remove shared their
+names with the player's own controls one level up, which is ambiguous to a
+reader and to a screen reader — they are “Archive deck” and “Remove deck…”
+now, and a check asserts no two controls on the screen share a name. And
+restoring the *last* archived deck emptied the archived view **and** removed
+the button that switched back, stranding the reader; the view now falls back
+on its own. Coaching chunk 11.85 → 19.02 kB gzip, main bundle +0.02.
+
+**Not built, deliberately:** no opponent scout, no recommendations, no
+similar-deck generation, no match plans, no outcomes. Those are phases 4 to 8.
 
 ---
 

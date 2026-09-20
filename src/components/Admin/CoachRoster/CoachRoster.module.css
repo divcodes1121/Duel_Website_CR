@@ -1029,3 +1029,351 @@
     flex-basis: 100%;
   }
 }
+
+/* ── phase 3: the deck arsenal ───────────────────────────────────────────── */
+
+.arsenal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filterRow .input {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+/* Tags are free text, so a chip is sized by its word and never truncated —
+   a coach's own label clipped to "Anti-Beat…" is worse than a wrapped row. */
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.tagChip {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+span.tagChip {
+  cursor: default;
+}
+
+.tagChip[data-on] {
+  border-color: var(--accent-select-edge);
+  background: var(--accent-select-wash);
+}
+
+/* Primary and Backup are roles rather than labels, so they carry the one
+   piece of colour in the row. */
+.tagChip[data-role] {
+  border-color: var(--hue-violet);
+  color: var(--hue-violet);
+}
+
+.tagAdd {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.tagAdd .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.arsenalList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.arsenalItem {
+  border: 1px solid var(--glass-stroke);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 0.7rem 0.8rem;
+}
+
+/* An archived deck is dimmed by its GROUND, never by its type: the contrast
+   sweep's rule is that text stays full ink in both themes. */
+.arsenalItem[data-archived] {
+  background: var(--surface-sunken);
+  border-style: dashed;
+}
+
+.arsenalHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.rankCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.rankButton {
+  width: 1.6rem;
+  height: 1.3rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rankButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rankNumber {
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.arsenalMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 12rem;
+  flex: 1 1 14rem;
+  font-size: 0.82rem;
+}
+
+.deckNameButton {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--glass-stroke);
+  text-underline-offset: 3px;
+}
+
+.arsenalDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--glass-stroke);
+  font-size: 0.82rem;
+}
+
+/* comfort */
+
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.82rem;
+}
+
+.star {
+  padding: 0 0.1rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.35;
+}
+
+.star[aria-pressed='true'] {
+  opacity: 1;
+  color: var(--accent-gold);
+}
+
+.starsStatic {
+  color: var(--accent-gold);
+  letter-spacing: 0.05em;
+}
+
+/* ── the deck editor ─────────────────────────────────────────────────────── */
+
+.editorDialog {
+  width: min(64rem, 96vw);
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.slotRow {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.slot {
+  aspect-ratio: 302 / 363;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 1.2rem;
+  cursor: default;
+  overflow: hidden;
+}
+
+.slot[data-filled] {
+  border-style: solid;
+  border-color: var(--accent-select-edge);
+  cursor: pointer;
+}
+
+.slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.slotNote {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.editorGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.editorFields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.editorPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.pickerHead {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pickerHead .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pickerType.pickerType {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+/* The picker is the ONE scroll region in this dialog. `flex: none` because a
+   scrolling child of a flex column is the one the flexbox crushes — the trap
+   this project has now hit four times. */
+.pickerGrid {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
+  gap: 0.3rem;
+  max-height: 22rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+/* ── taking a deck from their battles ────────────────────────────────────── */
+
+.pickerDialog {
+  width: min(44rem, 96vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.historyList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.historyPick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.historyPick:hover {
+  border-color: var(--accent-select-edge);
+}
+
+@media (max-width: 62rem) {
+  .editorGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pickerGrid {
+    max-height: 16rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .arsenalHead {
+    gap: 0.5rem;
+  }
+
+  .rankCol {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    order: 2;
+  }
+}

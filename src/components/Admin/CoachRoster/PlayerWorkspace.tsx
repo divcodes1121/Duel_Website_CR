@@ -26,6 +26,7 @@ import { ReadingState } from '../../Analytics/ReadingState';
 import { RecentBattles } from '../../Analytics/RecentBattles';
 import { PlayerCards } from '../../Analytics/PlayerCards';
 import { DeckActions } from '../../DeckActions/DeckActions';
+import { ArsenalTab } from './ArsenalTab';
 import { DailyChart, FormStrip, ShareBars } from './IntelCharts';
 import { CoachControls, DeckStrip, PlayerHeader, PlayerRecord } from './PlayerOverview';
 import styles from './CoachRoster.module.css';
@@ -155,6 +156,10 @@ export function PlayerWorkspace({
       {section === 'overview' && (
         <OverviewTab report={report} reportError={reportError} intel={intel} intelError={intelError} loading={intelLoading} player={player} />
       )}
+      {/* The arsenal is the coach's own list and does not depend on the
+          intelligence read — it renders whether or not the battles answered.
+          The intel is passed only so a deck can be taken FROM their history. */}
+      {section === 'arsenal' && <ArsenalTab player={player} intel={intel} />}
       {section === 'battles' && (
         <div className={styles.embed}>
           <RecentBattles tag={tag} />

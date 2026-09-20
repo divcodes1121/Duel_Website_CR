@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  COACH_SECTIONS,
   RosterError,
   cleanNewPlayer,
   coachHref,
@@ -91,8 +92,8 @@ describe('the route', () => {
     expect(parseCoachRoute(href)).toEqual({ tag: '#Y022GRCJQ', section: 'overview' });
   });
 
-  it('keeps every Phase 2 section through the hash', () => {
-    for (const section of ['overview', 'battles', 'decks', 'cards', 'opponents'] as const) {
+  it('keeps every section through the hash, arsenal included', () => {
+    for (const section of COACH_SECTIONS) {
       expect(parseCoachRoute(coachHref('#Y022GRCJQ', section)).section).toBe(section);
     }
   });
