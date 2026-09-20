@@ -1540,3 +1540,71 @@ button.metRow {
   border-color: var(--accent-select-edge);
   background: var(--accent-select-wash);
 }
+
+/* ── phase 8: the roster overview ────────────────────────────────────────── */
+
+/* The sidebar heading is a link to the overview now, so it takes a link's
+   affordances without becoming a button. */
+a.rosterTitle {
+  color: var(--text);
+  text-decoration: none;
+}
+
+a.rosterTitle:hover,
+a.rosterTitle[aria-current='page'] {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rosterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+}
+
+.rosterLink {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.rosterLink:hover .deckName {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rosterFigures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.9rem;
+  font-size: 0.82rem;
+}
+
+/* A flag is a fact and an action on one line: the fact carries the weight,
+   the action stays quiet, and neither is coloured — none of this is a
+   warning about the player. */
+.flagList {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0 0;
+  border-top: 1px solid var(--glass-stroke);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.flagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+}
+
+.flagLabel {
+  font-weight: 700;
+}

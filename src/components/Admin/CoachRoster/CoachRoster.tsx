@@ -16,6 +16,7 @@ import { Dropdown } from '../../ui/dropdown-menu-14';
 import { TeamIcon } from '../../Dashboard/icons';
 import { AddPlayerDialog } from './AddPlayerDialog';
 import { PlayerWorkspace } from './PlayerWorkspace';
+import { RosterOverview } from './RosterOverview';
 import styles from './CoachRoster.module.css';
 
 /**
@@ -77,13 +78,10 @@ export function CoachRoster() {
   const archived = useMemo(() => players.filter((p) => !p.isActive), [players]);
   const selected = players.find((p) => p.playerTag === tag) ?? null;
 
-  /* No player in the URL: open on the first active one, so the page is never
-     an empty frame when there is a roster to show. `replace`, so the bare
-     route does not become a Back-button step. */
-  useEffect(() => {
-    if (!loaded || tag || !active[0]) return;
-    window.location.replace(coachHref(active[0].playerTag, section));
-  }, [loaded, tag, active, section]);
+  /* THE BARE ROUTE IS THE ROSTER OVERVIEW NOW. It used to jump to the first
+     active player, because an empty frame was the only alternative; there is
+     a real screen there since phase 8, and jumping past it would hide the one
+     view that answers "where is the work". */
 
   if (!resolved) {
     return (
@@ -141,7 +139,12 @@ export function CoachRoster() {
       <div className={styles.body}>
         <aside className={styles.roster} aria-label="My players">
           <div className={styles.rosterHead}>
-            <span className={styles.rosterTitle}>My players</span>
+            {/* The way back to the whole roster. Without it, opening a player
+                is a one-way door: the sidebar lists players and nothing on
+                the screen points at the overview. */}
+            <a className={styles.rosterTitle} href={COACH_ROUTE} aria-current={!tag ? 'page' : undefined}>
+              My players
+            </a>
             <span className={styles.rosterCount}>{active.length}</span>
           </div>
 
@@ -231,6 +234,9 @@ export function CoachRoster() {
               </a>
             </section>
           )}
+
+          {/* No player in the URL: the whole roster, not an empty frame. */}
+          {loaded && !tag && <RosterOverview players={players} />}
 
           {selected && (
             <PlayerWorkspace
