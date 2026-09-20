@@ -12328,11 +12328,11 @@ on its own. Coaching chunk 11.85 → 19.02 kB gzip, main bundle +0.02.
 similar-deck generation, no match plans, no outcomes. Those are phases 4 to 8.
 
 **No server change**, so this shipped as one push; the analytics route count
-stays at 23. The one thing the local checks could not reach is the real
-Supabase path — with no Supabase configured locally the browser run used the
-in-memory repository, so RLS, the generated deck key and the table's own
-duplicate refusal are covered by unit tests and by 005's production verify,
-not by a live round trip.
+stays at 23. The local browser run used the in-memory repository, because this
+checkout has no Supabase — so the real path (RLS, the generated deck key, the
+table's own duplicate refusal and `sort_order` surviving a reload) was proved
+by the account holder's smoke test against production on 2026-09-20, which
+passed.
 
 ---
 
