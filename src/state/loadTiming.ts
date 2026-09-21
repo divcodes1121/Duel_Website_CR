@@ -50,12 +50,14 @@ const SEEDS: Record<string, number> = {
   'deck-counter': 16_000,
   'deck-lab': 12_000,
   'counter-lab': 16_000,
-  /* THE LONGEST READ ON THE SERVICE, and the seed says so rather than letting
-     the bar sprint to 90% and sit there. One run resolves up to sixteen
-     players — each a report, and for an untracked tag two live API calls — and
-     then profiles every deck the blue squad plays. The seed is a starting
-     guess only; the median of the last five real runs replaces it. */
-  teams: 45_000,
+  /* WAS 45 s, BECAUSE THE READ WAS: a 5v5 measured 150-210 s until the
+     cluster index (2026-09-21), which profiles the squad's decks from a
+     precomputed file instead of re-reading ~100,000 matchup rows per deck.
+     Measured after, on the VPS: 5v5 4.6 s cold / 0.5 s warm, 12v12 ~8 s with
+     every player cold. A 45 s seed against that would crawl the bar to 10%
+     and then jump. Still only a starting guess — the median of the last five
+     real runs replaces it. */
+  teams: 8_000,
   /* THE TWO LAZY CHUNKS, WHICH ARE NOT READS AND MUST NOT SHARE A READ'S KEY.
      These pace the Suspense fallback while a screen's JavaScript downloads —
      ~13 kB for Team Analysis and ~2 kB for 2v2 Decks, both well under a second

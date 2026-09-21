@@ -66,6 +66,13 @@ server/.duo_pairs.db
 server/.duo_pairs.db-wal
 server/.duo_pairs.db-shm
 
+# The cluster index (`cluster_index.py --build`) — derived from battles.db,
+# ~700 MB on production, rebuilt every four hours by royalweb-cluster.timer.
+# Never source. It holds deck hashes only, no player tags.
+server/.cluster_index.db
+server/.cluster_index.db-wal
+server/.cluster_index.db-shm
+
 # Phase 2 feature cache — derived data, regenerable via `--dump` (8.7 MB)
 server/ml/results/*.jsonl.gz
 

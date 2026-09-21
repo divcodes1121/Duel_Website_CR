@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-21-team-analysis-12',
+    date: '2026-09-21',
+    kind: 'improved',
+    title: 'Team Analysis takes twelve a side, and answers in seconds',
+    body: [
+      'Paste up to twelve players on each side. A full match plan used to take two or three minutes to work out; it now takes a few seconds.',
+      'Saved analyses follow your account, so a board you save on your computer opens on your phone.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+    needs: 'trial',
+  },
+  {
     id: '2026-09-20-dropdowns',
     date: '2026-09-20',
     kind: 'improved',

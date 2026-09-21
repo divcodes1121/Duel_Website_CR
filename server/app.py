@@ -500,6 +500,15 @@ class Handler(BaseHTTPRequestHandler):
                 # is enabled but has never completed a run" is invisible from
                 # every other angle, and this is the probe an operator checks.
                 out["recruit"] = recruit.state()
+                # THE CLUSTER INDEX'S AGE, for the same reason: a stopped
+                # rebuild timer does not break anything, it just lets every
+                # near-identical-deck figure quietly age. Build time, counts and
+                # an age in seconds — never the source path.
+                try:
+                    import cluster_index
+                    out["clusterIndex"] = cluster_index.status()
+                except Exception:  # noqa: BLE001 - an accelerator's status must not fail the probe
+                    out["clusterIndex"] = {"available": False}
                 return self._send(out)
 
             if path == "/api/analytics/meta":

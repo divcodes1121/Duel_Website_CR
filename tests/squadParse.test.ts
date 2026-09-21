@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -231,11 +233,18 @@ describe('parseSquad — empty', () => {
 });
 
 describe('readiness', () => {
+  /* TWO SUFFIX CHARACTERS FROM THE WHOLE TAG ALPHABET. This used to index
+     `'0289PYLQGRJC'[i]` — twelve characters — so the thirteenth player became
+     "#Y022GRCJundefined", which the parser rightly refused, and a test for
+     "one over a cap of twelve" measured a squad of twelve. Distinct and legal
+     for any n up to 196. */
+  const TAG_ALPHABET = '0289PYLQGRJCUV';
   const squad = (n: number) =>
     parseSquad(
-      Array.from({ length: n }, (_, i) => `#${'Y022GRCJQ'.slice(0, 8)}${'0289PYLQGRJC'[i]}`).join(
-        '\n',
-      ),
+      Array.from(
+        { length: n },
+        (_, i) => `#Y022GRCJ${TAG_ALPHABET[i % 14]}${TAG_ALPHABET[Math.floor(i / 14)]}`,
+      ).join('\n'),
     );
 
   it('needs both sides', () => {
@@ -251,12 +260,13 @@ describe('readiness', () => {
     expect(squadProblem(over, squad(1))).toContain(String(MAX_SQUAD));
   });
 
-  it('takes a full ten-player roster, which is what people paste', () => {
-    /* A ranked list off a Discord channel is numbered 1 to 10. The cap was 8,
-       so the most common real input was refused and the person was asked to
-       decide which two opponents did not matter. */
-    expect(MAX_SQUAD).toBe(10);
-    expect(squadProblem(squad(10), squad(10))).toBeNull();
+  it('takes a full twelve-player roster, which is what people paste', () => {
+    /* The cap was 8, then 10. The account holder's rosters run 10 to 12
+       (2026-09-21), so a cap of 10 refused the most common real input and asked
+       the person to decide which two opponents did not matter. */
+    expect(MAX_SQUAD).toBe(12);
+    expect(squadProblem(squad(12), squad(12))).toBeNull();
+    expect(squadProblem(squad(13), squad(1))).toContain('12');
   });
 
   it('MIRRORS THE SERVER, and a drift here is a silently shortened roster', () => {
@@ -266,7 +276,8 @@ describe('readiness', () => {
        the roster without listing it in `rejected` or anywhere else.
        If this fails, the other half of the change was not made:
        `server/team_analysis.py` MAX_SQUAD, and a deploy to the API host. */
-    expect(MAX_SQUAD).toBe(10);
+    const server = readFileSync(resolve(__dirname, '..', 'server', 'team_analysis.py'), 'utf8');
+    expect(server).toMatch(new RegExp(`^MAX_SQUAD = ${MAX_SQUAD}$`, 'm'));
   });
 
   it('names the side that is the problem', () => {

@@ -950,6 +950,55 @@ a single TEMP-table join — chunked `IN (...)` was 4.4 s, the join is 1.0 s, an
 one pass fills both buckets. `mode=ro` still allows temp tables. Net 15.2 s →
 5.5 s cold, 2.1 s cached.
 
+**THAT PATH IS NOW THE FALLBACK: `cluster_index.py` (2026-09-21).** The numbers
+above stopped being true as the database grew. Measured on the VPS:
+
+- The vocabulary is **2,772,680** hashes. The Python scan is 2.2 s a deck.
+- The join reads ~100,000 pair rows a deck, each a random page read into a
+  55 GB file. That is 3 s warm and 13–20 s cold.
+- The 32-entry cluster cache cleared itself whole on overflow, so a 5-player
+  roster (36 decks, 72 entries) was cold on every request.
+
+Team Analysis took **208 s** for a 5v5, 97% of it here.
+
+The index precomputes it. `.cluster_index.db` is this service's own file,
+rebuilt every 4 h by `royalweb-cluster.timer` in ~6 min at 80 MB peak memory.
+It holds three tables:
+
+- `deck_arch` is each deck's record per opponent archetype, summed in SQL from
+  `pair_matchup_agg` with the bot's database ATTACHed `mode=ro`.
+- `card_bits` is one big-integer bitset per card. "Shares 6 of 8" is an OR of
+  ANDs, 22 ms instead of 2.2 s.
+- `deck` holds stable, append-only ids, so a build can land under a running
+  reader.
+
+`_siblings`, `_cluster_all` and `deck_profile` read it first and fall back to
+the live path when it is missing, unreadable, or built from a different database
+(`meta.source`). The results are **identical**:
+
+- On 12 real decks: sibling counts, games and win rates, with zero difference.
+- On a synthetic database: `test_cluster_index.py`, 64 checks, including a
+  negative control and a guard on the query plan.
+
+**THE JOIN IS A `CROSS JOIN` ON PURPOSE.** SQLite has no statistics for a fresh
+temp table, and with a plain JOIN it scanned all 5.1M `deck_arch` rows: 870 ms a
+deck against 14 ms. The test reads the plan, because no equality check can see
+this.
+
+Both caches are LRUs now, with a lifetime: exact profiles for an hour, clusters
+keyed by index generation for 4 h. `/api/analytics/status` publishes
+`clusterIndex` (build time, age, decks, rows, `orphanRows`, build seconds).
+
+Measured after, through the real engine, with 8 worker threads:
+
+| board | fresh process | repeat |
+|---|---:|---:|
+| 5v5 | 4.6 s | 0.5 s |
+| 12v12, 24 real tracked players | 3.0 s | 1.7 s |
+
+A 12v12 of players whose history is not yet in the page cache adds ~5 s of
+per-player reads.
+
 **`real_opponents` has no evidence floor, on purpose.** `MIN_GAMES` stops the
 screen quoting a win rate off two games; it should not stop it saying the games
 happened. A deck that lost 0-3 to a specific list was vanishing behind archetype
@@ -986,6 +1035,29 @@ what the screen draws on the left.
 of a match plan's payload (live 5v5: 1.08 MB -> 257 kB), and the PDF, its only
 reader, prints it for the top pick alone. Per-teammate decks and the roster-wide
 list carry none. The client type is optional to match.
+
+**TWELVE A SIDE, AND IT RUNS IN PARALLEL (2026-09-21).** `MAX_SQUAD` is 12;
+`test_team_analysis.py` reads the client's copy out of `squadParse.ts`, and the
+vitest suite reads this file's copy, so neither can drift alone.
+
+Two fan-outs run on ONE process-wide pool (`_POOL`, `CLASH_TEAM_THREADS`,
+default 8), so concurrent big rosters share threads rather than multiplying
+them:
+
+- **Player resolution.** 24 players took 180 s serially on a cold cache and
+  4.7 s on 8 threads.
+- **Deck profiling.** Now an index lookup; see the matchup engine above.
+
+The ranking itself (`team_scout.diversify` / `fills`) was rewritten for speed:
+
+- a running maximum similarity instead of recomputing it against the whole
+  chosen list every round;
+- near-copy detection by shared six-card subset instead of an intersection
+  against every accepted deck.
+
+At 12v12 that removes 310,000 similarity calls and 1.4M set intersections a
+request. `test_team_scout.py` keeps the original bodies as oracles and compares
+them on 1,500 random pools each. They are identical.
 
 It has **no imports beyond the standard library**, the rule `deck_harmony.py`
 and `battle_modes.py` follow, so all 107 of its checks run against literals with

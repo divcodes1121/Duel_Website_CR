@@ -1,0 +1,41 @@
+[Unit]
+# Rebuilds the cluster index: every stored deck's record against every opponent
+# archetype, summed once off the request path, plus the card bitsets that find
+# near-identical decks. See the docstring of server/cluster_index.py for the
+# measurements that made it necessary (Team Analysis: 150-210 s for a 5v5, 97%
+# of it re-reading ~100,000 pair rows per deck on every request).
+#
+# IT DOES NOT WRITE TO battles.db. The bot's database is ATTACHed mode=ro; the
+# only file this writes is /opt/royalweb/server/.cluster_index.db.
+#
+# IT IS AN ACCELERATOR, NOT A DEPENDENCY. If this never runs, every screen
+# answers from the live tables exactly as before — slowly. A stopped timer
+# shows up as a growing `clusterIndex.ageSeconds` on /api/analytics/status.
+Description=Deckkies cluster index rebuild
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+ExecStart=/usr/bin/python3 -u cluster_index.py --build
+
+# BEHIND THE BOT AND THE API. A rebuild is ~5 minutes of one core and a
+# sequential read of pair_matchup_agg; nothing is waiting on it, so it yields
+# CPU and disk to the two processes that do have somebody waiting.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# FAIL VISIBLY, as the 2v2 fold does: a non-zero exit marks the unit failed,
+# and the JSON summary each run prints (decks, rows, orphanRows, seconds)
+# lands in the log beside it.
+SuccessExitStatus=0
+TimeoutStartSec=3600
+
+StandardOutput=append:/var/log/clashbot/cluster.log
+StandardError=append:/var/log/clashbot/cluster.log
+
+[Install]
+WantedBy=multi-user.target

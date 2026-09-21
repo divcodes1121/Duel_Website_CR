@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Redis } from '@upstash/redis';
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 /**
@@ -172,6 +173,43 @@ function isMeta(x: unknown): x is TeamSaveMeta {
 }
 
 /** The record to store and its index entry — or null when the body is not a save. */
+/**
+ * The most a compressed report may expand to. A real 12v12 is ~0.9 MB of
+ * JSON; this is headroom, and it is what stops a small crafted body from
+ * inflating into gigabytes inside the function (`maxOutputLength` makes
+ * `gunzipSync` throw instead).
+ */
+const TEAM_SAVE_MAX_INFLATED = 16_000_000;
+
+/**
+ * The report inside a save body — plain, or gzipped and base64'd.
+ *
+ * COMPRESSED SINCE THE CAP WENT TO TWELVE A SIDE (2026-09-21). A compacted
+ * 12v12 report is ~858 kB of JSON, 14% under the 1 MB request cap, and any
+ * new field would have pushed it over — at which point the save stays on the
+ * device that made it, which is the bug this sync exists to fix. Gzipped it is
+ * ~56 kB (15x), so the cap stops being a number anybody has to watch.
+ *
+ * PLAIN IS STILL ACCEPTED: the saves synced before this change are stored
+ * that way, and a browser without `CompressionStream` sends that way.
+ */
+function reportOf(b: Record<string, unknown>): Record<string, unknown> | null {
+  if (typeof b.reportGz === 'string') {
+    if (b.reportGz.length > MAX_BODY_BYTES) return null;
+    try {
+      const text = gunzipSync(Buffer.from(b.reportGz, 'base64'), {
+        maxOutputLength: TEAM_SAVE_MAX_INFLATED,
+      }).toString('utf8');
+      const parsed: unknown = JSON.parse(text);
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+  const r = b.report as Record<string, unknown> | null | undefined;
+  return r && typeof r === 'object' ? r : null;
+}
+
 function teamSaveFrom(body: unknown, id: string): { record: Record<string, unknown>; meta: TeamSaveMeta } | null {
   if (!body || typeof body !== 'object') return null;
   const b = body as Record<string, unknown>;
@@ -179,12 +217,18 @@ function teamSaveFrom(body: unknown, id: string): { record: Record<string, unkno
   if (typeof b.name !== 'string' || !b.name.trim() || b.name.length > 60) return null;
   if (typeof b.savedAt !== 'string' || Number.isNaN(Date.parse(b.savedAt))) return null;
   if (typeof b.blueText !== 'string' || typeof b.redText !== 'string') return null;
-  const r = b.report as Record<string, unknown> | null | undefined;
-  if (!r || typeof r !== 'object') return null;
+  const r = reportOf(b);
+  if (!r) return null;
   if (!Array.isArray(r.folders) || !Array.isArray(r.blue) || !Array.isArray(r.red)) return null;
+  const gz = typeof b.reportGz === 'string';
   return {
     // Only the fields a save has. Anything else a client sends is not stored.
-    record: { id, name: b.name, savedAt: b.savedAt, blueText: b.blueText, redText: b.redText, report: r },
+    // A compressed report is STORED compressed: the index needs its counts,
+    // which were read above; nothing server-side needs the rest.
+    record: {
+      id, name: b.name, savedAt: b.savedAt, blueText: b.blueText, redText: b.redText,
+      ...(gz ? { reportGz: b.reportGz } : { report: r }),
+    },
     meta: {
       id,
       name: b.name,

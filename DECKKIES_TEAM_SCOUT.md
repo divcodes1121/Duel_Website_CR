@@ -363,6 +363,75 @@ where the same five players are on both sides took **150+ s warm**. 1v1 warm is
 reads cold every time. One of three such requests dropped the connection at
 ~129 s.
 
+## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
+
+Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it
+takes too long … for future scope emerging problems also".
+
+**MEASURED FIRST, phase by phase, on the VPS against the real database.** A 5v5
+took **208 s** cold, and **168 s "warm"** in the same process.
+`deck_counter._cluster_all` was **97%** of it: ~5.6 s for each of the 36
+distinct blue decks, one after another. It had two halves:
+
+1. **The sibling scan.** A pure-Python walk over every stored deck hash, 2.2 s a
+   deck. The vocabulary is **2,772,680** hashes; the comment beside the scan
+   said 1,054,394.
+2. **The join.** ~100,000 `pair_matchup_agg` rows a deck, each a random page read
+   into a 55 GB file (the covering indexes lack draws and crowns). ~80 µs a row:
+   3 s warm, 13–20 s cold.
+
+"Warm" was cold because the cluster cache held 32 entries and **cleared whole**
+on overflow, and 36 decks need 72. Threads only bought **2.9×** on the join,
+because it is I/O, not CPU. 12v12 projected at ~9 minutes.
+
+**The fix is structural, not a cache** (`server/cluster_index.py`). Each deck's
+record per opponent archetype is summed ONCE, off the request path, into the
+service's own SQLite file:
+
+- `deck_arch`, ~5.1M rows, built by `royalweb-cluster.timer` every 4 h (~6 min,
+  80 MB peak);
+- plus card bitsets, so "shares 6 of 8 cards" is an OR of ANDs on big integers:
+  22 ms instead of 2.2 s.
+
+The bot's database is ATTACHed `mode=ro`.
+
+- **It is exact, not approximate.** On 12 real decks it matched the live path
+  with zero difference in sibling counts, games or win rates.
+  `test_cluster_index.py` (64 checks) pins that on a synthetic database with a
+  negative control, and checks the query plan. A plain `JOIN` there scanned
+  5.1M rows (870 ms a deck); `CROSS JOIN` seeks by key (14 ms). No equality
+  check can see that difference.
+- **It is never required.** Missing, unreadable, or built from another database
+  (`meta.source`), and every consumer falls back to the live path. A deck newer
+  than the build reads live too.
+- **Its age is published** as `clusterIndex` on `/api/analytics/status`.
+
+**Then the parts that were hiding behind it:**
+
+- **Player resolution in parallel.** 24 cold players took 180 s serially and
+  4.7 s on 8 threads. One process-wide pool (`CLASH_TEAM_THREADS`, 8), so two
+  big rosters at once do not take 16 threads from the other screens.
+- **Deck profiles in parallel**, and exact profiles from the index.
+- **The ranking.** `diversify` carries each candidate's closest similarity
+  forward instead of recomputing it against the whole list every round, and
+  `fills` spots near-copies by shared six-card subset. That is 310,000
+  similarity calls and 1.4M intersections a 12v12, gone. The original bodies
+  are oracles in `test_team_scout.py`: identical on 1,500 random pools each.
+- **Caches are LRUs with a lifetime**, not dicts that clear themselves.
+
+| through the staged engine, real database | before | fresh process | repeat |
+|---|---:|---:|---:|
+| 5v5 | 208 s | **4.6 s** | **0.5 s** |
+| 12v12, 24 real tracked players | ~9 min | **3.0 s** | **1.7 s** |
+
+A 12v12 of players whose history is not in the page cache adds ~5 s of
+per-player reads.
+
+**`MAX_SQUAD = 12`** on both halves. Each side's test now reads the OTHER side's
+constant out of its source file instead of pinning a literal, so the two cannot
+drift apart again. The vitest fixture that built tags from a 12-character slice
+of the alphabet (so "13 players" was 12) was fixed on the way.
+
 ## 5. Diversity — and the defect the case review found
 
 Greedy MMR with a superlinear card-overlap similarity, **plus an archetype

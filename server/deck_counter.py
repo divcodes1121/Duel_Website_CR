@@ -62,6 +62,7 @@ import json
 import os
 import threading
 import time
+from collections import OrderedDict
 
 import clash_data as cd
 import duel_combos as dx
@@ -184,8 +185,79 @@ WIN_CONDITION_PRIORITY = [
 # the same one: this deck's overall record across the whole field comes out at
 # 49.9%, not 58%.
 
-_PROFILE_CACHE: dict[str, dict] = {}
-_PROFILE_MAX = 64
+class _LRU:
+    """A bounded, thread-safe cache that forgets the OLDEST entry, and ages out.
+
+    REPLACES TWO DICTS THAT CLEARED THEMSELVES WHOLE ON OVERFLOW (2026-09-21).
+    `_CLUSTER_CACHE` held 32 entries and a 5-player roster needs 72, so every
+    Team Analysis request emptied it partway through and the next identical
+    request recomputed everything: measured 208 s cold and 168 s "warm" in one
+    process. An LRU evicts one entry at a time, so a roster that fits stays.
+
+    THE AGE LIMIT IS WHAT MAKES A BIGGER CACHE HONEST. The old whole-clear was,
+    by accident, the only thing that ever refreshed a cached profile; a larger
+    cache with no expiry would serve a deck's record from whenever it was first
+    asked for, for the life of the process.
+
+    Locked because the team screen now profiles decks on a thread pool.
+    """
+
+    def __init__(self, maxsize: int, ttl: float):
+        self.maxsize = maxsize
+        self.ttl = ttl
+        self._d: OrderedDict = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key, default=None):
+        now = time.monotonic()
+        with self._lock:
+            hit = self._d.get(key)
+            if hit is None:
+                return default
+            at, value = hit
+            if now - at > self.ttl:
+                del self._d[key]
+                return default
+            self._d.move_to_end(key)
+            return value
+
+    def __contains__(self, key) -> bool:
+        return self.get(key) is not None
+
+    # THE MAPPING READ SIDE — `dict(cache)`, `keys()`, iteration — is a
+    # SNAPSHOT: raw values, no age check, and no reordering, so taking a copy
+    # to compare against later cannot itself disturb what is being compared.
+    # `test_deck_tuner` does exactly that to prove the tuner leaves this cache
+    # alone. The real code paths read through `get()`.
+    def keys(self):
+        with self._lock:
+            return list(self._d.keys())
+
+    def __iter__(self):
+        return iter(self.keys())
+
+    def __getitem__(self, key):
+        with self._lock:
+            return self._d[key][1]
+
+    def __setitem__(self, key, value) -> None:
+        with self._lock:
+            self._d[key] = (time.monotonic(), value)
+            self._d.move_to_end(key)
+            while len(self._d) > self.maxsize:
+                self._d.popitem(last=False)
+
+    def __len__(self) -> int:
+        return len(self._d)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._d.clear()
+
+
+#: Exact-deck profiles. An hour, matching the counter snapshot's own refresh:
+#: these are read from the live table, so they may move within the day.
+_PROFILE_CACHE = _LRU(1024, ttl=float(os.getenv("CLASH_PROFILE_TTL", "3600")))
 
 # ── Near-identical decks ────────────────────────────────────────────────────
 #
@@ -214,8 +286,44 @@ _PROFILE_MAX = 64
 CLUSTER_LEVELS = (7, 6)
 
 _VOCAB: list[str] | None = None
-_CLUSTER_CACHE: dict[tuple[str, int], dict] = {}
-_CLUSTER_MAX = 32
+#: Cluster profiles, keyed `(deck key, level, index generation)` — a new
+#: cluster-index build is a new generation, so its answers never mix with the
+#: previous build's. 2048 keys is 1,024 decks at both levels (~35 MB), a dozen
+#: 12-player rosters. Four hours matches the index's own rebuild timer.
+_CLUSTER_CACHE = _LRU(2048, ttl=float(os.getenv("CLASH_CLUSTER_TTL", "14400")))
+
+
+def _index():
+    """`cluster_index`, or None. Imported late — it imports this module too."""
+    try:
+        import cluster_index
+        return cluster_index
+    except Exception:  # noqa: BLE001 - the index is an accelerator, never a dependency
+        return None
+
+
+def _generation() -> int:
+    ci = _index()
+    try:
+        return ci.generation() if ci else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def vocabulary_size() -> int:
+    """How many stored decks a sibling search looks across.
+
+    From the cluster index when it can answer, so reporting the size does not
+    force the 2.77M-string vocabulary into memory just to count it.
+    """
+    ci = _index()
+    n = None
+    if ci is not None:
+        try:
+            n = ci.deck_count()
+        except Exception:  # noqa: BLE001
+            n = None
+    return n if n is not None else len(_vocabulary())
 
 
 def _vocabulary() -> list[str]:
@@ -247,6 +355,17 @@ def _siblings(cards: list[str]) -> dict[str, int]:
     """
     mine = set(cards)
     lowest = min(CLUSTER_LEVELS)
+    # THE INDEX FIRST: the same answer from bitsets in milliseconds instead of
+    # a 2.2 s walk over every stored hash. None means no usable index, and the
+    # scan below is the exact fallback.
+    ci = _index()
+    if ci is not None:
+        try:
+            got = ci.siblings(list(mine), lowest)
+        except Exception:  # noqa: BLE001
+            got = None
+        if got is not None:
+            return got
     out = {}
     for h in _vocabulary():
         n = 0
@@ -266,10 +385,29 @@ def _cluster_all(cards: list[str]) -> dict[int, dict]:
     separate passes read 39,925 + 46,869 rows; this reads 46,869 once.
     """
     key = ",".join(sorted(set(cards)))
-    cached = {lv: _CLUSTER_CACHE[(key, lv)]
-              for lv in CLUSTER_LEVELS if (key, lv) in _CLUSTER_CACHE}
+    gen = _generation()
+    cached = {}
+    for lv in CLUSTER_LEVELS:
+        hit = _CLUSTER_CACHE.get((key, lv, gen))
+        if hit is not None:
+            cached[lv] = hit
     if len(cached) == len(CLUSTER_LEVELS):
         return cached
+
+    # THE PRECOMPUTED PATH. `cluster_index` sums the same rows ahead of time;
+    # see its docstring for the measurements that made it necessary. None ->
+    # no usable index, and the live join below runs exactly as it always has.
+    ci = _index()
+    if ci is not None:
+        try:
+            fast = ci.profiles(list(set(cards)), CLUSTER_LEVELS)
+        except Exception:  # noqa: BLE001
+            fast = None
+        if fast is not None:
+            gen = _generation()
+            for lv in CLUSTER_LEVELS:
+                _CLUSTER_CACHE[(key, lv, gen)] = fast[lv]
+            return fast
 
     empty = {"archetypes": {}, "overall": None, "battles": 0, "decks": 0}
     out = {lv: dict(empty) for lv in CLUSTER_LEVELS}
@@ -313,19 +451,17 @@ def _cluster_all(cards: list[str]) -> dict[int, dict]:
     finally:
         con.close()
 
-    if len(_CLUSTER_CACHE) >= _CLUSTER_MAX:
-        _CLUSTER_CACHE.clear()
     for lv in CLUSTER_LEVELS:
         res = _score(per[lv])
         res["decks"] = sum(1 for n in sibs.values() if n >= lv)
         out[lv] = res
-        _CLUSTER_CACHE[(key, lv)] = res
+        _CLUSTER_CACHE[(key, lv, gen)] = res
     return out
 
 
 def cluster_profile(cards: list[str], overlap: int) -> dict:
     """One level of `_cluster_all`, which computes them all together."""
-    key = (",".join(sorted(set(cards))), overlap)
+    key = (",".join(sorted(set(cards))), overlap, _generation())
     hit = _CLUSTER_CACHE.get(key)
     if hit is not None:
         return hit
@@ -386,6 +522,21 @@ def deck_profile(cards: list[str]) -> dict:
     if hit is not None:
         return hit
 
+    # FROM THE CLUSTER INDEX when it knows this deck: its own precomputed rows
+    # are exactly what the two queries below sum, as of the last build, and
+    # they sit in a compact file instead of behind ~1,000 random reads into
+    # the 55 GB database (176 ms a deck cold, on 8 threads). A deck newer than
+    # the build gets None back and is read live below.
+    ci = _index()
+    if ci is not None:
+        try:
+            fast = ci.exact(list(set(cards)))
+        except Exception:  # noqa: BLE001
+            fast = None
+        if fast is not None:
+            _PROFILE_CACHE[key] = fast
+            return fast
+
     per: dict[str, list[int]] = {}
     tiers = cd._tier_paths()
     if not tiers:
@@ -423,8 +574,6 @@ def deck_profile(cards: list[str]) -> dict:
     res = _score(per)
     res["decks"] = 1
 
-    if len(_PROFILE_CACHE) >= _PROFILE_MAX:
-        _PROFILE_CACHE.clear()
     _PROFILE_CACHE[key] = res
     return res
 
@@ -826,8 +975,15 @@ def start_background() -> None:
         # Read the deck vocabulary once, here, rather than making the first
         # person to paste a deck wait 2.2 s for it. It is only needed by the
         # cluster path, but that is the path a first-time user hits.
+        #
+        # NOT WHEN THE CLUSTER INDEX CAN ANSWER. It serves siblings from
+        # bitsets and never touches the vocabulary, which is 2.77M strings
+        # held for the life of the process; the live fallback loads it on
+        # first use if the index ever goes away.
         try:
-            _vocabulary()
+            ci = _index()
+            if ci is None or ci.deck_count() is None:
+                _vocabulary()
         except Exception:
             pass
         while True:

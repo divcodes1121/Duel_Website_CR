@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
 import { TEAM_SAVE_ID, TEAM_SAVE_MAX, teamSaveRoute, type TeamSaveKV } from '../api/decks';
 import type { TeamRecommendation, TeamReport } from '../src/state/analyticsClient';
+import { canGzip, gunzipText, gzipText } from '../src/utils/gzipText';
 import {
   compactReport,
   MAX_SAVES,
@@ -320,9 +322,47 @@ describe('the account endpoint (`/api/decks?doc=team-saves`)', () => {
     expect((await teamSaveRoute('PUT', 'tabc12345', huge, 'u1', kv)).status).toBe(413);
   });
 
-  it('a compacted 10v10 match plan fits one request', () => {
-    const big = compactReport(report(10));
+  it('a compacted 12v12 match plan fits one request even uncompressed', () => {
+    // The fallback path, for a browser without CompressionStream. A real
+    // 12v12 measured 858 kB here on 2026-09-21 — which is why it is gzipped.
+    const big = compactReport(report(12));
     expect(JSON.stringify(body('tabc12345', { report: big })).length).toBeLessThan(1_000_000);
+  });
+
+  it('a GZIPPED report is accepted, stored compressed, and counted', async () => {
+    const kv = memoryKV();
+    const rep12 = compactReport(report(12));
+    const plain = JSON.stringify(rep12);
+    const reportGz = await gzipText(plain);
+    expect(reportGz.length).toBeLessThan(plain.length / 5);
+
+    const { report: _drop, ...rest } = body('tabc12345');
+    void _drop;
+    const out = await teamSaveRoute('PUT', 'tabc12345', { ...rest, reportGz }, 'u1', kv);
+    expect(out.status).toBe(200);
+
+    const list = (await teamSaveRoute('GET', null, null, 'u1', kv)).json as { saves: TeamSaveMeta[] };
+    expect(list.saves[0]).toMatchObject({ players: 24, folders: 12, mode: 'squads' });
+
+    const got = ((await teamSaveRoute('GET', 'tabc12345', null, 'u1', kv)).json as { data: Record<string, unknown> }).data;
+    expect(got.report).toBeUndefined();
+    expect(JSON.parse(await gunzipText(got.reportGz as string))).toEqual(rep12);
+
+    // Rename keeps it compressed.
+    expect((await teamSaveRoute('PATCH', 'tabc12345', { name: 'Final' }, 'u1', kv)).status).toBe(200);
+    const renamed = ((await teamSaveRoute('GET', 'tabc12345', null, 'u1', kv)).json as { data: Record<string, unknown> }).data;
+    expect(renamed).toMatchObject({ name: 'Final', reportGz });
+  });
+
+  it('refuses garbage and a zip bomb instead of inflating it', async () => {
+    const kv = memoryKV();
+    const { report: _drop, ...rest } = body('tabc12345');
+    void _drop;
+    expect((await teamSaveRoute('PUT', 'tabc12345', { ...rest, reportGz: 'not-gzip' }, 'u1', kv)).status).toBe(400);
+    // 40 MB of zeros compresses to ~40 kB — the server must stop at its ceiling.
+    const bomb = gzipSync(Buffer.alloc(40_000_000)).toString('base64');
+    expect(bomb.length).toBeLessThan(1_000_000);
+    expect((await teamSaveRoute('PUT', 'tabc12345', { ...rest, reportGz: bomb }, 'u1', kv)).status).toBe(400);
   });
 
   it('renaming a save that is not there is a 404', async () => {
@@ -333,6 +373,23 @@ describe('the account endpoint (`/api/decks?doc=team-saves`)', () => {
     const out = await teamSaveRoute('POST', 'tabc12345', null, 'u1', memoryKV());
     expect(out.status).toBe(405);
     expect(out.allow).toContain('PATCH');
+  });
+});
+
+describe('gzip, browser half and server half', () => {
+  const text = JSON.stringify({ a: 'é ✓ 🏆', n: Array.from({ length: 5000 }, (_, i) => i) });
+
+  it('round-trips through the browser helpers', async () => {
+    expect(await gunzipText(await gzipText(text))).toBe(text);
+  });
+
+  it('the browser compresses what node:zlib reads, and the reverse', async () => {
+    expect(gunzipSync(Buffer.from(await gzipText(text), 'base64')).toString('utf8')).toBe(text);
+    expect(await gunzipText(gzipSync(Buffer.from(text, 'utf8')).toString('base64'))).toBe(text);
+  });
+
+  it('is available where the suite runs, as in every current browser', () => {
+    expect(canGzip()).toBe(true);
   });
 });
 

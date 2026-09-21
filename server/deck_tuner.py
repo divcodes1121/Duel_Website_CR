@@ -259,7 +259,7 @@ def neighbours(cards: list[str], archetypes: list[str] | None = None) -> dict:
         decks[h] = {"overlap": sibs.get(h, 0), **scored}
 
     out = {"base": base, "decks": decks,
-           "scanned": len(counter._vocabulary()), "found": len(sibs)}
+           "scanned": counter.vocabulary_size(), "found": len(sibs)}
     if len(_TUNE_CACHE) >= _TUNE_MAX:
         _TUNE_CACHE.clear()
     _TUNE_CACHE[ck] = out

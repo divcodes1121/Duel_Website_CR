@@ -653,10 +653,25 @@ check("the squad cap is enforced server-side too",
       len(over["blue"]) == ta.MAX_SQUAD,
       "the client cap is feedback; this is the boundary")
 
-check("MAX_SQUAD matches the client's copy", ta.MAX_SQUAD == 10,
+# READ OFF THE CLIENT'S SOURCE, not restated here. This check used to say
+# `== 10`, which pinned the server to a number rather than to the client, so
+# raising both to 12 would have meant editing a third place to keep it green.
+import re as _re
+_client = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                            "src", "utils", "squadParse.ts"), encoding="utf-8").read()
+_m = _re.search(r"export const MAX_SQUAD = (\d+);", _client)
+check("MAX_SQUAD matches the client's copy",
+      bool(_m) and ta.MAX_SQUAD == int(_m.group(1)),
       "src/utils/squadParse.ts MAX_SQUAD — the two are mirrors, and this "
       "file SLICES where the client REFUSES, so a drift is a silently "
       "shortened roster rather than an error")
+check("the cap is twelve — what the account holder's rosters really are",
+      ta.MAX_SQUAD == 12)
+check("a twelve-player roster is analysed whole, both sides",
+      len(ta.analyze(["#B%d" % i for i in range(12)],
+                     ["#R%d" % i for i in range(12)], days=30)["red"]) == 12)
+check("resolution keeps the roster order on the thread pool",
+      [p["tag"] for p in over["blue"]] == ["#B%d" % i for i in range(ta.MAX_SQUAD)])
 
 check("a two-roster run is stamped 'squads'", rep["mode"] == "squads")
 check("and carries no roster-wide block", "overall" not in rep,

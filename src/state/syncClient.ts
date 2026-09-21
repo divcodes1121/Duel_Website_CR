@@ -1,5 +1,6 @@
 import type { DeckOwner, DuelDeckSet, SavedDeckSet } from '../types/deck';
 import { supabase } from './supabase';
+import { canGzip, gunzipText, gzipText } from '../utils/gzipText';
 
 export interface SyncPayload {
   sets: Record<DeckOwner, DuelDeckSet>;
@@ -137,23 +138,45 @@ export async function pullTeamSaveIndex(): Promise<unknown[] | null> {
   }
 }
 
-/** One save in full, or null. */
+/** One save in full, or null. A compressed report comes back as `report`. */
 export async function pullTeamSave(id: string): Promise<unknown | null> {
   const res = await teamSaveCall(`&id=${encodeURIComponent(id)}`);
   if (!res?.ok) return null;
   try {
     const json = await res.json();
-    return json?.found ? json.data : null;
+    if (!json?.found) return null;
+    const data = json.data as Record<string, unknown> | null;
+    if (data && typeof data.reportGz === 'string') {
+      const { reportGz, ...rest } = data;
+      return { ...rest, report: JSON.parse(await gunzipText(reportGz as string)) };
+    }
+    return data;
   } catch {
     return null;
   }
 }
 
-/** Upload (or overwrite) one save. Whether the account accepted it. */
-export async function pushTeamSave(save: { id: string }): Promise<boolean> {
+/**
+ * Upload (or overwrite) one save. Whether the account accepted it.
+ *
+ * THE REPORT TRAVELS GZIPPED where the browser can do it: a compacted 12v12
+ * is ~858 kB of JSON against the endpoint's 1 MB cap, and ~56 kB compressed.
+ */
+export async function pushTeamSave(save: { id: string; report?: unknown }): Promise<boolean> {
+  let body: string;
+  try {
+    if (canGzip() && save.report !== undefined) {
+      const { report, ...rest } = save;
+      body = JSON.stringify({ ...rest, reportGz: await gzipText(JSON.stringify(report)) });
+    } else {
+      body = JSON.stringify(save);
+    }
+  } catch {
+    body = JSON.stringify(save);
+  }
   const res = await teamSaveCall(`&id=${encodeURIComponent(save.id)}`, {
     method: 'PUT',
-    body: JSON.stringify(save),
+    body,
   });
   return Boolean(res?.ok);
 }

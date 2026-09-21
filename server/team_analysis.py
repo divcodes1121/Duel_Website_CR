@@ -116,7 +116,9 @@ Counter behaves afterwards.
 from __future__ import annotations
 
 import datetime
+import os
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 
 import clash_data as cd
 import deck_counter as dcx
@@ -144,14 +146,28 @@ except Exception:  # noqa: BLE001 - deployment shape
 #: error, it gets a report with the tail of its roster missing and nothing
 #: saying so. The two constants move in the same change, always.
 #:
-#: TEN, RAISED FROM EIGHT 2026-08-30, because ten is what people paste — a
-#: ranked list off a Discord channel is numbered 1 to 10, and a cap that
-#: refuses the most common real input only asks the person to decide which two
-#: opponents do not matter. Cost: the scoring loop is `blue x red`, so 64
-#: candidate-folder pairs becomes 100, but that loop reads memory only (every
-#: profile is built once, up front). The real bill is the 20 player
-#: resolutions, which is a quarter more than 16, not 1.6x more.
-MAX_SQUAD = 10
+#: TWELVE, RAISED FROM TEN 2026-09-21 (and from eight 2026-08-30), because
+#: that is what the account holder's rosters actually are: "most of the
+#: rosters have 10-12 members". A cap under the real input only asks the
+#: person to decide which opponents do not matter.
+#:
+#: THE CAP WAS NOT RAISED UNTIL THE COST WAS FIXED. Before `cluster_index`, a
+#: 5v5 took 150-210 s, 97% of it profiling the blue squad's decks one after
+#: another, and 12v12 would have been ~9 minutes. Profiling is now a
+#: precomputed lookup on a thread pool and players resolve in parallel, so the
+#: bill grows with the roster in milliseconds rather than seconds. The scoring
+#: loop is `blue x red` in memory: 144 pairs, not 100.
+MAX_SQUAD = 12
+
+#: Threads for the two fan-outs below: resolving roster players and profiling
+#: the squad's decks. Both are I/O (SQLite and the CR API release the GIL).
+#: ONE POOL FOR THE PROCESS, not one per request, so two big rosters analysed
+#: at once share eight threads instead of each taking eight — the service also
+#: answers every other screen, and a Team Analysis must not starve them.
+_POOL = ThreadPoolExecutor(
+    max_workers=int(os.getenv("CLASH_TEAM_THREADS", "8")),
+    thread_name_prefix="team",
+)
 
 #: Games a blue deck needs before it can be recommended at all. Below this it
 #: is not a deck somebody plays, it is a deck somebody tried.
@@ -643,9 +659,10 @@ def _candidates(blue: list[dict]) -> list["_Candidate"]:
     Profiles are shared by deck key, so a list two teammates both play still
     costs one set of database reads rather than two.
     """
-    profiles: dict[str, "_DeckProfile"] = {}
-    out: list["_Candidate"] = []
-
+    # PASS 1: which (player, deck) pairs qualify, and which distinct decks
+    # they need profiled. No reads yet.
+    wanted: list[tuple[dict, dict, str]] = []
+    first: dict[str, tuple[list[str], str]] = {}
     for player in blue:
         decks = [d for d in (player.get("decks") or [])
                  if len(set(d.get("cards") or [])) == 8]
@@ -658,15 +675,33 @@ def _candidates(blue: list[dict]) -> list["_Candidate"]:
             if key in seen:
                 continue
             seen.add(key)
-            try:
-                prof = profiles.get(key)
-                if prof is None:
-                    prof = _DeckProfile(deck["cards"],
-                                        deck.get("winCondition") or "other")
-                    profiles[key] = prof
-                out.append(_Candidate(deck, player, prof))
-            except Exception:  # noqa: BLE001
-                traceback.print_exc()
+            wanted.append((player, deck, key))
+            first.setdefault(key, (deck["cards"], deck.get("winCondition") or "other"))
+
+    # PASS 2: every distinct deck profiled ONCE, on the pool. This was the
+    # whole cost of the screen — 36 decks one after another took 206 s of a
+    # 208 s 5v5 — and each profile is independent reads of its own deck.
+    def make(item):
+        key, (cards, arch) = item
+        try:
+            return key, _DeckProfile(cards, arch)
+        except Exception:  # noqa: BLE001 - one bad deck must not sink the roster
+            traceback.print_exc()
+            return key, None
+
+    profiles = dict(_POOL.map(make, list(first.items())))
+
+    # PASS 3: the candidates, in the original roster-and-deck order, which the
+    # tiebreaks downstream rely on.
+    out: list["_Candidate"] = []
+    for player, deck, key in wanted:
+        prof = profiles.get(key)
+        if prof is None:
+            continue
+        try:
+            out.append(_Candidate(deck, player, prof))
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
     return out
 
 
@@ -1199,8 +1234,14 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     # function that orchestrates it.
     is_scout = not blue_tags
 
-    blue = [_resolve(t, days) for t in blue_tags[:MAX_SQUAD]]
-    red = [_resolve(t, days) for t in red_tags[:MAX_SQUAD]]
+    # EVERY PLAYER RESOLVED AT ONCE, on the shared pool. Each is its own
+    # stored-history read — or, for somebody never tracked, a live CR API call
+    # that takes a second or two — and 24 of them one after another was up to
+    # a minute for a roster of strangers. `map` keeps the roster order.
+    tags = [t for t in blue_tags[:MAX_SQUAD]] + [t for t in red_tags[:MAX_SQUAD]]
+    resolved = list(_POOL.map(lambda t: _resolve(t, days), tags))
+    nb = len(blue_tags[:MAX_SQUAD])
+    blue, red = resolved[:nb], resolved[nb:]
 
     for p in blue:
         _archetypes_for(p.get("decks") or [])

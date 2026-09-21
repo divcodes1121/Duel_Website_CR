@@ -1,0 +1,26 @@
+[Unit]
+Description=Rebuild the Deckkies cluster index every four hours
+# If the unit is ever removed, the timer goes with it rather than firing at a
+# service that no longer exists.
+Requires=royalweb-cluster.service
+
+[Timer]
+# FOUR HOURS. A cluster sums thousands of games over hundreds of decks, so a
+# few hours of new battles moves no figure that matters — the same argument
+# the hourly counter snapshot rests on. A rebuild costs ~5 minutes, so this is
+# about 2% of the clock.
+OnCalendar=*-*-* 00/4:40:00
+
+# NOT ON THE MARK. The 2v2 fold runs hourly at a random minute and the bot
+# polls every two hours; a spread start keeps three readers of one 55 GB file
+# off each other.
+RandomizedDelaySec=900
+
+# CATCH UP AFTER A REBOOT. A build is a full rebuild, so a late one is
+# identical to an on-time one.
+Persistent=true
+
+Unit=royalweb-cluster.service
+
+[Install]
+WantedBy=timers.target

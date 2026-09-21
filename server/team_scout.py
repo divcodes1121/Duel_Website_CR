@@ -110,6 +110,8 @@ not called from here.
 
 from __future__ import annotations
 
+import functools
+import itertools
 import math
 
 #: The brain that produced a recommendation. Written onto every payload and
@@ -379,7 +381,17 @@ def similarity(a, b, arch_a: str | None = None, arch_b: str | None = None) -> fl
     different things. Squaring it leaves four shared cards nearly free and
     makes seven shared cards decisive.
     """
-    sa, sb = set(a or []), set(b or [])
+    return _pair_similarity(frozenset(a or []), frozenset(b or []), arch_a, arch_b)
+
+
+def _pair_similarity(sa: frozenset, sb: frozenset,
+                     arch_a: str | None, arch_b: str | None) -> float:
+    """`similarity` on card sets already built — the arithmetic, once.
+
+    Split out so `diversify` can build each candidate's set ONCE instead of on
+    every comparison: at 12v12 it made 310,000 comparisons a request and
+    rebuilt two sets for each (measured, 2026-09-21).
+    """
     if not sa or not sb:
         return 0.0
     overlap = len(sa & sb) / max(len(sa), len(sb))
@@ -883,6 +895,18 @@ def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
     pool[0]["adjustedScore"] = round(pool[0]["recommendationScore"], 3)
     rest = pool[1:]
 
+    # EACH CANDIDATE'S CLOSEST RESEMBLANCE TO THE LIST SO FAR, carried forward
+    # and updated against the newest pick only. It was recomputed against the
+    # whole chosen list on every round — O(n * k^2) similarity calls, 310,000
+    # of them on a 12v12 board — for a maximum that can only ever grow by the
+    # one deck just added. Same numbers: `max` does not care what order it saw
+    # its arguments in, and `similarity` is symmetric.
+    cards = {id(r): frozenset(r.get("cards") or []) for r in pool}
+    first = pool[0]
+    closest = {id(r): _pair_similarity(cards[id(r)], cards[id(first)],
+                                       r.get("archetype"), first.get("archetype"))
+               for r in rest}
+
     while rest and len(chosen) < limit:
         # How many of each archetype are already spoken for. Recomputed each
         # pass rather than carried, because the count is the penalty and a
@@ -894,16 +918,13 @@ def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
 
         scored = []
         for cand in rest:
-            sim = max(
-                similarity(cand["cards"], c["cards"],
-                           cand.get("archetype"), c.get("archetype"))
-                for c in chosen
-            )
+            sim = closest[id(cand)]
             repeat = taken.get(cand.get("archetype") or "", 0)
             penalty = REDUNDANCY_WEIGHT * sim + ARCHETYPE_REPEAT_PENALTY * repeat
             scored.append((cand["recommendationScore"] - penalty, sim, cand))
-        scored.sort(key=lambda s: (-s[0], s[2]["key"]))
-        adjusted, sim, pick = scored[0]
+        # `min`, not a full sort: only the first is used, and `min` returns the
+        # first of equal keys exactly as a stable sort would put it first.
+        adjusted, sim, pick = min(scored, key=lambda s: (-s[0], s[2]["key"]))
 
         # The floor is checked on the RAW score, not the adjusted one. A deck
         # that is genuinely good preparation should not be excluded for
@@ -916,6 +937,11 @@ def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
         pick["adjustedScore"] = round(adjusted, 3)
         chosen.append(pick)
         rest = [r for r in rest if r["key"] != pick["key"]]
+        pc, pa = cards[id(pick)], pick.get("archetype")
+        for r in rest:
+            s = _pair_similarity(cards[id(r)], pc, r.get("archetype"), pa)
+            if s > closest[id(r)]:
+                closest[id(r)] = s
 
     return chosen
 
@@ -947,13 +973,22 @@ def fills(existing, pool, need: int, *, min_overlap: int = SAME_DECK_OVERLAP):
     """
     if need <= 0:
         return []
-    seen = [set(r.get("cards") or []) for r in existing]
+    # TWO DECKS SHARE `min_overlap` CARDS EXACTLY WHEN THEY SHARE A
+    # `min_overlap`-CARD SUBSET, so "is this a near-copy of anything accepted
+    # so far" is a set lookup over its 28 six-card subsets instead of an
+    # intersection against every accepted deck. Same answer, including the
+    # degenerate cases; at 12v12 the old form made 1.4M intersections a
+    # request (measured, 2026-09-21).
+    seen: set[frozenset] = set()
+    for r in existing:
+        seen.update(_subsets(frozenset(r.get("cards") or []), min_overlap))
     out = []
     for cand in pool:
-        cards = set(cand.get("cards") or [])
+        cards = frozenset(cand.get("cards") or [])
         if not cards:
             continue
-        if any(len(cards & s) >= min_overlap for s in seen):
+        subs = _subsets(cards, min_overlap)
+        if any(x in seen for x in subs):
             continue
         row = dict(cand)
         # THE MARK IS ON THE ROW, not inferred from a missing owner. A scouting
@@ -962,10 +997,19 @@ def fills(existing, pool, need: int, *, min_overlap: int = SAME_DECK_OVERLAP):
         # the same sentence, and they are different claims.
         row["fill"] = True
         out.append(row)
-        seen.append(cards)
+        seen.update(subs)
         if len(out) >= need:
             break
     return out
+
+
+@functools.lru_cache(maxsize=16384)
+def _subsets(cards: frozenset, size: int) -> tuple[frozenset, ...]:
+    """Every `size`-card subset of `cards`. Memoised: the fill pool is the same
+    ~200 decks for every teammate of every folder in one request."""
+    if size <= 0:
+        return (frozenset(),)
+    return tuple(frozenset(c) for c in itertools.combinations(sorted(cards), size))
 
 
 def suggest(own, pool, *, limit: int = MAX_RECOMMENDATIONS):

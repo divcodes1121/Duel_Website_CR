@@ -362,7 +362,7 @@ export function parseSquad(text: string): SquadParse {
  * the screen also checks `limits.maxSquad` off the response and says so if the
  * deployed API disagrees with this file.
  */
-export const MAX_SQUAD = 10;
+export const MAX_SQUAD = 12;
 
 /** True when both squads are non-empty and within the cap. */
 export function squadsReady(blue: SquadParse, red: SquadParse): boolean {

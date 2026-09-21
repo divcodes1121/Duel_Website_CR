@@ -740,6 +740,128 @@ def property_suggest_ranks_together():
           "redundancy" not in many[0] and "fill" not in many[0])
 
 
+# ── The speed-ups change nothing (2026-09-21) ───────────────────────────────
+#
+# `diversify` now carries each candidate's closest resemblance forward instead
+# of recomputing it against the whole list every round, and `fills` detects a
+# near-copy by shared six-card subset instead of intersecting every accepted
+# deck. Both were rewritten for a 12v12 board, which made 310,000 similarity
+# calls and 1.4M set intersections a request. These are the ORIGINAL bodies,
+# verbatim, kept as oracles: the new code must return the same rows, in the
+# same order, with the same published figures, on inputs built to hit the
+# awkward cases — duplicate keys, shared archetypes, empty decks, ties.
+
+def _ref_similarity(a, b, arch_a=None, arch_b=None):
+    sa, sb = set(a or []), set(b or [])
+    if not sa or not sb:
+        return 0.0
+    overlap = len(sa & sb) / max(len(sa), len(sb))
+    sim = overlap * overlap
+    if arch_a and arch_b and arch_a == arch_b:
+        sim += ts.ARCHETYPE_SIMILARITY
+    return min(1.0, sim)
+
+
+def _ref_diversify(rows, *, limit=ts.MAX_RECOMMENDATIONS, minimum=ts.MIN_RECOMMENDATIONS):
+    pool = sorted((dict(r) for r in rows), key=lambda r: -r["recommendationScore"])
+    if not pool:
+        return []
+    best = pool[0]["recommendationScore"]
+    floor = best - ts.PORTFOLIO_DROP
+    chosen = [pool[0]]
+    pool[0]["redundancy"] = 0.0
+    pool[0]["adjustedScore"] = round(pool[0]["recommendationScore"], 3)
+    rest = pool[1:]
+    while rest and len(chosen) < limit:
+        taken = {}
+        for c in chosen:
+            a = c.get("archetype") or ""
+            taken[a] = taken.get(a, 0) + 1
+        scored = []
+        for cand in rest:
+            sim = max(_ref_similarity(cand["cards"], c["cards"],
+                                      cand.get("archetype"), c.get("archetype"))
+                      for c in chosen)
+            repeat = taken.get(cand.get("archetype") or "", 0)
+            penalty = ts.REDUNDANCY_WEIGHT * sim + ts.ARCHETYPE_REPEAT_PENALTY * repeat
+            scored.append((cand["recommendationScore"] - penalty, sim, cand))
+        scored.sort(key=lambda s: (-s[0], s[2]["key"]))
+        adjusted, sim, pick = scored[0]
+        if pick["recommendationScore"] < floor and len(chosen) >= minimum:
+            break
+        pick["redundancy"] = round(sim, 3)
+        pick["adjustedScore"] = round(adjusted, 3)
+        chosen.append(pick)
+        rest = [r for r in rest if r["key"] != pick["key"]]
+    return chosen
+
+
+def _ref_fills(existing, pool, need, *, min_overlap=ts.SAME_DECK_OVERLAP):
+    if need <= 0:
+        return []
+    seen = [set(r.get("cards") or []) for r in existing]
+    out = []
+    for cand in pool:
+        cards = set(cand.get("cards") or [])
+        if not cards:
+            continue
+        if any(len(cards & s) >= min_overlap for s in seen):
+            continue
+        row = dict(cand)
+        row["fill"] = True
+        out.append(row)
+        seen.append(cards)
+        if len(out) >= need:
+            break
+    return out
+
+
+def property_speedups_are_exact():
+    import random
+    print("\nThe speed-ups return exactly what the originals did")
+    r = random.Random(20260921)
+    cards = [f"c{i}" for i in range(20)]
+    archs = ["hog", "golem", "xbow", "bait", ""]
+
+    def row(i):
+        base = r.sample(cards, 8)
+        if r.random() < 0.05:
+            base = []                                  # an empty deck
+        return {
+            "key": f"k{r.randint(0, 40)}",            # duplicate keys on purpose
+            "cards": base,
+            "archetype": r.choice(archs),
+            # coarse scores so ties are common
+            "recommendationScore": round(r.uniform(40, 75) * 2) / 2,
+        }
+
+    div_same = fill_same = 0
+    trials = 1500
+    for _ in range(trials):
+        rows = [row(i) for i in range(r.randint(0, 40))]
+        limit = r.randint(1, 9)
+        minimum = r.randint(0, limit)
+        a = ts.diversify(rows, limit=limit, minimum=minimum)
+        b = _ref_diversify(rows, limit=limit, minimum=minimum)
+        div_same += a == b
+
+        existing = [row(i) for i in range(r.randint(0, 6))]
+        pool = [row(i) for i in range(r.randint(0, 40))]
+        need = r.randint(-1, 12)
+        overlap = r.choice([0, 1, 5, 6, 6, 6, 7, 8, 9])
+        fill_same += (ts.fills(existing, pool, need, min_overlap=overlap)
+                      == _ref_fills(existing, pool, need, min_overlap=overlap))
+
+    check(f"diversify == the original on {trials} random pools", div_same == trials,
+          f"{trials - div_same} differed")
+    check(f"fills == the original on {trials} random pools", fill_same == trials,
+          f"{trials - fill_same} differed")
+    check("similarity == the original",
+          all(ts.similarity(a, b, x, y) == _ref_similarity(a, b, x, y)
+              for a, b, x, y in [(["a", "b"], ["b", "c"], "hog", "hog"), ([], ["a"], None, None),
+                                 (["a"] * 3, ["a"], "", ""), (list("abcdefgh"), list("abcdefgz"), "x", "y")]))
+
+
 def main() -> int:
     print("team_scout — the coaching brain")
     case_1_many_known_decks()
@@ -760,6 +882,7 @@ def main() -> int:
     property_portfolio_is_not_padded()
     property_fills_follow_coach_assist()
     property_suggest_ranks_together()
+    property_speedups_are_exact()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 
