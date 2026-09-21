@@ -145,112 +145,15 @@ export function assistSourceRef(
   };
 }
 
-/* ── TOP-UPS: COACH ASSIST'S MECHANISM, ON THIS TAB ─────────────────────────
+/* ── TOP-UPS ───────────────────────────────────────────────────────────────
  *
- * The engine now does what `coach.suggest` has always done on the public Coach
- * Assist: it puts real decks from the wider player base beside the player's
- * own, marks each one `fill`, and ranks the two TOGETHER by expected win rate.
- * A deck the player pilots keeps a small edge (the practice tiebreak), so an
- * outside pick leads only when it is genuinely stronger. An earlier build kept
- * every pick below every owned deck and called that Coach Assist's rule; it was
- * not, and it hid 71% answers beneath a player's own 60% deck.
- *
- * WHAT THIS TAB OWES THE COACH IS THE DIFFERENCE. "Suggested, from their own
- * games" and "suggested, from somebody else's" lead to different conversations
- * with the player, and before this the screen had no way to tell them apart —
- * its copy said every suggestion came from decks the player had played. */
-
-export interface SuggestionMix {
-  /** Decks the player actually runs. */
-  own: number;
-  /** Top-ups from the wider player base. */
-  fill: number;
-}
-
-export function suggestionMix(recs: readonly TeamRecommendation[]): SuggestionMix {
-  const fill = recs.filter((r) => r.fill).length;
-  return { own: recs.length - fill, fill };
-}
-
-/** One line on what a Deckkies pick is, printed on the row itself. */
-export const FILL_NOTE = 'Deckkies pick — not in their history yet';
-
-/**
- * Why the list holds top-ups, when it does. Null when every row is their own.
- *
- * THE REASON STILL LEADS when none of the rows is theirs, because "why is
- * there nothing of theirs" is the fact a coach acts on — the top-ups are what
- * the screen can offer meanwhile, not an answer to it. It used to print only
- * the reason ("there is nothing to rank") directly above a list of seven
- * ranked decks, which is the screen contradicting itself.
- */
-export function fillNote(
-  reason: string | null | undefined,
-  mix: SuggestionMix,
-  playerName: string,
-  /** How many of the player's own decks the engine scored. */
-  considered = 0,
-): string | null {
-  if (mix.fill === 0) return null;
-  const n = mix.fill;
-  const decks = `${n} deck${n === 1 ? '' : 's'}`;
-  /* OUTRANKED IS NOT ABSENT, and the first version of this confused them. With
-     the two ranked together a player's own decks can all be scored AND all
-     lose — measured live, one player's own best was 56.8% against Deckkies
-     picks from 71.7% down — and the note then said "nothing of theirs could be
-     ranked" about five decks that were ranked. `reason` is null in exactly
-     that case: nothing is missing, their decks are simply weaker here. */
-  if (mix.own === 0 && !reason && considered > 0) {
-    return `${playerName}'s own ${considered} deck${considered === 1 ? '' : 's'} all score below these against this opponent, so every suggestion here is a Deckkies pick from the wider player base. Their own decks are still in the arsenal below.`;
-  }
-  if (mix.own === 0) {
-    const why =
-      reason === 'no_history'
-        ? `Nothing is stored for ${playerName} yet.`
-        : reason === 'no_comfort'
-          ? `${playerName} has no deck played often enough to count as one of theirs.`
-          : reason === 'no_evidence'
-            ? `None of ${playerName}'s decks has a measured record against this opponent.`
-            : `Nothing of ${playerName}'s own could be ranked.`;
-    return `${why} So these ${decks} come from the wider player base — real decks that answer this opponent, none of them in ${playerName}'s history yet.`;
-  }
-  return `${mix.own} of these ${mix.own === 1 ? 'is' : 'are'} ${playerName}'s own. The other ${decks} ${
-    n === 1 ? 'is a Deckkies pick' : 'are Deckkies picks'
-  } from the wider player base, ranked on the same scale — a deck ${playerName} already pilots keeps a small edge, so a pick leads only when it is genuinely stronger.`;
-}
-
-/**
- * How much of the opponent's play a figure covers, worded.
- *
- * NEVER A CONFIDENCE SCORE. `spreadCovered` is a real measured quantity — the
- * share of the opponent's decks the matchup evidence actually reached — and
- * saying it plainly is the honest alternative to inventing a certainty.
- */
-export const THIN_COVER = 50;
-
-export function coverNote(rec: TeamRecommendation): string {
-  const cover = Math.round(rec.spreadCovered);
-  /* WHAT THE FIGURE IS MEASURED OVER CHANGED, so the sentence has to.
-     It used to be the opponent's observed archetype spread; with the coaching
-     brain it is their PROJECTED pool, which also holds real variants of those
-     decks and archetypes their play implies. Saying "what they actually play"
-     about a number computed over inferred decks would be the one thing this
-     feature is built not to do — quietly presenting inference as observation.
-     `threatCovered` is the tell: a server predating the brain does not send
-     it, and the old sentence is still exactly right there. */
-  const projected = rec.threatCovered !== undefined;
-  const what = projected ? 'their likely pool' : 'what they actually play';
-  return cover >= THIN_COVER
-    ? `Covers ${cover}% of ${what}.`
-    : `Covers only ${cover}% of ${what} — the rest is unmeasured, not lost.`;
-}
-
-/** What a recommendation is FOR, in a coach's words rather than the enum's. */
-export const REC_TYPE_NOTE: Record<string, string> = {
-  COUNTER: 'Answers what they have been playing',
-  ROBUST: 'Holds up across their variants too',
-  CONTINGENCY: 'Cover for what they have not shown',
-};
+ * The engine does what `coach.suggest` does on the public Coach Assist: it
+ * puts real decks from the wider player base beside the player's own, marks
+ * each one `fill`, and ranks the two TOGETHER. A row that is a fill carries
+ * this label and nothing more — the notes that used to explain the mix, the
+ * coverage and the type/confidence of each row were removed at the account
+ * holder's request (2026-09-21). */
+export const FILL_NOTE = 'Deckkies pick';
 
 /** The engine's empty states, in words. Three different problems; a screen
  *  that prints one sentence for all three tells the coach to do the wrong
@@ -258,17 +161,15 @@ export const REC_TYPE_NOTE: Record<string, string> = {
 export function emptyReason(reason: string | null | undefined, playerName: string): string | null {
   switch (reason) {
     case 'no_history':
-      return `Nothing is stored for ${playerName} yet, so there is nothing to rank. This fills in as the collector sees their battles.`;
-    case 'no_comfort':
-      return `${playerName} has stored battles, but no deck played often enough to count as one of theirs. Play a deck a few more times, or approve one in the arsenal.`;
-    case 'no_evidence':
-      return `${playerName} has decks, but none with a measured record against what this opponent brings. That is missing evidence, not a bad matchup.`;
-    case 'no_matchup_data':
-      return 'The matchup snapshot on the analytics server is still building. Nothing you did, and it is fixed by waiting rather than by trying again.';
     case 'no_blue_history':
-      return `Nothing is stored for ${playerName} yet, so there is nothing to rank.`;
+      return `Nothing stored for ${playerName} yet.`;
+    case 'no_comfort':
     case 'no_blue_comfort':
-      return `Nothing ${playerName} plays often enough to count as one of their decks.`;
+      return `${playerName} has no deck played often enough to count.`;
+    case 'no_evidence':
+      return `No measured matchups for ${playerName}'s decks against this opponent.`;
+    case 'no_matchup_data':
+      return 'Matchup data is still building on the server.';
     default:
       return null;
   }

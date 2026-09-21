@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type {
-  RecommendationType,
   TeamFolder,
   TeamMode,
   TeamOverall,
@@ -76,7 +75,7 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
   if (overall.reason === 'no_history') {
     return (
       <p className={styles.warn}>
-        Nothing is stored for this roster in the window, so there is no combined spread to answer.
+        Nothing stored for this roster in this window.
       </p>
     );
   }
@@ -86,12 +85,6 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
         The roster as a whole
         <span className={styles.galleryCount}>{overall.players}</span>
       </h3>
-      <p className={styles.rosterLede}>
-        Every considered deck on the roster pooled into one spread, weighted by games rather than
-        by player — so a roster&apos;s busiest member counts for more than its quietest, which is
-        what actually decides what you will meet.
-      </p>
-
       <div className={styles.rosterBody}>
         {/* THEM ON THE LEFT, WHAT TO PLAY ON THE RIGHT. `.rosterBody` is a
             two-column grid; adding the projection as a third child pushed the
@@ -118,16 +111,16 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
             portfolio with no statement of what the portfolio was chosen
             against. Same component, same labelling, one pooled distribution
             instead of one opponent's. */}
-        <Threats threats={overall.threats ?? []} churn={overall.churn} />
+        <Threats threats={overall.threats ?? []} />
         </div>
 
         {overall.reason === 'no_evidence' ? (
           <p className={styles.warn}>
-            No deck has a measured record against this roster&apos;s spread, so nothing is ranked.
+            No measured matchups against this roster yet.
           </p>
         ) : (
           <div>
-            <SuggestHeading sub="against the whole roster" />
+            <SuggestHeading />
             <ol className={styles.mateDecks}>
               {overall.recommended.map((r, i) => (
                 <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
@@ -215,13 +208,6 @@ export function FolderGallery({
   );
 }
 
-/** What a recommendation is FOR, in a coach's words rather than the enum's. */
-const REC_TYPE_LABEL: Record<RecommendationType, string> = {
-  COUNTER: 'Counter',
-  ROBUST: 'Robust',
-  CONTINGENCY: 'Contingency',
-};
-
 /**
  * One recommended deck, with the reasoning it was chosen on.
  *
@@ -233,17 +219,7 @@ const REC_TYPE_LABEL: Record<RecommendationType, string> = {
  * headline alone cannot separate "this beats them" from "this beats
  * everybody", and those are very different reasons to top a ranking.
  */
-function Recommendation({
-  rec,
-  rank,
-  fillLabel = 'Nobody on your squad plays this yet — a Deckkies pick',
-}: {
-  rec: TeamRecommendation;
-  rank?: number;
-  /** How a top-up describes itself. Per teammate it is "not in THEIR
-   *  history"; squad-wide it is "nobody on your squad" — different claims. */
-  fillLabel?: string;
-}) {
+function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number }) {
   /* The delta is computed here rather than shipped, because the two halves are
      worth reading separately and a lone "+9.4" hides both of them. */
   const edge =
@@ -257,23 +233,16 @@ function Recommendation({
         {rank !== undefined && <span className={styles.recRank}>{rank}</span>}
         <div className={styles.recWho}>
           <span className={styles.recDeck}>{rec.name}</span>
-          {/* WHOSE DECK THIS IS is the load-bearing half of a match plan's
-              recommendation: on the day, somebody has to pilot it. A scouting
-              report has nobody, and says what the deck is instead of
-              inventing an owner for it. */}
-          {/* THREE STATES, NOT TWO. An owned deck names its pilot; a scouting
-              row is an archetype representative nobody owns; a FILL is a deck
-              nobody on this squad plays, offered because the teammate's own
-              list ran short. The middle and the last are both ownerless and
-              they are different claims — saying "most-played list of this
-              archetype" about a fill would hide that nobody here flies it. */}
-          <span className={styles.recOwner}>
-            {rec.owner
-              ? `${rec.owner.name} plays it`
-              : rec.fill
-                ? fillLabel
-                : 'A widely played real list of this archetype'}
-          </span>
+          {/* WHO FLIES IT, OR THAT NOBODY HERE DOES. An owned deck names its
+              pilot; a fill says it is a Deckkies pick. A scouting row belongs
+              to nobody and says nothing — the account holder asked for the
+              explanatory lines to go (2026-09-21), and "a widely played real
+              list of this archetype" was one of them. */}
+          {(rec.owner || rec.fill) && (
+            <span className={styles.recOwner}>
+              {rec.owner ? `${rec.owner.name} plays it` : 'Deckkies pick'}
+            </span>
+          )}
         </div>
         <div className={styles.recFigures}>
           <span className={styles.recRate} title="Expected win rate against this opponent's spread of archetypes, weighted by how much they play each one.">
@@ -297,9 +266,7 @@ function Recommendation({
                   </strong>
                 )}
               </span>
-            ) : (
-              'No overall record to compare against'
-            )}
+            ) : null}
           </span>
         </div>
       </div>
@@ -309,51 +276,12 @@ function Recommendation({
         art={rec.art}
         name={rec.owner ? `${rec.owner.name} — ${rec.name}` : rec.name}
       />
-
-      {/* WHY THIS DECK IS ON THE LIST, and how much is actually known.
-          A portfolio of five to seven only reads as preparation if each row
-          says what job it is doing; without this it reads as a longer ranking,
-          which is the failure the longer list was supposed to fix. Both are
-          optional — a server predating the brain sends neither, and the row
-          then draws exactly as it always did. */}
-      {(rec.type || rec.confidence) && (
-        <p className={styles.recWhy}>
-          {rec.type && (
-            <span className={styles.recType} data-type={rec.type}>
-              {REC_TYPE_LABEL[rec.type]}
-            </span>
-          )}
-          {rec.confidence && (
-            <span className={styles.recConf} data-conf={rec.confidence}>
-              {rec.confidence}
-            </span>
-          )}
-          {rec.explanation && <span className={styles.recSay}>{rec.explanation}</span>}
-        </p>
-      )}
-
-      {/* HOW MUCH OF THEIR PLAY THIS COVERS. An expected rate computed over
-          40% of what they bring is a different claim from one computed over
-          all of it, and the difference is invisible in the headline. */}
-      {rec.spreadCovered < 100 && (
-        <p className={styles.recCover}>
-          Measured against {pct(rec.spreadCovered)} of{' '}
-          {rec.threatCovered !== undefined ? 'their likely pool' : 'what they play'} — the rest
-          has no matchup evidence and was left out rather than counted as even.
-        </p>
-      )}
-
-      {/* THE PER-THREAT BREAKDOWN IS GONE, and the projection above is why.
-          It listed one row per threat — the threat's name, its share of the
-          likely pool, this deck's rate against it and the rung that came from
-          — which was the right shape when the opponent model was one row per
-          ARCHETYPE. The projection is one row per DECK now, and
-          `matchup_ladder` still answers per archetype, so four Mixed threats
-          produced four rows carrying the identical `57.2% · 8,390 games`. The
-          list restated the projection directly above it and then repeated
-          itself inside that. The headline, the coverage note and the
-          explanation carry the same claim once each; the evidence trail
-          survives in `matchups` on the payload and in the PDF. */}
+      {/* NO TYPE / CONFIDENCE / EXPLANATION LINE AND NO COVERAGE SENTENCE.
+          Both were here ("Robust · known · Holds up against Royal Hogs …
+          measured against 100% of their projected pool") and the account
+          holder asked for them gone. In production the type and confidence
+          barely vary, so the line said the same thing on every row. The
+          fields stay on the payload; the PDF still prints coverage. */}
     </li>
   );
 }
@@ -386,12 +314,6 @@ function PlayerRow({ row, open, onToggle }: {
 }) {
   const best = row.decks[0];
   const id = `team-opts-${row.owner.tag.replace(/[^A-Za-z0-9]/g, '')}`;
-  /* HOW MANY OF THESE ARE ACTUALLY THEIRS. The list is topped up when their
-     own qualifying decks run short, and the collapsed row must not present a
-     top-up as something this teammate flies — that is the whole reason a fill
-     is marked rather than just appended. */
-  const own = row.decks.filter((d) => !d.fill).length;
-  const filled = row.decks.length - own;
 
   return (
     <li className={styles.mate} data-open={open || undefined}>
@@ -416,16 +338,9 @@ function PlayerRow({ row, open, onToggle }: {
                 Graveyard" when Ravi has never touched it. */}
             {!best
               ? NO_OPTIONS[row.reason ?? ''] ?? 'No options'
-              : own === 0
-                ? /* OUTRANKED IS NOT ABSENT: with no `reason`, their decks were
-                     scored and every one lost to a pick. Saying "nothing of
-                     their own" there would be false. */
-                  row.reason
-                  ? `${NO_OPTIONS[row.reason] ?? 'Nothing of their own'} · ${filled} Deckkies pick${filled === 1 ? '' : 's'}`
-                  : `Deckkies pick: ${best.name} · their own ${row.considered} score lower here`
-                : best.fill
-                  ? `Deckkies pick: ${best.name} · ${own} of their own in the list`
-                  : `${best.name}${filled ? ` · ${filled} Deckkies pick${filled === 1 ? '' : 's'}` : ''}`}
+              : best.fill
+                ? `Deckkies pick: ${best.name}`
+                : best.name}
           </span>
         </span>
 
@@ -452,7 +367,6 @@ function PlayerRow({ row, open, onToggle }: {
               key={`${r.archetype}-${i}`}
               rec={r}
               rank={i + 1}
-              fillLabel={`Not in ${row.owner.name}'s history yet — a Deckkies pick`}
             />
           ))}
         </ol>
@@ -507,21 +421,11 @@ export function OpenFolder({
         </span>
       </div>
 
-      {p.basis === 'live' && (
-        <p className={styles.warn}>
-          This player has never been tracked, so everything below rests on their last {p.battles}{' '}
-          battles from the Clash Royale API. The tag is queued — come back once it has been
-          collected for a fuller read.
-        </p>
-      )}
-
       {folder.reason ? (
         <p className={styles.warn}>
           {folder.reason === 'no_history'
-            ? 'Nothing is stored for this player in the window, so there is no spread to answer.'
-            : scout
-              ? 'No deck has a measured record against what this player brings, so nothing is ranked. A recommendation here would be a guess wearing a percentage.'
-              : 'None of your squad’s decks has a measured record against what this player brings, so nothing is ranked. A recommendation here would be a guess wearing a percentage.'}
+            ? 'Nothing stored for this player in this window.'
+            : 'No measured matchups against this player yet.'}
         </p>
       ) : (
         <>
@@ -558,7 +462,7 @@ export function OpenFolder({
 
               {/* Below the history, because it is derived from it and a reader
                   should meet the evidence before the projection built on it. */}
-              <Threats threats={folder.threats ?? []} churn={folder.churn} />
+              <Threats threats={folder.threats ?? []} />
             </section>
 
             <div className={styles.boardVs}>
@@ -573,28 +477,19 @@ export function OpenFolder({
                  compare, hiding the reasoning behind a chevron would only put
                  a click in front of the one thing on the board. */
               <section className={styles.boardSide} data-side="blue">
-                <SuggestHeading sub={`against ${p.name}`} />
+                <SuggestHeading />
                 <ol className={styles.mateDecks}>
                   {folder.recommended.map((r, i) => (
                     <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
                   ))}
                 </ol>
-                {/* THIS SENTENCE SAID "ranked from N archetypes, each
-                    represented by its most-played list" — true while the pool
-                    was one representative per archetype, and wrong once it
-                    became ~200 real decks, when it announced "204 archetypes". */}
-                <p className={styles.considered}>
-                  Ranked from {folder.considered} real deck{folder.considered === 1 ? '' : 's'} —
-                  the most-played lists of every archetype. Nothing here is generated: every deck
-                  is one people run, with a record to score it on.
-                </p>
               </section>
             ) : (
               /* YOUR SQUAD, ONE ROW EACH. Every teammate appears — including
                  one with nothing to bring, which is information rather than a
                  reason to omit them. */
               <section className={styles.boardSide} data-side="blue">
-                <SuggestHeading sub={`for each of your players, against ${p.name}`} />
+                <SuggestHeading />
                 <ul className={styles.mates}>
                   {folder.perPlayer.map((row) => (
                     <PlayerRow
@@ -607,12 +502,6 @@ export function OpenFolder({
                     />
                   ))}
                 </ul>
-                <p className={styles.considered}>
-                  Tap a player for the seven decks Deckkies suggests against {p.name} — their own
-                  and the strongest from the wider player base, ranked together. A deck they
-                  already pilot gets a small edge, so a pick from outside has to be genuinely
-                  better to lead.
-                </p>
               </section>
             )}
           </div>

@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { saveMode, useTeamSaves, type SavedTeamAnalysis } from '../../../state/teamSaves';
+import type { TeamReport } from '../../../state/analyticsClient';
+import { saveCounts, useTeamSaves, type SavedTeamAnalysis } from '../../../state/teamSaves';
 import { ago } from '../../../utils/format';
 import styles from './TeamAnalysis.module.css';
+
+type FullSave = SavedTeamAnalysis & { report: TeamReport };
 
 /**
  * The saved analyses, listed under the entry board.
@@ -10,16 +13,20 @@ import styles from './TeamAnalysis.module.css';
  *
  * A saved board is something you come BACK for, so the list has to be visible
  * on the screen as you first find it — before anything has been pasted and
- * before anything has been run. Putting it beside the results would mean the
- * only way to reach last week's analysis is to perform this week's first.
+ * before anything has been run.
  *
- * ── EVERY ROW STATES ITS AGE, AND THAT IS NOT DECORATION ──────────────────
+ * ── IT IS ALWAYS THERE, EVEN EMPTY ────────────────────────────────────────
+ *
+ * It used to render nothing with no saves, and on a phone — where every save
+ * was on the desktop, because saves never left the browser that made them —
+ * that meant no sign the feature existed ("in the mobile layout I can't see
+ * saved analysis", 2026-09-21). Saves sync through the account now, and the
+ * heading stays so an empty list reads as empty rather than missing.
+ *
+ * ── EVERY ROW STATES ITS AGE ──────────────────────────────────────────────
  *
  * Every figure in a stored report was measured over a window that closed when
- * the analysis ran. Re-opening it shows what was true then. A row that read
- * only "vs Mohamed Light" would present a fortnight-old spread as the current
- * one, which is the single way this feature could mislead — so the age is part
- * of the row, not a tooltip on it.
+ * the analysis ran, so the age is part of the row, not a tooltip on it.
  */
 
 function Row({
@@ -29,13 +36,16 @@ function Row({
 }: {
   save: SavedTeamAnalysis;
   open: boolean;
-  onOpen: (save: SavedTeamAnalysis) => void;
+  onOpen: (save: FullSave) => void;
 }) {
   const rename = useTeamSaves((s) => s.rename);
   const remove = useTeamSaves((s) => s.remove);
+  const full = useTeamSaves((s) => s.full);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(save.name);
   const [confirming, setConfirming] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [failed, setFailed] = useState(false);
   const field = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -47,8 +57,19 @@ function Row({
     setEditing(false);
   };
 
-  const players = save.report.blue.length + save.report.red.length;
-  const mode = saveMode(save);
+  /* A SAVE FROM ANOTHER DEVICE IS FETCHED ON OPEN — the list carries only its
+     name, date and counts until then. */
+  const openIt = async () => {
+    if (fetching) return;
+    setFailed(false);
+    setFetching(true);
+    const got = await full(save.id);
+    setFetching(false);
+    if (got) onOpen(got);
+    else setFailed(true);
+  };
+
+  const { mode, players, folders } = saveCounts(save);
 
   if (editing) {
     return (
@@ -61,9 +82,8 @@ function Row({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commit();
-            /* Escape restores the STORED name rather than the draft — a
-               cancelled rename that leaves the typing behind has not been
-               cancelled. */
+            /* Escape restores the STORED name — a cancelled rename that leaves
+               the typing behind has not been cancelled. */
             if (e.key === 'Escape') {
               setDraft(save.name);
               setEditing(false);
@@ -78,26 +98,29 @@ function Row({
 
   return (
     <li className={styles.saveRow} data-open={open || undefined}>
-      {/* THE WHOLE ROW OPENS IT. The two small controls beside it are the
-          exceptions, which is why they are buttons in their own right and why
-          this one is not a wrapper around them — a button inside a button is
-          invalid HTML and the browser closes the outer one early, a trap this
-          project has already hit once on the Duel Zone's series row. */}
-      <button type="button" className={styles.saveOpen} onClick={() => onOpen(save)}>
+      {/* THE WHOLE ROW OPENS IT. The two small controls beside it are buttons
+          in their own right, not children of this one — a button inside a
+          button is invalid HTML. */}
+      <button
+        type="button"
+        className={styles.saveOpen}
+        onClick={() => void openIt()}
+        aria-busy={fetching || undefined}
+      >
         <span className={styles.saveTitle}>
-          {/* WHICH TAB THIS CAME OUT OF. One list holds both, because twelve
-              saves is twelve saves however they were made and splitting them
-              would mean two short lists that each look empty. Opening a row
-              switches to its own tab, so the badge is also the answer to "why
-              did the screen just change under me". */}
+          {/* WHICH TAB THIS CAME OUT OF. Opening a row switches to its own tab,
+              so the badge is also the answer to "why did the screen change". */}
           <span className={styles.saveMode} data-mode={mode}>
             {mode === 'scout' ? 'Scout' : 'Match'}
           </span>
           {save.name}
         </span>
         <span className={styles.saveMeta}>
-          {players} player{players === 1 ? '' : 's'} · {save.report.folders.length} folder
-          {save.report.folders.length === 1 ? '' : 's'} · saved {ago(save.savedAt)}
+          {fetching
+            ? 'Opening…'
+            : failed
+              ? 'Could not load — try again'
+              : `${players} player${players === 1 ? '' : 's'} · ${folders} folder${folders === 1 ? '' : 's'} · saved ${ago(save.savedAt)}`}
         </span>
       </button>
 
@@ -113,9 +136,7 @@ function Row({
           Rename
         </button>
         {/* TWO TAPS TO DELETE, and the second one says what it does. These rows
-            sit at thumb height on a phone next to the row that OPENS them, and
-            the thing being destroyed cannot be recovered by re-running: the
-            window it measured has moved. */}
+            sit at thumb height on a phone next to the row that OPENS them. */}
         <button
           type="button"
           className={styles.saveChip}
@@ -135,19 +156,29 @@ export function SavedAnalyses({
   onOpen,
 }: {
   openId: string | null;
-  onOpen: (save: SavedTeamAnalysis) => void;
+  onOpen: (save: FullSave) => void;
 }) {
   const saves = useTeamSaves((s) => s.saves);
-  if (!saves.length) return null;
+  const sync = useTeamSaves((s) => s.sync);
+
+  /* Reconcile with the account on arrival — this is what brings a save made
+     on another device into the list. A no-op when the account is unreachable. */
+  useEffect(() => {
+    void sync();
+  }, [sync]);
 
   return (
     <section className={styles.saves}>
       <h3 className={styles.savesTitle}>Saved analyses</h3>
-      <ul className={styles.saveList}>
-        {saves.map((s) => (
-          <Row key={s.id} save={s} open={s.id === openId} onOpen={onOpen} />
-        ))}
-      </ul>
+      {saves.length === 0 ? (
+        <p className={styles.savesEmpty}>None yet.</p>
+      ) : (
+        <ul className={styles.saveList}>
+          {saves.map((s) => (
+            <Row key={s.id} save={s} open={s.id === openId} onOpen={onOpen} />
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

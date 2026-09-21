@@ -95,3 +95,78 @@ export async function claimLegacyDecks(
   if (res.status === 404) return 'Nothing found for that login.';
   return 'Could not claim those decks.';
 }
+
+/* ── SAVED TEAM ANALYSES ─────────────────────────────────────────────────────
+ *
+ * Same endpoint, same token, a separate document family (`?doc=team-saves`):
+ * an index of every save plus one record per save. One document would not do
+ * — twelve compacted boards run to several megabytes, and the deck blob's 1 MB
+ * cap is there for a reason recorded in `api/decks.ts`.
+ *
+ * Every call answers `null`/`false` when there is no session or the endpoint
+ * is unreachable (including `vite dev`, where `/api/*` does not run). The
+ * caller treats that as "stay local", never as "the account is empty" — an
+ * unreachable account read as empty would delete every synced save. */
+
+const TEAM_SAVES = '/api/decks?doc=team-saves';
+
+async function teamSaveCall(
+  query: string,
+  init: RequestInit = {},
+): Promise<Response | null> {
+  const token = await bearer();
+  if (!token) return null;
+  return safeFetch(`${TEAM_SAVES}${query}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+  });
+}
+
+/** The account's index, or null when it could not be read. */
+export async function pullTeamSaveIndex(): Promise<unknown[] | null> {
+  const res = await teamSaveCall('');
+  if (!res?.ok) return null;
+  try {
+    const json = await res.json();
+    return Array.isArray(json?.saves) ? json.saves : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One save in full, or null. */
+export async function pullTeamSave(id: string): Promise<unknown | null> {
+  const res = await teamSaveCall(`&id=${encodeURIComponent(id)}`);
+  if (!res?.ok) return null;
+  try {
+    const json = await res.json();
+    return json?.found ? json.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Upload (or overwrite) one save. Whether the account accepted it. */
+export async function pushTeamSave(save: { id: string }): Promise<boolean> {
+  const res = await teamSaveCall(`&id=${encodeURIComponent(save.id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(save),
+  });
+  return Boolean(res?.ok);
+}
+
+export async function renameTeamSave(id: string, name: string): Promise<boolean> {
+  const res = await teamSaveCall(`&id=${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+  return Boolean(res?.ok);
+}
+
+export async function deleteTeamSave(id: string): Promise<boolean> {
+  const res = await teamSaveCall(`&id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return Boolean(res?.ok);
+}

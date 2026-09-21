@@ -7,11 +7,7 @@ import { deckKey, type ArsenalDeck } from '../src/state/coachArsenal';
 import {
   assistRows,
   assistSourceRef,
-  coverNote,
   FILL_NOTE,
-  fillNote,
-  REC_TYPE_NOTE,
-  suggestionMix,
   emptyReason,
   suggestedDecks,
   unapproved,
@@ -143,38 +139,6 @@ describe('what gets stored when a suggestion is approved', () => {
   });
 });
 
-describe('how much of the opponent a figure covers', () => {
-  it('says so plainly, and says when it is thin', () => {
-    expect(coverNote(rec(HOG, { spreadCovered: 80 }))).toBe('Covers 80% of what they actually play.');
-
-    /* THE SENTENCE FOLLOWS WHAT THE FIGURE IS MEASURED OVER.
-     *
-     * With the coaching brain the coverage is over the opponent's PROJECTED
-     * pool — their decks, real variants of them, and archetypes their play
-     * implies — and calling that "what they actually play" would present
-     * inference as observation, which is the one thing this feature exists
-     * not to do. `threatCovered` is the tell: a server predating the brain
-     * does not send it, and the original sentence is still exactly right. */
-    expect(coverNote(rec(HOG, { spreadCovered: 80, threatCovered: 0.8 }))).toBe(
-      'Covers 80% of their likely pool.',
-    );
-    expect(coverNote(rec(HOG, { spreadCovered: 21, threatCovered: 0.21 }))).toMatch(
-      /only 21% of their likely pool/,
-    );
-    expect(coverNote(rec(HOG, { spreadCovered: 80 }))).not.toMatch(/likely pool/);
-    expect(coverNote(rec(HOG, { spreadCovered: 21 }))).toMatch(/only 21%.*unmeasured, not lost/);
-  });
-
-  it('is never phrased as a confidence', () => {
-    for (const cover of [5, 49, 50, 99]) {
-      // WORD BOUNDARIES: a bare /sure/ also matches "unmeasured", which is in
-      // the honest half of this very sentence. Same substring trap as
-      // [class*="bar"] matching barWrap.
-      expect(coverNote(rec(HOG, { spreadCovered: cover }))).not.toMatch(/\b(confiden\w*|certain\w*|sure)\b/i);
-    }
-  });
-});
-
 describe('the engine’s empty states', () => {
   it('says something different for each, because they need different actions', () => {
     const said = ['no_history', 'no_comfort', 'no_evidence', 'no_matchup_data'].map((r) => emptyReason(r, 'Rahul'));
@@ -182,9 +146,12 @@ describe('the engine’s empty states', () => {
     expect(said.every((s) => typeof s === 'string' && s.length > 0)).toBe(true);
   });
 
-  it('blames the reader for none of them', () => {
-    expect(emptyReason('no_matchup_data', 'Rahul')).toMatch(/Nothing you did/);
-    expect(emptyReason('no_evidence', 'Rahul')).toMatch(/missing evidence, not a bad matchup/);
+  it('is one short sentence each — the account holder asked for the long ones to go', () => {
+    for (const r of ['no_history', 'no_comfort', 'no_evidence', 'no_matchup_data', 'no_blue_history', 'no_blue_comfort']) {
+      const said = emptyReason(r, 'Rahul')!;
+      expect(said.length).toBeLessThan(80);
+      expect(said.split(/[.!?](\s|$)/).filter((x) => x && x.trim()).length).toBeLessThanOrEqual(1);
+    }
   });
 
   it('has nothing to say when there is no problem', () => {
@@ -193,88 +160,47 @@ describe('the engine’s empty states', () => {
   });
 });
 
-describe('the coaching brain row labels', () => {
-  it('names every recommendation type the server can send', () => {
-    /* A TRIPWIRE, deliberately. `team_scout.REC_*` is the vocabulary and this
-     * is the only place it is turned into words a coach reads; a type the
-     * server starts sending and this map has never heard of would render as
-     * the raw enum on screen. Bump both in the same change. */
-    expect(Object.keys(REC_TYPE_NOTE).sort()).toEqual(['CONTINGENCY', 'COUNTER', 'ROBUST']);
-  });
-
-  it('says what the deck is for without claiming an unmeasured tendency', () => {
-    for (const note of Object.values(REC_TYPE_NOTE)) {
-      expect(note).not.toMatch(/\b(always|never|prefers|tends to|likes|favou?rs)\b/i);
-      expect(note.length).toBeLessThan(60);
-    }
-  });
-
-  it('a row from a server without the brain carries neither type nor confidence', () => {
-    /* The two halves deploy separately — Vercel builds from a push in a
-     * minute and `server/` is copied by hand — so there is always a window
-     * where the client is ahead. A reader that REQUIRED these would blank the
-     * screen during it, which is why every one of them is optional. */
-    const old = rec(HOG);
-    expect(old.type).toBeUndefined();
-    expect(old.confidence).toBeUndefined();
-    expect(old.threatCovered).toBeUndefined();
-    expect(coverNote(old)).toContain('what they actually play');
-  });
-});
-
 describe('Deckkies picks on the What-to-play tab', () => {
-  /* The engine now ranks the player's own decks and the wider player base's
-   * TOGETHER, the way `coach.suggest` sorts Coach Assist's list, and marks
-   * each outside deck `fill`. This tab owes the coach the difference. */
   const own = rec(HOG);
   const pick = rec(GOLEM, { owner: null, comfort: null, fill: true, expectedWinRate: 71.7 });
 
-  it('counts the two kinds apart', () => {
-    expect(suggestionMix([own, pick])).toEqual({ own: 1, fill: 1 });
-    expect(suggestionMix([])).toEqual({ own: 0, fill: 0 });
-  });
-
-  it('says nothing when every row is their own', () => {
-    expect(fillNote('no_history', { own: 3, fill: 0 }, 'Rahul')).toBeNull();
-  });
-
-  it('with nothing of theirs, leads with WHY and then says what the list is', () => {
-    const note = fillNote('no_history', { own: 0, fill: 7 }, 'Rahul')!;
-    expect(note).toMatch(/^Nothing is stored for Rahul yet\./);
-    expect(note).toMatch(/7 decks come from the wider player base/);
-    // The old sentence — "there is nothing to rank" — sat above seven ranked
-    // decks and contradicted them.
-    expect(note).not.toMatch(/nothing to rank/);
-  });
-
-  it('OUTRANKED IS NOT ABSENT — scored decks that all lost are not "nothing"', () => {
-    // Measured live: a player's own best 56.8% against picks from 71.7% down.
-    // `reason` is null there — nothing is missing — and five decks WERE ranked.
-    const note = fillNote(null, { own: 0, fill: 7 }, 'Dora', 5)!;
-    expect(note).toMatch(/Dora's own 5 decks all score below these/);
-    expect(note).not.toMatch(/could be ranked/);
-    expect(note).not.toMatch(/Nothing is stored/);
-  });
-
-  it('with a mix, says they are ranked on one scale — not "always below"', () => {
-    const note = fillNote(null, { own: 4, fill: 3 }, 'Rahul')!;
-    expect(note).toMatch(/4 of these are Rahul's own/);
-    expect(note).toMatch(/same scale/);
-    expect(note).not.toMatch(/always ranked below/);
-  });
-
-  it('one of their own is "is", not "are" — the screenshot caught it', () => {
-    expect(fillNote(null, { own: 1, fill: 6 }, 'Xethol')).toMatch(/^1 of these is Xethol's own/);
-    expect(fillNote(null, { own: 2, fill: 5 }, 'Xethol')).toMatch(/^2 of these are Xethol's own/);
-  });
-
-  it('the row label names it a Deckkies pick', () => {
-    expect(FILL_NOTE).toMatch(/Deckkies pick/);
+  it('the row label is just "Deckkies pick"', () => {
+    expect(FILL_NOTE).toBe('Deckkies pick');
   });
 
   it('approving a pick records it as one in the arsenal', () => {
     expect(assistSourceRef(pick, '#OPP', 30)).toMatchObject({ fill: true });
     expect(assistSourceRef(own, '#OPP', 30)).not.toHaveProperty('fill');
+  });
+});
+
+describe('no explanatory prose on the deck rows', () => {
+  /* ASKED FOR BY NAME (2026-09-21): "dont need this written : Robust / known /
+   * Holds up against Royal Hogs and the close variants of it — measured
+   * against 100% of their projected pool", and no other "rubbish written
+   * things". The fields stay on the payload (the PDF and saved plans use
+   * them); what this pins is that neither screen PRINTS them. */
+  const read = (f: string) => readFileSync(resolve(__dirname, '..', f), 'utf8');
+  const screens = [
+    'src/components/Analytics/TeamAnalysis/TeamFolders.tsx',
+    'src/components/Admin/CoachRoster/AssistTab.tsx',
+    'src/components/Analytics/TeamAnalysis/Threats.tsx',
+  ];
+
+  it('prints no type, confidence or explanation', () => {
+    for (const f of screens) {
+      const src = read(f);
+      expect(src, f).not.toMatch(/\{\s*rec\.explanation/);
+      expect(src, f).not.toMatch(/rec\.type\s*[&?]/);
+      expect(src, f).not.toMatch(/rec\.confidence\s*[&?]/);
+      expect(src, f).not.toMatch(/\{t\.confidence\}/);
+    }
+  });
+
+  it('prints no coverage sentence', () => {
+    for (const f of screens) {
+      expect(read(f), f).not.toMatch(/Measured against|Covers only|likely pool/);
+    }
   });
 });
 

@@ -916,6 +916,26 @@ def _suggested(own: list[dict], pool, limit: int) -> list[dict]:
         return scout.diversify(own, limit=limit, minimum=limit)
 
 
+def _evidence_on_top(rows: list[dict], keep: int = 1) -> list[dict]:
+    """`matchups` stays on the first `keep` rows only, and is dropped from the rest.
+
+    THE PER-THREAT TABLE IS THE BULK OF THE PAYLOAD AND ALMOST NOTHING READS
+    IT. One row per projected threat, ~4 kB per recommendation, and a 5v5
+    match plan carries 5 folders x (7 + 5 x 7) of them — measured, 80% of a
+    1.08 MB report. The screen stopped printing it (2026-09-21); the one reader
+    left is the PDF, which prints the table for each folder's TOP pick. Keeping
+    every copy made a saved 10v10 board ~4.6 MB, past what a browser will
+    store, which is how "This board is too large to store in the browser" was
+    reported.
+
+    The rows are `diversify`'s COPIES, so this cannot reach into another list
+    that shares a deck.
+    """
+    for row in rows[keep:]:
+        row.pop("matchups", None)
+    return rows
+
+
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             snap: dict | None, top_n: int = TOP_N,
             seeds: dict | None = None) -> dict:
@@ -1037,7 +1057,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             # as the `owner` on every row and the `fill` mark on every row that
             # has none — the reader is told which is which, rather than the
             # stronger deck being withheld.
-            "decks": _suggested(rows, fill_pool, PER_PLAYER_TOP_N),
+            "decks": _evidence_on_top(
+                _suggested(rows, fill_pool, PER_PLAYER_TOP_N), keep=0),
             "considered": len(rows),
             # WHICH empty state this is, said rather than inferred from a
             # missing list. The three are genuinely different problems: nothing
@@ -1092,7 +1113,7 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # IN A MATCH PLAN THE SQUAD'S DECKS AND THE POPULATION'S ARE RANKED
         # TOGETHER (`_suggested`), the same sort as each teammate's list. In a
         # scouting report `scored` already IS the population.
-        "recommended": (
+        "recommended": _evidence_on_top(
             _suggested(_distinct(scored), fill_pool, top_n) if blue
             else scout.diversify(_distinct(scored), limit=top_n)
         ),
@@ -1150,7 +1171,8 @@ def _combined(red: list[dict], cards: list[_Candidate],
         "threats": threats,
         "churn": projection["churn"],
         "mass": projection.get("mass"),
-        "recommended": scout.diversify(_distinct(scored), limit=SCOUT_TOP_N),
+        "recommended": _evidence_on_top(
+            scout.diversify(_distinct(scored), limit=SCOUT_TOP_N)),
         "reason": None if scored else "no_evidence",
         "brain": scout.BRAIN_VERSION,
     }

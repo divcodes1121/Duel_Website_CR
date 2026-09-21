@@ -17,11 +17,13 @@ export const DECKKIES_SUGGEST = 'What Deckkies Suggest To Play';
  * 12% wash, so it clears contrast in both themes without a white-on-colour
  * fill; the bar is `--solid-violet`, a bare graphic mark.
  */
-export function SuggestHeading({ sub }: { sub?: string }) {
+export function SuggestHeading() {
+  /* NO SUBTITLE. It carried "against the whole roster", "for each of your
+     players, against …" and a count of own vs outside decks; the account
+     holder asked for the explanatory text to go (2026-09-21). */
   return (
     <h4 className={styles.head}>
       <span className={styles.title}>{DECKKIES_SUGGEST}</span>
-      {sub && <span className={styles.sub}>{sub}</span>}
     </h4>
   );
 }

@@ -122,6 +122,158 @@ function legacyKey(username: string, password: string): string {
   return `deck-data:${hash}`;
 }
 
+/* ── SAVED TEAM ANALYSES (`?doc=team-saves`) ─────────────────────────────────
+ *
+ * Team Analysis saves used to live only in the browser that made them, so a
+ * phone never showed a board saved on the desktop (2026-09-21). They are kept
+ * here now, per account.
+ *
+ * ONE RECORD PER SAVE PLUS A HASH INDEX, NOT ONE DOCUMENT. A compacted 10v10
+ * board is ~0.7 MB and twelve of them would blow the 1 MB request cap above;
+ * the index is what the list needs and is a few hundred bytes a save. `HSET`
+ * and `HDEL` touch one field each, so two devices saving at once cannot
+ * overwrite each other's index entry the way a read-modify-write would.
+ *
+ * THIS FILE CANNOT IMPORT FROM `src/` (see the auth note), so the cap and the
+ * id shape are restated here and `tests/teamSaves.test.ts` asserts they match
+ * `src/state/teamSaveRules.ts`.
+ *
+ * The route is a function of a tiny KV interface rather than of Upstash
+ * directly, so the whole contract is tested against an in-memory store. */
+
+export const TEAM_SAVE_MAX = 12;
+export const TEAM_SAVE_ID = /^t[a-z0-9]{6,24}$/;
+
+export interface TeamSaveKV {
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<unknown>;
+  del(key: string): Promise<unknown>;
+  hgetall(key: string): Promise<Record<string, unknown> | null>;
+  hset(key: string, value: Record<string, unknown>): Promise<unknown>;
+  hdel(key: string, field: string): Promise<unknown>;
+}
+
+interface TeamSaveMeta {
+  id: string;
+  name: string;
+  savedAt: string;
+  mode: 'scout' | 'squads';
+  players: number;
+  folders: number;
+}
+
+const teamIndexKey = (userId: string) => `team-saves:user:${userId}`;
+const teamSaveKey = (userId: string, id: string) => `team-save:user:${userId}:${id}`;
+
+function isMeta(x: unknown): x is TeamSaveMeta {
+  if (!x || typeof x !== 'object') return false;
+  const m = x as TeamSaveMeta;
+  return typeof m.id === 'string' && typeof m.name === 'string' && typeof m.savedAt === 'string';
+}
+
+/** The record to store and its index entry — or null when the body is not a save. */
+function teamSaveFrom(body: unknown, id: string): { record: Record<string, unknown>; meta: TeamSaveMeta } | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as Record<string, unknown>;
+  if (b.id !== id) return null;
+  if (typeof b.name !== 'string' || !b.name.trim() || b.name.length > 60) return null;
+  if (typeof b.savedAt !== 'string' || Number.isNaN(Date.parse(b.savedAt))) return null;
+  if (typeof b.blueText !== 'string' || typeof b.redText !== 'string') return null;
+  const r = b.report as Record<string, unknown> | null | undefined;
+  if (!r || typeof r !== 'object') return null;
+  if (!Array.isArray(r.folders) || !Array.isArray(r.blue) || !Array.isArray(r.red)) return null;
+  return {
+    // Only the fields a save has. Anything else a client sends is not stored.
+    record: { id, name: b.name, savedAt: b.savedAt, blueText: b.blueText, redText: b.redText, report: r },
+    meta: {
+      id,
+      name: b.name,
+      savedAt: b.savedAt,
+      mode: r.mode === 'scout' ? 'scout' : 'squads',
+      players: r.blue.length + r.red.length,
+      folders: r.folders.length,
+    },
+  };
+}
+
+export async function teamSaveRoute(
+  method: string | undefined,
+  id: string | null,
+  body: unknown,
+  userId: string,
+  kv: TeamSaveKV,
+): Promise<{ status: number; json: unknown; allow?: string }> {
+  const index = teamIndexKey(userId);
+  if (id !== null && !TEAM_SAVE_ID.test(id)) return { status: 400, json: { error: 'Bad id' } };
+
+  if (method === 'GET') {
+    if (id === null) {
+      const all = (await kv.hgetall(index)) ?? {};
+      const saves = Object.values(all)
+        .filter(isMeta)
+        .sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
+      return { status: 200, json: { saves } };
+    }
+    const data = await kv.get(teamSaveKey(userId, id));
+    return { status: 200, json: { found: data != null, data: data ?? null } };
+  }
+
+  if (id === null) return { status: 400, json: { error: 'Missing id' } };
+
+  if (method === 'PUT') {
+    if (JSON.stringify(body ?? {}).length > MAX_BODY_BYTES) {
+      return { status: 413, json: { error: 'Payload too large' } };
+    }
+    const parsed = teamSaveFrom(body, id);
+    if (!parsed) return { status: 400, json: { error: 'Not a saved analysis' } };
+    const all = (await kv.hgetall(index)) ?? {};
+    if (!(id in all) && Object.keys(all).length >= TEAM_SAVE_MAX) {
+      return { status: 409, json: { error: 'full' } };
+    }
+    // Record FIRST, index second: an index entry must never point at nothing.
+    await kv.set(teamSaveKey(userId, id), parsed.record);
+    await kv.hset(index, { [id]: parsed.meta });
+    return { status: 200, json: { ok: true } };
+  }
+
+  if (method === 'PATCH') {
+    const name = (body as { name?: unknown } | null)?.name;
+    if (typeof name !== 'string' || !name.trim() || name.length > 60) {
+      return { status: 400, json: { error: 'Bad name' } };
+    }
+    const record = await kv.get(teamSaveKey(userId, id));
+    if (!record || typeof record !== 'object') return { status: 404, json: { error: 'Not found' } };
+    const next = { ...(record as Record<string, unknown>), name: name.trim() };
+    const parsed = teamSaveFrom(next, id);
+    if (!parsed) return { status: 404, json: { error: 'Not found' } };
+    await kv.set(teamSaveKey(userId, id), parsed.record);
+    await kv.hset(index, { [id]: parsed.meta });
+    return { status: 200, json: { ok: true } };
+  }
+
+  if (method === 'DELETE') {
+    // Index first, so a half-finished delete leaves an orphan record nobody
+    // lists rather than a listed save that cannot be opened.
+    await kv.hdel(index, id);
+    await kv.del(teamSaveKey(userId, id));
+    return { status: 200, json: { ok: true } };
+  }
+
+  return { status: 405, json: { error: 'Method not allowed' }, allow: 'GET, PUT, PATCH, DELETE' };
+}
+
+function redisKV(): TeamSaveKV {
+  const r = getRedis();
+  return {
+    get: (k) => r.get(k),
+    set: (k, v) => r.set(k, v),
+    del: (k) => r.del(k),
+    hgetall: (k) => r.hgetall(k),
+    hset: (k, v) => r.hset(k, v),
+    hdel: (k, f) => r.hdel(k, f),
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (!redisUrl || !redisToken) {
@@ -134,6 +286,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(401).json({ error: 'Invalid credential' });
       return;
     }
+    if (req.query?.doc === 'team-saves') {
+      const id = typeof req.query.id === 'string' ? req.query.id : null;
+      const out = await teamSaveRoute(req.method, id, req.body, userId, redisKV());
+      if (out.allow) res.setHeader('Allow', out.allow);
+      res.status(out.status).json(out.json);
+      return;
+    }
+
     const key = keyFor(userId);
 
     if (req.method === 'GET') {

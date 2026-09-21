@@ -409,6 +409,12 @@ check("each row is sorted best first",
           for r in folder["perPlayer"]))
 check("a row that produced decks states no reason",
       all(r["reason"] is None for r in folder["perPlayer"] if r["decks"]))
+check("no per-teammate deck carries the per-threat table — nothing reads it",
+      any(r["decks"] for r in folder["perPlayer"])
+      and all("matchups" not in d for r in folder["perPlayer"] for d in r["decks"]))
+check("the folder's top pick keeps it, for the PDF",
+      bool(folder["recommended"]) and "matchups" in folder["recommended"][0]
+      and all("matchups" not in d for d in folder["recommended"][1:]))
 check("the squad-wide headline lists three DISTINCT decks",
       len({",".join(sorted(set(r["cards"]))) for r in folder["recommended"]})
       == len(folder["recommended"]),
@@ -589,9 +595,12 @@ check("so the practice tiebreak contributes nothing to its rank",
               for r in scout_folder["recommended"]),
       "with no owner there is nothing to be practised at, so the tiebreak "
       "must contribute exactly nothing")
-check("the same scorer produced it — every row still names its rung",
-      all("source" in m for r in scout_folder["recommended"]
-          for m in r["matchups"]))
+check("the same scorer produced it — the top row still names its rung",
+      bool(scout_folder["recommended"])
+      and all("source" in m for m in scout_folder["recommended"][0]["matchups"]))
+check("the per-threat table rides on the TOP row only — the PDF's one reader",
+      all("matchups" not in r for r in scout_folder["recommended"][1:]),
+      "every other copy was 80% of a match plan's payload and nothing drew it")
 
 # ── the roster-wide read ────────────────────────────────────────────────────
 

@@ -424,6 +424,12 @@
   color: var(--text);
 }
 
+.savesEmpty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
 .saveList {
   display: flex;
   flex-direction: column;
@@ -654,14 +660,6 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface-nested);
-}
-
-.rosterLede {
-  margin: 0;
-  max-width: 72ch;
-  font-size: 0.78rem;
-  line-height: 1.5;
-  color: var(--text-muted);
 }
 
 /* `minmax(0, 1fr)` on both, never a bare `1fr` — see the note on `.entry`.
@@ -1002,20 +1000,10 @@
   color: var(--text);
 }
 
-.recSub,
-.recCover,
-.considered {
+.recSub {
   font-size: 0.72rem;
   line-height: 1.45;
   color: var(--text-muted);
-}
-
-.recCover {
-  margin: 0;
-}
-
-.considered {
-  margin: 0;
 }
 
 /* THE SCOUT ROW'S SECOND FIGURE — how much better this deck does here than it
@@ -1238,73 +1226,6 @@
     grid-column: 1 / -1;
   }
 
-}
-
-/* THE MATCHUP ROW GOES TWO-UP MUCH EARLIER THAN THE PAGE DOES, because it is
- * sized by its COLUMN and not by the viewport. The board splits into two sides
- * at 62rem, so from there up to ~1300px each side is only ~330-440px wide —
- * and four columns of text inside that overflowed at 1024 even though the page
- * around them had plenty of room. Breakpoints on the page do not describe a
- * box that is half the page.
- *
- * Name and rate stay on the first line (the two things being read together);
- * the share and the evidence drop underneath. */
-/* A recommendation's confidence word. Its twin for the projection lives in
-   `Threats.module.css`; the two were one combined rule until the projection
-   moved into its own component. */
-.recConf {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-/* The two weakest words are the ones worth marking, because they are the ones
-   a reader must not mistake for evidence. */
-.recConf[data-conf='speculative'],
-.recConf[data-conf='possible'] {
-  color: var(--hue-violet);
-}
-
-/* ── WHY A RECOMMENDATION IS ON THE LIST ────────────────────────────────── */
-
-.recWhy {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem;
-  margin: 0;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  color: var(--text-muted);
-}
-
-.recType {
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.recType[data-type='COUNTER'] {
-  color: var(--hue-green);
-}
-
-.recType[data-type='ROBUST'] {
-  color: var(--hue-blue);
-}
-
-.recType[data-type='CONTINGENCY'] {
-  color: var(--hue-violet);
-}
-
-.recSay {
-  flex: 1 1 14rem;
-  min-width: 0;
-  color: var(--text-muted);
 }
 
 /* ── THE HISTORY WINDOW ─────────────────────────────────────────────────────

@@ -26,6 +26,16 @@
   border-top: 1px solid var(--border);
 }
 
+/* The rule above separates the projection from the history it sits under.
+   Where it is the first thing in its box — the Coach Roster's What-to-play
+   tab gives it a block of its own — the rule divides nothing and only left an
+   empty band at the top of the card. */
+.threats:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .threatsTitle {
   display: flex;
   flex-wrap: wrap;
@@ -36,12 +46,6 @@
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--text);
-}
-
-.threatsNote {
-  font-size: 0.68rem;
-  font-weight: 500;
-  color: var(--text-muted);
 }
 
 .threatList {
@@ -55,7 +59,7 @@
 
 .threatRow {
   display: grid;
-  grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  grid-template-columns: 2.4rem minmax(0, 1fr);
   align-items: baseline;
   gap: 0.3rem 0.5rem;
   padding: 0.3rem 0.4rem;
@@ -81,13 +85,6 @@
   font-size: 0.78rem;
   color: var(--text);
   text-align: right;
-}
-
-.threatBody {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
 }
 
 .threatName {
@@ -118,38 +115,4 @@
 
 .threatKind[data-evidence='INFERRED'] {
   color: var(--hue-violet);
-}
-
-.threatWhy {
-  font-size: 0.68rem;
-  line-height: 1.4;
-  color: var(--text-muted);
-}
-
-.threatConf {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-/* The two weakest words are the ones worth marking, because they are the ones
-   a reader must not mistake for evidence. */
-.threatConf[data-conf='speculative'],
-.threatConf[data-conf='possible'] {
-  color: var(--hue-violet);
-}
-
-/* The projection is a stack on a phone: three columns at 390px crush the
-   reason line to a word a row. */
-@media (max-width: 34rem) {
-  .threatRow {
-    grid-template-columns: 2.4rem minmax(0, 1fr);
-  }
-
-  .threatConf {
-    grid-column: 2;
-  }
 }

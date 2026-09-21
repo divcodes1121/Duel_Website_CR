@@ -359,7 +359,7 @@ export function TeamAnalysis() {
         scout && e instanceof AnalyticsError && /squad/i.test(e.message);
       setError(
         stale
-          ? 'The analytics service has not been updated for scouting reports yet — it still requires both rosters. Match Plan works in the meantime, and deploying the current server/team_analysis.py to the API host enables this tab.'
+          ? 'Scouting is not available on the server yet — use Match Plan.'
           : e instanceof AnalyticsError
             ? e.message
             : 'The analysis could not be completed. Try again in a moment.',
@@ -396,15 +396,15 @@ export function TeamAnalysis() {
         setSavedId(result.id);
         /* NOT `savedAt`. What is on screen was measured just now; it becomes a
            snapshot when it is re-opened, not when it is written. */
-        setSaveNote(existing ? 'Updated.' : 'Saved. It is in the list above.');
+        setSaveNote(existing ? 'Updated.' : 'Saved.');
         return;
       }
       setSaveNote(
         result.reason === 'full'
           ? `You already have ${MAX_SAVES} saved analyses. Delete one to keep this.`
           : result.reason === 'too-large'
-            ? 'This board is too large to store in the browser. Narrow the rosters and run it again.'
-            : 'The browser refused to store it — its storage may be full or blocked.',
+            ? 'This board is too large to save.'
+            : 'Browser storage is full — delete an older analysis.',
       );
     },
     [report, saves, savedId, blueText, redText, doSave],
@@ -414,7 +414,7 @@ export function TeamAnalysis() {
      likely to want — the same match-up, re-run against today's window — is one
      click away rather than a re-paste. */
   const openSave = useCallback(
-    (save: SavedTeamAnalysis) => {
+    (save: SavedTeamAnalysis & { report: TeamReport }) => {
       /* OPENING A SAVE SWITCHES TO ITS OWN TAB. One list holds both kinds, so
          a scouting report opened from under the Match Plan tab would either
          render as a match plan with no players in it or refuse to render at
@@ -615,8 +615,7 @@ export function TeamAnalysis() {
             which reads as a bug. */}
         {!problem && overlap.length > 0 && (
           <p className={styles.note}>
-            {overlap.join(', ')} {overlap.length === 1 ? 'is' : 'are'} on both sides. Their own decks
-            can be recommended against them.
+            {overlap.join(', ')} {overlap.length === 1 ? 'is' : 'are'} on both sides.
           </p>
         )}
       </div>
@@ -624,18 +623,8 @@ export function TeamAnalysis() {
       {loading && (
         <ReadingState k="teams" hue="pink">
           <p>
-            {scout ? (
-              <>
-                Reading {red.members.length} player
-                {red.members.length === 1 ? '' : 's'} and scoring every archetype against what
-                they bring.
-              </>
-            ) : (
-              <>
-                Reading {blue.members.length + red.members.length} players and scoring every deck
-                your squad plays against each opponent&apos;s spread.
-              </>
-            )}
+            Reading {scout ? red.members.length : blue.members.length + red.members.length} player
+            {(scout ? red.members.length : blue.members.length + red.members.length) === 1 ? '' : 's'}…
           </p>
         </ReadingState>
       )}
@@ -651,10 +640,7 @@ export function TeamAnalysis() {
               without this line presents a fortnight-old read as the current
               one, which is the single way this feature could mislead. */}
           {savedAt && (
-            <p className={styles.snapshot}>
-              Saved {ago(savedAt)} — these are the figures as they were then, not as they are now.
-              Use <strong>Re-run against today</strong> to measure the same squads again.
-            </p>
+            <p className={styles.snapshot}>Saved {ago(savedAt)}.</p>
           )}
 
           {/* Named ONCE at the top. Eight identical empty folders do not read as
@@ -667,10 +653,10 @@ export function TeamAnalysis() {
                      host; until it lands there is no pool to rank at all.
                      Saying "no decks found" here would send somebody back to
                      their roster to look for a mistake that is not in it. */
-                  'The matchup snapshot on the analytics service is still building, so there is nothing to rank yet. It takes about a minute — try again shortly.'
+                  'Matchup data is still building — try again in a minute.'
                 : report.pool.reason === 'no_blue_history'
-                  ? 'Nothing is stored for your side yet, so there are no decks to recommend. Newly added tags are queued for collection and fill in within a couple of hours.'
-                  : `No deck on your side clears the ${report.pool.minGames}-game floor, so there is nothing anyone has actually piloted to recommend.`}
+                  ? 'Nothing stored for your side yet.'
+                  : `No deck on your side has ${report.pool.minGames}+ games.`}
             </p>
           )}
 
@@ -678,10 +664,7 @@ export function TeamAnalysis() {
               folders exist rather than about anything inside one. */}
           {capSkew && (
             <p className={styles.warn}>
-              The analytics service is still enforcing a limit of {serverCap} players a side, so
-              this report covers only the first {serverCap} of each roster — anyone past that was
-              dropped without being listed. Deploying the current{' '}
-              <code>server/team_analysis.py</code> to the API host lifts it to {MAX_SQUAD}.
+              Only the first {serverCap} players of each roster were analysed.
             </p>
           )}
 

@@ -1675,7 +1675,11 @@ export interface TeamRecommendation {
   /** How much of their play that figure actually covers, as a percentage. */
   spreadCovered: number;
   score: number;
-  matchups: TeamMatchupRow[];
+  /** The per-threat evidence. ONLY ON A FOLDER'S TOP PICK now — the PDF is
+   *  its one reader, and every other copy was 80% of a match plan's payload
+   *  (`_evidence_on_top` in `server/team_analysis.py`). Absent everywhere else,
+   *  and on saves compacted by `compactReport`. */
+  matchups?: TeamMatchupRow[];
 
   /* ── THE COACHING BRAIN'S SEPARATED SIGNALS ──────────────────────────────
    *

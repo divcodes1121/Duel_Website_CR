@@ -15,11 +15,7 @@ import { useCoachPlans } from '../../../state/coachPlansStore';
 import {
   assistRows,
   assistSourceRef,
-  coverNote,
   FILL_NOTE,
-  fillNote,
-  REC_TYPE_NOTE,
-  suggestionMix,
   emptyReason,
   suggestedDecks,
   type ArsenalRow,
@@ -122,7 +118,7 @@ export function AssistTab({
         section="assist"
         windowLabel={windowLabel}
         title={`What should ${playerLabel(player)} play?`}
-        blurb="Pick who they are up against. The ranking is the analytics engine's own — the same one Team Analysis uses — and this screen shows which of its picks you have already approved."
+        blurb="Pick who they are up against."
       />
     );
   }
@@ -171,28 +167,20 @@ export function AssistTab({
       setSaving(false);
     }
   }
-  /* TWO DIFFERENT SENTENCES FOR TWO DIFFERENT STATES. With nothing at all to
-     show, the reason is the whole answer. With Deckkies picks on screen, the
-     old reason — "there is nothing to rank" — sat directly above a list of
-     seven ranked decks and contradicted it; the fill note says why none of
-     them are theirs AND what the list is instead. */
-  const mix = suggestionMix(recs);
+  /* ONE SENTENCE, AND ONLY WHEN THE LIST IS EMPTY — then the reason is the
+     whole answer. With decks on screen it said nothing a row does not already
+     say, and the account holder asked for the explanatory text to go. */
   const why = suggested.length
-    ? fillNote(mine?.reason ?? null, mix, playerLabel(player), mine?.considered ?? 0)
+    ? null
     : emptyReason(mine?.reason ?? report?.pool?.reason, playerLabel(player));
 
   return (
     <div className={styles.arsenal}>
       <section className={styles.block}>
         <div className={styles.scoutHead}>
-          <div>
-            <h3 className={styles.blockTitle}>
-              {playerLabel(player)} against {opponentName}
-            </h3>
-            <span className={styles.muted}>
-              Ranked over {windowLabel}, against what this opponent is likely to bring — change the window above.
-            </span>
-          </div>
+          <h3 className={styles.blockTitle}>
+            {playerLabel(player)} against {opponentName}
+          </h3>
           <div className={styles.controlRow}>
             <button type="button" className={styles.primaryButton} disabled={saving} onClick={() => void saveAsPlan()}>
               {saving ? 'Saving…' : 'Save as match plan'}
@@ -207,7 +195,6 @@ export function AssistTab({
         </div>
         {error && <p className={styles.formError}>{error}</p>}
         {planError && <p className={styles.formError}>{planError}</p>}
-        {why && <p className={styles.hint}>{why}</p>}
       </section>
 
       {/* WHAT THEY ARE LIKELY TO BRING — the other half of Coach Assist's
@@ -219,7 +206,6 @@ export function AssistTab({
         <section className={styles.block}>
           <Threats
             threats={folder!.threats!}
-            churn={folder!.churn}
             title={`What ${opponentName} is likely to bring`}
           />
         </section>
@@ -232,13 +218,9 @@ export function AssistTab({
           pilot keeps a small edge, so an outside pick must be genuinely better
           to lead. */}
       <section className={styles.block}>
-        <SuggestHeading
-          sub={`${mix.own} of ${playerLabel(player)}'s own · ${mix.fill} from the wider player base`}
-        />
+        <SuggestHeading />
         {suggested.length === 0 ? (
-          <p className={styles.muted}>
-            {why ?? 'The engine had nothing to rank for this pairing.'}
-          </p>
+          <p className={styles.muted}>{why ?? 'Nothing to rank for this pairing.'}</p>
         ) : (
           <ul className={styles.arsenalList}>
             {suggested.map((s) => (
@@ -256,11 +238,10 @@ export function AssistTab({
       <section className={styles.block}>
         <div className={styles.blockHead}>
           <h3 className={styles.blockTitle}>Their arsenal against this opponent</h3>
-          <span className={styles.muted}>your order, not the engine's</span>
         </div>
         {rows.length === 0 ? (
           <p className={styles.muted}>
-            Nothing is approved for {playerLabel(player)} yet. The Arsenal tab is where that is decided.
+            Nothing in {playerLabel(player)}&apos;s arsenal yet.
           </p>
         ) : (
           <ul className={styles.arsenalList}>
@@ -298,34 +279,19 @@ function SuggestionRow({ suggestion, onApprove }: { suggestion: SuggestedDeck; o
         <div className={styles.arsenalMeta}>
           <span className={styles.deckName}>{arsenal ? deckLabel(arsenal) : rec.name}</span>
           <span className={styles.muted}>
-            {/* The engine's two figures, printed as they arrive. Nothing here
-                is combined into a score of our own. */}
-            Expected <strong>{rec.expectedWinRate.toFixed(1)}%</strong> against them
-            {typeof rec.overallWinRate === 'number' ? ` · ${rec.overallWinRate.toFixed(1)}% against the field` : ''}
-            {rec.comfort ? ` · they have played it ${rec.comfort.games} times` : ''}
+            {/* The engine's figures, printed as they arrive. Nothing here is
+                combined into a score of our own. */}
+            <strong>{rec.expectedWinRate.toFixed(1)}%</strong> vs them
+            {typeof rec.overallWinRate === 'number' ? ` · ${rec.overallWinRate.toFixed(1)}% vs the field` : ''}
+            {rec.comfort ? ` · played ${rec.comfort.games}×` : ''}
           </span>
-          <span className={styles.muted}>{coverNote(rec)}</span>
-          {/* A DECKKIES PICK SAYS SO. It is not a deck the player runs, and a
-              coach approving it is choosing to teach them something new — a
-              different conversation from approving one they already fly. */}
+          {/* A DECKKIES PICK SAYS SO — approving one means teaching the player
+              something new, a different conversation from one they fly. */}
           {rec.fill && (
             <span className={styles.tagRow}>
               <span className={styles.tagChip} data-role>
                 {FILL_NOTE}
               </span>
-            </span>
-          )}
-          {/* WHAT JOB THIS DECK IS DOING, and how much is actually known.
-              A list of five to seven only reads as preparation if each row
-              says why it is there; without it the longer list reads as a
-              longer ranking, which is the failure it was meant to fix.
-              Both are absent on a payload from a server predating the brain,
-              and the row then draws exactly as it always did. */}
-          {(rec.type || rec.confidence) && (
-            <span className={styles.muted}>
-              {rec.type ? REC_TYPE_NOTE[rec.type] ?? rec.type : null}
-              {rec.type && rec.confidence ? ' · ' : null}
-              {rec.confidence ? `confidence: ${rec.confidence}` : null}
             </span>
           )}
           <span className={styles.tagRow}>
@@ -360,7 +326,7 @@ function ArsenalVerdictRow({ row }: { row: ArsenalRow }) {
           <span className={styles.deckName}>{deckLabel(deck)}</span>
           {rec ? (
             <span className={styles.muted}>
-              The engine picked this: expected <strong>{rec.expectedWinRate.toFixed(1)}%</strong>. {coverNote(rec)}
+              Suggested · <strong>{rec.expectedWinRate.toFixed(1)}%</strong> vs them
             </span>
           ) : (
             <span className={styles.muted}>{verdict(reason, played)}</span>
@@ -389,11 +355,7 @@ function ArsenalVerdictRow({ row }: { row: ArsenalRow }) {
  * acting on an absence.
  */
 function verdict(reason: ArsenalRow['reason'], played: number | null): string {
-  if (reason === 'never_played') {
-    return 'No stored battles on this deck, so the engine cannot score it — that is missing evidence, not a verdict.';
-  }
-  if (reason === 'scored_lower') {
-    return `Scored, but not among the top picks here${played ? ` (${played} stored battles on it)` : ''}.`;
-  }
-  return 'Their battles have not been read, so there is nothing to compare this against.';
+  if (reason === 'never_played') return 'Not scored — no stored battles on it';
+  if (reason === 'scored_lower') return `Ranked lower here${played ? ` · ${played} battles` : ''}`;
+  return 'Not scored';
 }

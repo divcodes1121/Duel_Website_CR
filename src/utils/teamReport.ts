@@ -1,6 +1,7 @@
 import { pdfSafe } from './analyticsReport';
 import type {
   TeamFolder,
+  TeamMatchupRow,
   TeamMember,
   TeamRecommendation,
   TeamReport,
@@ -602,9 +603,9 @@ function folderBlocks(
      * order, so it is the likeliest threat of that archetype; the shares are
      * summed, because the archetype's real weight in the projection is all of
      * its decks together and printing only the leader's would understate it. */
-    const byArchetype: typeof top.matchups = [];
+    const byArchetype: TeamMatchupRow[] = [];
     const seenArch = new Map<string, number>();
-    for (const m of top.matchups) {
+    for (const m of top.matchups ?? []) {
       const at = seenArch.get(m.archetype);
       if (at === undefined) {
         seenArch.set(m.archetype, byArchetype.length);
