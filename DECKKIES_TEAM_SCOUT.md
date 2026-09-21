@@ -427,6 +427,29 @@ The bot's database is ATTACHed `mode=ro`.
 A 12v12 of players whose history is not in the page cache adds ~5 s of
 per-player reads.
 
+**LIVE as `080540f`.** The server was scp'd first (backups
+`*.bak-20260921-161306-preindex`). The first index build ran through the real
+unit: `Result=success`, 387 s, 0 orphan rows. Measured in production after:
+
+| request | before | after |
+|---|---:|---:|
+| 5v5 through `api.deckkies.com`, first / repeat | 166 s / 152 s | **6.6 s / 3.0 s** |
+| 12v12 of players nobody had read today, first / repeat | — | **4.0 s / 1.3 s** |
+| 12-player scouting report | — | **1.1 s** |
+| 1v1 (the Coach Roster's What-to-play) | 1.25 s | **0.1 s** |
+
+**Before deploying**, the same 5v5 was run through the staged engine with the
+index and then with it hidden: **30/30 lists in identical order, 210 rows,
+zero win-rate difference**, in 10.9 s against 297 s.
+
+**A 12v12 report is ~1 MB, so the Team Analysis save sync now gzips it.**
+Compacted it is 858 kB, 14% under the endpoint's 1 MB request cap, and any
+added field would have tipped it over — at which point a save stays on the
+device that made it. Gzipped it is ~56 kB. `src/utils/gzipText.ts` uses the
+browser's `CompressionStream`; `api/decks.ts` inflates with `node:zlib`
+(capped at 16 MB of output, so a zip bomb is refused) and stores it
+compressed. Plain saves, including the ones synced this morning, still work.
+
 **`MAX_SQUAD = 12`** on both halves. Each side's test now reads the OTHER side's
 constant out of its source file instead of pinning a literal, so the two cannot
 drift apart again. The vitest fixture that built tags from a 12-character slice
