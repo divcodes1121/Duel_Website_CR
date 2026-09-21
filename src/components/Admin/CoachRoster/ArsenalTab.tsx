@@ -18,6 +18,7 @@ import { battleTimeToIso, playerLabel, type RosterPlayer } from '../../../state/
 import type { CoachIntel } from '../../../state/analyticsClient';
 import { ago } from '../../../utils/format';
 import { CardArt } from '../../Analytics/CardArt';
+import { positionalArt } from '../../../utils/deckSeating';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ReadingState } from '../../Analytics/ReadingState';
 import { DeckEditorDialog } from './DeckEditorDialog';
@@ -314,6 +315,7 @@ function ArsenalRow({
   const [open, setOpen] = useState(false);
   const elixir = averageElixir(deck.cards);
   const label = deckLabel(deck);
+  const art = positionalArt(deck.cards);
 
   return (
     <li className={styles.arsenalItem} data-archived={deck.status === 'archived' || undefined}>
@@ -343,8 +345,11 @@ function ArsenalRow({
         )}
 
         <div className={styles.deckCards}>
+          {/* A saved deck's ORDER is its slots (a link, a suggestion and a
+              battle all arrive seated; the editor seats a hand-built one), so
+              the forms are read off the positions — the builder's rule. */}
           {deck.cards.map((c) => (
-            <CardArt key={c} card={c} className={styles.deckCard} />
+            <CardArt key={c} card={c} variant={art[c]} className={styles.deckCard} />
           ))}
         </div>
 

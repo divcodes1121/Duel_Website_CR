@@ -1236,6 +1236,45 @@ def _board_slots() -> dict[str, dict]:
     }
 
 
+def seater():
+    """`seat(cards) -> (ordered, art, inferred)` for decks with no record of
+    their own — seeds, projected threats, 2v2 pairs.
+
+    THOSE DECKS USED TO SKIP THE SLOT RULE ENTIRELY. A seed is `h.split(",")`
+    off the deck hash, which is ALPHABETICAL, and it was handed to the screen
+    with `art: {}` — so every Team Analysis recommendation, every "Deckkies
+    pick" fill, every projected threat and every 2v2 pair drew eight plain
+    cards in alphabetical order: no evolution in slot 1, no hero in slot 2, a
+    champion wherever the alphabet put it. Measured on the live API before the
+    fix: 50 of 50 decks on a 2v2 page, and 56 of 78 on a two-a-side Team
+    Analysis, broke the three-slot rule.
+
+    Same answer `_representatives` and `draw_deck` already give: the meta
+    board's observed marks when it has this exact list, `arrange_deck`'s
+    capability reading otherwise, and `inferred` says which so `CardArt`'s
+    tooltip can say "from slot position" rather than pass a guess off as seen.
+
+    A CLOSURE, so a caller seating a few hundred decks reads the board once.
+    """
+    art_by_hash = _board_art()
+    slots_by_hash = _board_slots()
+
+    def seat(cards) -> tuple[list[str], dict, bool]:
+        cards = list(cards or [])
+        if not cards:
+            return [], {}, False
+        key = ",".join(sorted(cards))
+        observed = art_by_hash.get(key, {})
+        try:
+            order, art = cd.arrange_deck(cards, observed,
+                                         slot_of=slots_by_hash.get(key))
+        except Exception:  # noqa: BLE001 - a bad deck draws plain, it does not 500
+            return cards, {}, True
+        return order, art, not observed
+
+    return seat
+
+
 # How a matchup number was arrived at, best first. The screen prints this —
 # "62.4%" from this deck's own 4,000 battles and "62.4%" from the archetype
 # average are not the same claim, and a reader is entitled to know which.

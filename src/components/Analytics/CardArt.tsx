@@ -5,6 +5,7 @@ import {
   getEvolutionIconUrl,
   getHeroIconUrl,
 } from '../../data/cards';
+import styles from './CardArt.module.css';
 
 /**
  * One card icon, drawn with its EVOLUTION or HERO art when that is how the deck
@@ -59,7 +60,7 @@ export function CardArt({
       title={label}
       loading="lazy"
       draggable={false}
-      className={className}
+      className={className ? `${styles.art} ${className}` : styles.art}
       data-variant={effective}
       data-inferred={effective && inferred ? '' : undefined}
       onError={() => !failed && setFailed(true)}

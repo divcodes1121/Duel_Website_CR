@@ -22,6 +22,7 @@ import {
 import { useCoachPlans } from '../../../state/coachPlansStore';
 import { ago } from '../../../utils/format';
 import { CardArt } from '../../Analytics/CardArt';
+import { positionalArt } from '../../../utils/deckSeating';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ReadingState } from '../../Analytics/ReadingState';
 import styles from './CoachRoster.module.css';
@@ -199,9 +200,12 @@ function PlanRow({
                 {deck ? (
                   <div className={styles.scoutDeck}>
                     <div className={styles.deckCards}>
-                      {deck.cards.map((c) => (
-                        <CardArt key={c} card={c} className={styles.deckCard} />
-                      ))}
+                      {(() => {
+                        const art = positionalArt(deck.cards);
+                        return deck.cards.map((c) => (
+                          <CardArt key={c} card={c} variant={art[c]} className={styles.deckCard} />
+                        ));
+                      })()}
                     </div>
                     <div className={styles.arsenalMeta}>
                       <span className={styles.deckName}>{deck.name ?? 'Deck'}</span>

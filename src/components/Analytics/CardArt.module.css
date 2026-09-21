@@ -1,0 +1,15 @@
+/* EVERY TILE IS CARD-SHAPED, WHATEVER FILE IT DRAWS.
+   The served art is not one size: base cards are 302x363, but evolutions run
+   302x369 to 302x433 and heroes 302x369 to 302x384. A caller that sizes a tile
+   `width: 42px; height: auto` therefore drew an evolution taller than the base
+   card beside it, and a strip holding an evolution, a hero and six plain cards
+   came out ragged — Team Analysis, the Coach Roster and 2v2 all did.
+
+   Fourteen boards already fixed this for themselves, each with the same two
+   lines; this makes it the component's own property so a new strip cannot
+   forget it. A caller's width still decides the size. Lower specificity than
+   any caller rule, so one that genuinely wants a different box still gets it. */
+.art {
+  aspect-ratio: 302 / 363;
+  object-fit: contain;
+}

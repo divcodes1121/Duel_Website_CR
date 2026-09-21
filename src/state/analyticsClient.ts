@@ -1580,8 +1580,10 @@ export type RecommendationType = 'COUNTER' | 'ROBUST' | 'CONTINGENCY';
 export interface TeamThreat {
   /** Order-free deck identity, matching the server's deck hash. */
   key: string;
+  /** SEATED: evolution, hero, wild first (`arrange_deck`). */
   cards: string[];
   art: Record<string, WildForm>;
+  artInferred?: boolean;
   archetype: string;
   name: string;
   evidence: ThreatEvidence;
@@ -1651,8 +1653,13 @@ export interface TeamMatchupRow {
  * was never pasted. Anything rendering a recommendation has to handle both.
  */
 export interface TeamRecommendation {
+  /** SEATED: evolution, hero, wild first (`arrange_deck`). */
   cards: string[];
   art: Record<string, WildForm>;
+  /** The forms were read from the cards' capability, not observed — every
+   *  seed-pool deck ("Deckkies pick", scouting rows) unless the meta board
+   *  holds the exact list. */
+  artInferred?: boolean;
   archetype: string;
   name: string;
   avgElixir: number;
@@ -1924,10 +1931,20 @@ export function fetchTeamAnalysis(
 export interface DuoDeck {
   /** `2v2d:<sha1 of the sorted card keys>`. Order-free by construction. */
   fingerprint: string;
+  /** SEATED ORDER — evolution, hero, wild first, by `arrange_deck`. The
+   *  fingerprint is still taken over the sorted keys; only the drawing order
+   *  is seated. */
   cards: { key: string; id: number; name: string; elixir: number }[];
   cardKeys: string[];
   cardIds: number[];
   avgElixir: number;
+  /** Which of the three special slots draws evolution or hero art. Optional:
+   *  an API that predates seating sends neither this nor `artInferred`. */
+  art?: Record<string, 'evolution' | 'hero'>;
+  /** The forms were read from what the cards can be, not observed — the
+   *  collection keeps no per-battle marks, so this is set unless the meta
+   *  board happens to hold the exact list. */
+  artInferred?: boolean;
 }
 
 /**

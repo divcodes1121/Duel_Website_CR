@@ -652,6 +652,16 @@ and the art together. Skipping it is what made the sequence board render the
 same deck in a different order and with no evolution art beside its own row in
 the series log.
 
+**A deck with no record of its own goes through `deck_counter.seater()`** —
+seeds, Team Analysis threats and fills, scouting rows, 2v2 pairs. A seed is its
+hash split on commas, i.e. ALPHABETICAL, and those decks used to reach the
+screen that way with `art: {}` (139 of 199 live decks broke the slot rule,
+2026-09-21). `seater()` uses the meta board's observed marks when it holds the
+exact list and `arrange_deck`'s capability reading otherwise, and reports which
+as `artInferred`. It is a closure so a caller seating hundreds of decks reads
+the board once. `duo_pairs` imports it on the read path only — the hourly fold
+runs that module as a CLI.
+
 **A pasted link's order is authoritative — pass `trust_order=True`.** A
 copyDeck link writes the three special slots first, in slot order, so its first
 three IDs already name the evolution, the hero and the wild. Rebuilding them
@@ -769,7 +779,11 @@ So:
   | 3 (index 2) | hero, evolution or champion (the "wild" slot) |
 
   which caps a deck at **two** evolutions. A champion has neither form, so it
-  simply draws as itself wherever it is legal.
+  draws as itself — and **it is seated FIRST, in slot 2 or 3**. Measured over
+  16,615 real battles holding one: index 1 in 15,063, index 2 in 1,701, never
+  lower, never beside more than two marks (evolution / champion / evolution is
+  81.3%). It used to be seated only when nothing else wanted those slots, so
+  pooled marks naming evolution / hero / evolution drew the champion fourth.
 
   **The payload does report it, once the level is read.** The old figures here
   — slot 2 "hero 70% / *evolution* 30%", 14% of battles carrying three evolution

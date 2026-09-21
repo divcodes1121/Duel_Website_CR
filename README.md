@@ -101,7 +101,7 @@ bot's SQLite files read-only.
 | UI — the landing banners | **fixed and uniform, 2026-09-01.** They were 90% apart on a phone — 298 / 518 / 298 / 567px, showing 21% to 42% of their own art — from three separate faults: the flipped pair kept the desktop two-column grid at every width (a specificity trap one level below the one already recorded beside it), `.band` was referenced in `Dashboard.tsx` and **never written**, so all four paintings met edge to edge at 1440 as well as 390, and each panel was as tall as its own copy. Now **0px spread at 430/390/360/320**. See [The four banners on a phone](#the-four-banners-on-a-phone-and-the-three-faults-under-one-symptom) |
 | UI — the display face | **scoped to the landing, 2026-09-01, 25/25 browser checks.** Bebas draws lowercase as capital forms, so every heading inside the product read as a poster. One declaration — `:root[data-app-inner] { --font-display: var(--font-body) }` — and the attribute is on `:root` rather than the shell because dialogs portal into `document.body` and inherit nothing from it |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **2,194 Python checks** across **43 suites**, **500 vitest** across 18 files, `tsc -b` and `npm run build` clean — **every suite green as of 2026-09-11**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **2,727 Python checks** across **51 suites** and **929 vitest** across 31 files as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -1965,7 +1965,8 @@ so a deck can wear at most **two evolutions**, at most **two heroes**, and at
 most **three marks in total** — one per slot. Those are three separate limits
 and all three are needed: two of each is individually legal, but slot 3 is the
 single seat the second of each competes for. A champion has neither an evolution
-nor a hero form, so wherever one is legal it simply draws as itself.
+nor a hero form, so it draws as itself — and **it is seated first, in slot 2 or
+3, never lower** ([below](#champions-are-seated-first-and-every-deck-is-seated)).
 
 `arrange_deck` fills as many special slots as it can. The four cards that own
 *both* forms — knight, valkyrie, musketeer, wizard — take an evolution slot when
@@ -2198,6 +2199,85 @@ identically to the same deck in the row beneath it.
 The two paths are pinned separately in `test_card_art.py` — thirteen checks on
 the observed path including idempotence, the caps, and the rule that an
 unobserved staple stays plain.
+
+### Champions are seated first, and every deck is seated
+
+Reported 2026-09-21 as *"in 2v2, Coach Assist, Team Scout, everywhere, the
+decks being generated don't match the 8-card format — no hero slots, evo slots,
+champs"*. Two separate faults, both measured on the live API before anything
+was changed, by walking every eight-card deck in a real payload and testing it
+against the rule above:
+
+| payload | decks breaking the rule, before | after (new code staged on the VPS, production data) |
+|---|---:|---:|
+| 2v2 Decks, one page | **50 / 50** | 0 / 400 |
+| Team Analysis, 2 v 2 | **56 / 78** | 0 / 74 |
+| Scouting report | **30 / 44** | 0 / 48 |
+| Deck Counter | **3 / 27** | 0 / 27 |
+| Meta, Player Analysis, Recent Battles | 0 / 80 | — |
+
+**1. Decks with no record of their own skipped the rule entirely.** A seed is
+`deck_counter._build_seeds`' `h.split(",")` — the deck HASH, which is
+alphabetical — handed on with `art: {}`. Every Team Analysis "Deckkies pick",
+every scouting row and every projected threat was drawn as eight plain cards in
+alphabetical order. The 2v2 board did the same on purpose: it drew the canonical
+order its fingerprint is taken over, on the argument that the collection has no
+per-battle marks to seat with. That argument missed that `arrange_deck` already
+answers the no-evidence case for every other board.
+
+`deck_counter.seater()` is now the one door for those decks: the meta board's
+observed marks when it holds the exact list, `arrange_deck`'s capability
+reading otherwise, and `artInferred` so `CardArt`'s tooltip says "from slot
+position" rather than passing a guess off as seen. `team_analysis` seats the
+scout pool once per snapshot, the threats per folder, and any stored-report
+deck past the report's top ten (which it never gave art). `duo_pairs.report`
+seats each page; the fingerprint is untouched, and `cardKeys` is now the seated
+order, so **Open in Game hands the game the evolution first and the hero
+second** instead of whatever sorted first.
+
+**2. A champion could be pushed out of the special slots.** It used to be
+seated only if no hero or second evolution wanted slots 2 and 3, so pooled
+marks naming evolution / hero / evolution put the champion fourth — seen live
+on Team Analysis (Goblinstein) and the Deck Counter (Golden Knight). Measured
+over 16,615 real battles holding a champion, from per-battle
+`player_card_keys` whose order is the game's own:
+
+| where the champion sat | battles |
+|---|---:|
+| index 1 (slot 2) | 15,063 |
+| index 2 (slot 3) | 1,701 |
+| anywhere lower | **0** |
+
+and never beside more than two marks. The layouts were evolution / champion /
+evolution **81.3%**, evolution / hero / champion 8.3%, evolution / champion /
+hero 6.9%, evolution / champion / champion 0.9%. So `arrange_deck` now seats the
+champion first, gives the remaining special seat to a second evolution (it may
+only go in slot 3) else a hero, and lets the payload's recorded seat decide
+which of the hero and the champion takes slot 2. The builder always enforced
+this (`canPlaceCardInSlot`); the server now agrees with it.
+
+**The client has a copy of the no-evidence branch, for the two places the
+server cannot reach**, in `src/utils/deckSeating.ts`: `positionalArt` reads the
+forms off a TRUSTED order (Coach Roster arsenal, plans and results — lists saved
+from a suggestion, a battle or a link — exactly `arrange_deck(trust_order=True)`
+and the builder's rule), and `seatDeck` seats a deck that arrived with no art at
+all (a Team Analysis board saved before this fix is a snapshot the server never
+sees again). A second implementation of one rule is the drift this project warns
+about, so `tests/deckSeating.test.ts` pins `seatDeck` against
+`tests/fixtures/seating.json` — **`arrange_deck`'s own output over 95 real
+decks from the live payloads, 54 of them holding a champion**. Change either
+side and it fails. The arsenal editor also seats a hand-built deck the moment
+its eighth card goes in; a pasted link or a deck carried in from a suggestion
+keeps its order, because that order is already the game's.
+
+**The tiles were ragged too.** Served art is not one size — base cards 302x363,
+evolutions 302x369 to 302x433, heroes 302x369 to 302x384 — and Team Analysis,
+the Coach Roster and 2v2 sized tiles `width: …; height: auto`, so an evolution
+drew taller than the card beside it. Fourteen boards had already fixed this for
+themselves with `aspect-ratio: 302 / 363; object-fit: contain`; it is now
+`CardArt`'s own base rule (`CardArt.module.css`), so a new strip cannot forget
+it. Verified in a browser at 1440 and 390, both themes: every tile in every
+strip one height, 89/89.
 
 ### Slot 3 takes either form, and the cap said otherwise
 
@@ -6195,6 +6275,17 @@ inside `[data-filmstrip-controls]`.
 ## Things that went wrong and what fixed them
 
 Kept because each one cost time and each one can recur.
+
+**A DECK WITH NO RECORD OF ITS OWN IS STILL A DECK, AND IT STILL HAS SLOTS.**
+Seeds, projected threats and 2v2 pairs were all handed to the screen as a
+sorted card list with `art: {}` — alphabetical, no evolution, no hero, a
+champion wherever the alphabet put it — because each was reasoned about as
+"there are no marks, so there is nothing to seat". `arrange_deck` has always
+answered the no-evidence case. Measured live before the fix: 139 of 199 such
+decks broke the slot rule. **Any new source of decks goes through
+`deck_counter.seater()` (server) or `drawnDeck` (client) before it is drawn**,
+and the way to check a payload is to walk every eight-card deck in it against
+the rule, not to look at one screen.
 
 **IF AN ELEMENT IN A FLEX COLUMN SCROLLS, IT NEEDS `flex: none`.** Stated as a
 rule because it has now been fixed three times in one day, in three files, and
@@ -11865,11 +11956,14 @@ strip is fractions of its own column rather than fixed tracks and grows into the
 space the figures were holding.
 
 **Both halves carry their own Copy link and Open in Game.** You take ONE of them
-into the game, so a single action on the pair would have nothing to copy. The
-card order is the canonical one the fingerprint is taken over rather than
-`arrange_deck`'s, so the game seats the deck alphabetically — a legal deck, the
-same eight cards, and re-deriving an order here would only make the link
-disagree with the strip above it.
+into the game, so a single action on the pair would have nothing to copy.
+**Both decks are SEATED** — evolution, hero or champion, wild first — by
+`arrange_deck`, the same rule every board uses, and the link carries that same
+order so the strip and the game agree. It used to be the canonical order the
+fingerprint is taken over, which put whatever sorted first into the evolution
+slot and drew all eight cards plain; see
+[Champions are seated first, and every deck is seated](#champions-are-seated-first-and-every-deck-is-seated).
+The fingerprint itself did not move.
 
 **Filtering is the card picker Meta and Duel Zone already use**, reaching all
 123 cards. It replaced a text box, and the two are not the same question: a

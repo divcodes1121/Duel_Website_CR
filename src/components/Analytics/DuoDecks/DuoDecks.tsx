@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getCardIconUrl } from '../../../data/cards';
+import { CardArt } from '../CardArt';
 import {
   type DuoDeck,
   type DuoPair,
@@ -70,27 +70,27 @@ function Deck({ deck, side, align }: { deck: DuoDeck; side: string; align: 'star
           {deck.avgElixir}
         </span>
         {/* PASSED THROUGH UNTOUCHED, which is `DeckActions`'s standing rule.
-            The order here is the canonical one rather than `arrange_deck`'s, so
-            the game seats the deck alphabetically — a legal deck, and the same
-            eight cards. `sm` in the head line: under a strip of small cards the
-            `md` chips were taller than the cards' own row. */}
+            The server sends the SEATED order — evolution, hero, wild first —
+            so the game is handed the deck laid out the way it is drawn here.
+            `sm` in the head line: under a strip of small cards the `md` chips
+            were taller than the cards' own row. */}
         <DeckActions cards={deck.cardKeys} name={side} size="sm" className={styles.deckActions} />
       </div>
       <div className={styles.cards}>
-        {/* CANONICAL ORDER, which is the order the fingerprint is taken over.
-            `arrange_deck`'s evolution and hero slotting needs the per-battle
-            art marks a deduplicated deck does not have, so a play order here
-            would be invented — and this row exists to state an identity. */}
+        {/* SEATED, NOT ALPHABETICAL. This row was drawn in the canonical order
+            the fingerprint is taken over, which put whatever sorted first into
+            the evolution slot and drew all eight cards plain — "no hero slots,
+            no evo slots, no champions". The server now seats every deck through
+            `arrange_deck`, the one slot rule every board uses; the collection
+            keeps no per-battle marks, so the art is read from what the cards
+            can be and `CardArt` says so in its tooltip. */}
         {deck.cards.map((c) => (
-          <img
+          <CardArt
             key={c.key}
+            card={c.key}
+            variant={deck.art?.[c.key]}
+            inferred={deck.artInferred}
             className={styles.card}
-            src={getCardIconUrl(c.key)}
-            alt={c.name}
-            title={`${c.name} · ${c.elixir} elixir`}
-            loading="lazy"
-            width={302}
-            height={363}
           />
         ))}
       </div>

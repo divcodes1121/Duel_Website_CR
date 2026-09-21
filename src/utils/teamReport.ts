@@ -16,6 +16,7 @@ import {
   type ReportHue,
   type TableRow,
 } from './analyticsReport';
+import { drawnDeck } from './deckSeating';
 
 /**
  * A whole team analysis as a printable dossier.
@@ -155,9 +156,16 @@ function recLine(r: TeamRecommendation, opts: { showOwner?: boolean } = {}): Dec
     meta: bits.slice(1).join(' · '),
     value: pct(r.expectedWinRate),
     valueNote: 'expected',
-    cards: r.cards,
-    art: r.art,
+    // SEATED, so a board saved before the server seated its seed decks
+    // prints the same evolution / hero / wild row the screen now draws.
+    ...seated(r.cards, r.art),
   };
+}
+
+/** A deck's cards and art as the screen draws them — see `drawnDeck`. */
+function seated(cards: string[], art: Record<string, 'evolution' | 'hero'> | undefined) {
+  const d = drawnDeck(cards, art);
+  return { cards: d.cards, art: d.art };
 }
 
 /** An opponent's own deck as a printable line. */
@@ -177,8 +185,7 @@ function theirLine(d: {
     }`,
     value: pct(d.useRate),
     valueNote: 'use rate',
-    cards: d.cards,
-    art: d.art,
+    ...seated(d.cards, d.art),
   };
 }
 

@@ -398,6 +398,29 @@ def _resolve(tag: str, days: int) -> dict:
     }
 
 
+# ── Seating: every deck on this screen obeys the three-slot rule ───────────
+
+
+def _seat_decks(decks: list[dict], seat) -> None:
+    """Seat any eight-card deck that has no art yet, in place.
+
+    `player_report` seats only its top ten decks (the art lookup is per deck),
+    and every seed arrives alphabetical and bare. Both used to reach the screen
+    that way — slot 1 holding whatever sorted first, no evolution frame, no
+    hero, a champion in slot 6 — while the deck beside them was drawn properly.
+    A deck that already carries art has been seated from real observations and
+    is left exactly as it is.
+    """
+    for d in decks:
+        cards = d.get("cards") or []
+        if d.get("art") or len(set(cards)) != 8:
+            continue
+        d["cards"], art, inferred = seat(cards)
+        d["art"] = art
+        if art and inferred:
+            d["artInferred"] = True
+
+
 # ── Archetypes, resolved in bulk ────────────────────────────────────────────
 
 
@@ -471,6 +494,11 @@ def _threats(decks: list[dict], seeds: dict | None) -> dict:
     behaviour, stated as a degradation rather than arrived at silently.
     """
     out = scout.threat_space(decks, seeds, veto=_VETO)
+
+    # VARIANTS AND INFERRED THREATS ARE SEEDS, and a seed's cards are its hash
+    # split on commas — alphabetical, with `art: {}` because `team_scout` has
+    # no imports and cannot seat them. Seated here, where the vocabulary is.
+    _seat_decks(out.get("threats") or [], dcx.seater())
 
     # THE ARCHETYPE KEY IS NOT ITS NAME, and a screenshot is what caught it.
     # `team_scout` has no imports by design, so it cannot reach `_label` and
@@ -624,7 +652,7 @@ class _Candidate:
     which is a claim about a team that was never pasted.
     """
 
-    __slots__ = ("cards", "key", "archetype", "name", "art", "owner",
+    __slots__ = ("cards", "key", "archetype", "name", "art", "inferred", "owner",
                  "games", "wins", "win_rate", "use_rate", "profile")
 
     def __init__(self, deck: dict, owner: dict | None, profile: "_DeckProfile"):
@@ -633,6 +661,9 @@ class _Candidate:
         self.archetype = deck.get("winCondition") or "other"
         self.name = deck.get("name") or dcx._label(self.archetype)
         self.art = deck.get("art") or {}
+        # Both spellings exist upstream: `player_report` says `artInferred`,
+        # the live log and the representatives say `inferredArt`.
+        self.inferred = bool(deck.get("artInferred") or deck.get("inferredArt"))
         self.owner = owner
         self.games = int(deck.get("matches") or 0)
         self.wins = int(deck.get("wins") or 0)
@@ -761,6 +792,10 @@ def _scout_candidates() -> list["_Candidate"]:
 
     out: list["_Candidate"] = []
     seeds = dcx.seeds() or {}
+    # A seed is its hash split on commas — alphabetical and bare. Seated once
+    # here, with the pool, so every "Deckkies pick" and every scouting row is
+    # drawn evolution / hero / wild like the rest of the site.
+    seat = dcx.seater()
 
     for arch, decks in seeds.items():
         for seed in decks[:SCOUT_SEEDS_PER_ARCHETYPE]:
@@ -772,10 +807,12 @@ def _scout_candidates() -> list["_Candidate"]:
             except Exception:  # noqa: BLE001
                 traceback.print_exc()
                 continue
+            cards, art, inferred = seat(cards)
             out.append(_Candidate(
                 {
                     "cards": cards,
-                    "art": {},
+                    "art": art,
+                    "inferredArt": inferred,
                     "winCondition": arch,
                     "name": dcx._label(arch),
                     # No owner means no games piloted and no win rate of
@@ -812,6 +849,7 @@ def _scout_candidates() -> list["_Candidate"]:
             out.append(_Candidate(
                 {
                     "cards": cards, "art": rep.get("art") or {},
+                    "inferredArt": rep.get("inferredArt", False),
                     "winCondition": arch,
                     "name": rep.get("name") or dcx._label(arch),
                     "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
@@ -880,6 +918,8 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None) -> dict | N
         row["sourceText"] = dcx.SOURCE_TEXT.get(row.get("source"))
 
     out = dict(base)
+    if card.art and card.inferred:
+        out["artInferred"] = True
     out.update({
         "art": card.art,
         "name": card.name,
@@ -1245,6 +1285,13 @@ def analyze(blue_tags: list[str], red_tags: list[str],
 
     for p in blue:
         _archetypes_for(p.get("decks") or [])
+
+    # Past its top ten, a stored report's decks carry no art and sit in
+    # whatever order the decks table kept. Both squads are drawn, so both get
+    # seated — the opponent's list is the left half of every folder.
+    seat = dcx.seater()
+    for p in resolved:
+        _seat_decks(p.get("decks") or [], seat)
 
     snap = dcx._snap()
     # READ ONCE FOR THE WHOLE RUN. `seeds()` is a dictionary off the snapshot,

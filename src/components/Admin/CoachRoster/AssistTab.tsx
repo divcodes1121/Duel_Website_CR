@@ -22,6 +22,7 @@ import {
   type SuggestedDeck,
 } from '../../../state/coachAssist';
 import { CardArt } from '../../Analytics/CardArt';
+import { drawnDeck, positionalArt } from '../../../utils/deckSeating';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ReadingState } from '../../Analytics/ReadingState';
 import { SuggestHeading } from '../../Analytics/TeamAnalysis/SuggestHeading';
@@ -255,7 +256,7 @@ export function AssistTab({
       {adding && (
         <DeckEditorDialog
           playerId={player.id}
-          initialCards={adding.cards}
+          initialCards={drawnDeck(adding.cards, adding.art).cards}
           initialName={adding.name}
           initialSource="coach_assist"
           initialSourceRef={assistSourceRef(adding, opponentTag, days)}
@@ -268,12 +269,13 @@ export function AssistTab({
 
 function SuggestionRow({ suggestion, onApprove }: { suggestion: SuggestedDeck; onApprove: () => void }) {
   const { rec, arsenal } = suggestion;
+  const drawn = drawnDeck(rec.cards, rec.art, rec.artInferred);
   return (
     <li className={styles.arsenalItem}>
       <div className={styles.arsenalHead}>
         <div className={styles.deckCards}>
-          {rec.cards.map((c) => (
-            <CardArt key={c} card={c} variant={rec.art?.[c]} className={styles.deckCard} />
+          {drawn.cards.map((c) => (
+            <CardArt key={c} card={c} variant={drawn.art[c]} inferred={drawn.inferred} className={styles.deckCard} />
           ))}
         </div>
         <div className={styles.arsenalMeta}>
@@ -304,7 +306,7 @@ function SuggestionRow({ suggestion, onApprove }: { suggestion: SuggestedDeck; o
                 Add to arsenal
               </button>
             )}
-            <DeckActions cards={rec.cards} name={rec.name} />
+            <DeckActions cards={drawn.cards} name={rec.name} />
           </span>
         </div>
       </div>
@@ -314,12 +316,13 @@ function SuggestionRow({ suggestion, onApprove }: { suggestion: SuggestedDeck; o
 
 function ArsenalVerdictRow({ row }: { row: ArsenalRow }) {
   const { deck, rec, played, reason } = row;
+  const art = positionalArt(deck.cards);
   return (
     <li className={styles.arsenalItem}>
       <div className={styles.arsenalHead}>
         <div className={styles.deckCards}>
           {deck.cards.map((c) => (
-            <CardArt key={c} card={c} className={styles.deckCard} />
+            <CardArt key={c} card={c} variant={art[c]} className={styles.deckCard} />
           ))}
         </div>
         <div className={styles.arsenalMeta}>

@@ -1548,11 +1548,46 @@ def update() -> dict:
 # Reading it
 # --------------------------------------------------------------------------
 
-def _deck_view(raw) -> list[dict]:
+def _seater():
+    """`seat(keys) -> (ordered, art, inferred)`, the site's one slot rule.
+
+    Imported on the READ path only: the hourly fold runs this module as a CLI
+    and has no business loading the meta board. Should `deck_counter` fail to
+    import, `arrange_deck` alone still seats the deck — from what its cards
+    can be rather than from observed marks — and says so.
+    """
+    try:
+        import deck_counter as dcx
+        return dcx.seater()
+    except Exception:  # noqa: BLE001
+        def seat(keys):
+            try:
+                order, art = cd.arrange_deck(list(keys), {})
+            except Exception:  # noqa: BLE001
+                return list(keys), {}, True
+            return order, art, True
+        return seat
+
+
+def _deck_view(raw, seat=None) -> tuple[list[dict], dict, bool]:
+    """One deck, SEATED: evolution / hero / wild first, like every other board.
+
+    It used to be the canonical order — the sorted keys the fingerprint is
+    taken over — which put whatever sorted first into slot 1 and drew all
+    eight cards plain. The fingerprint does not move: it was computed at fold
+    time and is carried through untouched; only the drawing order changes.
+
+    The collection stores card keys and nothing else, so no marks survive the
+    fold. The seating is the meta board's when it knows the exact list and the
+    cards' own capability otherwise, and `inferred` says which.
+    """
     try:
         keys = json.loads(raw or "[]")
     except Exception:
         keys = []
+    art, inferred = {}, False
+    if seat is not None and len(keys) == 8:
+        keys, art, inferred = seat(keys)
     out = []
     for k in keys:
         info = dx.card_info(k)
@@ -1562,15 +1597,31 @@ def _deck_view(raw) -> list[dict]:
             "name": info.get("name") or k,
             "elixir": info.get("elixir") or 0,
         })
-    return out
+    return out, art, inferred
 
 
-def _pair_row(row) -> dict:
-    a, b = _deck_view(row["deck_a_cards"]), _deck_view(row["deck_b_cards"])
+def _pair_row(row, seat=None) -> dict:
+    (a, art_a, inf_a) = _deck_view(row["deck_a_cards"], seat)
+    (b, art_b, inf_b) = _deck_view(row["deck_b_cards"], seat)
 
     def elixir(cards):
         vals = [c["elixir"] for c in cards if c["elixir"]]
         return round(sum(vals) / len(vals), 2) if vals else 0
+
+    def deck(fp, cards, art, inferred):
+        out = {
+            "fingerprint": fp,
+            "cards": cards,
+            # SEATED ORDER, so Copy link / Open in Game hands the game the
+            # evolution first and the hero second, exactly as drawn.
+            "cardKeys": [c["key"] for c in cards],
+            "cardIds": [c["id"] for c in cards],
+            "avgElixir": elixir(cards),
+            "art": art,
+        }
+        if art and inferred:
+            out["artInferred"] = True
+        return out
 
     try:
         tags = json.loads(row["player_tags"] or "[]")
@@ -1579,20 +1630,8 @@ def _pair_row(row) -> dict:
     return {
         "pairFingerprint": row["pair_fingerprint"],
         "mode": row["mode"],
-        "deckA": {
-            "fingerprint": row["deck_a_fingerprint"],
-            "cards": a,
-            "cardKeys": [c["key"] for c in a],
-            "cardIds": [c["id"] for c in a],
-            "avgElixir": elixir(a),
-        },
-        "deckB": {
-            "fingerprint": row["deck_b_fingerprint"],
-            "cards": b,
-            "cardKeys": [c["key"] for c in b],
-            "cardIds": [c["id"] for c in b],
-            "avgElixir": elixir(b),
-        },
+        "deckA": deck(row["deck_a_fingerprint"], a, art_a, inf_a),
+        "deckB": deck(row["deck_b_fingerprint"], b, art_b, inf_b),
         "occurrences": row["occurrences"],
         "players": row["distinct_players"],
         # A SAMPLE, capped at TAG_SAMPLE, and named as one so nobody reads it
@@ -1711,8 +1750,9 @@ def report(page: int = 1, per: int = PER_PAGE, query: str = "",
     except Exception:
         source_modes = []
 
+    seat = _seater()
     return {
-        "pairs": [_pair_row(r) for r in rows],
+        "pairs": [_pair_row(r, seat) for r in rows],
         "page": page,
         "pages": pages,
         "perPage": per,

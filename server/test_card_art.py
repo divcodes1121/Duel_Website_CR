@@ -320,6 +320,61 @@ check("a champion does not stop the evolutions rendering",
       sum(1 for v in art.values() if v == "evolution") == 2, f"art={art}")
 
 
+# ── a champion sits in slot 2 or 3, never lower ─────────────────────────────
+#
+# Measured over 16,615 real battles holding a champion: index 1 in 15,063,
+# index 2 in 1,701, never past the special slots, and never beside more than
+# two marks. evolution / champion / evolution is 81.3% of them. It used to be
+# seated only when nothing else wanted slots 2 and 3, so a deck whose marks
+# named evolution / hero / evolution drew its champion in slot 4 — seen live
+# on a Team Analysis opponent (Archers / Barbarian Barrel / Skeletons, with
+# Goblinstein fourth).
+
+print("\na champion sits in slot 2 or 3")
+
+o, a = arranged(["archer-queen", "bowler", "skeletons", "mortar"])
+check("with two evolutions it is evolution / champion / evolution",
+      o[:3] == ["skeletons", "archer-queen", "mortar"], f"{o[:3]} {a}")
+check("and the hero it displaced draws plain", "bowler" not in a, str(a))
+
+o, a = arranged(["archer-queen", "bowler", "skeletons"])
+check("with one evolution and a hero it is evolution / hero / champion",
+      o[:3] == ["skeletons", "bowler", "archer-queen"]
+      and a == {"skeletons": "evolution", "bowler": "hero"}, f"{o[:3]} {a}")
+
+MARKED = pad(["golden-knight", "skeletons", "bowler", "mortar"])
+o, a = cd.arrange_deck(MARKED, {"skeletons": "evolution", "bowler": "hero",
+                                "mortar": "evolution"})
+check("observed evolution / hero / evolution cannot push it out of slot 3",
+      o.index("golden-knight") in (1, 2), f"{o[:4]} {a}")
+check("and only two of the three marks can be drawn beside it",
+      len(a) == 2 and a.get(o[0]) == "evolution", str(a))
+
+o, a = cd.arrange_deck(pad(["golden-knight", "skeletons", "bowler"]),
+                       {"skeletons": "evolution", "bowler": "hero"},
+                       slot_of={"skeletons": 0, "bowler": 2})
+check("a hero SEEN in slot 3 keeps slot 3, the champion takes slot 2",
+      o[:3] == ["skeletons", "golden-knight", "bowler"], f"{o[:3]}")
+
+o, a = arranged(["archer-queen", "golden-knight", "skeletons", "mortar", "bowler"])
+check("two champions fill slots 2 and 3",
+      set(o[1:3]) == {"archer-queen", "golden-knight"}, f"{o[:3]}")
+check("leaving slot 1 its evolution and nothing else special",
+      a == {o[0]: "evolution"}, str(a))
+
+for label, cards in {
+    "champion only": ["monk"],
+    "champion + hero": ["monk", "goblins"],
+    "champion + three evolution-capable": ["monk", "skeletons", "mortar", "knight"],
+    "champion + both-form + hero": ["monk", "wizard", "bowler"],
+}.items():
+    o, a = arranged(cards)
+    check(f"{label}: the champion is in slot 2 or 3", o.index("monk") in (1, 2), str(o[:3]))
+    check(f"{label}: no evolution in slot 2", a.get(o[1]) != "evolution", str(a))
+    o2, a2 = cd.arrange_deck(o, {})
+    check(f"{label}: arranging again changes nothing", (o2, a2) == (o, a), f"{o2[:3]} vs {o[:3]}")
+
+
 print("\nnothing to draw")
 
 check("a deck with no special forms gets no art", arranged([])[1] == {})

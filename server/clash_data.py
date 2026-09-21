@@ -1358,6 +1358,16 @@ def arrange_deck(cards: list[str], marks: dict, trust_order: bool = False,
         # battles are fielded evolution / hero / hero — the third-commonest
         # loadout there is. Keeping only `heroes[0]` drew the second one plain.
         hero2 = heroes[1] if len(heroes) > 1 else None
+    elif champions:
+        hero2 = None
+        # A CHAMPION TAKES SLOT 2 OR 3 (see the champion block below), so there
+        # is one special seat fewer to spend and a both-form card is never
+        # needed as a hero while a second evolution can fill the wild slot.
+        evos = [c for c in cards if c in evo_only or c in both][:2]
+        hero = None
+        if len(evos) < 2 and len(champions) < 2:
+            spare = hero_only + [c for c in both if c not in evos]
+            hero = spare[0] if spare else None
     else:
         hero2 = None
         # THE GOAL IS TO FILL AS MANY SPECIAL SLOTS AS POSSIBLE — two evolutions
@@ -1389,26 +1399,60 @@ def arrange_deck(cards: list[str], marks: dict, trust_order: bool = False,
         slots[0] = evos[0]
         art[evos[0]] = "evolution"
 
-    # slot 2 — hero, else a champion (which draws as itself).
-    if hero:
-        slots[1] = hero
-        art[hero] = "hero"
-    elif champions:
-        slots[1] = champions.pop(0)
+    # ── A CHAMPION IS SEATED FIRST, IN SLOT 2 OR 3, AND NEVER LOWER ─────────
+    #
+    # Measured over 16,615 real battles holding a champion (per-battle
+    # `player_card_keys`, whose order is the game's own): the champion sat at
+    # index 1 in 15,063 and index 2 in 1,701 — NEVER past the special slots —
+    # and never beside more than two evolution/hero marks. The layouts:
+    #
+    #     evolution / champion / evolution   81.3%
+    #     evolution / hero     / champion      8.3%
+    #     evolution / champion / hero          6.9%
+    #     evolution / champion / champion      0.9%
+    #
+    # This used to seat the champion only when no hero or second evolution
+    # wanted the slot, so a deck whose pooled marks named evolution / hero /
+    # evolution pushed its champion down to slot 4 — a deck the game cannot
+    # build. The builder has always enforced it (`canPlaceCardInSlot`); this is
+    # the same rule on the server. The marks that no longer fit are not drawn.
+    champs = champions[:2]
+    if len(champs) >= 2:
+        slots[1], slots[2] = champs[0], champs[1]
+    elif champs:
+        champ = champs[0]
+        if len(evos) > 1:
+            # The wild slot takes the second evolution; slot 2 may not.
+            slots[1], slots[2] = champ, evos[1]
+            art[evos[1]] = "evolution"
+        elif hero:
+            # Either order is legal and both are played (8.3% / 6.9%). Where
+            # the hero was SEEN sitting decides; with no record the hero takes
+            # the hero slot.
+            if (slot_of or {}).get(hero) == 2:
+                slots[1], slots[2] = champ, hero
+            else:
+                slots[1], slots[2] = hero, champ
+            art[hero] = "hero"
+        else:
+            slots[1] = champ
+    else:
+        # slot 2 — the hero.
+        if hero:
+            slots[1] = hero
+            art[hero] = "hero"
 
-    # slot 3 — the wild slot: it takes EITHER form. Second evolution, else a
-    # second hero, else a champion. The evolution goes first only because
-    # evolution / hero / evolution outnumbers evolution / hero / hero seven to
-    # one; when the marks name both, `cap_special_marks` has already picked
-    # which of them survives, so this only ever sees one of the two.
-    if len(evos) > 1:
-        slots[2] = evos[1]
-        art[evos[1]] = "evolution"
-    elif hero2:
-        slots[2] = hero2
-        art[hero2] = "hero"
-    elif champions:
-        slots[2] = champions.pop(0)
+        # slot 3 — the wild slot: it takes EITHER form. Second evolution, else
+        # a second hero. The evolution goes first only because evolution / hero
+        # / evolution outnumbers evolution / hero / hero seven to one; when the
+        # marks name both, `cap_special_marks` has already picked which of them
+        # survives, so this only ever sees one of the two.
+        if len(evos) > 1:
+            slots[2] = evos[1]
+            art[evos[1]] = "evolution"
+        elif hero2:
+            slots[2] = hero2
+            art[hero2] = "hero"
 
     # AN EMPTY SPECIAL SLOT IS FILLED, NEVER COLLAPSED. Compacting the list
     # instead shifted the second evolution up into slot 2 whenever a deck had no

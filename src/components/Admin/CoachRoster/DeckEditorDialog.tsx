@@ -18,8 +18,10 @@ import {
   type ArsenalSource,
 } from '../../../state/coachArsenal';
 import { useCoachArsenal } from '../../../state/coachArsenalStore';
+import { positionalArt, seatDeck } from '../../../utils/deckSeating';
 import { filterCards, type CardTypeFilter } from '../../../utils/filter';
 import { sortCards } from '../../../utils/sort';
+import { CardArt } from '../../Analytics/CardArt';
 import { CardTile } from '../../CardPicker/CardTile';
 import { Dropdown } from '../../ui/dropdown-menu-14';
 import styles from './CoachRoster.module.css';
@@ -77,6 +79,14 @@ export function DeckEditorDialog({
   const update = useCoachArsenal((s) => s.update);
 
   const [cards, setCards] = useState<string[]>(deck?.cards ?? initialCards ?? []);
+  /* WHETHER THE ORDER IS ALREADY THE GAME'S. A pasted link, a suggestion and
+     a deck taken from their battles all arrive seated — evolution, hero, wild
+     first — and are kept exactly as they are. Cards clicked in by hand arrive
+     in the order they were clicked, which says nothing about slots, so a
+     hand-built deck is seated by the site's slot rule the moment it is whole.
+     Without that a coach's deck saved with a champion in slot 6 and no
+     evolution frame, and "Open in Game" handed the game that order. */
+  const [trusted, setTrusted] = useState(!!(deck?.cards?.length || initialCards?.length));
   const [name, setName] = useState(deck?.name ?? initialName ?? '');
   const [archetype, setArchetype] = useState(deck?.archetype ?? '');
   const [comfort, setComfort] = useState<number | null>(deck?.comfort ?? null);
@@ -106,12 +116,18 @@ export function DeckEditorDialog({
   );
 
   const inDeck = useMemo(() => new Set(cards), [cards]);
+  const seated = useMemo(
+    () => (!trusted && cards.length === ARSENAL_DECK_SIZE ? seatDeck(cards).cards : cards),
+    [cards, trusted],
+  );
+  const slotArt = useMemo(() => positionalArt(seated), [seated]);
   const problem = deckProblem(cards);
   const elixir = averageElixir(cards);
   const full = cards.length >= ARSENAL_DECK_SIZE;
 
   function toggleCard(key: string) {
     setError(null);
+    setTrusted(false);
     setCards((c) => (c.includes(key) ? c.filter((x) => x !== key) : c.length >= ARSENAL_DECK_SIZE ? c : [...c, key]));
   }
 
@@ -129,6 +145,7 @@ export function DeckEditorDialog({
       return;
     }
     setCards(keys);
+    setTrusted(true);
     setLinkNote(`Read eight cards from the link${initialSource === 'history' ? '' : ' — source recorded as a link'}.`);
     setError(null);
   }
@@ -155,7 +172,7 @@ export function DeckEditorDialog({
     try {
       if (deck) {
         await update(playerId, deck.id, {
-          cards,
+          cards: seated,
           name: name.trim() || null,
           archetype: archetype.trim() || null,
           comfort,
@@ -164,7 +181,7 @@ export function DeckEditorDialog({
         });
       } else {
         await add(playerId, {
-          cards,
+          cards: seated,
           name: name.trim() || null,
           archetype: archetype.trim() || null,
           comfort,
@@ -194,7 +211,7 @@ export function DeckEditorDialog({
             the same gesture as putting one in, rather than a second control. */}
         <div className={styles.slotRow}>
           {Array.from({ length: ARSENAL_DECK_SIZE }, (_, i) => {
-            const key = cards[i];
+            const key = seated[i];
             const card = key ? CARDS_BY_KEY.get(key) : undefined;
             return (
               <button
@@ -207,7 +224,7 @@ export function DeckEditorDialog({
                 aria-label={card ? `Remove ${card.name}` : `Empty slot ${i + 1}`}
                 onClick={() => key && toggleCard(key)}
               >
-                {key ? <img src={getCardIconUrl(key)} alt="" loading="lazy" /> : <span aria-hidden>+</span>}
+                {key ? <CardArt card={key} variant={slotArt[key]} /> : <span aria-hidden>+</span>}
               </button>
             );
           })}

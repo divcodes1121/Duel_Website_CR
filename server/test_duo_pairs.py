@@ -1712,10 +1712,15 @@ def test_the_board_preserves_pair_semantics() -> None:
         rep = dp.report(per=50)
         for p in rep["pairs"]:
             a, b = p["deckA"], p["deckB"]
-            check(f'{p["pairFingerprint"][:12]} deck A is canonically sorted',
-                  a["cardKeys"] == sorted(a["cardKeys"]))
-            check(f'{p["pairFingerprint"][:12]} deck B is canonically sorted',
-                  b["cardKeys"] == sorted(b["cardKeys"]))
+            # THE IDENTITY IS CANONICAL; THE DRAWING ORDER IS SEATED. The keys
+            # come back evolution / hero / wild first (see the seating test
+            # below), so what is pinned here is that re-sorting them lands on
+            # exactly the fingerprint the fold stored — nothing about the
+            # identity moved when the order stopped being alphabetical.
+            check(f'{p["pairFingerprint"][:12]} deck A re-sorts to its fingerprint',
+                  dp.deck_fingerprint(sorted(a["cardKeys"])) == a["fingerprint"])
+            check(f'{p["pairFingerprint"][:12]} deck B re-sorts to its fingerprint',
+                  dp.deck_fingerprint(sorted(b["cardKeys"])) == b["fingerprint"])
             check(f'{p["pairFingerprint"][:12]} the pair is canonically ordered',
                   a["fingerprint"] <= b["fingerprint"],
                   f'{a["fingerprint"]} vs {b["fingerprint"]}')
@@ -1746,6 +1751,46 @@ def test_every_row_can_be_drawn() -> None:
             check("players is a count", p["players"] >= 0)
             check("first seen is not after last seen",
                   p["firstSeen"] <= p["lastSeen"])
+
+
+def test_every_deck_is_seated_by_the_slot_rule() -> None:
+    """Evolution in slot 1, hero or champion in slot 2, wild in slot 3.
+
+    THE BOARD DREW EVERY DECK ALPHABETICALLY, with no art, and it was reported
+    as "no hero slots, no evo slots, no champions" — measured on the live API,
+    50 of 50 decks on a page broke the rule. The collection stores keys only,
+    so the seating comes from `arrange_deck`, the one function every other
+    board draws through, and the deck says its art was inferred.
+    """
+    print("")
+    print("every 2v2 deck is seated evolution / hero / wild")
+    with Fixture():
+        dp.migrate(enrol=False)
+        pairs = dp.report(per=50)["pairs"]
+        check("there are rows to check", len(pairs) > 0)
+        for p in pairs:
+            for side in ("deckA", "deckB"):
+                d = p[side]
+                keys = d["cardKeys"]
+                want, art = cd.arrange_deck(sorted(keys), {})
+                check(f"{side} is in arrange_deck's order", keys == want,
+                      f"{keys[:3]} vs {want[:3]}")
+                check(f"{side} carries arrange_deck's art", d["art"] == art,
+                      f"{d['art']} vs {art}")
+                check(f"{side} ids follow the seated order",
+                      d["cardIds"] == [c["id"] for c in d["cards"]]
+                      and [c["key"] for c in d["cards"]] == keys)
+                evolvable = [k for k in keys if dx.card_info(k).get("can_evolve")]
+                if evolvable:
+                    check(f"{side} slot 1 is an evolution",
+                          d["art"].get(keys[0]) == "evolution", str(keys[:3]))
+                check(f"{side} draws no art past slot 3",
+                      all(keys.index(c) < 3 for c in d["art"]), str(d["art"]))
+                champs = [k for k in keys if dx.card_info(k).get("is_champion")]
+                check(f"{side} seats its champion in slot 2 or 3",
+                      all(keys.index(c) in (1, 2) for c in champs[:2]), str(keys[:3]))
+                if d["art"]:
+                    check(f"{side} says its art is inferred", d.get("artInferred") is True)
 
 
 
@@ -2346,6 +2391,7 @@ if __name__ == "__main__":
     test_empty_results_are_a_clean_page()
     test_the_board_preserves_pair_semantics()
     test_every_row_can_be_drawn()
+    test_every_deck_is_seated_by_the_slot_rule()
     test_a_pair_row_carries_what_the_board_draws()
     test_the_board_can_be_searched()
     test_the_board_filters_by_card()

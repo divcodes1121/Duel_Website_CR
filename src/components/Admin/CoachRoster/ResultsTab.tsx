@@ -21,6 +21,7 @@ import {
 import { useCoachResults } from '../../../state/coachResultsStore';
 import { ago } from '../../../utils/format';
 import { CardArt } from '../../Analytics/CardArt';
+import { positionalArt } from '../../../utils/deckSeating';
 import { ReadingState } from '../../Analytics/ReadingState';
 import { Dropdown } from '../../ui/dropdown-menu-14';
 import { Tile } from './PlayerOverview';
@@ -218,6 +219,7 @@ function ResultRow({ result, plan, onRemove }: { result: MatchResult; plan: Matc
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const slot = result.playedSlot ?? inferSlot(plan, result.deckPlayed);
+  const playedArt = positionalArt(result.deckPlayed);
 
   return (
     <li className={styles.arsenalItem}>
@@ -236,7 +238,7 @@ function ResultRow({ result, plan, onRemove }: { result: MatchResult; plan: Matc
         </span>
         <span className={styles.deckCards}>
           {result.deckPlayed.map((c) => (
-            <CardArt key={c} card={c} className={styles.deckCard} />
+            <CardArt key={c} card={c} variant={playedArt[c]} className={styles.deckCard} />
           ))}
         </span>
       </button>

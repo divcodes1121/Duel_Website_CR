@@ -9,6 +9,7 @@ import type {
 } from '../../../state/analyticsClient';
 import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
+import { drawnDeck } from '../../../utils/deckSeating';
 import { VsMark } from '../../VsMark/VsMark';
 import styles from './TeamAnalysis.module.css';
 import { Threats } from './Threats';
@@ -31,7 +32,12 @@ function pct(n: number | null | undefined): string {
   return n === null || n === undefined ? '—' : `${n.toFixed(1)}%`;
 }
 
-/** One deck, drawn the way every other deck on the site is drawn. */
+/** One deck, drawn the way every other deck on the site is drawn.
+ *
+ *  The server seats every deck (evolution / hero / wild first). A board SAVED
+ *  before it did holds its seed decks alphabetical and bare, and a saved board
+ *  is never sent back to be re-seated — `drawnDeck` seats those here, with the
+ *  server's own rule, and leaves any deck that arrived with art untouched. */
 function Strip({
   cards,
   art,
@@ -43,14 +49,16 @@ function Strip({
   inferred?: boolean;
   name?: string;
 }) {
+  const d = drawnDeck(cards, art, inferred);
   return (
     <span className={styles.strip}>
-      {cards.map((c, i) => (
-        <CardArt key={`${c}-${i}`} card={c} variant={art?.[c]} inferred={inferred} />
+      {d.cards.map((c, i) => (
+        <CardArt key={`${c}-${i}`} card={c} variant={d.art[c]} inferred={d.inferred} />
       ))}
       {/* Renders nothing unless it is a whole 8-card deck — the guard that
-          keeps these off partial lists everywhere else on the site. */}
-      <DeckActions cards={cards} name={name} />
+          keeps these off partial lists everywhere else on the site. The SEATED
+          order, so the game is handed the evolution first and the hero second. */}
+      <DeckActions cards={d.cards} name={name} />
     </span>
   );
 }
@@ -174,9 +182,12 @@ export function FolderGallery({
               {best ? (
                 <>
                   <span className={styles.folderFaces} aria-hidden="true">
-                    {best.cards.slice(0, 4).map((c, i) => (
-                      <CardArt key={`${c}-${i}`} card={c} variant={best.art?.[c]} />
-                    ))}
+                    {(() => {
+                      const face = drawnDeck(best.cards, best.art, best.artInferred);
+                      return face.cards.slice(0, 4).map((c, i) => (
+                        <CardArt key={`${c}-${i}`} card={c} variant={face.art[c]} inferred={face.inferred} />
+                      ));
+                    })()}
                   </span>
                   <span className={styles.folderLead}>
                     <strong>{pct(best.expectedWinRate)}</strong>{' '}
@@ -274,6 +285,7 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
       <Strip
         cards={rec.cards}
         art={rec.art}
+        inferred={rec.artInferred}
         name={rec.owner ? `${rec.owner.name} — ${rec.name}` : rec.name}
       />
       {/* NO TYPE / CONFIDENCE / EXPLANATION LINE AND NO COVERAGE SENTENCE.
