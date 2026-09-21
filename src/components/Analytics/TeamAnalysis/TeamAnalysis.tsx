@@ -32,6 +32,7 @@ import { VsMark } from '../../VsMark/VsMark';
 import { FolderGallery, OpenFolder, RosterRead } from './TeamFolders';
 import { SavedAnalyses } from './TeamSaves';
 import styles from './TeamAnalysis.module.css';
+import { DAY_PRESETS, DEFAULT_DAYS, dayChip } from '../../../utils/datePresets';
 
 /**
  * TEAM ANALYSIS — a roster read, or two rosters matched against each other.
@@ -257,6 +258,10 @@ export function TeamAnalysis() {
      landing on the tab that demands your own squad's tags before it will do
      anything is how a tool teaches people it is not for them. */
   const [mode, setMode] = useState<TeamMode>('scout');
+  /* THE WINDOW, which this screen never had: every run asked for the default
+     30 days and there was no way to ask for anything else. The spans are the
+     shared list every date filter reads (`utils/datePresets.ts`). */
+  const [days, setDays] = useState<number>(DEFAULT_DAYS);
   const [blueText, setBlueText] = useState('');
   const [redText, setRedText] = useState('');
   const [report, setReport] = useState<TeamReport | null>(null);
@@ -328,6 +333,7 @@ export function TeamAnalysis() {
            server to ignore it would put the mode in two places at once. */
         scout ? [] : blue.members.map((m) => m.tag),
         red.members.map((m) => m.tag),
+        days,
       );
       /* THE MODE IS STAMPED CLIENT-SIDE WHEN THE SERVER DID NOT.
          `server/team_analysis.py` is copied to the VPS by hand while this half
@@ -418,6 +424,10 @@ export function TeamAnalysis() {
       setBlueText(save.blueText);
       setRedText(save.redText);
       setReport(save.report);
+      /* The window comes back with the board it produced — otherwise the
+         selector would claim a span the numbers on screen were not read over,
+         and a Re-run would quietly change the window as well as the date. */
+      if (typeof save.report.days === 'number') setDays(save.report.days);
       setSavedId(save.id);
       setSavedAt(save.savedAt);
       setOpenTag(null);
@@ -527,6 +537,24 @@ export function TeamAnalysis() {
       <SavedAnalyses openId={savedId} onOpen={openSave} />
 
       <div className={styles.actions}>
+        {/* THE HISTORY WINDOW. Counted back from each player's OWN last stored
+            battle — the site-wide convention — so a roster of people with
+            different last-played dates still gets a populated board. */}
+        <div className={styles.daysRow} role="group" aria-label="History window">
+          <span className={styles.daysLabel}>History</span>
+          {DAY_PRESETS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={styles.dayChip}
+              aria-pressed={days === d}
+              disabled={loading}
+              onClick={() => setDays(d)}
+            >
+              {dayChip(d)}
+            </button>
+          ))}
+        </div>
         <div className={styles.actionRow}>
           <button
             type="button"

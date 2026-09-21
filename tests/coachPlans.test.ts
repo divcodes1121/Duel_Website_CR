@@ -7,6 +7,7 @@ import {
   PLAN_SLOTS,
   PlanError,
   buildSnapshot,
+  candidateLabel,
   canConfirm,
   cleanNewPlan,
   deckInSlot,
@@ -218,5 +219,30 @@ describe('the plan list', () => {
     expect(saved.recommendations[0].cards).toEqual(XBOW);
     expect(saved.engine?.name).toBe('team_analysis');
     expect(saved.id).toBe(p.id);
+  });
+});
+
+describe('a Deckkies pick is frozen as one', () => {
+  /* Phase 7 reads results back against this snapshot. A win on a deck the
+   * player had never played is evidence about something different from a win
+   * on one of theirs, so the snapshot must keep them apart. */
+  const pick = rec(GOLEM, { owner: null, comfort: null, fill: true, expectedWinRate: 71.7 });
+
+  it('carries the fill mark into the frozen candidate', () => {
+    const [c] = buildSnapshot([pick], [], null);
+    expect(c.fill).toBe(true);
+    expect(c.source).toBe('coach_assist');
+    expect(c.played).toBeNull();
+  });
+
+  it('an owned pick carries no mark at all, not a false one', () => {
+    const [c] = buildSnapshot([rec(HOG)], [], null);
+    expect(c).not.toHaveProperty('fill');
+  });
+
+  it('describes a frozen pick as one the player had not played', () => {
+    expect(candidateLabel({ source: 'coach_assist', fill: true })).toMatch(/had not played/);
+    expect(candidateLabel({ source: 'coach_assist' })).toBe('The engine suggested it');
+    expect(candidateLabel({ source: 'arsenal' })).toBe('From their arsenal');
   });
 });

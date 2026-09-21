@@ -136,8 +136,87 @@ export function assistSourceRef(
     // The field-wide rate is the denominator the headline is missing; it is
     // optional on an older server, so it is stored only when present.
     ...(typeof rec.overallWinRate === 'number' ? { overallWinRate: rec.overallWinRate } : {}),
+    // A TOP-UP, recorded as one. Approving a deck the engine added from the
+    // wider player base is a different decision from approving one the player
+    // already runs, and the arsenal's provenance must be able to say which —
+    // otherwise, months later, it reads as a deck they had been playing.
+    ...(rec.fill ? { fill: true } : {}),
     at: new Date().toISOString(),
   };
+}
+
+/* ── TOP-UPS: COACH ASSIST'S MECHANISM, ON THIS TAB ─────────────────────────
+ *
+ * The engine now does what `coach.suggest` has always done on the public Coach
+ * Assist: it puts real decks from the wider player base beside the player's
+ * own, marks each one `fill`, and ranks the two TOGETHER by expected win rate.
+ * A deck the player pilots keeps a small edge (the practice tiebreak), so an
+ * outside pick leads only when it is genuinely stronger. An earlier build kept
+ * every pick below every owned deck and called that Coach Assist's rule; it was
+ * not, and it hid 71% answers beneath a player's own 60% deck.
+ *
+ * WHAT THIS TAB OWES THE COACH IS THE DIFFERENCE. "Suggested, from their own
+ * games" and "suggested, from somebody else's" lead to different conversations
+ * with the player, and before this the screen had no way to tell them apart —
+ * its copy said every suggestion came from decks the player had played. */
+
+export interface SuggestionMix {
+  /** Decks the player actually runs. */
+  own: number;
+  /** Top-ups from the wider player base. */
+  fill: number;
+}
+
+export function suggestionMix(recs: readonly TeamRecommendation[]): SuggestionMix {
+  const fill = recs.filter((r) => r.fill).length;
+  return { own: recs.length - fill, fill };
+}
+
+/** One line on what a Deckkies pick is, printed on the row itself. */
+export const FILL_NOTE = 'Deckkies pick — not in their history yet';
+
+/**
+ * Why the list holds top-ups, when it does. Null when every row is their own.
+ *
+ * THE REASON STILL LEADS when none of the rows is theirs, because "why is
+ * there nothing of theirs" is the fact a coach acts on — the top-ups are what
+ * the screen can offer meanwhile, not an answer to it. It used to print only
+ * the reason ("there is nothing to rank") directly above a list of seven
+ * ranked decks, which is the screen contradicting itself.
+ */
+export function fillNote(
+  reason: string | null | undefined,
+  mix: SuggestionMix,
+  playerName: string,
+  /** How many of the player's own decks the engine scored. */
+  considered = 0,
+): string | null {
+  if (mix.fill === 0) return null;
+  const n = mix.fill;
+  const decks = `${n} deck${n === 1 ? '' : 's'}`;
+  /* OUTRANKED IS NOT ABSENT, and the first version of this confused them. With
+     the two ranked together a player's own decks can all be scored AND all
+     lose — measured live, one player's own best was 56.8% against Deckkies
+     picks from 71.7% down — and the note then said "nothing of theirs could be
+     ranked" about five decks that were ranked. `reason` is null in exactly
+     that case: nothing is missing, their decks are simply weaker here. */
+  if (mix.own === 0 && !reason && considered > 0) {
+    return `${playerName}'s own ${considered} deck${considered === 1 ? '' : 's'} all score below these against this opponent, so every suggestion here is a Deckkies pick from the wider player base. Their own decks are still in the arsenal below.`;
+  }
+  if (mix.own === 0) {
+    const why =
+      reason === 'no_history'
+        ? `Nothing is stored for ${playerName} yet.`
+        : reason === 'no_comfort'
+          ? `${playerName} has no deck played often enough to count as one of theirs.`
+          : reason === 'no_evidence'
+            ? `None of ${playerName}'s decks has a measured record against this opponent.`
+            : `Nothing of ${playerName}'s own could be ranked.`;
+    return `${why} So these ${decks} come from the wider player base — real decks that answer this opponent, none of them in ${playerName}'s history yet.`;
+  }
+  return `${mix.own} of these ${mix.own === 1 ? 'is' : 'are'} ${playerName}'s own. The other ${decks} ${
+    n === 1 ? 'is a Deckkies pick' : 'are Deckkies picks'
+  } from the wider player base, ranked on the same scale — a deck ${playerName} already pilots keeps a small edge, so a pick leads only when it is genuinely stronger.`;
 }
 
 /**

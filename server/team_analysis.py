@@ -179,13 +179,14 @@ COMFORT_WEIGHT = 1.5
 #: pad the list with decks nobody should prepare.
 TOP_N = scout.MAX_RECOMMENDATIONS
 
-#: Per teammate, on the match-plan board. SMALLER THAN `TOP_N` DELIBERATELY:
-#: the squad-wide list answers "what should be practised", and this answers
-#: "what should Ravi bring", asked once per person. Ten teammates at seven rows
-#: each is a wall, and the fourth option for one player is still noise beside a
-#: fifth player with none — the original note's argument, which survives the
-#: change to the scorer because it was about the board and not about the model.
-PER_PLAYER_TOP_N = 5
+#: Per teammate, on the match-plan board — AND the Coach Roster's What-to-play
+#: tab, which reads `perPlayer[0]` and is where this number is actually felt.
+#:
+#: SEVEN, THE SAME AS THE SQUAD-WIDE LIST (was 5, and 3 before that). Raised on
+#: the account holder's request (2026-09-21). The board stays readable at ten
+#: teammates because every row is COLLAPSED until opened — the seven decks are
+#: behind one row per player, not seven rows each on screen at once.
+PER_PLAYER_TOP_N = 7
 
 #: How many decks a SCOUT folder recommends.
 #:
@@ -896,20 +897,23 @@ def _distinct(rows: list[dict]) -> list[dict]:
     return out
 
 
-def _topped_up(own: list[dict], pool) -> list[dict]:
-    """A teammate's own picks, topped up to `PER_PLAYER_TOP_N` with fills.
+def _suggested(own: list[dict], pool, limit: int) -> list[dict]:
+    """WHAT DECKKIES SUGGESTS TO PLAY: `own` and the population, ranked together.
 
-    `pool` is a callable so the fill candidates are scored only when somebody
-    is actually short — on a roster where everyone has decks this never runs.
+    `scout.suggest` does the work — this only makes it safe to call from the
+    board. `pool` is a callable so the population is scored once per folder,
+    on first use, and never at all in a scouting report (whose candidate pool
+    already IS the population).
+
+    A FAILURE FALLS BACK TO THE OWNED DECKS ALONE, diversified. The population
+    half is the part that reaches into the snapshot, and a snapshot problem
+    must cost the suggestions it adds and not the decks the player already has.
     """
-    need = PER_PLAYER_TOP_N - len(own)
-    if need <= 0:
-        return own
     try:
-        return own + scout.fills(own, pool(), need)
-    except Exception:  # noqa: BLE001 - a fill must never take the board down
+        return scout.suggest(own, pool(), limit=limit)
+    except Exception:  # noqa: BLE001 - the population half must never take the board down
         traceback.print_exc()
-        return own
+        return scout.diversify(own, limit=limit, minimum=limit)
 
 
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
@@ -969,15 +973,16 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         if row["owner"]:
             by_tag.setdefault(row["owner"]["tag"], []).append(row)
 
-    # THE FILL POOL, SCORED ONCE PER FOLDER AND ONLY IF SOMEBODY NEEDS IT.
+    # THE POPULATION, SCORED ONCE PER FOLDER.
     #
-    # A fill is not owner-specific — it is "a real deck nobody on this squad
-    # plays that answers this opponent" — so the same ranked list serves every
-    # teammate who is short. Scoring it per teammate would be ten identical
+    # Real decks out of the snapshot, ranked against THIS opponent's
+    # projection. Not owner-specific — it is "what Deckkies would suggest
+    # against this person" — so the same ranked list serves every teammate
+    # and the squad-wide list. Scoring it per teammate would be ten identical
     # passes over ~200 candidates.
     #
-    # LAZY, because the common case on a healthy roster is that nobody is
-    # short and this costs nothing at all.
+    # LAZY, and never built in a scouting report: there the candidate pool
+    # already IS the population, so `scored` is this list.
     _fill_pool: list[dict] | None = None
 
     def fill_pool() -> list[dict]:
@@ -1010,30 +1015,29 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         per_player.append({
             "owner": {"tag": mate["tag"], "name": mate["name"]},
             "basis": mate["basis"],
-            # DIVERSIFIED, NOT TRUNCATED, THEN TOPPED UP IF IT IS STILL SHORT.
+            # WHAT DECKKIES SUGGESTS THIS TEAMMATE PLAYS: their own decks and
+            # the population's, RANKED TOGETHER BY STRENGTH.
             #
-            # `rows` is already sorted and the grouping preserved that order,
-            # so slicing it returned this teammate's N highest-scoring decks —
-            # which, once the pool is wider than three, is reliably N versions
-            # of whatever archetype happens to beat the opponent's core.
-            # `diversify` applies a redundancy penalty so the list spans the
-            # threat space instead of repeating itself.
+            # That is `coach.suggest`'s sort, and an earlier build got it wrong
+            # the other way: it appended population decks BELOW every owned
+            # one and called that Coach Assist's rule. It was not — Coach
+            # Assist sorts the combined list by expected win rate — and on a
+            # live squad it left a player's own 60.0% deck above 71.7% and
+            # 71.3% answers. The account holder asked for the strongest to
+            # lead, and that is what Coach Assist does.
             #
-            # THE FILL IS `coach._fills`, AND IT REOPENS SOMETHING THIS
-            # MODULE'S OWN DOCSTRING ARGUED. That docstring says the pool is
-            # "exactly the decks the blue squad has ALREADY PLAYED", because a
-            # recommendation nobody can pilot is worth nothing on the day. That
-            # is still right about RANKING and it is wrong about an EMPTY
-            # BOARD: a teammate with two qualifying decks got two rows, and one
-            # with none got a bare reason, which reads as the tool having
-            # nothing to say about that person. Coach Assist has answered this
-            # the other way since it was written — top up from the population,
-            # mark what was added, never displace an owned deck — and the same
-            # answer belongs here. An owned deck always outranks a fill because
-            # fills are only ever appended.
-            "decks": _topped_up(scout.diversify(rows, limit=PER_PLAYER_TOP_N,
-                                                minimum=1),
-                                fill_pool),
+            # THEIR OWN DECKS KEEP A REAL EDGE: `score()` adds up to
+            # `FIT_WEIGHT` (1.5 points) for a deck they pilot, so a population
+            # deck must be genuinely better to pass one of theirs, not merely
+            # level. Near-copies of their own decks are refused outright.
+            #
+            # This module's docstring argues the candidate pool is "exactly
+            # the decks the blue squad has ALREADY PLAYED". That argument is
+            # about knowing who can pilot a deck on the day, and it survives
+            # as the `owner` on every row and the `fill` mark on every row that
+            # has none — the reader is told which is which, rather than the
+            # stronger deck being withheld.
+            "decks": _suggested(rows, fill_pool, PER_PLAYER_TOP_N),
             "considered": len(rows),
             # WHICH empty state this is, said rather than inferred from a
             # missing list. The three are genuinely different problems: nothing
@@ -1077,15 +1081,21 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         "threats": threats,
         "churn": projection["churn"],
         "mass": projection.get("mass"),
-        # RIGHT SIDE: what to bring, best first.
+        # RIGHT SIDE: WHAT DECKKIES SUGGESTS TO PLAY, best first.
         #
-        # FIVE TO SEVEN, DIVERSIFIED, and the diversity is what makes the
-        # longer list worth having. Taking the top seven by score returns seven
-        # answers to the same threat; `scout.diversify` penalises redundancy so
-        # the portfolio covers the observed core, the variants around it and
-        # the thing they have not shown. It may return FEWER than five rather
-        # than pad the list with decks nobody should prepare.
-        "recommended": scout.diversify(_distinct(scored), limit=top_n),
+        # SEVEN, DIVERSIFIED, and the diversity is what makes a longer list
+        # worth having: taking the top seven by score returns seven answers to
+        # the same threat, and `scout.diversify` penalises redundancy so the
+        # list covers the observed core, the variants around it and the thing
+        # they have not shown.
+        #
+        # IN A MATCH PLAN THE SQUAD'S DECKS AND THE POPULATION'S ARE RANKED
+        # TOGETHER (`_suggested`), the same sort as each teammate's list. In a
+        # scouting report `scored` already IS the population.
+        "recommended": (
+            _suggested(_distinct(scored), fill_pool, top_n) if blue
+            else scout.diversify(_distinct(scored), limit=top_n)
+        ),
         "perPlayer": per_player,
         "considered": len(cards),
         "brain": scout.BRAIN_VERSION,

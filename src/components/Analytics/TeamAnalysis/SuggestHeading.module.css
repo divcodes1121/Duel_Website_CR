@@ -1,0 +1,31 @@
+/* "What Deckkies Suggest To Play" — one heading, two screens (`SuggestHeading.tsx`).
+ *
+ * THE HIGHLIGHT IS A BAR AND A WASH, the text stays full ink. A white-on-violet
+ * slab would need `--solid-violet` behind small type in both themes; a 12% tint
+ * of `--hue-violet` under `--text` holds contrast on dark and light alike, and
+ * the 4px bar carries the colour as a bare graphic mark. */
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.6rem;
+  margin: 0 0 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border-left: 4px solid var(--solid-violet);
+  border-radius: 0 10px 10px 0;
+  background: color-mix(in srgb, var(--hue-violet) 12%, transparent);
+}
+
+.title {
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.sub {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}

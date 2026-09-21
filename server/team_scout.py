@@ -253,10 +253,20 @@ ARCHETYPE_SIMILARITY = 0.20
 #: slot, and nothing else can.
 ARCHETYPE_REPEAT_PENALTY = 2.5
 
-#: The portfolio. Five is the floor because the brief's structure needs room
-#: for a counter and a contingency below the known threats; seven is the
-#: ceiling because past it a coach is reading rather than choosing.
-MIN_RECOMMENDATIONS = 5
+#: The portfolio: SEVEN, and the floor is the ceiling.
+#:
+#: IT WAS "5 TO 7", with `PORTFOLIO_DROP` free to stop the list at five when
+#: the sixth option fell eight points below the best. Measured live that is
+#: what it did for 13 of 30 real opponents, and the account holder asked for
+#: seven (2026-09-21). That is a call about what a coach wants in front of
+#: them — a longer bench to choose from — and it is theirs to make. The rows
+#: are still ranked, so a weaker seventh sits last with its own rate beside it
+#: rather than being hidden; nothing on the list claims more than its figures.
+#:
+#: `diversify` keeps its `minimum` argument and `PORTFOLIO_DROP` keeps its
+#: meaning for any caller that asks for a shorter floor; the production
+#: callers simply no longer do.
+MIN_RECOMMENDATIONS = 7
 MAX_RECOMMENDATIONS = 7
 
 #: Shared cards at which two lists ARE the same deck.
@@ -269,9 +279,10 @@ MAX_RECOMMENDATIONS = 7
 SAME_DECK_OVERLAP = 6
 
 #: A candidate this far in points below the best one is not preparation, it is
-#: padding. The list is allowed to come back short of `MIN_RECOMMENDATIONS`
-#: rather than reach for filler — "here are five" is a promise about relevance,
-#: not about length.
+#: padding — for a caller that passes a `minimum` below its `limit`. With the
+#: portfolio at seven-and-seven it is not reached by production (see
+#: `MIN_RECOMMENDATIONS`), and a pool smaller than seven still comes back
+#: short rather than inventing a row.
 PORTFOLIO_DROP = 8.0
 
 # ── Vocabularies ────────────────────────────────────────────────────────────
@@ -855,7 +866,12 @@ def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
     three come back. A list padded to five with decks nobody should prepare is
     the failure mode of promising a length instead of a standard.
     """
-    pool = sorted(rows, key=lambda r: -r["recommendationScore"])
+    # SHALLOW COPIES, because the same scored rows are handed to more than one
+    # portfolio — a teammate's own list and the squad-wide one share dicts —
+    # and this function writes `redundancy` and `adjustedScore` onto what it
+    # returns. Mutating the caller's rows let whichever portfolio was built
+    # LAST overwrite the figures the other one had published.
+    pool = sorted((dict(r) for r in rows), key=lambda r: -r["recommendationScore"])
     if not pool:
         return []
 
@@ -917,11 +933,11 @@ def fills(existing, pool, need: int, *, min_overlap: int = SAME_DECK_OVERLAP):
     one level up — a teammate with two qualifying decks gets a two-row board
     and a reason, which reads as the tool having nothing to say about them.
 
-    IT NEVER DISPLACES AN OWNED DECK. `existing` is passed in whole and comes
-    back untouched; this only ever appends. That is what keeps
-    `team_analysis`'s standing argument intact — a recommendation nobody on the
-    team can pilot is worth less on the day than one somebody flies — while
-    still answering the case where there is nothing to pilot.
+    IT RETURNS CANDIDATES, IT DOES NOT ORDER THEM. `existing` comes back
+    untouched and this only ever returns additions; WHERE an addition lands is
+    `suggest()`'s decision, which ranks the two together by strength the way
+    `coach.suggest` does. (An earlier version appended fills below every owned
+    deck and called that Coach Assist's rule. It was not — see `suggest`.)
 
     THE SKIP IS A HARD ONE, not a penalty. `diversify` grades similarity
     because it is choosing among options that all deserve to be there; this is
@@ -950,6 +966,36 @@ def fills(existing, pool, need: int, *, min_overlap: int = SAME_DECK_OVERLAP):
         if len(out) >= need:
             break
     return out
+
+
+def suggest(own, pool, *, limit: int = MAX_RECOMMENDATIONS):
+    """WHAT DECKKIES SUGGESTS TO PLAY — their decks and the population's, ranked
+    together by strength.
+
+    THIS IS `coach.suggest`'S ACTUAL SORT, and an earlier version of this
+    module misdescribed it. `coach.suggest` builds its list from the player's
+    own legal decks, tops it up with population decks, and then sorts the whole
+    list by expected win rate — so a population deck that beats the opponent
+    by more DOES sit above one the player owns. This module first shipped the
+    top-ups appended below every owned deck ("never ranked in") and said that
+    was Coach Assist's rule. It was not, and on a live squad it put a player's
+    own 60.0% deck above two 71.7% / 71.3% answers they could have been told
+    about. The account holder asked for the stronger decks to lead.
+
+    THE PLAYER'S OWN DECKS STILL HAVE AN EDGE, AND IT IS THE PRINCIPLED ONE.
+    `score()` already adds `FIT_WEIGHT * playerFit` to a deck they pilot — up
+    to 1.5 points — so between two decks inside the noise the one they know
+    wins, and a population deck has to be genuinely better to pass it. That is
+    a tiebreak sized to lose to any real matchup difference, which is exactly
+    what the account holder asked for and exactly what Coach Assist does.
+
+    NEAR-COPIES ARE STILL REFUSED (`fills`, six shared cards): a population
+    list that is their own deck with one card swapped is their deck, and the
+    version they already play is the one kept.
+    """
+    own = list(own or [])
+    extra = fills(own, pool or [], need=len(pool or []))
+    return diversify(own + extra, limit=limit, minimum=limit)
 
 
 # ── 5. Saying why, from the evidence and nothing else ───────────────────────

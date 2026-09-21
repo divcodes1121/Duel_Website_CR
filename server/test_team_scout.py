@@ -487,8 +487,8 @@ def property_contract():
           ts.VARIANT_SHARE > 0.5)
     check("the variant overlap floor matches deck_tuner's MAX_SWAP of 2",
           8 - ts.MIN_VARIANT_OVERLAP == 2)
-    check("the portfolio is 5 to 7",
-          ts.MIN_RECOMMENDATIONS == 5 and ts.MAX_RECOMMENDATIONS == 7)
+    check("the portfolio is seven (the account holder's call, 2026-09-21)",
+          ts.MIN_RECOMMENDATIONS == 7 and ts.MAX_RECOMMENDATIONS == 7)
     check("the fit tiebreak is unchanged from team_analysis.COMFORT_WEIGHT",
           ts.FIT_WEIGHT == 1.5)
     check("every ladder source has a strength and the weakest is the default",
@@ -587,10 +587,28 @@ def property_portfolio_is_not_padded():
     for cards, arch in ((LAVA, "lava-hound"), (GRAVE, "graveyard"), (HOG_V2, "hog")):
         rows.append(ts.score(rate_all(45.0), sp["threats"], cards=cards,
                              archetype=arch))
+    # THE FLOOR, TESTED WITH THE FLOOR ASKED FOR. This check used to call
+    # `diversify(rows)` and assert `len < MIN_RECOMMENDATIONS`. When the
+    # portfolio went to seven-and-seven it KEPT PASSING — four candidates is
+    # fewer than seven whether the floor fired or not — so it had quietly
+    # stopped testing anything. The mechanism is still real for a caller that
+    # passes a lower `minimum`; this pins it where it is actually exercised.
+    floored = ts.diversify(rows, limit=ts.MAX_RECOMMENDATIONS, minimum=1)
+    check("with a low minimum, candidates far below the best are dropped",
+          len(floored) == 1, str(len(floored)))
+    check("the strong one is kept", floored[0]["key"] == ts.deck_key(GIANT))
+
+    # AND THE DEFAULT PORTFOLIO — seven, on the account holder's call — keeps
+    # every real candidate up to seven, ranked, and invents nothing.
     picked = ts.diversify(rows)
-    check("weak candidates are not padded into the list to reach five",
-          len(picked) < ts.MIN_RECOMMENDATIONS, str(len(picked)))
-    check("the strong one is kept", picked[0]["key"] == ts.deck_key(GIANT))
+    check("the default portfolio keeps every candidate the pool has",
+          len(picked) == len(rows), f"{len(picked)} of {len(rows)}")
+    check("but it never invents a row to reach seven",
+          len(picked) < ts.MAX_RECOMMENDATIONS)
+    check("the weaker ones are ranked below the strong one, not hidden",
+          picked[0]["key"] == ts.deck_key(GIANT)
+          and all(p["recommendationScore"] <= picked[0]["recommendationScore"]
+                  for p in picked))
 
     # And with enough real candidates it does reach the portfolio size.
     many = []
@@ -604,9 +622,8 @@ def property_portfolio_is_not_padded():
         many.append(ts.score(rate_all(62.0 - i * 0.4), sp["threats"],
                              cards=cards, archetype=arch))
     picked = ts.diversify(many)
-    check("a real pool fills the portfolio",
-          ts.MIN_RECOMMENDATIONS <= len(picked) <= ts.MAX_RECOMMENDATIONS,
-          str(len(picked)))
+    check("a real pool of seven fills the portfolio to exactly seven",
+          len(picked) == 7, str(len(picked)))
     check("and never exceeds the ceiling", len(picked) <= ts.MAX_RECOMMENDATIONS)
 
 
@@ -660,6 +677,69 @@ def property_fills_follow_coach_assist():
           ts.SAME_DECK_OVERLAP == 6)
 
 
+def property_suggest_ranks_together():
+    print("")
+    print("property — What Deckkies Suggests: own and population ranked together")
+    # `coach.suggest`'s real sort: the combined list by expected win rate. An
+    # earlier build appended population decks BELOW every owned one and called
+    # that Coach Assist's rule; on a live squad that left an owned 60.0% deck
+    # above 71.7% and 71.3% answers.
+    sp = ts.threat_space([deck(HOG, 50, wc="hog")], SEEDS, now=NOW)
+
+    weak_own = ts.score(rate_all(55.0), sp["threats"], cards=GIANT,
+                        archetype="giant", fit_games=40)
+    strong_pool = ts.score(rate_all(70.0), sp["threats"], cards=LAVA,
+                           archetype="lava-hound")
+    got = ts.suggest([weak_own], [strong_pool])
+    check("a genuinely stronger population deck ranks ABOVE a weaker owned one",
+          got[0]["key"] == ts.deck_key(LAVA),
+          str([(g["archetype"], g["recommendationScore"]) for g in got]))
+    check("and it is marked as a Deckkies pick", got[0].get("fill") is True)
+    check("the owned deck is still on the list, unmarked",
+          any(g["key"] == ts.deck_key(GIANT) and not g.get("fill") for g in got))
+
+    # THE OWNED DECK KEEPS ITS EDGE AT PARITY: `FIT_WEIGHT` is added to a deck
+    # they pilot, so a population deck must be genuinely better, not level.
+    even_own = ts.score(rate_all(60.0), sp["threats"], cards=GIANT,
+                        archetype="giant", fit_games=40)
+    even_pool = ts.score(rate_all(60.0), sp["threats"], cards=GRAVE,
+                         archetype="graveyard")
+    tie = ts.suggest([even_own], [even_pool])
+    check("at an equal matchup the deck they pilot leads",
+          tie[0]["key"] == ts.deck_key(GIANT),
+          str([(g["archetype"], g["recommendationScore"]) for g in tie]))
+
+    # NEAR-COPIES OF THEIR OWN DECK ARE REFUSED — the version they play is kept.
+    own_hog = ts.score(rate_all(55.0), sp["threats"], cards=HOG,
+                       archetype="hog", fit_games=40)
+    pool_hog = ts.score(rate_all(80.0), sp["threats"], cards=HOG_V1,
+                        archetype="hog")
+    dup = ts.suggest([own_hog], [pool_hog])
+    check("a one-card variant of their own deck is not suggested beside it",
+          [g["key"] for g in dup] == [ts.deck_key(HOG)],
+          str([g["key"][:30] for g in dup]))
+
+    # SEVEN WHEN THE POOL HAS THEM, ranked, and the caller's rows unmutated.
+    many = []
+    for i, (cards, arch) in enumerate((
+            (GIANT, "giant"), (LAVA, "lava-hound"), (GRAVE, "graveyard"),
+            (["giant", "witch", "musketeer", "zap", "arrows", "minions",
+              "knight", "tesla"], "giant2"),
+            (["balloon", "lumberjack", "barbarian-barrel", "musketeer",
+              "tombstone", "arrows", "minions", "knight"], "balloon"),
+            (["golem", "night-witch", "baby-dragon", "lumberjack",
+              "tornado", "lightning", "mega-minion", "barbarian-barrel"], "golem"),
+            (["x-bow", "tesla", "archers", "knight", "skeletons",
+              "ice-spirit", "fireball", "the-log"], "xbow"))):
+        many.append(ts.score(rate_all(66.0 - i), sp["threats"], cards=cards,
+                             archetype=arch))
+    seven = ts.suggest([own_hog], many)
+    check("the suggestion list is seven when the pool can fill it",
+          len(seven) == ts.MAX_RECOMMENDATIONS, str(len(seven)))
+    check("suggest() does not write onto the caller's rows",
+          "redundancy" not in many[0] and "fill" not in many[0])
+
+
 def main() -> int:
     print("team_scout — the coaching brain")
     case_1_many_known_decks()
@@ -679,6 +759,7 @@ def main() -> int:
     property_degradation()
     property_portfolio_is_not_padded()
     property_fills_follow_coach_assist()
+    property_suggest_ranks_together()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 

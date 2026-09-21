@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { CoachIntel, TeamRecommendation } from '../src/state/analyticsClient';
@@ -6,7 +8,10 @@ import {
   assistRows,
   assistSourceRef,
   coverNote,
+  FILL_NOTE,
+  fillNote,
   REC_TYPE_NOTE,
+  suggestionMix,
   emptyReason,
   suggestedDecks,
   unapproved,
@@ -199,7 +204,7 @@ describe('the coaching brain row labels', () => {
 
   it('says what the deck is for without claiming an unmeasured tendency', () => {
     for (const note of Object.values(REC_TYPE_NOTE)) {
-      expect(note).not.toMatch(/(always|never|prefers|tends to|likes|favou?rs)/i);
+      expect(note).not.toMatch(/\b(always|never|prefers|tends to|likes|favou?rs)\b/i);
       expect(note.length).toBeLessThan(60);
     }
   });
@@ -214,5 +219,82 @@ describe('the coaching brain row labels', () => {
     expect(old.confidence).toBeUndefined();
     expect(old.threatCovered).toBeUndefined();
     expect(coverNote(old)).toContain('what they actually play');
+  });
+});
+
+describe('Deckkies picks on the What-to-play tab', () => {
+  /* The engine now ranks the player's own decks and the wider player base's
+   * TOGETHER, the way `coach.suggest` sorts Coach Assist's list, and marks
+   * each outside deck `fill`. This tab owes the coach the difference. */
+  const own = rec(HOG);
+  const pick = rec(GOLEM, { owner: null, comfort: null, fill: true, expectedWinRate: 71.7 });
+
+  it('counts the two kinds apart', () => {
+    expect(suggestionMix([own, pick])).toEqual({ own: 1, fill: 1 });
+    expect(suggestionMix([])).toEqual({ own: 0, fill: 0 });
+  });
+
+  it('says nothing when every row is their own', () => {
+    expect(fillNote('no_history', { own: 3, fill: 0 }, 'Rahul')).toBeNull();
+  });
+
+  it('with nothing of theirs, leads with WHY and then says what the list is', () => {
+    const note = fillNote('no_history', { own: 0, fill: 7 }, 'Rahul')!;
+    expect(note).toMatch(/^Nothing is stored for Rahul yet\./);
+    expect(note).toMatch(/7 decks come from the wider player base/);
+    // The old sentence — "there is nothing to rank" — sat above seven ranked
+    // decks and contradicted them.
+    expect(note).not.toMatch(/nothing to rank/);
+  });
+
+  it('OUTRANKED IS NOT ABSENT — scored decks that all lost are not "nothing"', () => {
+    // Measured live: a player's own best 56.8% against picks from 71.7% down.
+    // `reason` is null there — nothing is missing — and five decks WERE ranked.
+    const note = fillNote(null, { own: 0, fill: 7 }, 'Dora', 5)!;
+    expect(note).toMatch(/Dora's own 5 decks all score below these/);
+    expect(note).not.toMatch(/could be ranked/);
+    expect(note).not.toMatch(/Nothing is stored/);
+  });
+
+  it('with a mix, says they are ranked on one scale — not "always below"', () => {
+    const note = fillNote(null, { own: 4, fill: 3 }, 'Rahul')!;
+    expect(note).toMatch(/4 of these are Rahul's own/);
+    expect(note).toMatch(/same scale/);
+    expect(note).not.toMatch(/always ranked below/);
+  });
+
+  it('one of their own is "is", not "are" — the screenshot caught it', () => {
+    expect(fillNote(null, { own: 1, fill: 6 }, 'Xethol')).toMatch(/^1 of these is Xethol's own/);
+    expect(fillNote(null, { own: 2, fill: 5 }, 'Xethol')).toMatch(/^2 of these are Xethol's own/);
+  });
+
+  it('the row label names it a Deckkies pick', () => {
+    expect(FILL_NOTE).toMatch(/Deckkies pick/);
+  });
+
+  it('approving a pick records it as one in the arsenal', () => {
+    expect(assistSourceRef(pick, '#OPP', 30)).toMatchObject({ fill: true });
+    expect(assistSourceRef(own, '#OPP', 30)).not.toHaveProperty('fill');
+  });
+});
+
+describe('the highlighted heading', () => {
+  const read = (f: string) => readFileSync(resolve(__dirname, '..', f), 'utf8');
+
+  it('reads exactly as the account holder asked for it', () => {
+    expect(read('src/components/Analytics/TeamAnalysis/SuggestHeading.tsx')).toContain(
+      "export const DECKKIES_SUGGEST = 'What Deckkies Suggest To Play';",
+    );
+  });
+
+  it('is mounted on both screens that rank decks against an opponent', () => {
+    expect(read('src/components/Analytics/TeamAnalysis/TeamFolders.tsx')).toMatch(/<SuggestHeading/);
+    expect(read('src/components/Admin/CoachRoster/AssistTab.tsx')).toMatch(/<SuggestHeading/);
+  });
+
+  it('the roster tab shows what the opponent is likely to bring beside it', () => {
+    // The other half of Coach Assist's mechanism — what they will bring —
+    // which this tab was missing.
+    expect(read('src/components/Admin/CoachRoster/AssistTab.tsx')).toMatch(/<Threats/);
   });
 });

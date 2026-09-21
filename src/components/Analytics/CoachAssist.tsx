@@ -23,6 +23,7 @@ import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
 import { useAccess } from '../../state/gate';
+import { DAY_PRESETS } from '../../utils/datePresets';
 
 /* Coach Assist — two windows over `server/coach.py`.
  *
@@ -1560,7 +1561,11 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
  * ago still gets a populated screen. In Window 2 it is resolved separately for
  * each of the two tags, so this is thirty days of EACH player's play rather
  * than one calendar range that may be empty for whichever stopped sooner. */
-const HISTORY_DAYS = [15, 30, 45, 60] as const;
+/* The shared list — see `utils/datePresets.ts`. It was 15/30/45/60 here alone,
+   so moving from this screen into the Coach Roster (7/30/90) dropped the two
+   windows a coach had just been using. The server clamps `days` to 1..4000, so
+   7 and 90 need nothing on its side. */
+const HISTORY_DAYS = DAY_PRESETS;
 
 export function CoachAssist({ tag }: { tag: string }) {
   const [win, setWin] = useState<'predict' | 'suggest'>('predict');

@@ -57,6 +57,17 @@ export const PLAN_SOURCE_LABEL: Record<PlanSource, string> = {
   variant: 'An edit of another deck',
 };
 
+/**
+ * How a frozen candidate is described. The source label, qualified when the
+ * engine's pick was a top-up — "The engine suggested it" about a deck the
+ * player had never played would hide the one thing a coach reading an old plan
+ * most needs to know about it.
+ */
+export function candidateLabel(c: Pick<PlanCandidate, 'source' | 'fill'>): string {
+  const base = PLAN_SOURCE_LABEL[c.source];
+  return c.fill ? `${base} — a deck they had not played` : base;
+}
+
 export const PLAN_NOTES_MAX = 4000;
 export const PLAN_NAME_MAX = 60;
 /** The table's own cap on the frozen snapshot, in bytes. */
@@ -108,6 +119,17 @@ export interface PlanCandidate {
   /** Times the player had played it, when known. */
   played: number | null;
   archetype: string | null;
+  /**
+   * A TOP-UP from the wider player base, not one of the player's own decks.
+   *
+   * Frozen because phase 7 reads results back against this snapshot: a win
+   * on a deck the player had never played is evidence about something
+   * different from a win on one of theirs, and pooling the two would blur
+   * exactly the comparison the snapshot exists to keep. Optional — plans
+   * frozen before the engine could top up have no answer, and a default would
+   * invent one. Rides in the existing `recommendations` jsonb; no migration.
+   */
+  fill?: boolean;
 }
 
 export interface PlanEngine {
@@ -220,6 +242,7 @@ export function buildSnapshot(
       spreadCovered: r.spreadCovered,
       played: r.comfort?.games ?? playedByKey?.get(key) ?? null,
       archetype: r.archetype ?? null,
+      ...(r.fill ? { fill: true } : {}),
     });
   }
 

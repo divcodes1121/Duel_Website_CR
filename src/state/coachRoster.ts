@@ -15,6 +15,7 @@
  */
 
 import { normalizeTag } from '../utils/squadParse';
+import { DAY_PRESETS } from '../utils/datePresets';
 
 export { normalizeTag };
 
@@ -163,9 +164,15 @@ export const SECTION_LABEL: Record<CoachSection, string> = {
   opponents: 'Opponents',
 };
 
-/** The shared window for Overview, Decks and Opponents. `0` is "all stored",
- *  sent to the server as a span longer than any storage tier holds. */
-export const COACH_WINDOWS = [7, 30, 90, 0] as const;
+/** The shared window for every windowed roster tab — Overview, Decks,
+ *  Opponents, Scout and What to play. `0` is "all stored", sent to the server
+ *  as a span longer than any storage tier holds.
+ *
+ *  THE DAY SPANS ARE `utils/datePresets.ts`, the one list every date filter on
+ *  the site reads (7/15/30/45/60/90). This was 7/30/90 alone, so the 15- and
+ *  45-day windows a coach used on the public Coach Assist were missing here.
+ *  "All" is this screen's own addition and stays. */
+export const COACH_WINDOWS = [...DAY_PRESETS, 0] as const;
 export type CoachWindow = (typeof COACH_WINDOWS)[number];
 export const windowDays = (w: CoachWindow): number => (w === 0 ? 4000 : w);
 

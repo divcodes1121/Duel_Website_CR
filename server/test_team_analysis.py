@@ -485,8 +485,12 @@ check("a scout folder recommends up to the portfolio size",
       len(scout_folder["recommended"]) <= ta.SCOUT_TOP_N
       and ta.SCOUT_TOP_N == ts.MAX_RECOMMENDATIONS,
       f"{len(scout_folder['recommended'])} of {ta.SCOUT_TOP_N}")
-check("the per-teammate board stays shorter than the squad-wide portfolio",
-      ta.PER_PLAYER_TOP_N < ta.TOP_N)
+# SEVEN ON BOTH BOARDS NOW (was 5 per teammate), on the account holder's call.
+# The per-teammate list is what the Coach Roster's What-to-play tab reads, so
+# this is the number a coach actually sees there.
+check("the per-teammate board shows seven, like the squad-wide portfolio",
+      ta.PER_PLAYER_TOP_N == 7 and ta.TOP_N == 7,
+      f"{ta.PER_PLAYER_TOP_N} / {ta.TOP_N}")
 # A TEAMMATE WITH A SHORT LIST IS TOPPED UP, NOT LEFT WITH A REASON.
 #
 # `coach._fills` has answered this since Coach Assist was written: when a
@@ -522,15 +526,28 @@ check("no two fills are the same deck",
 # AND A TEAMMATE WHO HAS THEIR OWN DECKS KEEPS THEM AT THE TOP.
 _rich_row = next(r for r in folder["perPlayer"] if r["owner"]["tag"] == "#B1")
 _owned = [d for d in _rich_row["decks"] if not d.get("fill")]
-check("an owned deck is never displaced by a fill",
-      not _rich_row["decks"] or not _rich_row["decks"][0].get("fill"),
-      "fills are appended, never ranked in")
-check("owned decks come before any fill",
-      [bool(d.get("fill")) for d in _rich_row["decks"]]
-      == sorted(bool(d.get("fill")) for d in _rich_row["decks"]),
-      str([bool(d.get("fill")) for d in _rich_row["decks"]]))
+# OWN AND POPULATION ARE RANKED TOGETHER NOW — `coach.suggest`'s real sort.
+# The two checks that stood here asserted the opposite ("owned decks come
+# before any fill") and kept PASSING after the rule changed, because this
+# fixture has no population pool at this point in the file: with nothing to
+# rank in, "owned first" is trivially true. The ordering contract is pinned in
+# `test_team_scout.py`, against literals where the rates can be controlled.
+# What is true of the payload whatever the pool is: every row is either a deck
+# a teammate owns, or a marked fill — never an unmarked deck of nobody's.
+check("every per-player row is owned or marked as a Deckkies pick",
+      all(bool(d.get("owner")) != bool(d.get("fill")) for d in _rich_row["decks"]),
+      str([(bool(d.get("owner")), bool(d.get("fill"))) for d in _rich_row["decks"]]))
 check("the owned half is what `considered` counts",
       _rich_row["considered"] >= len(_owned))
+
+# NO LIST EXCEEDS SEVEN, AND NO ROW IS AN UNMARKED STRANGER — on every
+# teammate's board.
+for _row in folder["perPlayer"]:
+    check(f"{_row['owner']['name']}: at most seven suggestions",
+          len(_row["decks"]) <= ta.PER_PLAYER_TOP_N, str(len(_row["decks"])))
+    check(f"{_row['owner']['name']}: every row is theirs or a marked pick",
+          all((d.get("owner") or {}).get("tag") == _row["owner"]["tag"] or d.get("fill")
+              for d in _row["decks"]))
 
 # EVERY THREAT CARRIES A DISPLAY NAME, NOT AN ARCHETYPE KEY.
 #

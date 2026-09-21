@@ -6,6 +6,7 @@ import { useCoachArsenal } from '../../../state/coachArsenalStore';
 import {
   PLAN_SLOTS,
   PLAN_SOURCE_LABEL,
+  candidateLabel,
   PlanError,
   SLOT_HELP,
   SLOT_LABEL,
@@ -357,7 +358,7 @@ function DeckPicker({
                 >
                   <span className={styles.metName}>{c.name}</span>
                   <span className={styles.muted}>
-                    {PLAN_SOURCE_LABEL[c.source]}
+                    {candidateLabel(c)}
                     {c.expectedWinRate !== null ? ` · expected ${c.expectedWinRate.toFixed(1)}%` : ' · never scored'}
                   </span>
                   <span className={styles.rowLink}>Use →</span>
@@ -419,7 +420,7 @@ function FrozenSnapshot({ plan }: { plan: MatchPlan }) {
               <li key={`${c.name}-${i}`} className={styles.metRow}>
                 <span className={styles.metName}>{c.name}</span>
                 <span className={styles.muted}>
-                  {PLAN_SOURCE_LABEL[c.source]}
+                  {candidateLabel(c)}
                   {c.expectedWinRate !== null ? ` · expected ${c.expectedWinRate.toFixed(1)}%` : ' · never scored'}
                   {c.spreadCovered !== null ? ` · covered ${c.spreadCovered.toFixed(0)}%` : ''}
                   {c.played !== null ? ` · played ${c.played}` : ''}

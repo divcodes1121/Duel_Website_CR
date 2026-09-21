@@ -16,7 +16,10 @@ import {
   assistRows,
   assistSourceRef,
   coverNote,
+  FILL_NOTE,
+  fillNote,
   REC_TYPE_NOTE,
+  suggestionMix,
   emptyReason,
   suggestedDecks,
   type ArsenalRow,
@@ -25,6 +28,8 @@ import {
 import { CardArt } from '../../Analytics/CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ReadingState } from '../../Analytics/ReadingState';
+import { SuggestHeading } from '../../Analytics/TeamAnalysis/SuggestHeading';
+import { Threats } from '../../Analytics/TeamAnalysis/Threats';
 import { DeckEditorDialog } from './DeckEditorDialog';
 import { OpponentChooser } from './OpponentChooser';
 import styles from './CoachRoster.module.css';
@@ -166,7 +171,15 @@ export function AssistTab({
       setSaving(false);
     }
   }
-  const why = emptyReason(mine?.reason ?? report?.pool?.reason, playerLabel(player));
+  /* TWO DIFFERENT SENTENCES FOR TWO DIFFERENT STATES. With nothing at all to
+     show, the reason is the whole answer. With Deckkies picks on screen, the
+     old reason — "there is nothing to rank" — sat directly above a list of
+     seven ranked decks and contradicted it; the fill note says why none of
+     them are theirs AND what the list is instead. */
+  const mix = suggestionMix(recs);
+  const why = suggested.length
+    ? fillNote(mine?.reason ?? null, mix, playerLabel(player), mine?.considered ?? 0)
+    : emptyReason(mine?.reason ?? report?.pool?.reason, playerLabel(player));
 
   return (
     <div className={styles.arsenal}>
@@ -177,7 +190,7 @@ export function AssistTab({
               {playerLabel(player)} against {opponentName}
             </h3>
             <span className={styles.muted}>
-              Ranked by the analytics engine over {windowLabel}, against what this opponent actually brings.
+              Ranked over {windowLabel}, against what this opponent is likely to bring — change the window above.
             </span>
           </div>
           <div className={styles.controlRow}>
@@ -197,16 +210,31 @@ export function AssistTab({
         {why && <p className={styles.hint}>{why}</p>}
       </section>
 
-      {/* THE ENGINE'S PICKS. Its candidate pool is the decks this player has
-          actually played — which is why an approved deck they have never run
-          cannot appear here, and why the arsenal block below says so. */}
+      {/* WHAT THEY ARE LIKELY TO BRING — the other half of Coach Assist's
+          mechanism. Coach Assist shows the opponent's likely next decks beside
+          what to play; this tab showed only the second half, so a coach saw a
+          ranking without what it was ranked against. It is the same
+          projection Team Analysis draws, from the same engine call. */}
+      {(folder?.threats?.length ?? 0) > 0 && (
+        <section className={styles.block}>
+          <Threats
+            threats={folder!.threats!}
+            churn={folder!.churn}
+            title={`What ${opponentName} is likely to bring`}
+          />
+        </section>
+      )}
+
+      {/* WHAT DECKKIES SUGGESTS TO PLAY. Not "the decks this player happens to
+          play" any more: their own decks and the strongest real decks from the
+          wider player base are ranked TOGETHER, the way Coach Assist sorts its
+          own suggestions, and every row says which kind it is. A deck they
+          pilot keeps a small edge, so an outside pick must be genuinely better
+          to lead. */}
       <section className={styles.block}>
-        <div className={styles.blockHead}>
-          <h3 className={styles.blockTitle}>What the engine suggests</h3>
-          <span className={styles.muted}>
-            from the {mine?.considered ?? 0} deck{(mine?.considered ?? 0) === 1 ? '' : 's'} of theirs it could score
-          </span>
-        </div>
+        <SuggestHeading
+          sub={`${mix.own} of ${playerLabel(player)}'s own · ${mix.fill} from the wider player base`}
+        />
         {suggested.length === 0 ? (
           <p className={styles.muted}>
             {why ?? 'The engine had nothing to rank for this pairing.'}
@@ -277,6 +305,16 @@ function SuggestionRow({ suggestion, onApprove }: { suggestion: SuggestedDeck; o
             {rec.comfort ? ` · they have played it ${rec.comfort.games} times` : ''}
           </span>
           <span className={styles.muted}>{coverNote(rec)}</span>
+          {/* A DECKKIES PICK SAYS SO. It is not a deck the player runs, and a
+              coach approving it is choosing to teach them something new — a
+              different conversation from approving one they already fly. */}
+          {rec.fill && (
+            <span className={styles.tagRow}>
+              <span className={styles.tagChip} data-role>
+                {FILL_NOTE}
+              </span>
+            </span>
+          )}
           {/* WHAT JOB THIS DECK IS DOING, and how much is actually known.
               A list of five to seven only reads as preparation if each row
               says why it is there; without it the longer list reads as a

@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import type { DateWindow } from '../../state/analyticsClient';
+import { DAY_PRESETS, dayLabel } from '../../utils/datePresets';
 
 export interface PlayerSummary {
   name: string;
@@ -80,15 +81,15 @@ export function seasonWindow(season: Season, coverageEnd: string | null): { from
 /* Presets, plus 'Custom' which reveals the two date fields. The list is
    filtered against real coverage at render time — offering 90 days when the
    databases hold 50 is just a way to show an empty chart. */
-export const RANGE_PRESETS = [
-  { label: 'Last 7 Days', days: 7 },
-  { label: 'Last 14 Days', days: 14 },
-  { label: 'Last 30 Days', days: 30 },
-  { label: 'Last 60 Days', days: 60 },
-  { label: 'Last 90 Days', days: 90 },
+/* The day windows come from `utils/datePresets.ts` — ONE list for every date
+   filter on the site (7/15/30/45/60/90). This menu used to carry its own
+   7/14/30/60/90 while Coach Assist offered 15/30/45/60 and the roster
+   7/30/90, three lists disagreeing about the same control. */
+export const RANGE_PRESETS: readonly { label: string; days: number }[] = [
+  ...DAY_PRESETS.map((d) => ({ label: dayLabel(d), days: d as number })),
   { label: 'All Data', days: 0 },
   { label: 'Custom…', days: -1 },
-] as const;
+];
 
 /* --------------------------------------------------------- window state */
 

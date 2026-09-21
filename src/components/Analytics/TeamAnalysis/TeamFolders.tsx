@@ -1,19 +1,19 @@
 import { useState } from 'react';
 import type {
   RecommendationType,
-  TeamChurn,
   TeamFolder,
   TeamMode,
   TeamOverall,
   TeamPlayerOptions,
   TeamRecommendation,
   TeamReport,
-  TeamThreat,
 } from '../../../state/analyticsClient';
 import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { VsMark } from '../../VsMark/VsMark';
 import styles from './TeamAnalysis.module.css';
+import { Threats } from './Threats';
+import { SuggestHeading } from './SuggestHeading';
 
 /**
  * The folders under a team analysis: a gallery of opponents, and the opened
@@ -93,6 +93,12 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
       </p>
 
       <div className={styles.rosterBody}>
+        {/* THEM ON THE LEFT, WHAT TO PLAY ON THE RIGHT. `.rosterBody` is a
+            two-column grid; adding the projection as a third child pushed the
+            suggestions into the narrow left column under a tall empty gap. The
+            history and the projection are one question — what they bring — so
+            they share the left column. */}
+        <div>
         <ul className={styles.spread}>
           {overall.spread.map((s) => (
             <li key={s.archetype} className={styles.spreadRow}>
@@ -113,17 +119,21 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
             against. Same component, same labelling, one pooled distribution
             instead of one opponent's. */}
         <Threats threats={overall.threats ?? []} churn={overall.churn} />
+        </div>
 
         {overall.reason === 'no_evidence' ? (
           <p className={styles.warn}>
             No deck has a measured record against this roster&apos;s spread, so nothing is ranked.
           </p>
         ) : (
-          <ol className={styles.mateDecks}>
-            {overall.recommended.map((r, i) => (
-              <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
-            ))}
-          </ol>
+          <div>
+            <SuggestHeading sub="against the whole roster" />
+            <ol className={styles.mateDecks}>
+              {overall.recommended.map((r, i) => (
+                <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
+              ))}
+            </ol>
+          </div>
         )}
       </div>
     </section>
@@ -212,84 +222,6 @@ const REC_TYPE_LABEL: Record<RecommendationType, string> = {
   CONTINGENCY: 'Contingency',
 };
 
-/** What each kind of projected threat is, said once, where it is drawn. */
-const THREAT_LABEL: Record<string, string> = {
-  OBSERVED: 'Seen playing',
-  VARIANT: 'Close variant',
-  INFERRED: 'Plausible',
-};
-
-/**
- * WHAT THEY ARE LIKELY TO BRING — the projection, beside the history.
- *
- * The list above this is `theirDecks`: decks they were actually observed
- * playing. This is the threat space the recommendations were scored against,
- * which is a different and larger thing — their decks, real variants of those
- * decks, and the archetypes their behaviour implies.
- *
- * THE TWO ARE DRAWN SEPARATELY AND LABELLED SEPARATELY, and that is the whole
- * honesty of the screen. A generated deck shown in the observed list would be
- * a claim that somebody watched them play it. Every row here says which kind
- * it is and how confident that is, and a variant names the deck it came from.
- */
-function Threats({ threats, churn }: { threats: TeamThreat[]; churn?: TeamChurn }) {
-  if (!threats.length) return null;
-  return (
-    <div className={styles.threats}>
-      <h5 className={styles.threatsTitle}>
-        Likely to bring
-        {churn && (
-          <span
-            className={styles.threatsNote}
-            title={
-              churn.evidence === 'thin'
-                ? 'Too little play to measure how much they switch, so the projection is deliberately wider than their history.'
-                : churn.evidence === 'none'
-                  ? 'No play at all to measure. The projection is as wide as it gets.'
-                  : 'Measured from how their own play is spread across decks.'
-            }
-          >
-            {churn.evidence === 'measured'
-              ? `${Math.round(100 * churn.switch)}% chance of something off-book`
-              : 'little history — projection widened'}
-          </span>
-        )}
-      </h5>
-      <ul className={styles.threatList}>
-        {threats.map((t) => (
-          <li key={t.key} className={styles.threatRow} data-evidence={t.evidence}>
-            <span className={styles.threatLike}>{(100 * t.likelihood).toFixed(0)}%</span>
-            <span className={styles.threatBody}>
-              <span className={styles.threatName}>
-                {t.name || t.archetype}
-                <em className={styles.threatKind} data-evidence={t.evidence}>
-                  {THREAT_LABEL[t.evidence] ?? t.evidence}
-                </em>
-              </span>
-              {/* THE EVIDENCE, NEVER DRESSED UP. An observed deck quotes the
-                  battles it was seen in; a variant names its parent and how
-                  many cards it shares; an inferred entry says plainly that it
-                  has never been seen. */}
-              <span className={styles.threatWhy}>
-                {t.evidence === 'OBSERVED'
-                  ? `${t.observedCount} battle${t.observedCount === 1 ? '' : 's'} on record`
-                  : t.evidence === 'VARIANT'
-                    ? `${t.overlap ?? 0} of 8 cards shared with ${t.basisName || 'a deck they play'} — never seen from them`
-                    : t.why === 'own_archetype'
-                      ? 'An archetype they play, in a configuration not seen from them'
-                      : 'Widely played, and nothing in their history rules it out'}
-              </span>
-            </span>
-            <span className={styles.threatConf} data-conf={t.confidence}>
-              {t.confidence}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 /**
  * One recommended deck, with the reasoning it was chosen on.
  *
@@ -301,7 +233,17 @@ function Threats({ threats, churn }: { threats: TeamThreat[]; churn?: TeamChurn 
  * headline alone cannot separate "this beats them" from "this beats
  * everybody", and those are very different reasons to top a ranking.
  */
-function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number }) {
+function Recommendation({
+  rec,
+  rank,
+  fillLabel = 'Nobody on your squad plays this yet — a Deckkies pick',
+}: {
+  rec: TeamRecommendation;
+  rank?: number;
+  /** How a top-up describes itself. Per teammate it is "not in THEIR
+   *  history"; squad-wide it is "nobody on your squad" — different claims. */
+  fillLabel?: string;
+}) {
   /* The delta is computed here rather than shipped, because the two halves are
      worth reading separately and a lone "+9.4" hides both of them. */
   const edge =
@@ -329,8 +271,8 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
             {rec.owner
               ? `${rec.owner.name} plays it`
               : rec.fill
-                ? 'Nobody on your squad plays this yet'
-                : 'Most-played list of this archetype'}
+                ? fillLabel
+                : 'A widely played real list of this archetype'}
           </span>
         </div>
         <div className={styles.recFigures}>
@@ -468,13 +410,22 @@ function PlayerRow({ row, open, onToggle }: {
         <span className={styles.mateWho}>
           <span className={styles.mateName}>{row.owner.name}</span>
           <span className={styles.mateSub}>
+            {/* A DECKKIES PICK CAN LEAD NOW — the list is ranked together
+                by strength — so the collapsed row must say when the deck it
+                names is not one of theirs, or it reads as "Ravi plays
+                Graveyard" when Ravi has never touched it. */}
             {!best
               ? NO_OPTIONS[row.reason ?? ''] ?? 'No options'
               : own === 0
-                ? `${NO_OPTIONS[row.reason ?? ''] ?? 'Nothing of their own'} · ${filled} suggested`
-                : `${best.name}${filled ? ` · ${filled} suggested` : ''}${
-                    row.considered > own ? ` · ${row.considered} decks weighed` : ''
-                  }`}
+                ? /* OUTRANKED IS NOT ABSENT: with no `reason`, their decks were
+                     scored and every one lost to a pick. Saying "nothing of
+                     their own" there would be false. */
+                  row.reason
+                  ? `${NO_OPTIONS[row.reason] ?? 'Nothing of their own'} · ${filled} Deckkies pick${filled === 1 ? '' : 's'}`
+                  : `Deckkies pick: ${best.name} · their own ${row.considered} score lower here`
+                : best.fill
+                  ? `Deckkies pick: ${best.name} · ${own} of their own in the list`
+                  : `${best.name}${filled ? ` · ${filled} Deckkies pick${filled === 1 ? '' : 's'}` : ''}`}
           </span>
         </span>
 
@@ -497,7 +448,12 @@ function PlayerRow({ row, open, onToggle }: {
       {open && best && (
         <ol className={styles.mateDecks} id={id}>
           {row.decks.map((r, i) => (
-            <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
+            <Recommendation
+              key={`${r.archetype}-${i}`}
+              rec={r}
+              rank={i + 1}
+              fillLabel={`Not in ${row.owner.name}'s history yet — a Deckkies pick`}
+            />
           ))}
         </ol>
       )}
@@ -617,17 +573,20 @@ export function OpenFolder({
                  compare, hiding the reasoning behind a chevron would only put
                  a click in front of the one thing on the board. */
               <section className={styles.boardSide} data-side="blue">
-                <h4 className={styles.boardTitle}>What beats it</h4>
+                <SuggestHeading sub={`against ${p.name}`} />
                 <ol className={styles.mateDecks}>
                   {folder.recommended.map((r, i) => (
                     <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
                   ))}
                 </ol>
+                {/* THIS SENTENCE SAID "ranked from N archetypes, each
+                    represented by its most-played list" — true while the pool
+                    was one representative per archetype, and wrong once it
+                    became ~200 real decks, when it announced "204 archetypes". */}
                 <p className={styles.considered}>
-                  Ranked from {folder.considered} archetype
-                  {folder.considered === 1 ? '' : 's'}, each represented by its most-played real
-                  list. Nothing here is generated — every deck is one people run, with a record
-                  to score it on.
+                  Ranked from {folder.considered} real deck{folder.considered === 1 ? '' : 's'} —
+                  the most-played lists of every archetype. Nothing here is generated: every deck
+                  is one people run, with a record to score it on.
                 </p>
               </section>
             ) : (
@@ -635,7 +594,7 @@ export function OpenFolder({
                  one with nothing to bring, which is information rather than a
                  reason to omit them. */
               <section className={styles.boardSide} data-side="blue">
-                <h4 className={styles.boardTitle}>Your players</h4>
+                <SuggestHeading sub={`for each of your players, against ${p.name}`} />
                 <ul className={styles.mates}>
                   {folder.perPlayer.map((row) => (
                     <PlayerRow
@@ -649,9 +608,10 @@ export function OpenFolder({
                   ))}
                 </ul>
                 <p className={styles.considered}>
-                  Tap a player for their best three against {p.name}. Ranked from{' '}
-                  {folder.considered} deck{folder.considered === 1 ? '' : 's'} your squad actually
-                  plays.
+                  Tap a player for the seven decks Deckkies suggests against {p.name} — their own
+                  and the strongest from the wider player base, ranked together. A deck they
+                  already pilot gets a small edge, so a pick from outside has to be genuinely
+                  better to lead.
                 </p>
               </section>
             )}

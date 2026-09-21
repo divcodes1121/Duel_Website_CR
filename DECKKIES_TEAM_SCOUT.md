@@ -214,6 +214,81 @@ is the *threat projection's* source. The fill *candidates* come from
 the snapshot predates the seed pool — so the gate silently switched fills off
 on exactly the deployment that needs them most.
 
+## 4c. What Deckkies Suggests To Play — ranked together, seven, everywhere (2026-09-21)
+
+**§4b above described Coach Assist wrongly, and this section corrects it.** It
+said `coach._fills` keeps population decks *below* every owned one. It does not:
+`coach.suggest` builds the list from the player's own legal decks, tops it up
+from the population, and then **sorts the combined list by expected win rate**.
+The appended-below rule was mine. On a live squad it held a player's own 60.0%
+deck above two 71.7% / 71.3% answers, and the account holder asked for the
+stronger decks to lead.
+
+`team_scout.suggest(own, pool)` is that sort. **Their own decks keep a real
+edge**, and it is the one already in the scorer: `FIT_WEIGHT × playerFit`, up to
+1.5 points, is added to a deck they pilot. So a population deck has to be
+*genuinely* better to pass one of theirs, not merely level. Near-copies of their
+own decks (six shared cards) are still refused, keeping the version they play.
+
+Measured live, same squad against the same opponent, before and after:
+
+| | top of the list before | after |
+|---|---:|---:|
+| Xethol | 67.7% (own) | **71.7%** (Deckkies pick) — own 67.7% at #3 |
+| Doralalala | 56.8% (own) | **71.7%** (Deckkies pick) — own decks all outranked |
+
+**Outranked is not absent.** Doralalala's five decks were scored and all lost.
+The first copy for "none of these are theirs" said "nothing could be ranked",
+which was false. `reason` is null in that case, and the screen now says "their
+own 5 decks all score below these".
+
+**Seven everywhere.** `MIN_RECOMMENDATIONS = MAX_RECOMMENDATIONS = 7` and
+`PER_PLAYER_TOP_N = 7`. The Coach Roster's What-to-play reads `perPlayer[0]`, so
+this is the number a coach sees there. `PORTFOLIO_DROP` keeps its meaning for a
+caller that passes a lower `minimum`, and no production caller does now.
+
+**"What Deckkies Suggest To Play"** is one highlighted heading
+(`SuggestHeading.tsx`: a violet bar over a 12% tint, with the text left at full
+ink) on both Team Analysis and the Coach Roster.
+
+**The Coach Roster got Coach Assist's other half.** Coach Assist shows what the
+opponent will bring beside what to play; the roster tab showed only the second
+half. `Threats.tsx` moved into its own component and CSS module so both screens
+draw the same projection.
+
+**A frozen match plan records a pick as a pick** (`PlanCandidate.fill`,
+`candidateLabel`). Phase 7 reads results against the snapshot, and a win on a
+deck the player had never played is different evidence from a win on one of
+theirs. It rides in the existing jsonb, so there is no migration.
+
+### Two faults found on the way, one of them mine from earlier the same day
+
+- **A literal backspace in a test regex.** `tests/coachAssist.test.ts`' "never
+  claims an unmeasured tendency" had `…` turned into two `0x08` characters
+  by a heredoc edit in `a370e30`. So it could match nothing and had passed
+  vacuously since. Repaired, and `src/`, `tests/` and `server/` were swept for
+  other control characters (none).
+- **`diversify` wrote onto its callers' rows.** A teammate's list and the
+  squad-wide list share scored dicts, so whichever portfolio was built last
+  overwrote the other's published `redundancy`. It works on shallow copies now.
+
+### Browser pass: 25 of 25
+
+Against the live API, at 1440, in dark mode:
+
+- the six day chips, the run sending `days=45`, the heading's bar and tint;
+- seven on every list, with every row saying whose it is;
+- a pick leading the collapsed row;
+- the roster's 7-chip window, projection and marked picks;
+- Recent Battles' presets.
+
+Screenshots caught three things the checks did not, all fixed:
+
+- the roster-wide suggestions had wrapped into the narrow left column under a
+  tall gap;
+- "1 of these are";
+- a sub-1% share printing as "0%" beside an observed deck.
+
 ## 5. Diversity — and the defect the case review found
 
 Greedy MMR with a superlinear card-overlap similarity, **plus an archetype
