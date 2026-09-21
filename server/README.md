@@ -981,6 +981,12 @@ recommendations are scored against that, diversified, and returned 5–7 at a
 time. `_spread()` survives as the DISPLAYED archetype breakdown and is still
 what the screen draws on the left.
 
+**`matchups` (the per-threat table) is on each folder's TOP pick only**
+(`_evidence_on_top`, 2026-09-21). It was ~4 kB on every recommendation and 80%
+of a match plan's payload (live 5v5: 1.08 MB -> 257 kB), and the PDF, its only
+reader, prints it for the top pick alone. Per-teammate decks and the roster-wide
+list carry none. The client type is optional to match.
+
 It has **no imports beyond the standard library**, the rule `deck_harmony.py`
 and `battle_modes.py` follow, so all 107 of its checks run against literals with
 no database. `DECKKIES_TEAM_SCOUT.md` is the design record — read it before

@@ -289,6 +289,80 @@ Screenshots caught three things the checks did not, all fixed:
 - "1 of these are";
 - a sub-1% share printing as "0%" beside an observed deck.
 
+## 4d. Less on screen, saves that fit, saves on every device (2026-09-21, `556d007`)
+
+Three requests arrived in one message:
+
+1. Remove the "Robust / known / Holds up against Royal Hogs … measured against
+   100% of their projected pool" line.
+2. Fix "This board is too large to store in the browser".
+3. Make saved analyses visible on a phone.
+
+The same message asked for no other explanatory text anywhere.
+
+**The prose is gone from both screens.** Team Analysis and the Coach Roster's
+What-to-play tab no longer print any of these:
+
+- a recommendation's type, confidence, explanation or coverage sentence;
+- the roster lede;
+- the "Ranked from N real decks" and "Tap a player" paragraphs;
+- the threat reason lines, the confidence words and the churn note;
+- the heading subtitles;
+- the fill banner or the window sub-line.
+
+A fill now says just **Deckkies pick**. Empty states and warnings are one short
+sentence each. A threat row is share, name and kind. The kind badge stays,
+because it is what keeps a generated deck from reading as an observed one.
+
+The fields are still on the payload. The PDF still prints coverage, and the
+frozen match plan still records the type. `tests/coachAssist.test.ts` pins that
+neither screen prints them. This settles the old §11 question — type and
+confidence were near-constant anyway.
+
+**"Too large" was the per-threat `matchups` table.** It was repeated on every
+recommendation: ~4 kB each, 80% of a match plan. Only the PDF reads it, and only
+on each folder's top pick. Two changes follow from that:
+
+- **The server** now sends the table on the top pick only
+  (`_evidence_on_top`). Measured live, a 5v5 plan went from **1.08 MB to
+  257 kB**, with the table still on all 5 top picks and on none of the other
+  175 decks.
+- **`compactReport`** applies the same rule at save time. It also drops the
+  per-row `explanation` and `brain`. So a board from an older server saves just
+  as small, and a 10v10 board stores in ~0.7 MB where it was ~4.6 MB.
+
+**The phone list was fine — it was empty.** Saves never left the browser that
+made them. They now sync through `/api/decks?doc=team-saves`:
+
+- One Upstash record per save, plus a hash index. Twelve boards do not fit the
+  deck blob's 1 MB cap, and `HSET`/`HDEL` touch one field each, so two devices
+  cannot overwrite each other's index entry.
+- Local storage is a cache. A save made elsewhere arrives as a stub (name, date,
+  counts) and its report is fetched on open.
+- `synced` tells "deleted on another device" from "never uploaded". Deletes made
+  offline are kept in `royal-team-saves-deleted` and retried.
+- The section is shown even when empty ("None yet.").
+
+The rules are in `teamSaveRules.ts` (no imports). The route is
+`teamSaveRoute()` over a six-method KV interface, so the whole contract is
+tested in memory: `tests/teamSaves.test.ts`, 31 checks. Those include user
+isolation, the 12 cap, the id pattern, 413, and "stores only a save's own
+fields".
+
+**Checked:** vitest 727 across 30 files. Browser 35/35 at 1440 and 390, both
+themes, replaying real captures; the What-to-play tab was mounted through the
+harness. Live, both `/api/decks?doc=team-saves` requests are refused 401 — with
+no token, and with a forged one — so the function loads. **The signed-in path is
+not checkable from this machine** (no session here). Saving on the desktop and
+opening it on the phone is the account holder's smoke test.
+
+**Seen while measuring, NOT caused by this change and NOT fixed here.** A 5v5
+where the same five players are on both sides took **150+ s warm**. 1v1 warm is
+**1.25 s**, which matches the old baseline. Ten players' deck profiles overflow
+`_CLUSTER_CACHE` (32 entries, cleared whole on overflow), so a board that size
+reads cold every time. One of three such requests dropped the connection at
+~129 s.
+
 ## 5. Diversity — and the defect the case review found
 
 Greedy MMR with a superlinear card-overlap similarity, **plus an archetype
@@ -515,11 +589,14 @@ columns at 390px.
 
 ## 11. Still owed
 
-- **`PER_PLAYER_TOP_N` is 5 and unverified on a wide board.** A scouting report
-  has no per-player board, so the browser pass never exercised it. Ten teammates
-  at five rows each is taller than what shipped; it may want to be 4, and that
-  is a judgement to make while looking at a Match Plan.
-- **`type` and `confidence` are near-constant in production.** 140 ROBUST + 42
+- **`PER_PLAYER_TOP_N` is 7 now (§4c)**, at the account holder's request. The
+  rows are collapsed per teammate, so the height only shows when one is opened;
+  verified on a 5v5 Match Plan in §4d's browser pass.
+- **A 5v5 or larger board is 150+ s warm** — see §4d. `_CLUSTER_CACHE` is
+  too small for ten players' deck profiles and clears whole on overflow.
+- **SETTLED 2026-09-21 (§4d): the badges are gone from the screen, and so is
+  the sentence.** What follows is the record of why that was reasonable.
+  **`type` and `confidence` are near-constant in production.** 140 ROBUST + 42
   COUNTER across 182 recommendations, **never more than one type inside a single
   portfolio**, `CONTINGENCY` never fired at all, and all 182 came back `known`.
   Both fields are *truthful* — at the top of a 204-deck pool everything beats
