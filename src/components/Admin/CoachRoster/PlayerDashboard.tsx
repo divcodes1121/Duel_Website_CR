@@ -13,7 +13,6 @@ import {
   DASH,
   cardMovers,
   coverage,
-  dayColumns,
   facedBars,
   matchupEmpty,
   strengths,
@@ -209,7 +208,7 @@ export function PlayerDashboard({
         {/* The purpose-built chart, NOT the kit's ColumnChart: this one breaks
             its win-rate line across days under three battles rather than
             drawing movement that did not happen. */}
-        <ChartCard title="Day by day" note="Win rate is drawn only on days with 3+ battles" badge={`${dayColumns(intel.timeline).length} days`}>
+        <ChartCard title="Day by day" note="Win rate is drawn only on days with 3+ battles" badge={`${intel.timeline.length} days`}>
           <DailyChart timeline={intel.timeline} />
           <div className={styles.formLine}>
             <span className={styles.muted}>Last {intel.form.length}</span>

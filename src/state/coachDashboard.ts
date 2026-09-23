@@ -85,12 +85,6 @@ export interface DashCard {
   winDelta?: number;
 }
 
-export interface DashDay {
-  day: string;
-  battles: number;
-  wins: number;
-}
-
 export type DashTone = 'neutral' | 'good' | 'warn' | 'bad' | 'info';
 
 /* ── floors, named so a reader can see what a figure needed to exist ────── */
@@ -114,8 +108,6 @@ export const DASH = {
   cardRows: 5,
   /** Matchup cards drawn, each direction. */
   matchupCards: 3,
-  /** Days drawn in the column chart. */
-  days: 14,
 } as const;
 
 const pct1 = (x: number) => `${x.toFixed(1)}%`;
@@ -228,16 +220,12 @@ export interface DashBar {
   display?: string;
 }
 
-/** Battles per day, most recent `DASH.days`. A day with none is KEPT — a gap
- *  is information, and `ColumnChart` draws a zero as nothing at all. */
-export function dayColumns(timeline: DashDay[], limit = DASH.days): DashBar[] {
-  return timeline.slice(-limit).map((d) => ({
-    label: d.day.slice(5), // MM-DD; the year is the window's, stated above
-    value: d.battles,
-    tone: 'info' as DashTone,
-    display: String(d.battles),
-  }));
-}
+/* `dayColumns` LIVED HERE AND WAS DELETED before it ever shipped a screen.
+   The dashboard draws `IntelCharts.DailyChart` instead, which breaks its
+   win-rate line across days under three battles rather than drawing movement
+   that did not happen — a purpose-built chart beating a generic one. Keeping
+   an unused exporter with its own tests would have been dead code that looks
+   maintained. */
 
 /** What they face, as a share of their battles. */
 export function facedBars(rows: DashArchetype[], total: number, limit = 6): DashBar[] {

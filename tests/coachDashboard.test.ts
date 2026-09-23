@@ -5,7 +5,6 @@ import {
   cardLabel,
   cardMovers,
   coverage,
-  dayColumns,
   facedBars,
   matchupEmpty,
   strengths,
@@ -117,28 +116,6 @@ describe('matchup cards', () => {
 });
 
 describe('charts', () => {
-  it('keeps a zero day rather than closing the gap', () => {
-    const bars = dayColumns([
-      { day: '2026-09-01', battles: 4, wins: 2 },
-      { day: '2026-09-02', battles: 0, wins: 0 },
-      { day: '2026-09-03', battles: 2, wins: 1 },
-    ]);
-    expect(bars).toHaveLength(3);
-    expect(bars[1].value).toBe(0);
-    expect(bars[0].label).toBe('09-01');
-  });
-
-  it('takes the most recent days, not the first', () => {
-    const days = Array.from({ length: 30 }, (_, i) => ({
-      day: `2026-09-${String(i + 1).padStart(2, '0')}`,
-      battles: i,
-      wins: 0,
-    }));
-    const bars = dayColumns(days, 5);
-    expect(bars).toHaveLength(5);
-    expect(bars[4].value).toBe(29);
-  });
-
   it('faced bars print a share of the real total', () => {
     expect(facedBars([a('Hog', 25, 10)], 100)[0].display).toBe('25%');
   });
