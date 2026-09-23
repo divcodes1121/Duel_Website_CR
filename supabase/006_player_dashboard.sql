@@ -149,14 +149,21 @@ as $$
    where cp.linked_user_id = auth.uid()
 $$;
 
+-- THE DECLARED TYPES ARE THE TABLE'S OWN, COLUMN FOR COLUMN. A `returns
+-- table` signature is checked against the final select at CREATE time, and
+-- Postgres will not widen for you: `cards` is `text[]` (004 line 138, with a
+-- CHECK that needs an array), not jsonb, and `comfort` is `smallint`, not
+-- integer. Both were guessed wrong here and the first run failed on the first
+-- of them — "return type mismatch ... returns text[] instead of jsonb at
+-- column 5". A grammar parser cannot catch this; only the real table can.
 create or replace function public.my_coach_decks()
 returns table (
   id          uuid,
   player_id   uuid,
   name        text,
   archetype   text,
-  cards       jsonb,
-  comfort     integer,
+  cards       text[],
+  comfort     smallint,
   sort_order  integer
 )
 language sql
