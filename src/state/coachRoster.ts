@@ -136,7 +136,14 @@ export function sortRoster(players: RosterPlayer[]): RosterPlayer[] {
 export const COACH_ROUTE = '#/admin/coach';
 /* The route key `decks` is the player's BATTLE HISTORY and predates the
    arsenal; it keeps its key so old links still open, and its label says which
-   of the two deck screens it is. */
+   of the two deck screens it is.
+
+   `battles` AND `cards` WERE REMOVED (2026-09-23). They mounted the EXACT
+   public components — `<RecentBattles>` and `<PlayerCards>` — while the
+   header's `Full player analysis →` already leads to both, so the workspace
+   was re-hosting the public site inside itself. An old link to either falls
+   back to `overview`, which `parseCoachRoute` already does for any section it
+   does not know. */
 export const COACH_SECTIONS = [
   'overview',
   'arsenal',
@@ -144,9 +151,7 @@ export const COACH_SECTIONS = [
   'assist',
   'plans',
   'results',
-  'battles',
   'decks',
-  'cards',
   'opponents',
 ] as const;
 export type CoachSection = (typeof COACH_SECTIONS)[number];
@@ -158,9 +163,7 @@ export const SECTION_LABEL: Record<CoachSection, string> = {
   assist: 'What to play',
   plans: 'Match plans',
   results: 'Results',
-  battles: 'Battles',
   decks: 'Decks played',
-  cards: 'Cards',
   opponents: 'Opponents',
 };
 

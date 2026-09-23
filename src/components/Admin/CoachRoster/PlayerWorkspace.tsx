@@ -23,8 +23,6 @@ import { buildInsights } from '../../../state/coachInsights';
 import { coachToken } from '../../../state/coachToken';
 import { ago } from '../../../utils/format';
 import { ReadingState } from '../../Analytics/ReadingState';
-import { RecentBattles } from '../../Analytics/RecentBattles';
-import { PlayerCards } from '../../Analytics/PlayerCards';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ArsenalTab } from './ArsenalTab';
 import { AssistTab } from './AssistTab';
@@ -44,9 +42,12 @@ const nf = new Intl.NumberFormat('en-US');
  *   the COACH INTEL    → what they did: own-deck 1v1 battles by day, mode,
  *                        archetype, deck and opponent (admin-only route)
  *
- * Both reads share ONE window (7 / 30 / 90 days / all), so every figure on the
- * Overview, Decks and Opponents tabs describes the same battles. Battles and
- * Cards embed the existing screens, which keep their own date controls.
+ * Both reads share ONE window, so every figure on the Overview, Decks and
+ * Opponents tabs describes the same battles.
+ *
+ * THE `battles` AND `cards` TABS ARE GONE (2026-09-23): they mounted the
+ * public `<RecentBattles>` / `<PlayerCards>` verbatim, and the header already
+ * links to the full public analysis that holds both.
  *
  * WHY THE INTEL SENDS A TOKEN. `/api/analytics/admin/coach/intel` is the one
  * analytics route that asks Supabase whether the caller is an admin; the
@@ -181,16 +182,6 @@ export function PlayerWorkspace({
       {/* The end of the chain: what was actually played, and the only figures
           that can say whether the preparation helped. */}
       {section === 'results' && <ResultsTab player={player} />}
-      {section === 'battles' && (
-        <div className={styles.embed}>
-          <RecentBattles tag={tag} />
-        </div>
-      )}
-      {section === 'cards' && (
-        <div className={styles.embed}>
-          <PlayerCards tag={tag} />
-        </div>
-      )}
       {section === 'decks' && <IntelGate intel={intel} error={intelError} loading={intelLoading}>{(i) => <DecksTab intel={i} />}</IntelGate>}
       {section === 'opponents' && (
         <IntelGate intel={intel} error={intelError} loading={intelLoading}>
@@ -251,7 +242,16 @@ function OverviewTab({
     if (!intel) return [];
     return buildInsights(
       intel,
-      intel.decks.map((d) => ({ name: d.deckName, battles: d.battles, wins: d.wins, lastSeen: battleTimeToIso(d.last) })),
+      /* KEY, not name: `deckName` is generated and collides — one real player
+         had nine distinct decks called "Mortar Rascals". The cards ride along
+         so the screen can draw the strip beside the sentence. */
+      intel.decks.map((d) => ({
+        key: d.key,
+        name: d.deckName,
+        battles: d.battles,
+        wins: d.wins,
+        lastSeen: battleTimeToIso(d.last),
+      })),
     );
   }, [intel]);
 
@@ -293,13 +293,17 @@ function OverviewTab({
                   <FormStrip form={i.form} />
                 </div>
                 <DailyChart timeline={i.timeline} />
+                {/* The mode split was a ShareBars block of its own and is one
+                    fact: measured live it was 99.5% a single bar on one player
+                    and two bars on another. A sentence says it. */}
+                {i.modes.length > 0 && (
+                  <p className={styles.muted}>
+                    {i.modes.map((m) => `${m.name} ${nf.format(m.battles)}`).join(' · ')}
+                  </p>
+                )}
               </section>
 
               <div className={styles.shareGrid}>
-                <section className={styles.block}>
-                  <h3 className={styles.blockTitle}>Modes</h3>
-                  <ShareBars rows={i.modes} total={i.summary.battles} />
-                </section>
                 <section className={styles.block}>
                   <h3 className={styles.blockTitle}>Their win conditions</h3>
                   <ShareBars rows={i.archetypes} total={i.summary.battles} />
@@ -319,12 +323,20 @@ function OverviewTab({
                   </p>
                 ) : (
                   <ul className={styles.insights}>
-                    {insights.map((x) => (
-                      <li key={x.id} className={styles.insight} data-kind={x.kind}>
-                        <span className={styles.insightText}>{x.text}</span>
-                        <span className={styles.insightEvidence}>{x.evidence}</span>
-                      </li>
-                    ))}
+                    {insights.map((x) => {
+                      /* BY KEY, never by name. `deckName` is generated and
+                         collides — one live player had nine distinct decks
+                         called "Mortar Rascals" — so the strip is the only
+                         thing that tells two of them apart. */
+                      const d = x.deckKey ? i.decks.find((k) => k.key === x.deckKey) : undefined;
+                      return (
+                        <li key={x.id} className={styles.insight} data-kind={x.kind}>
+                          <span className={styles.insightText}>{x.text}</span>
+                          {d && <DeckStrip deck={d} />}
+                          <span className={styles.insightEvidence}>{x.evidence}</span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </section>
@@ -397,11 +409,21 @@ function DecksTab({ intel }: { intel: CoachIntel }) {
 const H2H_FLOOR = 3;
 
 function OpponentsTab({ intel, playerTag }: { intel: CoachIntel; playerTag: string }) {
-  if (!intel.opponents.length) {
+  /* THE FLOOR THE WIN-RATE COLUMN ALREADY USES, APPLIED TO THE LIST ITSELF.
+     Measured live: 768 distinct opponents in one window, 17 of them met three
+     times or more. The other 751 were a ledger of strangers, each carrying a
+     "Scout →" link to somebody met once. A repeat meeting is the only thing on
+     this tab a coach can prepare for. */
+  const repeat = intel.opponents.filter((o) => o.battles >= H2H_FLOOR);
+  if (!repeat.length) {
     return (
       <section className={styles.notice}>
-        <h3>No opponents in this window</h3>
-        <p>Widen the window, or check back once more battles are stored.</p>
+        <h3>Nobody met more than {H2H_FLOOR - 1} times in this window</h3>
+        <p>
+          {intel.opponentsTotal > 0
+            ? `${nf.format(intel.opponentsTotal)} distinct opponents, each met once or twice. Widen the window to find repeat meetings.`
+            : 'Widen the window, or check back once more battles are stored.'}
+        </p>
       </section>
     );
   }
@@ -410,8 +432,7 @@ function OpponentsTab({ intel, playerTag }: { intel: CoachIntel; playerTag: stri
       <div className={styles.blockHead}>
         <h3 className={styles.blockTitle}>Opponents faced</h3>
         <span className={styles.muted}>
-          {nf.format(intel.opponentsTotal)} distinct · {nf.format(intel.opponentsRepeat)} met more than once
-          {intel.opponents.length < intel.opponentsTotal ? ` · showing the ${intel.opponents.length} most-met` : ''}
+          met {H2H_FLOOR} times or more · {nf.format(repeat.length)} of {nf.format(intel.opponentsTotal)} distinct
         </span>
       </div>
       <div className={styles.tableWrap}>
@@ -427,7 +448,7 @@ function OpponentsTab({ intel, playerTag }: { intel: CoachIntel; playerTag: stri
             </tr>
           </thead>
           <tbody>
-            {intel.opponents.map((o) => {
+            {repeat.map((o) => {
               const last = battleTimeToIso(o.last);
               return (
                 <tr key={o.tag}>
@@ -439,7 +460,7 @@ function OpponentsTab({ intel, playerTag }: { intel: CoachIntel; playerTag: stri
                   <td>
                     {o.wins}W {o.losses}L{o.draws ? ` ${o.draws}D` : ''}
                   </td>
-                  <td>{o.battles >= H2H_FLOOR ? `${((o.wins / o.battles) * 100).toFixed(0)}%` : <span className={styles.muted}>n={o.battles}</span>}</td>
+                  <td>{((o.wins / o.battles) * 100).toFixed(0)}%</td>
                   <td>{last ? ago(last) : '—'}</td>
                   <td>
                     {/* Into the scout, which is this workspace's own reading

@@ -17,6 +17,12 @@ import styles from './CoachRoster.module.css';
 
 const nf = new Intl.NumberFormat('en-US');
 
+/** Battles before the most-played deck's win rate is printed. `ShareBars`
+ *  already withholds a rate under the same count, and this block had no floor
+ *  at all — live, it printed "1 battles · 100.0% won" as a player's headline
+ *  deck at 7d, 30d, 90d AND All. A rate off one battle is not a rate. */
+const DECK_RATE_FLOOR = 5;
+
 /* The parts of a roster player's page that are about WHO they are — header,
    record tiles, the coach's own fields. `PlayerWorkspace` composes them with
    the Phase 2 tabs and owns the reads.
@@ -90,13 +96,6 @@ export function PlayerRecord({ report, intel }: { report: PlayerReport; intel: C
             note={p.rankedRank != null ? `#${nf.format(p.rankedRank)} global` : 'below the leaderboard cut'}
           />
         )}
-        {p?.trophies != null && (
-          <Tile
-            label="Trophy road"
-            value={nf.format(p.trophies)}
-            note={p.bestTrophies != null ? `best ${nf.format(p.bestTrophies)}` : undefined}
-          />
-        )}
         {s && (
           <>
             <Tile
@@ -108,7 +107,6 @@ export function PlayerRecord({ report, intel }: { report: PlayerReport; intel: C
             <Tile label="Last battle" value={lastDay ?? '—'} note="in this window" />
           </>
         )}
-        {(p?.arena || p?.clan) && <Tile label="Arena · clan" value={p?.arena ?? '—'} note={p?.clan ?? 'no clan'} />}
       </div>
 
       {intel && intel.hidden > 0 && (
@@ -129,9 +127,19 @@ export function PlayerRecord({ report, intel }: { report: PlayerReport; intel: C
               <div className={styles.deckMeta}>
                 <span className={styles.deckName}>{topDeck.deckName}</span>
                 <span className={styles.muted}>
-                  {nf.format(topDeck.battles)} battles · {((topDeck.wins / topDeck.battles) * 100).toFixed(1)}% won
+                  {nf.format(topDeck.battles)} battle{topDeck.battles === 1 ? '' : 's'} ·{' '}
+                  {topDeck.battles >= DECK_RATE_FLOOR
+                    ? `${((topDeck.wins / topDeck.battles) * 100).toFixed(1)}% won`
+                    : 'too few to rate'}
                   {topLast ? ` · last ${ago(topLast)}` : ''}
                 </span>
+                {/* "Most-played" says very little when it leads by one battle
+                    over fifteen others, so the spread is stated beside it. */}
+                {intel.decksTotal > 1 && topDeck.battles < DECK_RATE_FLOOR && (
+                  <span className={styles.muted}>
+                    across {nf.format(intel.decksTotal)} decks in this window — no deck has a settled record yet
+                  </span>
+                )}
                 <DeckActions cards={topDeck.cards} name={topDeck.deckName} />
               </div>
             </div>
