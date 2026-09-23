@@ -19,6 +19,26 @@ import type { Access } from './tiers';
 
 export type { Access } from './tiers';
 
+/**
+ * MAY THIS ACCOUNT USE COACH ROSTER?
+ *
+ * Admin OR the `is_coach` flag, and the two are deliberately independent:
+ * coaching is not administering, and an owner who wants somebody to coach
+ * should not have to hand them the console to do it. An admin keeps it
+ * unconditionally so the console's own link always works.
+ *
+ * `is_coach` is absent on a database still on 006 — read as false, because
+ * nobody should gain access by a column failing to arrive.
+ */
+export function useIsCoach(): boolean {
+  const ready = useAccountStore((s) => s.ready);
+  const profile = useAccountStore((s) => s.profile);
+  const access = useAccess();
+  if (!isSupabaseConfigured) return true;
+  if (!ready) return false;
+  return access === 'admin' || profile?.is_coach === true;
+}
+
 export function useAccess(): Access {
   const ready = useAccountStore((s) => s.ready);
   const userId = useAccountStore((s) => s.userId);

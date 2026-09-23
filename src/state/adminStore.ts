@@ -30,6 +30,10 @@ export interface AdminUser {
    *  that crashes against an un-migrated schema is worse than one that shows a
    *  control the server will refuse. */
   is_owner?: boolean;
+  /** May use Coach Roster. Separate from `role` — coaching is not
+   *  administering. Optional for the same reason `is_owner` is: a database
+   *  still on 006 does not send it, and `false` is the safe reading. */
+  is_coach?: boolean;
 }
 
 export interface Health {
@@ -144,6 +148,7 @@ interface AdminState {
 
   load: () => Promise<void>;
   setRole: (id: string, role: AdminUser['role']) => Promise<string | null>;
+  setCoach: (id: string, value: boolean) => Promise<string | null>;
   endTrial: (id: string) => Promise<string | null>;
 }
 
@@ -213,6 +218,16 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
     if (!supabase) return 'Not configured.';
     const { error } = await supabase.rpc('admin_end_trial', { target: id });
     if (error) return error.message;
+    await get().load();
+    return null;
+  },
+
+  async setCoach(id, value) {
+    if (!supabase) return 'Not configured.';
+    const { error } = await supabase.rpc('admin_set_coach', { target: id, value });
+    if (error) return error.message;
+    /* Re-read, like `setRole`: the database is the only place that knows what
+       the row looks like afterwards. */
     await get().load();
     return null;
   },

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { useAccess } from '../../../state/gate';
+import { useIsCoach } from '../../../state/gate';
 import { useAccountStore } from '../../../state/accountStore';
 import { isSupabaseConfigured } from '../../../state/supabase';
 import {
@@ -51,7 +51,11 @@ function useHash(): string {
 }
 
 export function CoachRoster() {
-  const access = useAccess();
+  /* ADMIN **OR** THE COACH FLAG (007). Coaching is not administering: an
+     owner who wants somebody to coach should not have to hand them the
+     console to do it. An admin keeps access unconditionally, so the
+     console's own link can never point at a screen that refuses them. */
+  const mayCoach = useIsCoach();
   /* WAIT FOR THE ACCOUNT TO RESOLVE BEFORE JUDGING IT. `ready` turns true as
      soon as the session is read — BEFORE the profile arrives — and `tier`
      defaults to 'free' until it does, so an admin would otherwise be told
@@ -70,8 +74,8 @@ export function CoachRoster() {
   const [win, setWin] = useState<CoachWindow>(30);
 
   useEffect(() => {
-    if (access === 'admin') void load();
-  }, [access, load]);
+    if (mayCoach) void load();
+  }, [mayCoach, load]);
 
   const { tag, section, arg } = parseCoachRoute(hash);
   const active = useMemo(() => players.filter((p) => p.isActive), [players]);
@@ -91,12 +95,13 @@ export function CoachRoster() {
     );
   }
 
-  if (access !== 'admin') {
+  if (!mayCoach) {
     return (
       <section className={styles.denied}>
         <h2>Not your roster</h2>
         <p>
-          Coach Roster is an administrator’s tool. Hiding it is a courtesy — the roster itself is
+          Coach Roster is for accounts an administrator has marked as a coach. Hiding it is a
+          courtesy — the roster itself is
           refused by the database to anyone else, so there is nothing here to find.
         </p>
         <a className={styles.linkButton} href="#/">

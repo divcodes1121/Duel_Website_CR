@@ -263,7 +263,7 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
     if (!supabase || !id) return;
     const { data } = await supabase
       .from('profiles')
-      .select('id, display_name, country, player_tag, role, trial_ends_at, onboarded_at, created_at')
+      .select('id, display_name, country, player_tag, role, trial_ends_at, onboarded_at, created_at, is_coach')
       .eq('id', id)
       .maybeSingle();
     const profile = (data as Profile | null) ?? null;

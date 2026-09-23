@@ -8,7 +8,7 @@ import { useAccess } from '../../state/gate';
 import { TIER_ADMIN_LABEL } from '../../state/tiers';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import { Dropdown } from '../ui/dropdown-menu-14';
-import { BadgeIcon } from '../Dashboard/icons';
+import { BadgeIcon, CoachIcon } from '../Dashboard/icons';
 import { ConsoleSummary } from './ConsoleSummary';
 import styles from './AdminConsole.module.css';
 
@@ -180,7 +180,7 @@ export function AdminConsole() {
      outright, so this only stops you discovering that by being told no — the
      database is the rule, this is the courtesy. */
   const meId = useAccountStore((s) => s.userId);
-  const { users, health, analytics, analyticsMs, collection, loading, error, load, setRole,
+  const { users, health, analytics, analyticsMs, collection, loading, error, load, setRole, setCoach,
           endTrial } = useAdminStore();
   const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -231,6 +231,13 @@ export function AdminConsole() {
         </p>
       </section>
     );
+  }
+
+  async function changeCoach(u: AdminUser, value: boolean) {
+    setBusyId(u.id);
+    const err = await setCoach(u.id, value);
+    setBusyId(null);
+    if (err) alert(err);
   }
 
   async function change(u: AdminUser, value: string) {
@@ -714,6 +721,39 @@ export function AdminConsole() {
                       { value: 'free', label: 'Free', description: 'The free areas only' },
                       { value: 'pro', label: 'Pro — paid', description: 'Every area, Coach Assist included' },
                       { value: 'admin', label: 'Admin', description: 'Everything, plus this console' },
+                    ]}
+                  />
+
+                  {/* COACH IS NOT A ROLE, SO IT IS NOT IN THE ROLE LIST.
+                      An account can be a coach on any tier, and folding it in
+                      would have forced a coach to also be an admin — which is
+                      the conflation this control exists to undo. Default is
+                      No for everybody; access is only ever granted here.
+
+                      YOUR OWN ROW IS ALLOWED, unlike Role. The console is
+                      reached through `effective_tier`, which never reads
+                      `is_coach`, so switching your own off is recoverable —
+                      and it is the only way the owner grants themselves the
+                      roster. */}
+                  <Dropdown
+                    className={styles.roleSelect}
+                    size="sm"
+                    align="end"
+                    caption="Coach"
+                    icon={<CoachIcon />}
+                    heading="Coach Roster"
+                    subheading={u.email ?? undefined}
+                    value={u.is_coach ? 'yes' : 'no'}
+                    disabled={busyId === u.id || (!!u.is_owner && u.id !== meId)}
+                    onChange={(v) => void changeCoach(u, v === 'yes')}
+                    title={
+                      u.is_owner && u.id !== meId
+                        ? "The owner's account cannot be modified by another admin"
+                        : 'Whether this account may open Coach Roster and keep a roster of players'
+                    }
+                    options={[
+                      { value: 'no', label: 'No', description: 'No access to Coach Roster' },
+                      { value: 'yes', label: 'Yes', description: 'May keep a roster and coach players' },
                     ]}
                   />
 

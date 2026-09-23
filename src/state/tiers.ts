@@ -84,6 +84,12 @@ export interface Profile {
   trial_ends_at: string | null;
   onboarded_at: string | null;
   created_at: string;
+  /** May use Coach Roster. SEPARATE FROM `role`, because coaching is not
+   *  administering and the second needs far less power than the first.
+   *  Optional: a database still on 006 does not send it, and `false` is the
+   *  safe reading of its absence — nobody gains access by a column being
+   *  missing. */
+  is_coach?: boolean;
 }
 
 /**
