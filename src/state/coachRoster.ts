@@ -146,6 +146,7 @@ export const COACH_ROUTE = '#/admin/coach';
    does not know. */
 export const COACH_SECTIONS = [
   'overview',
+  'practise',
   'arsenal',
   'scout',
   'assist',
@@ -158,6 +159,7 @@ export type CoachSection = (typeof COACH_SECTIONS)[number];
 
 export const SECTION_LABEL: Record<CoachSection, string> = {
   overview: 'Overview',
+  practise: 'What to practise',
   arsenal: 'Arsenal',
   scout: 'Scout',
   assist: 'What to play',

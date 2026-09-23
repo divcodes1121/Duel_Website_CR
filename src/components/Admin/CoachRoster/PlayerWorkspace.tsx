@@ -30,6 +30,7 @@ import { ResultsTab } from './ResultsTab';
 import { ScoutTab } from './ScoutTab';
 import { CoachControls, DeckStrip, PlayerHeader } from './PlayerOverview';
 import { PlayerDashboard } from './PlayerDashboard';
+import { TodayTab } from './TodayTab';
 import styles from './CoachRoster.module.css';
 
 const nf = new Intl.NumberFormat('en-US');
@@ -121,7 +122,12 @@ export function PlayerWorkspace({
   }, [tag, win]);
 
   const windowed =
-    section === 'overview' || section === 'decks' || section === 'opponents' || section === 'scout' || section === 'assist';
+    section === 'overview' ||
+    section === 'practise' ||
+    section === 'decks' ||
+    section === 'opponents' ||
+    section === 'scout' ||
+    section === 'assist';
 
   return (
     <div className={styles.overview}>
@@ -167,6 +173,10 @@ export function PlayerWorkspace({
           win={win}
         />
       )}
+      {/* WHAT TO PRACTISE — the field plan. It owns its own read and needs
+          neither the report nor the intelligence: the server builds the whole
+          answer from the meta board and this player's own battles. */}
+      {section === 'practise' && <TodayTab player={player} win={win} />}
       {/* The arsenal is the coach's own list and does not depend on the
           intelligence read — it renders whether or not the battles answered.
           The intel is passed only so a deck can be taken FROM their history. */}

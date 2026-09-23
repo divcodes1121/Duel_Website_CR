@@ -2059,3 +2059,72 @@ export function fetchDuoPairs(
   if (cards.length) q.set('cards', cards.join(','));
   return get<DuoReport>(`/api/analytics/duo-pairs?${q.toString()}`);
 }
+
+/* ── The field plan: what to play with no opponent ────────────────────────
+ *
+ * `server/coach_daily.py`. The meta board becomes a threat projection, that
+ * projection is reweighted by where this player measurably loses, and
+ * `team_scout.score()` — the SAME engine Team Analysis uses — ranks ~204 real
+ * decks against it. No model, no second scorer.
+ *
+ * `basis` is the load-bearing field: 'weighted' when their own record moved
+ * the projection, 'unweighted' when they have history but nothing clears the
+ * evidence floor, 'no_history' when there is none, and 'none' when the meta
+ * snapshot is still building. A client that renders all four the same way is
+ * claiming a plan was tailored when it was not.
+ */
+export interface FieldThreat {
+  key: string;
+  cards: string[];
+  art?: Record<string, WildForm>;
+  artInferred?: boolean;
+  archetype: string;
+  name: string;
+  evidence: string;
+  confidence: string;
+  likelihood: number;
+  useRate?: number;
+  players?: number;
+  /** 1.0 when this player's record did not move it. Never absent. */
+  boost: number;
+  /** Their own record against this archetype, or null when it is below the
+   *  evidence floor — which is NOT the same as an even record. */
+  playerRecord: { battles: number; winRate: number; deficit: number } | null;
+}
+
+export interface FieldPick {
+  key: string;
+  cards: string[];
+  art?: Record<string, WildForm>;
+  artInferred?: boolean;
+  archetype: string;
+  name: string;
+  expectedWinRate: number;
+  matchupValue: number;
+  spreadCovered: number;
+  threatCovered: number;
+  evidenceStrength: number;
+  confidence: string;
+}
+
+export interface FieldPlan {
+  tag: string;
+  brain: string;
+  basis: 'weighted' | 'unweighted' | 'no_history' | 'none';
+  reason: string | null;
+  window: { from: string | null; to: string | null };
+  battles: number;
+  winRate: number | null;
+  threats: FieldThreat[];
+  /** The deficits that moved the projection, worst first. Empty is a real
+   *  answer: nothing cleared the floor. */
+  weighted: { archetype: string; name: string; battles: number; winRate: number; deficit: number }[];
+  recommendations: FieldPick[];
+  pool: number;
+  meta: { decks: number; window: unknown; computedAt: number | null };
+}
+
+/** What this player should practise against the field. No opponent. */
+export function fetchFieldPlan(tag: string, win: DateWindow = {}): Promise<FieldPlan> {
+  return get<FieldPlan>(`/api/analytics/coach/field/${encodeURIComponent(tag)}?${windowQuery(win)}`);
+}
