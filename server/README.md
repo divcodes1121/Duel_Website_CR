@@ -287,6 +287,7 @@ happily against a server that never called it.
 | `GET /api/analytics/counters?deck=` | what beats a deck |
 | `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, **the projected threat space (`threats`), and 5–7 decks that answer it**. With `blue` those come from the squad's own lists; **omit `blue` entirely** and they come from the snapshot's seed pool (~200 real decks), plus an `overall` block ranking the same pool against the whole roster's pooled projection. `mode` says which, and `brain` says which reasoning produced it (`team-scout-2.0`). See `DECKKIES_TEAM_SCOUT.md`. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
+| `GET /api/analytics/coach/field/<tag>` | **what to play with NO OPPONENT** (`coach_daily.py`) — the meta board becomes a threat projection, that projection is reweighted by where this player measurably loses, and `team_scout.score()` ranks ~204 real decks against it. Works because `score()` takes the threat space as an INJECTED parameter and does not know where it came from, so there is no second scorer and no model. `basis` is `weighted` / `unweighted` / `no_history` / `none` and a client must say which. `tailoredPicks` reports how many picks the weighting actually put there, measured by ranking the unweighted projection too — live it is 0-1 of 7, and that is the correct answer rather than a weak one. Costs no database read per candidate; 1.4 s warm. `days` as everywhere else |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
 | `GET /api/analytics/meta?movement=<days>` | **how that board has MOVED** (`meta_history.py`) — rank and use-rate deltas between the newest stored day and the newest one at or before `days` back. Rides on the `/meta` path deliberately, so the **route count stays 23**. Answers `basis: "none"` with NO rows when there is nothing to compare against, never a list of zeros; a deck absent from the older day carries `entered: true` with a NULL delta rather than a climb from beyond the board's edge, and one that dropped off carries `left: true`. `comparedWith` / `daysApart` describe the snapshots ACTUALLY used, so a missed timer widens the span visibly instead of silently. Reads its own ~18k-row file, not the bot's database |
@@ -888,6 +889,81 @@ Two more, from writing it: `snapshot()` **refuses a `building` or empty board**
 the meta vanishing and returning), and `days or 7` **was a real bug** — 0 is
 falsy, so `?movement=0` silently became a seven-day answer instead of clamping.
 Absent means default; a supplied 0 clamps like any other out-of-range number.
+
+## A plan against the field (`coach_daily.py`)
+
+Every "what to play" on this site needed an opponent tag, because
+`team_scout.threat_space()` builds a projection from ONE player's observed
+decks. A coach asking what a player should practise tomorrow has no opponent
+to name.
+
+**The module rests on one fact:** `score(rate_for, threats, *, cards,
+archetype, fit_games)` takes the threat space as an **injected parameter**. It
+reads `archetype`, `likelihood`, `key`, `name` and `evidence` off each entry
+and asks the caller's `rate_for` how a candidate does against it — it does not
+know or care where the projection came from. So a projection built from the
+meta board gets the same tested arithmetic (the four separated signals, the
+coverage penalty, the evidence weighting, `diversify()`'s archetype-repeat
+rule) with **no second scorer and no model**. Nothing here trains or calls
+anything; a test asserts there is no `ml` import.
+
+`field_threats()` turns the top-`MAX_THREATS` meta decks into that shape,
+likelihood from use rate, renormalised **only after the cap** (`threat_space`'s
+own rule — the cap is a cost bound and drops nothing for being weak). Evidence
+is `OBSERVED` because every entry is a real list real players really played;
+`observedCount` carries the population's battles, so confidence reads `known`.
+A `building` or empty board yields nothing rather than an empty projection.
+
+### The weighting, and the three rules that keep it honest
+
+A pure meta answer tells every player the same thing, which is what a tier list
+already is. `deficits()` + `weight_threats()` move mass toward what this player
+actually loses to, from `coach_intel.opponentArchetypes` — **own-deck 1v1
+only**. `/api/analytics/counter/<tag>` answers a similar question and has **no
+mode filter at all** (measured: 872 battles where `coach_intel` reports 710),
+so it is deliberately not read here.
+
+1. **A deficit is only real above a floor.** Under `MIN_FACED` an archetype
+   gets no adjustment at all, not a small one.
+2. **The boost is bounded** by `MAX_BOOST`, or one catastrophic matchup over
+   twelve battles swallows the projection.
+3. **A strength is never down-weighted.** A deck they beat is still a deck they
+   will meet.
+
+### Reserved slots, and why they exist
+
+The first live answer exposed the gap. One roster player's worst matchup by a
+distance was Goblin Drill — 22.2% over 18 battles, 38.1 points below their own
+rate — and **no Goblin Drill deck is in the meta's top twelve by use rate**, so
+their single biggest weakness was absent from the projection and the boost had
+nothing to act on. `PRIORITY_SLOTS` admits up to three such archetypes from
+below the cut. They are real meta decks, their likelihood is still their own use
+rate (rare stays rare), the most-played are never displaced and the projection
+does not grow.
+
+### How much of a plan is about the player: measured
+
+`plan()` ranks the **unweighted** projection as well and reports
+`tailoredPicks`, with `fromWeighting` on each row. Live across five real
+players it is **0 to 1 of 7** — one player gets zero despite eight weighted
+matchups, and all five plans together draw on only eleven distinct decks.
+
+That is the correct answer, not a weak one: a rare archetype cannot matter much
+in a projection weighted by how often it is **faced**, however badly the player
+loses to it. The weighting moves the order and names the matchups; it rarely
+changes the deck set. **Raising `MAX_BOOST` would manufacture differentiation
+rather than measure it**, so the arithmetic is unchanged and the screen reports
+the number instead of implying more.
+
+`ts.explain()` is **not** called: Team Scout's prose was removed on request by
+name, and its vocabulary is about an opponent, which a field projection has
+none of. The first live run printed one identical sentence under all seven
+picks.
+
+**Cost**: the pool is `team_analysis._scout_candidates()` — ~204 real lists
+each carrying its own per-archetype record — so 204 decks against 12 threats
+costs **no query at all**. The only reads are one `coach_intel` pass and the
+already-computed meta snapshot. 1.4 s warm.
 
 ## The card board (`player_cards.py`)
 
