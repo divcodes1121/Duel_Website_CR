@@ -264,7 +264,7 @@ theirs. It rides in the existing jsonb, so there is no migration.
 ### Two faults found on the way, one of them mine from earlier the same day
 
 - **A literal backspace in a test regex.** `tests/coachAssist.test.ts`' "never
-  claims an unmeasured tendency" had `…` turned into two `0x08` characters
+  claims an unmeasured tendency" had its two `\b` escapes turned into two literal `0x08` characters
   by a heredoc edit in `a370e30`. So it could match nothing and had passed
   vacuously since. Repaired, and `src/`, `tests/` and `server/` were swept for
   other control characters (none).

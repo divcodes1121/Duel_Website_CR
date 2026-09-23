@@ -1627,3 +1627,12 @@ a.rosterTitle[aria-current='page'] {
   flex-wrap: wrap;
   margin-top: 0.6rem;
 }
+
+/* The merged opponent tab: the scout's reading, then what to bring against it.
+   One gap between two blocks that were whole screens a moment ago. */
+.opponentStack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}

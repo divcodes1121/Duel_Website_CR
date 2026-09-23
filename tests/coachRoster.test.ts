@@ -93,13 +93,13 @@ describe('the route', () => {
   });
 
   it('carries a scouted opponent as a third segment, so a scout is a real URL', () => {
-    const href = coachHref('#Y022GRCJQ', 'scout', '#2PYLQ0');
-    expect(href).toBe('#/admin/coach/Y022GRCJQ/scout/2PYLQ0');
-    expect(parseCoachRoute(href)).toEqual({ tag: '#Y022GRCJQ', section: 'scout', arg: '#2PYLQ0' });
+    const href = coachHref('#Y022GRCJQ', 'opponent', '#2PYLQ0');
+    expect(href).toBe('#/admin/coach/Y022GRCJQ/opponent/2PYLQ0');
+    expect(parseCoachRoute(href)).toEqual({ tag: '#Y022GRCJQ', section: 'opponent', arg: '#2PYLQ0' });
   });
 
   it('drops a third segment that is not a tag rather than passing it on', () => {
-    expect(parseCoachRoute('#/admin/coach/Y022GRCJQ/scout/not-a-tag').arg).toBeNull();
+    expect(parseCoachRoute('#/admin/coach/Y022GRCJQ/opponent/not-a-tag').arg).toBeNull();
   });
 
   it('keeps every section through the hash, arsenal included', () => {

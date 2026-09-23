@@ -1,17 +1,15 @@
 import { useEffect, useMemo } from 'react';
 
-import { coachHref, playerLabel, type RosterPlayer } from '../../../state/coachRoster';
+import { coachHref, playerLabel, type CoachSection, type RosterPlayer } from '../../../state/coachRoster';
 import {
   FLAG_ACTION,
   FLAG_LABEL,
-  ROSTER_RATE_FLOOR,
   sortOverview,
   totals,
   type AttentionFlag,
   type OverviewRow,
 } from '../../../state/coachOverview';
 import { useCoachOverview } from '../../../state/coachOverviewStore';
-import { ago } from '../../../utils/format';
 import { ReadingState } from '../../Analytics/ReadingState';
 import {
   BadgeIcon,
@@ -24,7 +22,6 @@ import {
   BarRows,
   ChartCard,
   ChartGrid,
-  ColumnChart,
   Dashboard,
   DashboardHeader,
   DashHero,
@@ -118,7 +115,7 @@ export function RosterOverview({ players }: { players: RosterPlayer[] }) {
             {sum.players === 0
               ? 'Add a player on the left to start.'
               : sum.needingAttention === 0
-                ? 'Every active player has a deck approved, a plan confirmed and its result recorded.'
+                ? 'Every active player has decks approved and is being collected.'
                 : 'The flags below name what is missing and where to fix it. They are in roster order — nothing is ranked.'}
           </DashHero>
 
@@ -137,35 +134,37 @@ export function RosterOverview({ players }: { players: RosterPlayer[] }) {
               icon={<CardsIcon />}
             />
             <KeyMetricCard
-              label="Plans in draft"
-              value={String(sum.openPlans)}
-              note={sum.openPlans === 0 ? 'nothing waiting to be confirmed' : 'not confirmed yet'}
-              tone={sum.openPlans > 0 ? 'warn' : 'neutral'}
+              label="Decks approved"
+              value={String(sum.decks)}
+              note="across the active roster"
               icon={<TargetIcon />}
             />
             <KeyMetricCard
-              label="Matches recorded"
-              value={String(sum.results)}
-              note={`rates appear at ${ROSTER_RATE_FLOOR} per player`}
+              label="Needing something"
+              value={String(sum.needingAttention)}
+              note={sum.needingAttention === 0 ? 'nothing outstanding' : 'flagged on their row below'}
+              tone={sum.needingAttention > 0 ? 'warn' : 'good'}
               icon={<TrendIcon />}
             />
           </MetricGrid>
 
           <ChartGrid>
-            <ChartCard
-              title="Preparation, step by step"
-              note="How many active players have reached each step. A count, not a funnel anybody is failing."
-              badge={`${sum.players} active`}
-            >
-              <ColumnChart bars={shape.steps} max={Math.max(1, sum.players)} />
-            </ChartCard>
-
+            {/* THE STEP FUNNEL IS GONE WITH PLANS AND RESULTS. One remaining
+                step is not a funnel; a chart of a single bar is decoration. */}
             <ChartCard
               title="What is outstanding"
               note="Every flag on the roster, counted. Each one names an action on the row it belongs to."
               badge={shape.flagTotal === 0 ? 'All clear' : `${shape.flagTotal} in total`}
             >
               <BarRows bars={shape.flags} empty="No flags — nothing is outstanding." />
+            </ChartCard>
+
+            <ChartCard
+              title="Decks approved"
+              note="Per active player. A count of the coach's own work, not a comparison between players."
+              badge={`${sum.decks} in total`}
+            >
+              <BarRows bars={shape.perPlayer} empty="No decks approved yet." />
             </ChartCard>
           </ChartGrid>
 
@@ -174,7 +173,7 @@ export function RosterOverview({ players }: { players: RosterPlayer[] }) {
               {shape.actions.length === 0 ? (
                 <InsightRow
                   title="Nothing outstanding"
-                  description="Every active player has a deck approved, a plan confirmed and its result recorded."
+                  description="Every active player has decks approved and is being collected."
                   tone="good"
                 />
               ) : (
@@ -191,33 +190,12 @@ export function RosterOverview({ players }: { players: RosterPlayer[] }) {
               )}
             </InsightCard>
 
-            <InsightCard title="Recorded" icon={<TrendIcon />} tone="good" badge="Test rows excluded">
-              <ReadoutList
-                rows={[
-                  { id: 'played', label: 'Matches recorded', value: String(sum.results) },
-                  { id: 'won', label: 'Won', value: String(shape.wins) },
-                  {
-                    id: 'rated',
-                    label: `Players at ${ROSTER_RATE_FLOOR}+ matches`,
-                    value: String(shape.rated),
-                    tone: shape.rated > 0 ? 'good' : 'neutral',
-                  },
-                  { id: 'floor', label: 'Below the floor', value: String(sum.players - shape.rated) },
-                ]}
-              />
-              <p className={styles.muted}>
-                Win rates appear once a player has {ROSTER_RATE_FLOOR} recorded matches — the same floor the Results
-                screen applies, so the two can never disagree.
-              </p>
-            </InsightCard>
-
             <InsightCard title="The roster" icon={<BadgeIcon />} tone="neutral" badge="Roster order">
               <ReadoutList
                 rows={[
                   { id: 'active', label: 'Active', value: String(sum.players) },
                   { id: 'archived', label: 'Archived', value: String(shape.archived) },
-                  { id: 'decks', label: 'Decks approved', value: String(shape.decks) },
-                  { id: 'plans', label: 'Plans saved', value: String(shape.plans) },
+                  { id: 'decks', label: 'Decks approved', value: String(sum.decks) },
                 ]}
               />
               <p className={styles.muted}>
@@ -243,7 +221,7 @@ export function RosterOverview({ players }: { players: RosterPlayer[] }) {
       )}
 
       {/* LAST, AND ON DEMAND. Everything above is the coach's own rows, read in
-          three cheap queries; this one calls the analytics service once per
+          ONE cheap query; this one calls the analytics service once per
           active player. The contract at the top of `coachOverview.ts` — that
           nothing on this screen reads that API — is kept by making it a button
           rather than part of the load. */}
@@ -261,19 +239,10 @@ export function RosterOverview({ players }: { players: RosterPlayer[] }) {
 const FLAG_TONE: Record<AttentionFlag, DashTone> = {
   not_collected: 'neutral',
   no_arsenal: 'warn',
-  no_plans: 'warn',
-  plan_unconfirmed: 'info',
-  plan_without_result: 'info',
 };
 
 /** Workflow order, so the list reads as the order the work happens in. */
-const FLAG_ORDER: AttentionFlag[] = [
-  'not_collected',
-  'no_arsenal',
-  'no_plans',
-  'plan_unconfirmed',
-  'plan_without_result',
-];
+const FLAG_ORDER: AttentionFlag[] = ['not_collected', 'no_arsenal'];
 
 function describe(rows: readonly OverviewRow[]) {
   const active = rows.filter((r) => r.player.isActive);
@@ -285,23 +254,21 @@ function describe(rows: readonly OverviewRow[]) {
     tone: FLAG_TONE[f],
   })).filter((b) => b.value > 0);
 
-  const steps: Bar[] = [
-    { label: 'Arsenal', value: active.filter((r) => r.arsenal > 0).length, tone: 'info' },
-    { label: 'Planned', value: active.filter((r) => r.plans > 0).length, tone: 'info' },
-    { label: 'Confirmed', value: active.filter((r) => r.confirmedPlans > 0).length, tone: 'info' },
-    { label: 'Recorded', value: active.filter((r) => r.results > 0).length, tone: 'good' },
-  ];
+  /* Per player, in roster order — the same order the rows below read in, so
+     a bar and a row cannot disagree about who is who. NOT sorted by count:
+     this screen counts, it does not rank. */
+  const perPlayer: Bar[] = active.map((r) => ({
+    label: r.player.displayName || r.player.playerTag,
+    value: r.arsenal,
+    tone: r.arsenal > 0 ? 'info' : 'warn',
+  }));
 
   return {
-    steps,
     flags,
+    perPlayer,
     flagTotal: flags.reduce((n, b) => n + b.value, 0),
     actions: FLAG_ORDER.map((f) => ({ flag: f, count: counted(f) })).filter((a) => a.count > 0),
-    wins: active.reduce((n, r) => n + r.wins, 0),
-    rated: active.filter((r) => r.winRate !== null).length,
     archived: rows.length - active.length,
-    decks: active.reduce((n, r) => n + r.arsenal, 0),
-    plans: active.reduce((n, r) => n + r.plans, 0),
   };
 }
 
@@ -317,19 +284,13 @@ function RosterRow({ row }: { row: OverviewRow }) {
         </a>
 
         <span className={styles.rosterFigures}>
+          {/* "Last touched" was the newest plan or result timestamp, and both
+              are gone — there is no activity clock in the coaching tables any
+              more. An invented one would be worse than none. */}
           <CountLink player={player} section="arsenal" n={row.arsenal} one="deck" many="decks" />
-          <CountLink player={player} section="plans" n={row.plans} one="plan" many="plans" />
-          <CountLink player={player} section="results" n={row.results} one="match" many="matches" />
-          <span className={styles.muted}>
-            {row.winRate === null
-              ? row.results
-                ? `${row.wins} won — too few to rate`
-                : 'nothing recorded'
-              : `${row.winRate.toFixed(0)}% won`}
-          </span>
-          <span className={styles.muted}>
-            {row.lastActivity ? `last touched ${ago(row.lastActivity)}` : 'no activity yet'}
-          </span>
+          <a className={styles.rowLink} href={coachHref(player.playerTag, 'practise')}>
+            Today’s plan →
+          </a>
         </span>
       </div>
 
@@ -357,7 +318,7 @@ function CountLink({
   many,
 }: {
   player: RosterPlayer;
-  section: 'arsenal' | 'plans' | 'results';
+  section: CoachSection;
   n: number;
   one: string;
   many: string;

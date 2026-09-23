@@ -136,7 +136,7 @@ export function ScoutTab({
       <OpponentChooser
         player={player}
         playerIntel={playerIntel}
-        section="scout"
+        section="opponent"
         windowLabel={windowLabel}
         title="Scout an opponent"
         blurb="What the person on the other side actually plays, read from the same battles as everything else here. Nothing is saved — the preparation you write from it belongs to a match plan."
@@ -172,7 +172,7 @@ export function ScoutTab({
             <a className={styles.linkButton} href={`#/player/${encodeURIComponent(opponentTag)}`}>
               Full analysis →
             </a>
-            <a className={styles.ghostButton} href={coachHref(player.playerTag, 'scout')}>
+            <a className={styles.ghostButton} href={coachHref(player.playerTag, 'opponent')}>
               Scout someone else
             </a>
           </div>

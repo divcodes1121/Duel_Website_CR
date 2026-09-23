@@ -22,12 +22,10 @@ import {
 import { coachToken } from '../../../state/coachToken';
 import { ago } from '../../../utils/format';
 import { ReadingState } from '../../Analytics/ReadingState';
+import { RecentBattles } from '../../Analytics/RecentBattles';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ArsenalTab } from './ArsenalTab';
-import { AssistTab } from './AssistTab';
-import { PlansTab } from './PlansTab';
-import { ResultsTab } from './ResultsTab';
-import { ScoutTab } from './ScoutTab';
+import { OpponentTab } from './OpponentTab';
 import { CoachControls, DeckStrip, PlayerHeader } from './PlayerOverview';
 import { PlayerDashboard } from './PlayerDashboard';
 import { TodayTab } from './TodayTab';
@@ -122,12 +120,7 @@ export function PlayerWorkspace({
   }, [tag, win]);
 
   const windowed =
-    section === 'overview' ||
-    section === 'practise' ||
-    section === 'decks' ||
-    section === 'opponents' ||
-    section === 'scout' ||
-    section === 'assist';
+    section === 'overview' || section === 'practise' || section === 'decks' || section === 'opponent';
 
   return (
     <div className={styles.overview}>
@@ -181,30 +174,23 @@ export function PlayerWorkspace({
           intelligence read — it renders whether or not the battles answered.
           The intel is passed only so a deck can be taken FROM their history. */}
       {section === 'arsenal' && <ArsenalTab player={player} intel={intel} />}
-      {/* The scout reads a DIFFERENT player through the same admin route. The
-          roster player's own intel is passed because head to head is their
-          record against that opponent, which only their battles can say. */}
-      {section === 'scout' && (
-        <ScoutTab player={player} playerIntel={intel} win={win} opponentTag={opponent} />
+      {/* ONE TAB FOR THE OTHER PLAYER: what they bring, then what answers it.
+          It reads a DIFFERENT player through the same admin route; the roster
+          player's own intel is passed because head to head is THEIR record
+          against that opponent, which only their battles can say. */}
+      {section === 'opponent' && (
+        <OpponentTab player={player} playerIntel={intel} win={win} opponentTag={opponent} />
       )}
-      {/* The engine's ranking joined to the arsenal. It reads the PLAYER's
-          intel for "have they ever played this", and the team-analysis route
-          for the ranking itself — no scoring happens in the client. */}
-      {section === 'assist' && (
-        <AssistTab player={player} playerIntel={intel} win={win} opponentTag={opponent} />
+      {/* BACK, ON REQUEST. It was removed as a re-host of the public screen —
+          and with plans, results and the opponent ledger gone there is room,
+          and a coach reading a workspace should not have to leave it to see
+          the battles every figure above is counted from. */}
+      {section === 'battles' && (
+        <div className={styles.embed}>
+          <RecentBattles tag={tag} />
+        </div>
       )}
-      {/* A plan is the coach's own record; it needs no analytics read of its
-          own, because everything it shows was frozen when it was made. */}
-      {section === 'plans' && <PlansTab player={player} />}
-      {/* The end of the chain: what was actually played, and the only figures
-          that can say whether the preparation helped. */}
-      {section === 'results' && <ResultsTab player={player} />}
       {section === 'decks' && <IntelGate intel={intel} error={intelError} loading={intelLoading}>{(i) => <DecksTab intel={i} />}</IntelGate>}
-      {section === 'opponents' && (
-        <IntelGate intel={intel} error={intelError} loading={intelLoading}>
-          {(i) => <OpponentsTab intel={i} playerTag={tag} />}
-        </IntelGate>
-      )}
     </div>
   );
 }
@@ -344,83 +330,6 @@ function DecksTab({ intel }: { intel: CoachIntel }) {
           );
         })}
       </ul>
-    </section>
-  );
-}
-
-/* ── Opponents ───────────────────────────────────────────────────────────── */
-
-/** Meetings before a head-to-head win rate is printed. */
-const H2H_FLOOR = 3;
-
-function OpponentsTab({ intel, playerTag }: { intel: CoachIntel; playerTag: string }) {
-  /* THE FLOOR THE WIN-RATE COLUMN ALREADY USES, APPLIED TO THE LIST ITSELF.
-     Measured live: 768 distinct opponents in one window, 17 of them met three
-     times or more. The other 751 were a ledger of strangers, each carrying a
-     "Scout →" link to somebody met once. A repeat meeting is the only thing on
-     this tab a coach can prepare for. */
-  const repeat = intel.opponents.filter((o) => o.battles >= H2H_FLOOR);
-  if (!repeat.length) {
-    return (
-      <section className={styles.notice}>
-        <h3>Nobody met more than {H2H_FLOOR - 1} times in this window</h3>
-        <p>
-          {intel.opponentsTotal > 0
-            ? `${nf.format(intel.opponentsTotal)} distinct opponents, each met once or twice. Widen the window to find repeat meetings.`
-            : 'Widen the window, or check back once more battles are stored.'}
-        </p>
-      </section>
-    );
-  }
-  return (
-    <section className={styles.block}>
-      <div className={styles.blockHead}>
-        <h3 className={styles.blockTitle}>Opponents faced</h3>
-        <span className={styles.muted}>
-          met {H2H_FLOOR} times or more · {nf.format(repeat.length)} of {nf.format(intel.opponentsTotal)} distinct
-        </span>
-      </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>Opponent</th>
-              <th>Met</th>
-              <th>Record</th>
-              <th>Win rate</th>
-              <th>Last met</th>
-              <th aria-label="Actions" />
-            </tr>
-          </thead>
-          <tbody>
-            {repeat.map((o) => {
-              const last = battleTimeToIso(o.last);
-              return (
-                <tr key={o.tag}>
-                  <td>
-                    <span className={styles.oppName}>{o.name || o.tag}</span>
-                    {o.name && <span className={styles.oppTag}>{o.tag}</span>}
-                  </td>
-                  <td>{o.battles}</td>
-                  <td>
-                    {o.wins}W {o.losses}L{o.draws ? ` ${o.draws}D` : ''}
-                  </td>
-                  <td>{((o.wins / o.battles) * 100).toFixed(0)}%</td>
-                  <td>{last ? ago(last) : '—'}</td>
-                  <td>
-                    {/* Into the scout, which is this workspace's own reading
-                        of them and carries the head to head; the full public
-                        analysis is one link further on from there. */}
-                    <a className={styles.rowLink} href={coachHref(playerTag, 'scout', o.tag)}>
-                      Scout →
-                    </a>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
     </section>
   );
 }

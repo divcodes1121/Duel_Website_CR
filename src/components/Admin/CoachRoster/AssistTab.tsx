@@ -8,10 +8,8 @@ import {
   type TeamReport,
 } from '../../../state/analyticsClient';
 import { coachHref, playerLabel, windowDays, type CoachWindow, type RosterPlayer } from '../../../state/coachRoster';
-import { deckKey, deckLabel } from '../../../state/coachArsenal';
+import { deckLabel } from '../../../state/coachArsenal';
 import { useCoachArsenal } from '../../../state/coachArsenalStore';
-import { buildSnapshot } from '../../../state/coachPlans';
-import { useCoachPlans } from '../../../state/coachPlansStore';
 import {
   assistRows,
   assistSourceRef,
@@ -75,9 +73,6 @@ export function AssistTab({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState<TeamRecommendation | null>(null);
-  const createPlan = useCoachPlans((s) => s.create);
-  const [saving, setSaving] = useState(false);
-  const [planError, setPlanError] = useState<string | null>(null);
 
   const windowLabel = win === 0 ? 'all stored battles' : `the last ${win} days`;
   const days = windowDays(win);
@@ -116,7 +111,7 @@ export function AssistTab({
       <OpponentChooser
         player={player}
         playerIntel={playerIntel}
-        section="assist"
+        section="opponent"
         windowLabel={windowLabel}
         title={`What should ${playerLabel(player)} play?`}
         blurb="Pick who they are up against."
@@ -138,36 +133,6 @@ export function AssistTab({
      of which engine and window produced the ranking — the engines move on,
      and a plan that pointed at today's numbers would quietly change its own
      reasoning. */
-  async function saveAsPlan() {
-    setSaving(true);
-    setPlanError(null);
-    try {
-      const played = playerIntel ? new Map(playerIntel.decks.map((d) => [deckKey(d.cards), d.battles])) : null;
-      await createPlan(player.id, {
-        opponentTag: opponentTag!,
-        opponentName: folder?.player.name ?? null,
-        recommendations: buildSnapshot(recs, arsenal, played),
-        engine: {
-          name: 'team_analysis',
-          route: '/api/analytics/teams',
-          days,
-          opponentTag: opponentTag!,
-          at: new Date().toISOString(),
-          // WHICH BRAIN RANKED IT. Read off the report rather than written as
-          // a literal here: a client hardcoding the version would keep
-          // claiming it after the server moved on, which is exactly the drift
-          // the field exists to make visible. Null when the server predates
-          // the brain — a real answer, not a default.
-          brain: report?.brain ?? null,
-        },
-        generatedAt: new Date().toISOString(),
-      });
-      window.location.hash = coachHref(player.playerTag, 'plans');
-    } catch (e) {
-      setPlanError(e instanceof Error ? e.message : 'Could not save that plan.');
-      setSaving(false);
-    }
-  }
   /* ONE SENTENCE, AND ONLY WHEN THE LIST IS EMPTY — then the reason is the
      whole answer. With decks on screen it said nothing a row does not already
      say, and the account holder asked for the explanatory text to go. */
@@ -183,19 +148,14 @@ export function AssistTab({
             {playerLabel(player)} against {opponentName}
           </h3>
           <div className={styles.controlRow}>
-            <button type="button" className={styles.primaryButton} disabled={saving} onClick={() => void saveAsPlan()}>
-              {saving ? 'Saving…' : 'Save as match plan'}
-            </button>
-            <a className={styles.linkButton} href={coachHref(player.playerTag, 'scout', opponentTag)}>
-              Scout them →
-            </a>
-            <a className={styles.ghostButton} href={coachHref(player.playerTag, 'assist')}>
+            {/* No "scout them" link: the scout is the block directly above
+                this one now. No "save as match plan": plans are gone. */}
+            <a className={styles.ghostButton} href={coachHref(player.playerTag, 'opponent')}>
               Someone else
             </a>
           </div>
         </div>
         {error && <p className={styles.formError}>{error}</p>}
-        {planError && <p className={styles.formError}>{planError}</p>}
       </section>
 
       {/* WHAT THEY ARE LIKELY TO BRING — the other half of Coach Assist's

@@ -134,7 +134,20 @@ export function sortRoster(players: RosterPlayer[]): RosterPlayer[] {
  * written without its '#', which would otherwise start a second fragment. */
 
 export const COACH_ROUTE = '#/admin/coach';
-/* The route key `decks` is the player's BATTLE HISTORY and predates the
+/* SCOUT AND "AGAINST AN OPPONENT" ARE ONE TAB (2026-09-24). They asked the
+   same question of the same evidence, needed the same opponent tag, and shared
+   `OpponentChooser` already — so a coach picked an opponent, read what they
+   play, then picked the SAME opponent again on the next tab to be told what to
+   bring. `opponent` does both, in that order. Old `/scout` and `/assist` links
+   fall back to `overview`, which `parseCoachRoute` already does for any
+   section it does not know.
+
+   MATCH PLANS, RESULTS AND OPPONENTS ARE GONE, on request. Plans and results
+   were never used — the roster overview read `0 plans · 0 matches · nothing
+   recorded` for every player — and the Opponents ledger is answered better by
+   Battles, which is back in their place.
+
+   The route key `decks` is the player's BATTLE HISTORY and predates the
    arsenal; it keeps its key so old links still open, and its label says which
    of the two deck screens it is.
 
@@ -148,29 +161,22 @@ export const COACH_SECTIONS = [
   'overview',
   'practise',
   'arsenal',
-  'scout',
-  'assist',
-  'plans',
-  'results',
+  'opponent',
+  'battles',
   'decks',
-  'opponents',
 ] as const;
 export type CoachSection = (typeof COACH_SECTIONS)[number];
 
 export const SECTION_LABEL: Record<CoachSection, string> = {
   overview: 'Overview',
-  /* THE TWO "WHAT TO PLAY" TABS SHIPPED NEXT TO EACH OTHER AND WERE NOT
-     TELLABLE APART. `practise` ranks against the FIELD with no opponent;
-     `assist` ranks against ONE named opponent. The names say which now, and
-     they are parallel so the pair reads as a pair. */
+  /* `practise` ranks against the FIELD with no opponent; `opponent` ranks
+     against ONE named tag. They shipped for a day as "What to practise" and
+     "What to play", which nobody could tell apart. */
   practise: 'Against the field',
   arsenal: 'Arsenal',
-  scout: 'Scout',
-  assist: 'Against an opponent',
-  plans: 'Match plans',
-  results: 'Results',
+  opponent: 'Opponent',
+  battles: 'Battles',
   decks: 'Decks played',
-  opponents: 'Opponents',
 };
 
 /** The shared window for every windowed roster tab — Overview, Decks,
