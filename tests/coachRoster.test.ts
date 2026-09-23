@@ -151,8 +151,23 @@ describe('the admin gate', () => {
     expect(coach).toBeLessThan(console_);
   });
 
-  it('refuses a non-admin on screen — a courtesy on top of the database refusing them', () => {
-    expect(screen).toContain("access !== 'admin'");
+  /* THE GATE IS ADMIN **OR** THE COACH FLAG (007). Coaching is not
+     administering, so an account can be given the roster without being given
+     the console. The screen still refuses everyone else, which is a courtesy
+     on top of the database refusing them. */
+  it('refuses anyone who is neither an admin nor a coach', () => {
+    expect(screen).toContain('useIsCoach');
+    expect(screen).toContain('if (!mayCoach)');
+    // and the old admin-only test must not linger and pass vacuously
+    expect(screen).not.toContain("access !== 'admin'");
+  });
+
+  it('the coach flag is read from the profile, defaulting to NO', () => {
+    const gate = R('src', 'state', 'gate.ts');
+    expect(gate).toContain('is_coach === true');
+    // `=== true` and not a truthiness check: absent on a pre-007 database,
+    // and nobody may gain access by a column failing to arrive.
+    expect(gate).not.toMatch(/profile\?\.is_coach\s*\)/);
   });
 
   it('is lazy, so the public bundle does not carry it', () => {
