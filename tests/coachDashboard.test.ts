@@ -132,6 +132,7 @@ describe('card movement', () => {
     winRate: 60,
     tiered: true,
     tier: 'medium',
+    prevBattles: 40,
     ...over,
   });
 
@@ -143,6 +144,19 @@ describe('card movement', () => {
 
   it('needs real battles behind it', () => {
     expect(cardMovers([c({ key: 'hog-rider', battles: 3, winDelta: 40 })], 'up')).toEqual([]);
+  });
+
+  /* THE BUG THIS PINS WAS MEASURED LIVE. The server withholds a delta only
+     when the previous window had ZERO battles with the card, so one is enough
+     for it to publish a figure: a card played once and lost, then 47 times at
+     59.6%, came back as `+59.6` — the delta equal to the rate. */
+  it('needs real battles behind the BASELINE too, not just now', () => {
+    expect(cardMovers([c({ key: 'archers', winRate: 59.6, winDelta: 59.6, prevBattles: 1 })], 'up')).toEqual([]);
+  });
+
+  it('treats a missing prevBattles as unknown, not as enough', () => {
+    const { prevBattles: _drop, ...noBaseline } = c({ key: 'hog-rider', winDelta: 40 });
+    expect(cardMovers([noBaseline], 'up')).toEqual([]);
   });
 
   it('needs the payload to call it rateable', () => {

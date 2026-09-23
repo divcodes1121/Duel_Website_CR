@@ -289,6 +289,17 @@ def card_board(tag: str, since: str | None = None, until: str | None = None,
             row["useDelta"] = round(row["useRate"] - rate(pb, prev_total), 1)
             # A win rate against no games is not 0% — it is nothing, and a card
             # they did not play last window has not "fallen to zero".
+            #
+            # ONE PREVIOUS BATTLE IS ARITHMETICALLY A BASELINE AND IS NOT A
+            # MEANINGFUL ONE. Measured live: a card played once and lost last
+            # window, then 47 times at 59.6% this window, reported
+            # `winDelta: +59.6` — the delta EQUALS the rate, because the
+            # baseline was 0% off a single game. The figure is true and says
+            # nothing. `prevBattles` is published so each reader can apply its
+            # own floor; this endpoint keeps emitting the delta because the
+            # public Cards board has always drawn it and changing that is a
+            # separate decision.
+            row["prevBattles"] = pb
             if pb and b:
                 row["winDelta"] = round(row["winRate"] - rate(pw, pb), 1)
         cards.append(row)

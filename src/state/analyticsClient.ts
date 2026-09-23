@@ -495,6 +495,12 @@ export interface ApiCardRow {
    *  `winDelta` is absent when either window has no games to compare. */
   useDelta?: number;
   winDelta?: number;
+  /** Battles behind the PREVIOUS window's rate. One is arithmetically a
+   *  baseline and is not a meaningful one — a card played once and lost, then
+   *  47 times at 59.6%, reports `winDelta: +59.6`. Optional: an older server
+   *  does not send it, and a reader that needs a floor must treat its absence
+   *  as unknown rather than as zero. */
+  prevBattles?: number;
   /** The same card scored once per FORM it was seen in — an evolved Skeletons
    *  has its own use rate and its own win rate, separate from the plain one.
    *

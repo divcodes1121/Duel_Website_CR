@@ -83,6 +83,8 @@ export interface DashCard {
   tier: 'high' | 'medium' | 'low' | null;
   useDelta?: number;
   winDelta?: number;
+  /** Battles behind the PREVIOUS window's rate. See `cardMovers`. */
+  prevBattles?: number;
 }
 
 export type DashTone = 'neutral' | 'good' | 'warn' | 'bad' | 'info';
@@ -256,6 +258,18 @@ export interface CardMove {
  * `winDelta` is ABSENT, not zero, when either window had nothing to compare;
  * `?? 0` would turn "we cannot say" into "no change", so a row without one is
  * dropped rather than defaulted.
+ *
+ * BOTH WINDOWS NEED A REAL SAMPLE, and the second one is what this screen got
+ * wrong first. The server withholds a delta only when the previous window had
+ * ZERO battles with that card, so ONE is enough for it to publish a figure —
+ * and measured live, a card played once and lost, then 47 times at 59.6%,
+ * came back as `+59.6`: the delta equal to the rate, because the baseline was
+ * 0% off a single game. True, and it says nothing. `prevBattles` is required
+ * here and must clear the same floor as the current window.
+ *
+ * An older server does not send `prevBattles` at all. That is UNKNOWN, not
+ * zero, and an unknown baseline is exactly what this filter exists to reject,
+ * so the row is dropped.
  */
 export function cardMovers(
   cards: DashCard[],
@@ -268,6 +282,8 @@ export function cardMovers(
         c.battles >= DASH.cardBattles &&
         c.tiered &&
         typeof c.winDelta === 'number' &&
+        typeof c.prevBattles === 'number' &&
+        c.prevBattles >= DASH.cardBattles &&
         (direction === 'up' ? c.winDelta >= DASH.cardGap : c.winDelta <= -DASH.cardGap),
     )
     .sort((a, b) =>
