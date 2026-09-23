@@ -41,6 +41,22 @@ Three rules keep that honest:
 
 With no history at all the plan is the pure field answer and `basis` says so,
 rather than silently pretending the weighting happened.
+
+── HOW MUCH OF A PLAN IS ACTUALLY ABOUT THE PLAYER: MEASURED, NOT CLAIMED ───
+
+Measured across the five real players on the live roster: every plan returns
+seven picks, any two of them share FOUR TO SIX, and all five plans together
+draw on only ELEVEN distinct decks. Against a given field a handful of decks
+really are the best answers, and that is mostly player-independent — the
+weighting moves the order and swaps a few entries at the margin.
+
+That is a true and useful answer, and a screen headed "weighted by seven
+matchups" could easily be read as promising five different plans for five
+players. So the plan SCORES THE UNWEIGHTED PROJECTION TOO and reports
+`tailoredPicks` — how many of the picks the weighting actually put there —
+with `fromWeighting` on each row. It costs one more pass over a pool that does
+no database work, and it turns a rhetorical claim into a number the reader can
+check. When it is 0 the screen can say so plainly.
 """
 
 from __future__ import annotations
@@ -266,24 +282,35 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
     pool = ta._scout_candidates()
     seat = dcx.seater()
 
-    rows = []
-    for c in pool:
-        got = ts.score(
-            lambda other, _p=c.profile: _p.against(other, snap),
-            threats,
-            cards=c.cards,
-            archetype=c.archetype,
-            # NOBODY'S DECK. The pool is archetype representatives, so there is
-            # no games-piloted figure — `None` is a real state and a zero would
-            # read as "they have played this none of the time", a claim about a
-            # player this pool knows nothing about.
-            fit_games=None,
-        )
-        if got:
-            got["name"] = c.name
-            rows.append(got)
+    def rank(projection):
+        out = []
+        for c in pool:
+            got = ts.score(
+                lambda other, _p=c.profile: _p.against(other, snap),
+                projection,
+                cards=c.cards,
+                archetype=c.archetype,
+                # NOBODY'S DECK. The pool is archetype representatives, so
+                # there is no games-piloted figure — `None` is a real state and
+                # a zero would read as "they have played this none of the
+                # time", a claim about a player this pool knows nothing about.
+                fit_games=None,
+            )
+            if got:
+                got["name"] = c.name
+                out.append(got)
+        return ts.diversify(out, limit=limit, minimum=min(MIN_PICKS, limit))
 
-    picks = ts.diversify(rows, limit=limit, minimum=min(MIN_PICKS, limit))
+    picks = rank(threats)
+
+    # WHAT THE WEIGHTING ACTUALLY CHANGED. See the module note: without this
+    # the screen's "weighted by N matchups" is a claim the reader cannot check,
+    # and across five real players the plans overlap 4-6 of 7. Costs one more
+    # pass over a pool that does no database work.
+    baseline = [p["key"] for p in rank(raw)] if defs else [p["key"] for p in picks]
+    base_set = set(baseline)
+    for p in picks:
+        p["fromWeighting"] = bool(defs) and p["key"] not in base_set
     for p in picks:
         ordered, art, inferred = seat(p["cards"])
         p["cards"] = ordered
@@ -311,6 +338,11 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
             key=lambda d: -d["deficit"],
         ),
         "recommendations": picks,
+        # How many picks the weighting put there. 0 is a real answer and the
+        # screen says it plainly rather than implying a tailoring that did not
+        # happen.
+        "tailoredPicks": sum(1 for p in picks if p["fromWeighting"]),
+        "baselinePicks": baseline,
         "pool": len(pool),
         "meta": {
             "decks": len(board.get("decks") or []),

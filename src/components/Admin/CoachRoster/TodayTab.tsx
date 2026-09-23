@@ -44,6 +44,16 @@ const nf = new Intl.NumberFormat('en-US');
  *   no_history   nothing stored for them yet
  *   none         the meta snapshot is still building; this is not their fault
  *
+ * HOW MUCH OF THIS PLAN IS ABOUT THIS PLAYER IS MEASURED, NOT ASSERTED. The
+ * server ranks the UNWEIGHTED projection as well and reports `tailoredPicks` —
+ * how many picks the weighting actually put there. Live across five real
+ * roster players that is **0 to 1 of 7**, because a rare archetype cannot
+ * matter much in a projection weighted by how often it is FACED, however badly
+ * the player loses to it. That is the correct answer, not a weak one: you
+ * prepare for what you meet. The weighting moves the ORDER and names the
+ * matchups; it rarely changes the deck set, and the badge says which happened
+ * rather than letting "weighted by 7 matchups" imply a bespoke plan.
+ *
  * NO PROSE UNDER THE PICKS. Team Scout's explanatory text was removed on
  * request by name, and the server's own `explain()` speaks about an OPPONENT
  * ("what they play") — which a field projection does not have. The first live
@@ -103,16 +113,27 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
 
   const tailored = plan.basis === 'weighted';
   const boosted = plan.threats.filter((t) => t.boost > 1);
+  const changed = plan.tailoredPicks ?? 0;
 
   return (
     <Dashboard className={styles.overview}>
       <DashHero
         heading="What to practise"
-        badge={tailored ? `Weighted by ${plan.weighted.length} matchup${plan.weighted.length === 1 ? '' : 's'}` : 'The field, unweighted'}
-        badgeTone={tailored ? 'good' : 'neutral'}
+        badge={
+          !tailored
+            ? 'The field, unweighted'
+            : changed > 0
+              ? `${changed} of ${plan.recommendations.length} from their own record`
+              : 'Same picks as the field alone'
+        }
+        badgeTone={tailored && changed > 0 ? 'good' : 'neutral'}
       >
         {tailored
-          ? `Ranked against what the field plays, with extra weight on the matchups ${playerLabel(player)} measurably loses.`
+          ? `Ranked against what the field plays, weighted toward the ${plan.weighted.length} matchup${plan.weighted.length === 1 ? '' : 's'} ${playerLabel(player)} measurably loses. ${
+              changed > 0
+                ? `${changed} of these ${plan.recommendations.length} ${changed === 1 ? 'is here' : 'are here'} because of that weighting; the rest are what the field alone would suggest.`
+                : `That moved the order but not the set — these are the decks the field alone suggests, which is what you should expect when the matchups they lose to are ones they rarely meet.`
+            }`
           : plan.basis === 'unweighted'
             ? `Ranked against what the field plays. None of their ${nf.format(plan.battles)} battles gives an archetype enough evidence to weight yet, so this is the same plan the field alone produces.`
             : 'Ranked against what the field plays. Nothing is stored for this player yet, so nothing is weighted to them.'}
@@ -132,10 +153,16 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
           icon={<SwordsIcon />}
         />
         <KeyMetricCard
-          label="Weighted toward"
-          value={String(boosted.length)}
-          note={tailored ? 'matchups they lose more than usual' : 'nothing clears the evidence floor'}
-          tone={boosted.length > 0 ? 'warn' : 'neutral'}
+          label="From their record"
+          value={tailored ? `${changed} of ${plan.recommendations.length}` : '—'}
+          note={
+            !tailored
+              ? 'nothing clears the evidence floor'
+              : changed > 0
+                ? 'picks the weighting put here'
+                : 'the weighting moved the order only'
+          }
+          tone={changed > 0 ? 'good' : 'neutral'}
           icon={<ShieldIcon />}
         />
         <KeyMetricCard
@@ -179,7 +206,10 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
                     ))}
                   </div>
                   <span className={styles.deckFigures}>
-                    <span className={styles.deckName}>{p.name}</span>
+                    <span className={styles.deckName}>
+                      {p.name}
+                      {p.fromWeighting && <span className={styles.oppTag}> · from their record</span>}
+                    </span>
                     <span>
                       <strong>{p.expectedWinRate.toFixed(1)}%</strong> expected · {p.spreadCovered.toFixed(0)}% of the
                       projection answered

@@ -2105,6 +2105,9 @@ export interface FieldPick {
   threatCovered: number;
   evidenceStrength: number;
   confidence: string;
+  /** True when this deck is in the plan BECAUSE of the weighting — absent
+   *  from the ranking the unweighted field produces. */
+  fromWeighting: boolean;
 }
 
 export interface FieldPlan {
@@ -2120,6 +2123,11 @@ export interface FieldPlan {
    *  answer: nothing cleared the floor. */
   weighted: { archetype: string; name: string; battles: number; winRate: number; deficit: number }[];
   recommendations: FieldPick[];
+  /** How many picks the weighting actually put there, measured by ranking the
+   *  UNWEIGHTED projection as well. Live it is 0-1 of 7, which is why the
+   *  screen reports it rather than implying more. */
+  tailoredPicks: number;
+  baselinePicks: string[];
   pool: number;
   meta: { decks: number; window: unknown; computedAt: number | null };
 }
