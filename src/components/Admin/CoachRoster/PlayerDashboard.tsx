@@ -13,6 +13,7 @@ import {
   DASH,
   cardMovers,
   coverage,
+  windowsComparable,
   facedBars,
   matchupEmpty,
   strengths,
@@ -104,8 +105,16 @@ export function PlayerDashboard({
   const cov = useMemo(() => coverage(intel.opponentArchetypes), [intel]);
   const weak = useMemo(() => weaknesses(intel.opponentArchetypes, overall), [intel, overall]);
   const strong = useMemo(() => strengths(intel.opponentArchetypes, overall), [intel, overall]);
-  const rising = useMemo(() => (cards ? cardMovers(cards.cards, 'up') : []), [cards]);
-  const falling = useMemo(() => (cards ? cardMovers(cards.cards, 'down') : []), [cards]);
+  /* Both windows must be comparable BEFORE any row is drawn — see
+     `windowsComparable`. On real data an 11x imbalance produced eleven fallers
+     and no risers, all of it regression to the mean. */
+  const basis = useMemo(
+    () => (cards ? windowsComparable(cards.totals.battles, cards.previous?.battles) : null),
+    [cards],
+  );
+  const comparable = basis?.ok === true;
+  const rising = useMemo(() => (cards && comparable ? cardMovers(cards.cards, 'up') : []), [cards, comparable]);
+  const falling = useMemo(() => (cards && comparable ? cardMovers(cards.cards, 'down') : []), [cards, comparable]);
   const insights = useMemo(
     () =>
       buildInsights(
@@ -260,6 +269,8 @@ export function PlayerDashboard({
         >
           {!cards ? (
             <p className={styles.muted}>Reading their cards…</p>
+          ) : basis && !basis.ok ? (
+            <p className={styles.muted}>{basis.reason}</p>
           ) : rising.length === 0 && falling.length === 0 ? (
             <p className={styles.muted}>
               No card has moved more than {DASH.cardGap} points on {DASH.cardBattles}+ battles in this window.

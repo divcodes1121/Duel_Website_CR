@@ -10,6 +10,7 @@ import {
   strengths,
   weaknesses,
   windowLine,
+  windowsComparable,
   type DashArchetype,
   type DashCard,
 } from '../src/state/coachDashboard';
@@ -192,6 +193,48 @@ describe('card movement', () => {
     expect(cardLabel('hog-rider')).toBe('Hog Rider');
     expect(cardLabel('pekka')).toBe('Pekka');
     expect(cardLabel('x-bow')).toBe('X Bow');
+  });
+});
+
+/* THE WINDOWS ARE EQUAL IN DAYS AND NOT IN BATTLES. Measured live: 610 this
+   window against 54 in the equally long one before it, inside which the player
+   had a 24-battle run at 100% — the screen reported ELEVEN fallers and ZERO
+   risers, all regression to the mean. A per-card floor cannot catch it; each
+   of those baselines cleared one. */
+describe('two windows must be comparable before anything is drawn', () => {
+  it('refuses a lopsided pair and names both counts', () => {
+    const r = windowsComparable(610, 54);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toContain('610');
+      expect(r.reason).toContain('54');
+      expect(r.reason).toContain('lopsided');
+    }
+  });
+
+  it('allows a pair that is merely uneven', () => {
+    expect(windowsComparable(826, 439).ok).toBe(true);
+  });
+
+  it('is exactly at the ratio, not past it', () => {
+    expect(windowsComparable(300, 100).ok).toBe(true);
+    expect(windowsComparable(301, 100).ok).toBe(false);
+  });
+
+  it('an absent previous window is unknown, not zero', () => {
+    const r = windowsComparable(500, null);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain('no earlier window');
+  });
+
+  it('an empty previous window says so in its own words', () => {
+    const r = windowsComparable(500, 0);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain('played nothing');
+  });
+
+  it('a smaller current window is fine — the guard is about a thin BASELINE', () => {
+    expect(windowsComparable(50, 600).ok).toBe(true);
   });
 });
 

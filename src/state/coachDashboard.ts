@@ -108,6 +108,9 @@ export const DASH = {
   cardGap: 5,
   /** Cards listed as movers, each direction. */
   cardRows: 5,
+  /** How lopsided the two windows may be before a comparison between them is
+   *  withheld. See `windowsComparable`. */
+  windowRatio: 3,
   /** Matchup cards drawn, each direction. */
   matchupCards: 3,
 } as const;
@@ -298,6 +301,40 @@ export function cardMovers(
       tone: direction === 'up' ? ('good' as DashTone) : ('warn' as DashTone),
       delta: c.winDelta as number,
     }));
+}
+
+/**
+ * Whether the two windows can be compared at all.
+ *
+ * THE WINDOWS ARE EQUAL IN DAYS AND NOT IN BATTLES, and that is what broke
+ * this block on real data. Measured live: one roster player had 610 ranked
+ * battles this window and 54 in the equally long one before it — an ELEVEN-FOLD
+ * imbalance. In those 54 they had a 24-battle run at 100% with three different
+ * cards, so the screen reported "Mortar fell 39.1 points", "Cannon Cart fell
+ * 38.5" and so on: ZERO risers and ELEVEN fallers, every one of them regression
+ * to the mean rather than a change in how they play.
+ *
+ * A per-card floor cannot catch this — each of those baselines cleared it. The
+ * fault is the comparison itself, so the whole block is withheld and says why,
+ * which is the same rule every other figure on this screen follows.
+ */
+export function windowsComparable(
+  now: number,
+  previous: number | null | undefined,
+): { ok: true } | { ok: false; reason: string } {
+  if (previous == null) {
+    return { ok: false, reason: 'There is no earlier window to compare against yet.' };
+  }
+  if (previous === 0) {
+    return { ok: false, reason: 'They played nothing in the window before this one, so there is nothing to compare against.' };
+  }
+  if (now > previous * DASH.windowRatio) {
+    return {
+      ok: false,
+      reason: `They played ${now.toLocaleString('en-US')} battles this window against ${previous.toLocaleString('en-US')} in the one before it. A comparison that lopsided measures the smaller sample, not a change in how they play.`,
+    };
+  }
+  return { ok: true };
 }
 
 /** `hog-rider` -> `Hog Rider`. The catalogue's own titles live in
