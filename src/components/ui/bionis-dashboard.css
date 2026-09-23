@@ -138,8 +138,13 @@
 
 .bd-donutFill {
   fill: none;
+  stroke: var(--mark);
   stroke-width: 12;
+  /* The ring is the one mark big enough to carry a glow without smearing.
+     Gated on `--glow-core`, so it is simply absent on light. */
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--mark) var(--glow-core), transparent));
   transition: stroke-dasharray var(--dur-3) var(--ease);
+  animation: bd-fade var(--dur-4) var(--ease) both;
 }
 
 .bd-donutValue {
@@ -338,17 +343,33 @@
 }
 
 .bd-barTrack {
+  position: relative;
   overflow: hidden;
-  height: 0.55rem;
+  height: 0.6rem;
   border-radius: 999px;
   background: var(--surface-sunken);
+  /* A hairline, so an EMPTY track still reads as a track rather than as a gap
+     in the card. Inset, so it cannot widen the row. */
+  box-shadow: inset 0 0 0 1px var(--glass-stroke);
 }
 
+/* THE GRADIENT RUNS TOWARD THE INK, AND THAT IS WHAT KEEPS IT LEGAL.
+   Mixing a hue toward `--text` moves it AWAY from the surface in BOTH themes
+   (lighter on dark, darker on light), so every point of the ramp has at least
+   the contrast the flat hue had. Mixing toward the track, or toward
+   transparent, is the obvious way to build a gradient and would have dropped
+   the pale end under the 3:1 floor on light. */
 .bd-barFill {
   display: block;
   height: 100%;
   border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--mark) 84%, var(--text)) 0%, var(--mark) 100%);
+  /* `--glow-halo` is 0% on light, so this one declaration serves both themes
+     with no [data-theme] branch: glow is a dark-mode affordance here. */
+  box-shadow: 0 0 10px color-mix(in srgb, var(--mark) var(--glow-halo), transparent);
   transition: width var(--dur-3) var(--ease);
+  animation: bd-grow-x var(--dur-4) var(--ease) both;
+  transform-origin: left center;
 }
 
 .bd-barValue {
@@ -404,7 +425,11 @@
   width: 100%;
   min-height: 3px;
   border-radius: 8px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mark) 84%, var(--text)) 0%, var(--mark) 100%);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--mark) var(--glow-halo), transparent);
   transition: height var(--dur-3) var(--ease);
+  animation: bd-grow-y var(--dur-4) var(--ease) both;
+  transform-origin: bottom center;
 }
 
 .bd-columnFill[data-empty] {
@@ -553,28 +578,31 @@
    TEXT, which makes it darker than the surface it sits on. `--hue-*` is
    graded as ink and clears 3:1 in both themes. This is the third time this
    project has picked the wrong hue step. */
+/* ONE PROPERTY PER TONE, read by the fill, the stroke and the glow alike.
+   It was three copies of the same colour choice, and the first thing to drift
+   would have been the one the contrast note above is about. */
 .bd-barFill[data-tone='info'],
-.bd-columnFill[data-tone='info'] { background: var(--hue-violet); }
+.bd-columnFill[data-tone='info'],
+.bd-donut[data-tone='info'] .bd-donutFill { --mark: var(--hue-violet); }
 .bd-barFill[data-tone='good'],
-.bd-columnFill[data-tone='good'] { background: var(--hue-green); }
+.bd-columnFill[data-tone='good'],
+.bd-donut[data-tone='good'] .bd-donutFill { --mark: var(--hue-green); }
 .bd-barFill[data-tone='warn'],
-.bd-columnFill[data-tone='warn'] { background: var(--warning); }
+.bd-columnFill[data-tone='warn'],
+.bd-donut[data-tone='warn'] .bd-donutFill { --mark: var(--warning); }
 .bd-barFill[data-tone='bad'],
-.bd-columnFill[data-tone='bad'] { background: var(--hue-red); }
+.bd-columnFill[data-tone='bad'],
+.bd-donut[data-tone='bad'] .bd-donutFill { --mark: var(--hue-red); }
 /* NOT `--border-strong`: that is a BORDER colour and measures 2.8:1 against
    the track on light, under the 3:1 a bare graphic mark needs — and it reads
    as the empty track rather than as a value. A mix of the ink into the track
    is symmetric in both themes (5.0:1 dark, 3.2:1 light). */
 .bd-barFill[data-tone='neutral'],
-.bd-columnFill[data-tone='neutral'] {
-  background: color-mix(in srgb, var(--text-muted) 45%, var(--surface-sunken));
+.bd-columnFill[data-tone='neutral'],
+.bd-donut[data-tone='neutral'] .bd-donutFill {
+  --mark: color-mix(in srgb, var(--text-muted) 45%, var(--surface-sunken));
 }
 
-.bd-donut[data-tone='info'] .bd-donutFill { stroke: var(--hue-violet); }
-.bd-donut[data-tone='good'] .bd-donutFill { stroke: var(--hue-green); }
-.bd-donut[data-tone='warn'] .bd-donutFill { stroke: var(--warning); }
-.bd-donut[data-tone='bad'] .bd-donutFill { stroke: var(--hue-red); }
-.bd-donut[data-tone='neutral'] .bd-donutFill { stroke: color-mix(in srgb, var(--text-muted) 45%, var(--surface-sunken)); }
 
 .bd-heroBadge[data-tone='good'] { background: var(--green-wash); color: var(--hue-green); }
 .bd-heroBadge[data-tone='info'] { background: var(--violet-wash); color: var(--hue-violet); }
@@ -640,4 +668,23 @@
   .bd-donutFill {
     transition: none;
   }
+}
+
+/* MOTION: ONE-SHOT, TRANSFORM AND OPACITY ONLY, never `infinite` — the
+   project's rule, and the reason the old glow loops were removed. `index.css`
+   disables every animation under `prefers-reduced-motion: reduce`, so these
+   need no guard of their own. */
+@keyframes bd-grow-x {
+  from { transform: scaleX(0); opacity: 0.4; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+@keyframes bd-grow-y {
+  from { transform: scaleY(0); opacity: 0.4; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes bd-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

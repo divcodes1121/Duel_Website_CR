@@ -729,20 +729,38 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Fill comes from the gradient the chart defines per instance; this only
+   carries the hover state and the transition. */
 .dayBar {
-  fill: var(--hue-blue);
-  opacity: 0.55;
+  opacity: 0.72;
+  transition: opacity var(--dur-1) var(--ease);
 }
 
 .dayBar[data-on] {
   opacity: 1;
 }
 
+.rateArea {
+  pointer-events: none;
+}
+
+.hoverGuide {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.32;
+  pointer-events: none;
+}
+
 .rateLine {
   fill: none;
   stroke: var(--hue-green);
-  stroke-width: 2;
+  stroke-width: 2.25;
   stroke-linejoin: round;
+  stroke-linecap: round;
+  /* Dark-mode only: `--glow-core` is 0% on light, so the same declaration is
+     a glow there and nothing here. */
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--hue-green) var(--glow-core), transparent));
 }
 
 .rateDot {

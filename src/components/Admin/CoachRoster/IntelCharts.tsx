@@ -66,6 +66,18 @@ export function DailyChart({ timeline }: { timeline: CoachIntel['timeline'] }) {
 
   const tickEvery = Math.max(1, Math.ceil(n / Math.max(3, Math.floor(plotW / 64))));
   const h = hover !== null ? timeline[hover] : null;
+  const floorY = PAD.top + plotH;
+
+  /* The filled area under each segment, built from THE SAME points the line
+     is drawn from — so the shading can never disagree with the line about
+     where the rate was, and a break in the line is a break in the fill. */
+  const areas = segments
+    .filter((pts) => pts.includes(' '))
+    .map((pts) => {
+      const first = pts.split(' ')[0].split(',')[0];
+      const last = pts.split(' ').slice(-1)[0].split(',')[0];
+      return `${first},${floorY} ${pts} ${last},${floorY}`;
+    });
 
   return (
     <div className={styles.chartWrap} ref={wrap}>
@@ -87,6 +99,19 @@ export function DailyChart({ timeline }: { timeline: CoachIntel['timeline'] }) {
         <title id={`${uid}-t`}>
           Battles per day, with the day’s win rate where at least {MIN_DAY_BATTLES} were played
         </title>
+        {/* IDS ARE SCOPED PER INSTANCE. A literal id would be global, and two
+            charts on one page would both resolve to whichever mounted last —
+            the same fault the pagination's `layoutId` had. */}
+        <defs>
+          <linearGradient id={`${uid}-bar`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--hue-blue)" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="var(--hue-blue)" stopOpacity="0.35" />
+          </linearGradient>
+          <linearGradient id={`${uid}-area`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--hue-green)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--hue-green)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
         {[0, 50, 100].map((v) => (
           <g key={v}>
             <line className={styles.gridLine} x1={PAD.left} x2={W - PAD.right} y1={yR(v)} y2={yR(v)} />
@@ -98,16 +123,33 @@ export function DailyChart({ timeline }: { timeline: CoachIntel['timeline'] }) {
         <text className={styles.axisText} x={PAD.left - 6} y={PAD.top + 8} textAnchor="end">
           {maxB}
         </text>
+        {hover !== null && (
+          <line
+            className={styles.hoverGuide}
+            x1={x(hover)}
+            x2={x(hover)}
+            y1={PAD.top}
+            y2={floorY}
+          />
+        )}
         {timeline.map((d, i) => (
           <rect
             key={d.day}
             className={styles.dayBar}
             data-on={hover === i || undefined}
+            fill={`url(#${uid}-bar)`}
+            /* A DAY WITH NO BATTLES DRAWS NOTHING. A rounded corner on a
+               zero-height rect still paints, the same way a round line-cap on
+               a zero-length ring does. */
+            rx={d.battles > 0 ? Math.min(3, bar / 3) : 0}
             x={x(i) - bar / 2}
             y={yB(d.battles)}
             width={bar}
-            height={Math.max(0, PAD.top + plotH - yB(d.battles))}
+            height={Math.max(0, floorY - yB(d.battles))}
           />
+        ))}
+        {areas.map((pts, i) => (
+          <polygon key={`a${i}`} className={styles.rateArea} fill={`url(#${uid}-area)`} points={pts} />
         ))}
         {segments.map((pts, i) =>
           pts.includes(' ') ? (
