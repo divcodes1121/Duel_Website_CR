@@ -1,0 +1,31 @@
+[Unit]
+Description=Store the Deckkies meta board once a day
+# If the unit is ever removed, the timer goes with it rather than firing at a
+# service that no longer exists.
+Requires=royalweb-meta.service
+
+[Timer]
+# DAILY, AND THE GRANULARITY IS THE POINT. meta_history's primary key is
+# (day, deck_hash), so a finer cadence would not store more history — a later
+# run just replaces the same day. The board itself already recomputes every 30
+# minutes for the live screens; this is the archive, and an archive of a
+# leaderboard that churns on hundreds of thousands of battles does not need a
+# finer tick than a day.
+OnCalendar=daily
+
+# NOT AT MIDNIGHT. The scan reads the bot's 33 GB SQLite on one spinning
+# volume, and the duo fold and the bot's own poll are already on it; a spread
+# start keeps the three off each other, which is the same reasoning
+# royalweb-duo.timer records.
+RandomizedDelaySec=3600
+
+# CATCH UP AFTER A REBOOT. A missed day is a permanent hole — the board cannot
+# be recomputed for a day that has passed, because the underlying battles have
+# moved on. So a late run is worth much more than no run, and storing it under
+# today's date is correct: it is a reading taken today.
+Persistent=true
+
+Unit=royalweb-meta.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,44 @@
+[Unit]
+# Stores one reading of the meta deck board per day, so the site can say what
+# is RISING rather than only what is popular right now. /api/analytics/meta is
+# a snapshot that keeps nothing; without this job, rank movement is not a
+# question the data can answer at all.
+#
+# IT READS THE BOT'S DATABASE mode=ro, like everything else here, and the only
+# file it writes is /opt/royalweb/server/.meta_history.db — ~50 rows a day,
+# about 18k a year, pruned at meta_history.RETAIN_DAYS.
+#
+# IT IS ALSO THE ONLY WRITER. `royalweb` itself only ever calls
+# meta_history.movement()/status(), which are reads, so a stalled timer ages
+# the history and can never corrupt it.
+Description=Deckkies meta board daily snapshot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+
+# `--snapshot` forces a fresh board computation and stores it. IT MUST FORCE:
+# meta.board() answers from a background snapshot and returns
+# {"building": true, "decks": []} while the ~45 s scan runs, and storing that
+# would write a day with no decks in it — which a later comparison would read
+# as the entire meta having vanished and come back. meta_history.snapshot()
+# refuses such a board as well, so this is belt and braces.
+#
+# Re-running on the same day REPLACES that day rather than appending, so a
+# retry, a manual run or a Persistent= catch-up are all idempotent.
+ExecStart=/usr/bin/python3 -u meta_history.py --snapshot
+
+# FAIL VISIBLY, like the duo job: a non-zero exit marks the unit failed and the
+# JSON summary lands in the log beside it. The scan is ~95 s in production, so
+# the timeout is generous rather than tight.
+SuccessExitStatus=0
+TimeoutStartSec=1800
+
+StandardOutput=append:/var/log/clashbot/meta-history.log
+StandardError=append:/var/log/clashbot/meta-history.log
+
+[Install]
+WantedBy=multi-user.target

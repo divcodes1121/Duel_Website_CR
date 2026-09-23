@@ -122,3 +122,11 @@ shot-*.png
 
 # Cygwin/MSYS crash dumps
 *.stackdump
+
+# The meta board's daily history — what is rising, not just what is popular.
+# Rebuildable only FORWARD (a day that has passed cannot be recomputed, since
+# the underlying battles have moved on), so it is real state, not derived
+# source, and it belongs on the VPS rather than in git.
+server/.meta_history.db
+server/.meta_history.db-wal
+server/.meta_history.db-shm

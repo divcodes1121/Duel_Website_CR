@@ -509,9 +509,33 @@ class Handler(BaseHTTPRequestHandler):
                     out["clusterIndex"] = cluster_index.status()
                 except Exception:  # noqa: BLE001 - an accelerator's status must not fail the probe
                     out["clusterIndex"] = {"available": False}
+                # HOW MANY DAYS OF META HISTORY EXIST. Same reason again: if
+                # the snapshot timer stops, nothing breaks and no trend is ever
+                # wrong — the span just silently stops growing, which is
+                # invisible from every other angle.
+                try:
+                    import meta_history
+                    out["metaHistory"] = meta_history.status()
+                except Exception:  # noqa: BLE001
+                    out["metaHistory"] = {"days": 0, "newest": None, "oldest": None}
                 return self._send(out)
 
             if path == "/api/analytics/meta":
+                # MOVEMENT RIDES ON THIS PATH rather than taking one of its
+                # own: it is the same subject read over time, every console
+                # already loads /meta, and a second route would have to be
+                # added to `_route`'s count and to the auth table for a reader
+                # that asks the same question. It is an indexed join of two
+                # days in a separate ~18k-row file, so it costs nothing.
+                q = parse_qs(parsed.query)
+                if "movement" in q:
+                    import meta_history
+                    raw = (q.get("movement") or [""])[0]
+                    try:
+                        days = int(raw) if raw.strip() else None
+                    except ValueError:
+                        days = None
+                    return self._send(meta_history.movement(days if days is not None else 7))
                 # Served from a background-computed snapshot: the underlying
                 # scan takes ~45 s, so it must never run inside a request.
                 # See the long note at the top of meta.py.

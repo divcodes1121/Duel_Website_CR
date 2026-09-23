@@ -289,6 +289,7 @@ happily against a server that never called it.
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
+| `GET /api/analytics/meta?movement=<days>` | **how that board has MOVED** (`meta_history.py`) — rank and use-rate deltas between the newest stored day and the newest one at or before `days` back. Rides on the `/meta` path deliberately, so the **route count stays 23**. Answers `basis: "none"` with NO rows when there is nothing to compare against, never a list of zeros; a deck absent from the older day carries `entered: true` with a NULL delta rather than a climb from beyond the board's edge, and one that dropped off carries `left: true`. `comparedWith` / `daysApart` describe the snapshots ACTUALLY used, so a missed timer widens the span visibly instead of silently. Reads its own ~18k-row file, not the bot's database |
 | `GET /api/analytics/duo-pairs?page=&per=&sort=&cards=` | **the unique DECK PAIRS played in 2v2** (`duo_pairs.py`), 1,483,672 of them. One record per combination of two teammate decks, with an occurrence count, distinct participants, and first/last seen. Reads a LOCAL collection, not `battle_raw` — the migration is a full scan of a 44.7 GB table and is a job. `sort` is a KEY into a closed vocabulary (`played` / `recent` / `first`), never a column, and all three are index reads at 9-15 ms. `cards` is comma-separated card keys, checked against the catalog, ANDed within ONE deck and matched WHOLE — the column is a JSON array so `%"giant"%` has boundaries a bare `%giant%` does not (605,447 pairs against the real Giant's 45,360). An unknown key is dropped rather than refused and the accepted list is echoed back. `q` is the older free-text search over the same columns plus the fingerprints; `cards` wins when both are given |
 | `GET /api/analytics/admin/coach/intel/<tag>?days=` | **Coach Roster's player intelligence, ADMIN ONLY** (`coach_intel.py`). One pass over the Recent Battles reader (`recent_battles._read_rows`), so only OWN-DECK 1v1 is counted and 2v2/drafts/events are reported as `hidden` / `hiddenByMode` exactly as the battle log reports them: a zero-filled daily timeline, the last ten results, modes, the player's archetypes and the ones they face, their decks (8 distinct cards, sorted-key identity, top 25 of `decksTotal`) and their opponents (top 50 by meetings of `opponentsTotal`, `opponentsRepeat` met twice or more). **This is the one route with a SECOND gate**: Caddy injects `X-Analytics-Key` on every path, so the key makes every route public; `admin_auth.verify` takes the caller's Supabase access token from `X-Coach-Token` and asks Supabase's own `coach_is_admin()` (migration 004) whether it belongs to an admin — 401 unauthorized, 403 forbidden, 503 not_configured / unavailable, and every failure closes. Verdicts are cached 60 s by token hash, 256 entries. Needs `SUPABASE_URL` + `SUPABASE_ANON_KEY` in the service's environment |
 
@@ -837,6 +838,56 @@ its prescribed role. Observed marks always win; inferred decks are flagged
 
 A dashed outline was tried as the visual marker and removed: it read as a broken
 image rather than as a caveat, on cards that are very likely right.
+
+## The meta over time (`meta_history.py`)
+
+`/api/analytics/meta` is a SNAPSHOT — it recomputes every `CLASH_META_REFRESH`
+seconds and keeps nothing — so "Royal Hogs is climbing" was not a sentence this
+project could say. `meta_history.py` stores one reading of the board per day in
+its **own SQLite file** (`server/.meta_history.db`, gitignored), the same call
+`duo_pairs.py` makes: the history must survive independently of the snapshot
+that produced it, and a read-write handle to the bot's database is the one
+thing this project has never taken. ~50 rows a day, ~18k a year, pruned at
+`RETAIN_DAYS` (400).
+
+`deploy/royalweb-meta.{service,timer}` runs `meta_history.py --snapshot` daily
+with `RandomizedDelaySec=3600` (the scan reads the bot's 33 GB SQLite on one
+spinning volume, and the duo fold and the bot's poll are already on it) and
+`Persistent=true` (a missed day is a PERMANENT hole — the board cannot be
+recomputed for a day that has passed, because the underlying battles have moved
+on). `metaHistory` on `/api/analytics/status` shows the span, so a stalled
+timer is visible — it breaks nothing and makes nothing wrong, it just silently
+stops the history growing.
+
+**Movement rides on `/api/analytics/meta?movement=<days>`** rather than taking a
+route of its own: same subject, same readers, and a second route would have to
+be added to `_route`'s count and the auth table for nothing. **The route count
+stays 23.**
+
+### The four ways a trend can lie
+
+Each is a named test in `test_meta_history.py` (29 checks, own temp file, no
+database opened).
+
+1. **No baseline is not zero movement.** One snapshot answers
+   `basis: "none"` with NO rows — the `RETENTION_DAYS` "unknown" rule. A client
+   rendering 0% for every deck would state, confidently, that the meta is still.
+2. **A deck that was not on the board did not move.** The board is the top
+   fifty; entering at rank 12 is not a 39-place climb from 51, because 51 is
+   where the board stopped, not where the deck was. `entered: true`, delta null.
+   A deck that dropped off carries `left: true`, never "fell to zero use".
+3. **A missed timer must not silently change the span.** Asking for 7 days when
+   the newest baseline is 11 days old is an 11-day comparison. `comparedWith`
+   and `daysApart` always describe the snapshots ACTUALLY used.
+4. **A refresh is not a day.** The board recomputes every 30 minutes, so a naive
+   append would store 48 readings a day. The primary key is `(day, deck_hash)`
+   and a later write REPLACES, so re-running the timer is idempotent.
+
+Two more, from writing it: `snapshot()` **refuses a `building` or empty board**
+(storing it would write a day with no decks, which a later comparison reads as
+the meta vanishing and returning), and `days or 7` **was a real bug** — 0 is
+falsy, so `?movement=0` silently became a seven-day answer instead of clamping.
+Absent means default; a supplied 0 clamps like any other out-of-range number.
 
 ## The card board (`player_cards.py`)
 
