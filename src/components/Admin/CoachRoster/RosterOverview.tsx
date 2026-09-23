@@ -38,6 +38,7 @@ import {
   type Bar,
   type DashTone,
 } from '../../ui/bionis-dashboard';
+import { TodayBoard } from './TodayBoard';
 import styles from './CoachRoster.module.css';
 
 /**
@@ -240,6 +241,13 @@ export function RosterOverview({ players }: { players: RosterPlayer[] }) {
           ))}
         </ul>
       )}
+
+      {/* LAST, AND ON DEMAND. Everything above is the coach's own rows, read in
+          three cheap queries; this one calls the analytics service once per
+          active player. The contract at the top of `coachOverview.ts` — that
+          nothing on this screen reads that API — is kept by making it a button
+          rather than part of the load. */}
+      <TodayBoard players={players} />
     </Dashboard>
   );
 }

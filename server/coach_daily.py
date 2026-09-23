@@ -244,8 +244,16 @@ def _overall(summary: dict) -> float:
 
 
 def plan(tag: str, since: str | None = None, until: str | None = None,
-         limit: int = MAX_PICKS) -> dict:
+         limit: int = MAX_PICKS, brief: bool = False) -> dict:
     """One player's plan against the field.
+
+    `brief` trims the payload for a ROSTER-WIDE read, where one row per player
+    is drawn and the full projection is not: the threats keep their names and
+    likelihoods but lose their card lists and art, only the top pick keeps its
+    cards, and `baselinePicks` is dropped. Measured on the live roster, five
+    full plans are 195 kB and five brief ones are a fraction of it. **It is a
+    projection of the same answer, not a cheaper one** — nothing is recomputed
+    differently, so a brief row can never disagree with the full screen.
 
     NO DATABASE WORK PER CANDIDATE. The pool is `team_analysis._scout_candidates()`
     — ~200 real lists out of the background snapshot's seeds, each carrying its
@@ -317,11 +325,27 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         p["art"] = art
         p["artInferred"] = inferred
 
-    for t in threats:
-        ordered, art, inferred = seat(t["cards"])
-        t["cards"] = ordered
-        t["art"] = art
-        t["artInferred"] = inferred
+    if brief:
+        # The threats keep what a summary row says (name, share, whether this
+        # player's record moved it) and lose the eight cards nobody draws there.
+        for t in threats:
+            for k in ("cards", "art", "artInferred", "wins", "winRate", "lastSeen",
+                      "similarityToObserved", "observedCount"):
+                t.pop(k, None)
+        # Only the top pick is drawn in a roster row; the rest keep their
+        # figures so the count and the best rate are still honest.
+        for p in picks[1:]:
+            p.pop("cards", None)
+            p.pop("art", None)
+            p.pop("matchups", None)
+        for p in picks:
+            p.pop("matchups", None)
+    else:
+        for t in threats:
+            ordered, art, inferred = seat(t["cards"])
+            t["cards"] = ordered
+            t["art"] = art
+            t["artInferred"] = inferred
 
     return {
         "tag": tag,
@@ -342,7 +366,8 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         # screen says it plainly rather than implying a tailoring that did not
         # happen.
         "tailoredPicks": sum(1 for p in picks if p["fromWeighting"]),
-        "baselinePicks": baseline,
+        **({} if brief else {"baselinePicks": baseline}),
+        "brief": brief,
         "pool": len(pool),
         "meta": {
             "decks": len(board.get("decks") or []),

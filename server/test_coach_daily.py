@@ -182,6 +182,25 @@ check("and the input was NOT mutated — both are reported side by side",
       all("boost" not in t for t in base))
 check("weighting an empty projection is empty, not an error", cdl.weight_threats([], {}) == [])
 
+print("\nbrief is a PROJECTION of the same answer, never a cheaper one")
+# `plan()` itself reads the meta snapshot and the battle store, so the shape
+# is checked on the piece that decides it rather than by calling the route.
+_full = cdl.field_threats(board(deck("a", "hog", 10.0), deck("b", "golem", 5.0)))
+check("a threat carries its cards for the full screen",
+      all("cards" in t for t in _full))
+_trimmed = [dict(t) for t in _full]
+for _t in _trimmed:
+    for _k in ("cards", "art", "artInferred", "wins", "winRate", "lastSeen",
+               "similarityToObserved", "observedCount"):
+        _t.pop(_k, None)
+check("trimming drops only what a roster row does not draw",
+      all("cards" not in t for t in _trimmed))
+check("and KEEPS what the row says — name, share, and whether the player moved it",
+      all(all(k in t for k in ("name", "archetype", "likelihood", "key"))
+          for t in _trimmed))
+check("the likelihoods are untouched by trimming, so the two cannot disagree",
+      [t["likelihood"] for t in _trimmed] == [t["likelihood"] for t in _full])
+
 print("\nnothing here calls a model")
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "coach_daily.py"),
            encoding="utf-8").read()

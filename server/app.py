@@ -746,8 +746,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
                 q = parse_qs(parsed.query)
                 since, until = _window(q, cd.coverage(tag))
+                # `brief=1` trims the payload for a roster-wide read (one row
+                # per player). The SAME answer, projected — nothing is computed
+                # differently, so a brief row cannot disagree with the screen.
+                brief = (q.get("brief") or [""])[0] in ("1", "true", "yes")
                 import coach_daily
-                return self._send(coach_daily.plan(tag, since, until))
+                return self._send(coach_daily.plan(tag, since, until, brief=brief))
 
             if path.startswith("/api/analytics/coach/predict/"):
                 raw = unquote(path[len("/api/analytics/coach/predict/"):])

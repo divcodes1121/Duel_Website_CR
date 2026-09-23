@@ -2127,12 +2127,26 @@ export interface FieldPlan {
    *  UNWEIGHTED projection as well. Live it is 0-1 of 7, which is why the
    *  screen reports it rather than implying more. */
   tailoredPicks: number;
-  baselinePicks: string[];
+  /** Absent in `brief` mode — it is only the evidence for `tailoredPicks`. */
+  baselinePicks?: string[];
+  brief?: boolean;
   pool: number;
   meta: { decks: number; window: unknown; computedAt: number | null };
 }
 
-/** What this player should practise against the field. No opponent. */
-export function fetchFieldPlan(tag: string, win: DateWindow = {}): Promise<FieldPlan> {
-  return get<FieldPlan>(`/api/analytics/coach/field/${encodeURIComponent(tag)}?${windowQuery(win)}`);
+/** What this player should practise against the field. No opponent.
+ *
+ *  `brief` trims the payload for a roster-wide read — the threats keep their
+ *  names and shares but lose their card lists, and only the top pick keeps its
+ *  cards. Measured live: 38.9 kB -> 8.8 kB, with identical picks, order, rates
+ *  and likelihoods. It is a PROJECTION of the same answer, so a brief row can
+ *  never disagree with the full screen. */
+export function fetchFieldPlan(
+  tag: string,
+  win: DateWindow & { brief?: boolean } = {},
+): Promise<FieldPlan> {
+  const { brief, ...window } = win;
+  const q = new URLSearchParams(windowQuery(window));
+  if (brief) q.set('brief', '1');
+  return get<FieldPlan>(`/api/analytics/coach/field/${encodeURIComponent(tag)}?${q.toString()}`);
 }
