@@ -88,7 +88,7 @@ export function PlansTab({ player }: { player: RosterPlayer }) {
           in reserve — with everything the screen was showing at the time frozen beside it.
         </p>
         <p className={styles.muted}>
-          Plans are made from <strong>What to play</strong>, which is where the ranking and the arsenal are both on
+          Plans are made from <strong>Against an opponent</strong>, which is where the ranking and the arsenal are both on
           screen.
         </p>
         {repoKind === 'memory' && (
@@ -104,7 +104,7 @@ export function PlansTab({ player }: { player: RosterPlayer }) {
         <section className={styles.notice}>
           <h3>No match plans yet</h3>
           <p>
-            Open <strong>What to play</strong>, choose an opponent, and save the preparation as a plan. Nothing is
+            Open <strong>Against an opponent</strong>, choose an opponent, and save the preparation as a plan. Nothing is
             recorded until you do.
           </p>
         </section>

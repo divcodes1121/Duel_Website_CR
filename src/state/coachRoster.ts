@@ -159,10 +159,14 @@ export type CoachSection = (typeof COACH_SECTIONS)[number];
 
 export const SECTION_LABEL: Record<CoachSection, string> = {
   overview: 'Overview',
-  practise: 'What to practise',
+  /* THE TWO "WHAT TO PLAY" TABS SHIPPED NEXT TO EACH OTHER AND WERE NOT
+     TELLABLE APART. `practise` ranks against the FIELD with no opponent;
+     `assist` ranks against ONE named opponent. The names say which now, and
+     they are parallel so the pair reads as a pair. */
+  practise: 'Against the field',
   arsenal: 'Arsenal',
   scout: 'Scout',
-  assist: 'What to play',
+  assist: 'Against an opponent',
   plans: 'Match plans',
   results: 'Results',
   decks: 'Decks played',
@@ -170,7 +174,7 @@ export const SECTION_LABEL: Record<CoachSection, string> = {
 };
 
 /** The shared window for every windowed roster tab — Overview, Decks,
- *  Opponents, Scout and What to play. `0` is "all stored", sent to the server
+ *  Opponents, Scout and both ranking tabs. `0` is "all stored", sent to the server
  *  as a span longer than any storage tier holds.
  *
  *  THE DAY SPANS ARE `utils/datePresets.ts`, the one list every date filter on
