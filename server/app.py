@@ -23,6 +23,7 @@ Endpoints
                                            (`blue` omitted = scouting report)
     GET /api/analytics/coach/predict/<tag> which decks they will bring next
     GET /api/analytics/coach/suggest       what to play, given both tags
+    GET /api/analytics/coach/field/<tag>   what to play against the field, no opponent
     GET /api/analytics/meta                the global leaderboard (snapshot)
     GET /api/analytics/meta/cards          global use/win rate per card, by form
     GET /api/analytics/live/<tag>          the live battlelog, analysed
@@ -730,6 +731,24 @@ class Handler(BaseHTTPRequestHandler):
             # `r2` (prediction) and `m1`/`m2` + `o1`/`o2` (suggestion), each a
             # comma-separated card list — the same encoding the matchup and
             # counters endpoints already use, rather than a second one.
+            # WHAT TO PLAY WITH NO OPPONENT — a plan against the field.
+            #
+            # A NEW PATH RATHER THAN A MODE ON `/coach/suggest`, which takes
+            # `me` and `opp` and answers about a duel in progress. This answers
+            # a different question with a different shape and no opponent at
+            # all, and hiding it behind an absent parameter would make one
+            # route return two payloads. The count tripwire moves to 24 with
+            # this commit, which is what it is for.
+            if path.startswith("/api/analytics/coach/field/"):
+                raw = unquote(path[len("/api/analytics/coach/field/"):])
+                tag = cd.normalize_tag(raw)
+                if not tag:
+                    return self._send({"error": "invalid_tag", "input": raw}, 400)
+                q = parse_qs(parsed.query)
+                since, until = _window(q, cd.coverage(tag))
+                import coach_daily
+                return self._send(coach_daily.plan(tag, since, until))
+
             if path.startswith("/api/analytics/coach/predict/"):
                 raw = unquote(path[len("/api/analytics/coach/predict/"):])
                 tag = cd.normalize_tag(raw)

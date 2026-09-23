@@ -729,7 +729,7 @@ class RoutingUnchanged(unittest.TestCase):
         # opponents). The FIRST route here that is admin-only: past the key
         # gate it asks Supabase whether the caller's own token is an admin's
         # (`admin_auth.py`), and `CoachRosterAdminGate` below pins that.
-        self.assertEqual(len(routes), 23)
+        self.assertEqual(len(routes), 24)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]
