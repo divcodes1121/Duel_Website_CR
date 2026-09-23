@@ -93,21 +93,21 @@ describe('insights', () => {
     expect(stale?.evidence).toContain('2026-08-25');
   });
 
-  it('calls out a matchup only when it is well past their usual rate', () => {
+  /* WHAT BEATS THEM IS THE DASHBOARD'S, NOT THIS LIST'S. The matchup cards
+     read the SAME rows with the SAME floors, so a bullet here printed every
+     weakness twice on one screen. */
+  it('never restates what beats them — that is the matchup cards', () => {
     const out = buildInsights(
       base({
         opponentArchetypes: [
-          { name: 'Golem', ...tally(20, 6) }, // 30% vs 60%
-          { name: 'Bait', ...tally(20, 11) }, // 55% — inside the gap
-          { name: 'X-Bow', ...tally(5, 0) }, // too few
+          { name: 'Golem', ...tally(20, 6) }, // 30% vs 60% — a real weakness
+          { name: 'Bait', ...tally(20, 11) },
         ],
       }),
       [],
     );
-    expect(ids(out)).toContain('vs-Golem');
-    expect(ids(out)).not.toContain('vs-Bait');
-    expect(ids(out)).not.toContain('vs-X-Bow');
-    expect(out.find((i) => i.id === 'vs-Golem')?.evidence).toBe('20 battles vs Golem · 6W 14L');
+    expect(ids(out).some((x) => x.startsWith('vs-'))).toBe(false);
+    expect(out.map((i) => i.text).join(' ')).not.toContain('Against Golem');
   });
 
   /* Measured live: eight of one player's thirty bullets were "Has met
@@ -145,31 +145,22 @@ describe('insights', () => {
     const out = buildInsights(
       base({
         archetypes: [{ name: 'Hog Rider', ...tally(42, 25) }],
-        opponentArchetypes: [
-          { name: 'Golem', ...tally(60, 6) }, // 10% vs 60% over 60 — the heaviest thing here
-          { name: 'Bait', ...tally(30, 27) },
-        ],
       }),
       decks,
     );
     expect(out).toHaveLength(MAX_INSIGHTS);
-    // The worst matchup, measured over the most battles, must survive the cut.
-    expect(ids(out)).toContain('vs-Golem');
-    // Context loses to evidence: a bare share should not displace a real gap.
+    // The heaviest deck gaps survive; context loses to evidence.
     expect(ids(out)).not.toContain('archetype-share');
+    expect(ids(out).every((x) => x.startsWith('deck-'))).toBe(true);
   });
 
   it('orders by evidence times effect, not by the order the rules ran', () => {
-    const out = buildInsights(
-      base({
-        opponentArchetypes: [
-          { name: 'Thin', ...tally(10, 1) }, // 10% vs 60%, but only 10 battles
-          { name: 'Solid', ...tally(200, 80) }, // 40% vs 60% over 200
-        ],
-      }),
-      [],
-    );
-    expect(ids(out)[0]).toBe('vs-Solid');
+    const out = buildInsights(base(), [
+      deck({ key: 'thin', name: 'Thin', battles: 16, wins: 16 }), // +40 on 16
+      deck({ key: 'solid', name: 'Solid', battles: 300, wins: 240 }), // +20 on 300
+    ]);
+    // 20 * sqrt(300) = 346 beats 40 * sqrt(16) = 160.
+    expect(ids(out)[0]).toBe('deck-solid-up');
   });
 
   it('never uses an adjective the numbers cannot carry', () => {

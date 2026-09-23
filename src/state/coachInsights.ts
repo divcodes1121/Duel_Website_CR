@@ -93,10 +93,6 @@ export const FLOORS = {
   deck: 15,
   /** Points of difference before a deck is "higher" or "lower". */
   deckGap: 5,
-  /** Battles behind a matchup comparison. */
-  matchup: 10,
-  /** Points of difference before a matchup is called out. */
-  matchupGap: 10,
   /** Days without a deck, with history behind it, before it is "unused". */
   staleDays: 14,
 } as const;
@@ -104,12 +100,11 @@ export const FLOORS = {
 /** How many survive to the screen. See the ceiling note above. */
 export const MAX_INSIGHTS = 5;
 
-/* How much each kind is worth per point of gap per unit of evidence. A
-   matchup is what is BEING DONE TO the player and is the most actionable
-   thing on the screen; a deck they own is next; context is last. These are
-   ordering nudges, not claims about the data. */
+/* How much each kind is worth per point of gap per unit of evidence. A deck
+   they own and are under-performing with is the most actionable thing left in
+   this list (what BEATS them moved to the dashboard's cards); context is last.
+   These are ordering nudges, not claims about the data. */
 const KIND_WEIGHT = {
-  matchup: 1.3,
   deck: 1.0,
   form: 0.9,
   stale: 0.5,
@@ -118,7 +113,6 @@ const KIND_WEIGHT = {
 
 const pct = (w: number, n: number) => (n ? (w / n) * 100 : 0);
 const f1 = (x: number) => `${x.toFixed(1)}%`;
-const record = (t: InsightTally) => `${t.wins}W ${t.losses}L${t.draws ? ` ${t.draws}D` : ''}`;
 
 /** Evidence times effect, so a 20-point gap over 12 battles does not outrank a
  *  12-point gap over 300. `sqrt` because the hundredth battle says less about
@@ -195,20 +189,12 @@ export function buildInsights(intel: InsightIntel, decks: InsightDeck[]): Insigh
     }
   }
 
-  // Matchups: what they struggle or thrive against.
-  for (const a of intel.opponentArchetypes) {
-    if (a.battles < FLOORS.matchup) continue;
-    const rate = pct(a.wins, a.battles);
-    const gap = rate - overall;
-    if (Math.abs(gap) < FLOORS.matchupGap) continue;
-    out.push({
-      id: `vs-${a.name}`,
-      kind: gap > 0 ? 'strength' : 'weakness',
-      text: `Against ${a.name} decks they win ${f1(rate)}, against ${f1(overall)} overall.`,
-      evidence: `${a.battles} battles vs ${a.name} · ${record(a)}`,
-      weight: weigh(gap, a.battles, 'matchup'),
-    });
-  }
+  /* WHAT BEATS THEM MOVED OUT OF THIS LIST (2026-09-23) and is now the
+     dashboard's matchup cards. It is the SAME rows (`opponentArchetypes`),
+     the same floors and the same comparison against their own rate — so a
+     bullet here would have printed every weakness a second time, in smaller
+     type, on the same screen. The cards say it with the count, the gap and a
+     tone; the floors moved with the rule, to `coachDashboard.DASH`. */
 
   /* WHO THEY MET IS NOT AN INSIGHT, and measuring it said so. On the live
      roster eight of one player's thirty bullets were "Has met <stranger> N

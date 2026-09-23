@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   AnalyticsError,
@@ -19,7 +19,6 @@ import {
   type CoachWindow,
   type RosterPlayer,
 } from '../../../state/coachRoster';
-import { buildInsights } from '../../../state/coachInsights';
 import { coachToken } from '../../../state/coachToken';
 import { ago } from '../../../utils/format';
 import { ReadingState } from '../../Analytics/ReadingState';
@@ -29,8 +28,8 @@ import { AssistTab } from './AssistTab';
 import { PlansTab } from './PlansTab';
 import { ResultsTab } from './ResultsTab';
 import { ScoutTab } from './ScoutTab';
-import { DailyChart, FormStrip, ShareBars } from './IntelCharts';
-import { CoachControls, DeckStrip, PlayerHeader, PlayerRecord } from './PlayerOverview';
+import { CoachControls, DeckStrip, PlayerHeader } from './PlayerOverview';
+import { PlayerDashboard } from './PlayerDashboard';
 import styles from './CoachRoster.module.css';
 
 const nf = new Intl.NumberFormat('en-US');
@@ -158,7 +157,15 @@ export function PlayerWorkspace({
       </nav>
 
       {section === 'overview' && (
-        <OverviewTab report={report} reportError={reportError} intel={intel} intelError={intelError} loading={intelLoading} player={player} />
+        <OverviewTab
+          report={report}
+          reportError={reportError}
+          intel={intel}
+          intelError={intelError}
+          loading={intelLoading}
+          player={player}
+          win={win}
+        />
       )}
       {/* The arsenal is the coach's own list and does not depend on the
           intelligence read — it renders whether or not the battles answered.
@@ -230,6 +237,7 @@ function OverviewTab({
   intelError,
   loading,
   player,
+  win,
 }: {
   report: PlayerReport | null;
   reportError: AnalyticsError | null;
@@ -237,24 +245,8 @@ function OverviewTab({
   intelError: string | null;
   loading: boolean;
   player: RosterPlayer;
+  win: CoachWindow;
 }) {
-  const insights = useMemo(() => {
-    if (!intel) return [];
-    return buildInsights(
-      intel,
-      /* KEY, not name: `deckName` is generated and collides — one real player
-         had nine distinct decks called "Mortar Rascals". The cards ride along
-         so the screen can draw the strip beside the sentence. */
-      intel.decks.map((d) => ({
-        key: d.key,
-        name: d.deckName,
-        battles: d.battles,
-        wins: d.wins,
-        lastSeen: battleTimeToIso(d.last),
-      })),
-    );
-  }, [intel]);
-
   if (reportError) {
     return (
       <section className={styles.notice}>
@@ -276,75 +268,18 @@ function OverviewTab({
   }
 
   return (
-    <>
-      <PlayerRecord report={report} intel={intel} />
-      <IntelGate intel={intel} error={intelError} loading={loading}>
-        {(i) =>
-          i.summary.battles === 0 ? (
-            <section className={styles.notice}>
-              <h3>No 1v1 battles in this window</h3>
-              <p>Widen the window, or check back once the collector has stored some.</p>
-            </section>
-          ) : (
-            <>
-              <section className={styles.block}>
-                <div className={styles.blockHead}>
-                  <h3 className={styles.blockTitle}>Day by day</h3>
-                  <FormStrip form={i.form} />
-                </div>
-                <DailyChart timeline={i.timeline} />
-                {/* The mode split was a ShareBars block of its own and is one
-                    fact: measured live it was 99.5% a single bar on one player
-                    and two bars on another. A sentence says it. */}
-                {i.modes.length > 0 && (
-                  <p className={styles.muted}>
-                    {i.modes.map((m) => `${m.name} ${nf.format(m.battles)}`).join(' · ')}
-                  </p>
-                )}
-              </section>
-
-              <div className={styles.shareGrid}>
-                <section className={styles.block}>
-                  <h3 className={styles.blockTitle}>Their win conditions</h3>
-                  <ShareBars rows={i.archetypes} total={i.summary.battles} />
-                </section>
-                <section className={styles.block}>
-                  <h3 className={styles.blockTitle}>What they face</h3>
-                  <ShareBars rows={i.opponentArchetypes} total={i.summary.battles} />
-                </section>
-              </div>
-
-              <section className={styles.block}>
-                <h3 className={styles.blockTitle}>Insights</h3>
-                {insights.length === 0 ? (
-                  <p className={styles.muted}>
-                    Nothing clears the evidence floors in this window yet — an insight needs enough battles behind it
-                    to survive the next few.
-                  </p>
-                ) : (
-                  <ul className={styles.insights}>
-                    {insights.map((x) => {
-                      /* BY KEY, never by name. `deckName` is generated and
-                         collides — one live player had nine distinct decks
-                         called "Mortar Rascals" — so the strip is the only
-                         thing that tells two of them apart. */
-                      const d = x.deckKey ? i.decks.find((k) => k.key === x.deckKey) : undefined;
-                      return (
-                        <li key={x.id} className={styles.insight} data-kind={x.kind}>
-                          <span className={styles.insightText}>{x.text}</span>
-                          {d && <DeckStrip deck={d} />}
-                          <span className={styles.insightEvidence}>{x.evidence}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </section>
-            </>
-          )
-        }
-      </IntelGate>
-    </>
+    <IntelGate intel={intel} error={intelError} loading={loading}>
+      {(i) =>
+        i.summary.battles === 0 ? (
+          <section className={styles.notice}>
+            <h3>No 1v1 battles in this window</h3>
+            <p>Widen the window, or check back once the collector has stored some.</p>
+          </section>
+        ) : (
+          <PlayerDashboard player={player} report={report} intel={i} win={win} />
+        )
+      }
+    </IntelGate>
   );
 }
 

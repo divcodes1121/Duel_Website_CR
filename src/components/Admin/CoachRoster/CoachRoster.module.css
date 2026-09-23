@@ -1614,3 +1614,16 @@ a.rosterTitle[aria-current='page'] {
 .overview {
   padding-bottom: 0.5rem;
 }
+
+/* The form chips under the day chart. Written because it was referenced:
+   `styles.x` for a class a module does not define is `undefined`, the element
+   renders class-less, nothing errors and nothing warns — this project has
+   shipped that fault before (`.band`, referenced and never written, silently
+   removed the gap between four full-bleed banners). */
+.formLine {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}

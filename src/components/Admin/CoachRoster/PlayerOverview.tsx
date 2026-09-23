@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import {
-  battleTimeToIso,
   playerLabel,
   NAME_MAX,
   NOTES_MAX,
@@ -10,18 +9,9 @@ import {
 } from '../../../state/coachRoster';
 import { useCoachRoster } from '../../../state/coachRosterStore';
 import { isLiveReport, type CoachIntel, type PlayerReport } from '../../../state/analyticsClient';
-import { ago } from '../../../utils/format';
 import { CardArt } from '../../Analytics/CardArt';
-import { DeckActions } from '../../DeckActions/DeckActions';
 import styles from './CoachRoster.module.css';
 
-const nf = new Intl.NumberFormat('en-US');
-
-/** Battles before the most-played deck's win rate is printed. `ShareBars`
- *  already withholds a rate under the same count, and this block had no floor
- *  at all — live, it printed "1 battles · 100.0% won" as a player's headline
- *  deck at 7d, 30d, 90d AND All. A rate off one battle is not a rate. */
-const DECK_RATE_FLOOR = 5;
 
 /* The parts of a roster player's page that are about WHO they are — header,
    record tiles, the coach's own fields. `PlayerWorkspace` composes them with
@@ -54,101 +44,11 @@ export function PlayerHeader({ player, report }: { player: RosterPlayer; report:
   );
 }
 
-/* WHO THEY ARE comes from the player report — rank, trophies, clan, whether
-   they are being collected. WHAT THEY DID comes from the coach intelligence,
-   which counts OWN-DECK 1v1 battles only: the report's own battle count and
-   win rate include 2v2 (measured on one player, most of their battles), and
-   the tiles here must agree with the Battles, Decks and Opponents tabs beside
-   them. Until the intelligence arrives, or if it cannot, those tiles are left
-   out rather than filled from the all-mode figures. */
-export function PlayerRecord({ report, intel }: { report: PlayerReport; intel: CoachIntel | null }) {
-  const p = report.profile;
-  const live = isLiveReport(report);
-  const s = intel?.summary;
-  const winRate = s && s.battles ? (s.wins / s.battles) * 100 : null;
-  const lastDay = intel?.timeline.length ? intel.timeline[intel.timeline.length - 1].day : null;
-  const topDeck = intel?.decks[0];
-  const topLast = topDeck ? battleTimeToIso(topDeck.last) : null;
-
-  return (
-    <>
-      <div className={styles.sourceRow}>
-        <span className={styles.sourceBadge} data-basis={report.basis}>
-          {live ? 'Live battlelog' : 'Stored history'}
-        </span>
-        <span className={styles.sourceNote}>
-          {live
-            ? 'The collector has not stored this player yet — the figures below fill in once it has.'
-            : intel
-              ? `Own-deck 1v1 battles, ${intel.window.from ?? '—'} to ${intel.window.to ?? '—'}.`
-              : 'Reading their battles…'}
-        </span>
-        <span className={styles.trackState} data-state={report.tracking.state}>
-          Collection: {report.tracking.state}
-        </span>
-      </div>
-
-      <div className={styles.tiles}>
-        {p?.rankedTrophies != null && (
-          <Tile
-            label="Path of Legends"
-            value={nf.format(p.rankedTrophies)}
-            note={p.rankedRank != null ? `#${nf.format(p.rankedRank)} global` : 'below the leaderboard cut'}
-          />
-        )}
-        {s && (
-          <>
-            <Tile
-              label="1v1 battles"
-              value={nf.format(s.battles)}
-              note={`${nf.format(s.wins)}W · ${nf.format(s.losses)}L${s.draws ? ` · ${nf.format(s.draws)}D` : ''}`}
-            />
-            <Tile label="Win rate" value={winRate == null ? '—' : `${winRate.toFixed(1)}%`} note="wins ÷ battles" />
-            <Tile label="Last battle" value={lastDay ?? '—'} note="in this window" />
-          </>
-        )}
-      </div>
-
-      {intel && intel.hidden > 0 && (
-        <p className={styles.hiddenNote} title={Object.entries(intel.hiddenByMode).map(([m, n]) => `${m}: ${n}`).join('\n')}>
-          {nf.format(intel.hidden)} battles in other modes (2v2, drafts, events) are not counted here — the same
-          ones the battle log leaves out.
-        </p>
-      )}
-
-      {intel && (
-        <section className={styles.block}>
-          <h3 className={styles.blockTitle}>Most-played deck</h3>
-          {!topDeck ? (
-            <p className={styles.muted}>No complete 1v1 deck in this window.</p>
-          ) : (
-            <div className={styles.deckRow}>
-              <DeckStrip deck={topDeck} />
-              <div className={styles.deckMeta}>
-                <span className={styles.deckName}>{topDeck.deckName}</span>
-                <span className={styles.muted}>
-                  {nf.format(topDeck.battles)} battle{topDeck.battles === 1 ? '' : 's'} ·{' '}
-                  {topDeck.battles >= DECK_RATE_FLOOR
-                    ? `${((topDeck.wins / topDeck.battles) * 100).toFixed(1)}% won`
-                    : 'too few to rate'}
-                  {topLast ? ` · last ${ago(topLast)}` : ''}
-                </span>
-                {/* "Most-played" says very little when it leads by one battle
-                    over fifteen others, so the spread is stated beside it. */}
-                {intel.decksTotal > 1 && topDeck.battles < DECK_RATE_FLOOR && (
-                  <span className={styles.muted}>
-                    across {nf.format(intel.decksTotal)} decks in this window — no deck has a settled record yet
-                  </span>
-                )}
-                <DeckActions cards={topDeck.cards} name={topDeck.deckName} />
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-    </>
-  );
-}
+/* `PlayerRecord` LIVED HERE AND IS GONE (2026-09-23). Its source row, six
+   tiles, hidden-mode note and most-played deck are all drawn by
+   `PlayerDashboard` now, from the same `coach_intel` payload. What survives in
+   this file is the identity header, the coach's own fields, and the two small
+   pieces other tabs share. */
 
 /** Eight cards in one line, with the art the battle log would draw. */
 export function DeckStrip({ deck }: { deck: CoachIntel['decks'][number] }) {
