@@ -1750,7 +1750,7 @@ the API, let the bot own the file, and its checkpoints fold cleanly. Confirm
 with:
 
 ```powershell
-try { $f=[IO.File]::Open('H:\ClashBot\dataattles.db','Open','ReadWrite','None'); $f.Close(); 'FREE' } catch { 'HELD' }
+try { $f=[IO.File]::Open('H:\ClashBot\data\battles.db','Open','ReadWrite','None'); $f.Close(); 'FREE' } catch { 'HELD' }
 ```
 
 `HELD` while the bot is running is correct and expected — it is the writer. It
