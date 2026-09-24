@@ -2213,9 +2213,13 @@ export interface DeckFamily {
   /** How many are built from cards they play — the signal the reserved slots
    *  and the board's partition both use. */
   knows: number;
-  /** At least one deck of this win condition is built from cards they play.
-   *  The board is PARTITIONED on this — a measured fact, not a weight. */
+  /** They have actually played this win condition. The board is PARTITIONED
+   *  on this — `worth_learning`'s own test, inverted, so the two cannot
+   *  disagree. NOT card overlap: that is dense enough to be true of every
+   *  family for a broad player, which collapsed the split when it was tried. */
   yours: boolean;
+  /** Games they have played of this win condition. */
+  games: number;
   /** The personal order put a different deck at the top of this family than
    *  the field's order would. 0 across a board is a real answer. */
   moved: boolean;

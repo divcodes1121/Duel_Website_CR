@@ -495,7 +495,7 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         # inside `worth_learning` says so.
         beat = near[0]["expectedWinRate"] if near else None
         learn = worth_learning(scored, hist, hist_total, beat)
-        fams = families(scored)
+        fams = families(scored, hist=hist, total=hist_total)
         # A family row draws a card strip, a name, a rate and whether they
         # could already pilot it -- so it carries exactly that. MEASURED: the
         # untrimmed rows made `families` 61 kB of a 108 kB payload, and the
@@ -836,6 +836,27 @@ def deck_affinity(cards, own: list[dict], pool: set[str] | None = None) -> dict:
     }
 
 
+def in_range(archetype: str, hist: dict[str, int], total: int) -> bool:
+    """Has this player actually played this win condition?
+
+    THE PARTITION RUNS ON THIS, NOT ON CARD OVERLAP, AND A LIVE BOARD IS WHY.
+    Grouping on `knowsCards` collapsed: a player with twenty-five decks and a
+    sixty-seven-card pool clears "five of eight cards I play" in ALL SEVENTEEN
+    families, so every section was "theirs" and the split said nothing. Card
+    overlap is the right signal for choosing WHICH decks of a family to show —
+    it is dense, which is exactly why it cannot also decide what is in range.
+
+    It is `worth_learning`'s own test, inverted, so the two cannot disagree
+    about the same player: a win condition is outside their range when it is
+    under `LEARN_MAX_SHARE` of their battles AND under `LEARN_MAX_BATTLES` of
+    them, and in range otherwise.
+    """
+    n = hist.get(archetype, 0)
+    if n > LEARN_MAX_BATTLES:
+        return True
+    return bool(total) and (n / total) > LEARN_MAX_SHARE
+
+
 def _fit_fraction(aff: dict | None) -> float:
     """0 at the affinity floor, 1 when all eight cards are shared.
 
@@ -922,7 +943,8 @@ def _pick(decks: list[dict], per: int) -> list[dict]:
     return out
 
 
-def families(scored: list[dict], per: int = FAMILY_DECKS) -> list[dict]:
+def families(scored: list[dict], per: int = FAMILY_DECKS,
+             hist: dict[str, int] | None = None, total: int = 0) -> list[dict]:
     """The scored pool grouped by win condition, best family first.
 
     ORDERED BY THEIR BEST DECK, not by how many decks a family has: twelve
@@ -970,10 +992,12 @@ def families(scored: list[dict], per: int = FAMILY_DECKS) -> list[dict]:
         # by, and it is a measured fact rather than a weight: either some deck
         # of this win condition is built from cards they already play, or none
         # is.
-        # ON THE SAME SIGNAL THE RESERVATION USES, or the partition would
-        # promote families whose reserved slots never fire.
         g["knows"] = sum(1 for r in g["decks"] if r.get("affinity", {}).get("knowsCards"))
-        g["yours"] = g["knows"] > 0
+        # WHETHER THEY PLAY THIS WIN CONDITION, which is a different question
+        # from whether its decks use their cards. With no history passed there
+        # is nothing to partition on and every family is "the field".
+        g["yours"] = in_range(g["archetype"], hist or {}, total)
+        g["games"] = (hist or {}).get(g["archetype"], 0)
         g["_p"] = personal_rate(best)
         g["decks"] = _pick(g["decks"], per)
         out.append(g)
@@ -1025,9 +1049,9 @@ def worth_learning(scored: list[dict], hist: dict[str, int], total: int,
     fams = families(scored, per=1)
     for g in fams:
         n = hist.get(g["archetype"], 0)
-        if total and (n / total) > LEARN_MAX_SHARE:
-            continue
-        if n > LEARN_MAX_BATTLES:
+        # The same test the board's partition uses, so "outside their range"
+        # means one thing in this module.
+        if in_range(g["archetype"], hist, total):
             continue
         if beat is not None and g["best"] <= beat:
             continue

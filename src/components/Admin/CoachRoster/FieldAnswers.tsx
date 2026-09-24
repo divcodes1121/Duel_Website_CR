@@ -231,7 +231,10 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
           onClick={() => setOpen(open === g.archetype ? null : g.archetype)}
         >
           {g.name} · {g.best.toFixed(1)}%
-          {g.knows > 0 && <span className={styles.oppTag}> · {g.knows}</span>}
+          {/* GAMES THEY HAVE PLAYED OF IT, which is what the group above
+              partitions on. The card-overlap count is dense enough to read
+              12-of-12 in every family and says nothing on a chip. */}
+          {g.games > 0 && <span className={styles.oppTag}> · {g.games}g</span>}
         </button>
       ))}
     </div>
@@ -273,7 +276,8 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
           <div key={g.archetype}>
             <p className={styles.muted}>
               {[`${g.total} decks`,
-                g.knows > 0 ? `${g.knows} ${self ? 'yours' : 'theirs'}` : null,
+                g.games > 0 ? `${g.games} games played` : null,
+                g.knows > 0 ? `${g.knows} from ${self ? 'your' : 'their'} cards` : null,
                 `top ${g.decks.length}`].filter(Boolean).join(' · ')}
             </p>
             <ul className={styles.deckList}>

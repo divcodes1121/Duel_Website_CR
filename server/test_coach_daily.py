@@ -380,7 +380,7 @@ _gx = cdl.families(_dense)[0]
 check("a deck built from their cards is reserved even with no single deck close",
       any(r["expectedWinRate"] == 50.0 for r in _gx["decks"]),
       str([r["expectedWinRate"] for r in _gx["decks"]]))
-check("and a family counts those, not just the close ones", _gx["knows"] == 1 and _gx["yours"] is True)
+check("and a family counts those, not just the close ones", _gx["knows"] == 1)
 _sparse = [sc("lava", 64.0 - n, known=4) for n in range(10)]
 check("below the cards floor nothing is reserved",
       [r["expectedWinRate"] for r in cdl.families(_sparse)[0]["decks"]] == [64.0, 63.0, 62.0, 61.0])
@@ -470,19 +470,37 @@ check("a family smaller than the cut is shown whole",
 
 print("the board is grouped by what they can already play")
 
+# THE PARTITION RUNS ON WHAT THEY HAVE PLAYED, not on card overlap. Grouping
+# on card overlap collapsed live: a broad player cleared it in all seventeen
+# families and every section came back "theirs".
 _mix = [sc("hog", 64.0), sc("golem", 55.0, shared=7), sc("mortar", 60.0)]
-_go = cdl.families(_mix)
-check("a win condition they can play leads one 9 points better that they cannot",
+_hist3, _tot3 = {"golem": 200}, 200
+_go = cdl.families(_mix, hist=_hist3, total=_tot3)
+check("a win condition they play leads one 9 points better that they do not",
       _go[0]["archetype"] == "golem", str([g["archetype"] for g in _go]))
 check("and the rest keep the field's own order behind it",
       [g["archetype"] for g in _go[1:]] == ["hog", "mortar"])
 check("each family says whether it is in their range",
       [g["yours"] for g in _go] == [True, False, False])
+check("and carries how many games they have on it", _go[0]["games"] == 200)
 check("grouping claims nothing about quality — `best` is untouched",
       _go[0]["best"] == 55.0 and _go[1]["best"] == 64.0)
-check("with nothing familiar it is exactly the field's order",
+check("with no history at all it is exactly the field's order",
       [g["archetype"] for g in cdl.families([sc("hog", 64.0), sc("golem", 55.0)])]
       == ["hog", "golem"])
+check("and nothing is claimed to be theirs",
+      not any(g["yours"] for g in cdl.families([sc("hog", 64.0), sc("golem", 55.0)])))
+
+# `in_range` is ONE definition, shared with `worth_learning`.
+check("a win condition they have played a lot of is in range",
+      cdl.in_range("hog", {"hog": 200}, 1000) is True)
+check("a handful of games out of thousands is not",
+      cdl.in_range("hog", {"hog": 10}, 4000) is False)
+check("but a handful out of a handful is — share OR count, never one alone",
+      cdl.in_range("hog", {"hog": 10}, 60) is True)
+check("never played is never in range", cdl.in_range("hog", {}, 1000) is False)
+check("and it is exactly what `worth_learning` refuses to offer",
+      cdl.worth_learning(_mix, _hist3, _tot3, beat=None)["archetype"] != "golem")
 
 
 print("\nclosest: what they could pilot today")
