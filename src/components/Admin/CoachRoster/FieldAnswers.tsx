@@ -92,7 +92,7 @@ function sharedLine(p: FieldPick): string | null {
   return p.closestOfFamily ? `Closest yours · ${bits.join(' · ')}` : bits.join(' · ');
 }
 
-function DeckRow({ p, note }: { p: FieldPick; note?: string | null }) {
+function DeckRow({ p, note, name = true }: { p: FieldPick; note?: string | null; name?: boolean }) {
   return (
     <li className={styles.deckItem}>
       <div className={styles.deckItemHead} style={{ cursor: 'default' }}>
@@ -102,7 +102,9 @@ function DeckRow({ p, note }: { p: FieldPick; note?: string | null }) {
           ))}
         </div>
         <span className={styles.deckFigures}>
-          <span className={styles.deckName}>{p.name}</span>
+          {/* Inside a family every deck IS that win condition, so the name
+              is the section heading repeated four times. */}
+          {name && <span className={styles.deckName}>{p.name}</span>}
           {/* The unit is stated once, on the card. Sixty-eight rows do not
               each need to repeat "expected against the field". */}
           <span>
@@ -282,7 +284,7 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
             </p>
             <ul className={styles.deckList}>
               {g.decks.map((p) => (
-                <DeckRow key={p.key} p={p} note={sharedLine(p)} />
+                <DeckRow key={p.key} p={p} note={sharedLine(p)} name={false} />
               ))}
             </ul>
           </div>
