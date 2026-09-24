@@ -2190,6 +2190,11 @@ export interface DeckAffinity {
   /** How many battles they have on the deck it matched. A deck played three
    *  times is not a playstyle, which is why the repertoire has its own floor. */
   deckBattles: number;
+  /** How many of the eight are cards they play AT ALL, across every deck.
+   *  A weaker claim than `shared` and a much denser one — it is what has
+   *  enough reach to say anything about most win conditions. */
+  known: number;
+  knowsCards: boolean;
 }
 
 /** One win condition, with the decks of it that answer the current field.
@@ -2203,8 +2208,11 @@ export interface DeckFamily {
   best: number;
   /** Decks of this win condition in the whole pool, before the trim. */
   total: number;
-  /** How many of them they could already pilot. */
+  /** How many of them are close to one deck they run. */
   familiar: number;
+  /** How many are built from cards they play — the signal the reserved slots
+   *  and the board's partition both use. */
+  knows: number;
   /** At least one deck of this win condition is built from cards they play.
    *  The board is PARTITIONED on this — a measured fact, not a weight. */
   yours: boolean;
@@ -2275,6 +2283,9 @@ export interface FieldPlan {
     archetypes: number;
     deckFloor: number;
     sharedFloor: number;
+    knownFloor: number;
+    /** Distinct cards across the decks they play. */
+    cards: number;
   };
   brief?: boolean;
   /** What the meta's own direction did to the projection. `applied` is false
@@ -2289,7 +2300,15 @@ export interface FieldPlan {
   /** Present only when the call asked to `compare`. */
   progress?: FieldProgress;
   pool: number;
-  meta: { decks: number; window: unknown; computedAt: number | null };
+  /** WHEN AND OVER WHAT this answer was computed. The board is a rolling
+   *  window of real battles recomputed on a timer, so the decks move as the
+   *  meta and this player's own usage move — `window` is how far back it
+   *  looks and `computedAt` is a unix second, not a promise. */
+  meta: {
+    decks: number;
+    window: { from: string | null; to: string | null; days: number } | null;
+    computedAt: number | null;
+  };
 }
 
 /** What this player should practise against the field. No opponent.

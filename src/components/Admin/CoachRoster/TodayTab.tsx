@@ -123,43 +123,34 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
     <Dashboard className={styles.overview}>
       <DashHero
         heading="What to practise"
-        badge={
-          near > 0
-            ? `${near} they could pilot today`
-            : fams > 0
-              ? 'Nothing of theirs answers this field'
-              : 'The field, unweighted'
-        }
+        badge={near > 0 ? `${near} playable now` : fams > 0 ? 'None playable now' : 'Unweighted'}
         badgeTone={near > 0 ? 'good' : 'warn'}
       >
-        {/* IT NO LONGER ADVERTISES THE WEIGHTING AS THE PERSONAL PART. That
-            claim was measured and it was 0 of 7 picks on five of six real
-            accounts — the weighting moves the ORDER, and saying more than
-            that was the screen promising a tailoring it had not done. What is
-            actually personal is the two blocks below: decks built from cards
-            they already play, and the one archetype worth taking up. */}
+        {/* FIGURES, NOT A PARAGRAPH. It advertised the weighting as the
+            personal part, which measured 0 of 7 picks on five of six real
+            accounts; what is personal is the two blocks below. */}
         {fams > 0
-          ? `${nf.format(plan.pool)} real decks ranked against what the field is playing right now, grouped by win condition. ${
-              near > 0
-                ? `${near} of them are built from cards ${playerLabel(player)} already plays.`
-                : `None of them is built from cards ${playerLabel(player)} already plays, so the place to start is a new win condition.`
-            }`
+          ? [
+              `${nf.format(plan.pool)} decks`,
+              `${fams} win conditions`,
+              near > 0 ? `${near} from ${playerLabel(player)}'s cards` : 'none from their cards',
+            ].join(' · ')
           : plan.basis === 'unweighted'
-            ? `Ranked against what the field plays. None of their ${nf.format(plan.battles)} battles gives an archetype enough evidence to weight yet.`
-            : 'Ranked against what the field plays. Nothing is stored for this player yet, so nothing is weighted to them.'}
+            ? `${nf.format(plan.battles)} games · no archetype past the evidence floor`
+            : 'Nothing stored for this player yet'}
       </DashHero>
 
       <MetricGrid>
         <KeyMetricCard
           label="Decks ranked"
           value={nf.format(plan.pool)}
-          note="real lists, not generated"
+          note="real lists"
           icon={<CardsIcon />}
         />
         <KeyMetricCard
           label="Field projection"
           value={String(plan.threats.length)}
-          note={`from the top ${nf.format(plan.meta.decks)} meta decks`}
+          note={`top ${nf.format(plan.meta.decks)} meta decks`}
           icon={<SwordsIcon />}
         />
         {/* THIS CARD USED TO REPORT `tailoredPicks`, and it was the wrong
@@ -172,8 +163,8 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
           value={String(near)}
           note={
             plan.repertoire
-              ? `${plan.repertoire.sharedFloor}+ cards shared with one of their ${plan.repertoire.decks} decks`
-              : 'decks built from cards they already play'
+              ? `${plan.repertoire.sharedFloor}+/8 of one of their ${plan.repertoire.decks} decks`
+              : 'built from their cards'
           }
           tone={near > 0 ? 'good' : 'warn'}
           icon={<ShieldIcon />}
@@ -181,7 +172,7 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
         <KeyMetricCard
           label="Best expected"
           value={plan.families?.length ? `${plan.families[0].best.toFixed(1)}%` : '—'}
-          note={plan.families?.length ? `${plan.families[0].name}, the field's best answer` : 'against this projection'}
+          note={plan.families?.length ? plan.families[0].name : 'vs this projection'}
           icon={<TrendIcon />}
         />
       </MetricGrid>
@@ -192,8 +183,8 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
           {plan.weighted.slice(0, 3).map((w) => (
             <InsightCard key={w.archetype} title={`More ${w.name}`} icon={<ShieldIcon />} tone="warn" badge="Weighted up">
               <InsightRow
-                title={`They win ${w.winRate.toFixed(1)}% against ${w.name}, ${w.deficit.toFixed(1)} points below their own rate.`}
-                description={`${w.battles} battles · the field's ${w.name} decks carry more weight in the ranking below`}
+                title={`${w.winRate.toFixed(1)}% · −${w.deficit.toFixed(1)} vs their rate`}
+                description={`${w.battles} games · weighted up`}
                 tone="warn"
               />
             </InsightCard>
@@ -229,8 +220,8 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
 
       <ChartCard
         title="What the field plays"
-        note="Share of the projection this plan was ranked against"
-        badge={`${plan.threats.length} decks`}
+        note="Share of the projection"
+        badge={String(plan.threats.length)}
       >
         <BarRows
           bars={plan.threats.map((t) => ({
@@ -243,7 +234,7 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
         />
         {boosted.length > 0 && (
           <p className={styles.muted}>
-            ↑ carries extra weight because {playerLabel(player)} loses to it more than they usually do.
+            ↑ weighted up — {playerLabel(player)} loses to it more than usual.
           </p>
         )}
       </ChartCard>

@@ -40,18 +40,56 @@ import styles from './CoachRoster.module.css';
  *                   `diversify` was being used to fake.
  */
 
-function sharedLine(p: FieldPick, self = false): string | null {
+/** How old this answer is, and what it was computed over.
+ *
+ * THE BOARD IS NOT A FIXED LIST AND THE SCREEN HAS TO SAY SO. The pool is
+ * rebuilt from a rolling window of real battles on an hourly timer, and the
+ * player's own side is a rolling 30 days, so these decks move as the meta and
+ * their usage move. Without a date on it a coach who opens the tab twice in a
+ * week cannot tell a board that has not changed from a board that is stuck —
+ * and the honest answer to "is this stale?" is a timestamp, not a reassurance.
+ *
+ * `trend` is the other half: once `meta_history` holds enough days, the
+ * projection is weighted toward what the field is TAKING UP rather than what
+ * it played. Under the floor it says so plainly instead of implying it is on.
+ */
+export function FreshnessLine({ plan }: { plan: FieldPlan }) {
+  const w = plan.meta?.window;
+  const at = plan.meta?.computedAt;
+  const t = plan.trend;
+
+  const age = (() => {
+    if (!at) return null;
+    const m = Math.max(0, Math.round((Date.now() / 1000 - at) / 60));
+    if (m < 60) return `${m}m ago`;
+    const h = Math.round(m / 60);
+    return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+  })();
+
+  return (
+    <p className={styles.muted}>
+      {[
+        w?.days ? `Meta ${w.days}d to ${w.to}` : 'Meta board',
+        age,
+        // NOT A CLAIM THAT IT IS ON. `applied` is false until enough days of
+        // meta history are stored.
+        t?.applied ? `trend ${t.days}d · ${t.moved} moved` : t ? 'trend off' : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')}
+    </p>
+  );
+}
+
+function sharedLine(p: FieldPick): string | null {
   const a = p.affinity;
-  if (!a || !a.familiar) return null;
-  const n = a.deckBattles;
-  const who = self ? 'you' : 'they';
-  const line = `${a.shared} of ${a.of} cards are in a deck ${
-    n === 1 ? `${who} played once` : `${who} have played ${n} times`
-  }`;
-  // A RESERVED ROW SAYS SO. It is in the family because it is close to what
-  // they play, not because it out-ranked the others, and letting the reader
-  // assume otherwise would be the screen overstating its own ranking.
-  return p.closestOfFamily ? `Closest of this win condition · ${line}` : line;
+  if (!a) return null;
+  const bits: string[] = [];
+  if (a.familiar) bits.push(`${a.shared}/${a.of} of one deck`);
+  else if (a.knowsCards) bits.push(`${a.known}/${a.of} your cards`);
+  else return null;
+  if (a.familiar && a.deckBattles) bits.push(`${a.deckBattles} games`);
+  return p.closestOfFamily ? `Closest yours · ${bits.join(' · ')}` : bits.join(' · ');
 }
 
 function DeckRow({ p, note }: { p: FieldPick; note?: string | null }) {
@@ -65,8 +103,10 @@ function DeckRow({ p, note }: { p: FieldPick; note?: string | null }) {
         </div>
         <span className={styles.deckFigures}>
           <span className={styles.deckName}>{p.name}</span>
+          {/* The unit is stated once, on the card. Sixty-eight rows do not
+              each need to repeat "expected against the field". */}
           <span>
-            <strong>{p.expectedWinRate.toFixed(1)}%</strong> expected against the field
+            <strong>{p.expectedWinRate.toFixed(1)}%</strong>
           </span>
           {note && <span className={styles.oppTag}>{note}</span>}
           <DeckActions cards={p.cards ?? []} name={p.name} />
@@ -86,32 +126,30 @@ export function ClosestCard({
 }) {
   const near = plan.closest ?? [];
   const rep = plan.repertoire;
-  const you = self ? 'you' : 'they';
-  const your = self ? 'your' : 'their';
 
   return (
     <ChartCard
       title={self ? 'Closest to how you play' : 'Closest to how they play'}
       note={
         rep
-          ? `Built from cards already in ${your} decks — ${rep.sharedFloor} of 8 or more, against the ${rep.decks} deck${rep.decks === 1 ? '' : 's'} ${you} played ${rep.deckFloor}+ times`
+          ? `${rep.sharedFloor}+/8 shared · ${rep.decks} deck${rep.decks === 1 ? '' : 's'} at ${rep.deckFloor}+ games · expected % vs field`
           : undefined
       }
-      badge={near.length > 0 ? `${near.length} ranked` : 'Nothing yet'}
+      badge={near.length > 0 ? String(near.length) : 'None'}
     >
       {near.length === 0 ? (
         <p className={styles.muted}>
-          {/* THREE DIFFERENT REASONS FOR AN EMPTY LIST, and they are not
-              interchangeable. One real account plays four decks heavily and
-              none of the 204 that answer this field resembles them. */}
+          {/* STILL TWO DIFFERENT REASONS — no repertoire, or a repertoire
+              nothing matches — because they mean opposite things. Stated as
+              facts rather than explained. */}
           {!rep || rep.decks === 0
-            ? `No deck ${self ? 'you have' : 'they have'} played ${rep?.deckFloor ?? 5} or more times is stored for this window, so there is nothing to match against.`
-            : `None of the decks that answer this field shares ${rep.sharedFloor} of its 8 cards with the ${rep.decks} deck${rep.decks === 1 ? '' : 's'} ${you} play. ${self ? 'Your' : 'Their'} decks sit outside what the field is currently answered with — which is what "Worth learning" is for.`}
+            ? `No deck at ${rep?.deckFloor ?? 5}+ games in this window.`
+            : `${rep.decks} deck${rep.decks === 1 ? '' : 's'}, none within ${rep.sharedFloor}/8 of the field's answers. See Worth learning.`}
         </p>
       ) : (
         <ul className={styles.deckList}>
           {near.map((p) => (
-            <DeckRow key={p.key} p={p} note={sharedLine(p, self)} />
+            <DeckRow key={p.key} p={p} note={sharedLine(p)} />
           ))}
         </ul>
       )}
@@ -127,20 +165,18 @@ export function LearnCard({
   learn: LearnSuggestion | null | undefined;
   self?: boolean;
 }) {
-  const you = self ? 'You have' : 'They have';
   const your = self ? 'your' : 'their';
   return (
     <ChartCard
       title="Worth learning"
-      note="A win condition outside their range that beats what is inside it"
-      badge={learn ? learn.name : 'Nothing to add'}
+      note="New win condition that beats their best"
+      badge={learn ? learn.name : 'None'}
     >
       {!learn ? (
         <p className={styles.muted}>
-          {/* NULL IS A REAL ANSWER. A new archetype costs weeks, so it is only
-              offered when it actually beats what they can already pilot. */}
-          Nothing {self ? 'you have' : 'they have'} never played answers this field better than what {your} own
-          decks already do. There is no archetype worth taking up right now.
+          {/* NULL IS A REAL ANSWER — a new archetype costs weeks and is only
+              offered when it actually wins. */}
+          Nothing unplayed beats {your} own decks.
         </p>
       ) : (
         <>
@@ -149,15 +185,15 @@ export function LearnCard({
             tone="good"
             title={
               learn.beats != null
-                ? `${learn.name} at ${learn.expectedWinRate.toFixed(1)}% — ${learn.beats.toFixed(1)} points better than anything ${self ? 'you' : 'they'} can already pilot`
-                : `${learn.name} at ${learn.expectedWinRate.toFixed(1)}% against the field`
+                ? `${learn.name} · ${learn.expectedWinRate.toFixed(1)}% · +${learn.beats.toFixed(1)} vs ${your} best`
+                : `${learn.name} · ${learn.expectedWinRate.toFixed(1)}%`
             }
             description={
               learn.yourBattles === 0
-                ? `${you} never played it.`
-                : `${you} played it ${learn.yourBattles} time${learn.yourBattles === 1 ? '' : 's'}${
-                    learn.yourShare != null ? `, ${learn.yourShare}% of ${your} battles` : ''
-                  }.`
+                ? 'Never played'
+                : `${learn.yourBattles} game${learn.yourBattles === 1 ? '' : 's'}${
+                    learn.yourShare != null ? ` · ${learn.yourShare}%` : ''
+                  }`
             }
           />
           <ul className={styles.deckList}>
@@ -195,9 +231,7 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
           onClick={() => setOpen(open === g.archetype ? null : g.archetype)}
         >
           {g.name} · {g.best.toFixed(1)}%
-          {g.familiar > 0 && (
-            <span className={styles.oppTag}> · {g.familiar} {self ? 'yours' : 'theirs'}</span>
-          )}
+          {g.knows > 0 && <span className={styles.oppTag}> · {g.knows}</span>}
         </button>
       ))}
     </div>
@@ -208,10 +242,10 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
       title="Every way to answer this field"
       note={
         mine.length > 0
-          ? `${mine.length} win condition${mine.length === 1 ? '' : 's'} ${self ? 'you' : 'they'} can already play, then the rest of the field. Inside each, the field's own order decides.`
-          : "Grouped by win condition, best first. Nothing here is built from cards they already play, so this is the field's order throughout."
+          ? `${mine.length} ${self ? 'yours' : 'theirs'} first, then the field · best % first`
+          : 'Best % first · nothing built from their cards'
       }
-      badge={`${fams.length} win conditions`}
+      badge={String(fams.length)}
     >
       {/* TWO GROUPS, NOT ONE RANKING — and the split is a measured fact
           (is any deck of this win condition built from cards they play?)
@@ -222,34 +256,29 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
           inside each run the field's rate still decides. */}
       {mine.length > 0 && (
         <>
-          <p className={styles.muted}>
-            {self ? 'You can already play these' : 'They can already play these'}
-          </p>
+          <p className={styles.muted}>{self ? 'Yours' : 'Theirs'}</p>
           {chips(mine)}
         </>
       )}
       {rest.length > 0 && (
         <>
-          <p className={styles.muted}>
-            {mine.length > 0 ? 'The rest of the field' : 'The field'}
-          </p>
+          <p className={styles.muted}>{mine.length > 0 ? 'Rest of field' : 'The field'}</p>
           {chips(rest)}
         </>
       )}
+      <FreshnessLine plan={plan} />
       {fams
         .filter((g) => g.archetype === open)
         .map((g) => (
           <div key={g.archetype}>
             <p className={styles.muted}>
-              {g.total} {g.name} deck{g.total === 1 ? '' : 's'} in the pool
-              {g.familiar > 0
-                ? `, ${g.familiar} of which ${self ? 'you' : 'they'} could already pilot`
-                : `, none of which matches a deck ${self ? 'you' : 'they'} play`}
-              . Showing the best {g.decks.length}.
+              {[`${g.total} decks`,
+                g.knows > 0 ? `${g.knows} ${self ? 'yours' : 'theirs'}` : null,
+                `top ${g.decks.length}`].filter(Boolean).join(' · ')}
             </p>
             <ul className={styles.deckList}>
               {g.decks.map((p) => (
-                <DeckRow key={p.key} p={p} note={sharedLine(p, self)} />
+                <DeckRow key={p.key} p={p} note={sharedLine(p)} />
               ))}
             </ul>
           </div>

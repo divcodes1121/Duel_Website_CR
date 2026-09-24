@@ -69,20 +69,31 @@ export function ProgressCard({
 }) {
   if (!progress) return null;
 
-  const spanNote =
+  // TWO ISO RANGES IS NOT A LABEL. "2026-08-26 to 2026-09-24, against
+  // 2026-07-27 to 2026-08-25" makes the reader do the subtraction to learn
+  // the one thing it is saying: this window against the one before it, and
+  // how long they are. The dates stay in the `title` for anyone reconciling.
+  const days = (() => {
+    const a = progress.window.from;
+    const b = progress.window.to;
+    if (!a || !b) return null;
+    return Math.round((Date.parse(b) - Date.parse(a)) / 86400000) + 1;
+  })();
+  const spanNote = days ? `Last ${days}d vs previous ${days}d` : 'vs the window before';
+  const spanTitle =
     progress.previous.from && progress.window.from
-      ? `${progress.window.from} to ${progress.window.to}, against ${progress.previous.from} to ${progress.previous.to}`
-      : 'Measured against the window before this one';
+      ? `${progress.window.from} to ${progress.window.to} against ${progress.previous.from} to ${progress.previous.to}`
+      : undefined;
 
   if (!progress.comparable) {
     const why =
       progress.reason === 'thin_before'
-        ? `There is not enough stored play before this window to compare against — ${progress.overall?.before.battles ?? 0} battles, where ${progress.floor} are needed. It fills in as history accrues.`
+        ? `${progress.overall?.before.battles ?? 0} games before · ${progress.floor} needed`
         : progress.reason === 'thin_now'
-          ? `${self ? 'You have' : 'They have'} ${progress.overall?.now.battles ?? 0} battles in this window, and ${progress.floor} are needed before a comparison says anything at all.`
-          : 'There is no earlier window to compare this one against.';
+          ? `${progress.overall?.now.battles ?? 0} games this window · ${progress.floor} needed`
+          : 'No earlier window';
     return (
-      <ChartCard title="Is it closing?" note={spanNote} badge="Not yet">
+      <ChartCard title="Is it closing?" note={<span title={spanTitle}>{spanNote}</span>} badge="Not yet">
         <p className={styles.muted}>{why}</p>
       </ChartCard>
     );
@@ -96,29 +107,22 @@ export function ProgressCard({
   return (
     <ChartCard
       title="Is it closing?"
-      note={spanNote}
-      badge={
-        moved.length > 0
-          ? `${moved.length} moved`
-          : o?.direction === 'flat'
-            ? 'Nothing moved measurably'
-            : 'Overall only'
-      }
+      note={<span title={spanTitle}>{spanNote}</span>}
+      badge={moved.length > 0 ? `${moved.length} moved` : 'None moved'}
     >
       {o && (
         <InsightRow
           icon={<TrendIcon />}
           tone={toneOf(o.direction)}
-          title={
-            o.direction === 'flat'
-              ? `Overall: ${pct(o.before.winRate)} → ${pct(o.now.winRate)}, too close to call`
-              : `Overall: ${pct(o.before.winRate)} → ${pct(o.now.winRate)}, ${o.direction === 'up' ? 'up' : 'down'} ${Math.abs(o.change ?? 0).toFixed(1)} points`
-          }
-          description={
-            o.direction === 'flat'
-              ? `${o.before.battles} battles before, ${o.now.battles} now — a difference under ${o.band?.toFixed(1) ?? '—'} points is noise at this sample size.`
-              : `${o.before.battles} battles before, ${o.now.battles} now.`
-          }
+          title={`Overall ${pct(o.before.winRate)} → ${pct(o.now.winRate)}${
+            o.direction === 'flat' ? '' : ` · ${o.direction === 'up' ? '+' : '−'}${Math.abs(o.change ?? 0).toFixed(1)}`
+          }`}
+          description={[
+            `${o.before.battles} → ${o.now.battles} games`,
+            // THE BAND STILL PRINTS. It is the figure that stops a coach
+            // acting on noise; only the sentence around it is gone.
+            o.direction === 'flat' ? `within ±${o.band?.toFixed(1) ?? '—'} noise` : null,
+          ].filter(Boolean).join(' · ')}
         />
       )}
 
@@ -127,10 +131,13 @@ export function ProgressCard({
           key={m.archetype}
           icon={<ShieldIcon />}
           tone={m.resolved ? 'good' : toneOf(m.direction)}
-          title={`${m.name}: ${pct(m.before.winRate)} → ${pct(m.now.winRate)}, ${m.direction === 'up' ? 'up' : 'down'} ${Math.abs(m.change ?? 0).toFixed(1)} points`}
-          description={`${m.before.battles} battles before, ${m.now.battles} now.${
-            m.resolved ? ` No longer below ${self ? 'your' : 'their'} overall rate.` : ''
-          }`}
+          title={`${m.name} ${pct(m.before.winRate)} → ${pct(m.now.winRate)} · ${
+            m.direction === 'up' ? '+' : '−'
+          }${Math.abs(m.change ?? 0).toFixed(1)}`}
+          description={[
+            `${m.before.battles} → ${m.now.battles} games`,
+            m.resolved ? 'no longer a weakness' : null,
+          ].filter(Boolean).join(' · ')}
         />
       ))}
 
@@ -145,9 +152,7 @@ export function ProgressCard({
             .map((m) => `${m.name}: ${pct(m.before.winRate)} → ${pct(m.now.winRate)} (±${m.band?.toFixed(1)} pts, ${m.before.battles}/${m.now.battles} battles)`)
             .join('\n')}
         >
-          {flat.length === 1 ? 'One other matchup' : `${flat.length} other matchups`} moved less than the noise at
-          these sample sizes: {list(flat.map((m) => m.name))}. An archetype is worth twenty to sixty battles over a
-          window this long, and two rates that far apart cannot be told apart.
+          {flat.length} within noise: {list(flat.map((m) => m.name))}
         </p>
       )}
 
@@ -156,17 +161,12 @@ export function ProgressCard({
           className={styles.muted}
           title={short.map((m) => `${m.name}: ${m.before.battles} before, ${m.now.battles} now`).join('\n')}
         >
-          {short.length === 1 ? 'One matchup' : `${short.length} matchups`} had fewer than {progress.floor} battles in
-          one of the two windows, so nothing is claimed about {short.length === 1 ? 'it' : 'them'}:{' '}
-          {list(short.map((m) => m.name))}.
+          {short.length} under {progress.floor} games: {list(short.map((m) => m.name))}
         </p>
       )}
 
       {progress.matchups.length === 0 && (
-        <p className={styles.muted}>
-          Nothing {self ? 'your' : 'their'} record is far enough below {self ? 'your' : 'their'} own rate, in either
-          window, to be worth tracking.
-        </p>
+        <p className={styles.muted}>No matchup below {self ? 'your' : 'their'} own rate.</p>
       )}
     </ChartCard>
   );

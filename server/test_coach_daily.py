@@ -327,14 +327,33 @@ check("it matches the CLOSEST deck, not the most played",
       cdl.deck_affinity([f"c1{i}" for i in range(8)], _two)["deckKey"] == "a")
 
 
+check("it also counts cards they play ANYWHERE, not just in the closest deck",
+      cdl.deck_affinity([f"c1{i}" for i in range(4)] + [f"c2{i}" for i in range(4)], _own)["known"] == 8)
+check("which is a different figure from the single-deck overlap",
+      cdl.deck_affinity([f"c1{i}" for i in range(4)] + [f"c2{i}" for i in range(4)], _own)["shared"] == 4)
+check("so a deck spread across two of their decks is NOT close to either",
+      cdl.deck_affinity([f"c1{i}" for i in range(4)] + [f"c2{i}" for i in range(4)], _own)["familiar"] is False)
+check("but is still built from cards they play",
+      cdl.deck_affinity([f"c1{i}" for i in range(4)] + [f"c2{i}" for i in range(4)], _own)["knowsCards"] is True)
+check("the card pool is every card in a deck they play", len(cdl.card_pool(_own)) == 16)
+check("a passed pool and a derived one agree",
+      cdl.deck_affinity([f"c1{i}" for i in range(8)], _own, cdl.card_pool(_own))["known"]
+      == cdl.deck_affinity([f"c1{i}" for i in range(8)], _own)["known"])
+
+
 print("\nfamilies: the field's answer, grouped by win condition")
 
 
-def sc(arch, rate, cards=None, shared=0):
+def sc(arch, rate, cards=None, shared=0, known=None):
+    # `known` defaults to `shared`: a deck overlapping one of their decks by N
+    # cards necessarily has at least N cards they play. Passing it separately
+    # is how the sparse/dense split is exercised.
+    k = shared if known is None else known
     return {"key": f"{arch}-{rate}", "name": cdl.dcx._label(arch), "archetype": arch,
             "cards": cards or [f"{arch}{i}" for i in range(8)],
             "expectedWinRate": rate, "spreadCovered": 50.0,
-            "affinity": {"shared": shared, "familiar": shared >= cdl.AFFINITY_MIN}}
+            "affinity": {"shared": shared, "familiar": shared >= cdl.AFFINITY_MIN,
+                         "known": k, "knowsCards": k >= cdl.KNOWN_MIN}}
 
 
 _scored = [sc("hog", 55.0), sc("hog", 61.0), sc("hog", 58.0, shared=6),
@@ -353,6 +372,18 @@ check("the total counts the whole family, not the trimmed list",
       cdl.families(_scored, per=1)[0]["total"] == 3)
 check("but only `per` are carried", len(cdl.families(_scored, per=1)[0]["decks"]) == 1)
 check("no scored decks is no families", cdl.families([]) == [])
+
+# THE RESERVATION RUNS ON THE DENSER SIGNAL.
+_dense = ([sc("xbow", 64.0 - n) for n in range(10)]
+          + [sc("xbow", 50.0, cards=[f"k{i}" for i in range(8)], shared=2, known=8)])
+_gx = cdl.families(_dense)[0]
+check("a deck built from their cards is reserved even with no single deck close",
+      any(r["expectedWinRate"] == 50.0 for r in _gx["decks"]),
+      str([r["expectedWinRate"] for r in _gx["decks"]]))
+check("and a family counts those, not just the close ones", _gx["knows"] == 1 and _gx["yours"] is True)
+_sparse = [sc("lava", 64.0 - n, known=4) for n in range(10)]
+check("below the cards floor nothing is reserved",
+      [r["expectedWinRate"] for r in cdl.families(_sparse)[0]["decks"]] == [64.0, 63.0, 62.0, 61.0])
 # The family summary must not carry a figure that cannot vary.
 check("a family carries no spreadCovered — it measured 100.0 on all 17, every account",
       all("spreadCovered" not in g for g in _f))

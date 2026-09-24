@@ -486,8 +486,9 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
 
     def _build_lists():
         nonlocal fams, near, learn
+        pool_cards = card_pool(own)
         for r in scored:
-            r["affinity"] = deck_affinity(r["cards"], own)
+            r["affinity"] = deck_affinity(r["cards"], own, pool_cards)
         near = closest(scored)
         # The bar a new archetype has to clear is the best thing they can
         # already pilot. With nothing familiar there is no bar, and the guard
@@ -613,6 +614,8 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
                 # "past the 5 floor" cannot say which.
                 "deckFloor": REPERTOIRE_MIN_BATTLES,
                 "sharedFloor": AFFINITY_MIN,
+                "knownFloor": KNOWN_MIN,
+                "cards": len(card_pool(own)),
             },
         }),
         **({"progress": progress(tag, since, until, intel)} if compare else {}),
@@ -701,6 +704,25 @@ FAMILIAR_WEIGHT = ts.FIT_WEIGHT
 #: has variants; four is enough to see that and short enough to scan.
 FAMILY_DECKS = 4
 
+#: Cards of a candidate that must be ones they ALREADY PLAY before it can be
+#: reserved a slot in its family. A different, denser signal from
+#: `AFFINITY_MIN`, and a WEAKER claim: that floor says "close to one deck you
+#: pilot", this one says "built out of cards you own and use".
+#:
+#: IT EXISTS BECAUSE DECK-LEVEL AFFINITY IS TOO SPARSE TO FILL A BOARD.
+#: Measured across six live accounts, five shared cards with a single one of
+#: their decks qualified 0 to 55 of 204 candidates, so most of the seventeen
+#: families had nothing familiar in them and fell back to the field's four —
+#: which is why the board still looked the same for everybody. Cards-anywhere
+#: qualifies 1 to 161 of 204 on the same accounts and separates them sharply,
+#: because it scales with how varied their play actually is.
+#:
+#: THE FLOOR IS STILL REAL. A player with fifteen distinct cards gets ONE
+#: qualifying candidate, and that is the honest answer for somebody whose
+#: decks sit outside what the field is answered with -- not a reason to lower
+#: it until something qualifies.
+KNOWN_MIN = 5
+
 #: Of those four, how many are reserved for the decks CLOSEST TO WHAT THEY
 #: PLAY rather than to the field's best.
 #:
@@ -769,7 +791,19 @@ def archetype_history(intel: dict | None) -> tuple[dict[str, int], int]:
     return hist, sum(hist.values())
 
 
-def deck_affinity(cards, own: list[dict]) -> dict:
+def card_pool(own: list[dict]) -> set[str]:
+    """Every card that appears in a deck they actually play.
+
+    Built once per request and passed in: `deck_affinity` runs 204 times and
+    rebuilding this inside it would rebuild the same set 204 times.
+    """
+    pool: set[str] = set()
+    for d in own:
+        pool.update(d["cards"])
+    return pool
+
+
+def deck_affinity(cards, own: list[dict], pool: set[str] | None = None) -> dict:
     """How close one candidate is to the decks this player actually runs.
 
     THE CLOSEST SINGLE DECK, not an average over their repertoire. A player
@@ -783,10 +817,19 @@ def deck_affinity(cards, own: list[dict]) -> dict:
         n = len(cs & set(d["cards"]))
         if n > best:
             best, match = n, d
+    # TWO SIGNALS, TWO CLAIMS, KEPT APART. `shared` is the overlap with the
+    # single closest deck they run -- "you could pilot this today". `known` is
+    # how many of the eight are cards they play at all, across every deck --
+    # "this is built out of your cards". The first is the stronger claim and
+    # the sparser one; the second is what has enough density to say anything
+    # about most win conditions.
+    known = len(cs & (card_pool(own) if pool is None else pool))
     return {
         "shared": best,
         "of": len(cs),
         "familiar": best >= AFFINITY_MIN,
+        "known": known,
+        "knowsCards": known >= KNOWN_MIN,
         "deckKey": (match or {}).get("key"),
         "deckCards": (match or {}).get("cards"),
         "deckBattles": int((match or {}).get("battles") or 0) if match else 0,
@@ -842,7 +885,11 @@ def _pick(decks: list[dict], per: int) -> list[dict]:
     that do not exist would drop the field's third and fourth best answers to
     show nothing in their place.
     """
-    familiar = [r for r in decks if r.get("affinity", {}).get("familiar")]
+    # RESERVED ON `knowsCards`, NOT `familiar`. Deck-level affinity is the
+    # stronger claim and is made in the "Closest" list; here it is too sparse
+    # to reach most families, which is what left the board looking the same
+    # for everybody. See `KNOWN_MIN`.
+    familiar = [r for r in decks if r.get("affinity", {}).get("knowsCards")]
     if not familiar or per <= FAMILY_FAMILIAR_SLOTS:
         return decks[:per]
 
@@ -852,7 +899,9 @@ def _pick(decks: list[dict], per: int) -> list[dict]:
     # Closest first among those not already shown; ties by the better answer.
     extra = sorted(
         (r for r in familiar if r["key"] not in seen),
-        key=lambda r: (-(r.get("affinity", {}).get("shared") or 0), -r["expectedWinRate"]),
+        key=lambda r: (-(r.get("affinity", {}).get("known") or 0),
+                       -(r.get("affinity", {}).get("shared") or 0),
+                       -r["expectedWinRate"]),
     )[:reserved]
     for r in extra:
         r["closestOfFamily"] = True
@@ -921,7 +970,10 @@ def families(scored: list[dict], per: int = FAMILY_DECKS) -> list[dict]:
         # by, and it is a measured fact rather than a weight: either some deck
         # of this win condition is built from cards they already play, or none
         # is.
-        g["yours"] = g["familiar"] > 0
+        # ON THE SAME SIGNAL THE RESERVATION USES, or the partition would
+        # promote families whose reserved slots never fire.
+        g["knows"] = sum(1 for r in g["decks"] if r.get("affinity", {}).get("knowsCards"))
+        g["yours"] = g["knows"] > 0
         g["_p"] = personal_rate(best)
         g["decks"] = _pick(g["decks"], per)
         out.append(g)
