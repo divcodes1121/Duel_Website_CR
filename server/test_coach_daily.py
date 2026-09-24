@@ -265,6 +265,177 @@ check("and KEEPS what the row says — name, share, and whether the player moved
 check("the likelihoods are untouched by trimming, so the two cannot disagree",
       [t["likelihood"] for t in _trimmed] == [t["likelihood"] for t in _full])
 
+print("\nthe window before this one")
+check("a 30-day window is preceded by the 30 days ending the day before",
+      cdl.previous_window("2026-08-26", "2026-09-24") == ("2026-07-27", "2026-08-25"))
+check("the span is taken from the DATES, not from a `days` the caller may not have sent",
+      cdl.previous_window("2026-09-18", "2026-09-24") == ("2026-09-11", "2026-09-17"))
+check("a one-day window has a one-day predecessor",
+      cdl.previous_window("2026-09-24", "2026-09-24") == ("2026-09-23", "2026-09-23"))
+check("it crosses a month and a leap day without arithmetic of its own",
+      cdl.previous_window("2028-03-01", "2028-03-05") == ("2028-02-25", "2028-02-29"))
+check("no window in, no window out", cdl.previous_window(None, "2026-09-24") == (None, None))
+check("an unparseable date is refused, not guessed",
+      cdl.previous_window("not-a-date", "2026-09-24") == (None, None))
+check("a datetime is tolerated — the API's own from/to may carry one",
+      cdl.previous_window("2026-09-18T00:00:00Z", "2026-09-24T23:59:59Z")
+      == ("2026-09-11", "2026-09-17"))
+check("a window that ends before it starts is refused",
+      cdl.previous_window("2026-09-24", "2026-09-18") == (None, None))
+
+
+print("\nthe noise band is what stops a small sample reading as progress")
+# THE CASE THE ADJUSTMENT EXISTS FOR. On the plain normal estimate a window of
+# 10/10 has a standard error of exactly ZERO, so this ten-point drop would be
+# published as a real slide off twenty battles.
+_c, _b = cdl._band(9, 10, 10, 10)
+check("10/10 then 9/10 is NOT a real move", cdl._direction(_c, _b) == "flat",
+      f"change {_c:.1f} band {_b:.1f}")
+check("and the band it was judged against is not zero", _b > 0, f"band {_b}")
+check("the change reported is the RAW difference, not the adjusted one",
+      abs(_c - (-10.0)) < 1e-9, f"{_c}")
+
+_c, _b = cdl._band(6, 12, 8, 12)
+check("a 16-point gap over twelve battles a side is still noise",
+      cdl._direction(_c, _b) == "flat", f"change {_c:.1f} band {_b:.1f}")
+
+_c, _b = cdl._band(600, 1000, 450, 1000)
+check("the same gap over a thousand a side is a real rise",
+      cdl._direction(_c, _b) == "up", f"change {_c:.1f} band {_b:.1f}")
+_c, _b = cdl._band(450, 1000, 600, 1000)
+check("and reversed, a real fall", cdl._direction(_c, _b) == "down")
+
+check("more evidence narrows the band", cdl._band(6, 12, 8, 12)[1] > cdl._band(60, 120, 80, 120)[1])
+check("exactly at the band is flat, not a move", cdl._direction(5.0, 5.0) == "flat")
+check("an empty window yields no claim at all", cdl._band(0, 0, 5, 10) == (0.0, 0.0))
+check("flat never means unchanged — the change survives it",
+      cdl._band(6, 12, 8, 12)[0] != 0)
+
+
+print("\nprogress: window against window, with no snapshot table")
+
+
+class _FakeIntel:
+    """Stands in for `coach_intel`, keyed by the window asked for."""
+
+    def __init__(self, by_window):
+        self.by = by_window
+        self.calls = []
+
+    def report(self, tag, since=None, until=None):
+        self.calls.append((since, until))
+        return self.by.get(since)
+
+
+def _arch(key, name, battles, wins):
+    return {"key": key, "name": name, "battles": battles, "wins": wins}
+
+
+def _intel(battles, wins, archs):
+    return {"summary": {"battles": battles, "wins": wins}, "opponentArchetypes": archs}
+
+
+def _run(now, before, since="2026-08-26", until="2026-09-24"):
+    real = cdl.coach_intel
+    fake = _FakeIntel({cdl.previous_window(since, until)[0]: before})
+    cdl.coach_intel = fake
+    try:
+        return cdl.progress("#AAA", since, until, now), fake
+    finally:
+        cdl.coach_intel = real
+
+
+# A weakness that really closed: 30% -> 62% against Mortar, overall steady.
+_now = _intel(400, 208, [_arch("mortar", "Mortar", 100, 62), _arch("golem", "Golem", 80, 24)])
+_was = _intel(400, 200, [_arch("mortar", "Mortar", 100, 30), _arch("golem", "Golem", 80, 25)])
+_p, _fake = _run(_now, _was)
+check("it reads exactly one extra window", len(_fake.calls) == 1, str(_fake.calls))
+check("and it is the window before this one", _fake.calls[0] == ("2026-07-27", "2026-08-25"))
+check("comparable, with both sides past the floor", _p["comparable"] is True)
+check("the floor it used is published", _p["floor"] == cdl.COMPARE_MIN)
+_m = {r["archetype"]: r for r in _p["matchups"]}
+check("the closed weakness is listed even though it is no longer a weakness",
+      "mortar" in _m)
+check("it is marked resolved", _m["mortar"]["resolved"] is True)
+check("with the direction of the record itself", _m["mortar"]["direction"] == "up")
+check("and both windows' rates, so the reader can check it",
+      _m["mortar"]["before"]["winRate"] == 30.0 and _m["mortar"]["now"]["winRate"] == 62.0)
+check("a weakness that did not move is listed and NOT resolved",
+      _m["golem"]["resolved"] is False and _m["golem"]["direction"] == "flat")
+check("the worst standing deficit sorts first", _p["matchups"][0]["archetype"] == "golem")
+
+# THE DISCIPLINE: the gap closed because the player got worse everywhere else.
+_now = _intel(400, 120, [_arch("mortar", "Mortar", 100, 30)])     # overall 30, mortar 30
+_was = _intel(400, 200, [_arch("mortar", "Mortar", 100, 30)])     # overall 50, mortar 30
+_p, _ = _run(_now, _was)
+_m = {r["archetype"]: r for r in _p["matchups"]}
+check("a deficit that closed because the OVERALL rate fell is not resolved",
+      _m["mortar"]["resolved"] is False)
+check("because the record against it never moved — 'flat', not 'up'",
+      _m["mortar"]["direction"] == "flat")
+check("the gap really did close, which is why this needs a second condition",
+      _m["mortar"]["deficitBefore"] == 20.0 and _m["mortar"]["deficitNow"] == 0.0)
+check("and the overall fall is reported as a fall", _p["overall"]["direction"] == "down")
+
+# A matchup they have stopped meeting.
+_now = _intel(400, 200, [_arch("mortar", "Mortar", 3, 1)])
+_was = _intel(400, 200, [_arch("mortar", "Mortar", 100, 30)])
+_p, _ = _run(_now, _was)
+_m = {r["archetype"]: r for r in _p["matchups"]}
+check("a matchup under the floor NOW is 'thin', not a movement",
+      _m["mortar"]["direction"] == "thin" and _m["mortar"]["change"] is None)
+check("it is never called resolved off a three-battle sample",
+      _m["mortar"]["resolved"] is False)
+
+_now = _intel(400, 200, [_arch("mortar", "Mortar", 100, 30)])
+_was = _intel(400, 200, [])
+_p, _ = _run(_now, _was)
+_m = {r["archetype"]: r for r in _p["matchups"]}
+check("a matchup absent from the earlier window is 'unseen', not a rise from zero",
+      _m["mortar"]["direction"] == "unseen")
+check("and it carries no invented earlier rate",
+      _m["mortar"]["before"]["winRate"] is None and _m["mortar"]["before"]["battles"] == 0)
+
+# Thin windows, and WHICH side is thin.
+_p, _ = _run(_intel(4, 2, []), _intel(400, 200, []))
+check("too few battles now is named as such", _p["reason"] == "thin_now")
+check("and nothing is compared", _p["comparable"] is False and _p["overall"]["change"] is None)
+check("but the counts are still reported, so the screen can say how far off it is",
+      _p["overall"]["now"]["battles"] == 4 and _p["overall"]["before"]["battles"] == 400)
+
+_p, _ = _run(_intel(400, 200, []), _intel(4, 2, []))
+check("too little history BEFORE is a different reason", _p["reason"] == "thin_before")
+
+_p, _ = _run(_intel(400, 200, []), None)
+check("no earlier report at all is thin_before, not a crash", _p["reason"] == "thin_before")
+
+_p = cdl.progress("#AAA", None, None, _intel(400, 200, []))
+check("with no window there is no comparison and it says so",
+      _p["reason"] == "no_window" and _p["comparable"] is False)
+
+# Only real weaknesses are listed — a matchup they are GOOD at is not progress.
+_now = _intel(400, 200, [_arch("hog", "Hog Rider", 100, 80)])
+_was = _intel(400, 200, [_arch("hog", "Hog Rider", 100, 75)])
+_p, _ = _run(_now, _was)
+check("a matchup they beat is not listed as something to work on",
+      _p["matchups"] == [])
+
+print("\nthe snapshot table was dropped on purpose, and the file says why")
+src_cd = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "coach_daily.py"),
+              encoding="utf-8").read()
+check("the reasoning is recorded where the next reader will look",
+      "coach_player_snapshot" in src_cd and "SERVICE-ROLE" in src_cd)
+# NOT `"supabase" not in src`: the module NAMES Supabase, in the comment
+# explaining why the snapshot table was dropped, so that check passed only
+# until the reasoning was written down and then failed on prose. What matters
+# is the mechanism -- there is no REST path, no service-role key and no way to
+# send anything anywhere.
+check("and it reaches Supabase by no route at all",
+      "rest/v1" not in src_cd and "service_role" not in src_cd
+      and "urlopen" not in src_cd and "requests." not in src_cd
+      and "http" not in src_cd.replace("https://", "").lower())
+
+
 print("\nnothing here calls a model")
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "coach_daily.py"),
            encoding="utf-8").read()

@@ -24,6 +24,7 @@ import {
 } from '../ui/bionis-dashboard';
 import { CrownIcon, ShieldIcon, SwordsIcon, TrendIcon } from '../Dashboard/icons';
 import { fetchFieldPlan, fetchPlayerReport, type FieldPlan, type PlayerReport } from '../../state/analyticsClient';
+import { ProgressCard } from '../Admin/CoachRoster/ProgressCard';
 import styles from '../Admin/CoachRoster/CoachRoster.module.css';
 import own from './PlayerHome.module.css';
 
@@ -100,7 +101,7 @@ export default function PlayerHome() {
        the collector has not stored, which takes tens of seconds, and making
        the figures wait on it would leave the screen empty with the answer
        already in hand — the fault the scout had. */
-    fetchFieldPlan(tag, { days: 30, brief: true }).then((p) => live && setPlan(p)).catch(() => {});
+    fetchFieldPlan(tag, { days: 30, brief: true, compare: true }).then((p) => live && setPlan(p)).catch(() => {});
     fetchPlayerReport(tag, { days: 30 }).then((r) => live && setReport(r)).catch(() => {});
     return () => {
       live = false;
@@ -421,6 +422,11 @@ function Overview({
           ))
         )}
       </InsightGrid>
+
+      {/* SECOND PERSON HERE, third on the coach's screen -- the same payload
+          and the same component, so the two cannot disagree about whether a
+          weakness is closing. */}
+      <ProgressCard progress={plan.progress} self />
 
       <ChartGrid>
         <ChartCard

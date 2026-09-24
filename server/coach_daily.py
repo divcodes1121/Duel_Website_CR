@@ -61,6 +61,9 @@ check. When it is 0 the screen can say so plainly.
 
 from __future__ import annotations
 
+import datetime as _dt
+import math
+
 import clash_data as cd
 import coach_intel
 import deck_counter as dcx
@@ -349,7 +352,8 @@ def _overall(summary: dict) -> float:
 
 
 def plan(tag: str, since: str | None = None, until: str | None = None,
-         limit: int = MAX_PICKS, brief: bool = False) -> dict:
+         limit: int = MAX_PICKS, brief: bool = False,
+         compare: bool = False) -> dict:
     """One player's plan against the field.
 
     `brief` trims the payload for a ROSTER-WIDE read, where one row per player
@@ -359,6 +363,11 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
     full plans are 195 kB and five brief ones are a fraction of it. **It is a
     projection of the same answer, not a cheaper one** — nothing is recomputed
     differently, so a brief row can never disagree with the full screen.
+
+    `compare` adds the progress pass -- the same window measured against the
+    one before it. It is OPT-IN because it costs a second `coach_intel` read,
+    and the roster-wide call fetches one plan per player: five players would
+    pay for ten battle passes to draw a screen that shows one figure each.
 
     NO DATABASE WORK PER CANDIDATE. The pool is `team_analysis._scout_candidates()`
     — ~200 real lists out of the background snapshot's seeds, each carrying its
@@ -386,6 +395,11 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
             "reason": "building" if board.get("building") else "no_meta",
             "threats": [], "recommendations": [],
             "window": {"from": since, "to": until},
+            # THE SHAPE MUST NOT DEPEND ON WHICH BRANCH RETURNED IT -- the
+            # same rule `weight_threats` already follows for `boost`. A client
+            # reading `progress` would otherwise find it absent on precisely
+            # the accounts the empty state is for.
+            **({"progress": progress(tag, since, until, intel)} if compare else {}),
         }
 
     threats = weight_threats(raw, defs)
@@ -484,6 +498,7 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         # screen says it plainly rather than implying a tailoring that did not
         # happen.
         "tailoredPicks": sum(1 for p in picks if p["fromWeighting"]),
+        **({"progress": progress(tag, since, until, intel)} if compare else {}),
         **({} if brief else {"baselinePicks": baseline}),
         "brief": brief,
         "pool": len(pool),
@@ -493,6 +508,234 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
             "computedAt": board.get("computedAt"),
         },
     }
+
+
+# -- IS THE WEAKNESS CLOSING? ----------------------------------------------
+#
+# MEASURED AGAINST THE WINDOW BEFORE THIS ONE, not against a stored snapshot.
+# The plan for this (`coach_player_snapshot`, one row a day, written by a
+# nightly timer) was dropped, and the three reasons are worth keeping because
+# each would apply again to the next thing somebody wants to remember:
+#
+#   1. NOTHING WOULD HAVE WRITTEN IT. The analytics service holds the Supabase
+#      ANON key, for `admin_auth`'s one RPC gate, and nothing else. Writing
+#      coach-owned rows needs the SERVICE-ROLE key, which bypasses RLS on
+#      every table in the project -- and it would sit on the same box as the
+#      bot and the 33 GB database, which still has no backup. A daily figure
+#      is not worth that blast radius.
+#   2. A SNAPSHOT ONLY HOLDS THE DAYS SOMEBODY LOOKED. Recomputation holds
+#      every day the battles do, and it answers for history that PREDATES the
+#      feature -- which a snapshot table by construction never can. So this is
+#      answerable today, over months of stored play, instead of being
+#      worthless until a timer has run for a month.
+#   3. A STORED RATE CAN DRIFT FROM ITS OWN WINDOW. Recomputing from the rows
+#      IS the window.
+#
+# What a snapshot would really buy is what the engine RECOMMENDED on a given
+# day -- the engines move, so that genuinely cannot be recovered later. That
+# is a different table answering a different question, and it is not this one.
+
+#: Battles needed IN EACH WINDOW before a matchup is compared at all. It is
+#: `MIN_FACED`, the same floor `deficits()` uses to decide a weakness is real,
+#: applied to both sides -- the comparison must not be able to call something
+#: a weakness and then refuse to say whether it moved, or the other way round.
+COMPARE_MIN = MIN_FACED
+
+#: The noise band, in standard errors of the difference. Two, i.e. roughly a
+#: 95% interval under the normal approximation. NOT A SIGNIFICANCE TEST, and
+#: nothing prints a p-value or the word -- it is the width below which two
+#: records of this size differ for no reason at all.
+COMPARE_Z = 2.0
+
+
+def previous_window(since: str | None, until: str | None) -> tuple[str | None, str | None]:
+    """The window of the same length ending the day before `since`.
+
+    `_window` in app.py builds an INCLUSIVE range counting back from the
+    player's last stored battle, so the span is `(until - since) + 1` days and
+    the window before it ends on `since - 1`. Taking the span from the dates
+    rather than from the request's `days` is what keeps this right when a
+    caller passed an explicit `from`/`to` instead.
+    """
+    if not since or not until:
+        return None, None
+    try:
+        a = _dt.date.fromisoformat(str(since)[:10])
+        b = _dt.date.fromisoformat(str(until)[:10])
+    except ValueError:
+        return None, None
+    span = (b - a).days + 1
+    if span < 1:
+        return None, None
+    end = a - _dt.timedelta(days=1)
+    return (end - _dt.timedelta(days=span - 1)).isoformat(), end.isoformat()
+
+
+def _band(w_now: int, n_now: int, w_was: int, n_was: int) -> tuple[float, float]:
+    """`(change, noise band)` in percentage points.
+
+    AGRESTI-CAFFO, not the plain normal interval: one success and one failure
+    are added to each sample before the variance is taken. The plain estimate
+    puts the standard error at ZERO whenever a window is all wins or all
+    losses, so a player who went 10/10 and then 9/10 would be credited with a
+    real ten-point slide -- and the small, lopsided sample is exactly the case
+    a floor of ten battles leaves in.
+
+    THE CHANGE IS FROM THE RAW RATES AND THE BAND FROM THE ADJUSTED ONES, on
+    purpose. The adjusted rate is a device for estimating spread; printing it
+    would be printing a number that is not this player's record.
+    """
+    if n_now <= 0 or n_was <= 0:
+        return 0.0, 0.0
+    p_now = (w_now + 1) / (n_now + 2)
+    p_was = (w_was + 1) / (n_was + 2)
+    se = math.sqrt(p_now * (1 - p_now) / (n_now + 2) + p_was * (1 - p_was) / (n_was + 2))
+    change = 100.0 * w_now / n_now - 100.0 * w_was / n_was
+    return change, COMPARE_Z * se * 100.0
+
+
+def _direction(change: float, band: float) -> str:
+    """'up' / 'down' / 'flat'. Flat means INDISTINGUISHABLE, not unchanged."""
+    if abs(change) <= band:
+        return "flat"
+    return "up" if change > 0 else "down"
+
+
+def _faced(intel: dict | None) -> dict[str, dict]:
+    """`archetype -> row` over `opponentArchetypes`, no floor applied."""
+    out: dict[str, dict] = {}
+    for a in (intel or {}).get("opponentArchetypes") or []:
+        key = a.get("key") or a.get("name") or ""
+        if key:
+            out[key] = a
+    return out
+
+
+def _rate(row: dict | None) -> tuple[int, int, float | None]:
+    """`(battles, wins, rate)` off one `opponentArchetypes` entry."""
+    n = int((row or {}).get("battles") or 0)
+    w = int((row or {}).get("wins") or 0)
+    return n, w, (100.0 * w / n if n else None)
+
+
+def progress(tag: str, since: str | None, until: str | None,
+             intel: dict | None = None) -> dict:
+    """Whether this player's weaknesses are closing, window against window.
+
+    `intel` is the CURRENT window's `coach_intel.report()`, passed in because
+    `plan()` has already paid for it -- so this adds exactly one more pass
+    over the battle rows, for the previous window, and nothing else.
+
+    A MATCHUP IS ONLY COMPARED WHEN BOTH WINDOWS CLEAR THE FLOOR. Falling
+    under it is reported as a state (`unseen` / `thin`) rather than as a
+    movement of zero, because "they stopped meeting this" and "this did not
+    change" are different facts and only one of them is about the player.
+    """
+    p_since, p_until = previous_window(since, until)
+    out: dict = {
+        "window": {"from": since, "to": until},
+        "previous": {"from": p_since, "to": p_until},
+        "floor": COMPARE_MIN,
+        "comparable": False,
+        "reason": None,
+        "overall": None,
+        "matchups": [],
+    }
+    if not p_since:
+        out["reason"] = "no_window"
+        return out
+
+    try:
+        before = coach_intel.report(tag, p_since, p_until)
+    except Exception:
+        before = None
+
+    s_now = (intel or {}).get("summary") or {}
+    s_was = (before or {}).get("summary") or {}
+    n_now, w_now = int(s_now.get("battles") or 0), int(s_now.get("wins") or 0)
+    n_was, w_was = int(s_was.get("battles") or 0), int(s_was.get("wins") or 0)
+
+    overall = {
+        "now": {"battles": n_now, "winRate": round(100.0 * w_now / n_now, 1) if n_now else None},
+        "before": {"battles": n_was, "winRate": round(100.0 * w_was / n_was, 1) if n_was else None},
+        "change": None, "band": None, "direction": None,
+    }
+    out["overall"] = overall
+
+    if n_now < COMPARE_MIN or n_was < COMPARE_MIN:
+        # NAMED, so the screen can say WHICH side is short. "You have not
+        # played enough yet" and "there is nothing before this to compare
+        # against" read completely differently to somebody being coached.
+        out["reason"] = "thin_now" if n_now < COMPARE_MIN else "thin_before"
+        return out
+
+    change, band = _band(w_now, n_now, w_was, n_was)
+    out["comparable"] = True
+    overall["change"] = round(change, 1)
+    overall["band"] = round(band, 1)
+    overall["direction"] = _direction(change, band)
+
+    now_rate = 100.0 * w_now / n_now
+    was_rate = 100.0 * w_was / n_was
+    f_now, f_was = _faced(intel), _faced(before)
+
+    # THE UNION OF BOTH WINDOWS' WEAKNESSES, not just the current ones. A
+    # deficit that has CLOSED is the best thing this screen can report, and
+    # listing only what is still wrong would delete it -- the player would see
+    # the same three names week after week with no record of the one they
+    # fixed.
+    keys: set[str] = set()
+    for src, base in ((f_now, now_rate), (f_was, was_rate)):
+        for k, a in src.items():
+            n, _w, r = _rate(a)
+            if n >= COMPARE_MIN and r is not None and base - r > 0:
+                keys.add(k)
+
+    rows = []
+    for k in keys:
+        a_now, a_was = f_now.get(k), f_was.get(k)
+        nn, ww, r_now = _rate(a_now)
+        pn, pw, r_was = _rate(a_was)
+        row = {
+            "archetype": k,
+            "name": (a_now or a_was or {}).get("name") or k,
+            "now": {"battles": nn, "winRate": round(r_now, 1) if r_now is not None else None},
+            "before": {"battles": pn, "winRate": round(r_was, 1) if r_was is not None else None},
+            "deficitNow": round(now_rate - r_now, 1) if r_now is not None else None,
+            "deficitBefore": round(was_rate - r_was, 1) if r_was is not None else None,
+            "change": None, "band": None,
+        }
+        if nn < COMPARE_MIN or pn < COMPARE_MIN:
+            row["direction"] = "unseen" if (nn == 0 or pn == 0) else "thin"
+        else:
+            ch, bd = _band(ww, nn, pw, pn)
+            row["change"] = round(ch, 1)
+            row["band"] = round(bd, 1)
+            row["direction"] = _direction(ch, bd)
+        # A WEAKNESS IS GONE WHEN THE GAP CLOSED **AND** THE RECORD ITSELF
+        # ROSE. The gap alone is not enough, and the first version of this got
+        # it wrong in a way a test caught: a deficit also closes when the
+        # player gets worse at EVERYTHING ELSE and their overall rate falls to
+        # meet a matchup that never moved at all. Measured on the gap alone
+        # that prints as resolved -- the screen congratulating somebody for a
+        # decline.
+        #
+        # Requiring 'up' rather than merely not-'down' is what excludes it,
+        # since that case is exactly 'flat'. It is a strong badge and it
+        # should need evidence: a five-point deficit crossing zero is inside
+        # the noise band of any sample this floor admits, so it stays unbadged
+        # and the row's two rates say what happened. 'up' also implies both
+        # windows cleared the floor, so this can never fire off three battles.
+        row["resolved"] = bool(
+            row["deficitBefore"] is not None and row["deficitBefore"] > 0
+            and row["deficitNow"] is not None and row["deficitNow"] <= 0
+            and row["direction"] == "up"
+        )
+        rows.append(row)
+
+    rows.sort(key=lambda r: (-(r["deficitNow"] if r["deficitNow"] is not None else -999.0), r["name"]))
+    out["matchups"] = rows
+    return out
 
 
 if __name__ == "__main__":

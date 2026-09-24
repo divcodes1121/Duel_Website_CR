@@ -2110,6 +2110,61 @@ export interface FieldPick {
   fromWeighting: boolean;
 }
 
+/** One window's record against one archetype, beside the window before it.
+ *
+ *  `direction` is the honest part. 'flat' means the two records are
+ *  INDISTINGUISHABLE at these sample sizes, not that nothing changed —
+ *  `change` survives it and is shown. 'thin' and 'unseen' are not movements
+ *  at all: they say the player stopped meeting this deck often enough to be
+ *  judged against it, which is a fact about the field and not about them. */
+export interface ProgressMatchup {
+  archetype: string;
+  name: string;
+  now: { battles: number; winRate: number | null };
+  before: { battles: number; winRate: number | null };
+  /** Points below their own overall rate. Positive means worse here. */
+  deficitNow: number | null;
+  deficitBefore: number | null;
+  /** Points, raw. Null when a window is under the floor. */
+  change: number | null;
+  /** The width below which a difference this size is noise. Grows as the
+   *  evidence thins, which is why a fixed threshold is not used. */
+  band: number | null;
+  direction: 'up' | 'down' | 'flat' | 'thin' | 'unseen';
+  /** The gap closed AND the record itself measurably rose. Both, because a
+   *  deficit also closes when everything else gets worse. */
+  resolved: boolean;
+}
+
+/** This window measured against the one before it.
+ *
+ *  RECOMPUTED FROM THE BATTLES, not read from a stored daily snapshot — so it
+ *  answers for history that predates the feature and cannot drift from its own
+ *  window. Opt-in via `compare`, because it costs a second battle pass and the
+ *  roster-wide read fetches one plan per player. */
+export interface FieldProgress {
+  window: { from: string | null; to: string | null };
+  previous: { from: string | null; to: string | null };
+  /** Battles needed in EACH window before anything is compared. */
+  floor: number;
+  comparable: boolean;
+  /** Why not, when it is not: 'no_window' | 'thin_now' | 'thin_before'. Which
+   *  side is short matters — "you have not played enough yet" and "there is
+   *  nothing before this" read completely differently. */
+  reason: string | null;
+  overall: {
+    now: { battles: number; winRate: number | null };
+    before: { battles: number; winRate: number | null };
+    change: number | null;
+    band: number | null;
+    direction: 'up' | 'down' | 'flat' | null;
+  } | null;
+  /** The union of both windows' weaknesses, worst standing deficit first —
+   *  so one that has CLOSED is still listed, which is the best thing this can
+   *  report. */
+  matchups: ProgressMatchup[];
+}
+
 export interface FieldPlan {
   tag: string;
   brain: string;
@@ -2130,6 +2185,17 @@ export interface FieldPlan {
   /** Absent in `brief` mode — it is only the evidence for `tailoredPicks`. */
   baselinePicks?: string[];
   brief?: boolean;
+  /** What the meta's own direction did to the projection. `applied` is false
+   *  under the history floor, and `reason` says so — it switches itself on
+   *  once enough days are stored. */
+  trend?: {
+    applied: boolean;
+    reason: string | null;
+    days: number | null;
+    moved: number;
+  };
+  /** Present only when the call asked to `compare`. */
+  progress?: FieldProgress;
   pool: number;
   meta: { decks: number; window: unknown; computedAt: number | null };
 }
@@ -2143,10 +2209,14 @@ export interface FieldPlan {
  *  never disagree with the full screen. */
 export function fetchFieldPlan(
   tag: string,
-  win: DateWindow & { brief?: boolean } = {},
+  win: DateWindow & { brief?: boolean; compare?: boolean } = {},
 ): Promise<FieldPlan> {
-  const { brief, ...window } = win;
+  const { brief, compare, ...window } = win;
   const q = new URLSearchParams(windowQuery(window));
   if (brief) q.set('brief', '1');
+  // A SECOND BATTLE PASS, so it is asked for rather than assumed. A
+  // roster-wide read fetches one plan per player and would double every one
+  // of them to draw a figure it does not show.
+  if (compare) q.set('compare', '1');
   return get<FieldPlan>(`/api/analytics/coach/field/${encodeURIComponent(tag)}?${q.toString()}`);
 }

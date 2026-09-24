@@ -21,6 +21,7 @@ import {
   MetricGrid,
 } from '../../ui/bionis-dashboard';
 import { CardsIcon, ShieldIcon, SwordsIcon, TrendIcon } from '../../Dashboard/icons';
+import { ProgressCard } from './ProgressCard';
 import styles from './CoachRoster.module.css';
 
 const nf = new Intl.NumberFormat('en-US');
@@ -68,7 +69,10 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
     let live = true;
     setPlan(null);
     setError(null);
-    fetchFieldPlan(tag, { days: windowDays(win) })
+    // `compare` measures this window against the one before it. One extra
+    // pass over the battle rows, and this is a single-player screen -- the
+    // roster-wide read deliberately does not ask for it.
+    fetchFieldPlan(tag, { days: windowDays(win), compare: true })
       .then((p) => live && setPlan(p))
       .catch((e) =>
         live &&
@@ -187,6 +191,12 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
           ))}
         </InsightGrid>
       )}
+
+      {/* AND WHETHER ANY OF IT IS WORKING. It sits with the weakness cards
+          rather than at the foot of the screen: those say what they lose to,
+          this says whether that is moving, and separating them leaves a coach
+          reading the same three names every week with no record of progress. */}
+      <ProgressCard progress={plan.progress} />
 
       <ChartCard
         title="What to play"

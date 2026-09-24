@@ -750,8 +750,18 @@ class Handler(BaseHTTPRequestHandler):
                 # per player). The SAME answer, projected — nothing is computed
                 # differently, so a brief row cannot disagree with the screen.
                 brief = (q.get("brief") or [""])[0] in ("1", "true", "yes")
+                # `compare=1` measures this window against the one before it.
+                # OPT-IN, and on the existing path rather than a route of its
+                # own: it answers about the same player over the same window
+                # and needs the deficits this call has already computed, so a
+                # separate route would pay for a second full battle pass to
+                # rebuild what is already in hand. It costs one extra
+                # `coach_intel` read, which the roster-wide brief read must
+                # not pay per player.
+                compare = (q.get("compare") or [""])[0] in ("1", "true", "yes")
                 import coach_daily
-                return self._send(coach_daily.plan(tag, since, until, brief=brief))
+                return self._send(coach_daily.plan(tag, since, until, brief=brief,
+                                                   compare=compare))
 
             if path.startswith("/api/analytics/coach/predict/"):
                 raw = unquote(path[len("/api/analytics/coach/predict/"):])

@@ -287,7 +287,7 @@ happily against a server that never called it.
 | `GET /api/analytics/counters?deck=` | what beats a deck |
 | `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, **the projected threat space (`threats`), and 5–7 decks that answer it**. With `blue` those come from the squad's own lists; **omit `blue` entirely** and they come from the snapshot's seed pool (~200 real decks), plus an `overall` block ranking the same pool against the whole roster's pooled projection. `mode` says which, and `brain` says which reasoning produced it (`team-scout-2.0`). See `DECKKIES_TEAM_SCOUT.md`. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
-| `GET /api/analytics/coach/field/<tag>` | **what to play with NO OPPONENT** (`coach_daily.py`) — the meta board becomes a threat projection, that projection is reweighted by where this player measurably loses, and `team_scout.score()` ranks ~204 real decks against it. Works because `score()` takes the threat space as an INJECTED parameter and does not know where it came from, so there is no second scorer and no model. `basis` is `weighted` / `unweighted` / `no_history` / `none` and a client must say which. `tailoredPicks` reports how many picks the weighting actually put there, measured by ranking the unweighted projection too — live it is 0-1 of 7, and that is the correct answer rather than a weak one. Costs no database read per candidate; 1.4 s warm. `days` as everywhere else |
+| `GET /api/analytics/coach/field/<tag>` | **what to play with NO OPPONENT** (`coach_daily.py`) — the meta board becomes a threat projection, that projection is reweighted by where this player measurably loses, and `team_scout.score()` ranks ~204 real decks against it. Works because `score()` takes the threat space as an INJECTED parameter and does not know where it came from, so there is no second scorer and no model. `basis` is `weighted` / `unweighted` / `no_history` / `none` and a client must say which. `tailoredPicks` reports how many picks the weighting actually put there, measured by ranking the unweighted projection too — live it is 0-1 of 7, and that is the correct answer rather than a weak one. Costs no database read per candidate; 1.4 s warm. `days` as everywhere else. **`compare=1`** adds `progress` — this window against the one of the same length before it, recomputed from the rows rather than read from a snapshot table (+~60 ms) |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
 | `GET /api/analytics/meta?movement=<days>` | **how that board has MOVED** (`meta_history.py`) — rank and use-rate deltas between the newest stored day and the newest one at or before `days` back. Rides on the `/meta` path deliberately, so the **route count stays 23**. Answers `basis: "none"` with NO rows when there is nothing to compare against, never a list of zeros; a deck absent from the older day carries `entered: true` with a NULL delta rather than a climb from beyond the board's edge, and one that dropped off carries `left: true`. `comparedWith` / `daysApart` describe the snapshots ACTUALLY used, so a missed timer widens the span visibly instead of silently. Reads its own ~18k-row file, not the bot's database |
@@ -964,6 +964,78 @@ picks.
 each carrying its own per-archetype record — so 204 decks against 12 threats
 costs **no query at all**. The only reads are one `coach_intel` pass and the
 already-computed meta snapshot. 1.4 s warm.
+
+### Is the weakness closing? (`?compare=1`)
+
+`progress()` measures this window against **the window of the same length
+immediately before it**, recomputed from the battle rows. It is opt-in: it
+costs one more `coach_intel` pass (**~60 ms warm**, measured alternated on the
+live service — 0.11 s against 0.17 s), and the roster-wide `brief` read fetches
+one plan per player and must not pay it per head.
+
+**There is no snapshot table, and the reasoning matters more than the feature.**
+`coach_player_snapshot` — one row a day, written by a nightly timer — was the
+plan and was dropped for three reasons, each of which applies again to the next
+thing somebody wants to remember:
+
+1. **Nothing would have written it.** This service holds the Supabase **anon**
+   key, for `admin_auth`'s one RPC gate. Writing coach-owned rows needs the
+   **service-role** key, which bypasses RLS on every table in the project — on
+   the same box as the bot and the 33 GB database, which still has no backup. A
+   daily figure is not worth that blast radius.
+2. **A snapshot only holds the days somebody looked.** Recomputation holds every
+   day the battles do, and answers for history that **predates the feature**,
+   which a snapshot by construction never can. So this works today, over months
+   of stored play, instead of being worthless until a timer has run a month.
+3. **A stored rate can drift from its own window.** Recomputing from the rows
+   *is* the window.
+
+What a snapshot would really buy is what the engine **recommended** on a given
+day — the engines move, so that genuinely cannot be recovered later. Different
+table, different question.
+
+**The band is Agresti–Caffo, not the plain normal interval.** One success and
+one failure are added to each sample before the variance is taken, because the
+plain estimate puts the standard error at **zero** whenever a window is all
+wins or all losses — a player who went 10/10 and then 9/10 would be credited
+with a real ten-point slide. That lopsided small sample is exactly what a floor
+of ten battles leaves in. **The change reported is the raw difference and the
+band comes from the adjusted rates**: the adjusted rate is a device for
+estimating spread, and printing it would be printing a number that is not the
+player's record. `COMPARE_Z` is 2.0. **It is a noise band, not a significance
+test** — nothing prints a p-value or the word.
+
+**`resolved` needs the gap to close AND the record to rise, and the first
+version got that wrong.** A deficit also closes when the player gets worse at
+everything else and their overall rate falls to meet a matchup that never
+moved. On the gap alone that prints as resolved — the screen congratulating
+somebody for a decline. A test caught it. Requiring `direction == 'up'` rather
+than merely not-`'down'` is what excludes it, since that case is exactly
+`'flat'`; it also implies both windows cleared the floor, so it can never fire
+off three battles.
+
+**Both windows must clear the floor** (`COMPARE_MIN` = `MIN_FACED` = 10), and
+falling under it is a state rather than a movement of zero: `thin` (faced, but
+too few) and `unseen` (not faced at all before). "They stopped meeting this"
+and "this did not change" are different facts and only one is about the player.
+The reason for an uncomparable window names **which side** is short —
+`thin_now` and `thin_before` read completely differently to somebody being
+coached.
+
+**The matchup list is the union of both windows' weaknesses**, worst standing
+deficit first, so one that has *closed* is still listed. Listing only what is
+still wrong would delete the best thing the screen can report, and the player
+would see the same three names every week with no record of the one they fixed.
+
+**Measured live, and it changed the UI.** On the real account every one of
+eleven matchups came back `flat` — correctly. Over a 30-day window an archetype
+is worth 20–60 battles, and telling two rates apart at that size needs 16 to 39
+points; a 16.8-point slide against Golem (73.9% over 23, then 57.1% over 21)
+sits inside a 27.4-point band. So the card prints **movement only**, with the
+rest as one counted line that names what it withheld — the battle log's
+hidden-mode rule. The **overall** line is always drawn, because it is the only
+figure with enough behind it to move: 437 battles against 489 gives a band of
+**6.2** points.
 
 ## The card board (`player_cards.py`)
 
