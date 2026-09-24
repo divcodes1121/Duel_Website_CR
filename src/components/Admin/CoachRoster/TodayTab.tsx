@@ -10,7 +10,6 @@ import { ReadingState } from '../../Analytics/ReadingState';
 import {
   BarRows,
   ChartCard,
-  ChartGrid,
   Dashboard,
   DashHero,
   InsightCard,
@@ -216,12 +215,17 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
           best deck of each of seven archetypes — a tier list. It is still in
           the payload (`recommendations`) because the roster's Today board
           draws one row per player from it. */}
-      <ChartGrid>
-        <ClosestCard plan={plan} />
-        <LearnCard learn={plan.learn} />
-      </ChartGrid>
-
-      <FamiliesCard plan={plan} />
+      {/* THE FIELD ON THE LEFT, THIS PLAYER ON THE RIGHT — asked for in
+          those words. Not a `ChartGrid`: that is equal columns and stretches
+          its children, which gave the two-line "Worth learning" card eleven
+          hundred pixels of empty ground beside a seven-deck list. */}
+      <div className={styles.answerGrid}>
+        <FamiliesCard plan={plan} />
+        <div className={styles.answerSide}>
+          <ClosestCard plan={plan} />
+          <LearnCard learn={plan.learn} />
+        </div>
+      </div>
 
       <ChartCard
         title="What the field plays"

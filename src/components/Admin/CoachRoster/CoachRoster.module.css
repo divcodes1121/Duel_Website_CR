@@ -1724,3 +1724,43 @@ a.rosterTitle[aria-current='page'] {
   border-color: var(--accent-select-edge);
   background: var(--accent-select-wash);
 }
+
+/* ── "What to play": the field on the left, the player on the right ────────
+   Asked for in those words — win-condition sections, and the decks related to
+   this player beside them.
+
+   `minmax(0, …)` on BOTH tracks, never a bare `1fr`: `1fr` is `minmax(auto,
+   1fr)` and a card strip inside will push the track wider than its share, so
+   the grid overflows while nothing inside it appears to. This project has
+   paid for that one more than once.
+
+   `align-items: start` is the other half. Without it a two-line "Worth
+   learning" card stretches to match a seven-deck list beside it — measured at
+   1500px, eleven hundred pixels of empty card with one sentence floating in
+   the middle of it, which reads as a broken panel rather than a short one. */
+.answerGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.answerSide {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* The families browser needs the width; below this the two columns stack and
+   the personal decks come FIRST, because on a phone they are the answer and
+   the seventeen-family browser is reference. */
+@media (max-width: 82rem) {
+  .answerGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .answerSide {
+    order: -1;
+  }
+}
