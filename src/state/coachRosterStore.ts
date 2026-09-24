@@ -35,9 +35,11 @@ interface Row {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  /** Optional: a database still on 005 does not send it. */
+  linked_user_id?: string | null;
 }
 
-const COLUMNS = 'id, player_tag, display_name, notes, is_active, created_at, updated_at';
+const COLUMNS = 'id, player_tag, display_name, notes, is_active, created_at, updated_at, linked_user_id';
 
 const fromRow = (r: Row): RosterPlayer => ({
   id: r.id,
@@ -47,6 +49,7 @@ const fromRow = (r: Row): RosterPlayer => ({
   isActive: r.is_active,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
+  linkedUserId: r.linked_user_id ?? null,
 });
 
 function supabaseRepo(): RosterRepo {
@@ -75,6 +78,19 @@ function supabaseRepo(): RosterRepo {
       const { data, error } = await table().update(row).eq('id', id).select(COLUMNS).single();
       if (error) throw explainDbError(error.code, error.message);
       return fromRow(data as Row);
+    },
+    /* RPCs, NOT TABLE WRITES. `linked_user_id` is deliberately absent from
+       every update grant, so `coach_link_player` is the only door — and its
+       guards (you own the row; the account exists) are the whole rule. The
+       database words each refusal; those sentences are relayed rather than
+       replaced, because a guessed reason can be wrong about which one it was. */
+    async link(id, email) {
+      const { error } = await db.rpc('coach_link_player', { p_player_id: id, p_email: email });
+      if (error) throw new RosterError('unknown', error.message, error.message);
+    },
+    async unlink(id) {
+      const { error } = await db.rpc('coach_unlink_player', { p_player_id: id });
+      if (error) throw new RosterError('unknown', error.message, error.message);
     },
     async remove(id) {
       const { error } = await table().delete().eq('id', id);
@@ -109,6 +125,8 @@ interface RosterState {
   add: (p: NewRosterPlayer) => Promise<RosterPlayer>;
   update: (id: string, patch: RosterPatch) => Promise<void>;
   remove: (id: string) => Promise<'deleted' | 'archived'>;
+  link: (id: string, email: string) => Promise<void>;
+  unlink: (id: string) => Promise<void>;
 }
 
 export const useCoachRoster = create<RosterState>()((set, get) => ({
@@ -141,6 +159,20 @@ export const useCoachRoster = create<RosterState>()((set, get) => ({
   async update(id, patch) {
     const row = await repo.update(id, patch);
     set({ players: sortRoster(get().players.map((p) => (p.id === id ? row : p))) });
+  },
+
+  /* RE-READ, NOT PATCH. `coach_link_player` resolves an email to an account
+     id, so the client does not know what was written — only the database
+     does. Guessing it locally would show a link that might not be the one
+     that landed. */
+  async link(id, email) {
+    await repo.link(id, email);
+    set({ players: sortRoster(await repo.list()) });
+  },
+
+  async unlink(id) {
+    await repo.unlink(id);
+    set({ players: sortRoster(await repo.list()) });
   },
 
   async remove(id) {

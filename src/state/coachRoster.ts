@@ -27,6 +27,14 @@ export interface RosterPlayer {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /** The account this player signs in as, set by their coach (006).
+   *
+   *  NOT DERIVED FROM `profiles.player_tag`. That column is written by the
+   *  player themselves, so any account could claim a roster tag and be handed
+   *  that player's coaching data. The link is explicit and the coach makes
+   *  it. Optional: a database still on 005 does not send it, and null means
+   *  "not linked", which is the safe reading. */
+  linkedUserId?: string | null;
 }
 
 export interface NewRosterPlayer {
@@ -49,6 +57,12 @@ export interface RosterRepo {
   /** Deletes outright, or — when the player has match history, which the
    *  database protects with ON DELETE RESTRICT — archives instead and says so. */
   remove(id: string): Promise<'deleted' | 'archived'>;
+  /** Give this roster player an account to sign in as, by email. The database
+   *  words every refusal ("that player is not on your roster", "no account has
+   *  signed up with that email yet"); relay those rather than inventing a
+   *  sentence that may be wrong about why. */
+  link(id: string, email: string): Promise<void>;
+  unlink(id: string): Promise<void>;
 }
 
 /** Limits mirrored from the table's CHECK constraints, so the form can stop
@@ -255,6 +269,15 @@ export function memoryRepo(seed: RosterPlayer[] = []): RosterRepo {
     async remove(id) {
       rows = rows.filter((r) => r.id !== id);
       return 'deleted';
+    },
+    /* The memory repo cannot look an account up — there are none — so it
+       records the link as the email itself. Enough for the screen to be
+       exercised locally; it saves nothing beyond the page's lifetime anyway. */
+    async link(id, email) {
+      rows = rows.map((r) => (r.id === id ? { ...r, linkedUserId: `local:${email}` } : r));
+    },
+    async unlink(id) {
+      rows = rows.map((r) => (r.id === id ? { ...r, linkedUserId: null } : r));
     },
   };
 }

@@ -1654,3 +1654,37 @@ a.rosterTitle[aria-current='page'] {
   gap: 1.25rem;
   min-width: 0;
 }
+
+/* Whether an account is attached to this roster player. Written because it is
+   referenced: a CSS-module class that does not exist renders class-less and
+   fails silently, which this project has shipped before. */
+.linkRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.linkState {
+  border-radius: 999px;
+  border: 1px solid var(--glass-stroke);
+  padding: 0.15rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Linked is the notable state, so it is the one that carries colour. */
+.linkState[data-on] {
+  border-color: color-mix(in srgb, var(--hue-green) 45%, transparent);
+  background: var(--green-wash);
+  color: var(--hue-green);
+}
+
+.linkForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}

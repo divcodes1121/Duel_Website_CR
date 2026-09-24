@@ -77,16 +77,22 @@ export function Tile({ label, value, note }: { label: string; value: string; not
 export function CoachControls({ player }: { player: RosterPlayer }) {
   const update = useCoachRoster((s) => s.update);
   const remove = useCoachRoster((s) => s.remove);
+  const link = useCoachRoster((s) => s.link);
+  const unlink = useCoachRoster((s) => s.unlink);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(player.displayName ?? '');
   const [notes, setNotes] = useState(player.notes ?? '');
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [email, setEmail] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setEditing(false);
     setConfirmRemove(false);
+    setLinking(false);
+    setEmail('');
     setMessage(null);
     setName(player.displayName ?? '');
     setNotes(player.notes ?? '');
@@ -113,10 +119,81 @@ export function CoachControls({ player }: { player: RosterPlayer }) {
           ) : (
             <p className={styles.muted}>No coach notes yet.</p>
           )}
+          {/* WHO SIGNS IN AS THIS PLAYER.
+              THE LINK IS EXPLICIT AND THE COACH MAKES IT. The obvious design
+              was to match `profiles.player_tag`, and it is SPOOFABLE: 001
+              grants the profile owner update on that column, so any account
+              could type a roster tag into their own profile and be handed
+              this player's coaching data. Nothing else on the site cares what
+              tag a profile claims, so it has never had to be trustworthy.
+              `linked_user_id` is set through `coach_link_player`, which is
+              the only door — the column is in no update grant. */}
+          <div className={styles.linkRow}>
+            <span className={styles.linkState} data-on={player.linkedUserId ? '' : undefined}>
+              {player.linkedUserId ? 'Account linked' : 'No account linked'}
+            </span>
+            <span className={styles.muted}>
+              {player.linkedUserId
+                ? 'They can sign in and see their own dashboard.'
+                : 'Link the account they sign in with to give them their dashboard.'}
+            </span>
+          </div>
+
+          {linking ? (
+            <form
+              className={styles.linkForm}
+              onSubmit={(e) => {
+                e.preventDefault();
+                void run(async () => {
+                  await link(player.id, email.trim());
+                  setLinking(false);
+                  setEmail('');
+                });
+              }}
+            >
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Their account email</span>
+                <input
+                  className={styles.input}
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="they@example.com"
+                />
+              </label>
+              <div className={styles.controlRow}>
+                <button type="submit" className={styles.primaryButton} disabled={busy || !email.trim()}>
+                  {busy ? 'Linking…' : 'Link account'}
+                </button>
+                <button type="button" className={styles.ghostButton} onClick={() => setLinking(false)}>
+                  Cancel
+                </button>
+              </div>
+              <p className={styles.muted}>
+                They must have signed up already — the database refuses an address no account uses.
+              </p>
+            </form>
+          ) : null}
+
           <div className={styles.controlRow}>
             <button type="button" className={styles.ghostButton} onClick={() => setEditing(true)}>
               Edit name &amp; notes
             </button>
+            {player.linkedUserId ? (
+              <button
+                type="button"
+                className={styles.ghostButton}
+                disabled={busy}
+                onClick={() => void run(() => unlink(player.id))}
+              >
+                Unlink account
+              </button>
+            ) : (
+              <button type="button" className={styles.ghostButton} onClick={() => setLinking(true)}>
+                Link account…
+              </button>
+            )}
             <button
               type="button"
               className={styles.ghostButton}
