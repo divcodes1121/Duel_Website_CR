@@ -1,5 +1,27 @@
 # Coach Roster — stabilization baseline
 
+> **SUPERSEDED IN PART, 2026-09-24. This is a frozen record of the
+> eight-phase system as it shipped on 2026-09-20 — it is deliberately NOT
+> rewritten, but the following are no longer true and it must not be read as
+> current:**
+>
+> * **Match plans and Results are DELETED** (`dd0b760`). Nine tabs became six:
+>   Overview / Against the field / Arsenal / Opponent / Battles / Decks
+>   played. The live roster read `0 plans · 0 matches · nothing recorded` for
+>   every player. The 004 tables remain; dropping them is its own migration.
+> * **The test baseline below is stale.** `coachPlans` and `coachResults` and
+>   their 42 checks went with the tabs; the coaching layer's own counts have
+>   moved since.
+> * **The route-count tripwire is 24, not 23** — phase 12's field plan added
+>   `/api/analytics/coach/field/<tag>`.
+> * **"Against the field" was rebuilt** (`47710b3`..`af0c89d`): it returned
+>   seven near-identical decks for every player, and now answers three
+>   questions — the win-condition board, the decks closest to what they play,
+>   and one archetype worth learning. See the README's Coach Roster section.
+>
+> What is still accurate here: the data model, the RLS boundary, the evidence
+> floors and the "no score, no rating" contract.
+
 **Status: phases 1–8 are live in production as of 2026-09-20.** This document
 freezes what the system is and what must stay true about it while it is
 observed in real use.

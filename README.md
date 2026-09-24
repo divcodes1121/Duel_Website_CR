@@ -101,7 +101,7 @@ bot's SQLite files read-only.
 | UI — the landing banners | **fixed and uniform, 2026-09-01.** They were 90% apart on a phone — 298 / 518 / 298 / 567px, showing 21% to 42% of their own art — from three separate faults: the flipped pair kept the desktop two-column grid at every width (a specificity trap one level below the one already recorded beside it), `.band` was referenced in `Dashboard.tsx` and **never written**, so all four paintings met edge to edge at 1440 as well as 390, and each panel was as tall as its own copy. Now **0px spread at 430/390/360/320**. See [The four banners on a phone](#the-four-banners-on-a-phone-and-the-three-faults-under-one-symptom) |
 | UI — the display face | **scoped to the landing, 2026-09-01, 25/25 browser checks.** Bebas draws lowercase as capital forms, so every heading inside the product read as a poster. One declaration — `:root[data-app-inner] { --font-display: var(--font-body) }` — and the attribute is on `:root` rather than the shell because dialogs portal into `document.body` and inherit nothing from it |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **2,727 Python checks** across **51 suites** and **929 vitest** across 31 files as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **2,946 Python checks** across **53 suites** and **931 vitest** across 31 files as of 2026-09-24, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> 190 checks. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -12302,6 +12302,88 @@ adds only the coaching layer: the roster, and (in later phases) each player's
 deck arsenal, match plans and results.
 
 **Phase 1 (roster) and Phase 2 (player intelligence) are live. Phase 3 (deck arsenal) is live. Phase 4 (opponent scout) is live. Phase 5 (what to play) is live. Phase 6 (match plans) is live. Phase 7 (results) is live. Phase 8 — the roster overview — is live, and completes the eight-phase plan.**
+
+**The tabs were consolidated on 2026-09-24** (`dd0b760`): nine became six —
+Overview / Against the field / Arsenal / Opponent / Battles / Decks played.
+Scout and "against an opponent" are ONE tab, because they are the same
+question about the same tag; match plans and results were deleted after the
+live roster read `0 plans · 0 matches` for every player.
+
+### "Against the field" answers three questions, not one
+
+It returned seven decks and they were nearly the same seven for everybody.
+**Measured over the six busiest live accounts: 42 slots drew on TEN distinct
+decks, three decks appeared in every single plan, and `tailoredPicks` — the
+engine's own count of how many picks the personal weighting put there — was 0
+for five of six.** Those are players with 2,300–3,100 battles each, so it was
+never an evidence problem.
+
+Two structural causes. `diversify()` is a PORTFOLIO picker whose
+archetype-repeat penalty collapses 204 decks to "the best deck of each of
+seven archetypes" — a tier list, identical for everyone by construction. And
+nothing in the ranking knew what the player plays: `score()` takes
+`fit_games`, and the field plan passes `None` because its pool is ownerless.
+
+So `plan()` keeps the whole scored pool — it was computing 204 and throwing
+197 away — and answers three questions off the same rows:
+
+* **Every way to answer this field** — the 17 win conditions, browsable, split
+  into the ones they already play and the rest of the field. The spread is
+  STRUCTURAL here, which is what `diversify` was being used to fake.
+* **Closest to how they play** — of those, the decks built from cards already
+  in their own lists, with the overlap stated so it can be checked by eye.
+* **Worth learning** — one win condition outside their range whose best deck
+  beats everything inside it, with the margin. `null` rather than a
+  manufactured suggestion when nothing unplayed actually wins.
+
+**Two signals, two claims.** `shared` is the overlap with the single closest
+deck they run ("you could pilot this today"); `known` is how many of the eight
+are cards they play anywhere ("this is built out of your cards"). The first is
+sparse — 0–55 of 204 qualify — and drives the Closest list; the second
+qualifies 1–161 and drives the per-family reserved slots. **Using one for both
+jobs failed twice**: a bounded weight moved 0–1 of 17 families, and grouping on
+card overlap collapsed because a player with 25 decks clears it in all
+seventeen. The board is partitioned on `in_range()` — have they actually
+played this win condition — which is `worth_learning`'s own test inverted.
+
+| | before | after |
+| --- | --- | --- |
+| section orders identical | 15 of 15 pairs | **0 of 15** |
+| families identical for everyone | 3 of 17 | **0 of 17** |
+| decks common per family | 2–4 of 4 | **1–3 of 4** |
+
+Two of the four slots per family are still the field's best and the same for
+everyone, **correctly** — they are the best answers, and showing a player worse
+ones to look personal inverts the point. An account whose four decks match
+nothing in the pool gets the field's order throughout, and the copy says so.
+
+**It moves with the meta, and the screen says when.** The pool is rebuilt
+hourly from a rolling 10-day window of real battles and caches on that
+snapshot's own `computedAt`, so it invalidates when the meta rebuilds; the
+player's side is a rolling 30 days. The board prints
+`Meta 10d to <date> · <age> · trend off|Nd`, because a board with no date on
+it cannot be told from a stuck one.
+
+**The copy is figures.** No sentence explains a number already on screen —
+`54.3% expected against the field` is `54.3%`, two ISO ranges are
+`Last 30d vs previous 30d` with the dates in a tooltip. The noise band, the
+counts and every floor still print; they are what stop a coach acting on
+noise.
+
+### Is the weakness closing?
+
+`?compare=1` measures the window against the one of the same length before it,
+**recomputed from the battle rows rather than read from a snapshot table**. A
+`coach_player_snapshot` written by a nightly timer was the plan and was
+dropped: nothing would have written it (the analytics service holds the anon
+key, and coach-owned rows need the service-role key, which bypasses RLS on
+every table), a snapshot only holds the days somebody looked, and recomputing
+from the rows *is* the window — so this answers for history that predates the
+feature. The band is Agresti–Caffo, because the plain estimate puts the
+standard error at zero whenever a window is all wins or all losses. It prints
+movement only: on the real account all eleven matchups came back "too close to
+call", correctly, and eleven repetitions of one sentence is a wall — the rest
+is one counted line that names what it withheld.
 
 ### Where the data lives, and what enforces "admin-only"
 
