@@ -2112,6 +2112,9 @@ export interface FieldPick {
    *  `learn.deck`; absent on `recommendations`, which is the ownerless
    *  portfolio. */
   affinity?: DeckAffinity;
+  /** This row is in its family because it is close to what they play, not
+   *  because it out-ranked the others. Labelled rather than passed off. */
+  closestOfFamily?: boolean;
 }
 
 /** One window's record against one archetype, beside the window before it.
@@ -2202,6 +2205,12 @@ export interface DeckFamily {
   total: number;
   /** How many of them they could already pilot. */
   familiar: number;
+  /** At least one deck of this win condition is built from cards they play.
+   *  The board is PARTITIONED on this — a measured fact, not a weight. */
+  yours: boolean;
+  /** The personal order put a different deck at the top of this family than
+   *  the field's order would. 0 across a board is a real answer. */
+  moved: boolean;
   decks: FieldPick[];
 }
 
@@ -2248,6 +2257,11 @@ export interface FieldPlan {
    *  rather than enforced by `diversify`'s archetype-repeat penalty. Absent in
    *  `brief`: a roster row draws one deck and would pay for 68. */
   families?: DeckFamily[];
+  /** How many families the personal deck order actually moved, and how many
+   *  win conditions they can already play. Published so the screen states the
+   *  size of the effect instead of implying it — the `tailoredPicks` rule. */
+  personalised?: number;
+  yourFamilies?: number;
   /** Of those, the ones built from cards they already play — sorted by
    *  expected win rate, because familiarity is the FILTER and not the
    *  ranking. Empty is a real answer and the screen says why. */

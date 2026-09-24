@@ -40,11 +40,18 @@ import styles from './CoachRoster.module.css';
  *                   `diversify` was being used to fake.
  */
 
-function sharedLine(p: FieldPick): string | null {
+function sharedLine(p: FieldPick, self = false): string | null {
   const a = p.affinity;
   if (!a || !a.familiar) return null;
   const n = a.deckBattles;
-  return `${a.shared} of ${a.of} cards are in a deck ${n === 1 ? 'they played once' : `they have played ${n} times`}`;
+  const who = self ? 'you' : 'they';
+  const line = `${a.shared} of ${a.of} cards are in a deck ${
+    n === 1 ? `${who} played once` : `${who} have played ${n} times`
+  }`;
+  // A RESERVED ROW SAYS SO. It is in the family because it is close to what
+  // they play, not because it out-ranked the others, and letting the reader
+  // assume otherwise would be the screen overstating its own ranking.
+  return p.closestOfFamily ? `Closest of this win condition · ${line}` : line;
 }
 
 function DeckRow({ p, note }: { p: FieldPick; note?: string | null }) {
@@ -104,7 +111,7 @@ export function ClosestCard({
       ) : (
         <ul className={styles.deckList}>
           {near.map((p) => (
-            <DeckRow key={p.key} p={p} note={sharedLine(p)} />
+            <DeckRow key={p.key} p={p} note={sharedLine(p, self)} />
           ))}
         </ul>
       )}
@@ -174,29 +181,61 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
   const [open, setOpen] = useState<string | null>(fams[0]?.archetype ?? null);
   if (fams.length === 0) return null;
 
+  const mine = fams.filter((g) => g.yours);
+  const rest = fams.filter((g) => !g.yours);
+
+  const chips = (list: DeckFamily[]) => (
+    <div className={styles.famRow}>
+      {list.map((g: DeckFamily) => (
+        <button
+          key={g.archetype}
+          type="button"
+          className={styles.famChip}
+          aria-pressed={open === g.archetype}
+          onClick={() => setOpen(open === g.archetype ? null : g.archetype)}
+        >
+          {g.name} · {g.best.toFixed(1)}%
+          {g.familiar > 0 && (
+            <span className={styles.oppTag}> · {g.familiar} {self ? 'yours' : 'theirs'}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <ChartCard
       title="Every way to answer this field"
-      note="Grouped by win condition, best first. The order is the field's, not theirs."
+      note={
+        mine.length > 0
+          ? `${mine.length} win condition${mine.length === 1 ? '' : 's'} ${self ? 'you' : 'they'} can already play, then the rest of the field. Inside each, the field's own order decides.`
+          : "Grouped by win condition, best first. Nothing here is built from cards they already play, so this is the field's order throughout."
+      }
       badge={`${fams.length} win conditions`}
     >
-      <div className={styles.famRow}>
-        {fams.map((g: DeckFamily) => (
-          <button
-            key={g.archetype}
-            type="button"
-            className={styles.famChip}
-            aria-pressed={open === g.archetype}
-            onClick={() => setOpen(open === g.archetype ? null : g.archetype)}
-          >
-            {g.name} · {g.best.toFixed(1)}%
-            {/* MARKED IN PLACE, NEVER RE-SORTED. The family order is what
-                answers the field; familiarity is a mark on a row, the same
-                rule the arsenal follows. */}
-            {g.familiar > 0 && <span className={styles.oppTag}> · {g.familiar} {self ? 'yours' : 'theirs'}</span>}
-          </button>
-        ))}
-      </div>
+      {/* TWO GROUPS, NOT ONE RANKING — and the split is a measured fact
+          (is any deck of this win condition built from cards they play?)
+          rather than a weight. Ordering by a bounded familiarity nudge was
+          tried and measured: it moved 0 or 1 of 17 families on six live
+          accounts, because the gaps between families are five points wide and
+          the nudge is capped at 1.5. Grouping claims nothing about quality —
+          inside each run the field's rate still decides. */}
+      {mine.length > 0 && (
+        <>
+          <p className={styles.muted}>
+            {self ? 'You can already play these' : 'They can already play these'}
+          </p>
+          {chips(mine)}
+        </>
+      )}
+      {rest.length > 0 && (
+        <>
+          <p className={styles.muted}>
+            {mine.length > 0 ? 'The rest of the field' : 'The field'}
+          </p>
+          {chips(rest)}
+        </>
+      )}
       {fams
         .filter((g) => g.archetype === open)
         .map((g) => (
@@ -210,7 +249,7 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
             </p>
             <ul className={styles.deckList}>
               {g.decks.map((p) => (
-                <DeckRow key={p.key} p={p} note={sharedLine(p)} />
+                <DeckRow key={p.key} p={p} note={sharedLine(p, self)} />
               ))}
             </ul>
           </div>

@@ -360,6 +360,100 @@ check("it carries what a family row is judged on instead",
       all(set(g) >= {"archetype", "name", "best", "total", "familiar", "decks"} for g in _f))
 
 
+print("\nthe families are ordered FOR THIS PLAYER, within bounds")
+
+check("below the affinity floor familiarity is worth nothing",
+      cdl._fit_fraction({"shared": 4}) == 0.0 and cdl._fit_fraction({"shared": 0}) == 0.0)
+check("at the floor it is just above nothing", 0 < cdl._fit_fraction({"shared": 5}) <= 0.25)
+check("all eight shared is the maximum", cdl._fit_fraction({"shared": 8}) == 1.0)
+check("no affinity at all is nothing, not a middle value", cdl._fit_fraction(None) == 0.0)
+
+# A DECK THEY KNOW CAN OVERTAKE A SLIGHTLY BETTER ONE THEY DO NOT.
+_close = [sc("hog", 60.0), sc("hog", 59.4, shared=8)]
+check("a deck they know well overtakes one 0.6 points better",
+      cdl.families(_close)[0]["decks"][0]["expectedWinRate"] == 59.4)
+# AND IT IS BOUNDED, which is the whole honesty of the rule.
+_far = [sc("hog", 62.0), sc("hog", 59.4, shared=8)]
+check("but NOT one 2.6 points better — the nudge is capped at FIT_WEIGHT",
+      cdl.families(_far)[0]["decks"][0]["expectedWinRate"] == 62.0)
+check("the cap is team_scout's own, not a second opinion on one quantity",
+      cdl.FAMILIAR_WEIGHT == ts.FIT_WEIGHT)
+
+check("`best` stays the expected win rate, never the adjusted score",
+      cdl.families(_close)[0]["best"] == 59.4)
+
+_two = [sc("hog", 60.0), sc("golem", 60.4, shared=8)]
+check("a family they can pilot leads one marginally better that they cannot",
+      cdl.families(_two)[0]["archetype"] == "golem")
+check("a family records whether the personal order moved its top deck",
+      cdl.families([sc("hog", 61.0), sc("hog", 60.5, shared=8)])[0]["moved"] is True)
+_none = cdl.families([sc("hog", 55.0), sc("golem", 60.0)])
+check("with no familiarity anywhere the order is the field's, unchanged",
+      [g["archetype"] for g in _none] == ["golem", "hog"])
+check("and nothing is reported as moved — 0 is a real answer",
+      all(g["moved"] is False for g in _none))
+
+
+print("\nevery family reserves room for what they can pilot")
+
+# Twelve decks of one family: the four best are strangers, two weaker ones are
+# theirs. The field-only board would never show the two they can play.
+_big = ([sc("hog", 64.0 - n) for n in range(10)]
+        + [sc("hog", 52.0, cards=[f"own{i}" for i in range(8)], shared=7),
+           sc("hog", 51.0, cards=[f"ow2{i}" for i in range(8)], shared=6)])
+_g = cdl.families(_big)[0]
+check("the family still shows four decks", len(_g["decks"]) == 4, str(len(_g["decks"])))
+_rates = sorted(r["expectedWinRate"] for r in _g["decks"])
+check("two of them are the ones they can pilot",
+      52.0 in _rates and 51.0 in _rates, str(_rates))
+check("and two are still the field's best",
+      64.0 in _rates and 63.0 in _rates, str(_rates))
+check("the reserved rows are MARKED, so the screen can say why they are there",
+      sum(1 for r in _g["decks"] if r.get("closestOfFamily")) == 2)
+check("the field's best is not marked as one",
+      not next(r for r in _g["decks"] if r["expectedWinRate"] == 64.0).get("closestOfFamily"))
+check("the closest is preferred over the merely familiar",
+      any(r.get("closestOfFamily") and r["affinity"]["shared"] == 7 for r in _g["decks"]))
+
+# A FAMILY WITH NOTHING FAMILIAR SPENDS NO SLOTS.
+_plain = cdl.families([sc("golem", 64.0 - n) for n in range(10)])[0]
+check("a family with nothing familiar shows four of the field's best",
+      [r["expectedWinRate"] for r in _plain["decks"]] == [64.0, 63.0, 62.0, 61.0],
+      str([r["expectedWinRate"] for r in _plain["decks"]]))
+check("and marks none of them reserved",
+      not any(r.get("closestOfFamily") for r in _plain["decks"]))
+
+# A deck already in the top four is not ALSO taken as a reserved slot.
+_dup = ([sc("bait", 64.0, cards=[f"own{i}" for i in range(8)], shared=8)]
+        + [sc("bait", 60.0 - n) for n in range(10)])
+_gd = cdl.families(_dup)[0]
+check("a familiar deck already in the cut does not consume a reserved slot too",
+      len({r["key"] for r in _gd["decks"]}) == 4, str([r["key"] for r in _gd["decks"]]))
+check("so the field's next best still gets in",
+      60.0 in [r["expectedWinRate"] for r in _gd["decks"]],
+      str([r["expectedWinRate"] for r in _gd["decks"]]))
+
+check("a family smaller than the cut is shown whole",
+      len(cdl.families([sc("mortar", 55.0), sc("mortar", 54.0)])[0]["decks"]) == 2)
+
+
+print("the board is grouped by what they can already play")
+
+_mix = [sc("hog", 64.0), sc("golem", 55.0, shared=7), sc("mortar", 60.0)]
+_go = cdl.families(_mix)
+check("a win condition they can play leads one 9 points better that they cannot",
+      _go[0]["archetype"] == "golem", str([g["archetype"] for g in _go]))
+check("and the rest keep the field's own order behind it",
+      [g["archetype"] for g in _go[1:]] == ["hog", "mortar"])
+check("each family says whether it is in their range",
+      [g["yours"] for g in _go] == [True, False, False])
+check("grouping claims nothing about quality — `best` is untouched",
+      _go[0]["best"] == 55.0 and _go[1]["best"] == 64.0)
+check("with nothing familiar it is exactly the field's order",
+      [g["archetype"] for g in cdl.families([sc("hog", 64.0), sc("golem", 55.0)])]
+      == ["hog", "golem"])
+
+
 print("\nclosest: what they could pilot today")
 _near = cdl.closest(_scored)
 check("only familiar decks are in it", all(r["affinity"]["familiar"] for r in _near))

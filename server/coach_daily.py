@@ -588,6 +588,15 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         # structural rather than enforced by `diversify`'s repeat penalty.
         **({} if brief else {
             "families": fams,
+            # HOW MANY FAMILIES THE PERSONAL ORDER ACTUALLY MOVED. 0 is a real
+            # answer -- a player with no overlap gets the field's board, and
+            # the screen says so rather than implying a tailoring that did not
+            # happen. Same discipline as `tailoredPicks`.
+            "personalised": sum(1 for g in fams if g.get("moved")),
+            # How many win conditions they can already play. It is what the
+            # board is grouped by, so the screen states it rather than leaving
+            # the reader to count the sections.
+            "yourFamilies": sum(1 for g in fams if g.get("yours")),
             # Of those, the ones built from cards they already play.
             "closest": near,
             # One win condition outside their range that beats everything in
@@ -676,9 +685,44 @@ AFFINITY_MIN = 5
 #: means.
 REPERTOIRE_MIN_BATTLES = 5
 
+#: Points of expected win rate a deck is worth for being one they could
+#: already pilot. `team_scout.FIT_WEIGHT`, reused rather than reinvented: it
+#: is the same claim ("this player has practice on this") with the same units,
+#: and two different weights for one quantity would eventually disagree.
+#:
+#: IT IS BOUNDED AND SMALL ON PURPOSE. At most 1.5 points, so a deck they know
+#: well can overtake one a point better that they have never touched, and
+#: cannot overtake one six points better. Raising it would manufacture
+#: personalisation rather than measure it -- the mistake `MAX_BOOST` is capped
+#: to avoid, made in a second place.
+FAMILIAR_WEIGHT = ts.FIT_WEIGHT
+
 #: Decks kept per win condition. The family exists to show that an archetype
 #: has variants; four is enough to see that and short enough to scan.
 FAMILY_DECKS = 4
+
+#: Of those four, how many are reserved for the decks CLOSEST TO WHAT THEY
+#: PLAY rather than to the field's best.
+#:
+#: THE ORDERING NUDGE ALONE WAS NOT ENOUGH, AND THE MEASUREMENT IS WHY. With
+#: `FAMILIAR_WEIGHT` and nothing else, `personalised` came back 0 or 1 of 17
+#: families on all six live accounts and 54 of ~68 decks sat on every single
+#: player's board -- the board was still the same board, which is exactly what
+#: was reported. The gap between a family's best deck and its second is
+#: routinely five points, far more than the 1.5 a bounded nudge may move, so
+#: familiarity could never reorder anything.
+#:
+#: RAISING THE WEIGHT WAS THE WRONG FIX: it would put worse decks above better
+#: ones on a weak signal, which is manufacturing personalisation rather than
+#: measuring it -- the mistake `MAX_BOOST` is capped to avoid.
+#:
+#: This is `PRIORITY_SLOTS`' answer to the same problem one level down. The
+#: family keeps its best answers AND reserves room for the ones this player
+#: could actually pick up, each labelled, instead of pretending a single
+#: ranking can carry both claims. A family with nothing familiar in it spends
+#: no slots and shows four of the field's best, because there is nothing
+#: personal to say about it.
+FAMILY_FAMILIAR_SLOTS = 2
 
 #: A win condition is outside their range when it is under this share of their
 #: battles AND under this many of them. Both, because the share alone calls a
@@ -749,6 +793,86 @@ def deck_affinity(cards, own: list[dict]) -> dict:
     }
 
 
+def _fit_fraction(aff: dict | None) -> float:
+    """0 at the affinity floor, 1 when all eight cards are shared.
+
+    Below the floor it is ZERO rather than a small number: three and four
+    shared cards are reachable by staples alone, so crediting them would let
+    the noise floor reorder a board.
+    """
+    if not aff:
+        return 0.0
+    n = int(aff.get("shared") or 0)
+    span = 8 - (AFFINITY_MIN - 1)
+    return max(0.0, min(1.0, (n - (AFFINITY_MIN - 1)) / span))
+
+
+def personal_rate(r: dict) -> float:
+    """Expected win rate, plus what practice on it is worth to THIS player.
+
+    THE ONE RULE THAT PERSONALISES THE BOARD. The families were ordered by the
+    field alone and every player saw the same seventeen sections in the same
+    order with the same decks inside them, which is the complaint this exists
+    to answer.
+
+    It is deliberately NOT a re-ranking by familiarity: that would put the deck
+    they already play at the top of a screen whose job is telling them what to
+    play instead. It is the field's answer, nudged by at most
+    `FAMILIAR_WEIGHT` points toward what they can actually pilot.
+
+    WHERE THEY HAVE NO HISTORY IT CHANGES NOTHING, and that is correct rather
+    than a shortfall: if they have never played Mortar, the best Mortar decks
+    are the best Mortar decks, and inventing a personal order over them would
+    be inventing. `personalised` on the payload counts how many families this
+    actually moved, so the screen can state the size of the effect instead of
+    implying it.
+    """
+    return r.get("expectedWinRate", 0.0) + FAMILIAR_WEIGHT * _fit_fraction(r.get("affinity"))
+
+
+def _pick(decks: list[dict], per: int) -> list[dict]:
+    """The `per` decks of one family this player should see.
+
+    The field's best FIRST, then up to `FAMILY_FAMILIAR_SLOTS` reserved for the
+    ones closest to what they play that did not already make the cut. Each
+    reserved row is marked `closestOfFamily`, so the screen says why it is
+    there rather than implying it out-ranked the others.
+
+    A FAMILY WITH NOTHING FAMILIAR SPENDS NO SLOTS. Reserving room for decks
+    that do not exist would drop the field's third and fourth best answers to
+    show nothing in their place.
+    """
+    familiar = [r for r in decks if r.get("affinity", {}).get("familiar")]
+    if not familiar or per <= FAMILY_FAMILIAR_SLOTS:
+        return decks[:per]
+
+    reserved = min(FAMILY_FAMILIAR_SLOTS, len(familiar))
+    keep = decks[:per - reserved]
+    seen = {r["key"] for r in keep}
+    # Closest first among those not already shown; ties by the better answer.
+    extra = sorted(
+        (r for r in familiar if r["key"] not in seen),
+        key=lambda r: (-(r.get("affinity", {}).get("shared") or 0), -r["expectedWinRate"]),
+    )[:reserved]
+    for r in extra:
+        r["closestOfFamily"] = True
+    out = keep + extra
+
+    # TOP BACK UP IF THE RESERVATION WENT UNSPENT. A test caught this: when the
+    # only familiar deck is ALREADY in the top cut there is nothing left to put
+    # in the slot held for it, and the family came back with three decks
+    # instead of four -- a reservation quietly costing the reader the field's
+    # fourth-best answer and showing nothing in its place.
+    if len(out) < per:
+        seen = {r["key"] for r in out}
+        out += [r for r in decks if r["key"] not in seen][:per - len(out)]
+
+    # Back into reading order once chosen: the list is still a ranking, the
+    # reservation only decides WHO is in it.
+    out.sort(key=lambda r: (-personal_rate(r), -r["expectedWinRate"], r["name"]))
+    return out
+
+
 def families(scored: list[dict], per: int = FAMILY_DECKS) -> list[dict]:
     """The scored pool grouped by win condition, best family first.
 
@@ -772,9 +896,18 @@ def families(scored: list[dict], per: int = FAMILY_DECKS) -> list[dict]:
 
     out = []
     for g in groups.values():
-        g["decks"].sort(key=lambda r: (-r["expectedWinRate"], r["name"]))
+        # The field's own order, kept so the payload can say how much the
+        # personal one actually differs from it -- the `tailoredPicks` rule:
+        # a claim the reader cannot check is not worth making.
+        field_first = min(g["decks"], key=lambda r: (-r["expectedWinRate"], r["name"]))
+        g["decks"].sort(key=lambda r: (-personal_rate(r), -r["expectedWinRate"], r["name"]))
         best = g["decks"][0]
+        # `best` STAYS THE EXPECTED WIN RATE, never the personal score. The
+        # screen prints it as a percentage against the field, and printing a
+        # familiarity-adjusted number as a win rate would be printing a figure
+        # that is not one.
         g["best"] = best["expectedWinRate"]
+        g["moved"] = best["key"] != field_first["key"]
         # NO `spreadCovered` ON THE FAMILY. It was published for one build and
         # measured 100.0 for all seventeen families on every account -- at the
         # top of a 204-deck pool every family's best deck answers the whole
@@ -784,9 +917,31 @@ def families(scored: list[dict], per: int = FAMILY_DECKS) -> list[dict]:
         # Marked in place rather than re-sorted: the coach's own rule from the
         # arsenal, and it keeps the family list a statement about the FIELD.
         g["familiar"] = sum(1 for r in g["decks"] if r.get("affinity", {}).get("familiar"))
-        g["decks"] = g["decks"][:per]
+        # IN THEIR RANGE, OR NOT. This is the partition the board is grouped
+        # by, and it is a measured fact rather than a weight: either some deck
+        # of this win condition is built from cards they already play, or none
+        # is.
+        g["yours"] = g["familiar"] > 0
+        g["_p"] = personal_rate(best)
+        g["decks"] = _pick(g["decks"], per)
         out.append(g)
-    out.sort(key=lambda g: (-g["best"], g["name"]))
+    # WIN CONDITIONS THEY CAN ALREADY PLAY FIRST, then the rest of the field,
+    # each run ordered by how well it answers the field.
+    #
+    # THIS IS A PARTITION, NOT A WEIGHT, AND THE MEASUREMENT IS WHY. Ordering
+    # by `personal_rate` alone moved 0 or 1 of 17 families on all six live
+    # accounts and left 54 of ~68 decks on every player's board -- the board
+    # really was the same board, which is what was reported. A bounded nudge
+    # cannot reorder a list whose gaps are five points wide, and un-bounding it
+    # would rank worse decks above better ones on a weak signal.
+    #
+    # Grouping claims nothing about quality: inside each run the field's own
+    # rate still decides, so a deck is never called better for being familiar.
+    # It answers a different question -- "which of these can I play today" --
+    # by putting those sections where they can be found.
+    out.sort(key=lambda g: (not g["yours"], -g["_p"], -g["best"], g["name"]))
+    for g in out:
+        g.pop("_p", None)
     return out
 
 
