@@ -363,12 +363,33 @@ function Overview({
           note="wins ÷ battles"
           icon={<TrendIcon />}
         />
-        <KeyMetricCard
-          label="Path of Legends"
-          value={p?.rankedTrophies != null ? nf.format(p.rankedTrophies) : '—'}
-          note={p?.rankedRank != null ? `#${nf.format(p.rankedRank)} global` : 'below the leaderboard cut'}
-          icon={<CrownIcon />}
-        />
+        {/* A RANKED SEASON RESETS TO ZERO, and printing that zero reads as
+            either "no data" or "they are terrible" — it is neither. Measured
+            on this very roster: rankedTrophies 0 with a rankedBest of 2,171,
+            because the season had turned and they had not queued yet. The
+            degradation is the one PlayerAnalysis already documents: no ranked
+            season this time -> trophy road and arena, which are real figures
+            about the same player. `rankedRank` is guarded SEPARATELY because
+            it is null below the leaderboard cut while trophies are set. */}
+        {p?.rankedTrophies ? (
+          <KeyMetricCard
+            label="Path of Legends"
+            value={nf.format(p.rankedTrophies)}
+            note={p.rankedRank != null ? `#${nf.format(p.rankedRank)} global` : 'below the leaderboard cut'}
+            icon={<CrownIcon />}
+          />
+        ) : (
+          <KeyMetricCard
+            label="Trophy road"
+            value={p?.trophies != null ? nf.format(p.trophies) : '—'}
+            note={
+              p?.rankedBest
+                ? `${p.arena ?? 'arena'} · ranked best ${nf.format(p.rankedBest)}`
+                : (p?.arena ?? 'no ranked season yet')
+            }
+            icon={<CrownIcon />}
+          />
+        )}
         <KeyMetricCard
           label="To work on"
           value={String(plan.weighted.length)}
