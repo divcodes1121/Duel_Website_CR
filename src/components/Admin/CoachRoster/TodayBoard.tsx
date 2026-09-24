@@ -4,6 +4,7 @@ import { fetchFieldPlan, type FieldPlan } from '../../../state/analyticsClient';
 import { coachHref, playerLabel, type RosterPlayer } from '../../../state/coachRoster';
 import { todayRow, todaySummary, type TodayRow } from '../../../state/coachToday';
 import { CardArt } from '../../Analytics/CardArt';
+import { drawnDeck } from '../../../utils/deckSeating';
 import { ChartCard, DashBadge } from '../../ui/bionis-dashboard';
 import styles from './CoachRoster.module.css';
 
@@ -81,9 +82,25 @@ export function TodayBoard({ players }: { players: RosterPlayer[] }) {
                 <div className={styles.deckItemHead} style={{ cursor: 'default' }}>
                   {r.pick && r.pick.cards.length > 0 ? (
                     <div className={styles.deckCards}>
-                      {r.pick.cards.map((c) => (
-                        <CardArt key={c} card={c} className={styles.deckCard} />
-                      ))}
+                      {/* `drawnDeck`, not a raw `art` lookup: the pick carries
+                          the art the SERVER seated (`plan()` runs every row
+                          through `deck_counter.seater()`) and this falls back
+                          to the capability seating when it does not. Dropping
+                          it entirely — which is what this did — drew every
+                          card in its base form, so an evolution, a hero and a
+                          champion in slots 0/1/2 rendered as plain cards. */}
+                      {(() => {
+                        const d = drawnDeck(r.pick.cards, r.pick.art, r.pick.artInferred);
+                        return d.cards.map((c) => (
+                          <CardArt
+                            key={c}
+                            card={c}
+                            variant={d.art[c]}
+                            inferred={d.inferred}
+                            className={styles.deckCard}
+                          />
+                        ));
+                      })()}
                     </div>
                   ) : (
                     <span className={styles.muted}>—</span>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CardArt } from './CardArt';
+import { drawnDeck } from '../../utils/deckSeating';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { CARDS_BY_KEY } from '../../data/cards';
 import { parseClashRoyaleDeckLink } from '../../utils/deckLink';
@@ -971,10 +972,19 @@ function OpponentReadPanel({ tag }: { tag: string }) {
       </h4>
 
       <div className={styles.oiePrimary}>
+        {/* THE PROXY STRIPS THE SEATING. `api/analytics/opponent-read` rebuilds
+            its response field by field and `primary` is `{cards, confidence,
+            basis}` — no art — so these decks arrive unseated and every card
+            drew its base form. `drawnDeck` falls back to the capability
+            seating and marks it `inferred`, so the tooltip says the form came
+            from slot position rather than from an observation. */}
         <ul className={styles.oieCards}>
-          {read.primary.cards.map((c) => (
-            <li key={c}><CardArt card={c} /></li>
-          ))}
+          {(() => {
+            const d = drawnDeck(read.primary.cards, undefined);
+            return d.cards.map((c) => (
+              <li key={c}><CardArt card={c} variant={d.art[c]} inferred={d.inferred} /></li>
+            ));
+          })()}
         </ul>
         <div className={styles.oieMeta}>
           <span className={styles.oieLabel}>Current / most recent deck</span>
@@ -1002,9 +1012,12 @@ function OpponentReadPanel({ tag }: { tag: string }) {
             {alts.map((a, i) => (
               <li key={i} className={styles.oieAlt}>
                 <ul className={styles.oieCards} data-small>
-                  {a.cards.map((c) => (
-                    <li key={c}><CardArt card={c} /></li>
-                  ))}
+                  {(() => {
+                    const d = drawnDeck(a.cards, undefined);
+                    return d.cards.map((c) => (
+                      <li key={c}><CardArt card={c} variant={d.art[c]} inferred={d.inferred} /></li>
+                    ));
+                  })()}
                 </ul>
                 {!!a.evidence.length && (
                   <span className={styles.oieEvidence}>{a.evidence[0]}</span>

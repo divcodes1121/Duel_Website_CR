@@ -39,7 +39,17 @@ export interface TodayPlanInput {
   basis: 'weighted' | 'unweighted' | 'no_history' | 'none';
   battles: number;
   tailoredPicks: number;
-  recommendations: { key: string; name: string; expectedWinRate: number; cards?: string[]; fromWeighting?: boolean }[];
+  recommendations: {
+    key: string;
+    name: string;
+    expectedWinRate: number;
+    cards?: string[];
+    /** The seating the SERVER computed. Carried through, because the board
+     *  draws these cards and without it every one renders in its base form. */
+    art?: Record<string, 'evolution' | 'hero'>;
+    artInferred?: boolean;
+    fromWeighting?: boolean;
+  }[];
   weighted: { archetype: string; name: string; battles: number; winRate: number; deficit: number }[];
 }
 
@@ -48,7 +58,17 @@ export interface TodayRow {
   label: string;
   kind: TodayKind;
   /** The one deck to put in front of them, or null when there is no plan. */
-  pick: { key: string; name: string; expectedWinRate: number; cards: string[] } | null;
+  pick: {
+    key: string;
+    name: string;
+    expectedWinRate: number;
+    cards: string[];
+    /* THE TYPE USED TO DROP THESE, so the board could not draw an evolution,
+       a hero or a champion even though the server had seated them — the art
+       was on the payload and thrown away one type earlier. */
+    art?: Record<string, 'evolution' | 'hero'>;
+    artInferred?: boolean;
+  } | null;
   /** What the weighting moved toward, worst first. Empty is a real answer. */
   workOn: string[];
   /** One short sentence. Never an adjective the plan cannot carry. */
@@ -72,7 +92,14 @@ export function todayRow(
 
   const top = plan.recommendations[0];
   const pick = top
-    ? { key: top.key, name: top.name, expectedWinRate: top.expectedWinRate, cards: top.cards ?? [] }
+    ? {
+        key: top.key,
+        name: top.name,
+        expectedWinRate: top.expectedWinRate,
+        cards: top.cards ?? [],
+        art: top.art,
+        artInferred: top.artInferred,
+      }
     : null;
   const workOn = plan.weighted.slice(0, 3).map((w) => w.name);
 

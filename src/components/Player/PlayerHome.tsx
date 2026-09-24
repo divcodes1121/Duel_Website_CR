@@ -4,6 +4,7 @@ import { useMyCoach, type MyRosterSeat } from '../../state/myCoach';
 import { useAccountStore } from '../../state/accountStore';
 import { DAY_PRESETS } from '../../utils/datePresets';
 import { CardArt } from '../Analytics/CardArt';
+import { positionalArt } from '../../utils/deckSeating';
 import { ReadingState } from '../Analytics/ReadingState';
 import { RecentBattles } from '../Analytics/RecentBattles';
 import { DeckActions } from '../DeckActions/DeckActions';
@@ -258,12 +259,22 @@ export default function PlayerHome() {
               </p>
             ) : (
               <ul className={styles.deckList}>
-                {myDecks.map((d) => (
+                {myDecks.map((d) => {
+                  /* AN ARSENAL DECK'S ORDER IS POSITIONAL — slot 0 evolution,
+                     1 hero, 2 wild — so its art has to be seated from the
+                     slots. Without this every card drew its BASE form, so an
+                     evolution, a hero and a champion in the first three slots
+                     rendered as plain cards. `ArsenalTab` and `AssistTab` draw
+                     the same rows through `positionalArt`; this screen did not,
+                     which is exactly the kind of divergence that makes a
+                     player's own dashboard disagree with their coach's. */
+                  const art = positionalArt(d.cards);
+                  return (
                   <li key={d.id} className={styles.deckItem}>
                     <div className={styles.deckItemHead} style={{ cursor: 'default' }}>
                       <div className={styles.deckCards}>
                         {d.cards.map((c) => (
-                          <CardArt key={c} card={c} className={styles.deckCard} />
+                          <CardArt key={c} card={c} variant={art[c]} className={styles.deckCard} />
                         ))}
                       </div>
                       <span className={styles.deckFigures}>
@@ -275,7 +286,8 @@ export default function PlayerHome() {
                       </span>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </ChartCard>

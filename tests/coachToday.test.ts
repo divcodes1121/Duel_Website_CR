@@ -59,6 +59,24 @@ describe('one row per player', () => {
     expect(todayRow('#A', 'X', null).kind).toBe('failed');
     expect(todayRow('#A', 'X', plan({ basis: 'none' })).kind).toBe('failed');
     expect(todayRow('#A', 'X', plan({ recommendations: [] })).kind).toBe('failed');
+
+    // THE SEATING MUST SURVIVE THE TYPE. It did not: `pick` was narrowed to
+    // {key, name, expectedWinRate, cards} and the art the server had already
+    // computed was dropped one type before the board, so every card on the
+    // Today board rendered in its base form -- no evolution, no hero, no
+    // champion in slots 0/1/2.
+    const seated = todayRow('#A', 'X', plan({
+      recommendations: [{
+        key: 'g',
+        name: 'Graveyard',
+        expectedWinRate: 63.7,
+        cards: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
+        art: { a: 'evolution', b: 'hero' },
+        artInferred: false,
+      }],
+    }));
+    expect(seated.pick?.art).toEqual({ a: 'evolution', b: 'hero' });
+    expect(seated.pick?.artInferred).toBe(false);
     expect(todayRow('#A', 'X', null).pick).toBeNull();
   });
 
