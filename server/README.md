@@ -1111,6 +1111,82 @@ The personal part is the filter (they have played it 0 times), and six players
 who all ignore the two best archetypes genuinely have the same thing to learn.
 Left as an observation rather than manufacturing variety.
 
+### Two signals, and which question each one answers
+
+Personalising this board needed two different measurements, and using one for
+both jobs failed twice in ways only live data showed.
+
+| | `affinity.shared` | `affinity.known` |
+| --- | --- | --- |
+| counts | overlap with the single closest deck they run | cards of the eight they play **anywhere** |
+| claims | "you could pilot this today" | "this is built out of your cards" |
+| floor | `AFFINITY_MIN` 5 | `KNOWN_MIN` 5 |
+| qualifies (6 live accounts) | 0–55 of 204 | 1–161 of 204 |
+| drives | the **Closest** list | the family **reserved slots** |
+
+**The board is partitioned on neither of them.** It is partitioned on
+`in_range()` — have they actually played this win condition — which is
+`worth_learning`'s own test inverted, so "outside their range" means one thing
+in the module and the board cannot offer a family as new while also calling it
+theirs.
+
+**Three attempts, and the first two are worth keeping because each failed for
+a reason that will recur:**
+
+1. **A bounded weight (`FAMILIAR_WEIGHT`, 1.5 points) moved nothing.**
+   `personalised` came back 0 or 1 of 17 families on all six accounts and 54
+   of ~68 decks sat on every player's board. The gaps between families are
+   five points wide. Un-bounding it would rank worse decks above better ones
+   on a weak signal — `MAX_BOOST`'s mistake in a second place. It is kept as a
+   tiebreak and the payload publishes how little it does.
+2. **Grouping on card overlap collapsed.** A player with 25 decks and a
+   67-card pool clears "5 of 8 are cards I play" in **all seventeen**
+   families, so every chip read `· 12` and every section landed in "Theirs".
+   Card overlap is dense precisely because it is a weak claim, which is why it
+   cannot decide range.
+3. **Reserved slots + a history partition worked.** `FAMILY_FAMILIAR_SLOTS`
+   (2 of 4) is `PRIORITY_SLOTS`' answer one level down: the family keeps its
+   best answers and reserves room for the ones built from their cards, each
+   marked `closestOfFamily` so the screen says why it is there.
+
+**Measured across the six busiest live accounts:**
+
+| | before | after |
+| --- | --- | --- |
+| decks common to all six, per family | 2–4 of 4 | **1–3 of 4** |
+| families identical for everyone | 3 of 17 | **0 of 17** |
+| section orders identical | 15 of 15 pairs | **0 of 15** |
+| distinct decks across boards | 86 of 408 | **111 of 408** |
+
+**Two of the four slots are still the field's best and are the same for
+everyone**, correctly — they are the best answers, and showing a player worse
+ones to look personal would invert the point. A player with four decks that
+match nothing in the pool gets the field's order throughout, and the copy says
+so.
+
+### It moves with the meta, and the screen says when
+
+The pool is `deck_counter.seeds()` out of `.counter_snapshot.json`, rebuilt on
+`CLASH_COUNTER_REFRESH` (hourly) from a rolling **10-day** window of real
+battles; `_scout_candidates` caches on that snapshot's own `computedAt`, so
+the pool invalidates when the meta rebuilds. The player's side is a rolling
+30 days. `FreshnessLine` prints `Meta 10d to <date> · <age> · trend off|Nd`,
+because a board with no date on it cannot be told from a stuck one.
+
+The 7-day directional weighting (`trend`) reports itself **off** until
+`meta_history` holds `TREND_MIN_DAYS`; it began 2026-09-23.
+
+### The copy is figures
+
+No sentence explains a number that is already on screen — the rule already
+applied to Team Scout's screens. `54.3% expected against the field` is
+`54.3%`; `Closest of this win condition · 8 of 8 cards are in a deck they have
+played 17 times` is `Closest yours · 8/8 of one deck · 17 games`; two ISO
+ranges are `Last 30d vs previous 30d` with the dates in a `title`. **The
+noise band, the counts and every floor still print** — they are what stop a
+coach acting on noise. Units are stated once per card rather than on each of
+68 rows.
+
 ## The card board (`player_cards.py`)
 
 Use rate and win rate for all 123 cards for one player, over a window, with
