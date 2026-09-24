@@ -19,6 +19,7 @@ const Sketchbook = lazy(() =>
 /* COACH ROSTER, lazy for the same reason: an admin's tool, and nothing in the
    public bundle should pay for it. */
 const CoachRoster = lazy(() => import('./components/Admin/CoachRoster/CoachRoster'));
+const PlayerHome = lazy(() => import('./components/Player/PlayerHome'));
 
 /* One shell for every signed-in route. The builder, Deck's Home and Counter
  * Palette used to be separate full pages, each with its own nav bar; they now
@@ -111,6 +112,21 @@ function App() {
      there, and the screen runs on an in-memory roster it labels as such). In
      production the screen refuses non-admins itself, and the database —
      `coach_players`' Row Level Security — refuses them underneath. */
+  /* A ROSTER PLAYER'S OWN DASHBOARD. Outside the Supabase branch for the same
+     reason the roster is: a checkout without Supabase can still open it, and
+     the screen says plainly that nobody's roster has them. Its own route
+     rather than a section of the Dashboard shell, because it is a different
+     AUDIENCE — the shell's rail is one loaded player's analytics sections. */
+  if (route.startsWith('#/my')) {
+    return (
+      <div className={styles.app}>
+        <Suspense fallback={null}>
+          <PlayerHome />
+        </Suspense>
+      </div>
+    );
+  }
+
   if (route.startsWith('#/admin/coach')) {
     return (
       <div className={styles.app}>

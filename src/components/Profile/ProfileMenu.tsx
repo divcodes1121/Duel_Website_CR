@@ -10,6 +10,7 @@ import { ProContact } from '../Analytics/ProContact';
 import { ChangePassword } from '../Auth/ChangePassword';
 import { WhatsNewDialog } from '../WhatsNew/WhatsNew';
 import { useReleaseFeed } from '../../state/whatsNew';
+import { useMyCoach } from '../../state/myCoach';
 import { useAccess } from '../../state/gate';
 import styles from './ProfileMenu.module.css';
 
@@ -140,6 +141,16 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
      disagree — and a reader who sees 3 in one place and nothing in the
      other stops believing either. */
   const { unread: news } = useReleaseFeed();
+  /* WHETHER A COACH HAS LINKED THIS ACCOUNT (006). One RPC, fired once the
+     session is known; `null` until it lands and `[]` when nobody's roster has
+     them, so the row never appears for an account it would take to an empty
+     screen. */
+  const mySeats = useMyCoach((s) => s.seats);
+  const loadSeats = useMyCoach((s) => s.load);
+  const userId = useAccountStore((s) => s.userId);
+  useEffect(() => {
+    if (userId && mySeats === null) void loadSeats();
+  }, [userId, mySeats, loadSeats]);
   const open = pos !== null;
 
   function toggleOpen() {
@@ -406,6 +417,17 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                   <Glyph d="book" />
                   Field Book
                 </a>
+                {/* ONLY WHEN A COACH HAS LINKED THIS ACCOUNT. `seats` is null
+                    until the read lands and `[]` when nobody's roster has
+                    them, so an unlinked account never sees a row it would
+                    click into an empty screen. The read is one RPC, fired
+                    once the session is known. */}
+                {mySeats && mySeats.length > 0 && (
+                  <a className={styles.item} role="menuitem" href="#/my" onClick={() => setPos(null)}>
+                    <Glyph d="console" />
+                    My coaching
+                  </a>
+                )}
                 {tier === 'admin' && (
                   <a
                     className={styles.item}
