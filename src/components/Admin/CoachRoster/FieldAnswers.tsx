@@ -275,10 +275,10 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
         .map((g) => (
           <div key={g.archetype}>
             <p className={styles.muted}>
-              {[`${g.total} decks`,
-                g.games > 0 ? `${g.games} games played` : null,
-                g.knows > 0 ? `${g.knows} from ${self ? 'your' : 'their'} cards` : null,
-                `top ${g.decks.length}`].filter(Boolean).join(' · ')}
+              {/* `knows` is deliberately NOT here: it read 12 of 12 in every
+                  family for a broad player, so it varies too little to be
+                  worth a column. The games figure is on the chip already. */}
+              {[`${g.total} decks`, `top ${g.decks.length}`].join(' · ')}
             </p>
             <ul className={styles.deckList}>
               {g.decks.map((p) => (
