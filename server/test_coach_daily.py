@@ -167,6 +167,70 @@ check("an archetype already in the cut costs no slot",
 check("a weakness the meta does not carry at all is simply not added",
       all(t["archetype"] != "nope" for t in cdl.field_threats(wide, priority=["nope"])))
 
+print("\nthe meta's own direction")
+
+
+def mv(basis="measured", apart=7, rows=()):
+    return {"basis": basis, "daysApart": apart, "reason": None, "rows": list(rows)}
+
+
+def row(h, prev, delta, rank=None):
+    return {"deckHash": h, "previousUseRate": prev, "useDelta": delta, "rankDelta": rank}
+
+
+tb = cdl.field_threats(board(deck("a", "hog", 10.0), deck("b", "golem", 10.0)))
+# field_threats must carry the join key, or nothing can ever match.
+check("a threat carries the board's own deckHash",
+      all(t.get("deckHash") for t in tb), [t.get("deckHash") for t in tb])
+
+up, st = cdl.trend_threats(tb, mv(rows=[row("a", 8.0, 2.0)]))
+by = {t["archetype"]: t for t in up}
+check("a rising deck gains mass", by["hog"]["likelihood"] > by["golem"]["likelihood"],
+      {k: v["likelihood"] for k, v in by.items()})
+check("and it still sums to 1.0", abs(sum(t["likelihood"] for t in up) - 1.0) < 1e-3)
+check("the trend is reported on the row, not hidden",
+      by["hog"]["trend"] and by["hog"]["trend"]["factor"] > 1.0, by["hog"]["trend"])
+check("the untouched deck carries trend None", by["golem"]["trend"] is None)
+check("and the state says it ran", st["applied"] is True and st["moved"] == 1, st)
+
+down, _ = cdl.trend_threats(tb, mv(rows=[row("a", 8.0, -4.0)]))
+byd = {t["archetype"]: t for t in down}
+check("a deck being dropped loses mass", byd["hog"]["likelihood"] < byd["golem"]["likelihood"],
+      {k: v["likelihood"] for k, v in byd.items()})
+
+huge, _ = cdl.trend_threats(tb, mv(rows=[row("a", 0.1, 90.0)]))
+check("the lift is BOUNDED, or one week's fashion becomes the whole field",
+      max(t["trend"]["factor"] for t in huge if t["trend"]) <= cdl.TREND_MAX)
+crash, _ = cdl.trend_threats(tb, mv(rows=[row("a", 90.0, -89.0)]))
+check("and so is the trim", min(t["trend"]["factor"] for t in crash if t["trend"])
+      >= 1.0 / cdl.TREND_MAX)
+
+noise, stn = cdl.trend_threats(tb, mv(rows=[row("a", 8.0, 0.05)]))
+check("a wobble under the floor moves NOTHING, not a little",
+      all(t["likelihood"] == b["likelihood"] for t, b in zip(noise, tb)), stn["moved"])
+
+print("\na short span is the board's churn, not a trend")
+short, sts = cdl.trend_threats(tb, mv(apart=1, rows=[row("a", 8.0, 4.0)]))
+check("under TREND_MIN_DAYS nothing moves", sts["applied"] is False)
+check("and the reason says why", "churn" in (sts["reason"] or ""), sts["reason"])
+check("likelihoods are untouched",
+      [t["likelihood"] for t in short] == [t["likelihood"] for t in tb])
+
+print("\nno history is not a flat trend")
+none_, stn2 = cdl.trend_threats(tb, {"basis": "none", "reason": "nothing stored yet", "rows": []})
+check("basis none applies nothing", stn2["applied"] is False)
+check("and every row still carries the key, just null",
+      all("trend" in t and t["trend"] is None for t in none_))
+check("a missing movement payload is handled too",
+      cdl.trend_threats(tb, None)[1]["applied"] is False)
+
+# `entered` rows carry a null delta BY DESIGN — the board is a top fifty, so
+# arriving at rank 40 is not a climb from 51.
+entered, ste = cdl.trend_threats(tb, mv(rows=[
+    {"deckHash": "a", "previousUseRate": None, "useDelta": None, "rankDelta": None}]))
+check("a deck that was not on the older board is NOT treated as a riser",
+      all(t["trend"] is None for t in entered) and ste["moved"] == 0)
+
 print("\nno prose")
 _src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "coach_daily.py"),
             encoding="utf-8").read()

@@ -16,6 +16,27 @@
   }
 }
 
+/* The way out. This route renders outside the app shell, so it carries its
+   own — see the note at the call site. */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back:hover {
+  border-color: var(--border-strong);
+}
+
 .notice {
   max-width: 34rem;
   margin: 3rem auto;

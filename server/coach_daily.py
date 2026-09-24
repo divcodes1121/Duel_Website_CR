@@ -81,6 +81,27 @@ MIN_FACED = 10
 #: The most a single weakness may multiply a threat's likelihood by.
 MAX_BOOST = 2.0
 
+#: Days of meta history the projection asks for.
+TREND_DAYS = 7
+
+#: THE SMALLEST REAL SPAN THAT MAY MOVE ANYTHING. The board recomputes every
+#: half hour and a one-day delta is mostly that churn — measured live the day
+#: after the history started, sixteen of fifty decks had "moved" a rank or two
+#: overnight. Under this many days apart the trend is reported and applied to
+#: NOTHING, which is the same rule every other floor here follows: below the
+#: floor, say nothing rather than say a little.
+TREND_MIN_DAYS = 3
+
+#: The most a trend may multiply a threat's likelihood by, and its reciprocal
+#: is the most it may divide one. Bounded for the reason MAX_BOOST is: a
+#: projection is about what they will MEET, and a deck cannot become the whole
+#: field in a week.
+TREND_MAX = 1.25
+
+#: Relative change in use rate below which nothing moves. A deck at 0.30% that
+#: gains 0.01pp has not risen; it has wobbled.
+TREND_FLOOR = 0.15
+
 #: Slots in the projection reserved for archetypes this player measurably
 #: loses to but the field's most-played decks do not cover.
 #:
@@ -152,6 +173,10 @@ def field_threats(board: dict, limit: int = MAX_THREATS,
     for d in rows:
         out.append({
             "key": ts.deck_key(d.get("cards")),
+            # THE JOIN KEY FOR TRENDS. `key` is the sorted card list and the
+            # meta history is keyed by the board's own `deckHash`; they are
+            # different identifiers and only this one matches.
+            "deckHash": d.get("deckHash"),
             "cards": list(d["cards"]),
             "art": d.get("art") or {},
             "archetype": d.get("winCondition") or "other",
@@ -238,6 +263,86 @@ def weight_threats(threats: list[dict], defs: dict[str, dict]) -> list[dict]:
     return out
 
 
+def trend_threats(threats: list[dict], move: dict | None) -> tuple[list[dict], dict]:
+    """Move mass toward what the field is TAKING UP, away from what it is dropping.
+
+    The population share in the board is what people played over the window
+    that ended when it was computed. A deck climbing through that window will
+    be commoner than its share says by the time this player next queues, and
+    one being abandoned will be rarer. That is the only forward-looking thing
+    in this module, and it is measured movement rather than a forecast.
+
+    IT REFUSES TO ACT ON A SHORT SPAN. `meta_history` stores one reading a day
+    and the board itself recomputes every half hour, so a one-day delta is
+    mostly that churn — measured the morning after the history began, sixteen
+    of fifty decks had shifted a rank overnight. Under `TREND_MIN_DAYS` the
+    trend is REPORTED and applied to nothing.
+
+    A DECK THAT WAS NOT ON THE OLDER BOARD IS NOT A RISER. `meta_history`
+    already marks it `entered` with a null delta, because the board is a top
+    fifty and arriving at rank 40 is not a climb from 51 — it is merely where
+    the board stopped. Such a row is left alone here rather than treated as
+    infinite growth.
+
+    Returns the adjusted threats and a report of what it did, so a screen can
+    say "this is weighted toward what is rising" only when it actually is.
+    """
+    state = {
+        "basis": (move or {}).get("basis") or "none",
+        "daysApart": (move or {}).get("daysApart"),
+        "applied": False,
+        "reason": None,
+        "moved": 0,
+    }
+    if not threats:
+        return [], state
+    if not move or move.get("basis") != "measured":
+        state["reason"] = (move or {}).get("reason") or "no meta history yet"
+        return [dict(t, trend=None) for t in threats], state
+
+    apart = int(move.get("daysApart") or 0)
+    if apart < TREND_MIN_DAYS:
+        state["reason"] = (
+            f"only {apart} day(s) between readings; under {TREND_MIN_DAYS} that is "
+            "the board's own churn, not a trend"
+        )
+        return [dict(t, trend=None) for t in threats], state
+
+    by_hash = {r.get("deckHash"): r for r in (move.get("rows") or [])}
+    out = []
+    moved = 0
+    for t in threats:
+        row = by_hash.get(t.get("deckHash"))
+        factor = 1.0
+        trend = None
+        prev = (row or {}).get("previousUseRate")
+        delta = (row or {}).get("useDelta")
+        # `entered` rows carry a null delta by design; so do departures.
+        if row and delta is not None and prev:
+            rel = delta / prev
+            if abs(rel) >= TREND_FLOOR:
+                factor = max(1.0 / TREND_MAX, min(TREND_MAX, 1.0 + rel))
+                moved += 1
+            trend = {
+                "rankDelta": row.get("rankDelta"),
+                "useDelta": round(delta, 3),
+                "relative": round(rel, 3),
+                "factor": round(factor, 3),
+            }
+        r = dict(t)
+        r["trend"] = trend
+        r["_t"] = float(t["likelihood"]) * factor
+        out.append(r)
+
+    total = sum(r["_t"] for r in out) or 1.0
+    for r in out:
+        r["likelihood"] = round(r["_t"] / total, 4)
+        del r["_t"]
+    out.sort(key=lambda r: (-r["likelihood"], r["name"]))
+    state.update(applied=True, moved=moved)
+    return out, state
+
+
 def _overall(summary: dict) -> float:
     n = int(summary.get("battles") or 0)
     return 100.0 * int(summary.get("wins") or 0) / n if n else 0.0
@@ -284,6 +389,16 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         }
 
     threats = weight_threats(raw, defs)
+
+    # THEN THE FIELD'S OWN DIRECTION, after the player's weighting and before
+    # anything is scored. The two are independent: one says what THEY lose to,
+    # the other what the population is taking up.
+    try:
+        import meta_history
+        move = meta_history.movement(TREND_DAYS)
+    except Exception:
+        move = None
+    threats, trend = trend_threats(threats, move)
     basis = "weighted" if defs else ("unweighted" if intel else "no_history")
 
     snap = dcx._snap()
@@ -357,6 +472,9 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         "winRate": round(overall, 1) if summary.get("battles") else None,
         # What the plan was built against, and what moved it.
         "threats": threats,
+        # What the meta's own direction did, so a screen can say "weighted
+        # toward what is rising" only when it actually is.
+        "trend": trend,
         "weighted": sorted(
             (d for d in defs.values() if d["deficit"] > 0),
             key=lambda d: -d["deficit"],
