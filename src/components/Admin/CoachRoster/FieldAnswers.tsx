@@ -95,21 +95,19 @@ function sharedLine(p: FieldPick): string | null {
 function DeckRow({ p, note, name = true }: { p: FieldPick; note?: string | null; name?: boolean }) {
   return (
     <li className={styles.deckItem}>
-      <div className={styles.deckItemHead} style={{ cursor: 'default' }}>
+      <div className={`${styles.deckItemHead} ${styles.deckHeadTight}`} style={{ cursor: 'default' }}>
         <div className={styles.deckCards}>
           {(p.cards ?? []).map((c) => (
             <CardArt key={c} card={c} variant={p.art?.[c]} inferred={p.artInferred} className={styles.deckCard} />
           ))}
         </div>
-        <span className={styles.deckFigures}>
+        <span className={`${styles.deckFigures} ${styles.deckFiguresInline}`}>
           {/* Inside a family every deck IS that win condition, so the name
               is the section heading repeated four times. */}
           {name && <span className={styles.deckName}>{p.name}</span>}
           {/* The unit is stated once, on the card. Sixty-eight rows do not
               each need to repeat "expected against the field". */}
-          <span>
-            <strong>{p.expectedWinRate.toFixed(1)}%</strong>
-          </span>
+          <strong>{p.expectedWinRate.toFixed(1)}%</strong>
           {note && <span className={styles.oppTag}>{note}</span>}
           <DeckActions cards={p.cards ?? []} name={p.name} />
         </span>

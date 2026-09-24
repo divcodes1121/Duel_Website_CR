@@ -1764,3 +1764,31 @@ a.rosterTitle[aria-current='page'] {
     order: -1;
   }
 }
+
+/* ── One line per deck row, on the field board only ───────────────────────
+   `.deckFigures` stacks (rate / note / actions) and is shared by the player
+   workspace, the roster's Today board and the player's own dashboard, so it
+   is modified here rather than changed under three screens nobody asked
+   about.
+
+   Sixty-eight rows on this board spend three lines each on text that reads as
+   one fact. Inline it is "63.5% · 5/8 your cards · [actions]", which is a line
+   and a half saved per row.
+
+   It still WRAPS: the strip is eight cards, so on a narrow column the text
+   drops under them rather than squeezing the art. `min-width: 0` so a long
+   note shrinks instead of pushing the row wider than its track — the same
+   guard the grid tracks need. */
+.deckFiguresInline {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.55rem;
+  min-width: 0;
+}
+
+/* The row is text-only now, so it does not need a text-block's leading. */
+.deckItemHead.deckHeadTight {
+  padding: 0.45rem 0.6rem;
+  gap: 0.45rem 0.8rem;
+}
