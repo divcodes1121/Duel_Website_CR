@@ -186,7 +186,20 @@ export const FREE_SECTIONS = [
  * is what actually stops an anonymous paste box from spending sixteen player
  * resolutions.
  */
-export const PRO_ONLY_SECTIONS = ['Coach Assist'] as const;
+export const PRO_ONLY_SECTIONS = [
+  'Coach Assist',
+  /* PRO ONLY, and deliberately NOT in the trial the way Team Analysis is.
+     A roster is a coaching relationship somebody sets up over weeks, not a
+     thing a three-day trialist evaluates — and unlike Team Analysis it
+     cannot be understood from one session with it.
+
+     VISIBLE TO EVERYONE THOUGH, gated rather than hidden: an area somebody
+     could subscribe to and cannot see does not exist to the person paying.
+     That is the rule Team Analysis established on 2026-08-30. `is_coach`
+     (migration 007) is the finer grain INSIDE the gate — pro says you may
+     open the screen, the flag says a roster is yours. */
+  'Coach Roster',
+] as const;
 
 /**
  * Areas only an ADMIN may open. Stricter than pro-only.

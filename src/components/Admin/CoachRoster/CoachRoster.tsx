@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useIsCoach } from '../../../state/gate';
 import { useAccountStore } from '../../../state/accountStore';
+import { sectionAllowed, useAccess } from '../../../state/gate';
+import { GateCard } from '../../Auth/GateCard';
 import { isSupabaseConfigured } from '../../../state/supabase';
 import {
   COACH_ROUTE,
@@ -56,6 +58,7 @@ export function CoachRoster() {
      console to do it. An admin keeps access unconditionally, so the
      console's own link can never point at a screen that refuses them. */
   const mayCoach = useIsCoach();
+  const access = useAccess();
   /* WAIT FOR THE ACCOUNT TO RESOLVE BEFORE JUDGING IT. `ready` turns true as
      soon as the session is read — BEFORE the profile arrives — and `tier`
      defaults to 'free' until it does, so an admin would otherwise be told
@@ -91,6 +94,20 @@ export function CoachRoster() {
     return (
       <section className={styles.page}>
         <p className={styles.muted}>Checking your account…</p>
+      </section>
+    );
+  }
+
+  /* THE TIER GATE COMES FIRST, and the order is the point. Coach Roster is on
+     the top bar now, so anyone can arrive here — and the honest answer to a
+     free account is "this is a pro area", not "an administrator has not marked
+     you as a coach", which is true but tells them to ask for the wrong thing.
+     `GateCard` is the same wall every other pro area shows, so the offer reads
+     identically wherever it is met. */
+  if (!sectionAllowed(access, 'Coach Roster')) {
+    return (
+      <section className={styles.page}>
+        <GateCard access={access} section="Coach Roster" />
       </section>
     );
   }

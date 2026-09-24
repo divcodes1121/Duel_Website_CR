@@ -68,6 +68,17 @@ export const DOCK_PATHS: Record<string, string> = {
    *
    * Two subpaths in one `d`, the same form Team Analysis already takes, so it
    * still morphs. */
+  /* A CLIPBOARD — a coach's list of people, not a chart. Single path, because
+     MorphSVG animates one path into one path and a multi-element icon simply
+     will not morph (the reason `dockIcons` exists apart from `icons.tsx`). */
+  'Coach Roster':
+    'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1zm-3 2h1v2h10V6h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2'
+    + 'H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm3 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm3 0a1 1 0 0 0 0 2h4'
+    + 'a1 1 0 0 0 0-2h-4zm-3 4a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm3 0a1 1 0 0 0 0 2h4a1 1 0 0 0 0-2h-4z',
+  /* A SINGLE FIGURE for the player's own coaching page — the same subject
+     seen from the other side. */
+  'My coaching':
+    'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c4.418 0 8 2.239 8 5v1H4v-1c0-2.761 3.582-5 8-5z',
   '2v2 Decks':
     'M4 4h6a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 10 20H4a1.5 1.5 0 0 1-1.5-1.5v-13'
     + 'A1.5 1.5 0 0 1 4 4zM14 4h6a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 20 20h-6a1.5 '

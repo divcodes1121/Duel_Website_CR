@@ -68,12 +68,15 @@ import { RecentBattles } from '../Analytics/RecentBattles';
 import {
   AnalyticsIcon,
   ArrowRightIcon,
+  BadgeIcon,
   BarsIcon,
   CardsIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CoachIcon,
   CrownIcon,
   DeckIcon,
+  DuoIcon,
   HomeIcon,
   LoadoutIcon,
   LogIcon,
@@ -81,11 +84,9 @@ import {
   PieIcon,
   SearchIcon,
   ShieldIcon,
-  CoachIcon,
   StarIcon,
   SwordsIcon,
   TeamIcon,
-  DuoIcon,
 } from './icons';
 import styles from './Dashboard.module.css';
 import { Fireflies, type FireflyHue } from '../../three/Fireflies';
@@ -96,6 +97,7 @@ import { WhatsNew } from '../WhatsNew/WhatsNew';
 import { Filmstrip } from '../Filmstrip/Filmstrip';
 import { GateCard } from '../Auth/GateCard';
 import { sectionAllowed, useAccess } from '../../state/gate';
+import { useMyCoach } from '../../state/myCoach';
 import { useAccountStore } from '../../state/accountStore';
 import { trialDaysLeft } from '../../state/supabase';
 
@@ -160,6 +162,19 @@ const TOP_NAV = [
      the whole player base, so it never belonged among a player's own sections —
      it was already home-only, and this is the same rule stated in the nav. */
   { label: 'Meta', icon: BarsIcon, hash: HOME, home: false, section: 'Top Meta Decks' },
+  /* THE COACH'S OWN SCREEN. A tool, like Team Analysis: its subject is a
+     roster of people, not one loaded tag, so it belongs in the dock and not in
+     `SIDE_NAV`. Pro-only (`PRO_ONLY_SECTIONS`) but VISIBLE to everyone — an
+     area somebody could subscribe to and cannot see does not exist to the
+     person paying, which is the rule Team Analysis set. `CoachRoster` itself
+     refuses a non-coach, so the dock entry is an invitation, not a promise. */
+  { label: 'Coach Roster', icon: CoachIcon, hash: '#/admin/coach', home: false },
+  /* THE OTHER SIDE OF THE SAME RELATIONSHIP, and the only nav entry in this
+     app that is CONDITIONAL ON DATA rather than on a tier: it is drawn only
+     when this account is actually on somebody's roster. A permanent "My
+     coaching" that answers "you are not on a roster" would be a dead control
+     for everyone who is not being coached, and most people are not. */
+  { label: 'My coaching', icon: BadgeIcon, hash: '#/my', home: false, linkedOnly: true },
 ] as const;
 
 /* `slug` is the section's place in the URL once a tag is loaded
@@ -528,7 +543,15 @@ export function Dashboard({
    * refuses: `#/teams` renders `GateCard` for anon and free. One decision, made
    * in one place, instead of a visibility rule and an access rule that can
    * disagree about who gets what. */
-  const topNavItems = TOP_NAV;
+  /* `My coaching` is hidden until a coach has actually linked this account to
+     a roster player. `seats` is null while the read is in flight and [] when
+     they are on nobody's roster, and BOTH must hide it — a control that
+     appears a second after load is worse than one that never appears. */
+  const mySeats = useMyCoach((st) => st.seats);
+  const isLinkedPlayer = (mySeats?.length ?? 0) > 0;
+  const topNavItems: readonly (typeof TOP_NAV)[number][] = isLinkedPlayer
+    ? TOP_NAV
+    : TOP_NAV.filter((n) => !('linkedOnly' in n && n.linkedOnly));
   const featureItems = FEATURES;
 
   /* THE BACKDROP WEARS THE OPEN AREA'S HUE — the same one the sidebar row and

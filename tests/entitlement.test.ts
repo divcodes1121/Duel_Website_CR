@@ -50,6 +50,10 @@ const ALL_SECTIONS = [
      Analysis screen — this list is a tripwire, so a new area has to be
      enumerated here before the matrix below can claim to be exhaustive. */
   'Team Analysis',
+  /* Pro-only, added 24 Sep 2026 when the roster moved onto the top bar. The
+     tripwire exists so a new area is enumerated here before the matrix can
+     claim to be exhaustive. */
+  'Coach Roster',
   /* The 2v2 pair board, moved off the admin console onto the landing strip on
      11 Sep 2026. In neither `FREE_SECTIONS` nor `PRO_ONLY_SECTIONS`, so it
      takes Team Analysis's arrangement exactly: seen by everyone, opened from
@@ -117,8 +121,14 @@ describe('a trial opens everything EXCEPT the pro-only areas', () => {
      are missing, and Team Analysis cannot — it has to be used on a real roster
      before it is worth paying for. Withholding it for the three days hides the
      feature most likely to convert the trial. */
-  it('Coach Assist is the pro-only area', () => {
-    expect([...PRO_ONLY_SECTIONS]).toEqual(['Coach Assist']);
+  /* COACH ROSTER JOINED IT on 24 Sep 2026, when the roster moved onto the top
+     bar. It is NOT in the trial the way Team Analysis is, and the reason is
+     the one above read the other way round: a roster is a coaching
+     relationship set up over weeks, so three days cannot show what it is for.
+     Pro says you may open the screen; `is_coach` (migration 007) says a
+     roster is yours, which is a different question and a finer grain. */
+  it('names every pro-only area, exactly', () => {
+    expect([...PRO_ONLY_SECTIONS]).toEqual(['Coach Assist', 'Coach Roster']);
   });
 
   it('a trial is refused every pro-only area', () => {
