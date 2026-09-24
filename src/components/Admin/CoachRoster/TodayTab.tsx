@@ -6,12 +6,11 @@ import {
   type FieldPlan,
 } from '../../../state/analyticsClient';
 import { playerLabel, windowDays, type CoachWindow, type RosterPlayer } from '../../../state/coachRoster';
-import { CardArt } from '../../Analytics/CardArt';
-import { DeckActions } from '../../DeckActions/DeckActions';
 import { ReadingState } from '../../Analytics/ReadingState';
 import {
   BarRows,
   ChartCard,
+  ChartGrid,
   Dashboard,
   DashHero,
   InsightCard,
@@ -21,6 +20,7 @@ import {
   MetricGrid,
 } from '../../ui/bionis-dashboard';
 import { CardsIcon, ShieldIcon, SwordsIcon, TrendIcon } from '../../Dashboard/icons';
+import { ClosestCard, FamiliesCard, LearnCard } from './FieldAnswers';
 import { ProgressCard } from './ProgressCard';
 import styles from './CoachRoster.module.css';
 
@@ -117,29 +117,36 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
 
   const tailored = plan.basis === 'weighted';
   const boosted = plan.threats.filter((t) => t.boost > 1);
-  const changed = plan.tailoredPicks ?? 0;
+  const near = (plan.closest ?? []).length;
+  const fams = (plan.families ?? []).length;
 
   return (
     <Dashboard className={styles.overview}>
       <DashHero
         heading="What to practise"
         badge={
-          !tailored
-            ? 'The field, unweighted'
-            : changed > 0
-              ? `${changed} of ${plan.recommendations.length} from their own record`
-              : 'Same picks as the field alone'
+          near > 0
+            ? `${near} they could pilot today`
+            : fams > 0
+              ? 'Nothing of theirs answers this field'
+              : 'The field, unweighted'
         }
-        badgeTone={tailored && changed > 0 ? 'good' : 'neutral'}
+        badgeTone={near > 0 ? 'good' : 'warn'}
       >
-        {tailored
-          ? `Ranked against what the field plays, weighted toward the ${plan.weighted.length} matchup${plan.weighted.length === 1 ? '' : 's'} ${playerLabel(player)} measurably loses. ${
-              changed > 0
-                ? `${changed} of these ${plan.recommendations.length} ${changed === 1 ? 'is here' : 'are here'} because of that weighting; the rest are what the field alone would suggest.`
-                : `That moved the order but not the set — these are the decks the field alone suggests, which is what you should expect when the matchups they lose to are ones they rarely meet.`
+        {/* IT NO LONGER ADVERTISES THE WEIGHTING AS THE PERSONAL PART. That
+            claim was measured and it was 0 of 7 picks on five of six real
+            accounts — the weighting moves the ORDER, and saying more than
+            that was the screen promising a tailoring it had not done. What is
+            actually personal is the two blocks below: decks built from cards
+            they already play, and the one archetype worth taking up. */}
+        {fams > 0
+          ? `${nf.format(plan.pool)} real decks ranked against what the field is playing right now, grouped by win condition. ${
+              near > 0
+                ? `${near} of them are built from cards ${playerLabel(player)} already plays.`
+                : `None of them is built from cards ${playerLabel(player)} already plays, so the place to start is a new win condition.`
             }`
           : plan.basis === 'unweighted'
-            ? `Ranked against what the field plays. None of their ${nf.format(plan.battles)} battles gives an archetype enough evidence to weight yet, so this is the same plan the field alone produces.`
+            ? `Ranked against what the field plays. None of their ${nf.format(plan.battles)} battles gives an archetype enough evidence to weight yet.`
             : 'Ranked against what the field plays. Nothing is stored for this player yet, so nothing is weighted to them.'}
       </DashHero>
 
@@ -156,23 +163,26 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
           note={`from the top ${nf.format(plan.meta.decks)} meta decks`}
           icon={<SwordsIcon />}
         />
+        {/* THIS CARD USED TO REPORT `tailoredPicks`, and it was the wrong
+            figure to make prominent: measured across six real accounts it was
+            0 for five of them, so the screen's headline personal number was
+            almost always zero. What is personal is how many of the field's
+            answers they could actually pick up. */}
         <KeyMetricCard
-          label="From their record"
-          value={tailored ? `${changed} of ${plan.recommendations.length}` : '—'}
+          label="Could pilot today"
+          value={String(near)}
           note={
-            !tailored
-              ? 'nothing clears the evidence floor'
-              : changed > 0
-                ? 'picks the weighting put here'
-                : 'the weighting moved the order only'
+            plan.repertoire
+              ? `${plan.repertoire.sharedFloor}+ cards shared with one of their ${plan.repertoire.decks} decks`
+              : 'decks built from cards they already play'
           }
-          tone={changed > 0 ? 'good' : 'neutral'}
+          tone={near > 0 ? 'good' : 'warn'}
           icon={<ShieldIcon />}
         />
         <KeyMetricCard
           label="Best expected"
-          value={plan.recommendations.length ? `${plan.recommendations[0].expectedWinRate.toFixed(1)}%` : '—'}
-          note="against this projection"
+          value={plan.families?.length ? `${plan.families[0].best.toFixed(1)}%` : '—'}
+          note={plan.families?.length ? `${plan.families[0].name}, the field's best answer` : 'against this projection'}
           icon={<TrendIcon />}
         />
       </MetricGrid>
@@ -198,40 +208,20 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
           reading the same three names every week with no record of progress. */}
       <ProgressCard progress={plan.progress} />
 
-      <ChartCard
-        title="What to play"
-        note={`Expected win rate against the projection · ${plan.recommendations.length} of ${nf.format(plan.pool)} ranked`}
-        badge={plan.brain}
-      >
-        {plan.recommendations.length === 0 ? (
-          <p className={styles.muted}>Nothing in the pool could be scored against this projection.</p>
-        ) : (
-          <ul className={styles.deckList}>
-            {plan.recommendations.map((p) => (
-              <li key={p.key} className={styles.deckItem}>
-                <div className={styles.deckItemHead} style={{ cursor: 'default' }}>
-                  <div className={styles.deckCards}>
-                    {p.cards.map((c) => (
-                      <CardArt key={c} card={c} variant={p.art?.[c]} inferred={p.artInferred} className={styles.deckCard} />
-                    ))}
-                  </div>
-                  <span className={styles.deckFigures}>
-                    <span className={styles.deckName}>
-                      {p.name}
-                      {p.fromWeighting && <span className={styles.oppTag}> · from their record</span>}
-                    </span>
-                    <span>
-                      <strong>{p.expectedWinRate.toFixed(1)}%</strong> expected · {p.spreadCovered.toFixed(0)}% of the
-                      projection answered
-                    </span>
-                    <DeckActions cards={p.cards} name={p.name} />
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </ChartCard>
+      {/* THE TWO PERSONAL BLOCKS FIRST, then the field's whole answer.
+          The seven-deck "What to play" list that used to sit here is GONE
+          from this screen: measured across the six busiest real accounts it
+          drew on ten distinct decks for forty-two slots and three decks
+          appeared in every single plan, because `diversify()` returns the
+          best deck of each of seven archetypes — a tier list. It is still in
+          the payload (`recommendations`) because the roster's Today board
+          draws one row per player from it. */}
+      <ChartGrid>
+        <ClosestCard plan={plan} />
+        <LearnCard learn={plan.learn} />
+      </ChartGrid>
+
+      <FamiliesCard plan={plan} />
 
       <ChartCard
         title="What the field plays"

@@ -287,7 +287,7 @@ happily against a server that never called it.
 | `GET /api/analytics/counters?deck=` | what beats a deck |
 | `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, **the projected threat space (`threats`), and 5–7 decks that answer it**. With `blue` those come from the squad's own lists; **omit `blue` entirely** and they come from the snapshot's seed pool (~200 real decks), plus an `overall` block ranking the same pool against the whole roster's pooled projection. `mode` says which, and `brain` says which reasoning produced it (`team-scout-2.0`). See `DECKKIES_TEAM_SCOUT.md`. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
-| `GET /api/analytics/coach/field/<tag>` | **what to play with NO OPPONENT** (`coach_daily.py`) — the meta board becomes a threat projection, that projection is reweighted by where this player measurably loses, and `team_scout.score()` ranks ~204 real decks against it. Works because `score()` takes the threat space as an INJECTED parameter and does not know where it came from, so there is no second scorer and no model. `basis` is `weighted` / `unweighted` / `no_history` / `none` and a client must say which. `tailoredPicks` reports how many picks the weighting actually put there, measured by ranking the unweighted projection too — live it is 0-1 of 7, and that is the correct answer rather than a weak one. Costs no database read per candidate; 1.4 s warm. `days` as everywhere else. **`compare=1`** adds `progress` — this window against the one of the same length before it, recomputed from the rows rather than read from a snapshot table (+~60 ms) |
+| `GET /api/analytics/coach/field/<tag>` | **what to play with NO OPPONENT** (`coach_daily.py`) — the meta board becomes a threat projection, that projection is reweighted by where this player measurably loses, and `team_scout.score()` ranks ~204 real decks against it. Works because `score()` takes the threat space as an INJECTED parameter and does not know where it came from, so there is no second scorer and no model. `basis` is `weighted` / `unweighted` / `no_history` / `none` and a client must say which. `tailoredPicks` reports how many picks the weighting actually put there, measured by ranking the unweighted projection too — live it is 0-1 of 7, and that is the correct answer rather than a weak one. Costs no database read per candidate; 1.4 s warm. `days` as everywhere else. Returns `families` / `closest` / `learn` / `repertoire` on the full read (not `brief`). **`compare=1`** adds `progress` — this window against the one of the same length before it, recomputed from the rows rather than read from a snapshot table (+~60 ms) |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
 | `GET /api/analytics/meta?movement=<days>` | **how that board has MOVED** (`meta_history.py`) — rank and use-rate deltas between the newest stored day and the newest one at or before `days` back. Rides on the `/meta` path deliberately, so the **route count stays 23**. Answers `basis: "none"` with NO rows when there is nothing to compare against, never a list of zeros; a deck absent from the older day carries `entered: true` with a NULL delta rather than a climb from beyond the board's edge, and one that dropped off carries `left: true`. `comparedWith` / `daysApart` describe the snapshots ACTUALLY used, so a missed timer widens the span visibly instead of silently. Reads its own ~18k-row file, not the bot's database |
@@ -1036,6 +1036,80 @@ rest as one counted line that names what it withheld — the battle log's
 hidden-mode rule. The **overall** line is always drawn, because it is the only
 figure with enough behind it to move: 437 battles against 489 gives a band of
 **6.2** points.
+
+### The answer was generic, and the shape was why
+
+The screen returned seven decks and they were nearly the same seven for every
+player. **Measured on the six busiest real accounts:** 42 slots drew on **ten
+distinct decks**, any two players shared four to six of seven, **three decks
+appeared in every single plan**, and `tailoredPicks` — the engine's own count
+of how many picks the weighting put there — was **0 for five of the six**.
+
+That was not a scoring fault. Two causes, both structural:
+
+1. **`diversify()` is a portfolio picker and this is not a portfolio.** Its
+   `ARCHETYPE_REPEAT_PENALTY` deliberately spreads picks across archetypes,
+   which is right for Team Scout (several answers to one opponent) and here
+   collapses 204 decks to "the best deck of each of seven archetypes" — a tier
+   list, and a tier list is the same for everyone by construction.
+2. **Nothing in the ranking knew what the player plays.** `score()` takes
+   `fit_games`; this module passes `None` because the pool is ownerless, so
+   the only personal term was the deficit weighting, whose own measurement is
+   the 0-of-7 above.
+
+So `plan()` keeps the **whole scored pool** (it used to compute 204 and throw
+197 away) and answers three questions instead of one, all from the same
+`score()` rows so they cannot disagree about a deck:
+
+| key | what it claims |
+| --- | --- |
+| `families` | every win condition the field can be answered with, ordered by its **best** deck. The spread is structural instead of enforced by a penalty. |
+| `closest` | of those, the ones built from cards they already run. |
+| `learn` | one win condition outside their range whose best deck beats everything inside it, or `null`. |
+
+**The same six accounts after:** 25 distinct decks across the personal lists,
+**mean pairwise overlap 1.00 decks**, and **nothing in every player's list**.
+
+**Affinity is raw shared cards, and the floor was measured.** The pool's
+staples are `barbarian-barrel` (34.8% of all 204 decks), `skeletons` (30.9%),
+`fireball` (26.0%) and `zap` (21.6%), so three and four shared cards are
+reachable by staples alone and say nothing about anybody; `AFFINITY_MIN` is
+**5**, the first level that needs a card outside them. The figure reported is
+the raw count on purpose — a staple-weighted score would be more correct and
+completely uncheckable, where "6 of these 8 cards are in a deck you play" is
+confirmed by looking at two card strips.
+
+**`REPERTOIRE_MIN_BATTLES` exists because the live data forced it.** Without a
+floor on their OWN decks, one account's closest match was "5 of 8 shared with a
+deck you played **3 times**" and another's entire related list came off one-
+and two-battle experiments. It is 5, the headline deck block's `DECK_RATE_FLOOR`
+reused rather than reinvented.
+
+**`learn` returns `null` rather than inventing a growth suggestion.** A new
+archetype costs weeks, so it is only offered when it actually beats the best
+thing they can already pilot; with nothing familiar there is no bar and the
+copy must not imply one (`beats` is `null` there).
+
+**Two fields were dropped after measuring them.** `spreadCovered` on a family
+was **100.0 for all seventeen families on every account** — at the top of a
+204-deck pool every family's best deck answers the whole projection, so it is
+true and says nothing, and a field that never varies is decoration. And
+`affinity.deckCards` was the single largest per-row field while only `closest`
+draws it; trimming the family rows took the payload **108.3 kB -> 83.0 kB**.
+
+**`brief` carries none of this** — verified live at **10.2 kB**, unchanged. The
+roster-wide read draws one deck per player and would otherwise pay for 68 more
+deck rows a head to show none of them.
+
+**It degrades rather than failing the tab.** `recommendations`, `threats` and
+`weighted` are complete before the three lists are built, so a fault in them
+costs those three lists and nothing else.
+
+**Open, not a bug:** `learn` picked Balloon or Graveyard for all six accounts,
+because those are the field's two best families and almost nobody plays them.
+The personal part is the filter (they have played it 0 times), and six players
+who all ignore the two best archetypes genuinely have the same thing to learn.
+Left as an observation rather than manufacturing variety.
 
 ## The card board (`player_cards.py`)
 

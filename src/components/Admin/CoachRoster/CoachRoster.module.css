@@ -1688,3 +1688,39 @@ a.rosterTitle[aria-current='page'] {
   gap: 0.5rem;
   margin-bottom: 0.7rem;
 }
+
+/* ── The win-condition picker on "Every way to answer this field" ──────────
+   Seventeen families of four decks is sixty-eight card strips, so they open
+   one at a time and this row is how you choose. `.windowChip`'s shape,
+   deliberately: it is the same kind of control (a one-of-many toggle) and a
+   second chip style would drift from it. It wraps rather than scrolling —
+   this sits inside a card, not in a bar with an edge to bleed off. */
+.famRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.7rem;
+}
+
+.famChip {
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--glass-stroke);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  text-align: left;
+}
+
+.famChip:hover {
+  border-color: var(--border-strong);
+}
+
+.famChip[aria-pressed='true'] {
+  border-color: var(--accent-select-edge);
+  background: var(--accent-select-wash);
+}

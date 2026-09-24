@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import math
+import traceback
 
 import clash_data as cd
 import coach_intel
@@ -419,7 +420,15 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
     pool = ta._scout_candidates()
     seat = dcx.seater()
 
-    def rank(projection):
+    def score_all(projection):
+        """Every candidate scored. THE WHOLE POOL, which is the change.
+
+        This used to end in `diversify()` and return seven, so 197 of 204
+        scored decks were computed and thrown away -- and the seven that
+        survived were one per archetype, which is a tier list. The families
+        and the two personal lists are all built from THIS list, so they read
+        the same numbers and cannot disagree about a deck.
+        """
         out = []
         for c in pool:
             got = ts.score(
@@ -431,14 +440,23 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
                 # there is no games-piloted figure — `None` is a real state and
                 # a zero would read as "they have played this none of the
                 # time", a claim about a player this pool knows nothing about.
+                # What DOES connect a candidate to this player is `affinity`
+                # below, computed from their own decks rather than from a
+                # games-piloted count the pool cannot have.
                 fit_games=None,
             )
             if got:
                 got["name"] = c.name
+                got["archetype"] = c.archetype
                 out.append(got)
-        return ts.diversify(out, limit=limit, minimum=min(MIN_PICKS, limit))
+        return out
 
-    picks = rank(threats)
+    def rank(projection):
+        return ts.diversify(score_all(projection), limit=limit,
+                            minimum=min(MIN_PICKS, limit))
+
+    scored = score_all(threats)
+    picks = ts.diversify(list(scored), limit=limit, minimum=min(MIN_PICKS, limit))
 
     # WHAT THE WEIGHTING ACTUALLY CHANGED. See the module note: without this
     # the screen's "weighted by N matchups" is a claim the reader cannot check,
@@ -453,6 +471,74 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         p["cards"] = ordered
         p["art"] = art
         p["artInferred"] = inferred
+
+    # -- THE THREE ANSWERS ------------------------------------------------
+    #
+    # Built from `scored`, so every figure here is the same `score()` row the
+    # portfolio above used. NOT in `brief`: the roster-wide read draws one deck
+    # per player and would pay for 68 more deck rows a head to show none of
+    # them.
+    own = repertoire(intel)
+    hist, hist_total = archetype_history(intel)
+    fams: list[dict] = []
+    near: list[dict] = []
+    learn = None
+
+    def _build_lists():
+        nonlocal fams, near, learn
+        for r in scored:
+            r["affinity"] = deck_affinity(r["cards"], own)
+        near = closest(scored)
+        # The bar a new archetype has to clear is the best thing they can
+        # already pilot. With nothing familiar there is no bar, and the guard
+        # inside `worth_learning` says so.
+        beat = near[0]["expectedWinRate"] if near else None
+        learn = worth_learning(scored, hist, hist_total, beat)
+        fams = families(scored)
+        # A family row draws a card strip, a name, a rate and whether they
+        # could already pilot it -- so it carries exactly that. MEASURED: the
+        # untrimmed rows made `families` 61 kB of a 108 kB payload, and the
+        # single biggest field was `affinity.deckCards`, the eight cards of
+        # the OWN deck it matched, which only the `closest` list draws beside
+        # its rows. Seventeen families times four decks is sixty-eight rows,
+        # so anything per-row is paid for sixty-eight times.
+        for g in fams:
+            for r in g["decks"]:
+                ordered, art, inferred = seat(r["cards"])
+                r["cards"] = ordered
+                r["art"] = art
+                r["artInferred"] = inferred
+                for k in ("matchups", "brain", "score", "recommendationScore",
+                          "threatCovered", "evidenceStrength", "matchupValue",
+                          "playerFit", "confidence", "spreadCovered"):
+                    r.pop(k, None)
+                a = r.get("affinity")
+                if a:
+                    a.pop("deckCards", None)
+        for r in near:
+            ordered, art, inferred = seat(r["cards"])
+            r["cards"] = ordered
+            r["art"] = art
+            r["artInferred"] = inferred
+            r.pop("matchups", None)
+        if learn:
+            ordered, art, inferred = seat(learn["deck"]["cards"])
+            learn["deck"]["cards"] = ordered
+            learn["deck"]["art"] = art
+            learn["deck"]["artInferred"] = inferred
+            learn["deck"].pop("matchups", None)
+
+    # IT DEGRADES TO THE OLD ANSWER RATHER THAN TAKING THE TAB DOWN. This is
+    # the coach's main screen, and `recommendations`, `threats` and `weighted`
+    # are all computed and complete by the time this runs — so a fault in the
+    # three new lists costs those three lists and nothing else. The same
+    # treatment `intel` and `meta_history` already get in this function.
+    if not brief:
+        try:
+            _build_lists()
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            fams, near, learn = [], [], None
 
     if brief:
         # The threats keep what a summary row says (name, share, whether this
@@ -498,6 +584,28 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         # screen says it plainly rather than implying a tailoring that did not
         # happen.
         "tailoredPicks": sum(1 for p in picks if p["fromWeighting"]),
+        # WHAT ANSWERS THE FIELD, grouped by win condition so the spread is
+        # structural rather than enforced by `diversify`'s repeat penalty.
+        **({} if brief else {
+            "families": fams,
+            # Of those, the ones built from cards they already play.
+            "closest": near,
+            # One win condition outside their range that beats everything in
+            # it, or null when there is nothing worth the weeks it costs.
+            "learn": learn,
+            # So an empty personal list can say WHY rather than just be short.
+            "repertoire": {
+                "decks": len(own),
+                "battles": sum(d["battles"] for d in own),
+                "archetypes": len(hist),
+                # TWO DIFFERENT FLOORS, and they were both called `floor` for
+                # one build: how many battles make a deck theirs, and how many
+                # shared cards make a candidate familiar. A screen printing
+                # "past the 5 floor" cannot say which.
+                "deckFloor": REPERTOIRE_MIN_BATTLES,
+                "sharedFloor": AFFINITY_MIN,
+            },
+        }),
         **({"progress": progress(tag, since, until, intel)} if compare else {}),
         **({} if brief else {"baselinePicks": baseline}),
         "brief": brief,
@@ -508,6 +616,229 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
             "computedAt": board.get("computedAt"),
         },
     }
+
+
+# -- "WHAT TO PLAY" IS THREE QUESTIONS, AND IT USED TO ANSWER ONLY ONE ------
+#
+# The screen returned seven decks and they were nearly the same seven for
+# everybody. That was not a bug in the scoring; it is what the SHAPE of the
+# answer forced, and there are two separate causes:
+#
+#   1. `diversify()` IS A PORTFOLIO PICKER, AND THIS IS NOT A PORTFOLIO.
+#      `ARCHETYPE_REPEAT_PENALTY` deliberately spreads picks across archetypes
+#      -- right for Team Scout, where you want several different answers to one
+#      opponent. Here it collapses 204 decks to "the best deck of each of seven
+#      archetypes", which is a tier list, and a tier list is the same for
+#      everyone by construction.
+#   2. NOTHING IN THE RANKING KNEW WHAT THE PLAYER PLAYS. `score()` takes
+#      `fit_games`, and this module passed None because the pool is ownerless.
+#      So the only personal term was the deficit weighting, and its own
+#      measurement says what that is worth: `tailoredPicks` runs 0 to 1 of 7.
+#
+# So the answer is split into the three questions a coach actually asks, each
+# with its own evidence and its own sentence:
+#
+#   FAMILIES        what answers the field, grouped by win condition, so the
+#                   spread is STRUCTURAL instead of enforced by a penalty. The
+#                   reader browses "what Hog decks beat this meta" rather than
+#                   being handed one Hog deck and told it is the Hog answer.
+#   CLOSEST         of those, the ones built out of cards they already play.
+#   WORTH LEARNING  one family they have no real history with whose best deck
+#                   beats everything they can already pilot. The growth
+#                   suggestion, and the only one that is allowed to be
+#                   unfamiliar.
+#
+# None of this re-scores anything. All three read the SAME `score()` rows, so
+# they cannot disagree about a deck -- the "two lists, not one" rule Team Scout
+# already follows for threats and recommendations.
+
+#: Cards a candidate must share with one of their own decks before it can be
+#: called related to how they play. MEASURED, not chosen: the pool's staples
+#: are barbarian-barrel (34.8% of all 204 decks), skeletons (30.9%), fireball
+#: (26.0%) and zap (21.6%), so three and four shared cards are reachable by
+#: staples alone and say nothing about anybody. Five is the first level that
+#: needs a card outside them.
+#:
+#: THE FIGURE REPORTED IS RAW SHARED CARDS, deliberately. A staple-weighted
+#: score would be more correct and completely uncheckable; "6 of these 8 cards
+#: are in a deck you play" is something the reader confirms by looking at two
+#: card strips.
+AFFINITY_MIN = 5
+
+#: Battles on one of THEIR OWN decks before it counts as something they play.
+#: MEASURED on six real accounts: without it the closest match for one player
+#: was "5 of 8 shared with a deck you played 3x", and for another the entire
+#: related list came off decks played ONCE or TWICE. A deck someone tried once
+#: is not their playstyle, and building a recommendation on it is the
+#: "1 battles - 100.0% won" fault this project already fixed on the headline
+#: deck block. Five is that block's floor (`DECK_RATE_FLOOR`), reused rather
+#: than reinvented so the two cannot disagree about what "a deck you play"
+#: means.
+REPERTOIRE_MIN_BATTLES = 5
+
+#: Decks kept per win condition. The family exists to show that an archetype
+#: has variants; four is enough to see that and short enough to scan.
+FAMILY_DECKS = 4
+
+#: A win condition is outside their range when it is under this share of their
+#: battles AND under this many of them. Both, because the share alone calls a
+#: busy player's minor deck "new" and the count alone calls everything new for
+#: somebody with forty battles.
+LEARN_MAX_SHARE = 0.05
+LEARN_MAX_BATTLES = 15
+
+
+def repertoire(intel: dict | None) -> list[dict]:
+    """Their own 8-card decks in this window, most played first.
+
+    A native duel row stores a 16- or 24-card loadout, which `coach_intel`
+    already refuses to split into invented decks; the guard is repeated here
+    because this function is the one that decides what "a deck they play"
+    means for the affinity figure.
+    """
+    out = []
+    for d in (intel or {}).get("decks") or []:
+        cards = [c for c in (d.get("cards") or []) if c]
+        if len(set(cards)) == 8 and int(d.get("battles") or 0) >= REPERTOIRE_MIN_BATTLES:
+            out.append({
+                "key": d.get("key") or ",".join(sorted(cards)),
+                "cards": cards,
+                "battles": int(d.get("battles") or 0),
+                "wins": int(d.get("wins") or 0),
+            })
+    out.sort(key=lambda d: -d["battles"])
+    return out
+
+
+def archetype_history(intel: dict | None) -> tuple[dict[str, int], int]:
+    """`{win condition: battles}` over their OWN decks, and the total.
+
+    `archetypes` is what they PLAYED; `opponentArchetypes` is what they faced,
+    and confusing the two would recommend somebody the deck they keep losing
+    to. The deficit weighting reads the other one, three functions up.
+    """
+    hist = {}
+    for a in (intel or {}).get("archetypes") or []:
+        key = (a.get("key") or "").strip().lower()
+        if key:
+            hist[key] = hist.get(key, 0) + int(a.get("battles") or 0)
+    return hist, sum(hist.values())
+
+
+def deck_affinity(cards, own: list[dict]) -> dict:
+    """How close one candidate is to the decks this player actually runs.
+
+    THE CLOSEST SINGLE DECK, not an average over their repertoire. A player
+    with one Hog deck and six others is a Hog player for the purposes of "can
+    you pilot this"; averaging would bury the one deck that makes the answer
+    yes. The deck it matched is named so the claim is checkable.
+    """
+    cs = set(cards)
+    best, match = 0, None
+    for d in own:
+        n = len(cs & set(d["cards"]))
+        if n > best:
+            best, match = n, d
+    return {
+        "shared": best,
+        "of": len(cs),
+        "familiar": best >= AFFINITY_MIN,
+        "deckKey": (match or {}).get("key"),
+        "deckCards": (match or {}).get("cards"),
+        "deckBattles": int((match or {}).get("battles") or 0) if match else 0,
+    }
+
+
+def families(scored: list[dict], per: int = FAMILY_DECKS) -> list[dict]:
+    """The scored pool grouped by win condition, best family first.
+
+    ORDERED BY THEIR BEST DECK, not by how many decks a family has: twelve
+    mediocre Mortar lists must not outrank two good Hog ones. Inside a family
+    the same rule, so `decks[0]` is always the family's answer.
+    """
+    groups: dict[str, dict] = {}
+    for r in scored:
+        a = r.get("archetype") or "other"
+        g = groups.get(a)
+        if g is None:
+            g = groups[a] = {
+                "archetype": a,
+                "name": dcx._label(a),
+                "decks": [],
+                "total": 0,
+            }
+        g["total"] += 1
+        g["decks"].append(r)
+
+    out = []
+    for g in groups.values():
+        g["decks"].sort(key=lambda r: (-r["expectedWinRate"], r["name"]))
+        best = g["decks"][0]
+        g["best"] = best["expectedWinRate"]
+        # NO `spreadCovered` ON THE FAMILY. It was published for one build and
+        # measured 100.0 for all seventeen families on every account -- at the
+        # top of a 204-deck pool every family's best deck answers the whole
+        # projection, so the figure is true and says nothing. A field that
+        # never varies is decoration; this project has shipped that mistake
+        # before (`type` and `confidence` on the scouting report).
+        # Marked in place rather than re-sorted: the coach's own rule from the
+        # arsenal, and it keeps the family list a statement about the FIELD.
+        g["familiar"] = sum(1 for r in g["decks"] if r.get("affinity", {}).get("familiar"))
+        g["decks"] = g["decks"][:per]
+        out.append(g)
+    out.sort(key=lambda g: (-g["best"], g["name"]))
+    return out
+
+
+def closest(scored: list[dict], limit: int = MAX_PICKS) -> list[dict]:
+    """The decks they could pilot today, best answer first.
+
+    SORTED BY EXPECTED WIN RATE, NOT BY HOW FAMILIAR IT IS. The question this
+    list answers is "what should I play", and familiarity is the FILTER, not
+    the ranking -- sorting by overlap would put the deck they already run at
+    the top of a screen whose whole job is telling them what to play instead.
+    """
+    near = [r for r in scored if r.get("affinity", {}).get("familiar")]
+    near.sort(key=lambda r: (-r["expectedWinRate"], r["name"]))
+    return near[:limit]
+
+
+def worth_learning(scored: list[dict], hist: dict[str, int], total: int,
+                   beat: float | None) -> dict | None:
+    """One win condition outside their range whose best deck beats what is in it.
+
+    THE `beat` GUARD IS THE WHOLE HONESTY OF THIS. A new archetype is only
+    worth the weeks it costs if it is actually better than what they can
+    already pilot, so this returns None rather than inventing a growth
+    suggestion -- the same refusal as `reason: null` on an outranked deck.
+    `beat` is the best expected rate among their familiar options; with no
+    familiar options there is nothing to beat and the best unfamiliar family
+    is offered on its own merits.
+    """
+    fams = families(scored, per=1)
+    for g in fams:
+        n = hist.get(g["archetype"], 0)
+        if total and (n / total) > LEARN_MAX_SHARE:
+            continue
+        if n > LEARN_MAX_BATTLES:
+            continue
+        if beat is not None and g["best"] <= beat:
+            continue
+        best = g["decks"][0]
+        return {
+            "archetype": g["archetype"],
+            "name": g["name"],
+            "deck": best,
+            "expectedWinRate": g["best"],
+            # What they have actually played of it. 0 is the common answer and
+            # is said plainly rather than hidden behind "new to you".
+            "yourBattles": n,
+            "yourShare": round(100.0 * n / total, 1) if total else None,
+            # The margin over the best thing they can already pilot, which is
+            # the entire argument for spending time on it.
+            "beats": round(g["best"] - beat, 1) if beat is not None else None,
+        }
+    return None
 
 
 # -- IS THE WEAKNESS CLOSING? ----------------------------------------------

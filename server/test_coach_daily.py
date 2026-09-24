@@ -265,6 +265,133 @@ check("and KEEPS what the row says — name, share, and whether the player moved
 check("the likelihoods are untouched by trimming, so the two cannot disagree",
       [t["likelihood"] for t in _trimmed] == [t["likelihood"] for t in _full])
 
+print("\nwhat they actually play")
+
+
+def odeck(n, battles, cards=None):
+    cs = cards or [f"c{n}{i}" for i in range(8)]
+    return {"key": ",".join(sorted(cs)), "cards": cs, "battles": battles, "wins": battles // 2}
+
+
+_intel = {"decks": [odeck(1, 100), odeck(2, 30), odeck(3, 3),
+                    {"key": "x", "cards": ["a"] * 8, "battles": 50},          # 1 distinct
+                    {"key": "y", "cards": [f"d{i}" for i in range(16)], "battles": 40}],  # a duel loadout
+          "archetypes": [{"key": "hog", "battles": 120}, {"key": "golem", "battles": 30},
+                         {"key": "mortar", "battles": 4}]}
+
+_own = cdl.repertoire(_intel)
+check("a deck played once is not a playstyle — the 3-battle deck is dropped",
+      [d["battles"] for d in _own] == [100, 30], str([d["battles"] for d in _own]))
+check("the floor is the headline block's, reused", cdl.REPERTOIRE_MIN_BATTLES == 5)
+check("a 16-card duel loadout is never split into invented decks",
+      all(len(set(d["cards"])) == 8 for d in _own))
+check("eight copies of one card is not eight cards either",
+      all(len(set(d["cards"])) == 8 for d in _own))
+check("most played first", _own[0]["battles"] == 100)
+check("no decks at all is an empty repertoire, not a crash", cdl.repertoire(None) == [])
+
+_hist, _tot = cdl.archetype_history(_intel)
+check("their own win conditions are counted", _hist["hog"] == 120 and _tot == 154)
+# NOT a docstring check, and the first draft of this was `... or True`, which
+# is a check that cannot fail. Feed it an intel where the two fields DISAGREE:
+# reading the wrong one recommends somebody the deck they keep losing to.
+_faced = {"archetypes": [{"key": "hog", "battles": 120}],
+          "opponentArchetypes": [{"key": "golem", "battles": 999}]}
+_h2, _t2 = cdl.archetype_history(_faced)
+check("it reads what they PLAYED, never what they faced",
+      _h2 == {"hog": 120} and _t2 == 120, str(_h2))
+
+
+print("\nhow close a candidate is to what they play")
+_a = cdl.deck_affinity([f"c1{i}" for i in range(8)], _own)
+check("an exact copy of a deck they play is 8 of 8", _a["shared"] == 8)
+check("and it is marked familiar", _a["familiar"] is True)
+check("it names the deck it matched, so the claim is checkable",
+      _a["deckKey"] == _own[0]["key"] and _a["deckBattles"] == 100)
+
+_half = [f"c1{i}" for i in range(5)] + ["zzz1", "zzz2", "zzz3"]
+check("five shared clears the floor", cdl.deck_affinity(_half, _own)["familiar"] is True)
+_four = [f"c1{i}" for i in range(4)] + ["zzz1", "zzz2", "zzz3", "zzz4"]
+check("four does NOT — staples alone reach four", cdl.deck_affinity(_four, _own)["familiar"] is False)
+check("and the raw count is still reported, not hidden",
+      cdl.deck_affinity(_four, _own)["shared"] == 4)
+check("nothing shared is zero, with no deck named",
+      cdl.deck_affinity(["q"] * 1 + [f"q{i}" for i in range(7)], _own)["deckKey"] is None)
+check("an empty repertoire cannot make anything familiar",
+      cdl.deck_affinity([f"c1{i}" for i in range(8)], [])["familiar"] is False)
+
+# THE CLOSEST SINGLE DECK, not an average over the repertoire.
+_two = [{"key": "a", "cards": [f"c1{i}" for i in range(8)], "battles": 9},
+        {"key": "b", "cards": [f"z{i}" for i in range(8)], "battles": 900}]
+check("it matches the CLOSEST deck, not the most played",
+      cdl.deck_affinity([f"c1{i}" for i in range(8)], _two)["deckKey"] == "a")
+
+
+print("\nfamilies: the field's answer, grouped by win condition")
+
+
+def sc(arch, rate, cards=None, shared=0):
+    return {"key": f"{arch}-{rate}", "name": cdl.dcx._label(arch), "archetype": arch,
+            "cards": cards or [f"{arch}{i}" for i in range(8)],
+            "expectedWinRate": rate, "spreadCovered": 50.0,
+            "affinity": {"shared": shared, "familiar": shared >= cdl.AFFINITY_MIN}}
+
+
+_scored = [sc("hog", 55.0), sc("hog", 61.0), sc("hog", 58.0, shared=6),
+           sc("golem", 60.0), sc("golem", 52.0),
+           sc("mortar", 49.0)]
+_f = cdl.families(_scored)
+check("one group per win condition", [g["archetype"] for g in _f] == ["hog", "golem", "mortar"])
+check("ordered by their BEST deck, never by how many decks they hold",
+      [g["best"] for g in _f] == [61.0, 60.0, 49.0])
+check("twelve mediocre lists do not outrank two good ones",
+      _f[0]["archetype"] == "hog" and _f[0]["total"] == 3)
+check("inside a family the best is first", _f[0]["decks"][0]["expectedWinRate"] == 61.0)
+check("the family reports how many of its decks they could already pilot",
+      _f[0]["familiar"] == 1 and _f[1]["familiar"] == 0)
+check("the total counts the whole family, not the trimmed list",
+      cdl.families(_scored, per=1)[0]["total"] == 3)
+check("but only `per` are carried", len(cdl.families(_scored, per=1)[0]["decks"]) == 1)
+check("no scored decks is no families", cdl.families([]) == [])
+# The family summary must not carry a figure that cannot vary.
+check("a family carries no spreadCovered — it measured 100.0 on all 17, every account",
+      all("spreadCovered" not in g for g in _f))
+check("it carries what a family row is judged on instead",
+      all(set(g) >= {"archetype", "name", "best", "total", "familiar", "decks"} for g in _f))
+
+
+print("\nclosest: what they could pilot today")
+_near = cdl.closest(_scored)
+check("only familiar decks are in it", all(r["affinity"]["familiar"] for r in _near))
+check("exactly the one that cleared the floor", len(_near) == 1)
+# Sorted by the ANSWER, not by how familiar. Two familiar decks, worse one more alike.
+_mix = [sc("hog", 52.0, shared=8), sc("golem", 61.0, shared=5)]
+check("sorted by expected win rate, NOT by how familiar it is",
+      [r["expectedWinRate"] for r in cdl.closest(_mix)] == [61.0, 52.0])
+check("nothing familiar is an empty list, not a lowered floor",
+      cdl.closest([sc("hog", 70.0, shared=4)]) == [])
+
+
+print("\nworth learning: one archetype outside their range")
+_hist2 = {"hog": 300}      # they are a hog player and nothing else
+_learn = cdl.worth_learning(_scored, _hist2, 300, beat=58.0)
+check("it picks a family they have no history with", _learn["archetype"] == "golem")
+check("and says how much they have actually played it", _learn["yourBattles"] == 0)
+check("with the margin over what they can already pilot", _learn["beats"] == 2.0)
+check("a family they already play is never offered as new",
+      cdl.worth_learning(_scored, {"hog": 300, "golem": 200}, 500, beat=40.0)["archetype"] == "mortar")
+check("NOTHING is offered when nothing unfamiliar beats what they can pilot",
+      cdl.worth_learning(_scored, _hist2, 300, beat=99.0) is None)
+check("with nothing familiar there is no bar to clear",
+      cdl.worth_learning(_scored, _hist2, 300, beat=None)["archetype"] == "golem")
+# The share and the count are BOTH needed.
+check("a busy player's minor deck is still outside their range on share",
+      cdl.worth_learning(_scored, {"hog": 3000, "golem": 10}, 3010, beat=None)["archetype"] == "golem")
+check("but a deck they play a lot of is not, however small the share",
+      cdl.worth_learning(_scored, {"hog": 100000, "golem": 4000}, 104000,
+                         beat=None)["archetype"] != "golem")
+
+
 print("\nthe window before this one")
 check("a 30-day window is preceded by the 30 days ending the day before",
       cdl.previous_window("2026-08-26", "2026-09-24") == ("2026-07-27", "2026-08-25"))

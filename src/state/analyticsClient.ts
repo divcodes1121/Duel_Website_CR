@@ -2106,8 +2106,12 @@ export interface FieldPick {
   evidenceStrength: number;
   confidence: string;
   /** True when this deck is in the plan BECAUSE of the weighting — absent
-   *  from the ranking the unweighted field produces. */
-  fromWeighting: boolean;
+   *  from the ranking the unweighted field produces. Only on `recommendations`. */
+  fromWeighting?: boolean;
+  /** How close it is to what they already play. On `families`, `closest` and
+   *  `learn.deck`; absent on `recommendations`, which is the ownerless
+   *  portfolio. */
+  affinity?: DeckAffinity;
 }
 
 /** One window's record against one archetype, beside the window before it.
@@ -2165,6 +2169,62 @@ export interface FieldProgress {
   matchups: ProgressMatchup[];
 }
 
+/** How close one candidate deck is to the decks this player actually runs.
+ *
+ *  THE FIGURE IS RAW SHARED CARDS, deliberately. A staple-weighted score would
+ *  be more correct and completely uncheckable; "6 of these 8 cards are in a
+ *  deck you play" is something the reader confirms by looking at two strips. */
+export interface DeckAffinity {
+  shared: number;
+  of: number;
+  /** `shared` cleared the floor — see `repertoire.sharedFloor`. Four is
+   *  reachable by staples alone, so four is not familiar. */
+  familiar: boolean;
+  deckKey: string | null;
+  /** The matched deck's own cards. Sent only where a screen draws them —
+   *  absent on family rows, which would have paid for it 68 times. */
+  deckCards?: string[];
+  /** How many battles they have on the deck it matched. A deck played three
+   *  times is not a playstyle, which is why the repertoire has its own floor. */
+  deckBattles: number;
+}
+
+/** One win condition, with the decks of it that answer the current field.
+ *
+ *  Ordered by the family's BEST deck, never by how many decks it holds:
+ *  twelve mediocre Mortar lists must not outrank two good Hog ones. */
+export interface DeckFamily {
+  archetype: string;
+  name: string;
+  /** The best expected win rate in the family. */
+  best: number;
+  /** Decks of this win condition in the whole pool, before the trim. */
+  total: number;
+  /** How many of them they could already pilot. */
+  familiar: number;
+  decks: FieldPick[];
+}
+
+/** One win condition outside their range whose best deck beats what is in it.
+ *
+ *  `null` rather than a manufactured suggestion when nothing unfamiliar is
+ *  actually better — a new archetype costs weeks and is only worth it if it
+ *  wins. */
+export interface LearnSuggestion {
+  archetype: string;
+  name: string;
+  deck: FieldPick;
+  expectedWinRate: number;
+  /** Battles they have actually played of it. 0 is the common answer and is
+   *  said plainly rather than hidden behind "new to you". */
+  yourBattles: number;
+  yourShare: number | null;
+  /** Points over the best thing they can already pilot — the whole argument
+   *  for spending time on it. `null` when they have nothing familiar at all,
+   *  where there is no bar and the copy must not imply one. */
+  beats: number | null;
+}
+
 export interface FieldPlan {
   tag: string;
   brain: string;
@@ -2184,6 +2244,24 @@ export interface FieldPlan {
   tailoredPicks: number;
   /** Absent in `brief` mode — it is only the evidence for `tailoredPicks`. */
   baselinePicks?: string[];
+  /** THE FIELD'S ANSWER, grouped by win condition, so the spread is structural
+   *  rather than enforced by `diversify`'s archetype-repeat penalty. Absent in
+   *  `brief`: a roster row draws one deck and would pay for 68. */
+  families?: DeckFamily[];
+  /** Of those, the ones built from cards they already play — sorted by
+   *  expected win rate, because familiarity is the FILTER and not the
+   *  ranking. Empty is a real answer and the screen says why. */
+  closest?: FieldPick[];
+  learn?: LearnSuggestion | null;
+  /** What "a deck you play" and "familiar" actually mean here, so an empty
+   *  personal list can state its own floors instead of just being short. */
+  repertoire?: {
+    decks: number;
+    battles: number;
+    archetypes: number;
+    deckFloor: number;
+    sharedFloor: number;
+  };
   brief?: boolean;
   /** What the meta's own direction did to the projection. `applied` is false
    *  under the history floor, and `reason` says so — it switches itself on
