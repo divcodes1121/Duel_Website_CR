@@ -106,6 +106,43 @@ function getRedis(): Redis {
 const keyFor = (userId: string) => `deck-data:user:${userId}`;
 
 /**
+ * The previous value of a user's deck blob, kept for `SHADOW_DAYS`.
+ *
+ * **THE LAST LINE OF DEFENCE, AND IT EXISTS BECAUSE THE CLIENT ALREADY LOST AN
+ * ACCOUNT'S LIBRARY ONCE.** A client bug replaced 150 saved duel sets with an
+ * empty payload; the client fix stops that particular path, but "the client
+ * pushed something wrong" is a category, not a single bug, and there was no
+ * copy of what it overwrote. One extra key makes every such loss recoverable
+ * by reading it back.
+ *
+ * It is NOT a backup system and must not be sold as one: one version deep,
+ * best-effort, and only written when the incoming payload would DESTROY saved
+ * work. That is the case worth paying a write for.
+ */
+const shadowKeyFor = (userId: string) => `deck-data:user:${userId}:prev`;
+
+/** How long a shadow copy lives. Long enough to notice and ask. */
+const SHADOW_SECONDS = 60 * 60 * 24 * 30;
+
+/** Saved sets in a blob, or 0 for anything unreadable. */
+export function libraryCount(blob: unknown): number {
+  const lib = (blob as { library?: unknown } | null)?.library;
+  return Array.isArray(lib) ? lib.length : 0;
+}
+
+/**
+ * Is this PUT about to destroy saved work?
+ *
+ * Exported so the decision can be tested without a Redis or a request. Only
+ * a SHRINK counts: a normal save adds or edits and is not worth a second
+ * write, while every loss so far has had this shape.
+ */
+export function shouldKeepShadow(existing: unknown, incoming: unknown): boolean {
+  if (existing == null) return false;
+  return libraryCount(existing) > libraryCount(incoming);
+}
+
+/**
  * The pre-Supabase storage key for an account, so its decks can be claimed.
  *
  * The twenty test logins are gone, which means the decks saved under them are
@@ -352,6 +389,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(413).json({ error: 'Payload too large' });
         return;
       }
+
+      /* KEEP WHAT IS ABOUT TO BE DESTROYED. Only when the incoming payload
+         holds FEWER saved sets than the stored one — a normal save adds or
+         edits and is not worth a second write, while a shrink is the shape
+         every loss so far has had. Deleting decks on purpose still works; the
+         previous version is simply recoverable for a month afterwards.
+
+         Best-effort on purpose: a failure here must never fail the user's
+         save. Losing the shadow copy is a smaller harm than refusing to
+         store the work they just did. */
+      try {
+        const existing = await getRedis().get(key);
+        if (shouldKeepShadow(existing, payload)) {
+          await getRedis().set(shadowKeyFor(userId), existing, { ex: SHADOW_SECONDS });
+        }
+      } catch {
+        /* ignore — see above */
+      }
+
       await getRedis().set(key, payload);
       res.status(200).json({ ok: true });
       return;

@@ -32,10 +32,57 @@ describe('one row per player', () => {
 
   /* THE DISTINCTION THIS WHOLE MODULE EXISTS FOR. Live, the weighting changes
      0-1 of 7 picks, so 'weighted' alone is not 'tailored'. */
+  /**
+   * THE ROSTER BOARD SHOWED EVERY PLAYER THE SAME DECK.
+   *
+   * It drew `recommendations[0]`, and `diversify()` makes that the best deck
+   * of the strongest archetype — the same deck for everyone, by construction.
+   * Six roster rows drew six identical Balloon decks. `closest[0]` is the best
+   * answer built from cards THIS player runs, so it differs by construction.
+   */
+  it('prefers the deck built from cards they actually play', () => {
+    const r = todayRow('#A', 'RIZAL', plan({
+      closest: [{
+        key: 'mine', name: 'Mortar', expectedWinRate: 58.8,
+        cards: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
+        affinity: { shared: 7, of: 8, deckBattles: 28, familiar: true },
+      }],
+    }));
+    expect(r.pick?.key).toBe('mine');
+    expect(r.source).toBe('their-deck');
+    expect(r.kind).toBe('tailored');
+    expect(r.note).toContain('7 of 8 cards');
+    expect(r.note).toContain('28 times');
+  });
+
+  it('two players with different repertoires get different decks', () => {
+    const a = todayRow('#A', 'A', plan({
+      closest: [{ key: 'mortar', name: 'Mortar', expectedWinRate: 58.8,
+                  cards: ['a'], affinity: { shared: 7, of: 8, deckBattles: 28, familiar: true } }],
+    }));
+    const b = todayRow('#B', 'B', plan({
+      closest: [{ key: 'balloon', name: 'Balloon', expectedWinRate: 57.3,
+                  cards: ['b'], affinity: { shared: 6, of: 8, deckBattles: 41, familiar: true } }],
+    }));
+    expect(a.pick?.key).not.toBe(b.pick?.key);
+  });
+
+  it('falls back to the field when nothing they play is close, and SAYS so', () => {
+    const r = todayRow('#A', 'A', plan({ closest: [], tailoredPicks: 0 }));
+    expect(r.source).toBe('field');
+    expect(r.note).toContain('Nothing they play is close');
+  });
+
+  it('never claims a personal pick it does not have', () => {
+    const r = todayRow('#A', 'A', plan({ tailoredPicks: 0 }));
+    expect(r.pick?.shared).toBeUndefined();
+    expect(r.source).toBe('field');
+  });
+
   it('weighted but unchanged is ORDERED, never tailored', () => {
     const r = todayRow('#A', 'NannoS', plan({ tailoredPicks: 0 }));
     expect(r.kind).toBe('ordered');
-    expect(r.note).toContain('moved the order, not the set');
+    expect(r.note).toContain('Nothing they play is close');
     expect(r.note).not.toContain('because of their own record');
   });
 

@@ -534,14 +534,27 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
     # are all computed and complete by the time this runs — so a fault in the
     # three new lists costs those three lists and nothing else. The same
     # treatment `intel` and `meta_history` already get in this function.
-    if not brief:
-        try:
-            _build_lists()
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
-            fams, near, learn = [], [], None
+    #
+    # BUILT IN `brief` TOO, AND THAT IS THE POINT. The roster's Today board
+    # reads the brief plan and drew `recommendations[0]` — the diversified top
+    # pick, which is the same deck for every player, so six rows showed six
+    # identical Balloon decks. It costs no query: the affinity is ~200 card-set
+    # intersections against at most 25 of their own decks. What `brief` still
+    # withholds is the SIZE — see the trim below.
+    try:
+        _build_lists()
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        fams, near, learn = [], [], None
 
     if brief:
+        # ONE PERSONAL DECK SURVIVES THE TRIM, because it is the only thing on
+        # a roster row that differs between players. The families board and the
+        # rest of `closest` are the full screen's and are dropped.
+        near = near[:1]
+        fams = []
+        if learn:
+            learn = {k: v for k, v in learn.items() if k != 'deck'}
         # The threats keep what a summary row says (name, share, whether this
         # player's record moved it) and lose the eight cards nobody draws there.
         for t in threats:
@@ -587,6 +600,19 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         "tailoredPicks": sum(1 for p in picks if p["fromWeighting"]),
         # WHAT ANSWERS THE FIELD, grouped by win condition so the spread is
         # structural rather than enforced by `diversify`'s repeat penalty.
+        # `closest` and `repertoire` ride along in brief (one deck, a few
+        # counts); `families` is emptied above and `learn` loses its deck.
+        "closest": near,
+        "learn": learn,
+        "repertoire": {
+            "decks": len(own),
+            "battles": sum(d["battles"] for d in own),
+            "archetypes": len(hist),
+            "deckFloor": REPERTOIRE_MIN_BATTLES,
+            "sharedFloor": AFFINITY_MIN,
+            "knownFloor": KNOWN_MIN,
+            "cards": len(card_pool(own)),
+        },
         **({} if brief else {
             "families": fams,
             # HOW MANY FAMILIES THE PERSONAL ORDER ACTUALLY MOVED. 0 is a real
@@ -598,25 +624,6 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
             # board is grouped by, so the screen states it rather than leaving
             # the reader to count the sections.
             "yourFamilies": sum(1 for g in fams if g.get("yours")),
-            # Of those, the ones built from cards they already play.
-            "closest": near,
-            # One win condition outside their range that beats everything in
-            # it, or null when there is nothing worth the weeks it costs.
-            "learn": learn,
-            # So an empty personal list can say WHY rather than just be short.
-            "repertoire": {
-                "decks": len(own),
-                "battles": sum(d["battles"] for d in own),
-                "archetypes": len(hist),
-                # TWO DIFFERENT FLOORS, and they were both called `floor` for
-                # one build: how many battles make a deck theirs, and how many
-                # shared cards make a candidate familiar. A screen printing
-                # "past the 5 floor" cannot say which.
-                "deckFloor": REPERTOIRE_MIN_BATTLES,
-                "sharedFloor": AFFINITY_MIN,
-                "knownFloor": KNOWN_MIN,
-                "cards": len(card_pool(own)),
-            },
         }),
         **({"progress": progress(tag, since, until, intel)} if compare else {}),
         **({} if brief else {"baselinePicks": baseline}),

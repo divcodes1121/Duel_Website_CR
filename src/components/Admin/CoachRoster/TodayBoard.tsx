@@ -142,9 +142,13 @@ export function TodayBoard({ players }: { players: RosterPlayer[] }) {
 }
 
 /* Four words, and they are not interchangeable — see `coachToday.ts`. */
+/* The badge names WHERE THE DECK CAME FROM. "From their record" and
+   "Re-ordered by their record" both described `tailoredPicks`, a figure about
+   the other list that measured 0 for five of six real accounts — so every row
+   wore one of two labels that meant the same nothing. */
 const KIND_LABEL = {
-  tailored: 'From their record',
-  ordered: 'Re-ordered by their record',
+  tailored: 'Built from their cards',
+  ordered: 'The field’s deck',
   field: 'The field alone',
   new: 'Not collected yet',
   failed: 'Could not read',

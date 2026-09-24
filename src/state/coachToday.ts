@@ -51,6 +51,17 @@ export interface TodayPlanInput {
     fromWeighting?: boolean;
   }[];
   weighted: { archetype: string; name: string; battles: number; winRate: number; deficit: number }[];
+  /** The best deck built from cards THIS player already runs. One entry in
+   *  `brief`, which is what a roster row draws. */
+  closest?: {
+    key: string;
+    name: string;
+    expectedWinRate: number;
+    cards?: string[];
+    art?: Record<string, 'evolution' | 'hero'>;
+    artInferred?: boolean;
+    affinity?: { shared: number; of: number; deckBattles: number; familiar: boolean };
+  }[];
 }
 
 export interface TodayRow {
@@ -68,12 +79,19 @@ export interface TodayRow {
        was on the payload and thrown away one type earlier. */
     art?: Record<string, 'evolution' | 'hero'>;
     artInferred?: boolean;
+    /** Cards shared with one of their own decks, and how much they play it.
+     *  Present only when the pick IS one of theirs. */
+    shared?: number;
+    deckBattles?: number;
   } | null;
   /** What the weighting moved toward, worst first. Empty is a real answer. */
   workOn: string[];
   /** One short sentence. Never an adjective the plan cannot carry. */
   note: string;
   tailoredPicks: number;
+  /** Where the pick came from. `their-deck` is the only one that is about
+   *  this player rather than about the field. */
+  source: 'their-deck' | 'field';
 }
 
 /** Plans that could not be read are their own kind — a coach must be able to
@@ -85,12 +103,21 @@ export function todayRow(
 ): TodayRow {
   if (!plan || plan.basis === 'none') {
     return {
-      tag, label, kind: 'failed', pick: null, workOn: [], tailoredPicks: 0,
+      tag, label, kind: 'failed', pick: null, workOn: [], tailoredPicks: 0, source: 'field',
       note: 'Their plan could not be worked out just now.',
     };
   }
 
-  const top = plan.recommendations[0];
+  /* THE PERSONAL DECK FIRST, AND THIS IS THE WHOLE POINT OF THE ROW.
+     It used to be `recommendations[0]` — the diversified top pick, which
+     `diversify()` makes the best deck of the strongest archetype, the same
+     deck for every player. Six roster rows drew six identical Balloon decks.
+     `closest[0]` is the best answer built from cards this player actually
+     runs, so it differs by construction; the field's pick is the fallback
+     when they have nothing close, which is a real state and is labelled. */
+  const mine = plan.closest?.[0];
+  const top = mine ?? plan.recommendations[0];
+  const source: TodayRow['source'] = mine ? 'their-deck' : 'field';
   const pick = top
     ? {
         key: top.key,
@@ -99,31 +126,45 @@ export function todayRow(
         cards: top.cards ?? [],
         art: top.art,
         artInferred: top.artInferred,
+        shared: mine?.affinity?.shared,
+        deckBattles: mine?.affinity?.deckBattles,
       }
     : null;
   const workOn = plan.weighted.slice(0, 3).map((w) => w.name);
 
   if (!pick) {
     return {
-      tag, label, kind: 'failed', pick: null, workOn, tailoredPicks: 0,
+      tag, label, kind: 'failed', pick: null, workOn, tailoredPicks: 0, source: 'field',
       note: 'Nothing in the pool could be ranked against the field today.',
     };
   }
 
   if (plan.basis === 'no_history') {
-    return { tag, label, kind: 'new', pick, workOn: [], tailoredPicks: 0,
+    return { tag, label, kind: 'new', pick, workOn: [], tailoredPicks: 0, source,
       note: 'Nothing stored for them yet — this is the field’s answer, not theirs.' };
   }
   if (plan.basis === 'unweighted') {
-    return { tag, label, kind: 'field', pick, workOn: [], tailoredPicks: 0,
+    return { tag, label, kind: 'field', pick, workOn: [], tailoredPicks: 0, source,
       note: `None of their ${plan.battles.toLocaleString('en-US')} battles gives an archetype enough evidence to weight yet.` };
   }
+  /* THE PICK IS ONE OF THEIRS, so the row says why it is theirs rather than
+     quoting `tailoredPicks` — a figure about the OTHER list, which measured 0
+     for five of six real accounts and made every row read the same. */
+  if (source === 'their-deck' && pick) {
+    return {
+      tag, label, kind: 'tailored', pick, workOn,
+      tailoredPicks: plan.tailoredPicks, source,
+      note: pick.shared != null && pick.deckBattles != null
+        ? `${pick.shared} of 8 cards are in a deck they have played ${pick.deckBattles} times.`
+        : 'Built from cards they already play.',
+    };
+  }
   if (plan.tailoredPicks > 0) {
-    return { tag, label, kind: 'tailored', pick, workOn, tailoredPicks: plan.tailoredPicks,
+    return { tag, label, kind: 'tailored', pick, workOn, tailoredPicks: plan.tailoredPicks, source,
       note: `${plan.tailoredPicks} of ${plan.recommendations.length} picks ${plan.tailoredPicks === 1 ? 'is' : 'are'} here because of their own record.` };
   }
-  return { tag, label, kind: 'ordered', pick, workOn, tailoredPicks: 0,
-    note: 'Their record moved the order, not the set — these are the field’s decks.' };
+  return { tag, label, kind: 'ordered', pick, workOn, tailoredPicks: 0, source,
+    note: 'Nothing they play is close to the field’s answers — this is the field’s deck.' };
 }
 
 export interface TodaySummary {
