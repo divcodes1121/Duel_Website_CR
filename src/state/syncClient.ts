@@ -34,19 +34,44 @@ async function bearer(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
-/** This account's synced deck data, or null if none exists yet / sync is unreachable. */
-export async function pullRemoteDecks(): Promise<SyncPayload | null> {
+/**
+ * The outcome of reading this account's synced decks.
+ *
+ * **`empty` AND `failed` USED TO BE THE SAME VALUE, AND IT COST AN ACCOUNT ITS
+ * WHOLE SAVED LIBRARY.** `pullRemoteDecks` returned `null` for a genuine
+ * "nothing stored yet" AND for a network error, a non-2xx and an unparseable
+ * body alike — so `decideSync` read a failed request as a brand-new account
+ * and answered `seed-remote`, which pushes whatever local holds over the
+ * remote. On a fresh browser local has just been reset to empty by
+ * `hydrateFromRemote`, so ONE failed GET during ONE sign-in replaces the
+ * account's library with nothing, and every later sign-in then adopts that
+ * emptiness over the good local copy.
+ *
+ * The three states are distinct now and the caller must answer `failed` by
+ * doing NOTHING. Not knowing is not the same as knowing there is nothing.
+ */
+export type RemoteRead =
+  | { status: 'found'; data: SyncPayload }
+  | { status: 'empty' }
+  | { status: 'failed' };
+
+/** This account's synced decks. Never conflates "none" with "unreachable". */
+export async function readRemoteDecks(): Promise<RemoteRead> {
   const token = await bearer();
-  if (!token) return null;
+  // No session is not an empty account either — it is a request never made.
+  if (!token) return { status: 'failed' };
   const res = await safeFetch('/api/decks', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res?.ok) return null;
+  if (!res) return { status: 'failed' };      // offline, DNS, CORS, abort
+  if (!res.ok) return { status: 'failed' };   // 401, 429, 500, 502 ...
   try {
     const json = await res.json();
-    return json?.found ? (json.data as SyncPayload) : null;
+    return json?.found
+      ? { status: 'found', data: json.data as SyncPayload }
+      : { status: 'empty' };                  // a 200 that says so
   } catch {
-    return null;
+    return { status: 'failed' };              // a body we cannot read
   }
 }
 

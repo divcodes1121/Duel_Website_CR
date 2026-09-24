@@ -30,7 +30,7 @@ import {
 } from './deckUtils';
 import { CARDS_BY_KEY } from '../data/cards';
 import { buildDuelImport, type DuelSaveOutcome, type PlayedGame } from './duelImport';
-import { pullRemoteDecks, pushRemoteDecks, type SyncPayload } from './syncClient';
+import { pushRemoteDecks, readRemoteDecks, type SyncPayload } from './syncClient';
 import { decideSync } from './syncPolicy';
 import { useAccountStore } from './accountStore';
 
@@ -907,8 +907,28 @@ function hasPending(): boolean {
   }
 }
 
+/**
+ * WHILE THIS IS TRUE, NOTHING IS PUSHED.
+ *
+ * Set when a read of the remote FAILS, cleared when one succeeds. It is the
+ * second half of the fix for the deletion: `decideSync` no longer answers
+ * `seed-remote` on a failed read, but local has already been reset to empty
+ * by the time we find out, and any later edit — or any state change that
+ * trips `schedulePush` — would still send that emptiness up.
+ *
+ * An account's saved decks are not recoverable from the app once overwritten,
+ * so the safe default when the remote is unreadable is to write nothing at
+ * all and wait for a read that works.
+ */
+let syncBlocked = false;
+
 /** Push now, and remember whether it landed. */
 async function pushNow() {
+  if (syncBlocked) {
+    /* Still marked pending, so the next successful read pushes it. */
+    markPending();
+    return false;
+  }
   const ok = await pushRemoteDecks(currentSyncPayload());
   if (ok) clearPending();
   else markPending();
@@ -921,6 +941,11 @@ function schedulePush() {
     return;
   }
   if (!useAccountStore.getState().userId) return;
+  if (syncBlocked) {
+    /* Mark it and stop. The push will happen after a read succeeds. */
+    markPending();
+    return;
+  }
   /* MARKED BEFORE THE DEBOUNCE, not after the push fails. The refresh that
      matters can happen during the 1.5 s window, before the request is even
      made, and local is already ahead of the remote at that point. */
@@ -990,12 +1015,22 @@ async function hydrateFromRemote(userId: string) {
     clearPending();
   }
 
-  const remote = await pullRemoteDecks();
+  const read = await readRemoteDecks();
   const action = decideSync({
     sameOwner,
-    hasRemote: Boolean(remote),
+    remoteRead: read.status,
     pendingLocalChanges: hasPending(),
   });
+
+  /* COULD NOT READ IT: change nothing, send nothing, try again next load.
+     Local may well have just been reset to empty two lines above, so pushing
+     now is exactly the deletion this whole path exists to prevent. */
+  if (action === 'wait') {
+    syncBlocked = true;
+    return;
+  }
+  syncBlocked = false;
+  const remote = read.status === 'found' ? read.data : null;
 
   /* LOCAL IS AHEAD: keep it and try again. Adopting the remote here is what
      deleted a saved duel — the blob is missing whatever the failed push was

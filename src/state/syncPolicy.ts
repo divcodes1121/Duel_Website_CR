@@ -69,12 +69,18 @@ export interface AdoptRemoteInput {
   /** Does the data already in this browser belong to the signing-in account? */
   sameOwner: boolean;
   /** Did the remote pull return a blob? */
-  hasRemote: boolean;
+  /** What reading the remote actually told us. `failed` is a real state,
+   *  and is NOT the same as `empty`. */
+  remoteRead: 'found' | 'empty' | 'failed';
   /** Are there local changes the remote has not accepted yet? */
   pendingLocalChanges: boolean;
 }
 
 export type SyncAction =
+  /** The remote could not be READ. Change nothing and push nothing until
+   *  it can be — not knowing what is up there is not permission to
+   *  overwrite it. */
+  | 'wait'
   /** Replace local state with the remote blob. Normal cross-device sync. */
   | 'adopt-remote'
   /** Keep local state and push it up: it is newer than what the remote holds. */
@@ -95,7 +101,12 @@ export type SyncAction =
  * owner check exists to prevent, and it outranks keeping unsynced work.
  */
 export function decideSync(input: AdoptRemoteInput): SyncAction {
-  if (!input.hasRemote) return 'seed-remote';
+  /* A FAILED READ IS NOT AN EMPTY ACCOUNT, and treating it as one cost a real
+     account its whole saved library. `hasRemote: false` meant both "nothing is
+     stored" and "we could not find out", and the answer to both was to push
+     local up — which, on a fresh browser, is empty. */
+  if (input.remoteRead === 'failed') return 'wait';
+  if (input.remoteRead === 'empty') return 'seed-remote';
   if (input.sameOwner && input.pendingLocalChanges) return 'keep-local-and-push';
   return 'adopt-remote';
 }

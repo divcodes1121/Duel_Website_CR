@@ -115,7 +115,7 @@ class World {
 
   constructor(
     readonly cap: number,
-    readonly policy: 'old' | 'new',
+    readonly policy: 'old' | 'v2' | 'new',
     readonly owner = 'user-a',
   ) {
     this.signedInAs = owner;
@@ -165,11 +165,42 @@ class World {
       if (this.remote) this.local = clone(this.remote);
       return;
     }
-    const action = decideSync({
-      sameOwner,
-      hasRemote: Boolean(this.remote),
-      pendingLocalChanges: this.pending,
-    });
+    this.decide(sameOwner, false);
+  }
+
+  /**
+   * A BROWSER THAT HAS NEVER HELD THIS ACCOUNT'S DECKS.
+   *
+   * `hydrateFromRemote` compares `localOwner()` to the user id, and on a fresh
+   * profile it is null — so local is RESET TO EMPTY before the remote is read.
+   * That is the state a headless verification run signs in with, and it is
+   * what makes a failed read destructive rather than merely useless.
+   */
+  freshBrowser(readFails = false) {
+    this.local = emptyPayload();
+    this.pending = false;
+    this.decide(false, readFails);
+  }
+
+  private decide(sameOwner: boolean, readFails: boolean) {
+    if (this.policy === 'v2') {
+      /* THE BEHAVIOUR THAT DELETED THE LIBRARY. `pullRemoteDecks` returned
+         null for a failed request AND for an account with nothing stored, so
+         the two were one value and the answer to both was to push local up. */
+      const hasRemote = readFails ? false : Boolean(this.remote);
+      const action = !hasRemote
+        ? 'seed-remote'
+        : sameOwner && this.pending
+          ? 'keep-local-and-push'
+          : 'adopt-remote';
+      if (action === 'adopt-remote' && this.remote) this.local = clone(this.remote);
+      else this.push();
+      return;
+    }
+    const remoteRead = readFails ? 'failed' : this.remote ? 'found' : 'empty';
+    const action = decideSync({ sameOwner, remoteRead, pendingLocalChanges: this.pending });
+    /* `wait` writes NOTHING — not the remote, not local. */
+    if (action === 'wait') return;
     if (action === 'adopt-remote' && this.remote) this.local = clone(this.remote);
     else if (action === 'keep-local-and-push') this.push();
     else if (action === 'seed-remote') this.push();
@@ -294,17 +325,17 @@ describe('the payload cap', () => {
 
 describe('decideSync', () => {
   it('adopts the remote on a normal load with nothing pending', () => {
-    expect(decideSync({ sameOwner: true, hasRemote: true, pendingLocalChanges: false }))
+    expect(decideSync({ sameOwner: true, remoteRead: 'found', pendingLocalChanges: false }))
       .toBe('adopt-remote');
   });
 
   it('keeps local when the remote has not accepted the latest change', () => {
-    expect(decideSync({ sameOwner: true, hasRemote: true, pendingLocalChanges: true }))
+    expect(decideSync({ sameOwner: true, remoteRead: 'found', pendingLocalChanges: true }))
       .toBe('keep-local-and-push');
   });
 
   it('seeds an account that has never synced', () => {
-    expect(decideSync({ sameOwner: true, hasRemote: false, pendingLocalChanges: false }))
+    expect(decideSync({ sameOwner: true, remoteRead: 'empty', pendingLocalChanges: false }))
       .toBe('seed-remote');
   });
 
@@ -312,8 +343,71 @@ describe('decideSync', () => {
     // User isolation outranks keeping unsynced work: local has already been
     // reset to empty, and the previous account's changes are not this
     // account's to push.
-    expect(decideSync({ sameOwner: false, hasRemote: true, pendingLocalChanges: true }))
+    expect(decideSync({ sameOwner: false, remoteRead: 'found', pendingLocalChanges: true }))
       .toBe('adopt-remote');
+  });
+});
+
+/**
+ * THE SECOND DELETION (2026-09-24), and it cost a real account its library.
+ *
+ *   150+ saved duels -> a headless sign-in in a fresh browser -> one failed
+ *   GET -> the cloud copy is replaced with an empty one -> every later
+ *   sign-in adopts that emptiness over the good local copy.
+ *
+ * The cause is one line: `pullRemoteDecks` returned `null` for a network
+ * error, a non-2xx and an unparseable body as well as for "nothing stored",
+ * so `decideSync` answered `seed-remote` — push local up — at the exact moment
+ * local had just been reset to empty.
+ */
+describe('a failed read is not an empty account', () => {
+  it('REPRODUCES the deletion against the pre-fix policy', () => {
+    const w = new World(SYNC_MAX_BYTES, 'v2').seed(150);
+    expect(w.remotes['user-a']?.library.length).toBe(150);
+
+    w.freshBrowser(true);                    // sign-in; the GET fails
+
+    expect(w.count).toBe(0);                 // local was reset, as designed
+    expect(w.remotes['user-a']?.library.length).toBe(0);   // ...and pushed up
+  });
+
+  it('does not happen now: a failed read writes nothing', () => {
+    const w = new World(SYNC_MAX_BYTES, 'new').seed(150);
+    w.freshBrowser(true);
+    expect(w.remotes['user-a']?.library.length).toBe(150);
+  });
+
+  it('and the next sign-in that CAN read restores the browser', () => {
+    const w = new World(SYNC_MAX_BYTES, 'new').seed(150);
+    w.freshBrowser(true);
+    expect(w.count).toBe(0);                 // this browser still has nothing
+    w.freshBrowser(false);                   // a read that works
+    expect(w.count).toBe(150);               // ...and it comes back
+    expect(w.remotes['user-a']?.library.length).toBe(150);
+  });
+
+  it('still seeds an account that genuinely has nothing stored', () => {
+    // The fix must not break the real first-sync case it was conflated with.
+    const w = new World(SYNC_MAX_BYTES, 'new');
+    w.save(1);
+    expect(w.remotes['user-a']?.library.length).toBe(1);
+  });
+
+  it('a failed read never costs work that is already local', () => {
+    const w = new World(SYNC_MAX_BYTES, 'new').seed(10);
+    w.save(11);
+    const before = w.count;
+    w.refresh();                             // same browser, same owner
+    expect(w.count).toBe(before);
+  });
+
+  it('every read outcome is handled — no default that overwrites', () => {
+    for (const remoteRead of ['found', 'empty', 'failed'] as const) {
+      const action = decideSync({ sameOwner: false, remoteRead, pendingLocalChanges: false });
+      expect(['adopt-remote', 'seed-remote', 'wait']).toContain(action);
+      // The destructive one is reachable ONLY from a confirmed-empty remote.
+      if (action === 'seed-remote') expect(remoteRead).toBe('empty');
+    }
   });
 });
 
