@@ -8,6 +8,7 @@ import { useThemeStore } from '../../state/themeStore';
 import { TIER_LABEL, trialDaysLeft } from '../../state/tiers';
 import { ProContact } from '../Analytics/ProContact';
 import { ChangePassword } from '../Auth/ChangePassword';
+import { Settings } from './Settings';
 import { WhatsNewDialog } from '../WhatsNew/WhatsNew';
 import { useReleaseFeed } from '../../state/whatsNew';
 import { useMyCoach } from '../../state/myCoach';
@@ -135,6 +136,7 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
   const [pos, setPos] = useState<MenuPos | null>(null);
   const [contact, setContact] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [setOpen, setSetOpen] = useState(false);
   const [newsOpen, setNewsOpen] = useState(false);
   /* THE SAME COUNT THE TOP BAR'S BELL SHOWS, from the same hook. The two
      are on screen together, so deriving it twice would eventually make them
@@ -413,6 +415,23 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                   What&apos;s new
                   {news > 0 && <span className={styles.itemCount}>{news > 9 ? '9+' : news}</span>}
                 </button>
+                {/* NAME, COUNTRY AND TAG WERE ASKED FOR ONCE, at onboarding,
+                    and never again — so a typo in a player tag was permanent,
+                    and that is the one field the whole analytics half of the
+                    site keys off. Onboarding is skippable too, so an account
+                    could simply never have set one. */}
+                <button
+                  type="button"
+                  className={styles.item}
+                  role="menuitem"
+                  onClick={() => {
+                    setPos(null);
+                    setSetOpen(true);
+                  }}
+                >
+                  <Glyph d="console" />
+                  Settings
+                </button>
                 <a className={styles.item} role="menuitem" href="#/guide" onClick={() => setPos(null)}>
                   <Glyph d="book" />
                   Field Book
@@ -493,6 +512,7 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
       {contact && <ProContact onClose={() => setContact(false)} />}
       {/* Same placement and the same reason as the dialog above it. */}
       {pwOpen && <ChangePassword onClose={() => setPwOpen(false)} />}
+      {setOpen && <Settings onClose={() => setSetOpen(false)} />}
       {/* And again. On a phone this is the ONLY way to the release feed —
           the bell is hidden below 860px because `.topActions` cannot hold
           it — so it must not be rendered inside the menu's own portal,

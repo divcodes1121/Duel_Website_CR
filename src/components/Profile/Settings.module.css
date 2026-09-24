@@ -1,0 +1,144 @@
+/* Account settings. Portalled to `document.body`, so nothing here may assume
+   a parent from the app shell. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(3px);
+  overflow-y: auto;
+}
+
+.card {
+  width: min(30rem, 100%);
+  border: 1px solid var(--glass-stroke);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 1.3rem;
+  margin: auto;
+}
+
+.head {
+  margin-bottom: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--surface-sunken);
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+}
+
+/* The field says it is wrong as well as the message below it — colour alone
+   is not a message, and somebody who cannot see the red still needs to know
+   which of three fields to look at. */
+.input[data-bad] {
+  border-color: var(--hue-red);
+}
+
+.dropdown {
+  width: 100%;
+}
+
+.hint,
+.ok,
+.bad {
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.hint {
+  color: var(--text-muted);
+}
+
+.ok {
+  color: var(--hue-green);
+  font-weight: 600;
+}
+
+.bad {
+  color: var(--hue-red);
+}
+
+.error {
+  margin: 0;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--hue-red) 45%, transparent);
+  background: var(--red-wash);
+  color: var(--hue-red);
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.2rem;
+}
+
+.primary,
+.ghost {
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--glass-stroke);
+}
+
+.primary {
+  background: var(--solid-violet);
+  color: var(--on-solid);
+  border-color: transparent;
+}
+
+.ghost {
+  background: transparent;
+  color: var(--text);
+}
+
+.primary:disabled,
+.ghost:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
