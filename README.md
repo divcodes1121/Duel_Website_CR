@@ -12309,6 +12309,35 @@ Scout and "against an opponent" are ONE tab, because they are the same
 question about the same tag; match plans and results were deleted after the
 live roster read `0 plans · 0 matches` for every player.
 
+### Where it lives, and who sees it
+
+**Coach Roster is on the top bar** (2026-09-24). A tool like Team Analysis:
+its subject is a roster of PEOPLE, not one loaded tag, so it is a dock
+destination rather than a `SIDE_NAV` row.
+
+* **Pro only** (`PRO_ONLY_SECTIONS`), and **visible to everyone** — anon, free
+  and trial meet the same `GateCard` every other pro area shows. Hiding it is
+  wrong for something purchasable: an area somebody could subscribe to and
+  cannot see does not exist to the person paying.
+* **Not in the trial**, unlike Team Analysis, and for that rule read the other
+  way round: a roster is a relationship set up over weeks, so three days
+  cannot show what it is for.
+* **The tier gate comes before the coach flag.** The honest answer to a free
+  account is "this is a pro area", not "an administrator has not marked you as
+  a coach" — true, and it tells them to ask for the wrong thing. `is_coach`
+  (007) is the finer grain inside: pro says you may open the screen, the flag
+  says a roster is yours.
+
+**`My coaching` (`#/my`) is the other side**, and the only nav entry in the app
+**conditional on data** rather than on a tier: drawn only once a coach has
+linked that account to a roster player. `seats` is `null` while the read is in
+flight and `[]` when they are on nobody's roster, and both hide it — a control
+that appears a second after load is worse than one that never appears.
+
+Verified live 12/12: ten dock cells signed in, nine for a stranger, every one
+drawing a real glyph path (`DOCK_PATHS` is keyed by LABEL, so a missing entry
+renders `<path d={undefined}>` — a cell that still takes its 40px).
+
 ### "Against the field" answers three questions, not one
 
 It returned seven decks and they were nearly the same seven for everybody.
