@@ -104,8 +104,61 @@
 
 .rosterHead {
   display: flex;
-  align-items: baseline;
+  /* `center`, not `baseline`: the back control is an icon box and has no text
+     baseline to sit on, so baseline alignment dropped it below the heading. */
+  align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* The back control and the heading travel together on the left; the count
+   stays pinned right, which `space-between` does with exactly two children. */
+.rosterHeadLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.rosterBack {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid var(--glass-stroke);
+  color: var(--text);
+  text-decoration: none;
+  /* The glyph is drawn at the icon's own size; this keeps it inside the box. */
+  font-size: 0.7rem;
+}
+
+.rosterBack svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.rosterBack:hover {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+/* A COARSE POINTER GETS A REAL TARGET WITHOUT MOVING THE TYPE. The box is
+   21px, well under the 44px a finger needs, and growing it would push the
+   heading off its line — so the hit area is an inset `::after`, the same
+   technique the theme toggle and the recovery link already use. */
+@media (pointer: coarse) {
+  .rosterBack {
+    position: relative;
+  }
+
+  .rosterBack::after {
+    content: '';
+    position: absolute;
+    inset: -0.55rem;
+  }
 }
 
 .rosterTitle {

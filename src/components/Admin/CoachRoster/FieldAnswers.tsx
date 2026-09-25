@@ -5,6 +5,7 @@ import { CardArt } from '../../Analytics/CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ChartCard, InsightRow } from '../../ui/bionis-dashboard';
 import { TrendIcon } from '../../Dashboard/icons';
+import { drawnDeck } from '../../../utils/deckSeating';
 import styles from './CoachRoster.module.css';
 
 /**
@@ -53,10 +54,14 @@ import styles from './CoachRoster.module.css';
  * projection is weighted toward what the field is TAKING UP rather than what
  * it played. Under the floor it says so plainly instead of implying it is on.
  */
-export function FreshnessLine({ plan }: { plan: FieldPlan }) {
-  const w = plan.meta?.window;
-  const at = plan.meta?.computedAt;
-  const t = plan.trend;
+export function FreshnessLine({ plan }: { plan: FieldPlan | null }) {
+  /* NULL IS A REAL CASE -- the roster board draws this after a read that
+     may have failed for every player, and inventing a date for a board
+     that was never computed is worse than saying nothing. */
+  const w = plan?.meta?.window;
+  const at = plan?.meta?.computedAt;
+  const t = plan?.trend;
+  if (!plan) return null;
 
   const age = (() => {
     if (!at) return null;
@@ -97,9 +102,22 @@ function DeckRow({ p, note, name = true }: { p: FieldPick; note?: string | null;
     <li className={styles.deckItem}>
       <div className={`${styles.deckItemHead} ${styles.deckHeadTight}`} style={{ cursor: 'default' }}>
         <div className={styles.deckCards}>
-          {(p.cards ?? []).map((c) => (
-            <CardArt key={c} card={c} variant={p.art?.[c]} inferred={p.artInferred} className={styles.deckCard} />
-          ))}
+          {/* `drawnDeck` FOR AN ENGINE DECK, EVEN THOUGH THE SERVER SEATS
+              THESE TODAY. Measured on a live plan: 94 of 94 decks across
+              recommendations, closest, the families and the threats arrive
+              with a real `art` map, so a raw lookup is not a live fault. It
+              is the one row in this file that would fail SILENTLY if that
+              ever changed -- an older server, or a seed the board has no
+              entry for -- by drawing an evolution, a hero or a champion as a
+              plain card. `drawnDeck` falls back to the capability seating and
+              marks it inferred, so the rule is the same at every call site
+              and the next reader does not have to work out which are safe. */}
+          {(() => {
+            const d = drawnDeck(p.cards ?? [], p.art, p.artInferred);
+            return d.cards.map((c) => (
+              <CardArt key={c} card={c} variant={d.art[c]} inferred={d.inferred} className={styles.deckCard} />
+            ));
+          })()}
         </div>
         <span className={`${styles.deckFigures} ${styles.deckFiguresInline}`}>
           {/* Inside a family every deck IS that win condition, so the name
@@ -169,7 +187,7 @@ export function LearnCard({
   return (
     <ChartCard
       title="Worth learning"
-      note="New win condition that beats their best"
+      note="Covers what their own decks cannot"
       badge={learn ? learn.name : 'None'}
     >
       {!learn ? (
@@ -188,13 +206,22 @@ export function LearnCard({
                 ? `${learn.name} · ${learn.expectedWinRate.toFixed(1)}% · +${learn.beats.toFixed(1)} vs ${your} best`
                 : `${learn.name} · ${learn.expectedWinRate.toFixed(1)}%`
             }
-            description={
+            description={[
               learn.yourBattles === 0
                 ? 'Never played'
                 : `${learn.yourBattles} game${learn.yourBattles === 1 ? '' : 's'}${
                     learn.yourShare != null ? ` · ${learn.yourShare}%` : ''
-                  }`
-            }
+                  }`,
+              /* WHAT IT ACTUALLY ADDS. Without this the card said only that
+                 the deck is better, which is how it came to answer Balloon
+                 for every player — "best you have not played" is one sentence
+                 for everybody. */
+              /* THE GAP IT FILLS LEADS, because that is what the suggestion
+                 is ranked on and what makes it this player's rather than the
+                 field's strongest deck. */
+              learn.fills ? `fills their ${learn.fills} gap` : null,
+              learn.covers?.length > 1 ? `also ${learn.covers.slice(1).join(', ')}` : null,
+            ].filter(Boolean).join(' · ')}
           />
           <ul className={styles.deckList}>
             <DeckRow p={learn.deck} />

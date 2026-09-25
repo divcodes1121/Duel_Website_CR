@@ -494,7 +494,7 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         # already pilot. With nothing familiar there is no bar, and the guard
         # inside `worth_learning` says so.
         beat = near[0]["expectedWinRate"] if near else None
-        learn = worth_learning(scored, hist, hist_total, beat)
+        learn = worth_learning(scored, hist, hist_total, beat, near, threats)
         fams = families(scored, hist=hist, total=hist_total)
         # A family row draws a card strip, a name, a rate and whether they
         # could already pilot it -- so it carries exactly that. MEASURED: the
@@ -1041,8 +1041,64 @@ def closest(scored: list[dict], limit: int = MAX_PICKS) -> list[dict]:
     return near[:limit]
 
 
+
+def _threat_rates(row: dict) -> dict[str, float]:
+    """`threat key -> this deck's expected rate against it`, off `score()`."""
+    out: dict[str, float] = {}
+    for m in row.get("matchups") or []:
+        k, r = m.get("threat"), m.get("winRate")
+        if k and r is not None:
+            out[k] = float(r)
+    return out
+
+
+def _best_owned(near: list[dict]) -> dict[str, float]:
+    """The best rate their OWN pilotable decks manage against each threat.
+
+    The MAXIMUM across their decks, not the average: they get to choose which
+    of their decks to bring, so what they can already do about a threat is what
+    their best answer to it does — averaging would credit a gap they do not
+    actually have.
+    """
+    best: dict[str, float] = {}
+    for r in near:
+        for k, v in _threat_rates(r).items():
+            if v > best.get(k, -1e9):
+                best[k] = v
+    return best
+
+
+def coverage_gain(cand: dict, owned: dict[str, float],
+                  weight: dict[str, float]) -> tuple[float, float, list[str]]:
+    """How much this deck ADDS to what they can already pilot.
+
+    Likelihood-weighted, and counted ONLY where the candidate is better. A deck
+    that loses to something they already beat adds nothing, and averaging that
+    in would let a deck look useful for being mediocre everywhere — which is
+    how "best overall" sneaks back in.
+
+    Returns the TOTAL gain, the biggest SINGLE-threat gain, and the threats it
+    comes from biggest first — so the screen can say what it covers rather than
+    only that it is better.
+    """
+    gain = 0.0
+    parts: list[tuple[float, str]] = []
+    for k, rate in _threat_rates(cand).items():
+        have = owned.get(k)
+        w = weight.get(k, 0.0)
+        if have is None or w <= 0:
+            continue
+        d = rate - have
+        if d > 0:
+            gain += w * d
+            parts.append((w * d, k))
+    parts.sort(reverse=True)
+    return gain, (parts[0][0] if parts else 0.0), [k for _, k in parts]
+
+
 def worth_learning(scored: list[dict], hist: dict[str, int], total: int,
-                   beat: float | None) -> dict | None:
+                   beat: float | None, near: list[dict] | None = None,
+                   threats: list[dict] | None = None) -> dict | None:
     """One win condition outside their range whose best deck beats what is in it.
 
     THE `beat` GUARD IS THE WHOLE HONESTY OF THIS. A new archetype is only
@@ -1054,24 +1110,100 @@ def worth_learning(scored: list[dict], hist: dict[str, int], total: int,
     is offered on its own merits.
     """
     fams = families(scored, per=1)
+
+    # ── WHAT IT ADDS, NOT WHAT IT SCORES ─────────────────────────────────
+    #
+    # THIS USED TO RETURN THE BEST UNFAMILIAR FAMILY, AND THAT WAS A TIER LIST
+    # WEARING A COACHING LABEL. Measured across six live accounts it answered
+    # Balloon or Graveyard for ALL SIX — they are the field's two strongest
+    # archetypes and almost nobody plays them, so "best you have not played"
+    # is the same sentence for everybody.
+    #
+    # The question a coach actually asks is what their range is MISSING. So an
+    # archetype is ranked by how much its best deck improves on what they can
+    # already pilot, threat by threat, weighted by how likely each threat is —
+    # `coverage_gain`. That is personal by construction, because the baseline
+    # is their own decks, and it is explainable: the threats the gain comes
+    # from are named.
+    owned = _best_owned(near or [])
+    weight = {t["key"]: float(t.get("likelihood") or 0.0) for t in (threats or [])}
+    # Archetype label first, the threat's own name next, the key last. A
+    # missing archetype must not print "Unknown Deck" at a reader.
+    arch_of = {}
+    for t in (threats or []):
+        a = (t.get("archetype") or "").strip()
+        arch_of[t["key"]] = (dcx._label(a) if a else "") or t.get("name") or t["key"]
+
+    ranked = []
     for g in fams:
-        n = hist.get(g["archetype"], 0)
-        # The same test the board's partition uses, so "outside their range"
-        # means one thing in this module.
         if in_range(g["archetype"], hist, total):
             continue
-        if beat is not None and g["best"] <= beat:
+        gain, hole, covers = (coverage_gain(g["decks"][0], owned, weight)
+                              if owned else (0.0, 0.0, []))
+        if owned:
+            # THE GAIN IS THE BAR WHEN THERE IS A BASELINE, not the overall
+            # rate. Requiring `best > their best overall` as well left only the
+            # field's two strongest archetypes in the running, so six live
+            # accounts were told to learn one of the same two — the generic
+            # answer this rewrite exists to remove. A family that answers a hole
+            # in their range earns the slot even when its headline rate is
+            # lower; that is what "worth learning" means to somebody who
+            # already has decks.
+            if gain <= 0:
+                continue
+        elif beat is not None and g["best"] <= beat:
+            # NO BASELINE, so there is no hole to measure and the only honest
+            # bar left is the one it used to use.
             continue
+        ranked.append((hole, gain, g["best"], g, covers))
+
+    # RANKED BY THE BIGGEST SINGLE HOLE, not by the total gain, and the two
+    # were measured against each other on the live roster: total gain answered
+    # two distinct archetypes across five players, the biggest hole answered
+    # three. They disagree for a reason worth stating — a deck that is a little
+    # better at EVERYTHING wins on total, and that is the generically strongest
+    # deck, which is the tier list again. Learning a new archetype is for
+    # answering something you cannot answer at all, so the ranking is the
+    # largest gap it closes; the total breaks ties.
+    #
+    # THE CONVERGENCE THAT REMAINS IS THE META'S, NOT THE CODE'S. Two decks
+    # dominate this field and Hog Rider is the commonest threat, so the best
+    # answer to it is the best answer for several people at once. What is
+    # personal is the gap itself, the size of it, and whether there is one.
+    #
+    # With NOTHING of their own to compare against, every candidate scores 0
+    # on both and the expected rate breaks the tie — the old behaviour, kept
+    # deliberately for exactly that case.
+    ranked.sort(key=lambda r: (-r[0], -r[1], -r[2], r[3]["name"]))
+
+    for hole, gain, _rate, g, covers in ranked:
         best = g["decks"][0]
+        # DEDUPED BY ARCHETYPE, and capped. The threats are individual meta
+        # DECKS, so a player who is weak to Hog read "covers Hog Rider
+        # Musketeer, Hog Rider Tesla" — the same lesson twice, and a third
+        # slot wasted saying it again.
+        seen_arch: list[str] = []
+        for k in covers:
+            a = arch_of.get(k) or k
+            if a not in seen_arch:
+                seen_arch.append(a)
+            if len(seen_arch) == 3:
+                break
         return {
+            "gain": round(gain, 2),
+            # The largest single gap it closes, and what that gap is.
+            "hole": round(hole, 2),
+            "fills": seen_arch[0] if seen_arch else None,
+            "covers": seen_arch,
             "archetype": g["archetype"],
             "name": g["name"],
             "deck": best,
             "expectedWinRate": g["best"],
             # What they have actually played of it. 0 is the common answer and
             # is said plainly rather than hidden behind "new to you".
-            "yourBattles": n,
-            "yourShare": round(100.0 * n / total, 1) if total else None,
+            "yourBattles": hist.get(g["archetype"], 0),
+            "yourShare": (round(100.0 * hist.get(g["archetype"], 0) / total, 1)
+                          if total else None),
             # The margin over the best thing they can already pilot, which is
             # the entire argument for spending time on it.
             "beats": round(g["best"] - beat, 1) if beat is not None else None,

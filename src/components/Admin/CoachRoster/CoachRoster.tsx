@@ -15,7 +15,7 @@ import {
 import { useCoachRoster } from '../../../state/coachRosterStore';
 import { ThemeToggle } from '../../Theme/ThemeToggle';
 import { Dropdown } from '../../ui/dropdown-menu-14';
-import { TeamIcon } from '../../Dashboard/icons';
+import { ChevronLeftIcon, TeamIcon } from '../../Dashboard/icons';
 import { AddPlayerDialog } from './AddPlayerDialog';
 import { PlayerWorkspace } from './PlayerWorkspace';
 import { RosterOverview } from './RosterOverview';
@@ -161,12 +161,30 @@ export function CoachRoster() {
       <div className={styles.body}>
         <aside className={styles.roster} aria-label="My players">
           <div className={styles.rosterHead}>
-            {/* The way back to the whole roster. Without it, opening a player
-                is a one-way door: the sidebar lists players and nothing on
-                the screen points at the overview. */}
-            <a className={styles.rosterTitle} href={COACH_ROUTE} aria-current={!tag ? 'page' : undefined}>
-              My players
-            </a>
+            <span className={styles.rosterHeadLeft}>
+              {/* AN EXPLICIT WAY BACK, and the heading was not one. "My
+                  players" has been a link to the overview since phase 8, but
+                  it is set as a 0.72rem uppercase label — it reads as a
+                  section heading, so nobody finds it, and opening a player
+                  looked like a one-way door. A chevron reads as a control.
+
+                  ONLY WHEN A PLAYER IS OPEN: on the overview there is nowhere
+                  to go back to, and a permanently-visible back button that
+                  sometimes does nothing is worse than none. */}
+              {tag && (
+                <a
+                  className={styles.rosterBack}
+                  href={COACH_ROUTE}
+                  aria-label="Back to the roster overview"
+                  title="Back to the roster overview"
+                >
+                  <ChevronLeftIcon />
+                </a>
+              )}
+              <a className={styles.rosterTitle} href={COACH_ROUTE} aria-current={!tag ? 'page' : undefined}>
+                My players
+              </a>
+            </span>
             <span className={styles.rosterCount}>{active.length}</span>
           </div>
 

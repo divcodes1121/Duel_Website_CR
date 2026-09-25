@@ -2244,6 +2244,19 @@ export interface LearnSuggestion {
    *  for spending time on it. `null` when they have nothing familiar at all,
    *  where there is no bar and the copy must not imply one. */
   beats: number | null;
+  /** Likelihood-weighted improvement over what they can ALREADY pilot,
+   *  counted only where this deck is better. 0 means there was nothing of
+   *  theirs to compare against, not that it adds nothing. */
+  gain: number;
+  /** The threats that gain comes from, biggest first — so the screen says
+   *  WHAT it covers rather than only that it is better. */
+  covers: string[];
+  /** The largest SINGLE gap it closes. This is what the suggestion is ranked
+   *  on: a deck a little better at everything is the tier list again, while a
+   *  new archetype is for answering something you cannot answer at all. */
+  hole: number;
+  /** The archetype that gap is against, or null when there is no baseline. */
+  fills: string | null;
 }
 
 export interface FieldPlan {

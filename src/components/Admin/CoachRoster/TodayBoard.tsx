@@ -5,6 +5,7 @@ import { coachHref, playerLabel, type RosterPlayer } from '../../../state/coachR
 import { todayRow, todaySummary, type TodayRow } from '../../../state/coachToday';
 import { CardArt } from '../../Analytics/CardArt';
 import { drawnDeck } from '../../../utils/deckSeating';
+import { FreshnessLine } from './FieldAnswers';
 import { ChartCard, DashBadge } from '../../ui/bionis-dashboard';
 import styles from './CoachRoster.module.css';
 
@@ -33,6 +34,12 @@ export function TodayBoard({ players }: { players: RosterPlayer[] }) {
   const [rows, setRows] = useState<TodayRow[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [ms, setMs] = useState<number | null>(null);
+  /* ONE PLAN KEPT, PURELY TO DATE THE BOARD. Every row is built against
+     the same meta snapshot, so any of them carries the same `meta.window`
+     and `computedAt` -- and `FreshnessLine` is the component the field tab
+     already uses, so the two screens cannot drift apart on what they claim
+     the answer was computed from. */
+  const [dated, setDated] = useState<FieldPlan | null>(null);
 
   async function load() {
     setBusy(true);
@@ -50,6 +57,11 @@ export function TodayBoard({ players }: { players: RosterPlayer[] }) {
         const plan = r.status === 'fulfilled' ? (r.value as FieldPlan) : null;
         return todayRow(p.playerTag, playerLabel(p), plan);
       }),
+    );
+    setDated(
+      (settled.find((r) => r.status === 'fulfilled') as
+        | PromiseFulfilledResult<FieldPlan>
+        | undefined)?.value ?? null,
     );
     setMs(Date.now() - started);
     setBusy(false);
@@ -130,6 +142,17 @@ export function TodayBoard({ players }: { players: RosterPlayer[] }) {
               </li>
             ))}
           </ul>
+          {/* WHAT IT WAS COMPUTED FROM, DATED. The board really does move
+              day to day and the movement is almost all the META's: measured
+              on the stored daily boards, 6 of the 12 threats a plan projects
+              against changed rank in ONE day, with 3 decks entering the board
+              of 50 and 3 leaving. The PLAYER half is slower -- over a week,
+              holding the board fixed, the top pick did not move for any of
+              five real accounts while the order moved for three and the
+              worth-learning suggestion for one. So this line is the only
+              honest way to say "today's plan": name the window and the hour
+              it was built, and let the reader see it change. */}
+          <FreshnessLine plan={dated} />
           <div className={styles.controlRow}>
             <button type="button" className={styles.ghostButton} disabled={busy} onClick={() => void load()}>
               {busy ? 'Working…' : 'Work them out again'}

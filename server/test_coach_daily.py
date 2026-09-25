@@ -515,6 +515,77 @@ check("nothing familiar is an empty list, not a lowered floor",
       cdl.closest([sc("hog", 70.0, shared=4)]) == [])
 
 
+print("\nworth learning is what their range is MISSING, not the best deck")
+
+
+def mrow(threat, rate):
+    return {"threat": threat, "archetype": threat, "name": threat.title(),
+            "likelihood": 0.25, "winRate": rate}
+
+
+def cand(arch, rate, vs, shared=0):
+    """A scored deck carrying per-threat rates, the way `score()` returns them."""
+    r = sc(arch, rate, shared=shared)
+    r["matchups"] = [mrow(k, v) for k, v in vs.items()]
+    return r
+
+
+# REAL THREATS CARRY AN ARCHETYPE, and the first version of this fixture did
+# not — so the deduping read `dcx._label("")` and printed "Unknown Deck". A
+# fixture that does not speak the producer's vocabulary pins nothing.
+_THREATS = [{"key": k, "archetype": k, "name": k.title(), "likelihood": 0.25}
+            for k in ("mortar", "golem", "hog", "bait")]
+
+# TWO CANDIDATES, ONE BEST OVERALL AND ONE THAT COVERS A REAL GAP.
+_pool = [
+    cand("balloon", 64.0, {"mortar": 66, "golem": 66, "hog": 62, "bait": 62}),
+    cand("xbow", 60.0, {"mortar": 78, "golem": 44, "hog": 44, "bait": 74}),
+]
+
+# Player A pilots something strong against mortar and bait already.
+_a = [cand("hog", 60.0, {"mortar": 75, "golem": 40, "hog": 60, "bait": 72}, shared=8)]
+# Player B's own deck is weak exactly where X-Bow is strong.
+_b = [cand("giant", 60.0, {"mortar": 40, "golem": 66, "hog": 60, "bait": 40}, shared=8)]
+
+_la = cdl.worth_learning(_pool, {}, 0, beat=None, near=_a, threats=_THREATS)
+_lb = cdl.worth_learning(_pool, {}, 0, beat=None, near=_b, threats=_THREATS)
+check("two players with different repertoires learn DIFFERENT archetypes",
+      _la["archetype"] != _lb["archetype"], f'{_la["archetype"]} vs {_lb["archetype"]}')
+check("the one already covered is not told to learn the deck that covers it",
+      _la["archetype"] == "balloon", _la["archetype"])
+check("the one with the gap is pointed at the deck that fills it",
+      _lb["archetype"] == "xbow", _lb["archetype"])
+check("and it NAMES the threats the gain comes from",
+      len(_lb["covers"]) >= 2 and all(isinstance(c, str) and c for c in _lb["covers"]),
+      str(_lb["covers"]))
+check("named as archetypes, deduped, at most three",
+      len(_lb["covers"]) == len(set(_lb["covers"])) and len(_lb["covers"]) <= 3,
+      str(_lb["covers"]))
+check("the gain is reported so the claim is checkable", _lb["gain"] > 0)
+
+# THE BEST DECK OVERALL STILL WINS WHEN THERE IS NO GAP TO MEASURE.
+_none = cdl.worth_learning(_pool, {}, 0, beat=None, near=[], threats=_THREATS)
+check("with no decks of their own it falls back to the best answer",
+      _none["archetype"] == "balloon", _none["archetype"])
+check("and reports no gain rather than inventing one", _none["gain"] == 0.0)
+
+# The gain counts only where the candidate is BETTER.
+_g, _h, _c = cdl.coverage_gain(
+    cand("x", 50.0, {"mortar": 90, "golem": 10}),
+    {"mortar": 50.0, "golem": 50.0},
+    {"mortar": 0.5, "golem": 0.5})
+check("a deck that loses where they are already fine adds nothing for it",
+      abs(_g - 0.5 * 40) < 1e-9, str(_g))
+check("and only the threats it actually improves are named", _c == ["mortar"], str(_c))
+check("a threat they have never faced cannot be a gap",
+      cdl.coverage_gain(cand("x", 50.0, {"new": 90}), {}, {"new": 1.0})[0] == 0.0)
+check("it also reports the BIGGEST single gap, which is what it ranks on",
+      abs(_h - 0.5 * 40) < 1e-9, str(_h))
+check("and `fills` names that one gap", _lb.get("fills") in (_lb.get("covers") or [None]))
+check("the baseline is their BEST deck, not their average",
+      cdl._best_owned([cand("a", 1, {"m": 40}), cand("b", 1, {"m": 70})])["m"] == 70.0)
+
+
 print("\nworth learning: one archetype outside their range")
 _hist2 = {"hog": 300}      # they are a hog player and nothing else
 _learn = cdl.worth_learning(_scored, _hist2, 300, beat=58.0)

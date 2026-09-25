@@ -4,7 +4,7 @@ import { useMyCoach, type MyRosterSeat } from '../../state/myCoach';
 import { useAccountStore } from '../../state/accountStore';
 import { DAY_PRESETS } from '../../utils/datePresets';
 import { CardArt } from '../Analytics/CardArt';
-import { positionalArt } from '../../utils/deckSeating';
+import { drawnDeck, positionalArt } from '../../utils/deckSeating';
 import { ReadingState } from '../Analytics/ReadingState';
 import { RecentBattles } from '../Analytics/RecentBattles';
 import { DeckActions } from '../DeckActions/DeckActions';
@@ -463,9 +463,19 @@ function Overview({
           ) : (
             <>
               <div className={styles.deckCards}>
-                {(best.cards ?? []).map((c) => (
-                  <CardArt key={c} card={c} variant={best.art?.[c]} inferred={best.artInferred} className={styles.deckCard} />
-                ))}
+                {/* `drawnDeck`, not a raw `art` lookup. This is an ENGINE deck,
+                    and the rule from the seating fix is that engine decks go
+                    through `drawnDeck` so a row the server could not seat still
+                    falls back to the capability seating and says so, instead of
+                    drawing an evolution, a hero or a champion as a plain card.
+                    Reading `best.art?.[c]` directly is that bug one call site
+                    further along than the three it was found in. */}
+                {(() => {
+                  const d = drawnDeck(best.cards ?? [], best.art, best.artInferred);
+                  return d.cards.map((c) => (
+                    <CardArt key={c} card={c} variant={d.art[c]} inferred={d.inferred} className={styles.deckCard} />
+                  ));
+                })()}
               </div>
               <p className={styles.deckName}>{best.name}</p>
               <p className={styles.muted}>
