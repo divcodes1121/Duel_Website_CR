@@ -401,6 +401,13 @@ On screen, each row says **your win con** (green) and **n/8 cards you play**, an
 prints the display name ("X-Bow", not "xbow") — the list and the loadout both
 printed raw keys before this.
 
+**Every composed and loadout deck also carries `vs`**, five archetype chips
+(their likely archetypes, their other win conditions, then the meta), read off
+the deck's own per-archetype record — the same five every deck on the
+Suggestion screen is rated against. Built in `coach._chips`; see the README
+section "Every Suggestion deck shows its rate against each of their
+archetypes".
+
 ---
 
 ## 8. The honest limits — say these in the UI, not just here

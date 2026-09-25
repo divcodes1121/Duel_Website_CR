@@ -7,9 +7,13 @@ live `/teams` route answers `brain: team-scout-2.0` with a 12-entry projection
 in **1.84 s mean / 2.7 s max** across 30 opponents, and the served
 `TeamAnalysis` chunk carries every new string.
 
-`server/team_scout.py` + `server/test_team_scout.py` (107 checks, no database),
-wired through `server/team_analysis.py`. Brain version **`team-scout-2.0`**,
-published on every report and frozen into `coach_match_plans.engine`.
+**Brain 2.1 LIVE since 2026-09-25 (`c23abdb`):** a match plan's per-teammate
+lists are chosen as a squad — different #1s inside a 3-point band, covering the
+opponent's archetypes, leaning on each teammate's own cards. See §4f.
+
+`server/team_scout.py` + `server/test_team_scout.py` (**155** checks, no
+database), wired through `server/team_analysis.py`. Brain version
+**`team-scout-2.1`** (was 2.0 until 2026-09-25), published on every report.
 
 ---
 

@@ -1045,6 +1045,32 @@ as two days the instant it starts.
 
 ---
 
+## Chip rows: one line, whatever the width (2026-09-25)
+
+Two screens now print a deck's rate against each of the opponent's archetypes
+as small chips (Team Scout's `recVs`, Coach Assist's `vsChips`). They were asked
+for on ONE line, and the width they get varies more than it looks:
+
+- **A strip inside a card measures its own width, not the viewport.** Team
+  Scout's Coverage strip uses a container query (`container-type:
+  inline-size`, `@container (max-width: 26rem)`) because its column is ~300px on
+  a phone AND between 62rem and ~1300px on a desktop; a viewport breakpoint
+  describes neither. On one line at 390px it broke "Graveyard" mid-word.
+- **Coach Assist's chips never wrap; the row scrolls sideways inside itself**
+  (`flex-wrap: nowrap; overflow-x: auto`, scrollbar hidden), with a right-edge
+  fade drawn by `mask-image` — a mask paints nothing, so it cannot cover the
+  card behind it. 3 whole chips show at 390px, 2 at 320px; a swipe reaches the
+  fifth. The row is `flex: none` because it sits in the verdict card's flex
+  COLUMN, and a scroller there otherwise gets a minimum height of zero.
+- **In a `DeckRow` the chips are the grid's LAST child**, spanning from the
+  name track (`grid-column: 2 / -1`), not inside the 11rem name cell, where
+  three chips wrapped to two lines. Below 900px they span the full row, because
+  the figure drops to its own line there in the first track and spills right,
+  and chips starting at track 2 ran into it.
+- Colour is `--success` / `--error`, never the identity hues, which are the
+  sides on these screens. A chip for an archetype outside their likely decks
+  has a dashed border and a `title` saying why it is there.
+
 ## Working on this
 
 ```bash

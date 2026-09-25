@@ -285,7 +285,7 @@ happily against a server that never called it.
 | `GET /api/analytics/deck?cards=&wild=` | how one pasted deck draws — slots + art (`wild=evolution` or `wild=hero` picks slot 3) |
 | `GET /api/analytics/matchup?a=&b=` | head-to-head for two decks (comma-separated keys) |
 | `GET /api/analytics/counters?deck=` | what beats a deck |
-| `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, **the projected threat space (`threats`), and 5–7 decks that answer it**. With `blue` those come from the squad's own lists; **omit `blue` entirely** and they come from the snapshot's seed pool (~200 real decks), plus an `overall` block ranking the same pool against the whole roster's pooled projection. `mode` says which, and `brain` says which reasoning produced it (`team-scout-2.0`). See `DECKKIES_TEAM_SCOUT.md`. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
+| `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, **the projected threat space (`threats`), and 5–7 decks that answer it**. With `blue` those come from the squad's own lists; **omit `blue` entirely** and they come from the snapshot's seed pool (~200 real decks), plus an `overall` block ranking the same pool against the whole roster's pooled projection. `mode` says which, and `brain` says which reasoning produced it (`team-scout-2.1`: a match plan's per-teammate lists are chosen as a squad, with `squadCover` on each folder). See `DECKKIES_TEAM_SCOUT.md`. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
 | `GET /api/analytics/coach/field/<tag>` | **what to play with NO OPPONENT** (`coach_daily.py`) — the meta board becomes a threat projection, that projection is reweighted by where this player measurably loses, and `team_scout.score()` ranks ~204 real decks against it. Works because `score()` takes the threat space as an INJECTED parameter and does not know where it came from, so there is no second scorer and no model. `basis` is `weighted` / `unweighted` / `no_history` / `none` and a client must say which. `tailoredPicks` reports how many picks the weighting actually put there, measured by ranking the unweighted projection too — live it is 0-1 of 7, and that is the correct answer rather than a weak one. Costs no database read per candidate; 1.4 s warm. `days` as everywhere else. Returns `families` / `closest` / `learn` / `repertoire` on the full read (not `brief`). **`compare=1`** adds `progress` — this window against the one of the same length before it, recomputed from the rows rather than read from a snapshot table (+~60 ms) |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
@@ -1943,6 +1943,18 @@ records still flow through every existing function unchanged; T1 refuses them.
 `brain-evidence/r3_measurement/mutation_tests.py` fails the suite.
 
 ### The labelled sampler (R3, schema 3)
+
+> **STATUS: STOPPED 2026-09-19 21:05 UTC, ~8 hours into a 7-day window, and it
+> has not run since.** `STOPPED: royalweb restarted (MainPID changed)` — the
+> Coach Roster Phase 2 deploy restarted royalweb, which is one of the
+> preregistered stop conditions, and the sampler disabled its own timer as
+> designed. Marker: `/var/lib/royalweb-sampler/r3s-20260919T1315Z.STOPPED`.
+> Found 2026-09-25; per protocol it was NOT restarted and cohort
+> `r3s-20260919T1315Z` will not be evaluated. **Every server deploy restarts
+> royalweb**, and there were many that week, so a re-run needs either a
+> deploy freeze for its seven days or an amendment to that stop condition —
+> the account holder's decision. The OIE itself is unaffected: still
+> `CLASH_OIE=shadow`, still invisible to users.
 
 Organic Coach traffic is ~0.5 new subjects a day, so the preregistered sampler
 (`brain-evidence/r3_sampler_design/PREREGISTRATION.md`) makes shadow-only

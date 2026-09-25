@@ -20,7 +20,7 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **950 vitest**, **204 Python** (`test_coach_daily`), route count **24** |
+| Tests | **951 vitest** (32 files), **3,015 Python checks** across 53 suites (one known failure, `test_ml_21a`), route count **24** — counted 2026-09-25 evening |
 
 ## What the field plan answers
 
@@ -38,6 +38,33 @@ It rests on one fact: **`team_scout.score()` takes the threat space as an
 injected parameter** and does not know where it came from, so a projection
 built from the meta board gets the same tested arithmetic with no second
 scorer. There is no model and a test asserts no `ml` import.
+
+## Shipped 2026-09-25 afternoon (all live)
+
+| commit | what | measured |
+|---|---|---|
+| `c23abdb` | **Team Scout brain 2.1** — a match plan's teammate lists are chosen as a squad (`team_scout.squad_plan`) + a Coverage strip | 11 real folders: every-#1-distinct 0/11 -> 8/11, distinct decks 117 -> 191 of 378, -0.36 pts |
+| `c0a643c` | **Coach Assist "Or bring one of these" is per player** (`deck_tuner.personalise`, `coach._playstyle` from ALL stored battles) | 12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition, -1.0 pt |
+| `284e09b` + `1754a7b` | **Five archetype chips under every Suggestion deck**, one line (`coach._chip_archetypes` / `_chips`) | likely -> their other win cons -> meta; warm latency unchanged ~1.1–1.3 s |
+
+Backups on the VPS: `team_*.py.bak-20260925-152203-presquad`,
+`{coach,deck_tuner}.py.bak-20260925-155229-prestyle`,
+`coach.py.bak-20260925-160905-prechips`, `coach.py.bak-20260925-162209-prefive`.
+
+## Decisions waiting on the account holder
+
+1. **The R3 prediction sampler STOPPED on 2026-09-19 21:05 UTC** (its own stop
+   condition: a royalweb restart during a deploy), ~8 h into 7 days, and was
+   not restarted, per protocol. A re-run needs a deploy freeze for its week or
+   an amendment to that stop condition. `server/README.md` has the detail.
+2. **Coach Assist's main "Play this" pick is still the same for players with no
+   duel history** — 7 of 12 got the same meta Hog deck, because `suggest()`
+   tops up from population decks, never from their own ladder decks. Fixing it
+   changes the headline recommendation, so it was left for a decision.
+3. **Coach Assist's displayed percentages are miscalibrated** (Brain Phase 16:
+   "Cards to expect" 62% shown vs 46% observed, "clear favourite" 45.5%). The
+   product response — reword, withhold, or reserve mass for unlisted decks —
+   is still open.
 
 ## THE ONE BLOCKING GAP: `is_coach` grants the screen, not the rows
 
