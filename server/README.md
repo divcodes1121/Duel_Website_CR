@@ -1065,7 +1065,7 @@ So `plan()` keeps the **whole scored pool** (it used to compute 204 and throw
 | --- | --- |
 | `families` | every win condition the field can be answered with, ordered by its **best** deck. The spread is structural instead of enforced by a penalty. |
 | `closest` | of those, the ones built from cards they already run. |
-| `learn` | one win condition outside their range whose best deck beats everything inside it, or `null`. |
+| `learn` | one win condition outside their range, chosen by the **biggest single gap it closes** in their record, or `null`. |
 
 **The same six accounts after:** 25 distinct decks across the personal lists,
 **mean pairwise overlap 1.00 decks**, and **nothing in every player's list**.
@@ -1158,6 +1158,36 @@ a reason that will recur:**
 | section orders identical | 15 of 15 pairs | **0 of 15** |
 | distinct decks across boards | 86 of 408 | **111 of 408** |
 
+### Worth learning is the biggest hole, not the best deck
+
+Reported as *"worth learning is the same for everyone"*. It was: **one
+archetype for all six live accounts**. The first fix ranked unfamiliar families
+by likelihood-weighted improvement over their own best answer, which made the
+FIGURES personal (gain 0.00–4.59) and still left **two distinct archetypes
+across five players**.
+
+**Both rankings were then measured against each other on the real roster
+before one was picked**, because they disagree for a reason worth stating:
+
+| ranked by | distinct suggestions across 5 players |
+| --- | --- |
+| total gain across the whole projection | 2 |
+| **the biggest single-threat gap it closes** | **3** |
+
+A deck that is a little better at **everything** wins on total gain — and that
+is the generically strongest deck, which is the tier list again. Learning a new
+archetype is for answering something you **cannot answer at all**, so the
+ranking is the largest gap it closes and the total only breaks ties.
+`coverage_gain()` returns `(total, hole, covers)`; `fills` names the archetype
+that gap is against and leads the card's copy. With no repertoire to compare
+against, every candidate scores 0 on both and the expected rate breaks the tie
+— the old behaviour, kept deliberately for exactly that case.
+
+**The convergence that remains is the meta's, not the code's.** Two decks
+dominate this field and Hog Rider is the commonest threat, so the best answer
+to it is the best answer for several people at once. What is personal is the
+gap, its size, and whether there is one at all.
+
 **Two of the four slots are still the field's best and are the same for
 everyone**, correctly — they are the best answers, and showing a player worse
 ones to look personal would invert the point. A player with four decks that
@@ -1171,7 +1201,30 @@ The pool is `deck_counter.seeds()` out of `.counter_snapshot.json`, rebuilt on
 battles; `_scout_candidates` caches on that snapshot's own `computedAt`, so
 the pool invalidates when the meta rebuilds. The player's side is a rolling
 30 days. `FreshnessLine` prints `Meta 10d to <date> · <age> · trend off|Nd`,
-because a board with no date on it cannot be told from a stuck one.
+because a board with no date on it cannot be told from a stuck one. **The
+roster's `Today` card draws the same component**, so the two screens cannot
+drift on what they claim the answer was computed from.
+
+**How fast each half actually moves, measured rather than promised:**
+
+| half | how it was measured | result |
+| --- | --- | --- |
+| the **meta** | the stored daily boards, one day apart | **6 of the 12 threats** a plan projects against changed rank; **3 decks entered** the board of 50 and 3 left |
+| the **player** | the same 30-day window ending 7 days earlier, board held fixed | the **top pick did not move** for any of 5 accounts; the order moved for **3**, worth-learning for **1** |
+
+That is the correct shape rather than a weak one. The plan changes day to day
+and the movement is almost all the field's; a top pick that thrashed daily
+would be noise, not intelligence. So the screen names the window and the hour
+instead of claiming churn it cannot show.
+
+**`TREND_MIN_DAYS` (3) cannot fire from the production path**, which is worth
+knowing before it is read as the real gate. `plan()` asks
+`meta_history.movement(TREND_DAYS)` and that takes the newest snapshot **at or
+before** `latest - 7`, walking older and never closer, so `daysApart` is always
+≥ 7. The live gate is `movement()` answering `basis: "none"` until seven days
+are stored — the history began 2026-09-23, so the trend is genuinely off until
+**2026-09-30** and the screen says `trend off` truthfully meanwhile. The guard
+is defensive depth, reachable only if `TREND_DAYS` is lowered under it.
 
 The 7-day directional weighting (`trend`) reports itself **off** until
 `meta_history` holds `TREND_MIN_DAYS`; it began 2026-09-23.
