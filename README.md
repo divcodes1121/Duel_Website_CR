@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Coach Roster** | **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 LIVE 2026-09-20 (`ed04b98`, server by scp first):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. **Phase 3 LIVE 2026-09-20 (`a1ac2e0`):** the Deck Arsenal — the decks a coach has approved for a player, built by hand, pasted as a link or taken from their battles, ranked and tagged, on 004's `coach_decks` plus one column from 005. **Phase 4 LIVE 2026-09-20 (`7f54bb2`):** the opponent scout — what an opponent plays, on stored history or a live snapshot with the difference stated, plus the head-to-head from the roster player's own battles. **Phase 5 LIVE 2026-09-20 (`a19eea9`):** what to play — the existing team-analysis engine's ranking for one player against one opponent, joined to the arsenal, with "not picked" and "could not be scored" kept apart. **Phase 6 LIVE 2026-09-20 (`7cca499`):** match plans — three slots against one opponent, with everything the screen showed frozen beside them. **Phase 7 LIVE 2026-09-20 (`2ba3f68`):** results and the learning loop — what was actually played, with the slot inferred from the cards, and rates withheld under their floors. **Phase 8 LIVE 2026-09-20 (`e0b4a7c`):** the roster overview — every player's preparation at a glance, with flags that name a state and an action. See [Coach Roster](#coach-roster-admin-only-experimental) |
+| **Coach Roster** | **PRO-GATED AND ON THE TOP BAR as of 2026-09-24, and a linked player has their own `#/my` as of 2026-09-25.** Coach is a per-account FLAG (`is_coach`, migration 007, applied) rather than a role, so an account on any tier can coach; the tier gate comes first, because the honest answer to a free account is "this is a pro area". Nine tabs became six. Match plans and results are deleted. "Against the field" answers three questions off one scored pool — the win-condition board, the decks closest to what they already run, and one archetype worth learning, ranked by the biggest single gap it closes. `progress` says whether a weakness is closing, recomputed rather than read from a snapshot table that was deliberately never built. The phase history follows. **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 LIVE 2026-09-20 (`ed04b98`, server by scp first):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. **Phase 3 LIVE 2026-09-20 (`a1ac2e0`):** the Deck Arsenal — the decks a coach has approved for a player, built by hand, pasted as a link or taken from their battles, ranked and tagged, on 004's `coach_decks` plus one column from 005. **Phase 4 LIVE 2026-09-20 (`7f54bb2`):** the opponent scout — what an opponent plays, on stored history or a live snapshot with the difference stated, plus the head-to-head from the roster player's own battles. **Phase 5 LIVE 2026-09-20 (`a19eea9`):** what to play — the existing team-analysis engine's ranking for one player against one opponent, joined to the arsenal, with "not picked" and "could not be scored" kept apart. **Phase 6 LIVE 2026-09-20 (`7cca499`):** match plans — three slots against one opponent, with everything the screen showed frozen beside them. **Phase 7 LIVE 2026-09-20 (`2ba3f68`):** results and the learning loop — what was actually played, with the slot inferred from the cards, and rates withheld under their floors. **Phase 8 LIVE 2026-09-20 (`e0b4a7c`):** the roster overview — every player's preparation at a glance, with flags that name a state and an action. See [Coach Roster](#coach-roster) |
 | **One dashboard, two screens** | **LIVE 2026-09-20 (`762a8b6`).** The admin console's summary and the Coach Roster's overview are the same layout now — a hero figure, a key-metric grid, two charts and three tinted insight cards — ported by hand from the `bionis-dashboard` composition into CSS Modules, since this project has no Tailwind and the item is not in the public registry. **The ring is never a score**: on the roster it shows how many active players have nothing outstanding, prints a fraction rather than a percentage, and requires a caption saying what it counts. The console's operational sections are deliberately untouched. Verified 37/37 in a browser, both themes, 1500 and 390 |
 | **One dropdown, everywhere** | **LIVE 2026-09-20 (`c28acba`).** Every select-style control — 13 of them, from the card library's filters to onboarding's country list — is the vendored watermelon.sh `dropdown-menu-14`, ported by hand: an icon tile, the value over a caption and an up/down chevron; a panel in the site's theme with a heading, a line of explanation per option and a tick on the chosen one. It is a real listbox with the keyboard a native select has (arrows, Home/End, type-ahead, Esc) plus a search field for long lists, anchored to its trigger, flipping above when there is no room below and never leaving the viewport. `SeasonMenu` is a thin wrapper over it now. Verified in a browser on real data in both themes and at 390; the admin role picker is the one not seen in a browser |
 | **2v2 pairs as strips** | **LIVE 2026-09-19 (`9053943`).** Deck A pinned to the left edge, deck B to the right, each deck's eight cards on one line with its label, elixir and two actions on the line above. A pair went from a ~300px block to a 128px strip at 1440 — about seven to a screen instead of one and a half. Stacks below 62rem, still eight across. Verified 20/20 in a browser, both themes, 1440/1024/390 |
@@ -192,7 +192,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 42. [Two filters and a heading](#two-filters-and-a-heading)
 42a. [One pager, everywhere](#one-pager-everywhere)
 42b. [The footer](#the-footer)
-42c. [Coach Roster (admin-only, experimental)](#coach-roster-admin-only-experimental)
+42c. [Coach Roster](#coach-roster)
 43. [The account menu is a stack of cards](#the-account-menu-is-a-stack-of-cards)
 43a. [What's new — the bell finally opens something](#whats-new--the-bell-finally-opens-something)
 44. [The phone pass — one scroll, and it is the page](#the-phone-pass--one-scroll-and-it-is-the-page)
@@ -328,7 +328,8 @@ open, so links and refreshes work.
 | `#/signin` | Sign in / sign up, then the three-step onboarding form |
 | `#/reset` | Set a new password, at the end of a recovery link |
 | `#/admin` | The admin console. Not linked from anywhere a non-admin sees |
-| `#/admin/coach` | **Coach Roster** — admin-only, experimental coaching workspace |
+| `#/admin/coach` | **Coach Roster** — a coaching workspace. Pro-gated and reached from the top bar; `is_coach` (007) decides whose roster it is. The path is still `#/admin/…` for history and is NOT an admin gate |
+| `#/my` | **My coaching** — a linked player's own dashboard. Shown in the top bar and profile menu only when the account is on somebody's roster |
 
 The analytics areas are **Search Player · Top Meta Decks · Deck Analysis · Duel
 Analysis · Duel Zone · Cards · Deck Counter · Coach Assist**, each with its own
@@ -12291,17 +12292,26 @@ gzip (+1.78)**, CSS **+1.01**.
 
 ---
 
-## Coach Roster (admin-only, experimental)
+## Coach Roster
 
-`#/admin/coach`, reached from the console's header. A private coaching
-workspace for a small roster of players the account holder coaches: choose a
-player, understand them, prepare against an opponent, record what happened.
-It is built in phases on top of the analytics that already exist — the player
-report, Coach Assist's `suggest`, Team Analysis's scorer, the deck tuner — and
-adds only the coaching layer: the roster, and (in later phases) each player's
-deck arsenal, match plans and results.
+`#/admin/coach`, reached from the **top bar**. A coaching workspace for a
+small roster of players: choose a player, understand them, prepare against an
+opponent or against the field. It is built on the analytics that already exist
+— the player report, Team Analysis's scorer, the meta board — and adds only the
+coaching layer: the roster, each player's deck arsenal, and the plans drawn
+against them.
 
-**Phase 1 (roster) and Phase 2 (player intelligence) are live. Phase 3 (deck arsenal) is live. Phase 4 (opponent scout) is live. Phase 5 (what to play) is live. Phase 6 (match plans) is live. Phase 7 (results) is live. Phase 8 — the roster overview — is live, and completes the eight-phase plan.**
+**The route is still `#/admin/…` for history and is NOT an admin gate.** Access
+is `PRO_ONLY_SECTIONS` plus the `is_coach` flag (migration 007), so an account
+on any tier can coach; renaming the path would break every stored link for a
+cosmetic gain.
+
+**All eight original phases shipped, then the workspace was cut back.** Nine
+tabs became six on 2026-09-24 and match plans and results were deleted, because
+the live roster read `0 plans · 0 matches · nothing recorded` for every player.
+What replaced them is a plan the engine draws itself, against the field, with
+no opponent to name — and the player's own view of it at `#/my`. The phase
+history is kept below because the reasoning in it is still load-bearing.
 
 **The tabs were consolidated on 2026-09-24** (`dd0b760`): nine became six —
 Overview / Against the field / Arsenal / Opponent / Battles / Decks played.
@@ -12414,7 +12424,7 @@ movement only: on the real account all eleven matchups came back "too close to
 call", correctly, and eleven repetitions of one sentence is a wall — the rest
 is one counted line that names what it withheld.
 
-### Where the data lives, and what enforces "admin-only"
+### Where the data lives, and what enforces access
 
 The coaching state is in Supabase — `supabase/004_coach_roster.sql` — and
 nothing else is. Battles, decks, matchups and predictions stay in the bot's
@@ -12428,7 +12438,28 @@ its own snapshot of what was recommended and why.
 **Row Level Security is the boundary, not the screen.** Every row requires
 the caller to be an admin — through `effective_tier`, the one definition of a
 tier — and to own the row (`coach_id = auth.uid()`), so a roster is personal
-and a non-admin reads and writes nothing. Children reference parents by
+and a non-admin reads and writes nothing.
+
+> **`is_coach` GRANTS THE SCREEN AND NOT THE ROWS, AND THAT GAP IS STILL
+> OPEN (measured 2026-09-25).** Migration 007 made coach a per-account flag so
+> an account on any tier can coach — but it deliberately did not touch these
+> policies, and `coach_is_admin()` is defined ONCE, in 004, as
+> `effective_tier(auth.uid()) = 'admin'`. Nothing redefines it. So a pro
+> account with `is_coach = true` and no admin role passes the client gate,
+> opens `#/admin/coach`, and **RLS then returns nothing** — an empty roster on
+> a screen it was just told it may use.
+>
+> **It is LATENT, not live, and that was counted rather than assumed**: of 14
+> accounts, exactly one carries `is_coach = true` and that one is the owner, so
+> every coach today is also an admin and RLS lets them through. It bites the
+> first non-admin who is flagged.
+>
+> **The fix is a migration, not a client change** — widening the five policies
+> to `(coach_is_admin() OR is_coach) AND coach_id = auth.uid()`, or redefining
+> `coach_is_admin()` to read the flag. That is a security-sensitive edit to RLS
+> on five tables and is the account holder's call, so it has not been written.
+> Until it is, **do not flag a non-admin as a coach** and expect a working
+> roster. Children reference parents by
 `(id, coach_id)` composite keys, because a foreign-key check runs without RLS
 and could otherwise attach a deck to another coach's player. Plans and results
 are `ON DELETE RESTRICT`: a player with history is archived, not deleted.

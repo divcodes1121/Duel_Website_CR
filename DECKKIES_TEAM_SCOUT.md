@@ -169,6 +169,40 @@ in a commit about something else.
 cluster6 0.45, archetype 0.25. An unrecognised source scores as the weakest, so
 a new rung added upstream makes this cautious rather than breaking the request.
 
+### `score()` HAS A SECOND CONSUMER NOW, AND A SIGNATURE CHANGE WOULD BREAK IT SILENTLY
+
+**`server/coach_daily.py` — the Coach Roster's "Against the field" tab and the
+linked player's own `#/my` — calls `team_scout.score()` directly.** It was
+added on 2026-09-23 and is the only other caller.
+
+It works *because* `score(rate_for, threats, *, cards, archetype, fit_games)`
+takes **the threat space as an injected parameter** and does not know where it
+came from. Team Analysis builds `threats` from one opponent's real decks;
+`coach_daily` builds the same shape from the **meta board**, reweighted by
+where a player measurably loses. So a field projection gets this exact
+arithmetic — the four separated signals, the coverage penalty, the evidence
+weighting — with **no second scorer**, which is what stops a roster screen and
+the public board disagreeing about the same deck.
+
+What that costs whoever edits this file:
+
+- **Changing the signature or the meaning of a term changes two products.**
+  `test_team_analysis.py` rebuilds the identity above, but it does not know
+  `coach_daily` exists; `test_coach_daily.py` (204 checks, no database) is the
+  other half and must be run too.
+- **`fit_games=None` is a legitimate call.** The coach's pool is *ownerless* —
+  204 real meta decks belonging to nobody — so `playerFit` is null and
+  `redundancy` zero on that path. They are not dead fields; they carry real
+  values here, where decks have owners. Do not "clean them up" on the evidence
+  of the coach payload alone.
+- **`diversify()` is NOT used by the coach**, deliberately. Its
+  `ARCHETYPE_REPEAT_PENALTY` is a *portfolio* rule — right for choosing five
+  decks to cover a match, wrong for one player's plan, where it collapsed 204
+  decks to "the best deck of each of seven" and produced the same list for
+  everybody. The coach groups by win condition instead, so the spread is
+  structural rather than enforced by a penalty.
+- **No `ml` import, on either path.** A test asserts it.
+
 ## 4b. A short per-teammate board is topped up, the way Coach Assist does
 
 `coach._fills` has answered this since Coach Assist was written: when a

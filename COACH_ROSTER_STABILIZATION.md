@@ -19,6 +19,33 @@
 >   questions — the win-condition board, the decks closest to what they play,
 >   and one archetype worth learning. See the README's Coach Roster section.
 >
+> **Further superseded, 2026-09-25 (`a746a9f` + `dee3ad5`):**
+>
+> * **The roster is NOT admin-only any more.** Coach is a per-account flag
+>   (`is_coach`, migration 007, applied), so an account on any tier can coach.
+>   The area is reached from the **top bar** and pro-gated like any other paid
+>   area; a small back control returns to the roster from a player.
+> * **A linked player has their own screen, `#/my`** (migration 006, applied
+>   and now read). It appears in the top bar and profile menu only when the
+>   account is on somebody's roster. Coach notes are never sent to it.
+> * **"Worth learning" is ranked by the biggest single gap it closes**, not by
+>   the best unplayed deck — both rankings were measured on the real roster
+>   first (2 distinct suggestions across 5 players against 3).
+> * **Progress over time ships, and there is no snapshot table.** `progress()`
+>   recomputes this window against the one before it; `coach_player_snapshot`
+>   was deliberately dropped for three reasons recorded in
+>   `DECKKIES_NEXT_SESSION.md`.
+> * **Every evidence floor is named in one place** and a tripwire sweeps the
+>   coach screens for a re-introduced literal. Two screens were writing a
+>   floor's value out again.
+> * **STILL TRUE, AND IT IS THE ONE OPEN GAP:** the RLS below is unchanged, so
+>   it still requires **admin**. `is_coach` grants the SCREEN and not the ROWS —
+>   a flagged non-admin would open the roster and read nothing. Latent today
+>   (counted: 1 of 14 accounts is flagged, and that one is the owner), and it
+>   needs a migration. See `DECKKIES_NEXT_SESSION.md`.
+> * Counts today: **6 tabs**, **950 vitest**, **204 Python checks** in
+>   `test_coach_daily`, route count **24**.
+>
 > What is still accurate here: the data model, the RLS boundary, the evidence
 > floors and the "no score, no rating" contract.
 

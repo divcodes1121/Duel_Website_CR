@@ -9,6 +9,22 @@ Companion to `README.md` (the narrative record) and `server/README.md` (the
 operational half). This file is the **mechanism**: the reasoning chain, end to
 end, at the level of individual functions and constants.
 
+> **SCOPE, as of 2026-09-25.** This file documents the **prediction** chain —
+> the OIE, the Coach's duel prediction and what they refuse to do. It does
+> **not** cover the two recommendation engines that shipped after it, and a
+> reader should not conclude from its silence that they do not exist:
+>
+> * **`server/team_scout.py`** — what to play against a named opponent.
+>   `DECKKIES_TEAM_SCOUT.md` is its record.
+> * **`server/coach_daily.py`** — what to play against the *field*, with no
+>   opponent, plus the win-condition board, the decks closest to what a player
+>   runs, one archetype worth learning and whether a weakness is closing.
+>   `server/README.md` § "A plan against the field" is its record.
+>
+> Neither trains or calls a model; both rest on `team_scout.score()` taking the
+> threat space as an injected parameter. Tests assert no `ml` import on either
+> path.
+
 ---
 
 ## Table of contents
