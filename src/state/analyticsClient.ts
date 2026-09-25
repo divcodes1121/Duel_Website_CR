@@ -1136,7 +1136,10 @@ export interface CoachVs {
   name: string;
   winRate: number;
   /** Share of their likely decks this archetype holds, 0..1. */
-  share?: number;
+  share?: number | null;
+  /** Why this archetype is a chip: in their LIKELY decks, another win
+   *  condition they play (`theirs`), or a top meta archetype filling to five. */
+  kind?: 'likely' | 'theirs' | 'meta';
 }
 
 /** One deck inside a recorded duel loadout. */

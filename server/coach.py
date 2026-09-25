@@ -801,6 +801,105 @@ def _vs_from_record(record: dict, archetypes: list[str],
     return out
 
 
+# ── Five chips per deck, not two (2026-09-25) ───────────────────────────────
+#
+# The first cut drew one chip per archetype of their LIKELY decks. Against an
+# opponent with no duel history those are three meta decks, and a live screen
+# showed exactly two chips (Hog Rider, Log Bait) under every deck. A coach
+# needs more of the field than that: a deck is picked for a whole duel, and
+# they can bring a win condition that is not their front-runner.
+
+#: Chips per deck. Five fits one line on a desktop row; a phone scrolls them
+#: sideways rather than wrapping (asked for: never a second line).
+CHIP_ARCHETYPES = 5
+
+
+def _chip_archetypes(opp_decks: list[dict], opp_families: dict[str, int] | None,
+                     meta_decks: list[dict] | None) -> list[dict]:
+    """The five archetypes every deck on the Suggestion screen is rated against.
+
+    IN THIS ORDER, and each says which it is (`kind`):
+
+      likely  — archetypes of the decks they are predicted to bring, by share;
+      theirs  — other win conditions they actually play (all stored battles),
+                most-played first;
+      meta    — the most-played archetypes on the meta board, to fill to five.
+
+    `other` is never a chip — it is the classifier's catch-all, and "Other
+    58%" says nothing about which deck they will bring.
+    """
+    out: list[dict] = []
+    seen: set[str] = set()
+
+    def add(a: str, kind: str, share: float | None = None) -> None:
+        if a and a != "other" and a not in seen and len(out) < CHIP_ARCHETYPES:
+            seen.add(a)
+            out.append({"archetype": a, "kind": kind, "share": share})
+
+    archs, weights = _spread(opp_decks or [])
+    for a in archs:
+        add(a, "likely", weights.get(a))
+    for a, _n in sorted((opp_families or {}).items(), key=lambda kv: (-kv[1], kv[0])):
+        add(a, "theirs")
+    use: dict[str, float] = {}
+    for d in meta_decks or []:
+        a = d.get("archetype") or _archetype(d["cards"])
+        use[a] = use.get(a, 0.0) + float(d.get("count") or 0)
+    for a, _u in sorted(use.items(), key=lambda kv: (-kv[1], kv[0])):
+        add(a, "meta")
+    return out
+
+
+def _rate_vs_archetype(mine: list[str], archetype: str, snap) -> float | None:
+    """My deck against an archetype they were NOT predicted to bring.
+
+    No opponent deck to pair with, so `win_prob`'s first rung does not apply.
+    The deck's own record against the archetype, then the archetype matrix —
+    and NOT the cluster rungs: those are the 11.6 s cold scan `win_prob`'s
+    docstring measures, and five chips on six decks would pay it thirty times
+    for a secondary figure.
+    """
+    try:
+        m = counter.deck_profile(mine)["archetypes"].get(archetype)
+    except Exception:  # noqa: BLE001 - a chip must never take the screen down
+        m = None
+    if m and m.get("winRate") is not None:
+        return float(m["winRate"])
+    if snap:
+        s = counter._symmetric(snap, _archetype(mine), archetype)
+        if s and s.get("winRate") is not None:
+            return float(s["winRate"])
+    return None
+
+
+def _chips(mine: list[str], per: list[dict] | None, chips: list[dict], snap,
+           record: dict | None = None) -> list[dict]:
+    """One deck's chips over `chips`, in that order; unmeasured ones absent.
+
+    A `likely` archetype reads off `per` (what the headline was computed from,
+    so chip and headline cannot disagree); anything else reads the deck's own
+    `record` when it has one (a tuner deck carries all seventeen), else
+    `_rate_vs_archetype`.
+    """
+    grouped = {v["archetype"]: v for v in _vs_from_per(per or [])}
+    out = []
+    for c in chips:
+        a = c["archetype"]
+        if a in grouped:
+            rate = grouped[a]["winRate"]
+        elif record is not None:
+            m = record.get(a)
+            rate = float(m["winRate"]) if m and m.get("winRate") is not None else None
+        else:
+            rate = _rate_vs_archetype(mine, a, snap)
+        if rate is None:
+            continue
+        row = _vs_row(a, rate, c.get("share"))
+        row["kind"] = c["kind"]
+        out.append(row)
+    return out
+
+
 def _spread(opp_decks: list[dict]) -> tuple[list[str], dict[str, float]]:
     """The opponent's likely decks, collapsed to `(archetypes, weights)`.
 
@@ -857,7 +956,8 @@ def _playstyle(tag: str, since: str | None, until: str | None,
 
 def tune(my_deck: list[str], opp_decks: list[dict],
          used: set | None = None, hist: dict | None = None,
-         profile: dict | None = None) -> dict | None:
+         profile: dict | None = None,
+         chips: list[dict] | None = None) -> dict | None:
     """Card-level swaps for one deck. See `DECK_TUNER.md`.
 
     OPT-IN AND ADMIN-ONLY at the route, because it costs a full sibling scan --
@@ -923,14 +1023,16 @@ def tune(my_deck: list[str], opp_decks: list[dict],
             limit=10 ** 6)
         composed["decks"] = tuner.personalise(composed["decks"], profile)
         for d in composed["decks"]:
-            d["vs"] = _vs_from_record(d.get("archetypes"), archetypes, weights)
+            d["vs"] = (_chips(d["deck"], None, chips, None, record=d.get("archetypes") or {})
+                       if chips else _vs_from_record(d.get("archetypes"), archetypes, weights))
         composed["playstyle"] = sorted(
             tuner.playstyle_families((profile or {}).get("families")))
         out["compose"] = composed
         out["loadout"] = tuner.loadout(
             archetypes, weights=weights, comfort=comfort, veto=harmony.veto)
         for d in (out["loadout"] or {}).get("decks") or []:
-            d["vs"] = _vs_from_record(d.get("archetypes"), archetypes, weights)
+            d["vs"] = (_chips(d["deck"], None, chips, None, record=d.get("archetypes") or {})
+                       if chips else _vs_from_record(d.get("archetypes"), archetypes, weights))
     except Exception as exc:  # pragma: no cover - degradation
         print("coach.tune: composer: %r" % (exc,), file=sys.stderr)
         out["compose"] = None
@@ -980,9 +1082,17 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     if len(mine) < MY_TOP_DECKS:
         mine = mine + _fills(mine, used_mine, MY_TOP_DECKS - len(mine))
 
+    # THE FIVE ARCHETYPES EVERY DECK ON THIS SCREEN IS RATED AGAINST: their
+    # likely ones, then the other win conditions they play, then the meta.
+    opp_families = (_playstyle(opp_tag, opp_since, opp_until, opp_hist)["families"]
+                    if opp_tag else {})
+    chips = _chip_archetypes(opp["decks"], opp_families, _population_decks())
+
     recs = []
     for md in mine:
         exp = _expected(md["cards"], opp["decks"], snap)
+        if exp:
+            exp["vs"] = _chips(md["cards"], exp["per"], chips, snap)
         recs.append({**md, "expected": exp})
 
     scored = [r for r in recs if r["expected"]]
@@ -1052,9 +1162,12 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         # asked". Costs a full sibling scan, so the route only sets `swaps`
         # for an admin. See `DECK_TUNER.md`.
         **({"tuner": tune(best["cards"], opp["decks"], used_mine, mine_hist,
-                          _playstyle(my_tag, my_since, my_until, mine_hist))}
+                          _playstyle(my_tag, my_since, my_until, mine_hist),
+                          chips)}
            if swaps and best else {}),
         "notes": _read(stage, best, opp, my_played, opp_played, observed),
+        # What the chips under every deck are rated against, in their order.
+        "chipArchetypes": [{**c, "name": counter._label(c["archetype"])} for c in chips],
         # Every reason the answer might be weaker than it looks, listed rather
         # than folded into one flag the reader cannot interrogate.
         "caveats": _caveats(mine_hist, opp_hist, opp, basis),

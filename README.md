@@ -3171,6 +3171,22 @@ Balloon Mega Knight, 49.7% expected, **Hog Rider 27%**) shows as that.
   the 11rem name cell they wrapped to two lines); below 900px they take a full
   row, because the figure drops to its own line there and they collided with it.
 - The opponent's decks carry none (they have no `expected`).
+- **FIVE CHIPS, NOT TWO (same day).** Against an opponent with no duel history
+  the likely decks are three meta decks, and a live screen showed two chips
+  (Hog Rider, Log Bait) under every deck. `coach._chip_archetypes` now picks
+  five: their **likely** archetypes by share, then **other win conditions they
+  play** (all stored battles, via `_playstyle`), then the **meta's most-played**
+  to fill; `other` never. Every deck on the screen is rated against the same
+  five (`chipArchetypes` on the payload). A likely chip reads off `per`, so it
+  cannot disagree with the headline; the rest read the deck's own record, then
+  the archetype matrix — never the 11.6 s cluster scan. Live example it
+  surfaced: CODE:KANGDONE's likely decks are all Hog / Log Bait, but they play
+  Bridge Spam, and the "Play this" deck is **42% against it**.
+- **One line, never two.** Extras (not in their likely decks) have a dashed
+  border and a tooltip saying which kind they are. Desktop fits all five; a
+  phone scrolls the row sideways inside itself with a faded right edge (3 whole
+  chips visible at 390px, 2 at 320px) — verified 28/28 at 1440/1024/390/320,
+  including that a swipe reaches the fifth chip and the page never scrolls.
 
 ### The history is windowed — 15, 30, 45 or 60 days
 

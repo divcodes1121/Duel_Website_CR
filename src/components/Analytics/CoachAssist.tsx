@@ -319,12 +319,25 @@ function PasteDeck({
  * under. Renders nothing when the server sent none (an older server, or a
  * deck with no record against anything they bring).
  */
+/** Why a chip is there — a tooltip, so the row itself stays figures only. */
+const KIND_TITLE: Record<string, string> = {
+  likely: 'In the decks they are likely to bring',
+  theirs: 'Another win condition they play',
+  meta: 'One of the most-played archetypes right now',
+};
+
 function VsChips({ vs, className }: { vs?: CoachVs[]; className?: string }) {
   if (!vs?.length) return null;
   return (
     <ul className={`${styles.vsChips} ${className ?? ''}`} aria-label="Win rate against each of their archetypes">
       {vs.map((v) => (
-        <li key={v.archetype} className={styles.vsChip} data-ok={v.winRate >= 50 || undefined}>
+        <li
+          key={v.archetype}
+          className={styles.vsChip}
+          data-ok={v.winRate >= 50 || undefined}
+          data-extra={v.kind && v.kind !== 'likely' ? '' : undefined}
+          title={KIND_TITLE[v.kind ?? 'likely']}
+        >
           <span>{v.name}</span>
           <strong>{v.winRate.toFixed(0)}%</strong>
         </li>

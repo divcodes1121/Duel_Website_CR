@@ -1689,6 +1689,12 @@ likelihood-weighted, unrecorded archetypes absent) and `_vs_from_record` (a
 tuner deck's record against the opponent's archetypes, in `_spread`'s order).
 Each row is `{archetype, name, winRate, share}`. Additive; nothing reads the old
 fields differently.
+Then widened to **five** per deck (`CHIP_ARCHETYPES`) by `_chip_archetypes`:
+likely archetypes, then the opponent's other win conditions (`_playstyle` on
+the OPPONENT — one extra `player_report` read per suggest), then the meta
+board; `other` never. Rows gain `kind` (`likely` / `theirs` / `meta`), and the
+payload carries `chipArchetypes`. Off-projection rates: the deck's own record,
+then `_symmetric` — deliberately not the cluster rungs.
 
 The bot's duel advisor, in two windows: `!predict`/`!predict2`/`!predict3` (what
 they will bring) and `!suggestion` (what you should answer with).

@@ -457,5 +457,54 @@ check("a composed deck's chips are its record against THEIR archetypes only, in 
       str(got))
 
 
+print("\nfive chips, not two: likely -> their other win cons -> the meta")
+# The live screen that asked for this: no duel history for them, so their
+# likely decks were three meta decks and two archetypes — two chips per deck.
+likely = [D(deck("hog-rider", "musketeer"), prob=0.47),
+          D(deck("hog-rider", "tesla"), prob=0.29),
+          D(deck("goblin-barrel"), prob=0.24)]
+meta = [{"cards": deck("x-bow"), "archetype": "xbow", "count": 300},
+        {"cards": deck("golem"), "archetype": "golem", "count": 200},
+        {"cards": deck("hog-rider"), "archetype": "hog", "count": 900},
+        {"cards": deck("balloon"), "archetype": "other", "count": 999},
+        {"cards": deck("graveyard"), "archetype": "graveyard", "count": 100}]
+ch = coach._chip_archetypes(likely, {"lava": 50, "other": 400, "hog": 10}, meta)
+check("five chips", len(ch) == coach.CHIP_ARCHETYPES == 5, str(ch))
+check("their likely archetypes lead, by share",
+      [c["archetype"] for c in ch[:2]] == ["hog", "bait"]
+      and [c["kind"] for c in ch[:2]] == ["likely", "likely"], str(ch))
+check("then a win condition they play that was not predicted",
+      ch[2] == {"archetype": "lava", "kind": "theirs", "share": None}, str(ch))
+check("then the meta's most-played, skipping what is already there",
+      [(c["archetype"], c["kind"]) for c in ch[3:]] == [("xbow", "meta"), ("golem", "meta")],
+      str(ch))
+check("`other` is never a chip", all(c["archetype"] != "other" for c in ch))
+check("with no opponent the chips come from the meta alone (four real "
+      "archetypes in this fixture once `other` is dropped)",
+      [c["kind"] for c in coach._chip_archetypes([], None, meta)] == ["meta"] * 4,
+      "four real meta archetypes exist here besides `other`")
+
+real_prof = coach.counter.deck_profile
+try:
+    coach.counter.deck_profile = lambda cards: {"archetypes": {"lava": {"winRate": 47.0},
+                                                               "xbow": {"winRate": 61.0}}}
+    per = [{"cards": likely[0]["cards"], "prob": 0.47, "matchup": {"winRate": 60.0}},
+           {"cards": likely[2]["cards"], "prob": 0.24, "matchup": {"winRate": 68.0}}]
+    got = coach._chips(deck("graveyard"), per, ch, None)
+    check("a likely chip reads off `per`, the others off the deck's own record",
+          [(v["archetype"], v["winRate"], v["kind"]) for v in got]
+          == [("hog", 60.0, "likely"), ("bait", 68.0, "likely"),
+              ("lava", 47.0, "theirs"), ("xbow", 61.0, "meta")], str(got))
+    check("an archetype with no record anywhere is absent, not 50",
+          all(v["archetype"] != "golem" for v in got))
+    rec = {"hog": {"winRate": 77.0}, "bait": {"winRate": 78.0}, "lava": {"winRate": 70.0},
+           "xbow": {"winRate": 55.0}, "golem": {"winRate": 49.0}}
+    tuned = coach._chips(deck("goblin-drill"), None, ch, None, record=rec)
+    check("a tuner deck reads all five off its own record, in chip order",
+          [v["winRate"] for v in tuned] == [77.0, 78.0, 70.0, 55.0, 49.0], str(tuned))
+finally:
+    coach.counter.deck_profile = real_prof
+
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

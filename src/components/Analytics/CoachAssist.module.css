@@ -1320,16 +1320,33 @@
 
 /* `--success` / `--error` for the verdict, as Team Scout argues: the hues on
    this screen are the blocks' identities and must not double as good/bad. */
+/* ONE LINE, NEVER TWO — asked for by name. Up to five chips; where a row is
+   narrower than that (a phone), it scrolls sideways within itself, the way
+   `.phoneNav` does, instead of wrapping. `min-width: 0` so the flex/grid
+   parent lets it shrink and scroll rather than widening the page. */
 .vsChips {
+  /* A scroller in a flex COLUMN (the verdict card) gets an automatic minimum
+     size of zero and is crushed; `flex: none` keeps its height. */
+  flex: none;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.35rem;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+  min-width: 0;
+  max-width: 100%;
   margin: 0.3rem 0 0;
   padding: 0;
   list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  touch-action: pan-x pan-y;
+}
+
+.vsChips::-webkit-scrollbar {
+  display: none;
 }
 
 .vsChip {
+  flex: none;
   display: inline-flex;
   align-items: baseline;
   gap: 0.25rem;
@@ -1366,5 +1383,30 @@
   .deckRowVs {
     grid-column: 1 / -1;
     margin-top: 0;
+  }
+}
+
+/* Not in their likely decks — another win condition they play, or the meta
+   filling to five. Dashed, so the two kinds read apart without a word. */
+.vsChip[data-extra] {
+  border-style: dashed;
+}
+
+/* PHONES: five chips do not fit ~300px, and the first cut showed two and a
+   half with nothing saying more existed. Tighter chips, and the right edge
+   fades so the row reads as continuing — a swipe reveals the rest. The fade
+   is a MASK, not an overlay: it paints nothing over the card behind it. */
+@media (max-width: 900px) {
+  .vsChips {
+    gap: 0.2rem;
+    padding-right: 1.2rem;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.6rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.6rem), transparent);
+  }
+
+  .vsChip {
+    gap: 0.2rem;
+    padding: 0.05rem 0.32rem;
+    font-size: 0.63rem;
   }
 }
