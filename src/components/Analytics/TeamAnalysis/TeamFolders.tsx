@@ -6,6 +6,7 @@ import type {
   TeamPlayerOptions,
   TeamRecommendation,
   TeamReport,
+  TeamSquadCover,
 } from '../../../state/analyticsClient';
 import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
@@ -230,7 +231,13 @@ export function FolderGallery({
  * headline alone cannot separate "this beats them" from "this beats
  * everybody", and those are very different reasons to top a ranking.
  */
-function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number }) {
+function Recommendation({ rec, rank, labels }: {
+  rec: TeamRecommendation;
+  rank?: number;
+  /** Archetype key -> display name, in the order the opponent is likely to
+   *  bring them. Present only on a match plan whose server sent a squad plan. */
+  labels?: [string, string][];
+}) {
   /* The delta is computed here rather than shipped, because the two halves are
      worth reading separately and a lone "+9.4" hides both of them. */
   const edge =
@@ -243,6 +250,7 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
       <div className={styles.recHead}>
         {rank !== undefined && <span className={styles.recRank}>{rank}</span>}
         <div className={styles.recWho}>
+          {rec.squadPick && labels && <span className={styles.recSquad}>Squad pick</span>}
           <span className={styles.recDeck}>{rec.name}</span>
           {/* WHO FLIES IT, OR THAT NOBODY HERE DOES. An owned deck names its
               pilot; a fill says it is a Deckkies pick. A scouting row belongs
@@ -252,6 +260,12 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
           {(rec.owner || rec.fill) && (
             <span className={styles.recOwner}>
               {rec.owner ? `${rec.owner.name} plays it` : 'Deckkies pick'}
+              {/* HOW MUCH OF IT THEY ALREADY PLAY. A Deckkies pick built out of
+                  six of their own cards is a different ask from one built out
+                  of none, and the squad plan leans on exactly this. */}
+              {!rec.owner && rec.known !== undefined && rec.known > 0 && (
+                <span className={styles.recKnown}> · {rec.known}/8 cards they play</span>
+              )}
             </span>
           )}
         </div>
@@ -288,6 +302,24 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
         inferred={rec.artInferred}
         name={rec.owner ? `${rec.owner.name} — ${rec.name}` : rec.name}
       />
+      {/* AGAINST EACH OF THEIR ARCHETYPES. The headline is one weighted
+          average; this is what it averages, so a deck strong overall that
+          loses to one of their archetypes is visible as that. Figures only. */}
+      {labels && rec.vs && (
+        <ul className={styles.recVs}>
+          {labels
+            .filter(([k]) => rec.vs?.[k] !== undefined)
+            .map(([k, name]) => {
+              const v = rec.vs![k];
+              return (
+                <li key={k} className={styles.recVsItem} data-ok={v >= 50 || undefined}>
+                  <span>{name}</span>
+                  <strong>{v.toFixed(0)}%</strong>
+                </li>
+              );
+            })}
+        </ul>
+      )}
       {/* NO TYPE / CONFIDENCE / EXPLANATION LINE AND NO COVERAGE SENTENCE.
           Both were here ("Robust · known · Holds up against Royal Hogs …
           measured against 100% of their projected pool") and the account
@@ -295,6 +327,46 @@ function Recommendation({ rec, rank }: { rec: TeamRecommendation; rank?: number 
           barely vary, so the line said the same thing on every row. The
           fields stay on the payload; the PDF still prints coverage. */}
     </li>
+  );
+}
+
+/**
+ * WHO ANSWERS WHAT: one row per archetype this opponent may bring, most likely
+ * first, naming the teammate whose #1 answers it best and at what rate.
+ *
+ * It is the squad plan read the other way round. The rows below are players;
+ * this is their archetypes, so a coach sees at a glance whether the squad's
+ * #1s leave a hole — an archetype nobody's #1 beats is drawn as a gap, not
+ * dropped, because "nobody has an answer to Graveyard" is the most useful
+ * line on the board. Numbers and names only, per the no-prose rule for this
+ * screen.
+ */
+function SquadCover({ rows }: { rows: TeamSquadCover[] }) {
+  if (!rows.length) return null;
+  const answered = rows.filter((r) => r.answered).length;
+  return (
+    <section className={styles.cover} aria-label="Squad coverage">
+      <h5 className={styles.coverHead}>
+        Coverage
+        <span className={styles.coverCount}>
+          {answered}/{rows.length}
+        </span>
+      </h5>
+      <ul className={styles.coverList}>
+        {rows.map((r) => (
+          <li key={r.archetype} className={styles.coverRow} data-gap={!r.answered || undefined}>
+            <span className={styles.coverArch}>
+              {r.name}
+              <span className={styles.coverShare}>{Math.round(r.likelihood * 100)}%</span>
+            </span>
+            <span className={styles.coverWho}>
+              {r.player ? `${r.player} · ${r.deck ?? ''}` : '—'}
+            </span>
+            <span className={styles.coverRate}>{pct(r.winRate)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -319,12 +391,19 @@ const NO_OPTIONS: Record<string, string> = {
  * that produced it, so the list answers "who should take this one" before
  * anything is opened at all — the expansion is for *why*, not for *what*.
  */
-function PlayerRow({ row, open, onToggle }: {
+function PlayerRow({ row, open, onToggle, labels }: {
   row: TeamPlayerOptions;
   open: boolean;
   onToggle: () => void;
+  labels?: [string, string][];
 }) {
   const best = row.decks[0];
+  /* WHAT THIS TEAMMATE'S #1 ANSWERS FOR THE SQUAD, named on the collapsed row
+     so a lineup can be read without opening anything: each of their
+     archetypes is somebody's job, and this says whose. */
+  const covers = best?.covers?.length && labels
+    ? labels.filter(([k]) => best.covers!.includes(k)).map(([, n]) => n)
+    : [];
   const id = `team-opts-${row.owner.tag.replace(/[^A-Za-z0-9]/g, '')}`;
 
   return (
@@ -354,6 +433,13 @@ function PlayerRow({ row, open, onToggle }: {
                 ? `Deckkies pick: ${best.name}`
                 : best.name}
           </span>
+          {covers.length > 0 && (
+            <span className={styles.mateCovers} title="The squad's best answer to these archetypes">
+              {covers.map((n) => (
+                <span key={n} className={styles.mateCover}>{n}</span>
+              ))}
+            </span>
+          )}
         </span>
 
         {/* The figure sits on the collapsed row deliberately: it is what the
@@ -379,6 +465,7 @@ function PlayerRow({ row, open, onToggle }: {
               key={`${r.archetype}-${i}`}
               rec={r}
               rank={i + 1}
+              labels={labels}
             />
           ))}
         </ol>
@@ -414,6 +501,11 @@ export function OpenFolder({
      thing the collapsed rows exist to avoid. Keyed by tag rather than index so
      it survives the list changing. */
   const [openMate, setOpenMate] = useState<string | null>(null);
+  /* Archetype key -> name, most likely first — the squad plan's own order,
+     so every per-archetype figure on the board reads in the same order. */
+  const labels: [string, string][] | undefined = folder.squadCover?.length
+    ? folder.squadCover.map((c) => [c.archetype, c.name])
+    : undefined;
   return (
     <div className={styles.open}>
       <div className={styles.openHead}>
@@ -502,11 +594,13 @@ export function OpenFolder({
                  reason to omit them. */
               <section className={styles.boardSide} data-side="blue">
                 <SuggestHeading />
+                <SquadCover rows={folder.squadCover ?? []} />
                 <ul className={styles.mates}>
                   {folder.perPlayer.map((row) => (
                     <PlayerRow
                       key={row.owner.tag}
                       row={row}
+                      labels={labels}
                       open={openMate === row.owner.tag}
                       onToggle={() =>
                         setOpenMate(openMate === row.owner.tag ? null : row.owner.tag)

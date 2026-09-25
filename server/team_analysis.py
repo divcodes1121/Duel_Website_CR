@@ -1099,6 +1099,40 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             _fill_pool = _distinct(scored_fills)
         return _fill_pool
 
+    # THE SQUAD'S QUESTION, NOT FIVE COPIES OF ONE PLAYER'S. `scout.squad_plan`
+    # assigns each teammate a different #1 from the options the evidence
+    # cannot separate, chosen so the squad's #1s answer as many of this
+    # opponent's archetypes as they can, leaning on cards each teammate
+    # already plays. Measured before it (2026-09-25, live 5v1): one #1 for
+    # all five, two identical lists, 12 distinct decks in 35 slots.
+    #
+    # A TEAMMATE'S CARDS ARE THE ONES IN DECKS THEY ACTUALLY RUN — the same
+    # `MIN_COMFORT_GAMES` floor that decides which of their decks are
+    # candidates, so "built out of your cards" and "a deck you play" cannot
+    # disagree about what counts as playing it.
+    plan_lists: dict[str, list[dict]] | None = None
+    cover: list[dict] = []
+    if blue and threats:
+        try:
+            squad = []
+            for mate in blue:
+                pool_cards: set[str] = set()
+                for d in mate.get("decks") or []:
+                    if int(d.get("matches") or 0) >= MIN_COMFORT_GAMES:
+                        pool_cards.update(d.get("cards") or [])
+                squad.append({"tag": mate["tag"],
+                              "own": by_tag.get(mate["tag"], []),
+                              "cards": pool_cards})
+            plan_lists, cover = scout.squad_plan(squad, fill_pool(), threats,
+                                                 limit=PER_PLAYER_TOP_N)
+            names = {m["tag"]: m["name"] for m in blue}
+            for c in cover:
+                c["name"] = dcx._label(c["archetype"] or "other")
+                c["player"] = names.get(c["tag"]) if c["tag"] else None
+        except Exception:  # noqa: BLE001 - the old per-teammate lists are the fallback
+            traceback.print_exc()
+            plan_lists, cover = None, []
+
     per_player = []
     for mate in blue:
         rows = by_tag.get(mate["tag"], [])
@@ -1133,7 +1167,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             # has none — the reader is told which is which, rather than the
             # stronger deck being withheld.
             "decks": _evidence_on_top(
-                _suggested(rows, fill_pool, PER_PLAYER_TOP_N), keep=0),
+                plan_lists[mate["tag"]] if plan_lists is not None
+                else _suggested(rows, fill_pool, PER_PLAYER_TOP_N), keep=0),
             "considered": len(rows),
             # WHICH empty state this is, said rather than inferred from a
             # missing list. The three are genuinely different problems: nothing
@@ -1193,6 +1228,11 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             else scout.diversify(_distinct(scored), limit=top_n)
         ),
         "perPlayer": per_player,
+        # WHICH TEAMMATE'S #1 ANSWERS EACH ARCHETYPE THEY MAY BRING, most
+        # likely first. Empty in a scouting report (nobody to assign) and on
+        # the fallback path; the client draws nothing rather than a strip of
+        # blanks.
+        "squadCover": cover,
         "considered": len(cards),
         "brain": scout.BRAIN_VERSION,
         # Said out loud rather than left to be inferred from an empty list.

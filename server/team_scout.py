@@ -118,7 +118,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-2.0"
+BRAIN_VERSION = "team-scout-2.1"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -861,8 +861,23 @@ def classify(row, threats) -> str:
 # ── 4. Diversity — the portfolio, not the ranking ───────────────────────────
 
 
-def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
+def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS,
+              score_key="recommendationScore", bonus=None, first=None):
     """Greedy maximal-marginal-relevance over the scored candidates.
+
+    `score_key` AND `bonus` EXIST FOR `squad_plan` AND DEFAULT TO EXACTLY THE
+    OLD BEHAVIOUR. The squad planner ranks a teammate's list on a PERSONAL
+    score (the same figure plus what their own cards are worth) and rewards a
+    pick for answering an archetype the list so far does not — `bonus(cand,
+    chosen)`, in the same points as the score. The floor, the redundancy
+    penalty and the archetype-repeat rule are this function's and are not
+    duplicated there; a second portfolio picker would be two rules for one
+    question that eventually disagree. `property_speedups_are_exact` pins the
+    defaults against the reference implementation.
+
+    `first` is a row (matched by `key`) that leads the list whatever its
+    score — the #1 the squad assigned this teammate. The floor is still taken
+    from the best score in the pool, not from `first`.
 
     THE PROBLEM THIS SOLVES IS THE ONE A LONGER LIST CREATES. Taking the top
     seven by score returns seven versions of whatever archetype happens to beat
@@ -883,16 +898,20 @@ def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
     # and this function writes `redundancy` and `adjustedScore` onto what it
     # returns. Mutating the caller's rows let whichever portfolio was built
     # LAST overwrite the figures the other one had published.
-    pool = sorted((dict(r) for r in rows), key=lambda r: -r["recommendationScore"])
+    pool = sorted((dict(r) for r in rows), key=lambda r: -r[score_key])
     if not pool:
         return []
 
-    best = pool[0]["recommendationScore"]
+    best = pool[0][score_key]
+    if first is not None:
+        lead = [r for r in pool if r["key"] == first["key"]]
+        if lead:
+            pool = lead + [r for r in pool if r["key"] != first["key"]]
     floor = best - PORTFOLIO_DROP
 
     chosen: list[dict] = [pool[0]]
     pool[0]["redundancy"] = 0.0
-    pool[0]["adjustedScore"] = round(pool[0]["recommendationScore"], 3)
+    pool[0]["adjustedScore"] = round(pool[0][score_key], 3)
     rest = pool[1:]
 
     # EACH CANDIDATE'S CLOSEST RESEMBLANCE TO THE LIST SO FAR, carried forward
@@ -902,9 +921,9 @@ def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
     # one deck just added. Same numbers: `max` does not care what order it saw
     # its arguments in, and `similarity` is symmetric.
     cards = {id(r): frozenset(r.get("cards") or []) for r in pool}
-    first = pool[0]
-    closest = {id(r): _pair_similarity(cards[id(r)], cards[id(first)],
-                                       r.get("archetype"), first.get("archetype"))
+    top = pool[0]
+    closest = {id(r): _pair_similarity(cards[id(r)], cards[id(top)],
+                                       r.get("archetype"), top.get("archetype"))
                for r in rest}
 
     while rest and len(chosen) < limit:
@@ -921,7 +940,8 @@ def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
             sim = closest[id(cand)]
             repeat = taken.get(cand.get("archetype") or "", 0)
             penalty = REDUNDANCY_WEIGHT * sim + ARCHETYPE_REPEAT_PENALTY * repeat
-            scored.append((cand["recommendationScore"] - penalty, sim, cand))
+            extra = bonus(cand, chosen) if bonus is not None else 0.0
+            scored.append((cand[score_key] - penalty + extra, sim, cand))
         # `min`, not a full sort: only the first is used, and `min` returns the
         # first of equal keys exactly as a stable sort would put it first.
         adjusted, sim, pick = min(scored, key=lambda s: (-s[0], s[2]["key"]))
@@ -930,7 +950,7 @@ def diversify(rows, *, limit=MAX_RECOMMENDATIONS, minimum=MIN_RECOMMENDATIONS):
         # that is genuinely good preparation should not be excluded for
         # resembling something already on the list — it should be ranked below
         # it, which is what the penalty already does.
-        if pick["recommendationScore"] < floor and len(chosen) >= minimum:
+        if pick[score_key] < floor and len(chosen) >= minimum:
             break
 
         pick["redundancy"] = round(sim, 3)
@@ -1040,6 +1060,275 @@ def suggest(own, pool, *, limit: int = MAX_RECOMMENDATIONS):
     own = list(own or [])
     extra = fills(own, pool or [], need=len(pool or []))
     return diversify(own + extra, limit=limit, minimum=limit)
+
+
+# ── 4c. The squad — who brings what ─────────────────────────────────────────
+#
+# `suggest()` ANSWERS ONE TEAMMATE AT A TIME, AND THAT IS WHY A MATCH PLAN READ
+# THE SAME FOR EVERYBODY. The population half of every teammate's list is the
+# SAME scored pool — "what beats this opponent" does not depend on who asks —
+# and a player's own decks win at most `FIT_WEIGHT` (1.5 points) against it.
+# Measured on a live 5v1 (2026-09-25): all five teammates got the same #1 deck,
+# two got byte-identical lists, and 35 slots held 12 distinct decks. A lineup
+# cannot be chosen from five copies of one answer.
+#
+# THE FIX IS TO ASK THE SQUAD'S QUESTION, NOT TO WEIGHT THE PLAYER'S ONE HARDER.
+# `coach_daily` already learned that a bigger familiarity weight only ranks
+# worse decks above better ones on a weak signal. Three rules instead:
+#
+#   1. A BAND, NOT A RE-RANKING. A teammate's #1 is chosen from the decks
+#      within `PRIMARY_BAND` points of the best they could be shown. Nobody is
+#      handed a clearly worse deck so the board looks personal; inside the
+#      band the matchup figures cannot tell the options apart, so something
+#      else may decide.
+#   2. WHAT DECIDES INSIDE IT IS THE SQUAD. #1 picks are assigned greedily,
+#      each one worth what it ADDS to the squad's answers — archetype by
+#      archetype, weighted by how likely the opponent is to bring it — plus
+#      what the teammate's own cards are worth. Two teammates share a #1 only
+#      when one has nothing else in the band.
+#   3. THE REST OF EACH LIST IS STILL `diversify`, on the personal score, with
+#      a bonus for answering an archetype the list does not yet answer and a
+#      cost for a deck already assigned to somebody else.
+
+#: A card count at which a candidate is "built out of your cards". Five of
+#: eight, the figure `coach_daily.KNOWN_MIN` settled on after measuring that
+#: deck-level overlap is too sparse to reach most candidates. Restated rather
+#: than imported because this module has no imports; the two must agree.
+KNOWN_MIN = 5
+
+#: Points a candidate is worth for being built out of cards the teammate
+#: plays: zero below `KNOWN_MIN`, `KNOWN_WEIGHT` at all eight. The same bound
+#: as `FIT_WEIGHT` and for the same reason — it is a tiebreak inside the noise,
+#: never a reason to prefer a deck several points worse.
+KNOWN_WEIGHT = FIT_WEIGHT
+
+#: How far below the best available a teammate's #1 may sit. Matchup rates
+#: here are likelihood-weighted means of per-archetype records whose own
+#: intervals run several points wide; three points is inside that and well
+#: inside `PORTFOLIO_DROP`, so the band only ever chooses between options the
+#: evidence cannot rank.
+PRIMARY_BAND = 3.0
+
+#: A win rate at or above which an archetype counts as ANSWERED. Coverage
+#: gain is measured from here, so a deck that loses to an archetype adds
+#: nothing for it however many points it improves on a worse loss.
+ANSWERED = 50.0
+
+#: Points of personal score per point of likelihood-weighted coverage added.
+#: One: both are win-rate points, so the conversion is the identity.
+COVER_WEIGHT = 1.0
+
+#: Cost, in the tail of a teammate's list, of a deck already assigned as
+#: somebody else's #1. The archetype-repeat penalty's size: enough to prefer a
+#: different answer of similar strength, not enough to hide a clearly better
+#: one.
+TAKEN_PENALTY = ARCHETYPE_REPEAT_PENALTY
+
+#: Cost, in the tail of a list, of each teammate EARLIER IN THE ROSTER who
+#: already lists the deck, capped at `TAKEN_PENALTY`. The #1s alone left two
+#: teammates sharing 4.7 of 7 decks on live squads — below the #1 everybody
+#: drew on the same population ranking. The cap keeps it a spread rule: it
+#: can move a backup a couple of points down, never swap in a bad one.
+SHARED_PENALTY = 1.0
+
+
+def archetype_weights(threats) -> dict[str, float]:
+    """`{archetype: likelihood}` over the projection, summed per archetype.
+
+    Coverage is counted per ARCHETYPE, not per threat deck: three Giant
+    variants are one question for a coach ("have we got a Giant answer"), and
+    counting them three times would let one archetype crowd out the rest.
+    """
+    out: dict[str, float] = {}
+    for t in threats or []:
+        a = t.get("archetype") or ""
+        if a:
+            out[a] = out.get(a, 0.0) + float(t.get("likelihood") or 0.0)
+    return out
+
+
+def vs_archetypes(row) -> dict[str, float]:
+    """A scored row's win rate against each archetype of the projection.
+
+    Likelihood-weighted over the threats of that archetype that were actually
+    measured. An archetype with no measured threat is ABSENT, not 50 — the
+    rule `score()` applies to the whole row, applied one level down.
+    """
+    num: dict[str, float] = {}
+    den: dict[str, float] = {}
+    for m in row.get("matchups") or []:
+        if m.get("winRate") is None:
+            continue
+        a = m.get("archetype") or ""
+        like = float(m.get("likelihood") or 0.0)
+        if not a or like <= 0:
+            continue
+        num[a] = num.get(a, 0.0) + like * float(m["winRate"])
+        den[a] = den.get(a, 0.0) + like
+    return {a: round(num[a] / den[a], 1) for a in num if den[a] > 0}
+
+
+def known_cards(cards, pool) -> int:
+    """How many of a deck's cards the teammate plays in a deck of their own."""
+    return len(set(cards or []) & set(pool or ()))
+
+
+def _known_bonus(n: int) -> float:
+    """0 below `KNOWN_MIN`, rising linearly to `KNOWN_WEIGHT` at eight."""
+    span = 8 - (KNOWN_MIN - 1)
+    return KNOWN_WEIGHT * max(0.0, min(1.0, (n - (KNOWN_MIN - 1)) / span))
+
+
+def cover_gain(vs: dict, have: dict, weight: dict) -> float:
+    """Likelihood-weighted points a deck adds over the answers already held.
+
+    Measured from `ANSWERED` where nothing is held yet, and only where the
+    deck is BETTER — `coach_daily.coverage_gain`'s rule, so a deck mediocre
+    everywhere cannot look useful by averaging.
+    """
+    gain = 0.0
+    for a, rate in vs.items():
+        w = weight.get(a, 0.0)
+        if w <= 0:
+            continue
+        d = rate - max(have.get(a, ANSWERED), ANSWERED)
+        if d > 0:
+            gain += w * d
+    return gain
+
+
+def _held(rows) -> dict[str, float]:
+    """The best rate held against each archetype across `rows`."""
+    have: dict[str, float] = {}
+    for r in rows:
+        for a, rate in (r.get("vs") or {}).items():
+            if rate > have.get(a, -1.0):
+                have[a] = rate
+    return have
+
+
+def squad_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS):
+    """Every teammate's list against ONE opponent, chosen as a squad.
+
+    `players` is `[{"tag", "own": [scored rows], "cards": set}]` in roster
+    order — `cards` being every card in a deck they actually play. `pool` is
+    the population, scored against the same `threats`, shared by all.
+
+    Returns `(lists, cover)`: `lists[tag]` is that teammate's ranked list
+    (copies — nothing the caller holds is written), `cover` is one row per
+    archetype of the projection saying which #1 answers it best. A teammate
+    with nothing scored gets an empty list, and the caller says why.
+    """
+    weight = archetype_weights(threats)
+
+    # ── Each teammate's candidates, scored for THEM ──────────────────────
+    cand: dict[str, list[dict]] = {}
+    for p in players:
+        own = list(p.get("own") or [])
+        rows = []
+        for r in own + fills(own, pool or [], need=len(pool or [])):
+            c = dict(r)
+            c["vs"] = vs_archetypes(c)
+            c["known"] = 8 if c.get("owner") else known_cards(
+                c.get("cards"), p.get("cards"))
+            c["personalScore"] = round(
+                float(c["recommendationScore"]) + _known_bonus(c["known"]), 3)
+            rows.append(c)
+        cand[p["tag"]] = rows
+
+    # ── #1 picks, assigned as a squad ────────────────────────────────────
+    eligible: dict[str, list[dict]] = {}
+    for tag, rows in cand.items():
+        if rows:
+            top = max(r["recommendationScore"] for r in rows)
+            eligible[tag] = [r for r in rows
+                             if r["recommendationScore"] >= top - PRIMARY_BAND]
+
+    order = {p["tag"]: i for i, p in enumerate(players)}
+    primary: dict[str, dict] = {}
+    have: dict[str, float] = {}
+    taken: set[str] = set()
+    waiting = [t for t in order if t in eligible]
+    while waiting:
+        best = None
+        for tag in waiting:
+            fresh = [r for r in eligible[tag] if r["key"] not in taken]
+            for r in (fresh or eligible[tag]):
+                # NO COVERAGE TERM FOR THE FIRST #1. With nothing held, "what
+                # it adds" is its whole edge over 50% on every archetype — the
+                # matchup figure counted a second time — and a test caught it
+                # outvoting a teammate's own deck. Coverage is a question
+                # about what the squad already has, so it waits for an answer.
+                value = r["personalScore"] + (COVER_WEIGHT * cover_gain(
+                    r["vs"], have, weight) if have else 0.0)
+                # Highest value, then the stronger deck, then roster order
+                # and the key — deterministic, so a board reloads the same.
+                k = (-value, -r["recommendationScore"], order[tag], r["key"])
+                if best is None or k < best[0]:
+                    best = (k, tag, r)
+        _, tag, r = best
+        primary[tag] = r
+        taken.add(r["key"])
+        for a, rate in r["vs"].items():
+            if rate > have.get(a, -1.0):
+                have[a] = rate
+        waiting.remove(tag)
+
+    # ── The rest of each list ────────────────────────────────────────────
+    lists: dict[str, list[dict]] = {}
+    listed: dict[str, int] = {}
+    for p in players:
+        tag = p["tag"]
+        rows = cand.get(tag) or []
+        if not rows:
+            lists[tag] = []
+            continue
+        mine = primary[tag]
+        others = {r["key"] for t, r in primary.items() if t != tag}
+
+        def bonus(c, chosen, _others=others):
+            gain = cover_gain(c["vs"], _held(chosen), weight)
+            if c["key"] in _others:
+                cost = TAKEN_PENALTY
+            else:
+                cost = min(TAKEN_PENALTY, SHARED_PENALTY * listed.get(c["key"], 0))
+            return COVER_WEIGHT * gain - cost
+
+        picked = diversify(rows, limit=limit, minimum=limit,
+                           score_key="personalScore", bonus=bonus, first=mine)
+        head, tail = picked[0], picked[1:]
+        # READING ORDER IS STRENGTH. `diversify` decides WHO is on the list;
+        # below the #1 the reader is comparing options, and a list ordered by
+        # pick sequence would put a coverage pick above a stronger deck with
+        # no way to see why.
+        tail.sort(key=lambda r: (-r["personalScore"], r["key"]))
+        head["squadPick"] = True
+        lists[tag] = [head] + tail
+        for r in lists[tag]:
+            listed[r["key"]] = listed.get(r["key"], 0) + 1
+
+    # ── Which #1 answers each archetype ──────────────────────────────────
+    cover = []
+    for a, w in sorted(weight.items(), key=lambda kv: (-kv[1], kv[0])):
+        best = None
+        for tag in order:
+            r = primary.get(tag)
+            if r is None or a not in r["vs"]:
+                continue
+            if best is None or r["vs"][a] > best[1]["vs"][a]:
+                best = (tag, r)
+        cover.append({
+            "archetype": a,
+            "likelihood": round(w, 4),
+            "tag": best[0] if best else None,
+            "deck": best[1].get("name") if best else None,
+            "winRate": best[1]["vs"][a] if best else None,
+            "answered": bool(best and best[1]["vs"][a] >= ANSWERED),
+        })
+    for c in cover:
+        if c["tag"] and c["answered"]:
+            lists[c["tag"]][0].setdefault("covers", []).append(c["archetype"])
+    return lists, cover
 
 
 # ── 5. Saying why, from the evidence and nothing else ───────────────────────

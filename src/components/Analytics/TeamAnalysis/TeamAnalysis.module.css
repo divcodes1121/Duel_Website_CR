@@ -1156,6 +1156,180 @@
   list-style: none;
 }
 
+/* ── The squad plan: who answers what ────────────────────────────────────── */
+
+/* THE SAME EDGE AS A TEAMMATE ROW, so it reads as part of the squad list it
+   heads rather than as a new kind of object. */
+.cover {
+  container-type: inline-size;
+  margin: 0 0 0.5rem;
+  padding: 0.55rem 0.7rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-nested);
+}
+
+.coverHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.coverCount {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.coverList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Archetype | who | rate. `minmax(0, …)` on both text tracks: a `1fr` track
+   is `minmax(auto, 1fr)` and a long deck name would blow the grid out. */
+.coverRow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr) 3.2rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.coverArch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.35rem;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.coverShare {
+  font-weight: 400;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* NARROW BY ITS OWN WIDTH, NOT THE VIEWPORT. The board column is ~300px on a
+   phone AND between 62rem and ~1300px on a desktop, so a viewport breakpoint
+   would describe neither. Two lines: archetype + rate, then who. Measured at
+   390: one line broke "Graveyard" mid-word and the share from its "%". */
+@container (max-width: 26rem) {
+  .coverRow {
+    grid-template-columns: minmax(0, 1fr) 3.2rem;
+    grid-template-areas: 'arch rate' 'who who';
+    row-gap: 0;
+    padding: 0.15rem 0;
+  }
+
+  .coverArch { grid-area: arch; }
+  .coverRate { grid-area: rate; }
+  .coverWho { grid-area: who; font-size: 0.72rem; }
+}
+
+.coverWho {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* `--success` / `--error` for the verdict, as `.recEdge` argues: blue and red
+   are the two SIDES on this screen and must not be reused as good and bad. */
+.coverRate {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--success);
+}
+
+.coverRow[data-gap] .coverRate {
+  color: var(--error);
+}
+
+/* A gap is marked by more than colour alone. */
+.coverRow[data-gap] .coverArch::after {
+  content: '·  gap';
+  font-weight: 400;
+  font-size: 0.68rem;
+  color: var(--error);
+}
+
+.recKnown {
+  color: var(--text-muted);
+}
+
+/* The #1 is ASSIGNED, not merely the top of a sort, so a stronger deck may
+   sit under it (it is somebody else's #1). The label is what keeps that
+   from reading as a sorting bug. */
+.recSquad {
+  align-self: flex-start;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--on-solid);
+  background: var(--solid-blue);
+}
+
+.recVs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recVsItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.recVsItem strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--error);
+}
+
+.recVsItem[data-ok] strong {
+  color: var(--success);
+}
+
+.mateCovers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin-top: 0.1rem;
+}
+
+.mateCover {
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text);
+  background: color-mix(in srgb, var(--hue-blue) 16%, transparent);
+}
+
 /* ── The phone ───────────────────────────────────────────────────────────── */
 
 /* BELOW 62rem THIS SCREEN IS PART OF THE PAGE, not a window. The site-wide

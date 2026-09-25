@@ -397,6 +397,60 @@ where the same five players are on both sides took **150+ s warm**. 1v1 warm is
 reads cold every time. One of three such requests dropped the connection at
 ~129 s.
 
+## 4f. The squad plan — a different #1 for every teammate (2026-09-25, brain 2.1)
+
+Reported: "the match plan has very similar decks suggested for all the home
+players against a single away player … suggest for different players
+differently, and cover all or almost all of the opponent's archetypes".
+
+**Measured before touching anything**, live 5v1: one #1 for all five, two
+identical lists of seven, 12 distinct decks in 35 slots. Every teammate's list
+was `suggest(own, pool)` over the SAME scored population pool, and `FIT_WEIGHT`
+(1.5) is all an owned deck gets against it.
+
+`squad_plan(players, pool, threats)` replaces the per-teammate call in
+`_folder` (the old call is the exception fallback):
+
+- **`PRIMARY_BAND` = 3.0.** A #1 is chosen only from decks within three points
+  of that teammate's best. Inside it the matchup figures (likelihood-weighted
+  means of records whose own intervals run several points) cannot rank the
+  options, so something else may decide. Well inside `PORTFOLIO_DROP` (8).
+- **Greedy assignment.** value = personal score + `cover_gain` over the #1s
+  already assigned (per ARCHETYPE, likelihood-weighted, from `ANSWERED` = 50,
+  only where better — `coach_daily.coverage_gain`'s rule). Fresh decks first;
+  a duplicate #1 only when the band holds nothing else.
+- **No coverage term for the first #1.** With nothing held, the gain is the
+  deck's whole edge over 50% — the matchup counted twice. A test caught it
+  outvoting an owned deck.
+- **`KNOWN_WEIGHT` = `FIT_WEIGHT`, floor `KNOWN_MIN` = 5**, restated from
+  `coach_daily` (no imports here). Card pool = decks with `MIN_COMFORT_GAMES`.
+- **Tails:** `diversify(score_key="personalScore", bonus=…, first=#1)`. Bonus =
+  coverage the list lacks − `TAKEN_PENALTY` (2.5, someone else's #1) −
+  `SHARED_PENALTY` (1 per earlier teammate listing it, capped at 2.5). Read
+  back sorted by personal score under the #1.
+
+**The #1s alone were not enough**, and the second measurement is why the spread
+rule exists: with them, lists still shared 4.70 of 7 per pair. With it, 3.32.
+
+| 11 real folders, 54 lists | before | #1s only | shipped |
+|---|---|---|---|
+| every #1 distinct | 0/11 | 8/11 | 8/11 |
+| distinct decks / 378 | 117 | 148 | 191 |
+| in every list | 53 | 36 | 21 |
+| shared per pair (of 7) | 5.69 | 4.70 | 3.32 |
+| archetypes answered by #1s | 56/57 | 57/57 | 57/57 |
+| mean #1 rate | 68.43 | 67.72 | 67.72 |
+| mean slot rate | 64.14 | — | 63.78 |
+
+**The first measurement run was stopped** — picking busy squads with a
+`GROUP BY` over 30 days of `battles` is a full scan of the 33 GB file on the
+spinning volume; two copies ran 16 minutes against the bot's own writes. The
+harness reads `player_stats_agg` (one row a player, 0.19 s) instead.
+
+Tests: `property_squad_plan` (24 checks, including a spread check that went red
+with `SHARED_PENALTY = 0`, and a first draft of it that passed vacuously — the
+filter matched no teammate). Browser 52/52.
+
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
 Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it

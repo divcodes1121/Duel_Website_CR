@@ -1754,6 +1754,43 @@ export interface TeamRecommendation {
    */
   overallWinRate?: number | null;
   overallGames?: number | null;
+
+  /* ── THE SQUAD PLAN (`team_scout.squad_plan`, brain 2.1) ─────────────────
+   *
+   * Match-plan rows only, and all optional: a server on brain 2.0 sends none
+   * of them and the screen draws the old row. */
+
+  /** Win rate against each archetype of this opponent's projection, keyed by
+   *  archetype. An archetype with no measured record is ABSENT, not 50. */
+  vs?: Record<string, number>;
+  /** How many of the eight cards this teammate plays in a deck of their own
+   *  (8 on a deck they pilot). */
+  known?: number;
+  /** The score this teammate's list is ranked on: the recommendation score
+   *  plus what their own cards are worth (at most 1.5 points). */
+  personalScore?: number;
+  /** This teammate's assigned #1 — chosen with the squad, so no two teammates
+   *  share one unless the evidence leaves nothing else close. */
+  squadPick?: boolean;
+  /** Archetypes this #1 is the squad's best answer to, at 50% or better. */
+  covers?: string[];
+}
+
+/** One row of a folder's squad coverage: who answers one of their archetypes. */
+export interface TeamSquadCover {
+  archetype: string;
+  /** Display name of the archetype. */
+  name: string;
+  /** Share of the projection this archetype holds, 0..1. */
+  likelihood: number;
+  /** The teammate whose #1 answers it best; null when no #1 is measured
+   *  against it at all. */
+  tag: string | null;
+  player: string | null;
+  deck: string | null;
+  winRate: number | null;
+  /** That best answer is 50% or better. */
+  answered: boolean;
 }
 
 /** One blue player's options against one opponent. */
@@ -1821,6 +1858,9 @@ export interface TeamFolder {
    * three empty states it is.
    */
   perPlayer: TeamPlayerOptions[];
+  /** Which teammate's #1 answers each archetype they may bring, most likely
+   *  first. Empty in a scouting report; absent from a brain-2.0 server. */
+  squadCover?: TeamSquadCover[];
   considered: number;
   /** Why there is nothing to show, when there is nothing to show. */
   reason: 'no_history' | 'no_evidence' | null;

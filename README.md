@@ -8279,6 +8279,69 @@ left and theirs on the right, press Analyse, and every opponent comes back as a
 **folder** — open it and their decks are on the left, the decks your squad
 should answer them with on the right, the word VS between.
 
+### Every teammate gets their own #1, chosen as a squad (`squad_plan`, brain 2.1, 2026-09-25)
+
+**Reported as "very similar decks for all the home players against one away
+player", and it was true.** Measured on a live 5v1: all five teammates had the
+**same #1**, two had **byte-identical lists of seven**, and 35 slots held 12
+distinct decks. The cause was structural: each teammate's list was
+`suggest(own, pool)` over ONE shared population ranking ("what beats this
+opponent" does not depend on who asks), and their own decks win at most
+`FIT_WEIGHT` (1.5 points) against it.
+
+`team_scout.squad_plan` asks the squad's question instead. Three rules:
+
+1. **A band, not a re-ranking.** A teammate's #1 comes from the decks within
+   `PRIMARY_BAND` (3 points) of the best they could be shown. Nobody is handed
+   a clearly worse deck to make the board look personal.
+2. **Inside the band, the squad decides.** #1s are assigned greedily, each
+   worth what it ADDS to the squad's answers (archetype by archetype, weighted
+   by how likely the opponent is to bring it; `cover_gain`, measured from 50%)
+   plus up to `KNOWN_WEIGHT` (1.5) for being built from cards that teammate
+   plays (5 of 8 is the floor, `coach_daily.KNOWN_MIN`). Two teammates share a
+   #1 only when one has nothing else in the band. **The first #1 takes no
+   coverage term** — with nothing held, "what it adds" is its whole edge over
+   50% counted a second time, and a test caught it outvoting a teammate's own
+   deck.
+3. **The rest of each list is still `diversify`**, on the personal score, plus
+   a bonus for answering an archetype the list does not yet answer, minus
+   `TAKEN_PENALTY` (2.5) for someone else's #1 and `SHARED_PENALTY` (1 per
+   earlier teammate listing it, capped at 2.5) so backups spread too.
+
+**Measured old vs new on the same 11 real folders (54 lists, 378 slots),
+staged on the VPS against production data:**
+
+| | before | after |
+|---|---|---|
+| folders where every teammate's #1 differs | 0 / 11 | **8 / 11** |
+| distinct decks in 378 slots | 117 | **191** |
+| decks in every teammate's list (summed) | 53 | **21** |
+| decks two teammates share, of 7 | 5.69 | **3.32** |
+| opponent archetypes answered (≥50%) by the #1s | 56 / 57 | **57 / 57** |
+| mean expected win rate, all slots | 64.14 | 63.78 (−0.36) |
+| mean #1 expected win rate | 68.43 | 67.72 (−0.71) |
+| #1s that are the teammate's own deck | 18 / 54 | 24 / 54 |
+
+**On screen** (numbers and labels only; this screen has a no-prose rule): a
+**Coverage** strip heads the squad list, one row per archetype they may bring,
+most likely first, naming whose #1 answers it and at what rate; an archetype
+nobody's #1 beats is drawn as a **gap**, not dropped. Each collapsed teammate
+row names the archetypes its #1 answers for the squad. An opened #1 is labelled
+**Squad pick**, since a stronger deck may sit under it (someone else's #1).
+Every row carries its per-archetype rates, and a Deckkies pick says how many of
+its eight cards the teammate already plays. The strip goes to two lines by its
+OWN width (container query): at 390px one line broke "Graveyard" mid-word.
+
+The payload gains `vs` / `known` / `personalScore` / `squadPick` / `covers` on
+per-teammate rows and `squadCover` on the folder, all optional on the client
+(a brain-2.0 server sends none and the old row is drawn). A 5v1 goes 55 kB ->
+61 kB. If `squad_plan` throws, the folder falls back to the old per-teammate
+`suggest()` lists. The Coach Roster's opponent tab reads `perPlayer[0]` of a
+one-player squad, so it gets the known-cards lean and nothing else changes
+there. 155 Python checks in `test_team_scout.py` (was 131), 951 vitest,
+52 / 52 in a browser (both themes, 1440 and 390, one gap forced through the
+payload because live data answered all five).
+
 ### The opponent model is a projection now (`team_scout.py`, 2026-09-21)
 
 **It used to rank decks against what the opponent had already played, and

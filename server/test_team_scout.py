@@ -740,6 +740,174 @@ def property_suggest_ranks_together():
           "redundancy" not in many[0] and "fill" not in many[0])
 
 
+# ── The squad plan (2026-09-25) ─────────────────────────────────────────────
+#
+# Reported as "very similar decks for all the home players against one away
+# player". Measured live: five teammates, ONE #1, two identical lists. Each
+# rule `squad_plan` adds is pinned here against literals.
+
+#: A hand-built projection: three archetypes, likelihoods summing to one.
+SQ_THREATS = [
+    {"key": "t-hog", "archetype": "hog", "likelihood": 0.40,
+     "evidence": "OBSERVED", "name": "Hog"},
+    {"key": "t-giant", "archetype": "giant", "likelihood": 0.35,
+     "evidence": "OBSERVED", "name": "Giant"},
+    {"key": "t-grave", "archetype": "graveyard", "likelihood": 0.25,
+     "evidence": "OBSERVED", "name": "Graveyard"},
+]
+
+#: Eight real-looking decks that share few enough cards that neither `fills`
+#: nor the redundancy penalty treats any two as the same deck.
+SQ_DECKS = {
+    "A": ["balloon", "lumberjack", "barbarian-barrel", "musketeer",
+          "tombstone", "arrows", "minions", "freeze"],
+    "B": ["pekka", "battle-ram", "bandit", "royal-ghost",
+          "magic-archer", "electro-wizard", "poison", "zap"],
+    "C": ["x-bow", "tesla", "archers", "knight", "skeletons",
+          "ice-spirit", "fireball", "the-log"],
+    "D": ["golem", "night-witch", "baby-dragon", "lightning",
+          "mega-minion", "tornado", "dark-prince", "elixir-collector"],
+    "E": ["royal-giant", "hunter", "fisherman", "electro-spirit",
+          "mother-witch", "earthquake", "goblin-cage", "rage"],
+    "F": ["mortar", "miner", "dart-goblin", "spear-goblins",
+          "bats", "bomber", "rocket", "giant-snowball"],
+    "G": ["goblin-drill", "wall-breakers", "valkyrie", "firecracker",
+          "cannon", "royal-delivery", "goblin-gang", "phoenix"],
+    "H": ["sparky", "goblin-giant", "rascals", "electro-dragon",
+          "inferno-dragon", "clone", "heal-spirit", "barbarians"],
+}
+
+
+def sq_row(name, rates, *, owner=None, games=None):
+    """A real `score()` row, owner attached the way `team_analysis` does."""
+    r = ts.score(rate_map(rates), SQ_THREATS, cards=SQ_DECKS[name],
+                 archetype=name.lower(), fit_games=games)
+    r["name"] = name
+    r["owner"] = owner
+    return r
+
+
+def property_squad_plan():
+    print("")
+    print("property — the squad plan: different #1s, chosen to cover the field")
+
+    # A is the single strongest deck and LOSES to Graveyard. C is next and
+    # also loses to it. B is a point lower than C and ANSWERS it.
+    a = sq_row("A", {"hog": 66, "giant": 66, "graveyard": 44})   # 60.5
+    c = sq_row("C", {"hog": 64, "giant": 64, "graveyard": 48})   # 60.0
+    b = sq_row("B", {"hog": 58, "giant": 58, "graveyard": 62})   # 59.0
+    d = sq_row("D", {"hog": 50, "giant": 50, "graveyard": 50})   # 50.0
+    pool = [a, c, b, d]
+    snapshot = [dict(r) for r in pool]
+
+    three = [{"tag": t, "own": [], "cards": set()} for t in ("#P1", "#P2", "#P3")]
+    lists, cover = ts.squad_plan(three, pool, SQ_THREATS)
+    firsts = [lists[t][0]["name"] for t in ("#P1", "#P2", "#P3")]
+    check("three teammates, three different #1s", len(set(firsts)) == 3, str(firsts))
+    check("the strongest deck is somebody's #1", "A" in firsts, str(firsts))
+    check("the #1 after it is the one that ANSWERS what it loses to (B), not "
+          "the one a point stronger that does not (C)",
+          firsts[1] == "B", str(firsts))
+    check("no #1 sits outside the band", "D" not in firsts, str(firsts))
+    check("every #1 is marked as the squad's pick",
+          all(lists[t][0].get("squadPick") for t in ("#P1", "#P2", "#P3")))
+    check("the caller's rows are not written onto",
+          [dict(r) for r in pool] == snapshot)
+
+    grave = next(c_ for c_ in cover if c_["archetype"] == "graveyard")
+    check("the cover row names who answers Graveyard, and at what",
+          grave["tag"] == "#P2" and grave["winRate"] == 62.0 and grave["answered"],
+          str(grave))
+    check("cover rows run most likely first and carry the projection's weight",
+          [c_["archetype"] for c_ in cover] == ["hog", "giant", "graveyard"]
+          and abs(sum(c_["likelihood"] for c_ in cover) - 1.0) < 1e-6,
+          str(cover))
+    check("the #1 that answers an archetype best lists it in `covers`",
+          "graveyard" in (lists["#P2"][0].get("covers") or []),
+          str(lists["#P2"][0].get("covers")))
+    check("every row carries its per-archetype rates",
+          lists["#P1"][0]["vs"] == {"hog": 66.0, "giant": 66.0, "graveyard": 44.0},
+          str(lists["#P1"][0].get("vs")))
+
+    again, _ = ts.squad_plan(three, pool, SQ_THREATS)
+    check("the plan is deterministic",
+          [[r["key"] for r in again[t]] for t in again]
+          == [[r["key"] for r in lists[t]] for t in lists])
+
+    # ONE DECK IN THE BAND: sharing it is the honest answer, not a worse deck.
+    alone, _ = ts.squad_plan(three[:2], [a, d], SQ_THREATS)
+    check("with one deck in the band both teammates are given it",
+          alone["#P1"][0]["name"] == alone["#P2"][0]["name"] == "A",
+          str([alone[t][0]["name"] for t in alone]))
+
+    # THEIR OWN CARDS DECIDE BETWEEN EQUALS.
+    e = sq_row("E", {"hog": 60, "giant": 60, "graveyard": 60})
+    f = sq_row("F", {"hog": 60, "giant": 60, "graveyard": 60})
+    pair = [{"tag": "#E", "own": [], "cards": set(SQ_DECKS["F"][:6])},
+            {"tag": "#F", "own": [], "cards": set(SQ_DECKS["E"][:7])}]
+    by_cards, _ = ts.squad_plan(pair, [e, f], SQ_THREATS)
+    check("between equal decks each teammate is given the one built from their cards",
+          by_cards["#E"][0]["name"] == "F" and by_cards["#F"][0]["name"] == "E",
+          str([by_cards[t][0]["name"] for t in by_cards]))
+    check("`known` counts the cards they play",
+          by_cards["#F"][0]["known"] == 7 and by_cards["#E"][0]["known"] == 6,
+          str([by_cards[t][0].get("known") for t in by_cards]))
+    check("five known cards is the floor: four earn nothing",
+          ts._known_bonus(4) == 0.0 and ts._known_bonus(8) == ts.KNOWN_WEIGHT)
+
+    # A DECK THEY PILOT, INSIDE THE BAND, LEADS THEIR LIST.
+    mine = sq_row("G", {"hog": 59, "giant": 59, "graveyard": 59},
+                  owner={"tag": "#G", "name": "G"}, games=30)
+    solo, _ = ts.squad_plan([{"tag": "#G", "own": [mine], "cards": set(SQ_DECKS["G"])}],
+                            [a, c], SQ_THREATS)
+    check("an owned deck in the band is that teammate's #1",
+          solo["#G"][0]["name"] == "G", str([r["name"] for r in solo["#G"]]))
+
+    # NOBODY WITH NOTHING GETS AN INVENTED LIST.
+    empty, cov0 = ts.squad_plan([{"tag": "#Z", "own": [], "cards": set()}],
+                                [], SQ_THREATS)
+    check("a teammate with nothing scored gets an empty list", empty["#Z"] == [])
+    check("and every archetype is reported unanswered rather than dropped",
+          len(cov0) == 3 and not any(c_["answered"] for c_ in cov0), str(cov0))
+
+    # SEVEN WHEN THERE ARE SEVEN, #1 FIRST, THE REST BY STRENGTH.
+    big = [sq_row(k, {"hog": 62 - i, "giant": 61 - i, "graveyard": 55 - i})
+           for i, k in enumerate(SQ_DECKS)]
+    full, _ = ts.squad_plan(three, big, SQ_THREATS)
+    check("each list is seven when the pool can fill it",
+          all(len(full[t]) == ts.MAX_RECOMMENDATIONS for t in full),
+          str([len(full[t]) for t in full]))
+    tails_sorted = all(
+        [r["personalScore"] for r in full[t][1:]]
+        == sorted((r["personalScore"] for r in full[t][1:]), reverse=True)
+        for t in full)
+    check("below the #1 each list reads strongest first", tails_sorted)
+    check("no two teammates share a #1 when the band holds alternatives",
+          len({full[t][0]["key"] for t in full}) == 3,
+          str([full[t][0]["name"] for t in full]))
+
+    # THE SPREAD RULE IS CAPPED: a deck listed by every earlier teammate costs
+    # at most `TAKEN_PENALTY`, so a clearly better backup is never hidden.
+    check("the shared-backup cost is capped at the taken cost",
+          min(ts.TAKEN_PENALTY, ts.SHARED_PENALTY * 99) == ts.TAKEN_PENALTY)
+    five = [{"tag": "#Q%d" % i, "own": [], "cards": set()} for i in range(5)]
+    # One deck in the band, so every #1 is A and only the BACKUP is in play.
+    far = [sq_row("A", {"hog": 70, "giant": 70, "graveyard": 70}),
+           sq_row("C", {"hog": 66, "giant": 66, "graveyard": 66}),
+           sq_row("D", {"hog": 60, "giant": 60, "graveyard": 60})]
+    kept, _ = ts.squad_plan(five, far, SQ_THREATS, limit=2)
+    backups = [kept[t][1]["name"] for t in kept]
+    check("a backup six points better survives however many teammates list it",
+          len(backups) == 5 and set(backups) == {"C"}, str(backups))
+    near = [sq_row("A", {"hog": 70, "giant": 70, "graveyard": 70}),
+            sq_row("C", {"hog": 60, "giant": 60, "graveyard": 60}),
+            sq_row("D", {"hog": 59, "giant": 59, "graveyard": 59})]
+    moved, _ = ts.squad_plan(five, near, SQ_THREATS, limit=2)
+    backups = [moved[t][1]["name"] for t in moved]
+    check("a backup one point better gives way once teammates already list it",
+          backups[0] == "C" and "D" in backups[1:], str(backups))
+
+
 # ── The speed-ups change nothing (2026-09-21) ───────────────────────────────
 #
 # `diversify` now carries each candidate's closest resemblance forward instead
@@ -882,6 +1050,7 @@ def main() -> int:
     property_portfolio_is_not_padded()
     property_fills_follow_coach_assist()
     property_suggest_ranks_together()
+    property_squad_plan()
     property_speedups_are_exact()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0

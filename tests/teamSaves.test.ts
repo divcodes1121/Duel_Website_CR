@@ -112,6 +112,25 @@ describe('a saved report is compacted', () => {
     expect(r.comfort?.games).toBe(40);
   });
 
+  it('keeps the squad plan: per-archetype rates, known cards, #1 mark and the coverage strip', () => {
+    const plan: TeamReport = {
+      ...full,
+      folders: full.folders.map((f) => ({
+        ...f,
+        squadCover: [{ archetype: 'hog', name: 'Hog Rider', likelihood: 0.4, tag: '#P1',
+                       player: 'Ravi', deck: 'Hog 2.6', winRate: 61.2, answered: true }],
+        perPlayer: f.perPlayer.map((p) => ({
+          ...p,
+          decks: p.decks.map((d, i) => ({ ...d, vs: { hog: 61.2 }, known: 6,
+                                          squadPick: i === 0, covers: i === 0 ? ['hog'] : undefined })),
+        })),
+      })),
+    };
+    const kept = compactReport(plan).folders[0];
+    expect(kept.squadCover?.[0]).toMatchObject({ archetype: 'hog', answered: true });
+    expect(kept.perPlayer[0].decks[0]).toMatchObject({ vs: { hog: 61.2 }, known: 6, squadPick: true, covers: ['hog'] });
+  });
+
   it('is a fraction of the size — the bug was a board too large to store', () => {
     const before = JSON.stringify(full).length;
     const after = JSON.stringify(small).length;

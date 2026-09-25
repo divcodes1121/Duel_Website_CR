@@ -1446,6 +1446,18 @@ recommendations are scored against that, diversified, and returned 5–7 at a
 time. `_spread()` survives as the DISPLAYED archetype breakdown and is still
 what the screen draws on the left.
 
+**A MATCH PLAN'S LISTS ARE CHOSEN AS A SQUAD (`team_scout.squad_plan`, brain
+2.1, 2026-09-25).** Each teammate's #1 comes from the decks within
+`PRIMARY_BAND` (3 pts) of the best available, assigned greedily so the squad's
+#1s cover the opponent's archetypes (`cover_gain`, from 50%) and lean on cards
+each teammate plays (`KNOWN_WEIGHT` 1.5, floor 5 of 8); no two share a #1
+unless the band holds nothing else. The tails are `diversify` on the personal
+score with `score_key` / `bonus` / `first` (defaults unchanged, pinned by the
+speed-up oracle). Live, 11 folders: every-#1-distinct 0/11 -> 8/11, distinct
+decks 117 -> 191 of 378, mean slot rate -0.36 pts. `squadCover` on the folder;
+`vs` / `known` / `squadPick` / `covers` on rows. **`score()` is untouched** —
+`coach_daily` is its second consumer. Record: `DECKKIES_TEAM_SCOUT.md` §4f.
+
 **`matchups` (the per-threat table) is on each folder's TOP pick only**
 (`_evidence_on_top`, 2026-09-21). It was ~4 kB on every recommendation and 80%
 of a match plan's payload (live 5v5: 1.08 MB -> 257 kB), and the PDF, its only
