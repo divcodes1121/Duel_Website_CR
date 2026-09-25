@@ -10,6 +10,7 @@ import {
   fetchCoachSuggestion,
   fetchDrawnDeck,
   type CoachDeck,
+  type CoachVs,
   type CoachHistory,
   type CoachPrediction,
   type CoachSuggestion,
@@ -310,6 +311,28 @@ function PasteDeck({
   );
 }
 
+/**
+ * THIS DECK AGAINST EACH OF THEIR ARCHETYPES — Team Scout's chips, asked for
+ * by name ("bridge spam 58%, lava 47%"). The headline is one weighted
+ * average; this is what it averages, so a deck strong overall that loses to
+ * one of their archetypes shows as that. Figures only: green at 50%+, red
+ * under. Renders nothing when the server sent none (an older server, or a
+ * deck with no record against anything they bring).
+ */
+function VsChips({ vs, className }: { vs?: CoachVs[]; className?: string }) {
+  if (!vs?.length) return null;
+  return (
+    <ul className={`${styles.vsChips} ${className ?? ''}`} aria-label="Win rate against each of their archetypes">
+      {vs.map((v) => (
+        <li key={v.archetype} className={styles.vsChip} data-ok={v.winRate >= 50 || undefined}>
+          <span>{v.name}</span>
+          <strong>{v.winRate.toFixed(0)}%</strong>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** A deck row inside a result list. */
 function DeckRow({
   deck,
@@ -379,6 +402,10 @@ function DeckRow({
           <span className={styles.figureLabel}>no evidence</span>
         </div>
       ) : null}
+      {/* ITS OWN LINE UNDER THE CARDS, not inside the 11rem name cell, where
+          three chips wrapped to two lines and made these rows taller than the
+          rest. The last child of the grid, spanning from the name column on. */}
+      <VsChips vs={exp?.vs} className={styles.deckRowVs} />
     </li>
   );
 }
@@ -1146,6 +1173,7 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
               )}
               <Strip cards={d.view.cards} art={d.view.art}
                      inferred={d.view.inferredArt} size="sm" />
+              <VsChips vs={d.vs} />
             </div>
           ))}
         </>
@@ -1172,6 +1200,7 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
               <strong>{d.name ?? d.archetype}</strong>
               <Strip cards={d.view.cards} art={d.view.art}
                      inferred={d.view.inferredArt} size="sm" />
+              <VsChips vs={d.vs} />
             </div>
           ))}
         </>
@@ -1444,6 +1473,7 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
             )}
           </div>
           <Strip cards={best.cards} art={best.art} inferred={best.inferredArt} name={best.deckName} />
+          <VsChips vs={best.expected?.vs} />
         </section>
       )}
 

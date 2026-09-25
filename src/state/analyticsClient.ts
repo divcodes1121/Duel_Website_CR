@@ -1123,6 +1123,20 @@ export interface CoachExpected {
    *  guessed at 50%. */
   weight: number;
   per: { cards: string[]; prob: number; matchup: CoachMatchup | null }[];
+  /** The headline split by their ARCHETYPES — Team Scout's chips. One row per
+   *  archetype that has a record, most likely first; an unrecorded one is
+   *  absent, never 50. Absent from a server before 2026-09-25. */
+  vs?: CoachVs[];
+}
+
+/** One chip: this deck's win rate against one of their archetypes. */
+export interface CoachVs {
+  archetype: string;
+  /** Display name ("X-Bow", not "xbow"). */
+  name: string;
+  winRate: number;
+  /** Share of their likely decks this archetype holds, 0..1. */
+  share?: number;
 }
 
 /** One deck inside a recorded duel loadout. */
@@ -1330,6 +1344,8 @@ export interface ComposedDeck {
   /** The worst-matchup figure plus what their playstyle is worth (at most 3
    *  points). What the list is ordered on below the lead. */
   personal?: number;
+  /** This deck's record against each archetype THEY bring, their order. */
+  vs?: CoachVs[];
 }
 
 export interface Composed {

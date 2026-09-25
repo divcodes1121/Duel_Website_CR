@@ -1683,6 +1683,13 @@ vs one opponent: 1 -> 7 distinct lists (as sets), 6 -> 12 distinct decks, mean w
 matchup -1.0 point. `compose` rows gained `family` and `name`; the loadout is
 untouched. See `DECK_TUNER.md` §7.
 
+**`expected.vs` AND `vs` ON COMPOSED/LOADOUT DECKS (2026-09-25).** Per-archetype
+chips for the Suggestion screen: `_vs_from_per` (grouped by `_archetype`,
+likelihood-weighted, unrecorded archetypes absent) and `_vs_from_record` (a
+tuner deck's record against the opponent's archetypes, in `_spread`'s order).
+Each row is `{archetype, name, winRate, share}`. Additive; nothing reads the old
+fields differently.
+
 The bot's duel advisor, in two windows: `!predict`/`!predict2`/`!predict3` (what
 they will bring) and `!suggestion` (what you should answer with).
 

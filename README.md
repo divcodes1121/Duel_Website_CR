@@ -3152,6 +3152,26 @@ condition, and a cost of about 1 point of worst-matchup rate (every deck still
 >= 55.3%). Rows say **your win con** and **n/8 cards you play**, and print names,
 not keys. `DECK_TUNER.md` §7 has the rules and the table.
 
+### Every Suggestion deck shows its rate against each of their archetypes (2026-09-25)
+
+Team Scout's chips, asked for by name ("Bridge Spam 58% · Lava 47%"), under
+**Play this**, every row of **Your options, ranked**, every **Or bring one of
+these** deck and every **A full loadout** deck. Green at 50%+, red under. The
+headline is one weighted average and the chips are what it averages, so a deck
+that is strong overall but loses to one of their archetypes (a live example:
+Balloon Mega Knight, 49.7% expected, **Hog Rider 27%**) shows as that.
+
+- **Your options / Play this:** `coach._vs_from_per` groups `expected.per`
+  (one row per opponent DECK) by `_archetype`, the classifier `_spread` feeds
+  the tuner, so both halves name an archetype identically. Likelihood-weighted;
+  an archetype with no record is absent, never 50.
+- **Composed and loadout decks:** `coach._vs_from_record`, the deck's own record
+  against the archetypes THEY bring, in their order.
+- In a deck row the chips are the grid's last child on a line of their own (in
+  the 11rem name cell they wrapped to two lines); below 900px they take a full
+  row, because the figure drops to its own line there and they collided with it.
+- The opponent's decks carry none (they have no `expected`).
+
 ### The history is windowed — 15, 30, 45 or 60 days
 
 Both windows used to read **everything** stored for a player, which quietly

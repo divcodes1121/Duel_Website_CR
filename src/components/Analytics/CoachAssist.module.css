@@ -1315,3 +1315,56 @@
   font-weight: 700;
   color: var(--hue-green);
 }
+
+/* ── Per-archetype chips (Team Scout's `recVs`, the same look) ───────────── */
+
+/* `--success` / `--error` for the verdict, as Team Scout argues: the hues on
+   this screen are the blocks' identities and must not double as good/bad. */
+.vsChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vsChip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.vsChip strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--error);
+}
+
+.vsChip[data-ok] strong {
+  color: var(--success);
+}
+
+/* Inside a deck row: the last grid child, on a line of its own under the
+   cards, starting where the name does. */
+.deckRowVs {
+  grid-column: 2 / -1;
+  margin-top: -0.2rem;
+}
+
+/* BELOW 900px THE FIGURE DROPS TO ITS OWN LINE in the first track and spills
+   right (the strip already spans the row there), so a chip line starting at
+   the name column landed on that line and ran into "59.8% expected". A full
+   row of their own, after it. */
+@media (max-width: 900px) {
+  .deckRowVs {
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+}

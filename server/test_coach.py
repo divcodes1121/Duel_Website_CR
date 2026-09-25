@@ -422,5 +422,40 @@ check("a deck they have never run matches nothing",
 check("no reveals, no answer", coach.observed_sequences([], log)["matched"] == 0)
 
 
+print("\nper-archetype chips under every Suggestion deck (Team Scout's `vs`)")
+G1, G2, X1 = deck("golem", "night-witch"), deck("golem", "lumberjack"), deck("x-bow")
+per = [{"cards": G1, "prob": 0.3, "matchup": {"winRate": 60.0}},
+       {"cards": G2, "prob": 0.1, "matchup": {"winRate": 40.0}},
+       {"cards": X1, "prob": 0.4, "matchup": {"winRate": 47.0}},
+       {"cards": deck("hog-rider"), "prob": 0.2, "matchup": None}]
+vs = coach._vs_from_per(per)
+check("two decks of one archetype are ONE chip, likelihood-weighted",
+      [v for v in vs if v["archetype"] == "golem"][0]["winRate"] == 55.0, str(vs))
+check("chips run most likely first, by the archetype's SUMMED share "
+      "(Golem 0.3+0.1 ties X-Bow 0.4, then by key)",
+      [v["archetype"] for v in vs] == ["golem", "xbow"], str(vs))
+check("an archetype with no record is ABSENT, never 50",
+      all(v["archetype"] != "hog" for v in vs), str(vs))
+check("every chip carries a display name, not the key",
+      [v["name"] for v in vs] == ["Golem", "X-Bow"], str(vs))
+
+real = coach.win_prob
+try:
+    coach.win_prob = fake_win_prob({"golem": 80.0, "x-bow": 40.0})
+    exp = coach._expected(A, [D(deck("golem"), prob=0.5), D(deck("x-bow"), prob=0.5)], FakeSnap())
+    check("_expected publishes the chips beside the headline",
+          [(v["name"], v["winRate"]) for v in exp["vs"]] == [("Golem", 80.0), ("X-Bow", 40.0)],
+          str(exp.get("vs")))
+finally:
+    coach.win_prob = real
+
+rec = {"golem": {"winRate": 62.0}, "xbow": {"winRate": 48.5}, "lava": {"winRate": 70.0}}
+got = coach._vs_from_record(rec, ["xbow", "golem", "hog"], {"xbow": 0.6, "golem": 0.3, "hog": 0.1})
+check("a composed deck's chips are its record against THEIR archetypes only, in "
+      "their order, missing ones absent",
+      [(v["archetype"], v["winRate"]) for v in got] == [("xbow", 48.5), ("golem", 62.0)],
+      str(got))
+
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

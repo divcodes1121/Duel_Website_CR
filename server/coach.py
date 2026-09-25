@@ -754,7 +754,51 @@ def _expected(mine: list[str], opp_decks: list[dict], snap) -> dict | None:
             den += w
     if not den:
         return None
-    return {"winRate": round(num / den, 1), "weight": round(den, 4), "per": per}
+    return {"winRate": round(num / den, 1), "weight": round(den, 4), "per": per,
+            "vs": _vs_from_per(per)}
+
+
+def _vs_row(archetype: str, rate: float, share: float | None = None) -> dict:
+    row = {"archetype": archetype, "name": counter._label(archetype or "other"),
+           "winRate": round(rate, 1)}
+    if share is not None:
+        row["share"] = round(share, 4)
+    return row
+
+
+def _vs_from_per(per: list[dict]) -> list[dict]:
+    """The headline split by the opponent's ARCHETYPES — Team Scout's chips.
+
+    `per` is one row per opponent DECK. Grouped by `_archetype`, the same
+    classifier `_spread` feeds the tuner, so a chip here and a chip under a
+    composed deck name an archetype identically. Likelihood-weighted over the
+    decks of that archetype that have a record; one with no record is ABSENT,
+    never 50 — `_expected`'s own rule, one level down. Most likely first.
+    """
+    num: dict[str, float] = {}
+    den: dict[str, float] = {}
+    share: dict[str, float] = {}
+    for p in per:
+        a = _archetype(p["cards"])
+        w = float(p.get("prob") or 0.0)
+        share[a] = share.get(a, 0.0) + w
+        m = p.get("matchup")
+        if m and m.get("winRate") is not None and w > 0:
+            num[a] = num.get(a, 0.0) + w * float(m["winRate"])
+            den[a] = den.get(a, 0.0) + w
+    return [_vs_row(a, num[a] / den[a], share[a])
+            for a in sorted(num, key=lambda k: (-share[k], k)) if den[a] > 0]
+
+
+def _vs_from_record(record: dict, archetypes: list[str],
+                    weights: dict[str, float]) -> list[dict]:
+    """The same chips for a tuner deck, off its own per-archetype record."""
+    out = []
+    for a in archetypes:
+        m = (record or {}).get(a)
+        if m and m.get("winRate") is not None:
+            out.append(_vs_row(a, float(m["winRate"]), weights.get(a)))
+    return out
 
 
 def _spread(opp_decks: list[dict]) -> tuple[list[str], dict[str, float]]:
@@ -878,11 +922,15 @@ def tune(my_deck: list[str], opp_decks: list[dict],
             exclude={",".join(sorted(set(my_deck)))},
             limit=10 ** 6)
         composed["decks"] = tuner.personalise(composed["decks"], profile)
+        for d in composed["decks"]:
+            d["vs"] = _vs_from_record(d.get("archetypes"), archetypes, weights)
         composed["playstyle"] = sorted(
             tuner.playstyle_families((profile or {}).get("families")))
         out["compose"] = composed
         out["loadout"] = tuner.loadout(
             archetypes, weights=weights, comfort=comfort, veto=harmony.veto)
+        for d in (out["loadout"] or {}).get("decks") or []:
+            d["vs"] = _vs_from_record(d.get("archetypes"), archetypes, weights)
     except Exception as exc:  # pragma: no cover - degradation
         print("coach.tune: composer: %r" % (exc,), file=sys.stderr)
         out["compose"] = None
