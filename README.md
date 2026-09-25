@@ -3139,6 +3139,19 @@ Two windows over `server/coach.py`, ported from the bot's duel advisor:
 | **Duel Prediction** | `!predict` / `!predict2` / `!predict3` | one tag | which decks they open with, and what is still legal after each reveal |
 | **Suggestion** | `!suggestion #YOU [#THEM]` | your tag; the opponent comes from the route | the same read, then YOUR still-legal decks ranked by expected win rate |
 
+### "Or bring one of these" is chosen for the player (2026-09-25)
+
+Measured on production: 12 players against one opponent got **one identical
+list** of six. `deck_tuner.personalise` now picks each player's six from the
+same evidence by their playstyle, read from **all** their stored battles and not
+duel rows only: the lead stays within 4 points of the best counter, two slots
+are held for decks of their own win conditions that still win their worst
+matchup, and there is one deck per family. Result: 1 -> **7** distinct lists of
+12 (as sets of decks), 6 -> **12** distinct decks, 10 of 12 offered a deck of their own win
+condition, and a cost of about 1 point of worst-matchup rate (every deck still
+>= 55.3%). Rows say **your win con** and **n/8 cards you play**, and print names,
+not keys. `DECK_TUNER.md` §7 has the rules and the table.
+
 ### The history is windowed — 15, 30, 45 or 60 days
 
 Both windows used to read **everything** stored for a player, which quietly

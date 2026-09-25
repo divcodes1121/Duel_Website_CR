@@ -1674,6 +1674,15 @@ under 10 ms warm.
 
 ## Coach Assist (`coach.py`)
 
+**THE TUNER'S "OR BRING ONE OF THESE" IS PERSONAL (2026-09-25).** `tune()`
+takes a `profile` from `_playstyle(tag, since, until, hist)` — one
+`cd.player_report` read (all stored battles; duel decks added on top) — and
+passes compose's WHOLE ranked list through `deck_tuner.personalise`. Only when
+`swaps=1`, so the default Coach response pays nothing. Measured on 12 players
+vs one opponent: 1 -> 7 distinct lists (as sets), 6 -> 12 distinct decks, mean worst-
+matchup -1.0 point. `compose` rows gained `family` and `name`; the loadout is
+untouched. See `DECK_TUNER.md` §7.
+
 The bot's duel advisor, in two windows: `!predict`/`!predict2`/`!predict3` (what
 they will bring) and `!suggestion` (what you should answer with).
 

@@ -353,6 +353,54 @@ triple maximising `loadout_floor`. With that pool size the search is small
 enough to be exhaustive with pruning, and
 `dz.pick_duel_legal_sequence()` remains the fallback.
 
+### Choosing six FOR THIS PLAYER — `personalise` (2026-09-25)
+
+**Reported: "Or bring one of these" looked the same for every player.** Measured
+on production, 12 players against one opponent: **one identical list** of six
+(two Balloon, two Royal Giant). `compose` answers "what beats this opponent",
+which does not depend on who asks. Its only personal input, `familiar`, was a
+tiebreak after three other keys and was counted from **duel** rows, which 7 of
+the 12 had none of. A Lava Hound player with 216 Lava battles in the window was
+offered no Lava deck.
+
+`coach.tune` now asks `compose` for its whole ranked list and hands it to
+`deck_tuner.personalise(rows, profile)`, with `profile` built by
+`coach._playstyle` from **all** their stored battles (`player_report`, the
+reader the player screen and Team Analysis use), with the duel decks added on top.
+
+| rule | constant | why |
+|---|---|---|
+| the lead is within the band of the best counter | `LEAD_BAND` 4.0 | never a clearly weaker counter to look personal |
+| slots held for THEIR win conditions | `STYLE_SLOTS` 2, `STYLE_BAND` 8.0 | a bounded weight alone moves nothing (`coach_daily`'s finding) |
+| a held deck must win its worst matchup | `STYLE_FLOOR` 50 | "the actual decks which counter the opponent" |
+| one deck per family, two for a family they play | — | six variants of two archetypes is two answers |
+| their win condition / built from their cards | `STYLE_WEIGHT` / `KNOWN_WEIGHT` 1.5 each, `KNOWN_MIN` 5 | the project's one size for "they can pilot this" |
+| a win condition is theirs past 15 battles or 5% | `STYLE_MIN_BATTLES` / `_SHARE` | `coach_daily.in_range`'s rule |
+| `other` is never a playstyle | — | the first live run marked it "yours" for 9 of 12 |
+
+Rows match playstyle on `family` (the seed pool's key, the bot's classifier), not
+on `archetype` (the hash reading), which calls any Miner deck "miner".
+
+**Measured old vs new, same 12 players, same opponent, staged on the VPS:**
+
+| | before | after |
+|---|---|---|
+| distinct lists (as sets; 9 / 12 counting order) | 1 / 12 | **7 / 12** |
+| distinct decks offered | 6 | **12** |
+| shared per pair (of 6) | 6.00 | **4.41** |
+| families per list | 4.0 | **5.2** |
+| players offered a deck of their own win condition | 0 | **10 / 12** |
+| lead worst-matchup | 64.80 | 64.35 |
+| mean worst-matchup, all decks (min) | 61.43 (59.3) | 60.43 (55.3) |
+
+The two with nothing of their own play only Hog or only Miner, and no deck of
+either family wins its worst matchup against this opponent. The remaining overlap
+is the field's: X-Bow, Golem and Balloon really are the best counters here.
+
+On screen, each row says **your win con** (green) and **n/8 cards you play**, and
+prints the display name ("X-Bow", not "xbow") — the list and the loadout both
+printed raw keys before this.
+
 ---
 
 ## 8. The honest limits — say these in the UI, not just here

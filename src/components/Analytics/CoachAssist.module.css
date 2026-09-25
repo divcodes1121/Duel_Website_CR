@@ -1306,3 +1306,12 @@
   opacity: 0.5;
   font-size: 0.9rem;
 }
+
+/* A deck of a win condition this player actually plays, on the personalised
+   "Or bring one of these" list. The identity hue at body size, per the hue
+   steps: `--hue-*` is graded to hold 4.5:1 as ink. */
+.composeYours {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--hue-green);
+}

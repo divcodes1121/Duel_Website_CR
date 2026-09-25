@@ -772,8 +772,48 @@ def _spread(opp_decks: list[dict]) -> tuple[list[str], dict[str, float]]:
     return sorted(weights, key=lambda a: -weights[a]), weights
 
 
+#: A deck counts toward a player's card pool at this many battles — the same
+#: floor `coach_daily.REPERTOIRE_MIN_BATTLES` and `team_analysis`'s comfort
+#: games use, so "a deck you play" means one thing across the three screens.
+PLAYSTYLE_MIN_BATTLES = 5
+
+
+def _playstyle(tag: str, since: str | None, until: str | None,
+               hist: dict | None) -> dict:
+    """What this player actually plays: `{"cards": set, "families": {wc: n}}`.
+
+    FROM ALL THEIR STORED BATTLES, NOT THE DUEL ROWS. The Coach's own history
+    is duel-like play only, and seven of twelve production players asked about
+    on 2026-09-25 had none of it — so `familiar` read 0 on every deck and the
+    "Or bring one of these" list could not differ between them. `player_report`
+    is the reader the player screen and Team Analysis already use. Its duel
+    decks are added on top, so nothing the old path knew is lost.
+
+    A failure returns an empty profile, which `personalise` reads as "nothing
+    personal to say" rather than as an error.
+    """
+    cards: set[str] = set()
+    families: dict[str, int] = {}
+    try:
+        rep = cd.player_report(tag, since, until) if tag else None
+    except Exception as exc:  # noqa: BLE001 - the profile must never take the screen down
+        print("coach._playstyle: %r" % (exc,), file=sys.stderr)
+        rep = None
+    for d in (rep or {}).get("decks") or []:
+        n = int(d.get("matches") or 0)
+        wc = d.get("winCondition") or ""
+        if wc:
+            families[wc] = families.get(wc, 0) + n
+        if n >= PLAYSTYLE_MIN_BATTLES and len(set(d.get("cards") or [])) == 8:
+            cards.update(d["cards"])
+    for d in (hist or {}).get("allDecks") or []:
+        cards.update(d)
+    return {"cards": cards, "families": families}
+
+
 def tune(my_deck: list[str], opp_decks: list[dict],
-         used: set | None = None, hist: dict | None = None) -> dict | None:
+         used: set | None = None, hist: dict | None = None,
+         profile: dict | None = None) -> dict | None:
     """Card-level swaps for one deck. See `DECK_TUNER.md`.
 
     OPT-IN AND ADMIN-ONLY at the route, because it costs a full sibling scan --
@@ -826,11 +866,21 @@ def tune(my_deck: list[str], opp_decks: list[dict],
     # composer does NO database work -- its pool is the snapshot's seeds -- so
     # this costs almost nothing on top of the scan already paid for above.
     try:
-        out["compose"] = tuner.compose(
+        # THE WHOLE RANKED POOL, then THIS player's six. `compose` alone
+        # answers "what beats this opponent" and gave twelve players one list;
+        # `personalise` chooses among its evidence by their playstyle, inside a
+        # band, with slots held for their own win conditions.
+        composed = tuner.compose(
             archetypes, weights=weights, used=used or set(),
-            comfort=comfort, veto=harmony.veto,
+            comfort=comfort | set((profile or {}).get("cards") or ()),
+            veto=harmony.veto,
             # Never offer back the deck they are already being told to play.
-            exclude={",".join(sorted(set(my_deck)))})
+            exclude={",".join(sorted(set(my_deck)))},
+            limit=10 ** 6)
+        composed["decks"] = tuner.personalise(composed["decks"], profile)
+        composed["playstyle"] = sorted(
+            tuner.playstyle_families((profile or {}).get("families")))
+        out["compose"] = composed
         out["loadout"] = tuner.loadout(
             archetypes, weights=weights, comfort=comfort, veto=harmony.veto)
     except Exception as exc:  # pragma: no cover - degradation
@@ -953,7 +1003,8 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         # null would read as "no swaps found" where the truth is "nobody
         # asked". Costs a full sibling scan, so the route only sets `swaps`
         # for an admin. See `DECK_TUNER.md`.
-        **({"tuner": tune(best["cards"], opp["decks"], used_mine, mine_hist)}
+        **({"tuner": tune(best["cards"], opp["decks"], used_mine, mine_hist,
+                          _playstyle(my_tag, my_since, my_until, mine_hist))}
            if swaps and best else {}),
         "notes": _read(stage, best, opp, my_played, opp_played, observed),
         # Every reason the answer might be weaker than it looks, listed rather

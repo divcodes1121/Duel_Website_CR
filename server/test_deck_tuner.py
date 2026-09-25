@@ -461,6 +461,9 @@ def main() -> int:
     check("the veto is counted", c["skipped"]["vetoed"] >= 1, str(c["skipped"]))
     check("the pool is reported as ready", c["poolReady"] is True)
     check("the pool size is stated", c["poolSize"] == 5, str(c["poolSize"]))
+    check("every composed deck carries a display name, never the raw key",
+          all(x.get("name") and x["name"] != x["family"] for x in c["decks"]),
+          str([(x.get("family"), x.get("name")) for x in c["decks"]]))
 
     print("\nan empty pool is a SNAPSHOT problem, not 'no good decks'")
     c0 = tuner.compose(archs, pool={})
@@ -498,6 +501,69 @@ def main() -> int:
           "— three decks covering together should beat the best one alone")
     check("an unmeasured archetype is NAMED, not scored 50%",
           isinstance(lo["uncovered"], list))
+
+    print("\nMODE B, FOR THIS PLAYER — personalise (2026-09-25)")
+    # Twelve production players against one opponent were handed ONE list.
+    # Rows are compose's own shape: hash, deck, floor, family, archetype.
+    def row(h, fam, floor, cards=None):
+        cards = cards or [f"{h}-{i}" for i in range(8)]
+        return {"hash": h, "deck": cards, "floor": floor, "family": fam,
+                "archetype": fam, "familiar": 0}
+
+    LAVA_CARDS = ["lava-hound", "balloon", "miner", "mega-minion",
+                  "tombstone", "arrows", "fireball", "guards"]
+    field = [row("xb1", "xbow", 64.8), row("go1", "golem", 63.0),
+             row("ba1", "balloon", 62.1), row("ba2", "balloon", 60.1),
+             row("rg1", "royal-giant", 59.3), row("rg2", "royal-giant", 59.3),
+             row("hg1", "hog", 58.0), row("pk1", "pekka", 57.5),
+             row("lv1", "lava", 57.0, LAVA_CARDS), row("lv2", "lava", 48.0),
+             row("mn1", "miner", 56.0)]
+    snapshot = [dict(r) for r in field]
+
+    none = tuner.personalise(field, None)
+    fams = [r["family"] for r in none]
+    check("with no profile the lead is the best counter", none[0]["hash"] == "xb1")
+    check("...and the list is one deck per family, not two Balloons and two RGs",
+          len(fams) == len(set(fams)) == tuner.TOP_DECKS, str(fams))
+
+    lava = {"cards": set(LAVA_CARDS), "families": {"lava": 216, "miner": 108}}
+    xbow = {"cards": set(field[0]["deck"]), "families": {"xbow": 300}}
+    lv = tuner.personalise(field, lava)
+    xb = tuner.personalise(field, xbow)
+    check("a Lava player is offered a Lava deck that still counters",
+          any(r["hash"] == "lv1" and r["yours"] and r.get("reserved") for r in lv),
+          str([(r["hash"], r.get("reserved")) for r in lv]))
+    check("...but never one that LOSES its worst matchup (floor under 50)",
+          all(r["hash"] != "lv2" for r in lv))
+    check("two players with different playstyles get different lists",
+          [r["hash"] for r in lv] != [r["hash"] for r in xb],
+          str([r["hash"] for r in lv]))
+    check("every lead is within the band of the best counter",
+          all(p[0]["floor"] >= 64.8 - tuner.LEAD_BAND for p in (none, lv, xb)))
+    check("a family they play may appear twice, any other once",
+          all(sum(1 for r in lv if r["family"] == f) <= (2 if f in ("lava", "miner") else 1)
+              for f in {r["family"] for r in lv}))
+    check("`familiar` counts cards from ALL their play, not duel rows only",
+          next(r for r in lv if r["hash"] == "lv1")["familiar"] == 8)
+    check("the caller's rows are not written onto",
+          [dict(r) for r in field] == snapshot)
+
+    # Equal floors: the one built from their cards leads.
+    even = [row("aa", "hog", 60.0), row("bb", "golem", 60.0, LAVA_CARDS)]
+    check("between equal counters the one built from their cards leads",
+          tuner.personalise(even, {"cards": set(LAVA_CARDS), "families": {}})[0]["hash"] == "bb")
+
+    check("a win condition is theirs past 15 battles",
+          tuner.playstyle_families({"lava": 16, "hog": 2000}) == {"lava", "hog"})
+    check("...or past 5% of their battles, and not otherwise",
+          tuner.playstyle_families({"xbow": 10, "hog": 100}) == {"xbow", "hog"}
+          and tuner.playstyle_families({"xbow": 10, "hog": 1000}) == {"hog"})
+    check("an empty list stays empty", tuner.personalise([], lava) == [])
+    check("`other` is never a playstyle — it is the classifier's catch-all",
+          tuner.playstyle_families({"other": 900, "hog": 100}) == {"hog"})
+    check("...but it still counts toward the share, so a minor win condition "
+          "is not inflated past 5%",
+          tuner.playstyle_families({"other": 900, "hog": 90, "xbow": 10}) == {"hog"})
     check("the broken deck never enters the loadout either",
           all(d["hash"] != ",".join(sorted(BROKEN)) for d in lo["decks"]))
 

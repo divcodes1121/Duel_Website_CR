@@ -594,6 +594,16 @@ def compose(archetypes: list[str],
                 "view": view,
                 "hash": d["hash"],
                 "archetype": counter._archetype_of_hash(d["hash"]),
+                # THE SEED POOL'S OWN KEY, which is the bot's classifier — the
+                # one `player_report`'s `winCondition` comes from. `archetype`
+                # above is the hash reading, which calls any deck holding
+                # Miner "miner", so a Lava + Miner list would never match a
+                # Lava player. `personalise` matches playstyle on this.
+                "family": _arch,
+                # THE DISPLAY NAME. The screen printed `archetype` raw —
+                # "xbow", "royal-giant", "bridge-spam" — beside screens that
+                # all say "X-Bow". Same fault a Team Scout screenshot caught.
+                "name": counter._label(_arch or counter._archetype_of_hash(d["hash"])),
                 "floor": f,
                 "floorGames": fg,
                 "floorArchetype": fw,
@@ -626,6 +636,143 @@ def compose(archetypes: list[str],
         # must not look the same on screen.
         "poolReady": bool(seedmap),
     }
+
+
+# ── Mode B, for THIS player (2026-09-25) ───────────────────────────────────
+#
+# `compose` answers "what beats this opponent", which does not depend on who
+# asks. Measured on production: twelve players against one opponent were
+# handed ONE identical list of six (two Balloon, two Royal Giant), including a
+# Lava Hound player with 216 Lava battles in the window and no Lava deck on
+# it. Its only personal input was `familiar`, a tiebreak after three other
+# keys, counted from DUEL rows — which seven of the twelve had none of.
+#
+# `personalise` keeps compose's evidence and changes only the choosing, on the
+# rules Team Scout's squad plan and `coach_daily` already use:
+#
+#   * a BAND — the lead is chosen from decks within `LEAD_BAND` of the best
+#     worst-matchup, never a clearly weaker counter to look personal;
+#   * RESERVED SLOTS for their own win conditions — `STYLE_SLOTS` of them, for
+#     decks of a family they actually play whose worst matchup still clears
+#     `STYLE_FLOOR` (they do not LOSE to anything the opponent brings), within
+#     `STYLE_BAND` of the best. A bounded weight alone moves nothing; that was
+#     `coach_daily`'s finding and the gaps here are just as wide;
+#   * ONE DECK PER FAMILY (two for a family they play) — six variants of two
+#     archetypes is a list with two answers in it.
+
+#: Worst-matchup points below the best counter that the lead may sit. The top
+#: of a live list spans ~5.5 points over six decks; four keeps the lead among
+#: the options the evidence cannot separate.
+LEAD_BAND = 4.0
+
+#: How far below the best counter a deck of THEIR win condition may sit and
+#: still be reserved a slot. Wider than the lead band because the slot is
+#: labelled as theirs, not presented as the strongest option.
+STYLE_BAND = 8.0
+
+#: A reserved deck must win its worst matchup: 50% or better against every
+#: archetype of the opponent's that it has a record against.
+STYLE_FLOOR = 50.0
+
+#: Slots of six reserved for decks of the player's own win conditions.
+STYLE_SLOTS = 2
+
+#: Points for a deck of a family they play, and at most for one built from
+#: their cards (from five of eight, `coach_daily.KNOWN_MIN`). Both 1.5, the
+#: project's one size for "they can pilot this" (`team_scout.FIT_WEIGHT`).
+STYLE_WEIGHT = 1.5
+KNOWN_WEIGHT = 1.5
+KNOWN_MIN = 5
+
+#: A win condition is THEIRS above this many battles or this share of them —
+#: `coach_daily.in_range`'s rule, so the two screens agree on what "a win
+#: condition you play" means.
+STYLE_MIN_BATTLES = 15
+STYLE_MIN_SHARE = 0.05
+
+
+def _known_bonus(n: int) -> float:
+    span = 8 - (KNOWN_MIN - 1)
+    return KNOWN_WEIGHT * max(0.0, min(1.0, (n - (KNOWN_MIN - 1)) / span))
+
+
+def playstyle_families(families: dict[str, int] | None) -> set[str]:
+    """The win conditions a player actually plays, from `{family: battles}`."""
+    # `other` IS THE CLASSIFIER'S CATCH-ALL, NOT A PLAYSTYLE. The first live
+    # run marked it "your win con" for nine of twelve players, which says
+    # nothing about any of them. It still counts toward the total, so a player
+    # whose play is mostly unclassified does not have a minor win condition
+    # inflated past the share floor.
+    fam = {k: int(v or 0) for k, v in (families or {}).items() if k}
+    total = sum(fam.values())
+    fam.pop("other", None)
+    return {k for k, n in fam.items()
+            if n > STYLE_MIN_BATTLES or (total and n / total > STYLE_MIN_SHARE)}
+
+
+def personalise(rows: list[dict], profile: dict | None,
+                limit: int = TOP_DECKS) -> list[dict]:
+    """`limit` of `compose`'s rows, chosen for one player. Copies; `rows` untouched.
+
+    `rows` is compose's WHOLE ranked list (best worst-matchup first).
+    `profile` is `{"cards": set, "families": {win condition: battles}}` over
+    ALL their stored play, not duel rows only. With no profile the answer is
+    the field's, one deck per family — nothing personal is invented.
+    """
+    if not rows:
+        return []
+    cards = set((profile or {}).get("cards") or ())
+    mine = playstyle_families((profile or {}).get("families"))
+    best = max(r["floor"] for r in rows)
+
+    pool = []
+    for r in rows:
+        c = dict(r)
+        known = len(set(c.get("deck") or []) & cards)
+        c["familiar"] = max(int(c.get("familiar") or 0), known)
+        c["yours"] = bool(c.get("family")) and c.get("family") in mine
+        c["personal"] = round(c["floor"] + _known_bonus(c["familiar"])
+                              + (STYLE_WEIGHT if c["yours"] else 0.0), 3)
+        pool.append(c)
+
+    def order(r):
+        return (-r["personal"], -r["floor"], r["hash"])
+
+    taken: dict[str, int] = {}
+
+    def room(r) -> bool:
+        fam = r.get("family") or r.get("archetype") or ""
+        return taken.get(fam, 0) < (2 if fam in mine else 1)
+
+    def take(r, out):
+        fam = r.get("family") or r.get("archetype") or ""
+        taken[fam] = taken.get(fam, 0) + 1
+        out.append(r)
+
+    out: list[dict] = []
+    lead = min((r for r in pool if r["floor"] >= best - LEAD_BAND), key=order)
+    take(lead, out)
+
+    style = sorted((r for r in pool if r["yours"] and r is not lead
+                    and r["floor"] >= max(STYLE_FLOOR, best - STYLE_BAND)), key=order)
+    reserved = 0
+    for r in style:
+        if reserved >= STYLE_SLOTS or len(out) >= limit:
+            break
+        if room(r):
+            r["reserved"] = True
+            take(r, out)
+            reserved += 1
+
+    for r in sorted(pool, key=order):
+        if len(out) >= limit:
+            break
+        if any(r is o for o in out) or not room(r):
+            continue
+        take(r, out)
+
+    # Reading order: the lead, then by what the list was chosen on.
+    return [out[0]] + sorted(out[1:], key=order)
 
 
 def loadout(archetypes: list[str],

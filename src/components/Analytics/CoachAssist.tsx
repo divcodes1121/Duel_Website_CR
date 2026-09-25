@@ -1135,7 +1135,15 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
               <strong style={{ fontVariantNumeric: 'tabular-nums' }}>
                 {d.floor.toFixed(1)}
               </strong>{' '}
-              {d.archetype}
+              {d.name ?? d.archetype}
+              {/* WHY THIS DECK IS ON *THEIR* LIST. Labels and counts only —
+                  the list is chosen per player now (`deck_tuner.personalise`),
+                  so a reader comparing two players' lists is owed the reason
+                  they differ. */}
+              {d.yours && <span className={styles.composeYours}> · your win con</span>}
+              {d.familiar > 0 && (
+                <span className={styles.blockNote}> · {d.familiar}/8 cards you play</span>
+              )}
               <Strip cards={d.view.cards} art={d.view.art}
                      inferred={d.view.inferredArt} size="sm" />
             </div>
@@ -1161,7 +1169,7 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
           </h4>
           {tuner.loadout.decks.map((d) => (
             <div key={d.hash} style={{ marginBottom: '.5rem' }}>
-              <strong>{d.archetype}</strong>
+              <strong>{d.name ?? d.archetype}</strong>
               <Strip cards={d.view.cards} art={d.view.art}
                      inferred={d.view.inferredArt} size="sm" />
             </div>

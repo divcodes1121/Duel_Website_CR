@@ -1315,11 +1315,29 @@ export interface ComposedDeck {
    *  weighs, never a score — being handed eight unfamiliar cards mid-duel is
    *  a real cost. */
   familiar: number;
+  /** The seed pool's win-condition key (the bot's classifier), which is what
+   *  playstyle is matched on. `archetype` is the hash reading and calls any
+   *  Miner deck "miner". Optional: absent from a server before 2026-09-25. */
+  family?: string;
+  /** Display name of the family ("X-Bow", not "xbow"). Absent before
+   *  2026-09-25, when the screen falls back to `archetype`. */
+  name?: string;
+  /** A win condition this player actually plays (15+ battles or 5%+ of them). */
+  yours?: boolean;
+  /** Held a slot for being one of their win conditions — it still wins its
+   *  worst matchup, and sits within 8 points of the best counter. */
+  reserved?: boolean;
+  /** The worst-matchup figure plus what their playstyle is worth (at most 3
+   *  points). What the list is ordered on below the lead. */
+  personal?: number;
 }
 
 export interface Composed {
   archetypes: string[];
   decks: ComposedDeck[];
+  /** The win conditions this player plays, from ALL their stored battles —
+   *  what the list was personalised on. Empty when nothing is stored. */
+  playstyle?: string[];
   considered: number;
   skipped: { illegal: number; vetoed: number; no_floor: number; excluded: number };
   vetoed: boolean;
