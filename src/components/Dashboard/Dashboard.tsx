@@ -264,7 +264,14 @@ const DUO_CARD = {
   hash: '#/duo',
 } as const;
 
-/* Filled from the database at runtime — hardcoded tags would 404 on click. */
+/* THE FALLBACK ONLY, NOT THE SOURCE — the comment here used to say these were
+   filled from the database, which describes the effect below and not this
+   constant. `fetchSuggestedTags()` replaces them with the real most-played
+   tags; these three are what a visitor sees when that ONE route fails, and
+   they are kept rather than blanked because `/suggest` can fail while the
+   player read it feeds works fine (it is a separate route on the same
+   service, and the documented local behaviour is exactly that). They are
+   real tracked tags, so a chip still resolves. */
 const FALLBACK_TAGS = ['#9GJ0Q0LGG', '#U2YVYGGV2', '#L8GVPJ900'];
 
 /* The three built tools, as full panels down the home screen.

@@ -9,6 +9,7 @@ import {
 } from '../../../state/analyticsClient';
 import { battleTimeToIso, windowDays, type CoachWindow, type RosterPlayer } from '../../../state/coachRoster';
 import { buildInsights } from '../../../state/coachInsights';
+import { DECK_RATE_FLOOR } from '../../../state/coachScout';
 import {
   DASH,
   cardMovers,
@@ -134,7 +135,11 @@ export function PlayerDashboard({
   const live = isLiveReport(report);
   const topDeck = intel.decks[0];
   const topLast = topDeck ? battleTimeToIso(topDeck.last) : null;
-  const rated = topDeck && topDeck.battles >= 5;
+  /* THE NAMED FLOOR, NOT A BARE 5. `DECK_RATE_FLOOR` was already exported
+     from `coachScout` and this screen wrote its value out again -- so the
+     scout's floor and the dashboard's could drift apart while both claimed to
+     be "too few to rate", on the same player, two tabs apart. */
+  const rated = topDeck && topDeck.battles >= DECK_RATE_FLOOR;
 
   /* The catalogue's own titles, so a mover reads "Hog Rider" and not the
      module's fallback title-casing of its key. */

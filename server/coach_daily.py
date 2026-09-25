@@ -94,6 +94,17 @@ TREND_DAYS = 7
 #: overnight. Under this many days apart the trend is reported and applied to
 #: NOTHING, which is the same rule every other floor here follows: below the
 #: floor, say nothing rather than say a little.
+#:
+#: IT CANNOT FIRE FROM THE PRODUCTION PATH TODAY, AND THAT IS WORTH KNOWING
+#: BEFORE SOMEBODY READS IT AS THE REAL GATE. `plan()` asks
+#: `meta_history.movement(TREND_DAYS)`, and that function takes the newest
+#: snapshot AT OR BEFORE `latest - days` -- it walks OLDER, never closer. So
+#: `daysApart` is always >= TREND_DAYS (7), never below this 3, and the guard
+#: below is defensive depth rather than the live gate. THE LIVE GATE IS
+#: `movement()` ANSWERING `basis: "none"` until seven days are stored: the
+#: history began 2026-09-23, so the trend is genuinely off until 2026-09-30
+#: and the screen says "trend off" truthfully in the meantime. This guard
+#: becomes reachable only if TREND_DAYS is ever lowered under it.
 TREND_MIN_DAYS = 3
 
 #: The most a trend may multiply a threat's likelihood by, and its reciprocal

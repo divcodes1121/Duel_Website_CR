@@ -14,6 +14,7 @@ import { coachToken } from '../../../state/coachToken';
 import {
   deckRate,
   evidenceNote,
+  h2hRate,
   headToHead,
   leadArchetype,
   scoutBasis,
@@ -235,8 +236,12 @@ export function ScoutTab({
               />
               <Tile
                 label={`${playerLabel(player)}’s win rate here`}
-                value={h2h.battles >= 3 ? `${((h2h.wins / h2h.battles) * 100).toFixed(1)}%` : '—'}
-                note={h2h.battles >= 3 ? 'against this opponent only' : `only ${h2h.battles} meetings — too few to rate`}
+                value={h2hRate(h2h) !== null ? `${h2hRate(h2h)!.toFixed(1)}%` : '—'}
+                note={
+                  h2hRate(h2h) !== null
+                    ? 'against this opponent only'
+                    : `only ${h2h.battles} meetings — too few to rate`
+                }
               />
             </div>
             <p className={styles.muted}>Last met {battleTimeToIso(h2h.last) ? ago(battleTimeToIso(h2h.last)!) : '—'}.</p>

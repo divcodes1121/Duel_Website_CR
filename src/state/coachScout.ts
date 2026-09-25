@@ -158,6 +158,19 @@ export function evidenceNote(basis: ScoutBasis, battles: number, windowLabel: st
  *  played forty times. */
 export const DECK_RATE_FLOOR = 5;
 
+/** Meetings before a HEAD-TO-HEAD rate is printed. A different quantity from
+ *  `DECK_RATE_FLOOR` and deliberately lower: a deck's rate is a claim about a
+ *  deck, of which a player has many, while this is a claim about one pairing,
+ *  and three meetings is the least that is not a coin toss reported as a
+ *  record. It lived as a bare `3` written twice in `ScoutTab`, which is how a
+ *  floor drifts from the sentence that explains it. */
+export const H2H_FLOOR = 3;
+
+/** The head-to-head rate, or null under the floor. */
+export function h2hRate(h: Pick<HeadToHead, 'battles' | 'wins'>): number | null {
+  return h.battles >= H2H_FLOOR ? (h.wins / h.battles) * 100 : null;
+}
+
 export function deckRate(d: Pick<ScoutDeck, 'battles' | 'wins'>): number | null {
   return d.battles >= DECK_RATE_FLOOR ? (d.wins / d.battles) * 100 : null;
 }

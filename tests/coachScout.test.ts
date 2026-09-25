@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CoachIntel, LiveDeck, LivePlayerReport, PlayerReport } from '../src/state/analyticsClient';
+import { readFileSync } from 'node:fs';
+
 import {
   DECK_RATE_FLOOR,
+  H2H_FLOOR,
   SCOUT_THIN,
   deckRate,
+  h2hRate,
   evidenceNote,
   headToHead,
   leadArchetype,
@@ -222,5 +226,42 @@ describe('naming what they lead with', () => {
 
   it('says nothing at all on thin evidence, however lopsided', () => {
     expect(leadArchetype(withTop(SCOUT_THIN - 1, SCOUT_THIN - 1))).toBeNull();
+  });
+});
+
+/* EVERY FLOOR IS NAMED IN ONE PLACE, AND NO SCREEN MAY WRITE ITS VALUE OUT
+   AGAIN. Found by a variance census over the live payloads: the head-to-head
+   floor was a bare `3` repeated twice in `ScoutTab` while the docs called it
+   `H2H_FLOOR`, and `PlayerDashboard` wrote `>= 5` for the deck-rate floor that
+   this module already exports. Both said "too few to rate" about the same
+   player two tabs apart and could have drifted without anything failing.
+
+   This is the same tripwire shape `coachDashboard.test.ts` uses for `DASH` vs
+   `FLOORS`: assert the VALUE so a change is deliberate, and sweep the screens
+   so the literal cannot come back. */
+describe('the evidence floors are named, not written out per screen', () => {
+  it('holds the two scout floors at their stated values', () => {
+    expect(DECK_RATE_FLOOR).toBe(5);
+    expect(H2H_FLOOR).toBe(3);
+  });
+
+  it('withholds a head-to-head rate under the floor and gives one at it', () => {
+    expect(h2hRate({ battles: H2H_FLOOR - 1, wins: 2 })).toBeNull();
+    expect(h2hRate({ battles: H2H_FLOOR, wins: 3 })).toBe(100);
+    // A rate is a rate, not a rounding of one.
+    expect(h2hRate({ battles: 4, wins: 1 })).toBe(25);
+  });
+
+  it('and no coach screen compares a battle count to a bare floor literal', () => {
+    const screens = [
+      'src/components/Admin/CoachRoster/ScoutTab.tsx',
+      'src/components/Admin/CoachRoster/PlayerDashboard.tsx',
+    ];
+    for (const f of screens) {
+      const src = readFileSync(f, 'utf8');
+      /* `battles >= 5` / `battles >= 3` are the two that were really there.
+         Anything of that shape is a floor being restated, whatever its value. */
+      expect(src).not.toMatch(/battles\s*>=\s*\d/);
+    }
   });
 });
