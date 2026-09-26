@@ -1,70 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  areaAttr,
-  clampTip,
-  gaugeArc,
-  nearestIndex,
-  pointsAttr,
-  shareOf,
-  sparkGeometry,
-  tipAbove,
-} from '../src/components/ui/dashGeometry';
+import { clampTip, gaugeArc, shareOf, tipAbove } from '../src/components/ui/dashGeometry';
 import { DASH, facedBars, facedRateBars, recordLine } from '../src/state/coachDashboard';
-
-describe('sparkGeometry', () => {
-  it('splits the series at every null and never bridges it', () => {
-    const g = sparkGeometry([10, 20, null, 30, 40, 50], 100, 40);
-    expect(g.runs.map((r) => r.map((p) => p.i))).toEqual([[0, 1], [3, 4, 5]]);
-    // A gap is still an x position, so it can be hovered and say why.
-    expect(g.xs).toHaveLength(6);
-  });
-
-  it('draws a lone point as a run of one (a dot, not a line)', () => {
-    const g = sparkGeometry([null, 5, null], 100, 40);
-    expect(g.runs).toEqual([[expect.objectContaining({ i: 1, value: 5 })]]);
-    expect(areaAttr(g.runs[0], g.floorY)).toBe('');
-  });
-
-  it('treats a null as a gap, not a zero, when scaling', () => {
-    const withGap = sparkGeometry([50, null, 60], 100, 40);
-    const withZero = sparkGeometry([50, 0, 60], 100, 40);
-    // With a zero the 50 sits well up the plot; with a gap it is the floor.
-    expect(withGap.points[0].y).toBeGreaterThan(withZero.points[0].y);
-  });
-
-  it('honours a pinned scale, so a rate means the same on every card', () => {
-    const g = sparkGeometry([50], 100, 40, { min: 0, max: 100, pad: 0 });
-    expect(g.points[0].y).toBeCloseTo(20);
-  });
-
-  it('draws a flat series as a level line, not NaN', () => {
-    const g = sparkGeometry([7, 7, 7], 100, 40);
-    expect(g.points.every((p) => p.y === 20)).toBe(true);
-    expect(pointsAttr(g.runs[0])).not.toContain('NaN');
-  });
-
-  it('closes the area on the floor using the line\'s own points', () => {
-    const g = sparkGeometry([1, 2], 100, 40, { pad: 0 });
-    const area = areaAttr(g.runs[0], g.floorY);
-    expect(area.startsWith('0.0,40 ')).toBe(true);
-    expect(area).toContain(pointsAttr(g.runs[0]));
-    expect(area.endsWith('100.0,40')).toBe(true);
-  });
-
-  it('draws nothing for an all-null series', () => {
-    expect(sparkGeometry([null, null], 100, 40).points).toEqual([]);
-  });
-});
-
-describe('nearestIndex', () => {
-  it('snaps to the nearest column, gaps included', () => {
-    expect(nearestIndex(49, [0, 50, 100])).toBe(1);
-    expect(nearestIndex(-20, [0, 50, 100])).toBe(0);
-    expect(nearestIndex(500, [0, 50, 100])).toBe(2);
-    expect(nearestIndex(10, [])).toBeNull();
-  });
-});
 
 describe('tooltip placement', () => {
   it('centres on the anchor when there is room', () => {

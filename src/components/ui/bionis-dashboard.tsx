@@ -17,8 +17,9 @@
  *
  *  1. **NO TAILWIND, NO APEXCHARTS, NO ALPINE.** Every utility is a rule in
  *     `bionis-dashboard.css`, prefix-scoped `bd-` like `glass-dock` and
- *     `footer-5`. Charts are hand-drawn SVG/CSS, the idiom `IntelCharts`
- *     already uses; the tooltips are this file's `ChartTip`, not a library's.
+ *     `footer-5`. The time and category charts are RECHARTS (2026-09-26,
+ *     `dash-charts.tsx`, which says why); the bar list, the gauge and the
+ *     part-to-whole bar stay HTML/SVG, where a library adds nothing.
  *  2. **COLOUR IS OURS.** TailAdmin's dark mode is navy; this site's is black
  *     with grey edges, and a navy card under a black top bar reads as another
  *     site. Every colour is a token from `index.css`, tone is a `data-tone`
@@ -51,6 +52,7 @@ import {
   useCallback,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -61,8 +63,21 @@ import {
 import { LayoutGroup, MotionConfig, motion } from 'framer-motion';
 
 import { cn } from './cn';
-import { clampTip, gaugeArc, nearestIndex, shareOf, sparkGeometry, tipAbove, pointsAttr, areaAttr } from './dashGeometry';
+import { clampTip, gaugeArc, shareOf, tipAbove } from './dashGeometry';
+import { ChartViewContext, Columns, DashTable, SparkArea, TONE_COLOR, useChartView } from './dash-charts';
+import { AlertIcon, ChartIcon, CheckCircleIcon, TableIcon, XCircleIcon } from './dash-icons';
 import './bionis-dashboard.css';
+
+export {
+  DashTable,
+  Legend,
+  SERIES,
+  StackedColumns,
+  TONE_COLOR,
+  TrendChart,
+  type StackSeries,
+  type TrendSeries,
+} from './dash-charts';
 
 export type DashTone = 'neutral' | 'good' | 'warn' | 'bad' | 'info';
 
@@ -357,98 +372,11 @@ export interface Trend {
 }
 
 /**
- * A small line with its area, hoverable point by point.
- *
- * Drawn in a 0..100 x-space with `preserveAspectRatio="none"` and
- * non-scaling strokes, so it fills any width without a ResizeObserver; the
- * hover dot is an HTML element placed in percent for the same reason (an SVG
- * circle would stretch into an ellipse).
+ * A small line with its area, hoverable point by point — drawn by Recharts
+ * (`SparkArea`). A null is a gap; the tooltip says what a gap means.
  */
-export function Sparkline({ trend, height = 44 }: { trend: Trend; height?: number }) {
-  const uid = useId();
-  const t = useChartTip();
-  const g = sparkGeometry(trend.values, 100, height, { min: trend.min, max: trend.max, pad: 3 });
-  const fmt = trend.format ?? ((v: number) => String(v));
-  const tone = trend.tone ?? 'info';
-
-  if (g.points.length === 0) return null;
-
-  const at = (i: number) => {
-    const box = t.host.current;
-    if (!box) return;
-    const v = trend.values[i];
-    const p = g.points.find((q) => q.i === i);
-    const px = (g.xs[i] / 100) * box.clientWidth;
-    t.showAt(i, px, p ? p.y : height / 2, {
-      title: trend.labels?.[i] ?? `#${i + 1}`,
-      value: v == null ? '—' : fmt(v),
-      lines: v == null && trend.gapNote ? [trend.gapNote] : undefined,
-      tone,
-    });
-  };
-
-  const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const box = e.currentTarget.getBoundingClientRect();
-    const i = nearestIndex(((e.clientX - box.left) / box.width) * 100, g.xs);
-    if (i != null) at(i);
-  };
-
-  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    const n = trend.values.length;
-    const cur = t.active ?? n - 1;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      at(Math.max(0, Math.min(n - 1, cur + (e.key === 'ArrowLeft' ? -1 : 1))));
-    } else if (e.key === 'Escape') t.hide();
-  };
-
-  const last = g.points[g.points.length - 1];
-  const hover = t.active != null ? g.points.find((p) => p.i === t.active) : undefined;
-  return (
-    <div
-      ref={t.host}
-      className="bd-spark"
-      data-tone={tone}
-      style={{ height }}
-      tabIndex={0}
-      role="group"
-      aria-label={`${trend.label}. Latest ${fmt(last.value)}. Arrow keys step through it.`}
-      onPointerMove={onMove}
-      onPointerDown={onMove}
-      onPointerLeave={t.leave}
-      onFocus={() => at(t.active ?? last.i)}
-      onBlur={t.hide}
-      onKeyDown={onKey}
-    >
-      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <linearGradient id={`${uid}-a`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--mark)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--mark)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {g.runs.map((run, i) =>
-          run.length > 1 ? (
-            <g key={i}>
-              <polygon className="bd-sparkArea" points={areaAttr(run, g.floorY)} fill={`url(#${uid}-a)`} />
-              <polyline className="bd-sparkLine" points={pointsAttr(run)} />
-            </g>
-          ) : null,
-        )}
-        {t.active != null && (
-          <line className="bd-sparkGuide" x1={g.xs[t.active]} x2={g.xs[t.active]} y1={0} y2={height} />
-        )}
-      </svg>
-      {/* Isolated points, and the hover dot, are HTML so they stay round. */}
-      {g.runs
-        .filter((r) => r.length === 1)
-        .map((r) => (
-          <span key={r[0].i} className="bd-sparkDot" style={{ left: `${r[0].x}%`, top: r[0].y }} />
-        ))}
-      {hover && <span className="bd-sparkDot" data-on="" style={{ left: `${hover.x}%`, top: hover.y }} />}
-      <ChartTip tip={t.tip} host={t.host} />
-    </div>
-  );
+export function Sparkline({ trend, height = 48 }: { trend: Trend; height?: number }) {
+  return <SparkArea trend={trend} height={height} />;
 }
 
 /* ── metric cards ──────────────────────────────────────────────────────── */
@@ -463,6 +391,17 @@ const Arrow = ({ dir }: { dir: 'up' | 'down' }) => (
   </svg>
 );
 
+/** A state in a word, with the icon that says it without the colour. */
+export function StatusPill({ tone, children }: { tone: DashTone; children: ReactNode }) {
+  const Icon = tone === 'bad' ? XCircleIcon : tone === 'warn' ? AlertIcon : CheckCircleIcon;
+  return (
+    <span className="bd-pill bd-status" data-tone={tone}>
+      <Icon size={13} />
+      {children}
+    </span>
+  );
+}
+
 export function KeyMetricCard({
   label,
   value,
@@ -476,6 +415,7 @@ export function KeyMetricCard({
   progress,
   onClick,
   actionLabel,
+  status,
 }: {
   label: ReactNode;
   value: ReactNode;
@@ -495,6 +435,9 @@ export function KeyMetricCard({
   /** Makes the figure a button — used to jump to the block that explains it. */
   onClick?: () => void;
   actionLabel?: string;
+  /** A state, in a word, with its icon — "Healthy", "Late", "Stalled". The
+   *  dataviz rule: a status colour ships with an icon and a label. */
+  status?: { tone: DashTone; label: string };
 }) {
   const head = (
     <>
@@ -519,6 +462,7 @@ export function KeyMetricCard({
             {delta}
           </span>
         )}
+        {status && <StatusPill tone={status.tone}>{status.label}</StatusPill>}
       </div>
       {note && <span className="bd-metricNote">{note}</span>}
     </>
@@ -661,7 +605,18 @@ export function ChartCard({
     if (tab === undefined) setOwn(t);
     onTabChange?.(t);
   };
+  /* THE TABLE VIEW. A chart inside says it has one (`useChartView`), and the
+     card then offers the switch — so no value on a chart is reachable only
+     by hovering, and a card holding no chart shows no dead button. */
+  const [charts, setCharts] = useState(0);
+  const [table, setTable] = useState(false);
+  const register = useCallback(() => {
+    setCharts((n) => n + 1);
+    return () => setCharts((n) => n - 1);
+  }, []);
+  const view = useMemo(() => ({ table, register }), [table, register]);
   const body = typeof children === 'function' ? children(current) : children;
+  const titleText = typeof title === 'string' ? title : 'this chart';
   return (
     <article className="bd-chartCard" id={id}>
       <div className="bd-cardHead">
@@ -669,11 +624,23 @@ export function ChartCard({
           <h3 className="bd-cardTitle">{title}</h3>
           {note && <p className="bd-cardNote">{note}</p>}
         </div>
-        {(tabs || badge) && (
+        {(tabs || badge || charts > 0) && (
           <div className="bd-cardHeadSide">
             {badge && <DashBadge>{badge}</DashBadge>}
             {tabs && tabs.length > 1 && (
               <DashTabs tabs={tabs} value={current} onChange={pick} label={typeof title === 'string' ? title : 'View'} idBase={base} />
+            )}
+            {charts > 0 && (
+              <button
+                type="button"
+                className="bd-viewToggle"
+                aria-pressed={table}
+                aria-label={table ? `Show ${titleText} as a chart` : `Show ${titleText} as a table`}
+                title={table ? 'Show as a chart' : 'Show as a table'}
+                onClick={() => setTable((t) => !t)}
+              >
+                {table ? <ChartIcon /> : <TableIcon />}
+              </button>
             )}
           </div>
         )}
@@ -684,7 +651,7 @@ export function ChartCard({
           ? { role: 'tabpanel', id: `${base}-panel`, 'aria-labelledby': `${base}-tab-${current}` }
           : {})}
       >
-        {body}
+        <ChartViewContext.Provider value={view}>{body}</ChartViewContext.Provider>
       </div>
       {footer && <div className="bd-cardFoot">{footer}</div>}
     </article>
@@ -695,6 +662,10 @@ export interface Bar {
   label: string;
   value: number;
   tone?: DashTone;
+  /** An entity's own colour (a CSS colour or `var(--chart-n)`), when the bar
+   *  stands for something a legend elsewhere already colours. Wins over
+   *  `tone`, so the same thing is never two colours on one screen. */
+  color?: string;
   /** Printed at the end of the row instead of the bare value. */
   display?: string;
   /** The figures behind the bar, for its tooltip — counts, never adjectives. */
@@ -723,8 +694,21 @@ const ariaFor = (b: Bar) => [b.label, b.display ?? String(b.value), b.detail].fi
  */
 export function BarRows({ bars, max, empty = 'Nothing to show yet.' }: { bars: Bar[]; max?: number; empty?: string }) {
   const t = useChartTip();
+  const table = useChartView();
   const ceiling = max ?? Math.max(1, ...bars.map((b) => b.value));
   if (bars.length === 0) return <p className="bd-empty">{empty}</p>;
+  if (table) {
+    return (
+      <DashTable
+        columns={[
+          { key: 'label', label: 'Category' },
+          { key: 'value', label: 'Value', numeric: true },
+          { key: 'detail', label: 'Detail' },
+        ]}
+        rows={bars.map((b) => ({ label: b.label, value: b.display ?? String(b.value), detail: b.detail }))}
+      />
+    );
+  }
   const open = (i: number, el: HTMLElement) =>
     t.show(i, el.querySelector('.bd-barTrack') ?? el, tipFor(bars[i]), 'top');
   return (
@@ -747,7 +731,7 @@ export function BarRows({ bars, max, empty = 'Nothing to show yet.' }: { bars: B
               <span
                 className="bd-barFill"
                 data-tone={b.tone ?? 'info'}
-                style={{ width: `${shareOf(b.value, ceiling) * 100}%` }}
+                style={{ width: `${shareOf(b.value, ceiling) * 100}%`, ...(b.color ? { background: b.color } : {}) }}
               />
             </span>
             <span className="bd-barValue">{b.display ?? b.value}</span>
@@ -759,42 +743,99 @@ export function BarRows({ bars, max, empty = 'Nothing to show yet.' }: { bars: B
   );
 }
 
-/** Vertical bars over named categories, on a hairline grid — TailAdmin's
- *  monthly-sales card, without pretending to a time axis. */
-export function ColumnChart({ bars, max, empty = 'Nothing to show yet.' }: { bars: Bar[]; max?: number; empty?: string }) {
+/** Vertical bars over named categories — TailAdmin's monthly-sales card,
+ *  without pretending to a time axis. Drawn by Recharts (`Columns`). */
+export function ColumnChart({
+  bars,
+  max,
+  empty = 'Nothing to show yet.',
+  height,
+}: {
+  bars: Bar[];
+  max?: number;
+  empty?: string;
+  height?: number;
+}) {
+  return <Columns bars={bars} max={max} empty={empty} height={height} />;
+}
+
+/* ── part of a whole ───────────────────────────────────────────────────── */
+
+export interface Segment {
+  key: string;
+  label: string;
+  value: number;
+  color: string;
+  /** Printed instead of the bare value. */
+  display?: string;
+  detail?: string;
+}
+
+/**
+ * One bar split into its parts, with a legend that carries every figure —
+ * the skill's form for part-to-whole (a donut is deprioritised: angles are
+ * read worse than lengths). Segments are separated by a 2px surface gap, not
+ * a stroke; an empty part is left out of the bar and kept in the legend, so
+ * a zero is stated rather than silently missing.
+ */
+export function SegmentBar({
+  segments,
+  total,
+  label,
+  empty = 'Nothing to show yet.',
+}: {
+  segments: Segment[];
+  /** The whole, when it is more than the parts listed (an "other" not drawn). */
+  total?: number;
+  label?: string;
+  empty?: string;
+}) {
   const t = useChartTip();
-  const ceiling = max ?? Math.max(1, ...bars.map((b) => b.value));
-  if (bars.length === 0) return <p className="bd-empty">{empty}</p>;
-  const open = (i: number, el: HTMLElement) =>
-    t.show(i, el.querySelector('.bd-columnFill') ?? el, tipFor(bars[i]), 'top');
+  const table = useChartView();
+  const sum = total ?? segments.reduce((n, x) => n + x.value, 0);
+  const share = (v: number) => (sum > 0 ? `${((v / sum) * 100).toFixed(v / sum < 0.1 ? 1 : 0)}%` : '—');
+  if (sum <= 0) return <p className="bd-empty">{empty}</p>;
+  if (table) {
+    return (
+      <DashTable
+        caption={label}
+        columns={[
+          { key: 'label', label: 'Part' },
+          { key: 'value', label: 'Count', numeric: true },
+          { key: 'share', label: 'Share', numeric: true },
+        ]}
+        rows={segments.map((x) => ({ label: x.label, value: x.display ?? x.value.toLocaleString('en-US'), share: share(x.value) }))}
+      />
+    );
+  }
+  const drawn = segments.filter((x) => x.value > 0);
   return (
-    <div className="bd-plot" ref={t.host} data-focus={t.active != null ? '' : undefined}>
-      <ul className="bd-columns">
-        {bars.map((b, i) => (
-          <li
-            className="bd-column"
-            key={b.label}
-            tabIndex={0}
-            aria-label={ariaFor(b)}
+    <div className="bd-seg bd-plot" ref={t.host} data-focus={t.active != null ? '' : undefined}>
+      <div className="bd-segBar" role="img" aria-label={`${label ? `${label}: ` : ''}${segments.map((x) => `${x.label} ${x.display ?? x.value} (${share(x.value)})`).join(', ')}`}>
+        {drawn.map((x, i) => (
+          <span
+            key={x.key}
+            className="bd-segPart"
             data-on={t.active === i ? '' : undefined}
-            onPointerEnter={(e) => open(i, e.currentTarget)}
+            style={{ flexGrow: x.value, background: x.color }}
+            onPointerEnter={(e) =>
+              t.show(i, e.currentTarget, {
+                title: x.label,
+                value: `${x.display ?? x.value.toLocaleString('en-US')} · ${share(x.value)}`,
+                lines: x.detail ? [x.detail] : undefined,
+              })
+            }
             onPointerLeave={t.leave}
-            onFocus={(e) => open(i, e.currentTarget)}
-            onBlur={t.hide}
-          >
-            <span className="bd-columnTrack">
-              {/* The value rides on its own bar, so a short bar is not read
-                  against a number at the top of the plot. */}
-              <span className="bd-columnValue">{b.display ?? b.value}</span>
-              <span
-                className="bd-columnFill"
-                data-tone={b.tone ?? 'info'}
-                /* A ZERO MUST DRAW NOTHING — see `.bd-columnFill[data-empty]`. */
-                data-empty={b.value === 0 || undefined}
-                style={{ height: `${shareOf(b.value, ceiling) * 100}%` }}
-              />
-            </span>
-            <span className="bd-columnLabel">{b.label}</span>
+          />
+        ))}
+      </div>
+      <ul className="bd-segLegend">
+        {segments.map((x) => (
+          <li key={x.key}>
+            <i style={{ background: x.color }} aria-hidden="true" />
+            <span className="bd-segName">{x.label}</span>
+            <strong>{x.display ?? x.value.toLocaleString('en-US')}</strong>
+            <span className="bd-segShare">{share(x.value)}</span>
           </li>
         ))}
       </ul>
@@ -802,6 +843,9 @@ export function ColumnChart({ bars, max, empty = 'Nothing to show yet.' }: { bar
     </div>
   );
 }
+
+/** A tone as a mark colour, for a caller building its own series. */
+export const toneColor = (tone: DashTone) => TONE_COLOR[tone];
 
 /* ── insight cards ─────────────────────────────────────────────────────── */
 

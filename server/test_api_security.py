@@ -172,7 +172,9 @@ class Authentication(unittest.TestCase):
                   # Coach Roster's admin-only route. Its second gate (the
                   # Supabase admin check) sits BEHIND this one, so an unkeyed
                   # caller is refused here before Supabase is ever asked.
-                  "/api/analytics/admin/coach/intel/%23Y022GRCJQ"]
+                  "/api/analytics/admin/coach/intel/%23Y022GRCJQ",
+                  # The console's tracking view: admin-only past the key too.
+                  "/api/analytics/admin/tracking"]
         with configured(CLASH_API_KEY=KEY) as mod, serving(mod) as base:
             for path in routes:
                 with self.subTest(path=path):
@@ -729,7 +731,15 @@ class RoutingUnchanged(unittest.TestCase):
         # opponents). The FIRST route here that is admin-only: past the key
         # gate it asks Supabase whether the caller's own token is an admin's
         # (`admin_auth.py`), and `CoachRosterAdminGate` below pins that.
-        self.assertEqual(len(routes), 24)
+        #
+        # 24 on 23 Sep 2026: `/api/analytics/coach/field/<tag>` (what to play
+        # with no opponent — the field plan).
+        #
+        # 25 on 26 Sep 2026: `/api/analytics/admin/tracking` (the console's
+        # Tracking view — who was queued, from which screen, and whether the
+        # bot has them). Admin-gated like the intel route, because it lists
+        # the tags people looked up; `TrackingAdminGate` below pins that.
+        self.assertEqual(len(routes), 25)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]
@@ -860,5 +870,17 @@ class CoachRosterAdminGate(unittest.TestCase):
         self.assertIn("X-Coach-Token", app_module.ALLOWED_HEADERS)
 
 
+
+class TrackingAdminGate(CoachRosterAdminGate):
+    """The console's tracking view sits behind the same admin check."""
+
+    PATH = "/api/analytics/admin/tracking"
+
+    def _serve(self, mod):
+        mod.tracking.activity = lambda days=30, limit=300: {"days": days, "requests": [], "probe": "#Y022GRCJQ"}
+        return serving(mod)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

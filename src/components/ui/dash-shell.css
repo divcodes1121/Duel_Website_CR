@@ -1,0 +1,706 @@
+/* THE DASHBOARD SHELL — see `dash-shell.tsx`.
+ *
+ * Classes are prefixed `dk-` and not hashed, like the kit's `bd-`. Every
+ * colour is a `--dash-*` token from `bionis-dashboard.css`, so the shell and
+ * the cards inside it are one palette, stepped separately for each theme.
+ *
+ * NO GREY TEXT, the project's contrast rule: group labels, sub-lines and the
+ * subtitle are full ink, and hierarchy is size, weight and case.
+ */
+
+.dk-shell {
+  --dk-open: 16.5rem;
+  --dk-mini: 4.5rem;
+  --dk-top: 4.25rem;
+  display: flex;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  background: var(--dash-page);
+  color: var(--text);
+}
+
+/* ── the sidebar ───────────────────────────────────────────────────────── */
+
+.dk-side {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex: none;
+  width: var(--dk-open);
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--dash-line);
+  background: var(--dash-side);
+  transition: width var(--dur-3) var(--ease), transform var(--dur-3) var(--ease);
+}
+
+.dk-shell[data-state='mini'] .dk-side {
+  width: var(--dk-mini);
+}
+
+.dk-shell[data-state='closed'] .dk-side {
+  width: 0;
+  border-right-width: 0;
+}
+
+.dk-sideHead {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  height: var(--dk-top);
+  padding: 0 0.75rem 0 1.1rem;
+  border-bottom: 1px solid var(--dash-line);
+}
+
+.dk-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.dk-brandMark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0.18rem;
+  border-radius: 10px;
+  /* The favicon's ground: the D is near-white and needs the dark tile in both
+     themes. On dark the tile is five points off black, so it takes a ring. */
+  background: #0c1222;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.dk-brandMark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dk-brandText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.dk-brandText strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.dk-brandText small {
+  overflow: hidden;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dk-sideCtl {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+/* The one icon-button look, shared by the sidebar controls and the top bar's
+   "open" button. 36px — a comfortable pointer target without a halo. */
+.dk-iconBtn {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease);
+}
+
+.dk-iconBtn:hover {
+  background: var(--dash-hover);
+}
+
+.dk-iconBtn:active {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+/* On a touch screen the target grows without moving the glyph. */
+@media (pointer: coarse) {
+  .dk-iconBtn::after {
+    position: absolute;
+    inset: -4px;
+    content: '';
+  }
+}
+
+/* ── the nav ───────────────────────────────────────────────────────────── */
+
+.dk-nav {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 1.1rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 0.75rem 1.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dash-line) transparent;
+}
+
+.dk-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.dk-groupLabel {
+  margin: 0 0 0.3rem;
+  padding: 0 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dk-groupToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dk-groupToggle:hover {
+  background: var(--dash-hover);
+}
+
+.dk-groupToggle svg {
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.dk-groupToggle svg[data-open] {
+  transform: rotate(90deg);
+}
+
+.dk-list {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.dk-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.7rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  padding: 0.35rem 0.75rem;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+}
+
+.dk-item:hover {
+  background: var(--dash-hover);
+}
+
+/* THE CURRENT ITEM: the accent wash under the accent ink, and a bar on the
+   leading edge — the selection hue this project already uses for "you are
+   here", never a status colour. */
+.dk-item[aria-current='page'] {
+  background: var(--dash-accent-wash);
+  color: var(--dash-accent);
+  font-weight: 650;
+}
+
+.dk-item[aria-current='page']::before {
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: -0.75rem;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--dash-accent);
+  content: '';
+}
+
+/* Quieter, not greyer: the archived roster keeps full ink and loses weight. */
+.dk-item[data-dim] {
+  font-weight: 400;
+  font-style: italic;
+}
+
+.dk-itemIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.dk-avatar {
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dk-hue) 24%, var(--dash-side));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dk-hue) 45%, transparent);
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.dk-avatar[data-hue='1'] { --dk-hue: var(--chart-1); }
+.dk-avatar[data-hue='2'] { --dk-hue: var(--chart-2); }
+.dk-avatar[data-hue='3'] { --dk-hue: var(--chart-3); }
+.dk-avatar[data-hue='4'] { --dk-hue: var(--chart-4); }
+.dk-avatar[data-hue='5'] { --dk-hue: var(--chart-5); }
+.dk-avatar[data-hue='6'] { --dk-hue: var(--chart-6); }
+
+.dk-itemText {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.dk-itemLabel,
+.dk-itemSub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dk-itemSub {
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.dk-item[aria-current='page'] .dk-itemSub {
+  color: var(--text);
+}
+
+.dk-itemBadge {
+  flex: none;
+  min-width: 1.5rem;
+  border-radius: 999px;
+  background: var(--dash-sunken);
+  box-shadow: inset 0 0 0 1px var(--dash-line);
+  padding: 0.1rem 0.45rem;
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.dk-itemDot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--dk-dot, var(--text));
+  box-shadow: 0 0 0 2px var(--dash-side);
+}
+
+.dk-itemDot[data-tone='good'] { --dk-dot: var(--hue-green); }
+.dk-itemDot[data-tone='warn'] { --dk-dot: var(--warning); }
+.dk-itemDot[data-tone='bad'] { --dk-dot: var(--hue-red); }
+.dk-itemDot[data-tone='info'] { --dk-dot: var(--dash-accent); }
+
+/* A button placed under a group — "Add player". */
+.dk-addBtn {
+  display: flex;
+  width: 100%;
+  min-height: 2.35rem;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.3rem;
+  border: 1px dashed var(--dash-line);
+  border-radius: 10px;
+  background: transparent;
+  padding: 0.35rem 0.75rem;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+
+.dk-addBtn:hover {
+  border-color: var(--dash-accent);
+  background: var(--dash-accent-wash);
+}
+
+.dk-addBtn > svg {
+  flex: none;
+  width: 1.5rem;
+}
+
+/* ── the rail (minimised) ──────────────────────────────────────────────── */
+
+.dk-shell[data-state='mini'] .dk-sideHead {
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  height: auto;
+  padding: 0.85rem 0 0.6rem;
+}
+
+.dk-shell[data-state='mini'] .dk-sideCtl {
+  flex-direction: column;
+}
+
+.dk-shell[data-state='mini'] .dk-brandText,
+.dk-shell[data-state='mini'] .dk-itemText,
+.dk-shell[data-state='mini'] .dk-itemBadge,
+.dk-shell[data-state='mini'] .dk-addBtnText {
+  /* Visually hidden, still read: a rail item's name is its tooltip's text and
+     its accessible name at once. */
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.dk-shell[data-state='mini'] .dk-nav {
+  align-items: center;
+  padding: 0.85rem 0.5rem 1.25rem;
+}
+
+.dk-shell[data-state='mini'] .dk-group {
+  align-items: center;
+  width: 100%;
+}
+
+.dk-shell[data-state='mini'] .dk-groupLabel {
+  overflow: hidden;
+  width: 1.5rem;
+  height: 1px;
+  margin: 0.2rem auto 0.6rem;
+  padding: 0;
+  background: var(--dash-line);
+  color: transparent;
+}
+
+.dk-shell[data-state='mini'] .dk-item {
+  justify-content: center;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.dk-shell[data-state='mini'] .dk-item[aria-current='page']::before {
+  left: -0.5rem;
+}
+
+/* The status dot rides on the icon's corner on the rail. */
+.dk-shell[data-state='mini'] .dk-itemDot {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+}
+
+.dk-shell[data-state='mini'] .dk-addBtn {
+  justify-content: center;
+  width: 2.75rem;
+  margin: 0.3rem auto 0;
+  padding: 0;
+}
+
+.dk-railTip {
+  position: fixed;
+  z-index: 200;
+  transform: translateY(-50%);
+  border: 1px solid var(--dash-line);
+  border-radius: 8px;
+  background: var(--dash-card);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.35);
+  padding: 0.35rem 0.6rem;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: dk-tip var(--dur-1) var(--ease) both;
+}
+
+/* ── the main column ───────────────────────────────────────────────────── */
+
+.dk-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.dk-top {
+  display: flex;
+  flex: none;
+  min-height: var(--dk-top);
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--dash-line);
+  background: var(--dash-page);
+  padding: 0.6rem clamp(1rem, 2.2vw, 1.75rem);
+}
+
+.dk-topText {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.dk-titleRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dk-title {
+  overflow: hidden;
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dk-titleBadge {
+  flex: none;
+  border-radius: 999px;
+  background: var(--dash-sunken);
+  box-shadow: inset 0 0 0 1px var(--dash-line);
+  padding: 0.15rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dk-subtitle {
+  overflow: hidden;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dk-topActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dk-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.25rem;
+  border: 1px solid var(--dash-line);
+  border-radius: 9px;
+  background: var(--dash-card);
+  box-shadow: var(--dash-card-shadow);
+  padding: 0 0.85rem;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+
+.dk-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text) 30%, var(--dash-line));
+  background: var(--dash-sunken);
+}
+
+.dk-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.dk-buttonIcon {
+  display: inline-flex;
+}
+
+/* One turn per press while busy — a finite rotation, never `infinite`. */
+.dk-button[data-busy] .dk-buttonIcon {
+  animation: dk-spin 900ms var(--ease) 3;
+}
+
+.dk-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dash-line) transparent;
+}
+
+.dk-contentInner {
+  display: flex;
+  max-width: 92rem;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 0 auto;
+  padding: clamp(1rem, 2.2vw, 1.75rem) clamp(1rem, 2.2vw, 1.75rem) 3rem;
+}
+
+/* A notice above the content — a preview banner, a load error. */
+.dk-banner {
+  margin: 0;
+  border: 1px solid var(--dash-line);
+  border-radius: 12px;
+  background: var(--dash-sunken);
+  padding: 0.7rem 0.95rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.dk-banner[data-tone='bad'] {
+  border-color: color-mix(in srgb, var(--hue-red) 45%, var(--dash-line));
+  background: var(--red-wash);
+}
+
+/* ── the drawer (below 64rem) ──────────────────────────────────────────── */
+
+@media (max-width: 63.99rem) {
+  .dk-side {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    width: min(18rem, 86vw);
+    border-right: 1px solid var(--dash-line);
+    box-shadow: 18px 0 40px -18px rgba(0, 0, 0, 0.45);
+    transform: translateX(-102%);
+  }
+
+  .dk-shell[data-state='drawer'] .dk-side {
+    transform: none;
+  }
+
+  .dk-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(0, 0, 0, 0.5);
+    animation: dk-fade var(--dur-2) var(--ease) both;
+  }
+
+  .dk-top {
+    padding: 0.55rem 0.9rem;
+  }
+
+  .dk-subtitle {
+    display: none;
+  }
+}
+
+@media (max-width: 30rem) {
+  .dk-title {
+    font-size: 1.05rem;
+  }
+
+  .dk-button .dk-buttonText {
+    /* The icon carries it on a phone; the name stays for a screen reader. */
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    clip: rect(0 0 0 0);
+  }
+
+  .dk-button {
+    width: 2.25rem;
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dk-side,
+  .dk-item,
+  .dk-iconBtn,
+  .dk-groupToggle svg {
+    transition: none;
+  }
+
+  .dk-scrim,
+  .dk-railTip,
+  .dk-button[data-busy] .dk-buttonIcon {
+    animation: none;
+  }
+}
+
+@keyframes dk-tip {
+  from { opacity: 0; transform: translate(-3px, -50%); }
+}
+
+@keyframes dk-fade {
+  from { opacity: 0; }
+}
+
+@keyframes dk-spin {
+  to { transform: rotate(360deg); }
+}

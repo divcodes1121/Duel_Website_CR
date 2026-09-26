@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { coachToken } from './coachToken';
 import { supabase } from './supabase';
 
 /**
@@ -137,6 +138,70 @@ export interface Collection {
   ops?: Ops;
 }
 
+/** One request in the tracking window — `tracking.activity()` on the server. */
+export interface TrackingRequest {
+  tag: string;
+  name: string | null;
+  /** The raw source the route wrote (`duels`, `team`, `leaderboard`, …). */
+  source: string;
+  requestedAt: string;
+  lastSeenAt: string;
+  hits: number;
+  state: 'waiting' | 'collecting';
+  /** When the bot added them to `tracked_players`; null while waiting. */
+  enrolledAt: string | null;
+  waitSeconds: number | null;
+  /** Collected before anybody asked — the request found them already there. */
+  alreadyTracked: boolean;
+}
+
+/**
+ * WHO WAS QUEUED, FROM WHERE, AND WHETHER THE BOT HAS THEM — the console's
+ * Tracking view, from the admin-gated `/api/analytics/admin/tracking`.
+ * `botRead` false means the bot's table could not be read, so every state is
+ * unknown rather than "waiting", and the screen says so.
+ */
+export interface TrackingActivity {
+  generatedAt: string;
+  days: number;
+  botRead: boolean;
+  tracked: number;
+  queue: { rows: number; waiting: number };
+  summary: {
+    requested: number;
+    collecting: number;
+    waiting: number;
+    addedWindow: number;
+    added24h: number;
+    medianWaitSeconds: number | null;
+    waitSample: number;
+  };
+  daily: { day: string; bySource: Record<string, number> }[];
+  bySource: Record<string, { requested: number; collecting: number; waiting: number }>;
+  requests: TrackingRequest[];
+  truncated: boolean;
+  drainBatch?: number;
+  bulkQueueCap?: number;
+}
+
+/** A refusal from the admin route, worded — the same four the roster's
+ *  intel route words, because it is the same gate. */
+function trackingProblem(status: number, code: unknown): string {
+  if (status === 404) return 'The analytics server does not have the tracking route yet — its server half has not been deployed.';
+  switch (code) {
+    case 'unauthorized':
+      return 'The analytics server could not verify your session. Sign out and in again.';
+    case 'forbidden':
+      return 'The analytics server says this account is not an admin.';
+    case 'not_configured':
+      return 'The analytics server is not configured to check admin access (SUPABASE_URL / SUPABASE_ANON_KEY).';
+    case 'unavailable':
+      return 'The analytics server could not reach Supabase to check admin access. Try again in a moment.';
+    default:
+      return `The tracking read failed (${status}).`;
+  }
+}
+
 interface AdminState {
   users: AdminUser[];
   health: Health | null;
@@ -145,8 +210,13 @@ interface AdminState {
   collection: Collection | null;
   loading: boolean;
   error: string | null;
+  tracking: TrackingActivity | null;
+  trackingDays: number;
+  trackingLoading: boolean;
+  trackingError: string | null;
 
   load: () => Promise<void>;
+  loadTracking: (days?: number) => Promise<void>;
   setRole: (id: string, role: AdminUser['role']) => Promise<string | null>;
   setCoach: (id: string, value: boolean) => Promise<string | null>;
   endTrial: (id: string) => Promise<string | null>;
@@ -160,9 +230,17 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
   collection: null,
   loading: false,
   error: null,
+  tracking: null,
+  trackingDays: 30,
+  trackingLoading: false,
+  trackingError: null,
 
   async load() {
     set({ loading: true, error: null });
+    /* The tracking read is a FIFTH independent source and runs beside the
+       rest: the overview's queue figures come from it, and a refusal there
+       (an older server, a missing Supabase key) must not hold up the four. */
+    void get().loadTracking();
 
     /* All three in parallel and none allowed to sink the others: the users
        table, the deployment's config and the VPS's storage are three
@@ -211,6 +289,30 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
     if (collection.status === 'fulfilled') next.collection = collection.value;
 
     set(next);
+  },
+
+  async loadTracking(days) {
+    const d = days ?? get().trackingDays;
+    set({ trackingLoading: true, trackingError: null, trackingDays: d });
+    try {
+      const base = import.meta.env.VITE_ANALYTICS_BASE ?? '';
+      const token = await coachToken();
+      const res = await fetch(`${base}/api/analytics/admin/tracking?days=${d}`, {
+        headers: token ? { 'X-Coach-Token': token } : {},
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+        throw new Error(trackingProblem(res.status, body.error));
+      }
+      const data = (await res.json()) as TrackingActivity;
+      /* A slower answer for a window the reader has already left is dropped,
+         so rapid tab switching cannot show 90 days under a 7-day tab. */
+      if (get().trackingDays === d) set({ tracking: data, trackingLoading: false });
+    } catch (e) {
+      if (get().trackingDays === d) {
+        set({ trackingError: e instanceof Error ? e.message : 'The tracking read failed.', trackingLoading: false });
+      }
+    }
   },
 
   /** Item: end someone's trial now. Not a role change — see the SQL. */

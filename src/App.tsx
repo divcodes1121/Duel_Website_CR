@@ -6,7 +6,6 @@ import { ResetPassword } from './components/Auth/ResetPassword';
 import { useAccountStore } from './state/accountStore';
 import { isSupabaseConfigured } from './state/supabase';
 import styles from './App.module.css';
-import { AdminConsole } from './components/Admin/AdminConsole';
 /* SPLIT OUT, the same treatment jsPDF and three.js get and for the same reason:
    it is a side route most visitors never open, and everything it needs — the
    book, the leaf machinery, the magnifier, eight plates of copy — would
@@ -20,6 +19,10 @@ const Sketchbook = lazy(() =>
    public bundle should pay for it. */
 const CoachRoster = lazy(() => import('./components/Admin/CoachRoster/CoachRoster'));
 const PlayerHome = lazy(() => import('./components/Player/PlayerHome'));
+/* THE CONSOLE, lazy since it moved onto the dashboard shell and its charts
+   (2026-09-26): Recharts and the kit are ~100 kB gzip that no public page may
+   pay for, and an admin opening `#/admin` fetches them with the route. */
+const AdminConsole = lazy(() => import('./components/Admin/AdminConsole'));
 
 /* One shell for every signed-in route. The builder, Deck's Home and Counter
  * Palette used to be separate full pages, each with its own nav bar; they now
@@ -161,7 +164,9 @@ function App() {
     if (route.startsWith('#/admin')) {
       return (
         <div className={styles.app}>
-          <AdminConsole />
+          <Suspense fallback={null}>
+            <AdminConsole />
+          </Suspense>
         </div>
       );
     }

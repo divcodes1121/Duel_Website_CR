@@ -100,6 +100,28 @@ def _ensure() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_tag_requests_at "
                 "ON tag_requests(requested_at)"
             )
+            # WHERE A QUEUE ROW GOES WHEN THE BOT HAS ENROLLED IT. The prune
+            # below used to DELETE it, and the source and the request time went
+            # with it — so the console could say how many tags were waiting and
+            # never who had been queued, from where, or how long they waited.
+            # Same columns plus the moment it left the queue; bounded by
+            # `HISTORY_DAYS`.
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tag_history (
+                    tag          TEXT PRIMARY KEY,
+                    requested_at TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    hits         INTEGER NOT NULL DEFAULT 1,
+                    source       TEXT,
+                    pruned_at    TEXT NOT NULL
+                )
+                """
+            )
+            con.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tag_history_at "
+                "ON tag_history(requested_at)"
+            )
             con.commit()
             _ready = True
         finally:
@@ -108,6 +130,16 @@ def _ensure() -> None:
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _stamp(epoch: float) -> str:
+    """The queue's own timestamp format, for an arbitrary moment."""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
+
+
+#: How long a row stays in `tag_history` after it was requested. Long enough
+#: for the console's 90-day view; the table is one short row per enrolled tag.
+HISTORY_DAYS = 120
 
 
 def bot_tracked(tag: str) -> bool:
@@ -195,7 +227,22 @@ def prune_enrolled() -> int:
         done = [t for t in queued if t in tracked]
         if not done:
             return 0
+        # MOVED, NOT DROPPED — see `tag_history` in `_ensure`.
+        now = _now()
+        con.executemany(
+            """
+            INSERT OR REPLACE INTO tag_history
+                (tag, requested_at, last_seen_at, hits, source, pruned_at)
+            SELECT tag, requested_at, last_seen_at, hits, source, ?
+            FROM tag_requests WHERE tag = ?
+            """,
+            ((now, t) for t in done),
+        )
         con.executemany("DELETE FROM tag_requests WHERE tag = ?", ((t,) for t in done))
+        con.execute(
+            "DELETE FROM tag_history WHERE requested_at < ?",
+            (_stamp(time.time() - HISTORY_DAYS * 86400),),
+        )
         con.commit()
         return len(done)
     except Exception:
@@ -414,3 +461,180 @@ def pending(limit: int = 200) -> list[dict]:
             }
         )
     return out
+
+
+def _epoch(stamp: str | None) -> float | None:
+    """Seconds since the epoch for both formats this module meets: the queue's
+    `2026-09-26T12:57:42Z` and the bot's `2026-09-26T13:06:58.476824+00:00`."""
+    if not stamp:
+        return None
+    try:
+        from datetime import datetime
+
+        return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _bot_rows() -> tuple[dict[str, str], bool]:
+    """{tag: added_at} for every player the bot collects, and whether the read
+    worked. A plain read through the read-only path, like `bot_tracked_set`."""
+    path = cd.resolve_db_path()
+    if not path:
+        return {}, False
+    try:
+        con = cd.connect(path)
+    except Exception:
+        return {}, False
+    try:
+        return {r[0]: (r[1] or "") for r in con.execute("SELECT tag, added_at FROM tracked_players")}, True
+    except Exception:
+        return {}, False
+    finally:
+        con.close()
+
+
+def _names(tags: list[str]) -> dict[str, str]:
+    """In-game names for up to a few hundred tags, in batches. Empty on failure:
+    the console then shows tags, which is what it showed before."""
+    path = cd.resolve_db_path()
+    if not path or not tags:
+        return {}
+    out: dict[str, str] = {}
+    try:
+        con = cd.connect(path)
+    except Exception:
+        return {}
+    try:
+        for i in range(0, len(tags), 400):
+            chunk = tags[i : i + 400]
+            q = "SELECT tag, name FROM player_names WHERE tag IN (%s)" % ",".join("?" * len(chunk))
+            for r in con.execute(q, chunk):
+                if r[1]:
+                    out[r[0]] = r[1]
+    except Exception:
+        pass
+    finally:
+        con.close()
+    return out
+
+
+def activity(days: int = 30, limit: int = 300) -> dict:
+    """WHO WAS QUEUED, FROM WHERE, AND WHETHER THE BOT HAS PICKED THEM UP.
+
+    The console's Tracking view. Three answers from two tables:
+
+      * every request in the window — the queue AND `tag_history`, so a tag the
+        bot enrolled an hour ago is still listed — with its state: `waiting`
+        (queued, not collected yet) or `collecting` (in the bot's
+        `tracked_players`), when the bot added it and how long that took;
+      * the bot's additions per day, each attributed to the source that queued
+        it, or `direct` when no queue row exists (a Discord command, or an
+        enrolment from before this history was kept);
+      * the median wait from request to enrolment.
+
+    Counts over the whole window; only the listed rows are capped at `limit`,
+    and `truncated` says so. Reads the bot's table read-only; writes nothing.
+    """
+    days = max(1, min(int(days or 30), HISTORY_DAYS))
+    limit = max(1, min(int(limit or 300), 2000))
+    now = time.time()
+    # WHOLE UTC DAYS: today and the `days - 1` before it. A rolling cut would
+    # open the chart on a partial day, which draws as a dip that did not happen.
+    since = _stamp((now // 86400 - (days - 1)) * 86400)
+    day_ago = now - 86400
+
+    _ensure()
+    con = _connect()
+    try:
+        queued = [dict(r) for r in con.execute(
+            "SELECT tag, requested_at, last_seen_at, hits, source FROM tag_requests")]
+        history = [dict(r) for r in con.execute(
+            "SELECT tag, requested_at, last_seen_at, hits, source, pruned_at FROM tag_history")]
+    finally:
+        con.close()
+
+    bot, bot_ok = _bot_rows()
+
+    # Where each tag came from, whenever it was asked for. A tag still in the
+    # queue is the fresher record, so it wins over its own history row.
+    origin: dict[str, dict] = {r["tag"]: r for r in history}
+    origin.update({r["tag"]: r for r in queued})
+
+    # ── the requests in the window ────────────────────────────────────────
+    rows = []
+    for r in origin.values():
+        if (r["requested_at"] or "") < since:
+            continue
+        added = bot.get(r["tag"]) or None
+        req = _epoch(r["requested_at"])
+        got = _epoch(added)
+        wait = round(got - req) if got is not None and req is not None and got >= req else None
+        rows.append({
+            "tag": r["tag"],
+            "source": r["source"] or "unknown",
+            "requestedAt": r["requested_at"],
+            "lastSeenAt": r["last_seen_at"],
+            "hits": r["hits"],
+            "state": "collecting" if added else "waiting",
+            "enrolledAt": added,
+            "waitSeconds": wait,
+            # Collected before anyone asked: the request found it already there.
+            "alreadyTracked": bool(added) and wait is None,
+        })
+    rows.sort(key=lambda x: x["requestedAt"] or "", reverse=True)
+
+    by_source: dict[str, dict[str, int]] = {}
+    for x in rows:
+        b = by_source.setdefault(x["source"], {"requested": 0, "collecting": 0, "waiting": 0})
+        b["requested"] += 1
+        b[x["state"]] += 1
+
+    waits = sorted(x["waitSeconds"] for x in rows if x["waitSeconds"] is not None)
+    median = None
+    if waits:
+        mid = len(waits) // 2
+        median = waits[mid] if len(waits) % 2 else round((waits[mid - 1] + waits[mid]) / 2)
+
+    # ── the bot's additions per day, by where they came from ──────────────
+    daily: dict[str, dict[str, int]] = {}
+    added_window = added_24h = 0
+    for tag, added in bot.items():
+        if not added or added < since:
+            continue
+        added_window += 1
+        t = _epoch(added)
+        if t is not None and t >= day_ago:
+            added_24h += 1
+        src = (origin.get(tag) or {}).get("source") or "direct"
+        day = daily.setdefault(added[:10], {})
+        day[src] = day.get(src, 0) + 1
+
+    shown = rows[:limit]
+    names = _names([x["tag"] for x in shown])
+    for x in shown:
+        x["name"] = names.get(x["tag"])
+
+    waiting_now = sum(1 for r in queued if r["tag"] not in bot) if bot_ok else len(queued)
+    return {
+        "generatedAt": _stamp(now),
+        "days": days,
+        # False when the bot's table could not be read: every state then says
+        # `waiting`, and the console must not present that as fact.
+        "botRead": bot_ok,
+        "tracked": len(bot),
+        "queue": {"rows": len(queued), "waiting": waiting_now},
+        "summary": {
+            "requested": len(rows),
+            "collecting": sum(1 for x in rows if x["state"] == "collecting"),
+            "waiting": sum(1 for x in rows if x["state"] == "waiting"),
+            "addedWindow": added_window,
+            "added24h": added_24h,
+            "medianWaitSeconds": median,
+            "waitSample": len(waits),
+        },
+        "daily": [{"day": d, "bySource": daily[d]} for d in sorted(daily)],
+        "bySource": by_source,
+        "requests": shown,
+        "truncated": len(rows) > len(shown),
+    }

@@ -23,7 +23,6 @@ import {
   ChartCard,
   ChartGrid,
   Dashboard,
-  DashboardHeader,
   DashHero,
   InsightCard,
   InsightGrid,
@@ -85,11 +84,9 @@ export function RosterOverview({ players }: { players: RosterPlayer[] }) {
 
   return (
     <Dashboard className={styles.overview}>
-      <DashboardHeader
-        title="Your roster"
-        subtitle="Counts of your own preparation. Nothing here is a rating of a player."
-      />
-
+      {/* THE HEADING IS THE SHELL'S NOW ("Roster overview", with the "not a
+          rating" line as its subtitle), so the page does not open by saying
+          its own name twice. */}
       {error && <p className={styles.formError}>{error}</p>}
 
       {sum && shape && (

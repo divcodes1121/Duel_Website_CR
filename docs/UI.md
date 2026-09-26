@@ -1114,6 +1114,113 @@ only some screens had.
   see "Exporting a screen as a PDF" in the README. Nothing in the report engine
   may set a transparency state; a test enforces it.
 
+## The dashboard shell, and charts that follow the rules (2026-09-27)
+
+The console, the Coach Roster and the player's own page (`#/my`) sit in one
+shell, `ui/dash-shell.tsx` + `dash-shell.css`, on one kit
+(`ui/bionis-dashboard.{tsx,css}`) whose charts are now drawn by Recharts
+(`ui/dash-charts.tsx`). Asked for as "a left sidebar with open, close and
+minimise buttons, cool colours for both themes, and charts that are not
+boring".
+
+### The shell
+
+- **Three states, remembered per screen** (`dk-shell:<id>` in localStorage,
+  read in try/catch): open (264px), minimised to a 72px rail, closed. Minimise
+  and close are different requests — the rail keeps one-click navigation for
+  somebody who wants the width; closed gives the content the whole window and
+  leaves one "Open sidebar" button in the top bar, which takes focus.
+- **Below 64rem it is a drawer** whatever the remembered state says — a rail
+  beside a dashboard does not fit a phone. Scrim, Esc, and navigation all close
+  it; opening it focuses the current item.
+- **Ctrl/⌘+B** toggles open ↔ rail (the shadcn convention), except while
+  typing in a field.
+- **A hidden sidebar is `inert`**, so its links are not in the tab order.
+- **A rail item's label stays in the DOM**, visually hidden, so it is still the
+  accessible name; the visible tooltip is a PORTAL, because the rail scrolls and
+  a tooltip inside a scroller is clipped by it.
+- **Status dots never carry meaning alone**: each has a screen-reader word.
+- The shell sets `data-app-inner` on `<html>` like the Dashboard does, so
+  headings on these routes are in the body face too.
+
+### The palette
+
+`--dash-*` surfaces and `--chart-1..6` series are defined in the kit's CSS per
+theme. Dark keeps the site's black ground and lifts zinc surfaces off it
+(sidebar `#0b0b0d`, card `#141417`, sunken `#1c1c21`) instead of shadows — the
+elevation model Vercel, Linear and shadcn's dark themes use. Light is a white
+card on `#f4f4f6` with a hairline and TailAdmin's two-layer shadow.
+
+The series order is violet > teal > amber > blue > pink > lime, run through the
+dataviz skill's validator against `#141417` and `#ffffff`: worst adjacent
+colour-blind ΔE 11.3 (target 8), normal-vision floor 21.2 (15), every slot at
+least 3:1 on its card. **Red is not a series colour** — it is reserved for a
+loss or a fault, and ships with a word or an icon. `tests/dashCharts.test.ts`
+pins the hexes; re-run the validator before changing one.
+
+### Why Recharts
+
+SVG, so a CSS custom property works as a fill or a stroke and both themes come
+free (the shadcn/ui charts depend on exactly this); a keyboard layer on by
+default in v3; the renderer shadcn's and Tremor's dashboards are built on. It is
+~115 kB gzip, which is why it may only ever load in the three lazy routes —
+`AdminConsole` became `React.lazy` for this.
+
+### The rules, as code
+
+`tests/dashCharts.test.ts` sweeps the chart module for the ones a diff can
+break silently: every line and area has `connectNulls={false}` (a thin day is a
+gap, never a zero, never bridged), every bar `maxBarSize={24}`, no second
+y-axis anywhere, solid hairline grids, no series colour on text, nothing
+infinite. It was proven by bridging a gap on purpose and watching it fail.
+
+- **Every chart has a table view.** A chart registers with its card
+  (`useChartView`) and the card draws a table toggle only then, so no value is
+  reachable only by hovering and a card with no chart has no dead button.
+- **Tooltips lead with the value** and key each series with a short stroke of
+  its colour; the stacked chart lists every series at that day and a total.
+- **Stacked columns** round only the topmost non-empty segment and give each
+  segment with one above it a 2px surface gap, instead of a stroke round it.
+- **Part to whole is a bar** (`SegmentBar`), not a donut: angles read worse
+  than lengths. An empty part leaves the bar and stays in the legend.
+
+### Two faults the screenshots found, not the tests
+
+1. **Colour followed the rank, not the entity.** "Requests by screen" drew every
+   bar violet directly under a legend in which violet meant *Player search*, so
+   the Team Analysis bar read as the wrong source. `Bar.color` lets a bar carry
+   its entity's colour, and wins over `tone`.
+2. **The thing the view exists for was a flat line.** On one axis, four
+   leaderboard days of 400-570 enrolments made the one-to-fourteen a day that
+   people ask for on the site invisible. The "Asked on the site" tab re-scales
+   to those families — same colours, same order.
+
+### The day chart is two charts
+
+The coach's Overview drew battles as bars and the win rate as a line in ONE
+plot with two y-axes. Two measures of different units are two charts: battles
+per day stacked by result above, the win rate below with the window's own rate
+as a reference line, sharing their days and their crosshair (`syncId`).
+
+### Traps hit building it
+
+- **The first import of Recharts under `vite dev` RELOADS THE PAGE** — Vite
+  discovers the dependency, pre-bundles it and reloads, and a Playwright
+  `evaluate` in flight dies with "execution context was destroyed". Run once,
+  let it optimise, run again.
+- **A harness that seeds SHARED stores renders the screen twice.** At `#/my`
+  the app itself mounted `PlayerHome` from the same seeded stores, so every
+  locator found two shells; scope to the harness root.
+- **A toggle's accessible name changes once pressed** ("…as a table" becomes
+  "…as a chart"), so a second click by the first name times out.
+- **The Bash tool collapses `\\` to `\` even inside a quoted heredoc**, which
+  turned a regex's `\\:` into `\:` — a SyntaxError under the `u` flag. Write a
+  patch with backslashes to a file and run it.
+- **Dead CSS was pruned BY REFERENCE**, not by eye: list every class a module
+  defines that no importer references, drop only selectors naming those, then
+  prove nothing referenced went missing. The roster's module went 1,837 → 1,369
+  lines, including rules for tabs deleted weeks ago.
+
 ## Working on this
 
 ```bash

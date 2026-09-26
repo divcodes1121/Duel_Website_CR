@@ -14,7 +14,6 @@ import {
   ChartCard,
   ChartGrid,
   Dashboard,
-  DashboardHeader,
   DashHero,
   InsightCard,
   InsightGrid,
@@ -23,7 +22,9 @@ import {
   MetricGrid,
   ScoreDonut,
 } from '../ui/bionis-dashboard';
-import { CrownIcon, ShieldIcon, SwordsIcon, TrendIcon } from '../Dashboard/icons';
+import { CrownIcon, DeckIcon, HomeIcon, ShieldIcon, SwordsIcon, TargetIcon, TrendIcon } from '../Dashboard/icons';
+import { DashShell, type ShellGroup } from '../ui/dash-shell';
+import { GridIcon } from '../ui/dash-icons';
 import { fetchFieldPlan, fetchPlayerReport, type FieldPlan, type PlayerReport } from '../../state/analyticsClient';
 import { ProgressCard } from '../Admin/CoachRoster/ProgressCard';
 import styles from '../Admin/CoachRoster/CoachRoster.module.css';
@@ -31,6 +32,32 @@ import own from './PlayerHome.module.css';
 
 const SECTIONS = ['overview', 'practise', 'arsenal', 'battles'] as const;
 type Section = (typeof SECTIONS)[number];
+
+const ICON: Record<Section, JSX.Element> = {
+  overview: <GridIcon />,
+  practise: <TargetIcon size={18} />,
+  arsenal: <DeckIcon size={18} />,
+  battles: <SwordsIcon size={18} />,
+};
+
+/** `#/my/practise` -> `practise`; the bare route is the overview. The section
+ *  is in the URL now, so a refresh keeps it and a coach can send the link. */
+function sectionOf(hash: string): Section {
+  const s = hash.replace(/^#\/my\/?/, '').split(/[/?#]/)[0];
+  return (SECTIONS as readonly string[]).includes(s) ? (s as Section) : 'overview';
+}
+
+function useHash(): string {
+  const [hash, setHash] = useState(window.location.hash);
+  useEffect(() => {
+    const on = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  return hash;
+}
+
+const hrefOf = (s: Section) => (s === 'overview' ? '#/my' : `#/my/${s}`);
 const LABEL: Record<Section, string> = {
   overview: 'Overview',
   practise: 'What to practise',
@@ -63,6 +90,11 @@ const nf = new Intl.NumberFormat('en-US');
  *
  * A COACH WHO IS ALSO A PLAYER keeps the console and the roster; this is one
  * more screen they can open, not a mode the app switches into.
+ *
+ * IN THE DASHBOARD SHELL SINCE 2026-09-26, like the console and the roster:
+ * the four sections are the sidebar (open, minimised to a rail, or closed; a
+ * drawer on a phone) and each has its own URL, `#/my/practise` and so on. A
+ * player with two coaches picks between them in the sidebar too.
  */
 export default function PlayerHome() {
   const seats = useMyCoach((s) => s.seats);
@@ -74,7 +106,10 @@ export default function PlayerHome() {
   const userId = useAccountStore((s) => s.userId);
 
   const [seatId, setSeatId] = useState<string | null>(null);
-  const [section, setSection] = useState<Section>('overview');
+  const section = sectionOf(useHash());
+  const setSection = (s: Section) => {
+    window.location.hash = hrefOf(s);
+  };
   /* THE BRIEF PLAN, for the overview's figures. It is the SAME answer the
      practise tab draws in full — a projection of it, proven identical on
      picks, order, rates and likelihoods — so the two tabs cannot disagree
@@ -170,76 +205,63 @@ export default function PlayerHome() {
     updatedAt: '',
   };
 
+  const groups: ShellGroup[] = [
+    {
+      id: 'me',
+      label: 'My coaching',
+      items: SECTIONS.map((sec) => ({ id: sec, label: LABEL[sec], icon: ICON[sec], href: hrefOf(sec), current: sec === section })),
+    },
+    ...(seats && seats.length > 1
+      ? [
+          {
+            id: 'coaches',
+            label: 'Your coaches',
+            items: seats.map((st) => ({
+              id: st.id,
+              label: st.coachName,
+              onSelect: () => setSeatId(st.id),
+              current: st.id === seat.id,
+            })),
+          },
+        ]
+      : []),
+    {
+      id: 'site',
+      label: 'Deckkies',
+      items: [{ id: 'home', label: 'Back to Deckkies', icon: <HomeIcon size={18} />, href: '#/' }],
+    },
+  ];
+
   return (
-    <div className={own.page}>
-      {/* A WAY BACK. `#/my` is its own route outside the Dashboard shell, so
-          it inherits none of the app's navigation — without this the only exit
-          is the browser's back button, and there is none at all for somebody
-          who arrived by typing the URL or following a link. The console had
-          exactly this gap and carries the same control. */}
-      <a className={own.back} href="#/">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-             strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-        Home
-      </a>
-
+    <DashShell
+      id="my"
+      product="My coaching"
+      title={LABEL[section]}
+      subtitle={`${seat.displayName || seat.playerTag} · set up for you by ${seat.coachName}`}
+      groups={groups}
+    >
       <Dashboard className={styles.overview}>
-        <DashboardHeader
-          title="My coaching"
-          subtitle={`Set up for you by ${seat.coachName}.`}
-          control={
-            seats && seats.length > 1 ? (
-              <div className={own.seatRow} role="group" aria-label="Your coaches">
-                {seats.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className={own.seatChip}
-                    aria-pressed={s.id === seat.id}
-                    onClick={() => setSeatId(s.id)}
-                  >
-                    {s.coachName}
-                  </button>
-                ))}
-              </div>
-            ) : undefined
-          }
-        />
+        {section === 'overview' && (
+          <DashHero heading={seat.displayName || seat.playerTag} badge={seat.playerTag} badgeTone="neutral">
+            Everything here is counted from your own 1v1 battles. Nothing on this page is a rating of you.
+          </DashHero>
+        )}
 
-        <DashHero heading={seat.displayName || seat.playerTag} badge={seat.playerTag} badgeTone="neutral">
-          Everything here is counted from your own 1v1 battles. Nothing on this page is a rating of you.
-        </DashHero>
-
-        <nav className={styles.tabs} aria-label="Sections">
-          {SECTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={styles.tab}
-              aria-current={s === section ? 'page' : undefined}
-              onClick={() => setSection(s)}
-            >
-              {LABEL[s]}
-            </button>
-          ))}
-          {section === 'practise' && (
-            <div className={styles.windowChips} role="group" aria-label="Window">
-              {[...DAY_PRESETS, 0].map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  className={styles.windowChip}
-                  aria-pressed={w === win}
-                  onClick={() => setWin(w as typeof win)}
-                >
-                  {w === 0 ? 'All' : `${w}d`}
-                </button>
-              ))}
-            </div>
-          )}
-        </nav>
+        {section === 'practise' && (
+          <div className={styles.windowChips} role="group" aria-label="Window">
+            {[...DAY_PRESETS, 0].map((w) => (
+              <button
+                key={w}
+                type="button"
+                className={styles.windowChip}
+                aria-pressed={w === win}
+                onClick={() => setWin(w as typeof win)}
+              >
+                {w === 0 ? 'All' : `${w}d`}
+              </button>
+            ))}
+          </div>
+        )}
 
         {section === 'overview' && <Overview plan={plan} report={report} onPractise={() => setSection('practise')} />}
 
@@ -254,38 +276,30 @@ export default function PlayerHome() {
             badge={`${myDecks.length} deck${myDecks.length === 1 ? '' : 's'}`}
           >
             {myDecks.length === 0 ? (
-              <p className={styles.muted}>
-                Your coach has not approved any decks for you yet.
-              </p>
+              <p className={styles.muted}>Your coach has not approved any decks for you yet.</p>
             ) : (
               <ul className={styles.deckList}>
                 {myDecks.map((d) => {
                   /* AN ARSENAL DECK'S ORDER IS POSITIONAL — slot 0 evolution,
                      1 hero, 2 wild — so its art has to be seated from the
-                     slots. Without this every card drew its BASE form, so an
-                     evolution, a hero and a champion in the first three slots
-                     rendered as plain cards. `ArsenalTab` and `AssistTab` draw
-                     the same rows through `positionalArt`; this screen did not,
-                     which is exactly the kind of divergence that makes a
-                     player's own dashboard disagree with their coach's. */
+                     slots, exactly as `ArsenalTab` and `AssistTab` draw the
+                     same rows. */
                   const art = positionalArt(d.cards);
                   return (
-                  <li key={d.id} className={styles.deckItem}>
-                    <div className={styles.deckItemHead} style={{ cursor: 'default' }}>
-                      <div className={styles.deckCards}>
-                        {d.cards.map((c) => (
-                          <CardArt key={c} card={c} variant={art[c]} className={styles.deckCard} />
-                        ))}
+                    <li key={d.id} className={styles.deckItem}>
+                      <div className={styles.deckItemHead} style={{ cursor: 'default' }}>
+                        <div className={styles.deckCards}>
+                          {d.cards.map((c) => (
+                            <CardArt key={c} card={c} variant={art[c]} className={styles.deckCard} />
+                          ))}
+                        </div>
+                        <span className={styles.deckFigures}>
+                          <span className={styles.deckName}>{d.name || d.archetype || 'Deck'}</span>
+                          {d.comfort != null && <span className={styles.muted}>Comfort {d.comfort} of 5</span>}
+                          <DeckActions cards={d.cards} name={d.name || 'Deck'} />
+                        </span>
                       </div>
-                      <span className={styles.deckFigures}>
-                        <span className={styles.deckName}>{d.name || d.archetype || 'Deck'}</span>
-                        {d.comfort != null && (
-                          <span className={styles.muted}>Comfort {d.comfort} of 5</span>
-                        )}
-                        <DeckActions cards={d.cards} name={d.name || 'Deck'} />
-                      </span>
-                    </div>
-                  </li>
+                    </li>
                   );
                 })}
               </ul>
@@ -299,7 +313,7 @@ export default function PlayerHome() {
           </div>
         )}
       </Dashboard>
-    </div>
+    </DashShell>
   );
 }
 

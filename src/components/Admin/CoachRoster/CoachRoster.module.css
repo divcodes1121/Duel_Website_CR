@@ -18,286 +18,6 @@
   color: var(--text);
 }
 
-/* ── top bar ─────────────────────────────────────────────────────────── */
-
-.top {
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
-  flex-wrap: wrap;
-}
-
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.42rem 0.85rem 0.42rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  font-size: 0.84rem;
-  font-weight: 600;
-  color: var(--text);
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    border-color var(--dur-2) var(--ease),
-    transform var(--dur-2) var(--ease);
-}
-
-.back:hover {
-  border-color: var(--text-muted);
-  transform: translateX(-2px);
-}
-
-.title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  font-weight: 700;
-}
-
-.experimental {
-  padding: 0.2rem 0.55rem;
-  border: 1px dashed var(--border-strong);
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.topActions {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-left: auto;
-}
-
-.previewBanner {
-  margin: 0;
-  padding: 0.6rem 0.85rem;
-  border: 1px dashed var(--border-strong);
-  border-radius: 10px;
-  font-size: 0.8rem;
-}
-
-/* ── the two columns ─────────────────────────────────────────────────── */
-
-.body {
-  display: grid;
-  grid-template-columns: 15.5rem minmax(0, 1fr);
-  gap: 1rem;
-  align-items: start;
-}
-
-.roster {
-  position: sticky;
-  top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.9rem;
-  border: 1px solid var(--glass-stroke);
-  border-radius: 14px;
-  background: var(--surface);
-}
-
-.rosterHead {
-  display: flex;
-  /* `center`, not `baseline`: the back control is an icon box and has no text
-     baseline to sit on, so baseline alignment dropped it below the heading. */
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-/* The back control and the heading travel together on the left; the count
-   stays pinned right, which `space-between` does with exactly two children. */
-.rosterHeadLeft {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.rosterBack {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  flex: none;
-  border-radius: 6px;
-  border: 1px solid var(--glass-stroke);
-  color: var(--text);
-  text-decoration: none;
-  /* The glyph is drawn at the icon's own size; this keeps it inside the box. */
-  font-size: 0.7rem;
-}
-
-.rosterBack svg {
-  width: 0.85rem;
-  height: 0.85rem;
-}
-
-.rosterBack:hover {
-  border-color: var(--border-strong);
-  background: var(--surface);
-}
-
-/* A COARSE POINTER GETS A REAL TARGET WITHOUT MOVING THE TYPE. The box is
-   21px, well under the 44px a finger needs, and growing it would push the
-   heading off its line — so the hit area is an inset `::after`, the same
-   technique the theme toggle and the recovery link already use. */
-@media (pointer: coarse) {
-  .rosterBack {
-    position: relative;
-  }
-
-  .rosterBack::after {
-    content: '';
-    position: absolute;
-    inset: -0.55rem;
-  }
-}
-
-.rosterTitle {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.rosterCount {
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.rosterList {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* A player card: the name, the tag under it. Selection is violet, as it is
-   everywhere in this app — a leading edge and a tinted fill, not colour alone. */
-.rosterItem {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  width: 100%;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-nested);
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color var(--dur-2) var(--ease),
-    background var(--dur-2) var(--ease);
-}
-
-.rosterItem:hover {
-  border-color: var(--border-strong);
-}
-
-.rosterItem[data-on] {
-  border-color: var(--accent-select-edge);
-  background: var(--accent-select-fill-sunken);
-  box-shadow: inset 3px 0 0 var(--accent-select);
-}
-
-.rosterItem[data-dim] .rosterName {
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-
-.rosterName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.88rem;
-  font-weight: 600;
-}
-
-.rosterTag {
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.addButton {
-  padding: 0.55rem 0.7rem;
-  border: 1px dashed var(--border-strong);
-  border-radius: 10px;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.addButton:hover {
-  border-style: solid;
-}
-
-.archivedWrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.archivedToggle {
-  align-self: flex-start;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.76rem;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  min-width: 0;
-}
-
-/* The switcher is the phone's roster; on a desktop the sidebar is. */
-.switcher {
-  display: none;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.switcherDropdown.switcherDropdown {
-  flex: 1;
-  width: auto;
-}
-
-@media (max-width: 860px) {
-  .body {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .roster {
-    display: none;
-  }
-
-  .switcher {
-    display: flex;
-  }
-}
-
 /* ── the player ──────────────────────────────────────────────────────── */
 
 .overview {
@@ -745,112 +465,10 @@
   gap: 0.4rem 1rem;
 }
 
-.hiddenNote {
-  margin: 0;
-  font-size: 0.8rem;
-  cursor: help;
-}
-
 .shareGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
   gap: 0.9rem;
-}
-
-/* chart */
-
-.chartWrap {
-  /* The floating tooltip is positioned against this box. */
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.chart {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.gridLine {
-  stroke: var(--glass-stroke);
-  stroke-width: 1;
-}
-
-.axisText {
-  fill: var(--text);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Fill comes from the gradient the chart defines per instance; this only
-   carries the hover state and the transition. */
-.dayBar {
-  opacity: 0.72;
-  transition: opacity var(--dur-1) var(--ease);
-}
-
-.dayBar[data-on] {
-  opacity: 1;
-}
-
-.rateArea {
-  pointer-events: none;
-}
-
-.hoverGuide {
-  stroke: var(--text);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-  opacity: 0.32;
-  pointer-events: none;
-}
-
-.rateLine {
-  fill: none;
-  stroke: var(--hue-green);
-  stroke-width: 2.25;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  /* Dark-mode only: `--glow-core` is 0% on light, so the same declaration is
-     a glow there and nothing here. */
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--hue-green) var(--glow-core), transparent));
-}
-
-.rateDot {
-  fill: var(--hue-green);
-}
-
-.chartLegend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem 1rem;
-  font-size: 0.76rem;
-}
-
-.chartLegend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.keyBar,
-.keyLine {
-  display: inline-block;
-  width: 0.8rem;
-}
-
-.keyBar {
-  height: 0.6rem;
-  background: var(--hue-blue);
-  opacity: 0.55;
-}
-
-.keyLine {
-  height: 2px;
-  background: var(--hue-green);
 }
 
 /* form */
@@ -1032,45 +650,6 @@
   gap: 0.5rem 1.2rem;
   padding: 0 0.7rem 0.7rem;
   font-size: 0.82rem;
-}
-
-/* opponents */
-
-.tableWrap {
-  overflow-x: auto;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.84rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.table th {
-  text-align: left;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid var(--glass-stroke);
-  white-space: nowrap;
-}
-
-.table td {
-  padding: 0.45rem 0.5rem;
-  border-bottom: 1px solid var(--glass-stroke);
-  white-space: nowrap;
-}
-
-.table td:first-child {
-  white-space: normal;
-}
-
-.oppName {
-  display: block;
-  font-weight: 600;
 }
 
 .oppTag {
@@ -1530,46 +1109,6 @@ span.tagChip {
   }
 }
 
-/* ── phase 6: match plans ────────────────────────────────────────────────── */
-
-.planHead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-/* A slot is a labelled decision, so it gets its own bounded box rather than
-   being a run of rows a reader has to group by eye. */
-.slotBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.6rem 0.7rem;
-  border: 1px solid var(--glass-stroke);
-  border-radius: 12px;
-  background: var(--surface-sunken);
-}
-
-.pickerBox {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.6rem 0.7rem;
-  border: 1px solid var(--accent-select-edge);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
 /* The picker's rows are buttons here and links in the chooser; both must sit
    the same way, so the shared row style is reset for a button's defaults. */
 button.metRow {
@@ -1580,21 +1119,6 @@ button.metRow {
   cursor: pointer;
 }
 
-/* ── phase 7: results ────────────────────────────────────────────────────── */
-
-.crownRow {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem;
-}
-
-.checkRow {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.84rem;
-}
-
 /* A chosen row in the record dialog reads as chosen rather than merely
    hovered — the dialog is answered with clicks, not with a cursor. */
 .metRow[data-on] {
@@ -1603,19 +1127,6 @@ button.metRow {
 }
 
 /* ── phase 8: the roster overview ────────────────────────────────────────── */
-
-/* The sidebar heading is a link to the overview now, so it takes a link's
-   affordances without becoming a button. */
-a.rosterTitle {
-  color: var(--text);
-  text-decoration: none;
-}
-
-a.rosterTitle:hover,
-a.rosterTitle[aria-current='page'] {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
 
 .rosterRow {
   display: flex;
@@ -1834,4 +1345,25 @@ a.rosterTitle[aria-current='page'] {
 .deckItemHead.deckHeadTight {
   padding: 0.45rem 0.6rem;
   gap: 0.45rem 0.8rem;
+}
+
+/* ── the day chart: two charts on one set of days ────────────────────── */
+
+.dayCharts {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dayChartLabel {
+  margin: 0.4rem 0 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.dayChartLabel:first-child {
+  margin-top: 0;
 }

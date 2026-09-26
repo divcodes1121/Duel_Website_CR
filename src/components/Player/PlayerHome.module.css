@@ -1,41 +1,7 @@
-/* A roster player's own dashboard. Its own scroll region, because `body` is
-   `overflow: hidden` and every route on this site owns its own — and
-   `min-height: 0` with it, or the flex child refuses to shrink below its
-   content and pushes the overflow back out. */
-.page {
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 1.2rem 1rem 3rem;
-}
-
-@media (max-width: 62rem) {
-  .page {
-    height: auto;
-    overflow: visible;
-  }
-}
-
-/* The way out. This route renders outside the app shell, so it carries its
-   own — see the note at the call site. */
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.9rem;
-  border-radius: 999px;
-  border: 1px solid var(--glass-stroke);
-  background: var(--surface);
-  color: var(--text);
-  padding: 0.4rem 0.85rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.back:hover {
-  border-color: var(--border-strong);
-}
+/* The player's own page (`#/my`). Since 2026-09-26 the page itself is the
+   dashboard shell (`ui/dash-shell`), which owns the scroll region, the
+   navigation and the way home; what is left here is the notice shown to a
+   visitor who is signed out, or on nobody's roster. */
 
 .notice {
   max-width: 34rem;
@@ -68,28 +34,3 @@
   font-weight: 600;
 }
 
-/* Only drawn when somebody has more than one coach, which is legal: the
-   unique index in 006 is scoped to (coach_id, linked_user_id), not global. */
-.seatRow {
-  display: flex;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-}
-
-.seatChip {
-  border-radius: 999px;
-  border: 1px solid var(--glass-stroke);
-  background: transparent;
-  color: var(--text);
-  padding: 0.3rem 0.75rem;
-  font: inherit;
-  font-size: 0.82rem;
-  cursor: pointer;
-}
-
-.seatChip[aria-pressed='true'] {
-  border-color: color-mix(in srgb, var(--hue-violet) 55%, transparent);
-  background: var(--violet-wash);
-  color: var(--hue-violet);
-  font-weight: 600;
-}

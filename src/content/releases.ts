@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-27-team-pdf-per-player',
+    date: '2026-09-27',
+    kind: 'new',
+    title: 'Team Analysis can export one player’s plan on its own',
+    body: [
+      'Beside Export PDF there is now a choice of who the document covers: the whole match plan, or any single player on either side. A teammate’s PDF holds their own decks and, for every opponent, what that opponent plays and that teammate’s ranked options against them. An opponent’s PDF is that opponent’s whole section, with every teammate’s answers.',
+      'Each player can be handed just the pages that are theirs, and they are the same pages the full plan prints.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-09-26-pdf-reports',
     date: '2026-09-26',
     kind: 'improved',

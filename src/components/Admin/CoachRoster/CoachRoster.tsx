@@ -7,15 +7,17 @@ import { GateCard } from '../../Auth/GateCard';
 import { isSupabaseConfigured } from '../../../state/supabase';
 import {
   COACH_ROUTE,
+  SECTION_LABEL,
   coachHref,
   parseCoachRoute,
   playerLabel,
   type CoachWindow,
+  type RosterPlayer,
 } from '../../../state/coachRoster';
 import { useCoachRoster } from '../../../state/coachRosterStore';
-import { ThemeToggle } from '../../Theme/ThemeToggle';
-import { Dropdown } from '../../ui/dropdown-menu-14';
-import { ChevronLeftIcon, TeamIcon } from '../../Dashboard/icons';
+import { DashShell, initialsOf, type ShellGroup, type ShellItem } from '../../ui/dash-shell';
+import { GridIcon, PlusIcon } from '../../ui/dash-icons';
+import { HomeIcon, ShieldIcon } from '../../Dashboard/icons';
 import { AddPlayerDialog } from './AddPlayerDialog';
 import { PlayerWorkspace } from './PlayerWorkspace';
 import { RosterOverview } from './RosterOverview';
@@ -40,7 +42,15 @@ import styles from './CoachRoster.module.css';
  * are only the sections that exist: Phase 2 adds Battles, Decks, Cards and
  * Opponents, and later phases add theirs rather than shipping placeholders
  * that promise screens which do not exist yet.
+ *
+ * IN THE DASHBOARD SHELL SINCE 2026-09-26 (`ui/dash-shell.tsx`), like the
+ * console and the player's own page: the roster IS the sidebar — Overview,
+ * then every active player as an item with an avatar, the archived ones in a
+ * folded group — and it opens, minimises to a rail of avatars, and closes.
+ * On a phone it is the drawer, which is why the narrow-screen player
+ * dropdown that stood in for the old side panel is gone.
  */
+
 
 function useHash(): string {
   const [hash, setHash] = useState(window.location.hash);
@@ -71,7 +81,6 @@ export function CoachRoster() {
   const hash = useHash();
   const { players, loaded, loading, error, repoKind, load } = useCoachRoster();
   const [adding, setAdding] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
   /* The window lives HERE, above the workspace, so it survives switching
      player: Rahul at 90 days, then Arjun, is still 90 days. */
   const [win, setWin] = useState<CoachWindow>(30);
@@ -132,164 +141,128 @@ export function CoachRoster() {
     window.location.hash = coachHref(t, section);
   };
 
+  const playerItem = (p: RosterPlayer, dim = false): ShellItem => ({
+    id: p.id,
+    label: playerLabel(p),
+    sub: p.displayName ? p.playerTag : undefined,
+    avatar: initialsOf(playerLabel(p)),
+    /* Switching player keeps the section, so a coach comparing arsenals
+       moves down the roster without re-picking the tab each time. */
+    href: coachHref(p.playerTag, section),
+    current: p.playerTag === tag,
+    dim,
+  });
+
+  const groups: ShellGroup[] = [
+    {
+      id: 'roster',
+      label: 'Roster',
+      items: [{ id: 'overview', label: 'Overview', icon: <GridIcon />, href: COACH_ROUTE, current: !tag }],
+    },
+    {
+      id: 'players',
+      label: `My players · ${active.length}`,
+      items: active.map((p) => playerItem(p)),
+      after: (
+        <button type="button" className="dk-addBtn" onClick={() => setAdding(true)} aria-label="Add player">
+          <PlusIcon />
+          <span className="dk-addBtnText">Add player</span>
+        </button>
+      ),
+    },
+    ...(archived.length > 0
+      ? [
+          {
+            id: 'archived',
+            label: `Archived · ${archived.length}`,
+            collapsible: true,
+            defaultOpen: archived.some((p) => p.playerTag === tag),
+            items: archived.map((p) => playerItem(p, true)),
+          },
+        ]
+      : []),
+    {
+      id: 'tools',
+      label: 'Tools',
+      items: [
+        /* The console is an ADMIN's screen; a coach who is not one would be
+           sent to a refusal, so the link is only drawn for an admin. */
+        ...(access === 'admin'
+          ? [{ id: 'console', label: 'Console', icon: <ShieldIcon size={18} />, href: '#/admin' }]
+          : []),
+        { id: 'home', label: 'Back to Deckkies', icon: <HomeIcon size={18} />, href: '#/' },
+      ],
+    },
+  ];
+
   return (
-    <section className={styles.page}>
-      <header className={styles.top}>
-        <a className={styles.back} href="#/admin">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          Console
-        </a>
-        <h1 className={styles.title}>Coach Roster</h1>
-        {/* Admin-only, so only admins ever see it: this is a working tool on
-            real players, still being built phase by phase. */}
-        <span className={styles.experimental}>🧪 Experimental</span>
-        <div className={styles.topActions}>
-          <ThemeToggle size="1.8rem" />
-        </div>
-      </header>
-
-      {repoKind === 'memory' && (
-        <p className={styles.previewBanner}>
-          Local preview: Supabase is not configured in this checkout, so this roster lives in memory
-          and is gone on reload. In production it is saved to your account.
-        </p>
-      )}
-      {error && <p className={styles.formError}>{error}</p>}
-
-      <div className={styles.body}>
-        <aside className={styles.roster} aria-label="My players">
-          <div className={styles.rosterHead}>
-            <span className={styles.rosterHeadLeft}>
-              {/* AN EXPLICIT WAY BACK, and the heading was not one. "My
-                  players" has been a link to the overview since phase 8, but
-                  it is set as a 0.72rem uppercase label — it reads as a
-                  section heading, so nobody finds it, and opening a player
-                  looked like a one-way door. A chevron reads as a control.
-
-                  ONLY WHEN A PLAYER IS OPEN: on the overview there is nowhere
-                  to go back to, and a permanently-visible back button that
-                  sometimes does nothing is worse than none. */}
-              {tag && (
-                <a
-                  className={styles.rosterBack}
-                  href={COACH_ROUTE}
-                  aria-label="Back to the roster overview"
-                  title="Back to the roster overview"
-                >
-                  <ChevronLeftIcon />
-                </a>
-              )}
-              <a className={styles.rosterTitle} href={COACH_ROUTE} aria-current={!tag ? 'page' : undefined}>
-                My players
-              </a>
-            </span>
-            <span className={styles.rosterCount}>{active.length}</span>
-          </div>
-
-          {loading && !loaded && <p className={styles.muted}>Loading the roster…</p>}
-
-          <ul className={styles.rosterList}>
-            {active.map((p) => (
-              <RosterItem key={p.id} label={playerLabel(p)} tag={p.playerTag} on={p.playerTag === tag} onPick={() => go(p.playerTag)} />
-            ))}
-          </ul>
-
-          <button type="button" className={styles.addButton} onClick={() => setAdding(true)}>
-            + Add player
-          </button>
-
-          {archived.length > 0 && (
-            <div className={styles.archivedWrap}>
-              <button
-                type="button"
-                className={styles.archivedToggle}
-                aria-expanded={showArchived}
-                onClick={() => setShowArchived((v) => !v)}
-              >
-                {showArchived ? 'Hide' : 'Show'} archived ({archived.length})
-              </button>
-              {showArchived && (
-                <ul className={styles.rosterList}>
-                  {archived.map((p) => (
-                    <RosterItem key={p.id} label={playerLabel(p)} tag={p.playerTag} on={p.playerTag === tag} onPick={() => go(p.playerTag)} dim />
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </aside>
-
-        <main className={styles.main}>
-          {/* THE SWITCHER ON A NARROW SCREEN, where the sidebar goes. The
-              shared Dropdown, searchable once the roster is long enough to
-              want finding in. */}
-          {players.length > 0 && (
-            <div className={styles.switcher}>
-              <Dropdown
-                className={styles.switcherDropdown}
-                caption="Current player"
-                icon={<TeamIcon />}
-                heading="My players"
-                searchable={players.length > 8}
-                value={selected?.playerTag ?? ''}
-                onChange={(t) => t && go(t)}
-                options={[
-                  ...(selected ? [] : [{ value: '', label: 'Choose a player' }]),
-                  ...players.map((p) => ({
-                    value: p.playerTag,
-                    label: playerLabel(p),
-                    description: p.displayName ? p.playerTag : undefined,
-                    group: p.isActive ? 'Active' : 'Archived',
-                  })),
-                ]}
-              />
-              <button type="button" className={styles.ghostButton} onClick={() => setAdding(true)}>
-                + Add
-              </button>
-            </div>
-          )}
-
-          {loaded && players.length === 0 && (
-            <section className={styles.empty}>
-              <h2>Your roster is empty</h2>
-              <p>
-                Add the players you coach by their Clash Royale tag. Each one gets their own profile
-                here, built from the battles Deckkies already collects — and adding a player also asks
-                the collector to start following them.
+    <>
+      <DashShell
+        id="coach"
+        product="Coach Roster"
+        title={selected ? playerLabel(selected) : 'Roster overview'}
+        subtitle={
+          selected
+            ? `${selected.playerTag} · ${SECTION_LABEL[section]}`
+            : 'Counts of your own preparation. Nothing here is a rating of a player.'
+        }
+        badge="Experimental"
+        groups={groups}
+        banner={
+          <>
+            {repoKind === 'memory' && (
+              <p className="dk-banner">
+                Local preview: Supabase is not configured in this checkout, so this roster lives in memory and is gone on
+                reload. In production it is saved to your account.
               </p>
-              <button type="button" className={styles.primaryButton} onClick={() => setAdding(true)}>
-                + Add your first player
-              </button>
-            </section>
-          )}
+            )}
+            {error && (
+              <p className="dk-banner" data-tone="bad">
+                {error}
+              </p>
+            )}
+          </>
+        }
+      >
+        {loading && !loaded && <p className={styles.muted}>Loading the roster…</p>}
 
-          {loaded && tag && !selected && (
-            <section className={styles.empty}>
-              <h2>{tag} is not on your roster</h2>
-              <p>Pick a player on the left, or add this one.</p>
-              <a className={styles.linkButton} href={COACH_ROUTE}>
-                Back to the roster
-              </a>
-            </section>
-          )}
+        {loaded && players.length === 0 && (
+          <section className={styles.empty}>
+            <h2>Your roster is empty</h2>
+            <p>
+              Add the players you coach by their Clash Royale tag. Each one gets their own profile here, built from the
+              battles Deckkies already collects — and adding a player also asks the collector to start following them.
+            </p>
+            <button type="button" className={styles.primaryButton} onClick={() => setAdding(true)}>
+              + Add your first player
+            </button>
+          </section>
+        )}
 
-          {/* No player in the URL: the whole roster, not an empty frame. */}
-          {loaded && !tag && <RosterOverview players={players} />}
+        {loaded && tag && !selected && (
+          <section className={styles.empty}>
+            <h2>{tag} is not on your roster</h2>
+            <p>Pick a player in the sidebar, or add this one.</p>
+            <a className={styles.linkButton} href={COACH_ROUTE}>
+              Back to the roster
+            </a>
+          </section>
+        )}
 
-          {selected && (
-            <PlayerWorkspace
-              key={selected.id}
-              player={selected}
-              section={section}
-              win={win}
-              onWindow={setWin}
-              opponent={arg}
-            />
-          )}
-        </main>
-      </div>
+        {/* No player in the URL: the whole roster, not an empty frame. */}
+        {loaded && !tag && players.length > 0 && <RosterOverview players={players} />}
+
+        {selected && (
+          <PlayerWorkspace
+            key={selected.id}
+            player={selected}
+            section={section}
+            win={win}
+            onWindow={setWin}
+            opponent={arg}
+          />
+        )}
+      </DashShell>
 
       {adding && (
         <AddPlayerDialog
@@ -300,37 +273,7 @@ export function CoachRoster() {
           }}
         />
       )}
-    </section>
-  );
-}
-
-function RosterItem({
-  label,
-  tag,
-  on,
-  onPick,
-  dim,
-}: {
-  label: string;
-  tag: string;
-  on: boolean;
-  onPick: () => void;
-  dim?: boolean;
-}) {
-  return (
-    <li>
-      <button
-        type="button"
-        className={styles.rosterItem}
-        data-on={on || undefined}
-        data-dim={dim || undefined}
-        aria-current={on ? 'true' : undefined}
-        onClick={onPick}
-      >
-        <span className={styles.rosterName}>{label}</span>
-        <span className={styles.rosterTag}>{tag}</span>
-      </button>
-    </li>
+    </>
   );
 }
 

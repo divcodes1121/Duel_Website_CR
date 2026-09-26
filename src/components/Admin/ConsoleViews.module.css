@@ -1,0 +1,298 @@
+/* The console's section views — the parts the dashboard kit does not already
+   draw. Every colour is a `--dash-*` token (see `bionis-dashboard.css`), and no
+   text is grey: hierarchy is size, weight and case, the project's rule. */
+
+/* THE ONE FILTER ROW, above everything it scopes. */
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+}
+
+.asOf {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.loading {
+  margin: 0;
+  padding: 2rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* A re-read keeps the frame and dims it — no skeleton, no jump (the dataviz
+   rule). The filter row stays at full strength: it is what was pressed. */
+.busy > :not(:first-child) {
+  opacity: 0.55;
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.small {
+  margin: 0.9rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* ── the request table ─────────────────────────────────────────────────── */
+
+.player {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.player strong {
+  overflow: hidden;
+  max-width: 16rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* The family's colour rides on a swatch beside the name — the text itself
+   stays in ink (text never wears the series colour). */
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.source i {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+}
+
+/* ── the accounts table (moved from AdminConsole.module.css) ───────────── */
+
+.searchRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.search {
+  min-width: 0;
+  flex: 1 1 16rem;
+  height: 2.4rem;
+  border: 1px solid var(--dash-line);
+  border-radius: 10px;
+  background: var(--dash-sunken);
+  padding: 0 0.85rem;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.search::placeholder {
+  color: var(--text);
+  opacity: 1;
+}
+
+.count {
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.name {
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.email {
+  overflow: hidden;
+  max-width: 13rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.you {
+  display: inline-block;
+  margin-left: 0.45rem;
+  border-radius: 999px;
+  background: var(--dash-accent-wash);
+  padding: 0.05rem 0.45rem;
+  color: var(--dash-accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 0.08em;
+}
+
+.you[data-owner] {
+  background: var(--neutral-wash);
+  color: var(--warning);
+}
+
+.tier {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tier[data-tier='free'] { background: var(--neutral-wash); color: var(--text); }
+.tier[data-tier='trial'] { background: var(--violet-wash); color: var(--hue-violet); }
+.tier[data-tier='pro'] { background: var(--green-wash); color: var(--hue-green); }
+.tier[data-tier='admin'] { background: var(--neutral-wash); color: var(--warning); }
+
+.sub {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+}
+
+.access {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.4rem;
+  /* One line per account: wrapped, the End trial button doubled every row's
+     height. The table's own wrapper scrolls sideways when it must. */
+  white-space: nowrap;
+}
+
+/* Doubled, so it beats `.dd14-trigger` whichever stylesheet loads last. */
+.roleSelect.roleSelect {
+  min-width: 7.5rem;
+}
+
+.endTrial {
+  height: 2rem;
+  border: 1px solid var(--dash-line);
+  border-radius: 8px;
+  background: var(--dash-card);
+  padding: 0 0.7rem;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.endTrial:hover:not(:disabled) {
+  background: var(--dash-sunken);
+}
+
+.endTrial:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.empty {
+  padding: 1.5rem 0.8rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* ── the service list (Site & domain) ──────────────────────────────────── */
+
+.services {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-direction: column;
+}
+
+.service {
+  display: grid;
+  align-items: center;
+  gap: 0.35rem 1rem;
+  grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+  padding: 0.85rem 0.1rem;
+}
+
+.service + .service {
+  border-top: 1px solid var(--dash-line);
+}
+
+.serviceIcon {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--dash-sunken);
+}
+
+.serviceText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.serviceName {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.serviceNote {
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.serviceValue {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@container bd (max-width: 34rem) {
+  .service {
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+  }
+
+  .serviceValue {
+    grid-column: 2;
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
+/* ── the explanatory note under a figure ───────────────────────────────── */
+
+.explain {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy > :not(:first-child) {
+    transition: none;
+  }
+}

@@ -138,5 +138,111 @@ check(
 )
 
 
+# --- the history: what the prune removes is kept, not lost (2026-09-26) -----
+#
+# The prune used to DELETE an enrolled row, and its source and request time
+# went with it; the console's Tracking view needs both. The bot's table is not
+# available in a test, so its two reads are stubbed — what is pinned is what
+# this module does with them.
+
+import time as _time  # noqa: E402
+
+_reset()
+con = sqlite3.connect(os.environ["CLASH_TRACKING_DB"])
+con.execute("DELETE FROM tag_history")
+now = _time.time()
+stamp = tracking._stamp
+rows = [
+    ("#HISTA", stamp(now - 3600), "duels"),           # enrolled 10 min later
+    ("#HISTB", stamp(now - 7200), "team"),            # enrolled 1 h later
+    ("#WAITC", stamp(now - 600), "search"),           # still waiting
+    ("#OLDD", stamp(now - 40 * 86400), "cards"),      # outside a 30-day window
+]
+con.executemany(
+    "INSERT INTO tag_requests (tag, requested_at, last_seen_at, hits, source) VALUES (?, ?, ?, 1, ?)",
+    ((t, at, at, src) for t, at, src in rows),
+)
+# One ancient history row the prune must age out.
+con.execute(
+    "INSERT INTO tag_history (tag, requested_at, last_seen_at, hits, source, pruned_at) VALUES (?, ?, ?, 1, ?, ?)",
+    ("#ANCIENT", stamp(now - (tracking.HISTORY_DAYS + 5) * 86400),
+     stamp(now - (tracking.HISTORY_DAYS + 5) * 86400), "search", stamp(now - 86400 * 100)),
+)
+con.commit()
+con.close()
+
+
+def _iso(epoch):
+    return _time.strftime("%Y-%m-%dT%H:%M:%S", _time.gmtime(epoch)) + ".123456+00:00"
+
+
+bot = {
+    "#HISTA": _iso(now - 3600 + 600),
+    "#HISTB": _iso(now - 7200 + 3600),
+    "#OLDD": _iso(now - 39 * 86400),
+    "#DIRECT1": _iso(now - 2 * 86400),                # enrolled with no queue row
+}
+_orig_set, _orig_rows, _orig_names = tracking.bot_tracked_set, tracking._bot_rows, tracking._names
+tracking.bot_tracked_set = lambda: set(bot)
+tracking._bot_rows = lambda: (dict(bot), True)
+tracking._names = lambda tags: {"#HISTA": "Ravi"}
+try:
+    moved = tracking.prune_enrolled()
+    check("the prune removes the three enrolled rows from the queue", moved == 3, f"moved {moved}")
+    con = sqlite3.connect(os.environ["CLASH_TRACKING_DB"])
+    hist = {r[0]: r[1] for r in con.execute("SELECT tag, source FROM tag_history")}
+    left = [r[0] for r in con.execute("SELECT tag FROM tag_requests")]
+    con.close()
+    check("...and keeps each one, source and all, in the history",
+          hist.get("#HISTA") == "duels" and hist.get("#HISTB") == "team" and hist.get("#OLDD") == "cards",
+          str(hist))
+    check("...leaving only the tag still waiting in the queue", left == ["#WAITC"], str(left))
+    check("a history row older than HISTORY_DAYS is aged out", "#ANCIENT" not in hist)
+
+    a = tracking.activity(days=30)
+    by_tag = {r["tag"]: r for r in a["requests"]}
+    check("a request the bot has is 'collecting'", by_tag["#HISTA"]["state"] == "collecting")
+    check("a request the bot does not have is 'waiting'", by_tag["#WAITC"]["state"] == "waiting")
+    check("the wait is measured from request to enrolment",
+          by_tag["#HISTA"]["waitSeconds"] == 600 and by_tag["#HISTB"]["waitSeconds"] == 3600,
+          str((by_tag["#HISTA"]["waitSeconds"], by_tag["#HISTB"]["waitSeconds"])))
+    check("the median wait is the middle of the measured waits", a["summary"]["medianWaitSeconds"] == 2100,
+          str(a["summary"]["medianWaitSeconds"]))
+    check("a request older than the window is not listed", "#OLDD" not in by_tag)
+    check("rows come newest first", [r["tag"] for r in a["requests"]] == ["#WAITC", "#HISTA", "#HISTB"])
+    check("names are attached where the bot has one",
+          by_tag["#HISTA"]["name"] == "Ravi" and by_tag["#WAITC"]["name"] is None)
+    check("counts by source", a["bySource"]["duels"] == {"requested": 1, "collecting": 1, "waiting": 0}
+          and a["bySource"]["search"]["waiting"] == 1, str(a["bySource"]))
+    daily = {d["day"]: d["bySource"] for d in a["daily"]}
+    flat = {}
+    for src in daily.values():
+        for k, v in src.items():
+            flat[k] = flat.get(k, 0) + v
+    check("bot additions carry the source that queued them",
+          flat.get("duels") == 1 and flat.get("team") == 1, str(flat))
+    check("an enrolment with no queue row is 'direct'", flat.get("direct") == 1, str(flat))
+    check("an enrolment before the window is not counted", flat.get("cards") is None, str(flat))
+    check("the queue reports what is still waiting", a["queue"] == {"rows": 1, "waiting": 1}, str(a["queue"]))
+    check("the bot's roster size is reported", a["tracked"] == 4)
+
+    one = tracking.activity(days=1)
+    check("the window is whole UTC days: one day starts at today's midnight",
+          all(r["requestedAt"][:10] == _time.strftime("%Y-%m-%d", _time.gmtime(now)) for r in one["requests"])
+          and all(d["day"] == _time.strftime("%Y-%m-%d", _time.gmtime(now)) for d in one["daily"]),
+          str([r["requestedAt"] for r in one["requests"]]))
+
+    small = tracking.activity(days=30, limit=2)
+    check("the list is capped, and says so", len(small["requests"]) == 2 and small["truncated"] is True)
+    check("...while the counts still cover the whole window", small["summary"]["requested"] == 3)
+
+    tracking._bot_rows = lambda: ({}, False)
+    blind = tracking.activity(days=30)
+    check("an unreadable bot table is flagged, not presented as fact", blind["botRead"] is False)
+    check("...and nothing is claimed as collecting", blind["summary"]["collecting"] == 0)
+finally:
+    tracking.bot_tracked_set, tracking._bot_rows, tracking._names = _orig_set, _orig_rows, _orig_names
+
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

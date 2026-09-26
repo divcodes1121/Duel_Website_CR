@@ -29,6 +29,8 @@ Endpoints
     GET /api/analytics/live/<tag>          the live battlelog, analysed
     GET /api/analytics/track/<tag>         enrol the tag; report its state
     GET /api/analytics/track/pending       tags queued but not yet enrolled
+    GET /api/analytics/admin/tracking      who was queued, from where, and
+                                           whether the bot has them (admin)
 
 Every handler answers 200 with a useful body or a JSON error; the drive being
 unplugged is a normal state, not a failure.
@@ -990,6 +992,26 @@ class Handler(BaseHTTPRequestHandler):
             # The data itself is counts over the player's own battles, read
             # through the Recent Battles reader (see coach_intel.py), so it
             # cannot disagree with the battle log about which battles exist.
+            # THE CONSOLE'S TRACKING VIEW. Admin-gated like the roster's
+            # intel: it lists tags people looked up on this site, and which
+            # screen they looked them up on, which is not something to hand to
+            # anyone who can reach the key Caddy injects. See
+            # `tracking.activity`.
+            if path == "/api/analytics/admin/tracking":
+                verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
+                if verdict != "ok":
+                    self._outcome = "auth_failed"
+                    return self._send({"error": verdict}, admin_auth.STATUS[verdict])
+                q = parse_qs(parsed.query)
+                try:
+                    days = int((q.get("days") or ["30"])[0])
+                except ValueError:
+                    days = 30
+                out = tracking.activity(days=days)
+                out["drainBatch"] = recruit.DRAIN_BATCH
+                out["bulkQueueCap"] = recruit.BULK_QUEUE_CAP
+                return self._send(out)
+
             if path.startswith("/api/analytics/admin/coach/intel/"):
                 verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
                 if verdict != "ok":
