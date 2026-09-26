@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 import type { CoachIntel, CoachTally } from '../../../state/analyticsClient';
+import { ChartTip, type TipAt } from '../../ui/bionis-dashboard';
 import styles from './CoachRoster.module.css';
 
 /**
@@ -66,6 +67,35 @@ export function DailyChart({ timeline }: { timeline: CoachIntel['timeline'] }) {
 
   const tickEvery = Math.max(1, Math.ceil(n / Math.max(3, Math.floor(plotW / 64))));
   const h = hover !== null ? timeline[hover] : null;
+
+  function pick(e: ReactPointerEvent<SVGSVGElement>) {
+    const box = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - box.left) / box.width) * W;
+    const i = Math.floor((px - PAD.left) / slot);
+    setHover(i >= 0 && i < n ? i : null);
+  }
+
+  /* The floating card, anchored over the taller of the day's two marks. The
+     viewBox IS the measured width, so SVG units are CSS pixels here. */
+  const rated = h ? h.battles >= MIN_DAY_BATTLES : false;
+  const tip: TipAt | null =
+    h && hover !== null
+      ? {
+          title: h.day,
+          value: `${h.battles} battle${h.battles === 1 ? '' : 's'}`,
+          lines: [
+            `${h.wins}W ${h.losses}L${h.draws ? ` ${h.draws}D` : ''}`,
+            rated
+              ? `${((h.wins / h.battles) * 100).toFixed(0)}% won`
+              : h.battles > 0
+                ? `Under ${MIN_DAY_BATTLES} battles — no rate drawn`
+                : 'No battles this day',
+          ],
+          tone: 'info',
+          x: x(hover),
+          y: Math.min(yB(h.battles), rated ? yR((h.wins / h.battles) * 100) : yB(h.battles)),
+        }
+      : null;
   const floorY = PAD.top + plotH;
 
   /* The filled area under each segment, built from THE SAME points the line
@@ -88,12 +118,20 @@ export function DailyChart({ timeline }: { timeline: CoachIntel['timeline'] }) {
         height={H}
         role="img"
         aria-labelledby={`${uid}-t`}
-        onMouseLeave={() => setHover(null)}
-        onMouseMove={(e) => {
-          const box = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-          const px = ((e.clientX - box.left) / box.width) * W;
-          const i = Math.floor((px - PAD.left) / slot);
-          setHover(i >= 0 && i < n ? i : null);
+        /* Mouse, touch and keyboard all reach the same tooltip. A touch
+           pointer always "leaves" when the finger lifts, so touch closes on
+           blur (a tap elsewhere) rather than on leave. */
+        tabIndex={0}
+        onPointerLeave={(e) => e.pointerType !== 'touch' && setHover(null)}
+        onPointerDown={pick}
+        onPointerMove={pick}
+        onBlur={() => setHover(null)}
+        onFocus={() => setHover((h) => h ?? n - 1)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            setHover((h) => Math.max(0, Math.min(n - 1, (h ?? n - 1) + (e.key === 'ArrowLeft' ? -1 : 1))));
+          } else if (e.key === 'Escape') setHover(null);
         }}
       >
         <title id={`${uid}-t`}>
@@ -173,7 +211,9 @@ export function DailyChart({ timeline }: { timeline: CoachIntel['timeline'] }) {
         <span>
           <i className={styles.keyLine} /> win rate (days with {MIN_DAY_BATTLES}+ battles)
         </span>
-        <span className={styles.chartReadout} aria-live="polite">
+        {/* Kept for a screen reader; the floating card is what a sighted
+            reader sees. */}
+        <span className="sr-only" aria-live="polite">
           {h
             ? `${h.day}: ${h.battles} battles · ${h.wins}W ${h.losses}L${h.draws ? ` ${h.draws}D` : ''}${
                 h.battles >= MIN_DAY_BATTLES ? ` · ${((h.wins / h.battles) * 100).toFixed(0)}%` : ''
@@ -181,6 +221,7 @@ export function DailyChart({ timeline }: { timeline: CoachIntel['timeline'] }) {
             : ' '}
         </span>
       </div>
+      <ChartTip tip={tip} host={wrap} />
     </div>
   );
 }

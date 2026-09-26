@@ -340,6 +340,16 @@ function Overview({
   const p = report && 'profile' in report ? report.profile : null;
   const best = plan.recommendations[0];
 
+  /* THIS WINDOW AGAINST THE ONE BEFORE IT, from the same `progress` block the
+     card further down draws — so a pill here can never disagree with it. The
+     win-rate pill says "within noise" when the server calls the two windows
+     indistinguishable ('flat'): the change is real and printed, but an arrow
+     on it would claim a movement the band swallows. Nothing is drawn when the
+     windows are not comparable at all. */
+  const o = plan.progress?.comparable ? plan.progress.overall : null;
+  const moreBattles = o ? o.now.battles - o.before.battles : null;
+  const rateChange = o?.change ?? null;
+
   return (
     <>
       <DashHero
@@ -369,12 +379,24 @@ function Overview({
           value={nf.format(plan.battles)}
           note="in the last 30 days"
           icon={<SwordsIcon />}
+          tone="info"
+          delta={moreBattles != null ? `${moreBattles >= 0 ? '+' : ''}${nf.format(moreBattles)} vs prior 30d` : undefined}
+          deltaDir={moreBattles ? (moreBattles > 0 ? 'up' : 'down') : undefined}
+          deltaTone="neutral"
         />
         <KeyMetricCard
           label="Win rate"
           value={plan.winRate == null ? '—' : `${plan.winRate.toFixed(1)}%`}
           note="wins ÷ battles"
           icon={<TrendIcon />}
+          tone="good"
+          delta={
+            rateChange != null && o
+              ? `${rateChange >= 0 ? '+' : ''}${rateChange.toFixed(1)} pts${o.direction === 'flat' ? ', within noise' : ''}`
+              : undefined
+          }
+          deltaDir={o?.direction === 'up' ? 'up' : o?.direction === 'down' ? 'down' : undefined}
+          deltaTone={o?.direction === 'up' ? 'good' : o?.direction === 'down' ? 'bad' : 'neutral'}
         />
         {/* A RANKED SEASON RESETS TO ZERO, and printing that zero reads as
             either "no data" or "they are terrible" — it is neither. Measured
@@ -452,6 +474,9 @@ function Overview({
               value: Math.round(t.likelihood * 1000),
               tone: t.boost > 1 ? ('warn' as const) : ('info' as const),
               display: `${(t.likelihood * 100).toFixed(1)}%`,
+              detail: t.playerRecord
+                ? `You: ${t.playerRecord.winRate.toFixed(1)}% over ${nf.format(t.playerRecord.battles)} battles`
+                : 'Not met often enough to judge you against it',
             }))}
             empty="The meta board is still being computed."
           />

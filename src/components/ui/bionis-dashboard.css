@@ -1,30 +1,59 @@
-/* BIONIS DASHBOARD — the stylesheet the registry never shipped.
+/* THE DASHBOARD KIT — TailAdmin's layout in this site's tokens.
  *
- * The source is Tailwind utilities end to end and this project has no
- * Tailwind, so every one of them is written out here. Classes are prefixed
- * `bd-` and NOT hashed by CSS Modules, matching `glass-dock.css`,
- * `footer-5.css` and `continuous-pagination.css`.
+ * Measured off demo.tailadmin.com (light) before a line was written: cards
+ * 16px radius, 1px border, 24px pad, 24px grid gap; icon tile 48px / 12px;
+ * figures 30px/700; card titles 18px/600; segmented control 8px track with a
+ * 2px inset and 6px tabs 36px tall. Those numbers are the ones below.
  *
- * Colour is read from `index.css`'s tokens. Tone is a `data-tone` attribute
- * resolved once, at the bottom, so nothing in the TSX branches on the theme.
- * The three hue STEPS matter here and are easy to get wrong: `--solid-*` is a
- * fill that carries white text, `--hue-*` is ink at body size, and a bar is a
- * bare graphic mark that only needs 3:1 — so fills take `--solid-*` and text
- * takes `--hue-*`.
+ * Classes are prefixed `bd-` and NOT hashed by CSS Modules, matching
+ * `glass-dock.css`, `footer-5.css` and `continuous-pagination.css`.
+ *
+ * THE THREE HUE STEPS — this project's most repeated colour bug:
+ *   `--solid-*`  a FILL that carries white text (icon tiles).
+ *   `--hue-*`    INK at body size, and every bare graphic mark (bars, lines,
+ *                arcs), which only needs 3:1 and is darker than the surface
+ *                if drawn in the fill step (2.40:1 measured, on dark).
+ *   washes       a tone's 8% tint under its own `--hue-*` ink (pills).
+ * One `--mark` per tone is read by every fill, stroke and glow alike.
+ *
+ * NO GREY TEXT. `--text-muted` is full ink in both themes on purpose (the
+ * contrast sweep); hierarchy is size, weight and case.
  */
 
+/* ── shell ─────────────────────────────────────────────────────────────── */
+
+/* A SIZE CONTAINER, because this kit lives in columns that are a fraction of
+   the page: every breakpoint below asks how wide the DASHBOARD is, not the
+   window. `inline-size` only, so its height still follows its content. */
 .bd-root {
+  container: bd / inline-size;
   display: flex;
-  flex-direction: column;
-  gap: 2rem;
+  width: 100%;
   min-width: 0;
+  flex-direction: column;
+  /* One value: a container cannot query its own size, so the gap between its
+     children cannot follow a `@container` rule the way everything inside does. */
+  gap: 1.25rem;
 }
 
-/* ── header ─────────────────────────────────────────────────────────────── */
+/* The section entrance: one short rise, staggered by position. `backwards`,
+   NOT `both`: a finished animation that still holds its last frame keeps a
+   stacking context on every child, and a tooltip that overflows its card
+   would then paint UNDER the next card down. */
+.bd-root > * {
+  animation: bd-rise var(--dur-4) var(--ease) backwards;
+}
+.bd-root > :nth-child(2) { animation-delay: 40ms; }
+.bd-root > :nth-child(3) { animation-delay: 80ms; }
+.bd-root > :nth-child(4) { animation-delay: 120ms; }
+.bd-root > :nth-child(5) { animation-delay: 160ms; }
+.bd-root > :nth-child(n + 6) { animation-delay: 200ms; }
+
+/* ── header ────────────────────────────────────────────────────────────── */
 
 .bd-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
@@ -40,15 +69,17 @@
 .bd-title {
   margin: 0;
   min-width: 0;
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .bd-subtitle,
 .bd-cardNote {
   margin: 0;
   font-size: 0.85rem;
+  line-height: 1.45;
   color: var(--text-muted);
 }
 
@@ -56,64 +87,148 @@
   flex: none;
 }
 
-/* ── hero ───────────────────────────────────────────────────────────────── */
+/* ── the card surface, shared ──────────────────────────────────────────── */
+
+.bd-metric,
+.bd-chartCard,
+.bd-insight,
+.bd-heroMain {
+  min-width: 0;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+/* ── hero ──────────────────────────────────────────────────────────────── */
 
 .bd-hero {
   display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* TailAdmin's target card: the raised card sits on a tinted band that holds
+   the figures beneath it. */
+.bd-hero[data-banded] {
+  border: 1px solid var(--glass-stroke);
+  border-radius: 18px;
+  background: var(--surface-sunken);
+}
+
+.bd-hero[data-banded] .bd-heroMain {
+  /* The band's own border is the outer edge; the inner card's reads as a lift. */
+  margin: -1px -1px 0;
+}
+
+.bd-heroMain {
+  display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.25rem 2rem;
   flex-wrap: wrap;
+  padding: 1.25rem;
+}
+
+@container bd (min-width: 40rem) {
+  .bd-heroMain {
+    padding: 1.5rem 1.75rem;
+  }
 }
 
 .bd-heroText {
   display: flex;
-  min-width: min(20rem, 100%);
+  min-width: min(18rem, 100%);
   flex: 1 1 20rem;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.85rem;
 }
 
 .bd-heroHeading {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 .bd-heroBody {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.6rem;
   align-items: flex-start;
-}
-
-/* A pill in the tone's wash with the tone's ink — the source's
-   `bg-(--live)/10 text-(--live)`, expressed in tokens. */
-.bd-heroBadge {
-  display: inline-flex;
-  width: fit-content;
-  border-radius: 12px;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.85rem;
-  font-weight: 600;
 }
 
 .bd-heroCopy {
   margin: 0;
-  max-width: 34rem;
-  font-size: 0.88rem;
-  line-height: 1.45;
+  max-width: 36rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
   color: var(--text-muted);
 }
 
 .bd-heroFigure {
   display: flex;
-  flex: 1 1 12rem;
+  flex: 1 1 14rem;
   align-items: center;
   justify-content: center;
 }
 
-/* ── the ring ───────────────────────────────────────────────────────────── */
+.bd-heroStats {
+  display: grid;
+  margin: 0;
+  /* Three short figures fit one line even on a 320px phone; wrapping one onto
+     a row of its own left a divider hanging off nothing. */
+  grid-template-columns: repeat(auto-fit, minmax(5.25rem, 1fr));
+  padding: 1rem 0.25rem 1.1rem;
+}
+
+.bd-heroStat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.5rem;
+  text-align: center;
+}
+
+/* A hairline between figures, TailAdmin's divider. */
+.bd-heroStat + .bd-heroStat {
+  border-left: 1px solid var(--glass-stroke);
+}
+
+.bd-heroStat dt {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.bd-heroStat dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── the pill (hero badge, metric delta) ───────────────────────────────── */
+
+.bd-pill {
+  display: inline-flex;
+  width: fit-content;
+  flex: none;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── the gauge / ring ──────────────────────────────────────────────────── */
 
 .bd-donut {
   display: flex;
@@ -121,13 +236,14 @@
   max-width: 100%;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .bd-donutSvg {
   display: block;
   width: 100%;
   height: auto;
+  overflow: visible;
 }
 
 .bd-donutTrack {
@@ -136,15 +252,26 @@
   stroke-width: 12;
 }
 
+.bd-gauge .bd-donutTrack {
+  stroke-width: 16;
+  stroke-linecap: round;
+}
+
 .bd-donutFill {
   fill: none;
   stroke: var(--mark);
   stroke-width: 12;
-  /* The ring is the one mark big enough to carry a glow without smearing.
-     Gated on `--glow-core`, so it is simply absent on light. */
+  /* The one mark big enough to carry a glow without smearing. Gated on
+     `--glow-core`, so it is simply absent on light. */
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--mark) var(--glow-core), transparent));
   transition: stroke-dasharray var(--dur-3) var(--ease);
   animation: bd-fade var(--dur-4) var(--ease) both;
+}
+
+.bd-gauge .bd-donutFill {
+  stroke-width: 16;
+  /* Draws itself in once: the dash starts fully offset and runs to its value. */
+  animation: bd-draw 900ms var(--ease) both;
 }
 
 .bd-donutValue {
@@ -152,160 +279,378 @@
   font-family: var(--font-display);
   font-size: 1.85rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bd-gauge .bd-donutValue {
+  font-size: 2.35rem;
+  letter-spacing: -0.02em;
 }
 
 .bd-donutCaption {
-  max-width: 15rem;
+  max-width: 17rem;
   text-align: center;
-  font-size: 0.78rem;
-  line-height: 1.35;
+  font-size: 0.8rem;
+  line-height: 1.4;
   color: var(--text-muted);
 }
 
-/* ── metric cards ───────────────────────────────────────────────────────── */
+/* ── metric cards ──────────────────────────────────────────────────────── */
 
 .bd-metricGrid {
   display: grid;
-  grid-template-columns: 1fr;
+  /* TWO UP ON A PHONE, as TailAdmin does: one card per row made four figures
+     a full screen of scrolling. 9.5rem lets two sit side by side from ~320px. */
+  grid-template-columns: repeat(auto-fit, minmax(min(9.5rem, 100%), 1fr));
   gap: 0.75rem;
 }
 
-@media (min-width: 40rem) {
-  .bd-metricGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 72rem) {
+@container bd (min-width: 56rem) {
   .bd-metricGrid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.25rem;
   }
 }
 
 .bd-metric {
+  /* Each card is its own size container: whether the icon tile sits beside
+     the label or above it depends on how wide THIS card is, which the page
+     width does not say (four across on a desktop, two on a phone). */
+  container: bdm / inline-size;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.25rem;
+  transition: transform var(--dur-3) var(--ease), border-color var(--dur-2) var(--ease);
+}
+
+@container bd (max-width: 30rem) {
+  .bd-metric {
+    padding: 1rem;
+  }
+  .bd-metricValue {
+    font-size: 1.6rem;
+  }
+  .bd-metricIcon {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 10px;
+  }
+}
+
+/* Only a card that DOES something moves under the pointer. */
+.bd-metric[data-clickable]:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--text) 28%, var(--glass-stroke));
+}
+
+.bd-metricHit {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0.3rem;
-  border: 1px solid var(--glass-stroke);
-  border-radius: 14px;
-  background: var(--surface);
-  padding: 0.85rem 0.95rem;
+  gap: 0.35rem;
+  margin: -0.25rem;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  padding: 0.25rem;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .bd-metricHead {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.65rem;
+  margin-bottom: 0.45rem;
 }
 
+/* TailAdmin's 48px tile, taking the card's tone as a wash under its ink. */
 .bd-metricIcon {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  color: var(--text);
 }
 
 .bd-metricIcon svg {
-  width: 100%;
-  height: 100%;
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.bd-metricGo {
+  position: absolute;
+  top: 1.1rem;
+  right: 1rem;
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.bd-metric[data-clickable] .bd-metricHead {
+  padding-right: 1.25rem;
+}
+
+/* A NARROW CARD PUTS THE TILE ABOVE THE LABEL — TailAdmin's own layout. Beside
+   it, "LOSING MATCHUPS" had ~74px on a phone and its longest word ran into the
+   arrow. */
+@container bdm (max-width: 12.5rem) {
+  .bd-metricHead {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+  .bd-metric[data-clickable] .bd-metricHead {
+    padding-right: 0;
+  }
+}
+
+.bd-metric[data-clickable]:hover .bd-metricGo {
+  transform: translateX(2px);
 }
 
 .bd-metricLabel {
-  font-size: 0.78rem;
+  min-width: 0;
+  font-size: 0.8rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  line-height: 1.3;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: var(--text-muted);
+}
+
+.bd-metricRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .bd-metricValue {
   font-family: var(--font-display);
-  font-size: 1.6rem;
+  font-size: 1.9rem;
   font-weight: 700;
-  line-height: 1.1;
-}
-
-.bd-metricDelta {
-  font-size: 0.8rem;
-  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .bd-metricNote {
-  font-size: 0.78rem;
-  line-height: 1.35;
+  font-size: 0.8rem;
+  line-height: 1.4;
   color: var(--text-muted);
 }
 
-/* ── chart cards ────────────────────────────────────────────────────────── */
+.bd-metricProgress {
+  display: block;
+  overflow: hidden;
+  height: 0.4rem;
+  margin-top: 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+}
+
+/* The sparkline runs to the card's edges and sits on its floor, so a row of
+   cards with and without one still reads as a row. */
+.bd-metricTrend {
+  margin: auto -0.35rem -0.35rem;
+  padding-top: 0.6rem;
+}
+
+/* ── sparkline ─────────────────────────────────────────────────────────── */
+
+.bd-spark {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.bd-spark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.bd-sparkLine {
+  fill: none;
+  stroke: var(--mark);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--mark) var(--glow-core), transparent));
+}
+
+.bd-sparkGuide {
+  stroke: color-mix(in srgb, var(--text) 35%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.bd-sparkDot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--mark);
+  pointer-events: none;
+}
+
+.bd-sparkDot[data-on] {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border: 2px solid var(--bg-2);
+  box-shadow: 0 0 0 1px var(--mark);
+}
+
+/* ── tabs ──────────────────────────────────────────────────────────────── */
+
+.bd-tabs {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  padding: 3px;
+}
+
+.bd-tab {
+  position: relative;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  padding: 0.4rem 0.8rem;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bd-tab[aria-selected='true'] {
+  font-weight: 700;
+}
+
+/* The slab travels between tabs; `--surface` is white on light and the card's
+   own grey on dark, so it lifts off the sunken track in both themes without a
+   `[data-theme]` branch. */
+.bd-tabSlab {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08), inset 0 0 0 1px var(--glass-stroke);
+}
+
+.bd-tabText {
+  position: relative;
+}
+
+/* ── chart cards ───────────────────────────────────────────────────────── */
 
 .bd-chartGrid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
-@media (min-width: 72rem) {
+@container bd (min-width: 56rem) {
   .bd-chartGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
   }
 }
 
 .bd-chartCard,
 .bd-insight {
   display: flex;
-  min-width: 0;
   flex-direction: column;
   gap: 1.1rem;
-  border: 1px solid var(--glass-stroke);
-  border-radius: 16px;
-  padding: 1rem;
+  padding: 1.25rem;
 }
 
-.bd-chartCard {
-  background: var(--surface);
+@container bd (min-width: 40rem) {
+  .bd-chartCard,
+  .bd-insight {
+    padding: 1.4rem 1.5rem;
+  }
 }
 
 .bd-cardHead {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.5rem 0.75rem;
+  gap: 0.6rem 0.9rem;
   flex-wrap: wrap;
 }
 
 .bd-cardHeadText {
   display: flex;
   min-width: 0;
+  flex: 1 1 12rem;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.25rem;
+}
+
+.bd-cardHeadSide {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .bd-cardTitle {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   font-weight: 700;
+  line-height: 1.35;
 }
 
 .bd-chartBody {
   display: flex;
   flex: 1;
+  min-width: 0;
   flex-direction: column;
   justify-content: center;
+}
+
+.bd-cardFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin: 0 -1.5rem -1.4rem;
+  border-top: 1px solid var(--glass-stroke);
+  padding: 0.85rem 1.5rem;
+  font-size: 0.82rem;
 }
 
 .bd-badge {
   display: inline-flex;
   flex: none;
   align-items: center;
-  border-radius: 10px;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 999px;
   background: var(--surface-sunken);
-  padding: 0.35rem 0.6rem;
-  font-size: 0.74rem;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  white-space: nowrap;
   color: var(--text-muted);
 }
 
@@ -315,7 +660,68 @@
   color: var(--text-muted);
 }
 
-/* ── bars ───────────────────────────────────────────────────────────────── */
+/* ── the plot host: where a tooltip is positioned ─────────────────────── */
+
+.bd-plot {
+  position: relative;
+  /* Above any later non-positioned sibling, so a tooltip that overflows its
+     card paints over the next card rather than under it. */
+  z-index: 1;
+  min-width: 0;
+}
+
+/* ── tooltip ───────────────────────────────────────────────────────────── */
+
+/* OPAQUE. A translucent tooltip over a chart is two layers of marks read
+   through each other — the same fault a translucent dropdown was. */
+.bd-tip {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  min-width: 7rem;
+  max-width: 16rem;
+  flex-direction: column;
+  gap: 0.2rem;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 10px;
+  background: var(--bg-2);
+  box-shadow: 0 10px 28px -6px rgba(16, 24, 40, 0.22);
+  padding: 0.5rem 0.7rem;
+  pointer-events: none;
+  animation: bd-tip-in var(--dur-1) var(--ease) both;
+}
+
+.bd-tipTitle {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.bd-tipValue {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bd-tipValue i {
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--mark);
+}
+
+.bd-tipLine {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── bars ──────────────────────────────────────────────────────────────── */
 
 .bd-bars {
   display: flex;
@@ -323,29 +729,44 @@
   padding: 0;
   list-style: none;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.2rem;
 }
 
 .bd-bar {
   display: grid;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
   /* minmax(0, …) on the label or a long one blows the grid out — the `1fr`
      trap this project has hit three times. */
-  grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) minmax(3rem, auto);
+  margin: 0 -0.5rem;
+  border-radius: 10px;
+  padding: 0.45rem 0.5rem;
+  cursor: default;
+  outline-offset: 1px;
+  transition: background-color var(--dur-2) var(--ease);
+}
+
+.bd-bar[data-on] {
+  background: var(--neutral-wash);
 }
 
 .bd-barLabel {
   overflow: hidden;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.bd-bar[data-on] .bd-barLabel {
+  font-weight: 700;
 }
 
 .bd-barTrack {
   position: relative;
   overflow: hidden;
-  height: 0.6rem;
+  height: 0.55rem;
   border-radius: 999px;
   background: var(--surface-sunken);
   /* A hairline, so an EMPTY track still reads as a track rather than as a gap
@@ -357,29 +778,45 @@
    Mixing a hue toward `--text` moves it AWAY from the surface in BOTH themes
    (lighter on dark, darker on light), so every point of the ramp has at least
    the contrast the flat hue had. Mixing toward the track, or toward
-   transparent, is the obvious way to build a gradient and would have dropped
-   the pale end under the 3:1 floor on light. */
+   transparent, would drop the pale end under the 3:1 floor on light. */
 .bd-barFill {
   display: block;
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--mark) 84%, var(--text)) 0%, var(--mark) 100%);
-  /* `--glow-halo` is 0% on light, so this one declaration serves both themes
-     with no [data-theme] branch: glow is a dark-mode affordance here. */
+  /* `--glow-halo` is 0% on light: glow is a dark-mode affordance here. */
   box-shadow: 0 0 10px color-mix(in srgb, var(--mark) var(--glow-halo), transparent);
-  transition: width var(--dur-3) var(--ease);
-  animation: bd-grow-x var(--dur-4) var(--ease) both;
+  transition: width var(--dur-3) var(--ease), opacity var(--dur-2) var(--ease);
+  /* `backwards`, NOT `both`: a finished animation holding its last frame pins
+     `opacity: 1` above every later rule, and the dimming below would never
+     apply. The same trap as the section entrance, in a different property. */
+  animation: bd-grow-x var(--dur-4) var(--ease) backwards;
   transform-origin: left center;
 }
 
+/* While one row is in focus the others' MARKS dim — never their text, which
+   stays full ink (the contrast rule). */
+.bd-plot[data-focus] .bd-bar:not([data-on]) .bd-barFill,
+.bd-plot[data-focus] .bd-column:not([data-on]) .bd-columnFill {
+  opacity: 0.4;
+}
+
 .bd-barValue {
+  justify-self: end;
   font-family: var(--font-display);
   font-size: 0.9rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-/* ── columns ────────────────────────────────────────────────────────────── */
+@container bd (max-width: 30rem) {
+  .bd-bar {
+    grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr) minmax(2.6rem, auto);
+    gap: 0.5rem;
+  }
+}
+
+/* ── columns ───────────────────────────────────────────────────────────── */
 
 .bd-columns {
   display: grid;
@@ -388,8 +825,10 @@
   list-style: none;
   grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
-  gap: 0.5rem;
-  min-height: 11rem;
+  /* NO GAP, so the hairline grid on the tracks runs unbroken across the
+     plot; the fill is narrower than its track instead. */
+  gap: 0;
+  min-height: 12rem;
 }
 
 .bd-column {
@@ -397,7 +836,9 @@
   min-width: 0;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  border-radius: 10px;
+  cursor: default;
 }
 
 .bd-columnValue {
@@ -407,14 +848,33 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The plot grid: a hairline at every quarter, drawn on each track so the
+   lines line up across columns (every track is the same height).
+   The value sits in the track ON its bar; the top padding is the room a full
+   bar's label overflows into, so a 100% bar does not push it off the plot. */
 .bd-columnTrack {
   display: flex;
   width: 100%;
   flex: 1;
-  align-items: flex-end;
-  justify-content: center;
-  border-radius: 8px;
-  background: var(--surface-sunken);
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  padding-top: 1.5rem;
+  background-image: repeating-linear-gradient(
+    to top,
+    var(--glass-stroke) 0 1px,
+    transparent 1px 25%
+  );
+  transition: background-color var(--dur-2) var(--ease);
+}
+
+.bd-column:first-child .bd-columnTrack { border-top-left-radius: 8px; }
+.bd-column:last-child .bd-columnTrack { border-top-right-radius: 8px; }
+
+/* The hovered column's band — TailAdmin's crosshair column. */
+.bd-column[data-on] .bd-columnTrack {
+  background-color: var(--neutral-wash);
 }
 
 /* A ZERO MUST DRAW NOTHING. The floor keeps a small non-zero value visible,
@@ -422,13 +882,13 @@
    a round line-cap causes on a zero-length ring. */
 .bd-columnFill {
   display: block;
-  width: 100%;
+  width: min(58%, 2.6rem);
   min-height: 3px;
-  border-radius: 8px;
+  border-radius: 7px 7px 2px 2px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--mark) 84%, var(--text)) 0%, var(--mark) 100%);
   box-shadow: 0 0 10px color-mix(in srgb, var(--mark) var(--glow-halo), transparent);
-  transition: height var(--dur-3) var(--ease);
-  animation: bd-grow-y var(--dur-4) var(--ease) both;
+  transition: height var(--dur-3) var(--ease), opacity var(--dur-2) var(--ease);
+  animation: bd-grow-y var(--dur-4) var(--ease) backwards;
   transform-origin: bottom center;
 }
 
@@ -439,66 +899,68 @@
 .bd-columnLabel {
   max-width: 100%;
   overflow: hidden;
-  font-size: 0.74rem;
+  font-size: 0.78rem;
+  font-weight: 500;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-muted);
 }
 
-/* ── insight cards ──────────────────────────────────────────────────────── */
+/* ── insight cards ─────────────────────────────────────────────────────── */
 
 .bd-insightGrid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
   gap: 1rem;
+  scroll-margin-top: 1rem;
 }
 
-@media (min-width: 72rem) {
+@container bd (min-width: 56rem) {
   .bd-insightGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.25rem;
   }
 }
 
 .bd-insightTitle {
   display: flex;
   min-width: 0;
+  flex: 1 1 10rem;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.7rem;
 }
 
-/* The source's `size-7 rounded-md bg-(--insight-x) text-white`. */
 .bd-insightIcon {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 8px;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 10px;
   color: var(--on-solid);
 }
 
 .bd-insightIcon svg {
-  width: 1rem;
-  height: 1rem;
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 .bd-insightBody {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.55rem;
 }
 
 .bd-insightRow {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 0.7rem;
+  gap: 0.75rem;
+  border: 1px solid var(--glass-stroke);
   border-radius: 12px;
   background: var(--surface-sunken);
-  padding: 0.55rem 0.7rem;
+  padding: 0.7rem 0.85rem;
 }
 
 .bd-rowIcon {
@@ -519,32 +981,33 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
 
 .bd-rowTitle {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   font-weight: 600;
+  line-height: 1.4;
 }
 
 .bd-rowNote {
   margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.35;
+  font-size: 0.8rem;
+  line-height: 1.4;
   color: var(--text-muted);
 }
 
-/* ── readout list ───────────────────────────────────────────────────────── */
+/* ── readout list ──────────────────────────────────────────────────────── */
 
 .bd-readout {
   display: flex;
   flex: 1;
   flex-direction: column;
-  justify-content: space-between;
+  border: 1px solid var(--glass-stroke);
   border-radius: 12px;
   background: var(--surface-sunken);
-  padding: 0.6rem 0.75rem;
+  padding: 0.2rem 0.85rem;
 }
 
 .bd-readoutRow {
@@ -552,11 +1015,25 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.3rem 0;
+  margin: 0 -0.85rem;
+  padding: 0.55rem 0.85rem;
+  transition: background-color var(--dur-2) var(--ease);
 }
 
+.bd-readoutRow + .bd-readoutRow {
+  border-top: 1px solid var(--glass-stroke);
+}
+
+.bd-readoutRow:hover {
+  background: var(--neutral-wash);
+}
+
+.bd-readoutRow:first-child { border-radius: 11px 11px 0 0; }
+.bd-readoutRow:last-child { border-radius: 0 0 11px 11px; }
+
 .bd-readoutLabel {
-  font-size: 0.85rem;
+  min-width: 0;
+  font-size: 0.86rem;
   color: var(--text-muted);
 }
 
@@ -566,114 +1043,122 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── tone ───────────────────────────────────────────────────────────────── *
- * Resolved once. FILLS take `--solid-*` (graded to hold white); INK takes
- * `--hue-*` (graded to hold 4.5:1 at body size). Mixing the two up is this
- * project's most repeated colour bug.
+/* ── tone ──────────────────────────────────────────────────────────────── *
+ * Resolved once. Every mark reads `--mark`; see the note at the top about
+ * which hue step each kind of element takes.
  */
 
-/* A BAR IS A BARE GRAPHIC MARK, SO IT TAKES THE `--hue-*` STEP, NOT
-   `--solid-*`. Measured against the track on dark: `--solid-violet` is
-   2.40:1 and `--solid-green` 3.11:1 — the fill step is graded to carry WHITE
-   TEXT, which makes it darker than the surface it sits on. `--hue-*` is
-   graded as ink and clears 3:1 in both themes. This is the third time this
-   project has picked the wrong hue step. */
-/* ONE PROPERTY PER TONE, read by the fill, the stroke and the glow alike.
-   It was three copies of the same colour choice, and the first thing to drift
-   would have been the one the contrast note above is about. */
-.bd-barFill[data-tone='info'],
-.bd-columnFill[data-tone='info'],
-.bd-donut[data-tone='info'] .bd-donutFill { --mark: var(--hue-violet); }
-.bd-barFill[data-tone='good'],
-.bd-columnFill[data-tone='good'],
-.bd-donut[data-tone='good'] .bd-donutFill { --mark: var(--hue-green); }
-.bd-barFill[data-tone='warn'],
-.bd-columnFill[data-tone='warn'],
-.bd-donut[data-tone='warn'] .bd-donutFill { --mark: var(--warning); }
-.bd-barFill[data-tone='bad'],
-.bd-columnFill[data-tone='bad'],
-.bd-donut[data-tone='bad'] .bd-donutFill { --mark: var(--hue-red); }
-/* NOT `--border-strong`: that is a BORDER colour and measures 2.8:1 against
-   the track on light, under the 3:1 a bare graphic mark needs — and it reads
-   as the empty track rather than as a value. A mix of the ink into the track
-   is symmetric in both themes (5.0:1 dark, 3.2:1 light). */
-.bd-barFill[data-tone='neutral'],
-.bd-columnFill[data-tone='neutral'],
-.bd-donut[data-tone='neutral'] .bd-donutFill {
-  --mark: color-mix(in srgb, var(--text-muted) 45%, var(--surface-sunken));
-}
+/* Scoped to the kit's own classes: a bare `[data-tone]` would set `--mark` on
+   every element in the app that happens to carry the attribute. */
+[class*='bd-'][data-tone='info'] { --mark: var(--hue-violet); }
+[class*='bd-'][data-tone='good'] { --mark: var(--hue-green); }
+[class*='bd-'][data-tone='warn'] { --mark: var(--warning); }
+[class*='bd-'][data-tone='bad'] { --mark: var(--hue-red); }
+/* NOT `--border-strong`: that measures 2.8:1 against the track on light,
+   under the 3:1 a bare mark needs, and reads as the empty track. A mix of the
+   ink into the track is symmetric in both themes (5.0:1 dark, 3.2:1 light). */
+[class*='bd-'][data-tone='neutral'] { --mark: color-mix(in srgb, var(--text-muted) 45%, var(--surface-sunken)); }
 
+/* Pills and hero stats: the tone's wash under the tone's ink. */
+.bd-pill[data-tone='good'] { background: var(--green-wash); color: var(--hue-green); }
+.bd-pill[data-tone='info'] { background: var(--violet-wash); color: var(--hue-violet); }
+.bd-pill[data-tone='warn'] { background: var(--neutral-wash); color: var(--warning); }
+.bd-pill[data-tone='bad'] { background: var(--red-wash); color: var(--hue-red); }
+.bd-pill[data-tone='neutral'] { background: var(--neutral-wash); color: var(--text); }
 
-.bd-heroBadge[data-tone='good'] { background: var(--green-wash); color: var(--hue-green); }
-.bd-heroBadge[data-tone='info'] { background: var(--violet-wash); color: var(--hue-violet); }
-.bd-heroBadge[data-tone='warn'] { background: var(--neutral-wash); color: var(--warning); }
-.bd-heroBadge[data-tone='bad'] { background: var(--red-wash); color: var(--hue-red); }
-.bd-heroBadge[data-tone='neutral'] { background: var(--neutral-wash); color: var(--text); }
-
+.bd-heroStat dd[data-tone='good'],
 .bd-rowIcon[data-tone='good'],
-.bd-readoutValue[data-tone='good'],
-.bd-metric[data-tone='good'] .bd-metricDelta { color: var(--hue-green); }
+.bd-readoutValue[data-tone='good'] { color: var(--hue-green); }
+.bd-heroStat dd[data-tone='warn'],
 .bd-rowIcon[data-tone='warn'],
-.bd-readoutValue[data-tone='warn'],
-.bd-metric[data-tone='warn'] .bd-metricDelta { color: var(--warning); }
+.bd-readoutValue[data-tone='warn'] { color: var(--warning); }
+.bd-heroStat dd[data-tone='bad'],
 .bd-rowIcon[data-tone='bad'],
-.bd-readoutValue[data-tone='bad'],
-.bd-metric[data-tone='bad'] .bd-metricDelta { color: var(--hue-red); }
+.bd-readoutValue[data-tone='bad'] { color: var(--hue-red); }
+.bd-heroStat dd[data-tone='info'],
 .bd-rowIcon[data-tone='info'],
-.bd-readoutValue[data-tone='info'],
-.bd-metric[data-tone='info'] .bd-metricDelta { color: var(--hue-violet); }
+.bd-readoutValue[data-tone='info'] { color: var(--hue-violet); }
+.bd-heroStat dd[data-tone='neutral'],
 .bd-rowIcon[data-tone='neutral'],
-.bd-readoutValue[data-tone='neutral'],
-.bd-metric[data-tone='neutral'] .bd-metricDelta { color: var(--text); }
+.bd-readoutValue[data-tone='neutral'] { color: var(--text); }
 
-/* The insight card's tint: the source's
-   `bg-[linear-gradient(180deg,rgb(x)/0.08_0%,transparent_42%)]`. The solid
-   goes on the icon tile, the wash on the card. */
+/* The metric icon tile takes its card's tone as a wash with the tone's ink;
+   a neutral card keeps the plain sunken tile. */
+.bd-metricIcon[data-tone='info'] { background: var(--violet-wash); color: var(--hue-violet); }
+.bd-metricIcon[data-tone='good'] { background: var(--green-wash); color: var(--hue-green); }
+.bd-metricIcon[data-tone='warn'] { background: var(--neutral-wash); color: var(--warning); }
+.bd-metricIcon[data-tone='bad'] { background: var(--red-wash); color: var(--hue-red); }
+
+/* The insight card's tint: a wash fading out down the card; the solid goes
+   on the icon tile, which carries white. */
 .bd-insight[data-tone='info'] {
-  background: linear-gradient(180deg, var(--violet-wash) 0%, transparent 42%);
+  background: linear-gradient(180deg, var(--violet-wash) 0%, var(--surface) 46%);
 }
 .bd-insight[data-tone='info'] .bd-insightIcon { background: var(--solid-violet); }
 
 .bd-insight[data-tone='good'] {
-  background: linear-gradient(180deg, var(--green-wash) 0%, transparent 42%);
+  background: linear-gradient(180deg, var(--green-wash) 0%, var(--surface) 46%);
 }
 .bd-insight[data-tone='good'] .bd-insightIcon { background: var(--solid-green); }
 
 .bd-insight[data-tone='warn'] {
-  background: linear-gradient(180deg, var(--neutral-wash) 0%, transparent 42%);
+  background: linear-gradient(180deg, var(--neutral-wash) 0%, var(--surface) 46%);
 }
 /* Dark ink on amber, light ink on the deep orange light-mode value — which
    is exactly what `--bg-1` is in each theme. */
 .bd-insight[data-tone='warn'] .bd-insightIcon { background: var(--warning); color: var(--bg-1); }
 
 .bd-insight[data-tone='bad'] {
-  background: linear-gradient(180deg, var(--red-wash) 0%, transparent 42%);
+  background: linear-gradient(180deg, var(--red-wash) 0%, var(--surface) 46%);
 }
 .bd-insight[data-tone='bad'] .bd-insightIcon { background: var(--solid-red); }
 
-.bd-insight[data-tone='neutral'] {
-  background: var(--surface);
-}
-.bd-insight[data-tone='neutral'] .bd-insightIcon { background: color-mix(in srgb, var(--text-muted) 45%, var(--surface-sunken)); }
-
-/* Glow is dark-mode only and static — `--glow-core`/`--glow-halo` are 0% on
-   light, so this one declaration serves both themes. */
-.bd-insightIcon {
-  box-shadow: 0 0 10px color-mix(in srgb, currentColor var(--glow-core), transparent);
+.bd-insight[data-tone='neutral'] .bd-insightIcon {
+  background: var(--surface-sunken);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--glass-stroke);
 }
 
+/* Glow is dark-mode only and static — `--glow-core` is 0% on light, so this
+   one declaration serves both themes. */
+.bd-insight:not([data-tone='neutral']) .bd-insightIcon {
+  box-shadow: 0 0 12px color-mix(in srgb, currentColor var(--glow-core), transparent);
+}
+
+/* ── motion ────────────────────────────────────────────────────────────── */
+
+/* ONE-SHOT, TRANSFORM AND OPACITY — plus the gauge's single dash, which is
+   one small path drawn once. Never `infinite`. `index.css` disables every
+   animation under `prefers-reduced-motion: reduce`; the transitions below are
+   switched off here as well. */
 @media (prefers-reduced-motion: reduce) {
   .bd-barFill,
   .bd-columnFill,
-  .bd-donutFill {
+  .bd-donutFill,
+  .bd-metric,
+  .bd-bar,
+  .bd-readoutRow {
     transition: none;
+  }
+  .bd-metric[data-clickable]:hover {
+    transform: none;
+  }
+  /* `index.css` shortens every animation to 0.01ms but leaves its DELAY, so
+     the staggered entrance would still hold each section invisible for up to
+     200ms. Off outright, here. */
+  .bd-root > *,
+  .bd-barFill,
+  .bd-columnFill,
+  .bd-donutFill,
+  .bd-tip {
+    animation: none;
   }
 }
 
-/* MOTION: ONE-SHOT, TRANSFORM AND OPACITY ONLY, never `infinite` — the
-   project's rule, and the reason the old glow loops were removed. `index.css`
-   disables every animation under `prefers-reduced-motion: reduce`, so these
-   need no guard of their own. */
+@keyframes bd-rise {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
 @keyframes bd-grow-x {
   from { transform: scaleX(0); opacity: 0.4; }
   to { transform: scaleX(1); opacity: 1; }
@@ -687,4 +1172,13 @@
 @keyframes bd-fade {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes bd-draw {
+  from { stroke-dashoffset: var(--bd-dash, 0); }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes bd-tip-in {
+  from { opacity: 0; transform: translateY(3px); }
 }

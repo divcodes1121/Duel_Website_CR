@@ -45,6 +45,9 @@ const nf = new Intl.NumberFormat();
  *  between passes, not a stall. Same threshold the Collection section uses. */
 const STALE_MS = 3 * 60 * 60 * 1000;
 
+/** A whole-percent share for a tooltip; a dash when there is no total. */
+const share = (n: number, of: number) => (of > 0 ? `${Math.round((n / of) * 100)}%` : '—');
+
 export function ConsoleSummary({
   accounts,
   counts,
@@ -65,13 +68,21 @@ export function ConsoleSummary({
   const alive = gap !== null && gap < STALE_MS;
 
   const tiers: Bar[] = useMemo(
-    () => [
-      { label: 'Free', value: counts.free, tone: 'neutral' },
-      { label: 'Member', value: counts.trial, tone: 'info' },
-      { label: 'Pro', value: counts.pro, tone: 'good' },
-      { label: 'Admin', value: counts.admin, tone: 'warn' },
-    ],
-    [counts],
+    () =>
+      (
+        [
+          ['Free', counts.free, 'neutral'],
+          ['Member', counts.trial, 'info'],
+          ['Pro', counts.pro, 'good'],
+          ['Admin', counts.admin, 'warn'],
+        ] as const
+      ).map(([label, value, tone]) => ({
+        label,
+        value,
+        tone,
+        detail: `${share(value, accounts)} of ${accounts} account${accounts === 1 ? '' : 's'}`,
+      })),
+    [counts, accounts],
   );
 
   /* Both bars are a share of the SAME real total — the recruiter's own
@@ -79,10 +90,27 @@ export function ConsoleSummary({
      per-bar maximum would make two different scales look like one. */
   const capacity: Bar[] = recruit
     ? [
-        { label: 'Tracked', value: collection?.trackedPlayers ?? 0, tone: 'info', display: nf.format(collection?.trackedPlayers ?? 0) },
-        { label: 'Queued', value: recruit.queued, tone: 'warn', display: nf.format(recruit.queued) },
+        {
+          label: 'Tracked',
+          value: collection?.trackedPlayers ?? 0,
+          tone: 'info',
+          display: nf.format(collection?.trackedPlayers ?? 0),
+          detail: `${share(collection?.trackedPlayers ?? 0, recruit.ceiling)} of the ${nf.format(recruit.ceiling)} ceiling`,
+        },
+        {
+          label: 'Queued',
+          value: recruit.queued,
+          tone: 'warn',
+          display: nf.format(recruit.queued),
+          detail: `${share(recruit.queued, recruit.ceiling)} of the ceiling — counted as spent before it enrols`,
+        },
       ]
     : [];
+
+  /* The recruiter counts a queued tag as spent (`recruit.enqueue`), so the
+     room left is the ceiling less BOTH. A difference of two payload fields —
+     nothing here is estimated. */
+  const room = recruit && collection ? Math.max(0, recruit.ceiling - collection.trackedPlayers - recruit.queued) : null;
 
   return (
     <Dashboard>
@@ -98,6 +126,18 @@ export function ConsoleSummary({
         heading="Is the collection alive?"
         badge={newest ? (alive ? 'Battles arriving' : 'No battle in 3h') : 'Not reported'}
         badgeTone={newest ? (alive ? 'good' : 'warn') : 'neutral'}
+        stats={
+          recruit && collection
+            ? [
+                { label: 'Ceiling', value: nf.format(recruit.ceiling) },
+                { label: 'Room left', value: nf.format(room ?? 0), tone: room === 0 ? 'warn' : 'neutral' },
+                {
+                  label: 'Days stored',
+                  value: collection.global?.days ? nf.format(collection.global.days) : '—',
+                },
+              ]
+            : undefined
+        }
         figure={
           recruit && collection ? (
             <ScoreDonut

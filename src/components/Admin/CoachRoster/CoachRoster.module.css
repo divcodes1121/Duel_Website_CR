@@ -760,6 +760,8 @@
 /* chart */
 
 .chartWrap {
+  /* The floating tooltip is positioned against this box. */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -849,13 +851,6 @@
 .keyLine {
   height: 2px;
   background: var(--hue-green);
-}
-
-.chartReadout {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  min-height: 1.1em;
 }
 
 /* form */
@@ -1093,11 +1088,6 @@
 @media (max-width: 560px) {
   .windowChips {
     margin-left: 0;
-  }
-
-  .chartReadout {
-    margin-left: 0;
-    flex-basis: 100%;
   }
 }
 

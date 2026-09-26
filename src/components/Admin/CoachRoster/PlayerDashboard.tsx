@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 
 import {
   fetchCardBoard,
@@ -16,6 +16,7 @@ import {
   coverage,
   windowsComparable,
   facedBars,
+  facedRateBars,
   matchupEmpty,
   strengths,
   weaknesses,
@@ -36,10 +37,12 @@ import {
   MetricGrid,
   ReadoutList,
   ScoreDonut,
+  type DashStat,
+  type Trend,
 } from '../../ui/bionis-dashboard';
 import { CrownIcon, ShieldIcon, SwordsIcon, TrendIcon } from '../../Dashboard/icons';
 import { DeckActions } from '../../DeckActions/DeckActions';
-import { DailyChart, FormStrip } from './IntelCharts';
+import { DailyChart, FormStrip, MIN_DAY_BATTLES } from './IntelCharts';
 import { DeckStrip } from './PlayerOverview';
 import styles from './CoachRoster.module.css';
 
@@ -86,6 +89,8 @@ export function PlayerDashboard({
 }) {
   const tag = player.playerTag;
   const [cards, setCards] = useState<CardBoard | null>(null);
+  const [faceTab, setFaceTab] = useState('share');
+  const matchupsId = useId();
 
   useEffect(() => {
     let live = true;
@@ -105,6 +110,14 @@ export function PlayerDashboard({
   const overall = s.battles ? (s.wins / s.battles) * 100 : 0;
   const cov = useMemo(() => coverage(intel.opponentArchetypes), [intel]);
   const weak = useMemo(() => weaknesses(intel.opponentArchetypes, overall), [intel, overall]);
+  /* THE COUNT IS NOT THE CARDS. `weaknesses` stops at `DASH.matchupCards`
+     (three) because that is how many cards the grid draws — so a metric
+     reading `weak.length` could never say more than 3, however many matchups
+     were losing. The figure counts them all; the grid still draws three. */
+  const losingCount = useMemo(
+    () => weaknesses(intel.opponentArchetypes, overall, Number.POSITIVE_INFINITY).length,
+    [intel, overall],
+  );
   const strong = useMemo(() => strengths(intel.opponentArchetypes, overall), [intel, overall]);
   /* Both windows must be comparable BEFORE any row is drawn — see
      `windowsComparable`. On real data an 11x imbalance produced eleven fallers
@@ -141,6 +154,52 @@ export function PlayerDashboard({
      be "too few to rate", on the same player, two tabs apart. */
   const rated = topDeck && topDeck.battles >= DECK_RATE_FLOOR;
 
+  /* THE SPARKLINES ARE THE DAY CHART'S OWN SERIES, drawn small. The win-rate
+     line takes the same floor `DailyChart` does — a day under
+     `MIN_DAY_BATTLES` is a GAP, never a zero and never bridged — so the card
+     and the chart below it cannot disagree about a day. */
+  const days = intel.timeline;
+  const dayLabels = days.map((d) => d.day);
+  const battlesTrend: Trend | undefined =
+    days.length > 1
+      ? {
+          values: days.map((d) => d.battles),
+          labels: dayLabels,
+          format: (v) => `${v} battle${v === 1 ? '' : 's'}`,
+          min: 0,
+          label: 'Battles per day',
+        }
+      : undefined;
+  const rateTrend: Trend | undefined =
+    days.length > 1 && days.some((d) => d.battles >= MIN_DAY_BATTLES)
+      ? {
+          values: days.map((d) => (d.battles >= MIN_DAY_BATTLES ? (d.wins / d.battles) * 100 : null)),
+          labels: dayLabels,
+          format: (v) => `${v.toFixed(0)}% won`,
+          gapNote: `Under ${MIN_DAY_BATTLES} battles — no rate drawn`,
+          min: 0,
+          max: 100,
+          label: 'Win rate per day, on days with 3 or more battles',
+        }
+      : undefined;
+
+  /* Figures the rest of the screen does not print: how many of the window's
+     days they played, how many decks, and when they last did. */
+  const played = days.filter((d) => d.battles > 0).length;
+  const heroStats: DashStat[] | undefined =
+    !live && days.length > 0
+      ? [
+          { label: 'Days played', value: `${played} of ${days.length}` },
+          { label: 'Decks played', value: nf.format(intel.decksTotal) },
+          { label: 'Last battle', value: days[days.length - 1].day.slice(5).replace('-', '/') },
+        ]
+      : undefined;
+
+  const toMatchups = () => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    document.getElementById(matchupsId)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  };
+
   /* The catalogue's own titles, so a mover reads "Hog Rider" and not the
      module's fallback title-casing of its key. */
   const title = (key: string, fallback: string) => CARDS_BY_KEY.get(key)?.name ?? fallback;
@@ -151,6 +210,7 @@ export function PlayerDashboard({
         heading={live ? 'Live battlelog' : 'Stored history'}
         badge={`Collection: ${report.tracking.state}`}
         badgeTone={report.tracking.state === 'tracked' ? 'good' : 'warn'}
+        stats={heroStats}
         figure={
           cov && (
             <ScoreDonut
@@ -174,12 +234,16 @@ export function PlayerDashboard({
           value={nf.format(s.battles)}
           note={`${nf.format(s.wins)}W · ${nf.format(s.losses)}L${s.draws ? ` · ${nf.format(s.draws)}D` : ''}`}
           icon={<SwordsIcon />}
+          tone="info"
+          trend={battlesTrend}
         />
         <KeyMetricCard
           label="Win rate"
           value={s.battles ? `${overall.toFixed(1)}%` : '—'}
           note="wins ÷ battles, this window"
           icon={<TrendIcon />}
+          tone="good"
+          trend={rateTrend}
         />
         <KeyMetricCard
           label="Path of Legends"
@@ -189,15 +253,17 @@ export function PlayerDashboard({
         />
         <KeyMetricCard
           label="Losing matchups"
-          value={String(weak.length)}
+          value={String(losingCount)}
           note={`${DASH.matchupGap}+ points below their own rate`}
-          tone={weak.length > 0 ? 'warn' : 'good'}
+          tone={losingCount > 0 ? 'warn' : 'good'}
           icon={<ShieldIcon />}
+          onClick={toMatchups}
+          actionLabel={`${losingCount} losing matchups — go to the matchup cards`}
         />
       </MetricGrid>
 
       {/* THE BLOCK A COACH READS FIRST. */}
-      <InsightGrid>
+      <InsightGrid id={matchupsId}>
         {weak.length === 0 && strong.length === 0 ? (
           <InsightCard title="Matchups" icon={<ShieldIcon />} tone="neutral">
             <p className={styles.muted}>{matchupEmpty(intel.opponentArchetypes, overall)}</p>
@@ -230,12 +296,39 @@ export function PlayerDashboard({
           </div>
         </ChartCard>
 
-        <ChartCard title="What they face" note="Share of their battles in this window">
-          <BarRows
-            bars={facedBars(intel.opponentArchetypes, s.battles)}
-            max={s.battles}
-            empty="No opponents in this window."
-          />
+        {/* ONE LIST, TWO READINGS, SAME ROWS IN THE SAME ORDER — switching tab
+            moves the bars, not the rows. The rate tab draws only archetypes
+            past the matchup floor, so it can never state a rate the matchup
+            cards withheld. */}
+        <ChartCard
+          title="What they face"
+          note={
+            faceTab === 'rate'
+              ? `Their win rate against each, ${DASH.matchupBattles}+ battles only`
+              : 'Share of their battles in this window'
+          }
+          tabs={[
+            { id: 'share', label: 'Share' },
+            { id: 'rate', label: 'Win rate' },
+          ]}
+          tab={faceTab}
+          onTabChange={setFaceTab}
+        >
+          {(tab) =>
+            tab === 'rate' ? (
+              <BarRows
+                bars={facedRateBars(intel.opponentArchetypes, overall)}
+                max={100}
+                empty={`None of the archetypes they face most has ${DASH.matchupBattles} battles behind it in this window.`}
+              />
+            ) : (
+              <BarRows
+                bars={facedBars(intel.opponentArchetypes, s.battles)}
+                max={s.battles}
+                empty="No opponents in this window."
+              />
+            )
+          }
         </ChartCard>
       </ChartGrid>
 

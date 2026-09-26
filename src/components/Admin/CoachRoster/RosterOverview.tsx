@@ -252,6 +252,7 @@ function describe(rows: readonly OverviewRow[]) {
     label: FLAG_LABEL[f],
     value: counted(f),
     tone: FLAG_TONE[f],
+    detail: FLAG_ACTION[f],
   })).filter((b) => b.value > 0);
 
   /* Per player, in roster order — the same order the rows below read in, so
@@ -261,6 +262,7 @@ function describe(rows: readonly OverviewRow[]) {
     label: r.player.displayName || r.player.playerTag,
     value: r.arsenal,
     tone: r.arsenal > 0 ? 'info' : 'warn',
+    detail: r.arsenal === 0 ? 'No deck approved yet' : `${r.arsenal} deck${r.arsenal === 1 ? '' : 's'} approved`,
   }));
 
   return {

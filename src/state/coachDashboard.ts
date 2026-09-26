@@ -182,7 +182,7 @@ function card(a: DashArchetype, overall: number, kind: 'weak' | 'strong'): Match
 export function weaknesses(
   faced: DashArchetype[] | null,
   overall: number,
-  limit = DASH.matchupCards,
+  limit: number = DASH.matchupCards,
 ): MatchupCard[] {
   if (!faced) return [];
   return faced
@@ -195,7 +195,7 @@ export function weaknesses(
 export function strengths(
   faced: DashArchetype[] | null,
   overall: number,
-  limit = DASH.matchupCards,
+  limit: number = DASH.matchupCards,
 ): MatchupCard[] {
   if (!faced) return [];
   return faced
@@ -223,6 +223,17 @@ export interface DashBar {
   value: number;
   tone?: DashTone;
   display?: string;
+  /** The figures behind the bar, for its tooltip. */
+  detail?: string;
+}
+
+/** The record line a tooltip prints: the count always, the rate only past the
+ *  floor — the same rule the matchup cards follow, so hovering a bar can
+ *  never state a rate the cards withheld. */
+export function recordLine(a: DashArchetype): string {
+  const wl = `${a.wins}W ${a.losses}L${a.draws ? ` ${a.draws}D` : ''}`;
+  const n = `${a.battles} battle${a.battles === 1 ? '' : 's'}`;
+  return judged(a) ? `${n} · ${wl} · ${pct1(rate(a.wins, a.battles))} won` : `${n} · ${wl} · too few to rate`;
 }
 
 /* `dayColumns` LIVED HERE AND WAS DELETED before it ever shipped a screen.
@@ -239,7 +250,36 @@ export function facedBars(rows: DashArchetype[], total: number, limit = 6): Dash
     value: r.battles,
     tone: 'info' as DashTone,
     display: total ? `${((r.battles / total) * 100).toFixed(0)}%` : String(r.battles),
+    detail: recordLine(r),
   }));
+}
+
+/**
+ * The same archetypes as `facedBars`, IN THE SAME ORDER, drawn as their win
+ * rate — the second tab of "What they face". Only those past the floor: a
+ * bar is a claim, and an archetype met three times has no rate to draw.
+ *
+ * Kept in the most-faced order rather than sorted by rate, so switching tabs
+ * moves the bars and not the rows — the reader compares one row across two
+ * views. The tone does the ranking: the same gaps as the matchup cards.
+ */
+export function facedRateBars(rows: DashArchetype[], overall: number, limit = 6): DashBar[] {
+  return rows
+    .slice(0, limit)
+    .filter(judged)
+    .map((a) => {
+      const r = rate(a.wins, a.battles);
+      const diff = r - overall;
+      const tone: DashTone =
+        diff <= -DASH.severeGap ? 'bad' : diff <= -DASH.matchupGap ? 'warn' : diff >= DASH.matchupGap ? 'good' : 'neutral';
+      return {
+        label: a.name,
+        value: r,
+        tone,
+        display: pct1(r),
+        detail: `${a.battles} battles · ${a.wins}W ${a.losses}L${a.draws ? ` ${a.draws}D` : ''} · ${signed(diff)} vs their ${pct1(overall)}`,
+      };
+    });
 }
 
 /* ── card movement ─────────────────────────────────────────────────────── */
