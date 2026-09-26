@@ -24,6 +24,7 @@ import { supabase } from '../../state/supabase';
 import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
+import { useReportRegistration } from '../../state/reportExport';
 import { useAccess } from '../../state/gate';
 import { DAY_PRESETS } from '../../utils/datePresets';
 
@@ -643,6 +644,11 @@ function DuelPrediction({ tag, days }: { tag: string; days: number }) {
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [busy, setBusy] = useState(false);
   const reading = useHeldLoading(busy);
+  useReportRegistration({
+    id: 'coach-predict',
+    ready: Boolean(data),
+    build: async () => (await import('../../utils/screenAdapters')).coachPredictionDoc(data as CoachPrediction),
+  });
 
   const run = useCallback(
     (decks: string[][]) => {
@@ -1257,6 +1263,11 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [busy, setBusy] = useState(false);
   const reading = useHeldLoading(busy);
+  useReportRegistration({
+    id: 'coach-suggest',
+    ready: Boolean(data),
+    build: async () => (await import('../../utils/screenAdapters')).coachSuggestionDoc(data as CoachSuggestion),
+  });
 
   /* THE STAGING SHELF. Card-level swaps are unmeasured against real data, and
      `main` deploys straight to production — so an admin session is the only

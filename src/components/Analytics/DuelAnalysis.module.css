@@ -962,18 +962,3 @@
 
 /* ---------------------------------------------------------------- footer */
 
-/* Stacked tab blocks — only ever more than one when printing, where each needs
-   naming because the tab bar that would have identified it is a dead control
-   on paper. */
-.tabBlock + .tabBlock {
-  margin-top: 26px;
-}
-
-.printTabHeading {
-  margin: 0 0 12px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--text);
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}

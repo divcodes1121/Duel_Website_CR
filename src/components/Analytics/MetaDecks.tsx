@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
-import { ReportButton } from '../Export/ReportButton';
-import { metaBoardDoc } from '../../utils/reportAdapters';
+import { useScreenExport } from '../Export/ExportButton';
 import { ReadingState } from './ReadingState';
 import {
   AnalyticsError,
@@ -67,6 +66,11 @@ export function MetaDecks() {
      through anyway. See the hook. */
   const reading = useHeldLoading(loading && !board);
   const timer = useRef<number | null>(null);
+  const exportButton = useScreenExport({
+    id: 'meta',
+    ready: Boolean(board && board.decks.length),
+    build: async () => (await import('../../utils/reportAdapters')).metaBoardDoc(board as MetaBoard),
+  });
 
   useEffect(() => {
     let live = true;
@@ -210,7 +214,7 @@ export function MetaDecks() {
           {/* A thunk, not a built document — the report describes the board as
               it stands when the button is pressed, including how stale the
               snapshot has become by then. */}
-          <ReportButton build={() => metaBoardDoc(board)} />
+          {exportButton}
           <span className={styles.stat}>
             {cardFilter.length ? (
               <>

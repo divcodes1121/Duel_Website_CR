@@ -1,3 +1,4 @@
+import { useScreenExport } from '../Export/ExportButton';
 import { useEffect, useMemo, useState } from 'react';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
@@ -443,6 +444,15 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
 
   const { win, preset, setPreset } = useDateWindow(season, report?.coverage.end ?? null);
 
+  /* All three tabs that hold an answer: the player's matchups, and whichever
+     deck-vs-deck and find-a-counter readings have been run this visit. */
+  const exportButton = useScreenExport({
+    id: 'counter',
+    ready: Boolean(report || versus || counters),
+    win,
+    build: async () => (await import('../../utils/screenAdapters')).deckCounterDoc(report, tag, { versus, counters }),
+  });
+
   useEffect(() => {
     let live = true;
     setLoading(true);
@@ -522,6 +532,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
             <h1 className={styles.title}>Deck Counter</h1>
             <p className={styles.blurb}>{TABS.find((t) => t.id === tab)?.blurb}</p>
           </div>
+          {exportButton}
           {tab === 'player' && (
             <div className={styles.range}>
               {RANGE_PRESETS.filter((r) => r.days >= 0).map((r) => (

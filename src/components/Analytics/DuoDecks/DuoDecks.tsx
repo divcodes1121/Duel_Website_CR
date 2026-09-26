@@ -1,3 +1,4 @@
+import { useScreenExport } from '../../Export/ExportButton';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CardArt } from '../CardArt';
@@ -118,6 +119,12 @@ function Pair({ pair }: { pair: DuoPair }) {
 
 export function DuoDecks() {
   const [report, setReport] = useState<DuoReport | null>(null);
+  const exportButton = useScreenExport({
+    id: 'duo',
+    ready: Boolean(report?.pairs.length),
+    // The page of pairs on screen, at its sort, filter and page size.
+    build: async () => (await import('../../../utils/screenAdapters')).duoPairsDoc(report as DuoReport),
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<string>('played');
@@ -184,6 +191,7 @@ export function DuoDecks() {
     <div className={styles.page}>
       <header className={styles.head}>
         <h1 className={styles.title}>2v2 Decks</h1>
+        {exportButton}
         <p className={styles.lede}>
           Unique teammate deck combinations — the two decks a pair of players
           actually brought together, not one deck against another.

@@ -1,3 +1,4 @@
+import { useScreenExport } from '../Export/ExportButton';
 import { useEffect, useMemo, useState } from 'react';
 import { CARDS } from '../../data/cards';
 import type { Card } from '../../types/card';
@@ -70,6 +71,11 @@ interface Row {
 
 export function GlobalCards() {
   const [board, setBoard] = useState<GlobalCardBoard | null>(null);
+  const exportButton = useScreenExport({
+    id: 'global-cards',
+    ready: Boolean(board?.cards?.length),
+    build: async () => (await import('../../utils/screenAdapters')).globalCardsDoc(board as GlobalCardBoard),
+  });
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<TabId>('all');
   const [sort, setSort] = useState<'use' | 'win'>('use');
@@ -148,6 +154,7 @@ export function GlobalCards() {
             An evolved card is scored apart from the plain one.
           </p>
         </div>
+        {exportButton}
         {board?.window?.from && (
           <span className={styles.window}>
             {board.window.days} days to {board.window.to}

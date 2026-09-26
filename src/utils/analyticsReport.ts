@@ -93,6 +93,10 @@ export interface DeckLine {
   art?: Record<string, 'evolution' | 'hero'>;
   /** Art was guessed from slot position rather than observed. Said out loud. */
   inferredArt?: boolean;
+  /** Colour the figure by what it MEANS on this screen rather than by the
+   *  absolute rate: a 63% "worst matchup" is nine points under the player's
+   *  own average, and printed green it reads as a strength. */
+  valueHue?: ReportHue;
 }
 
 export interface DecksBlock extends BlockBase {
@@ -268,6 +272,9 @@ export interface VersusBlock extends BlockBase {
    * page it is on.
    */
   emptyNote?: string;
+  /** What sits between the two decks: "VS" for opponents (the default), "+"
+   *  for teammates — the 2v2 board's partnerships are one side, not two. */
+  joiner?: string;
   pairs: {
     left: DeckLine;
     /** Null when nothing on the squad answers it — printed as a stated
@@ -277,7 +284,56 @@ export interface VersusBlock extends BlockBase {
   }[];
 }
 
+/**
+ * A LINE CHART over days — Player Analysis's use-rate and win-rate trends.
+ * `points[i]` belongs to `ticks[i]`; a null is a day with nothing to plot and
+ * breaks the line rather than being drawn as zero.
+ */
+export interface TrendBlock extends BlockBase {
+  kind: 'trend';
+  ticks: string[];
+  series: { label: string; points: (number | null)[] }[];
+  /** Printed on the axis. `pct` appends a percent sign. */
+  format?: 'pct' | 'int';
+}
+
+/**
+ * THE BATTLE LOG — one battle a row: the result, the player's deck, the
+ * opponent's. The Recent Battles screen, printed.
+ */
+export interface BattlesBlock extends BlockBase {
+  kind: 'battles';
+  rows: {
+    result: 'win' | 'loss' | 'draw';
+    /** "3-1". */
+    score: string;
+    when: string;
+    mode: string;
+    leftLabel: string;
+    rightLabel: string;
+    left: DeckLine;
+    right: DeckLine;
+  }[];
+}
+
+/**
+ * A GRID OF CARDS, each with its own small figures — the Cards screen.
+ * `form` picks the evolution or hero art, so the Evolutions tab prints the
+ * evolutions rather than the base cards.
+ */
+export interface CardGridBlock extends BlockBase {
+  kind: 'cards';
+  cards: {
+    key: string;
+    form?: 'evolution' | 'hero';
+    stats: { label: string; value: string; fraction?: number; hue?: ReportHue; thin?: boolean }[];
+  }[];
+}
+
 export type ReportBlock =
+  | TrendBlock
+  | BattlesBlock
+  | CardGridBlock
   | StatsBlock
   | TableBlock
   | BarsBlock
@@ -397,6 +453,15 @@ export interface ReportDoc {
   contents?: boolean;
   /** A sentence under the cover title, when the subject line is not enough. */
   summary?: string;
+  /**
+   * `full` opens the report on a cover sheet of its own (the castle artwork,
+   * the headline figures and the contents); `band` opens it on a hero band
+   * with the content starting under it on the same sheet. Defaults to `full`
+   * when `contents` is on — a long, sectioned document needs a front page —
+   * and `band` otherwise, so a two-page report does not spend one of them on
+   * a title.
+   */
+  cover?: 'full' | 'band';
 }
 
 /* ------------------------------------------------------------------ helpers */

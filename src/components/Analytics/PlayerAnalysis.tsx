@@ -3,14 +3,14 @@ import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { ChartLegend, TrendChart } from './TrendChart';
 import { LivePlayer } from './LivePlayer';
-import { ReportButton } from '../Export/ReportButton';
+import { useScreenExport } from '../Export/ExportButton';
 import { ReadingState } from './ReadingState';
-import { playerReportDoc } from '../../utils/reportAdapters';
 import {
   AnalyticsError,
   fetchPlayerReport,
   isLiveReport,
   type PlayerReport,
+  type StoredPlayerReport,
 } from '../../state/analyticsClient';
 import {
   DECK_SORTS,
@@ -178,6 +178,14 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
     season,
     report?.coverage?.end ?? null,
   );
+
+  const exportButton = useScreenExport({
+    id: 'player',
+    ready: Boolean(report) && !isLiveReport(report as PlayerReport),
+    win,
+    build: async () => (await import('../../utils/reportAdapters'))
+      .playerReportDoc(report as StoredPlayerReport, tag),
+  });
 
   useEffect(() => {
     let live = true;
@@ -476,7 +484,7 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
               sidebar's Upgrade Now was caught being, and the reason this project
               refuses to draw a control that does nothing. It now builds the real
               report, at whatever window and sort are live when it is pressed. */}
-          <ReportButton build={() => playerReportDoc(report, tag)} label="Export Data" />
+          {exportButton}
         </header>
 
         <div className={styles.sortTabs}>

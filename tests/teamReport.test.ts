@@ -299,13 +299,15 @@ describe('teamAnalysisReport — what the page will look like', () => {
     expect(new Set(entries).size).toBe(entries.length);
   });
 
-  it('breaks before a versus block so it opens a sheet of its own', () => {
-    // A pair stands ~94 mm; started halfway down a page it takes the whole of
-    // the next one anyway and leaves a hole behind it.
+  it('lets the engine place a versus block instead of forcing a sheet for it', () => {
+    // The old renderer could strand a heading, so a break opened a sheet for
+    // every head-to-head and left half-empty pages behind. The new packer
+    // keeps a heading with its first pair, so the block only needs a heading.
     const doc = teamAnalysisReport(report());
     const i = doc.blocks.findIndex((b) => b.kind === 'versus');
     expect(i).toBeGreaterThan(0);
-    expect(doc.blocks[i - 1].kind).toBe('break');
+    expect(doc.blocks[i - 1].kind).not.toBe('break');
+    expect((doc.blocks[i] as { heading?: string }).heading).toBeTruthy();
   });
 
   /* ── The scouting report ──────────────────────────────────────────────────

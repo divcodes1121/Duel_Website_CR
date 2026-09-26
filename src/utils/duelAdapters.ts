@@ -1,5 +1,6 @@
 import type { DuelReport, DuelZoneReport } from '../state/analyticsClient';
 import { int, pct, type ReportBlock, type ReportDoc } from './analyticsReport';
+import { printableName } from './report/text';
 
 /* Report models for the two duel screens.
  *
@@ -8,11 +9,9 @@ import { int, pct, type ReportBlock, type ReportDoc } from './analyticsReport';
  * wired. `reportAdapters.ts` covers Player Analysis, Live Player, Meta and
  * Cards, and these two were simply never added.
  *
- * SEPARATE FILE, NOT APPENDED TO `reportAdapters.ts`. That module is imported
- * eagerly by four screens; these two are reached only by pressing a button, so
- * `ReportButton`'s thunk may import them dynamically and keep them out of the
- * chunk everyone loads. The same arrangement `teamReport.ts` uses, and for the
- * same reason.
+ * SEPARATE FILE, reached only by pressing Export: the screens' export thunks
+ * (`useScreenExport`) import it dynamically, like every adapter since the
+ * 2026-09-26 rebuild, so none of it is in the chunk everyone loads.
  *
  * THE MODEL IS THE SCREEN'S OWN NUMBERS, NEVER A NEW READING. Nothing here
  * recomputes anything: every figure is one the screen was already showing, so
@@ -40,7 +39,7 @@ function share(n: number, of: number): string {
 /** The opponent's name, or their tag when none was ever stored. */
 function oppName(s: { opponentName: string; opponentTag: string }): string {
   return s.opponentName && s.opponentName !== s.opponentTag
-    ? s.opponentName
+    ? printableName(s.opponentName, s.opponentTag)
     : s.opponentTag;
 }
 
@@ -92,7 +91,7 @@ export function duelZoneDoc(r: DuelZoneReport, tag: string): ReportDoc {
      which store a loadout and NO per-game opponent — so the right-hand side
      is genuinely absent nine times in ten, and it says why rather than
      drawing an empty grid. */
-  const CAP = 24;
+  const CAP = 60;
   const shown = r.series.slice(0, CAP);
   if (shown.length) {
     blocks.push({
@@ -211,7 +210,7 @@ export function duelZoneDoc(r: DuelZoneReport, tag: string): ReportDoc {
 
 /* --------------------------------------------------------- Duel Analysis */
 
-export function duelAnalysisDoc(r: DuelReport, tag: string): ReportDoc {
+export function duelAnalysisDoc(r: DuelReport, tag: string, insights: ReportBlock[] = []): ReportDoc {
   const d = r.duels;
   const blocks: ReportBlock[] = [
     {
@@ -271,6 +270,12 @@ export function duelAnalysisDoc(r: DuelReport, tag: string): ReportDoc {
       })),
     });
   }
+
+  /* THE INSIGHTS PANEL AT THE FOOT OF THE SCREEN. It reads the Duel Zone
+     payload (the pair board above it has no series), so the caller fetches
+     that and passes the blocks in; absent, the report simply ends with the
+     tabs. */
+  blocks.push(...insights);
 
   const tabs = Object.values(r.tabs ?? {});
   const best = tabs

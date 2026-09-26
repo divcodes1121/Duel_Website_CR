@@ -1071,6 +1071,40 @@ for on ONE line, and the width they get varies more than it looks:
   sides on these screens. A chip for an archetype outside their likely decks
   has a dashed border and a `title` saying why it is there.
 
+## The Export button — one per screen (2026-09-26)
+
+`components/Export/ExportButton.tsx` is the only export control on the site.
+It replaced two that were both labelled "Export PDF": the shell's, which
+printed the live page through the browser, and a per-screen jsPDF button that
+only some screens had.
+
+- **Placement is decided by context, not by the screen.** A screen calls
+  `useScreenExport({ id, build, ready, win })`. Inside the player shell
+  (`ReportHost` in `Dashboard.tsx`) that registers with the shell's button in
+  the query row, so the button sits in the same place on every section and
+  the screen renders nothing; anywhere else (Team Analysis, 2v2 Decks, the
+  home boards) the hook returns the inline button for the screen's header.
+  Coach Assist's result panels call `useReportRegistration` directly, since
+  they only ever mount inside the shell.
+- **The shell's button is a menu**: *This page* (greyed with "Waiting for this
+  screen to load" until the section registers) and *Full player report*. The
+  menu is portalled and opaque, anchored under the button's right edge; Esc
+  closes it and refocuses the button, arrows move between items, outside
+  pointerdown and resize close it.
+- **Feedback is a label, not a greyed control**: a spinner and the step
+  ("Reading 3 of 6 sections…", "Drawing pages…"), then "Saved · N pages" for
+  three seconds, and a stated "Export failed" otherwise. The spinner is a
+  continuous animation that exists only while an export is running; reduced
+  motion stills it.
+- **It no longer disappears on a narrow screen.** The old button shared
+  `.topSeason` with the season picker and the whole slot was `display: none`
+  below 1080px, so tablets and phones had no export at all. Only
+  `.topSeasonMenu` is hidden now. Verified at 390px: the button is on screen
+  at 44px tall and the menu fits the viewport.
+- **The PDF it produces is always dark** and does not read the page's CSS —
+  see "Exporting a screen as a PDF" in the README. Nothing in the report engine
+  may set a transparency state; a test enforces it.
+
 ## Working on this
 
 ```bash

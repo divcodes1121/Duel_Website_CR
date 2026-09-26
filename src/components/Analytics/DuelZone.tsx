@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
-import { ReportButton } from '../Export/ReportButton';
+import { useScreenExport } from '../Export/ExportButton';
 import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { useBuilderStore } from '../../state/store';
 import { duelPairs, type DuelSaveOutcome } from '../../state/duelImport';
@@ -418,6 +418,14 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
     report?.coverage.end ?? null,
   );
 
+  const exportButton = useScreenExport({
+    id: 'duel-zone',
+    ready: Boolean(report),
+    win,
+    // Both panes — the series log and the deck sequence — whichever is open.
+    build: async () => (await import('../../utils/duelAdapters')).duelZoneDoc(report as DuelZoneReport, tag),
+  });
+
   useEffect(() => {
     let live = true;
     setLoading(true);
@@ -542,11 +550,7 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
               every screen loads; a dynamic import in an EVENT HANDLER never
               touches Suspense, which is what makes it safe inside this shell. */}
           <div className={styles.exportSlot}>
-            <ReportButton
-              build={async () =>
-                (await import('../../utils/duelAdapters')).duelZoneDoc(report, tag)
-              }
-            />
+            {exportButton}
           </div>
 
           <div className={styles.filterSlot}>

@@ -1,391 +1,262 @@
 /**
- * The report layout engine's decision layer.
- *
- * These three modules are import-free by design — `geometry` has no imports at
- * all and `fit` and `audit` import only it — precisely so that the arithmetic
- * that decides what a page looks like can be tested without a jsPDF instance,
- * a browser or card art. That is the same reasoning behind `tiers.ts`,
- * `squadParse.ts` and `passwordRules.ts`.
+ * The report engine's pure half: geometry, pagination, the audit, the palette,
+ * the glyph filter and the art sweep. None of these import jsPDF or touch a
+ * browser, which is the point of the split — the rules that decide what a
+ * page looks like are testable on their own.
  *
  * WHAT THESE TESTS CANNOT DO is tell you the document looks right. Every fault
- * this engine shipped during its own construction — a 4 mm card, a heading
- * written across the title beside it, a section bar naming content that was on
- * a different page — was found by rendering pages and looking at them, and two
- * of the three would have passed everything below. The unit tests pin the
- * rules; the rendering pass is what checks they were the right rules.
+ * found while building the engine — a score drawn over a date, a matrix that
+ * painted every cell one green, two decks a page apart with a hole between
+ * them — was found by rendering pages and looking at them. The tests pin the
+ * rules; the rendering pass checks they were the right rules.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  CARD_MIN, FILL_MIN, clamp, itemWidth, itemsAcross, lineH,
+  BODY_BOTTOM, BODY_TOP, CARD_MAX, CARD_MIN, CARD_RATIO, CONTENT_W, FONT_MIN, MARGIN, PAGE_W,
+  cardH, cardWidthFor, columnWidth, columnsFor, stripWidth,
 } from '../src/utils/report/geometry';
-import {
-  balanceRows, chooseGrid, chooseVariant, packAtoms, underfilled,
-  type Atom, type Variant,
-} from '../src/utils/report/fit';
-import { auditDocument, auditPage, shouldReflow, type AuditPage, type Box } from '../src/utils/report/audit';
+import { pack, type PackItem } from '../src/utils/report/pack';
+import { auditDocument, auditPage, type Box } from '../src/utils/report/audit';
+import { HUES, P, contrast, heat, mix, parsePct, rateColor } from '../src/utils/report/theme';
+import { drawable, latin1, printableName } from '../src/utils/report/text';
+import { collectArt, tagged } from '../src/utils/report/engine';
+import type { ReportBlock } from '../src/utils/analyticsReport';
 
 /* ---------------------------------------------------------------- geometry */
 
 describe('geometry', () => {
-  it('divides a width into items and gaps', () => {
-    expect(itemWidth(100, 4, 4)).toBeCloseTo((100 - 12) / 4);
-    expect(itemWidth(100, 1, 4)).toBe(100);
+  it('keeps the card art at its true ratio', () => {
+    expect(cardH(10)).toBeCloseTo(10 / CARD_RATIO);
+    expect(CARD_RATIO).toBeCloseTo(302 / 363);
   });
 
-  it('is the inverse of itemsAcross at the boundary', () => {
-    const w = itemWidth(269, 8, 3.2);
-    expect(itemsAcross(269, w, 3.2)).toBe(8);
+  it('never sizes a card past the ceiling, however much room there is', () => {
+    // The complaint that started the rewrite: art far bigger than the site.
+    expect(cardWidthFor(400, 8, 1)).toBe(CARD_MAX);
+    expect(cardWidthFor(10, 8, 1)).toBe(CARD_MIN);
+    expect(cardWidthFor(90, 8, 1)).toBeCloseTo((90 - 7) / 8);
   });
 
-  it('never reports fewer than one item across', () => {
-    expect(itemsAcross(10, 400, 4)).toBe(1);
+  it('measures a strip as cards plus the gaps between them', () => {
+    expect(stripWidth(8, 10, 1)).toBe(87);
+    expect(stripWidth(0, 10, 1)).toBe(0);
   });
 
-  it('clamps both ways', () => {
-    expect(clamp(5, 0, 10)).toBe(5);
-    expect(clamp(-5, 0, 10)).toBe(0);
-    expect(clamp(50, 0, 10)).toBe(10);
-  });
-
-  it('turns a point size into a line box in millimetres', () => {
-    // 10 pt at 1.32 leading is 10 * 0.3528 * 1.32.
-    expect(lineH(10)).toBeCloseTo(4.657, 2);
+  it('splits a width into equal columns', () => {
+    expect(columnWidth(100, 4, 4)).toBeCloseTo(22);
+    expect(columnsFor(CONTENT_W, 40, 3, 6)).toBe(6);
+    expect(columnsFor(50, 40, 3)).toBe(1);
   });
 });
 
-/* ------------------------------------------------------------ balanceRows */
+/* -------------------------------------------------------------- pagination */
 
-describe('balanceRows', () => {
-  it('leaves an exact fit alone', () => {
-    expect(balanceRows(24, 8)).toEqual([8, 8, 8]);
+const items = (hs: number[], extra: Partial<PackItem>[] = []): PackItem[] =>
+  hs.map((h, i) => ({ h, gap: 2, ...(extra[i] ?? {}) }));
+
+describe('pack', () => {
+  const opts = { top: 0, bottom: 100 };
+
+  it('fills a page and turns it', () => {
+    const pages = pack(items([40, 40, 40]), opts);
+    expect(pages.map((p) => p.map((x) => x.item))).toEqual([[0, 1], [2]]);
   });
 
-  it('spreads a lone orphan rather than stranding it', () => {
-    // 9 in 8 columns is 8 + 1; the orphan reads as a mistake.
-    expect(balanceRows(9, 8)).toEqual([5, 4]);
+  it('places the first atom on a page with no gap above it', () => {
+    const pages = pack(items([40, 40, 40]), opts);
+    expect(pages[1][0].y).toBe(0);
+    expect(pages[0][1].y).toBe(42);
   });
 
-  it('leaves a last row alone once it is half the width', () => {
-    expect(balanceRows(12, 8)).toEqual([8, 4]);
+  it('keeps a heading with the row under it', () => {
+    // 60 + heading 10 + row 30 = 102 > 100: the heading must not be stranded.
+    const pages = pack(items([60, 10, 30], [{}, { keep: true }, {}]), opts);
+    expect(pages.map((p) => p.map((x) => x.item))).toEqual([[0], [1, 2]]);
   });
 
-  it('never loses or invents an item', () => {
-    for (let n = 1; n <= 60; n += 1) {
-      for (let c = 1; c <= 10; c += 1) {
-        const rows = balanceRows(n, c);
-        expect(rows.reduce((a, b) => a + b, 0)).toBe(n);
-        expect(Math.max(...rows)).toBeLessThanOrEqual(c);
-      }
-    }
+  it('opens a new page for a section opener', () => {
+    const pages = pack(items([10, 10], [{}, { breakBefore: true }]), opts);
+    expect(pages).toHaveLength(2);
   });
 
-  it('handles a count under one row', () => {
-    expect(balanceRows(3, 8)).toEqual([3]);
+  it('reserves a continuation heading when a block spills', () => {
+    const pages = pack(items([70, 20, 20], [{}, {}, { contH: 8 }]), { ...opts, contGap: 0 });
+    const second = pages[1];
+    expect(second[0]).toEqual({ item: 2, y: 0, cont: true });
+    expect(second[1]).toEqual({ item: 2, y: 8 });
   });
 
-  it('returns nothing for nothing', () => {
-    expect(balanceRows(0, 8)).toEqual([]);
-    expect(balanceRows(5, 0)).toEqual([]);
-  });
-});
-
-/* -------------------------------------------------------------- chooseGrid */
-
-const cardGrid = (count: number, width = 269, first = 158, rest = 158) => chooseGrid({
-  count, width, first, rest,
-  gap: 3.2, rowGap: 3.6,
-  min: CARD_MIN * 2 + 4, ideal: 34, max: 42,
-  rowHeight: (w) => (w - 4) / 2 / 0.832 + 14,
-});
-
-describe('chooseGrid', () => {
-  it('never returns an item under the floor', () => {
-    for (let n = 1; n <= 120; n += 1) {
-      const plan = cardGrid(n);
-      if (!plan) continue;
-      expect(plan.itemW).toBeGreaterThanOrEqual(CARD_MIN * 2 + 4);
-    }
+  it('places an atom taller than a page rather than looping', () => {
+    const pages = pack(items([10, 150, 10]), opts);
+    expect(pages.flat().filter((p) => !p.cont).map((p) => p.item)).toEqual([0, 1, 2]);
   });
 
-  it('prefers fewer pages over a larger item', () => {
-    // 72 pairs: a wide grid fits them in two sheets, a narrow one in four.
-    const plan = cardGrid(72);
-    expect(plan).not.toBeNull();
-    expect(plan!.pages).toBeLessThanOrEqual(2);
+  it('never leaves a trailing empty page', () => {
+    const pages = pack(items([10, 10], [{}, { breakBefore: true }]), opts);
+    expect(pages.every((p) => p.length > 0)).toBe(true);
   });
 
-  it('does not stretch a handful of items across the whole sheet', () => {
-    const plan = cardGrid(3);
-    expect(plan!.cols).toBeLessThanOrEqual(3);
-    expect(plan!.itemW).toBeLessThanOrEqual(42);
-  });
-
-  it('gives a narrow column fewer columns, with no caller change', () => {
-    const wide = cardGrid(24, 269);
-    const narrow = cardGrid(24, 120);
-    expect(narrow!.cols).toBeLessThan(wide!.cols);
-  });
-
-  it('reports the page count the packer will actually produce', () => {
-    const plan = cardGrid(40)!;
-    const rows = plan.rows.length;
-    const expected = plan.rowsFirst >= rows
-      ? 1
-      : 1 + Math.ceil((rows - plan.rowsFirst) / plan.rowsRest);
-    expect(plan.pages).toBe(expected);
-  });
-
-  it('returns null when nothing can be laid out', () => {
-    expect(chooseGrid({
-      count: 0, width: 269, first: 158, rest: 158, gap: 2, rowGap: 2,
-      min: 10, ideal: 20, max: 30, rowHeight: () => 10,
-    })).toBeNull();
-    expect(cardGrid(5, 4)).toBeNull();
-  });
-
-  it('honours an explicit column allowlist', () => {
-    const plan = chooseGrid({
-      count: 24, width: 269, first: 158, rest: 158, gap: 3, rowGap: 3,
-      min: 10, ideal: 30, max: 60, rowHeight: (w) => w / 2,
-      allow: [3, 6],
-    });
-    expect([3, 6]).toContain(plan!.cols);
+  it('starts the first page lower when a hero band sits above it', () => {
+    const pages = pack(items([10]), { ...opts, firstTop: 50 });
+    expect(pages[0][0].y).toBe(50);
   });
 });
 
-/* --------------------------------------------------------------- packAtoms */
-
-const atom = (h: number, extra: Partial<Atom> = {}): Atom => ({ h, kind: 'row', ...extra });
-
-describe('packAtoms', () => {
-  it('never splits an atom across a page', () => {
-    const pages = packAtoms([atom(50), atom(50), atom(50), atom(50)],
-      { first: 158, rest: 158 });
-    for (const p of pages) {
-      expect(p.atoms.reduce((s, a) => s + a.h, 0)).toBeLessThanOrEqual(p.room);
-    }
-  });
-
-  it('keeps a heading with the block it introduces', () => {
-    // Only 30 mm left: the heading must travel with its first row.
-    const pages = packAtoms(
-      [atom(10, { kind: 'heading', keepWithNext: true }), atom(40), atom(40)],
-      { first: 30, rest: 158 },
-    );
-    const first = pages.find((p) => p.atoms.length > 0)!;
-    expect(first.atoms[0].kind).toBe('heading');
-    expect(first.atoms[1].kind).toBe('row');
-  });
-
-  it('moves a whole keep-with-next chain, however long', () => {
-    const pages = packAtoms(
-      [
-        atom(10, { kind: 'a', keepWithNext: true }),
-        atom(10, { kind: 'b', keepWithNext: true }),
-        atom(10, { kind: 'c' }),
-        atom(140),
-      ],
-      { first: 25, rest: 158 },
-    );
-    const withChain = pages.find((p) => p.atoms.some((a) => a.kind === 'a'))!;
-    expect(withChain.atoms.map((a) => a.kind).slice(0, 3)).toEqual(['a', 'b', 'c']);
-  });
-
-  it('turns the page rather than overhanging, even with nothing placed yet', () => {
-    /* THE REGRESSION THIS PINS: "the current page is empty" is not the same
-       question as "this is a whole page". A flow usually starts in whatever is
-       left under the block before it. */
-    const pages = packAtoms([atom(100)], { first: 70, rest: 158 });
-    expect(pages[0].atoms).toHaveLength(0);
-    expect(pages[1].atoms).toHaveLength(1);
-  });
-
-  it('places a genuinely oversized atom rather than looping for ever', () => {
-    const pages = packAtoms([atom(400)], { first: 158, rest: 158 });
-    expect(pages).toHaveLength(1);
-    expect(pages[0].atoms).toHaveLength(1);
-  });
-
-  it('gives the first page a different budget from the rest', () => {
-    const pages = packAtoms([atom(40), atom(40), atom(40)], { first: 45, rest: 158 });
-    expect(pages[0].atoms).toHaveLength(1);
-    expect(pages[1].atoms).toHaveLength(2);
-  });
-
-  it('reports a fill for every page', () => {
-    const pages = packAtoms([atom(79), atom(79)], { first: 158, rest: 158 });
-    expect(pages[0].fill).toBeCloseTo(1, 2);
-  });
-
-  it('emits one page for no atoms at all', () => {
-    expect(packAtoms([], { first: 158, rest: 158 })).toHaveLength(1);
-  });
-
-  it('counts the gap between atoms', () => {
-    const pages = packAtoms([atom(50), atom(50), atom(50)],
-      { first: 158, rest: 158, gap: 5 });
-    // 50 + 5 + 50 + 5 + 50 = 160 > 158, so the third moves.
-    expect(pages[0].atoms).toHaveLength(2);
-  });
-});
-
-/* ----------------------------------------------------------- chooseVariant */
-
-const variant = (id: string, heights: number[], legibility: number,
-                 lossy = false): Variant => ({
-  id, legibility, lossy, atoms: heights.map((h) => atom(h)),
-});
-
-describe('chooseVariant', () => {
-  it('prefers the composition that costs fewer pages', () => {
-    const dense = variant('dense', [30, 30, 30, 30], 0.6);
-    const loose = variant('loose', [80, 80, 80, 80], 1);
-    const pick = chooseVariant([dense, loose], { first: 158, rest: 158 });
-    expect(pick!.variant.id).toBe('dense');
-  });
-
-  it('prefers the more legible composition at equal page counts', () => {
-    const small = variant('small', [30, 30], 0.4);
-    const big = variant('big', [60, 60], 0.95);
-    const pick = chooseVariant([small, big], { first: 158, rest: 158 });
-    expect(pick!.variant.id).toBe('big');
-  });
-
-  it('makes a lossy variant earn its place by a whole page', () => {
-    // Same page count: the faithful one must win.
-    const full = variant('full', [70, 70], 1);
-    const cut = variant('cut', [70], 1, true);
-    const pick = chooseVariant([full, cut], { first: 158, rest: 158 });
-    expect(pick!.variant.id).toBe('full');
-  });
-
-  it('lets a lossy variant win when it genuinely saves sheets', () => {
-    const full = variant('full', Array<number>(12).fill(80), 1);
-    const cut = variant('cut', [80, 80], 1, true);
-    const pick = chooseVariant([full, cut], { first: 158, rest: 158 });
-    expect(pick!.variant.id).toBe('cut');
-  });
-
-  it('ignores an empty variant', () => {
-    const pick = chooseVariant([variant('empty', [], 1), variant('real', [40], 1)],
-      { first: 158, rest: 158 });
-    expect(pick!.variant.id).toBe('real');
-  });
-
-  it('returns null when there is nothing to choose', () => {
-    expect(chooseVariant([], { first: 158, rest: 158 })).toBeNull();
-  });
-});
-
-describe('underfilled', () => {
-  it('never reports the last page, which is allowed to end', () => {
-    const pages = packAtoms([atom(150), atom(10)], { first: 158, rest: 158 });
-    expect(underfilled(pages)).toEqual([]);
-  });
-
-  it('reports a page that gave up early', () => {
-    const pages = packAtoms([atom(40), atom(150)], { first: 158, rest: 158 });
-    expect(pages[0].fill).toBeLessThan(FILL_MIN);
-    expect(underfilled(pages)).toEqual([0]);
-  });
-});
-
-/* ------------------------------------------------------------------ audit */
-
-const box = (b: Partial<Box>): Box =>
-  ({ x: 14, y: 40, w: 100, h: 20, kind: 'row', ...b });
-
-const page = (boxes: Box[], extra: Partial<AuditPage> = {}): AuditPage =>
-  ({ index: 2, boxes, fill: 0.8, ...extra });
+/* ------------------------------------------------------------------- audit */
 
 describe('audit', () => {
-  it('passes a well-formed page', () => {
-    expect(auditPage(page([box({ y: 40 }), box({ y: 70 })]))).toEqual([]);
+  const ok: Box = { x: MARGIN, y: BODY_TOP, w: 20, h: 10, kind: 'panel' };
+
+  it('passes a box inside the body', () => {
+    expect(auditPage(1, [ok])).toEqual([]);
   });
 
-  it('catches ink past the body floor', () => {
-    const f = auditPage(page([box({ y: 185, h: 20 })]));
-    expect(f.map((x) => x.rule)).toContain('overflow-bottom');
-    expect(f[0].severity).toBe('error');
+  it('flags type under the print floor', () => {
+    expect(auditPage(1, [{ ...ok, kind: 'text', font: FONT_MIN - 0.5 }])[0].rule).toBe('type-floor');
   });
 
-  it('catches ink outside the side margins', () => {
-    const f = auditPage(page([box({ x: 280, w: 30 })]));
-    expect(f.map((x) => x.rule)).toContain('overflow-side');
+  it('flags cards under the floor and over the ceiling', () => {
+    expect(auditPage(1, [{ ...ok, kind: 'card', cardW: CARD_MIN - 1 }])[0].rule).toBe('card-floor');
+    expect(auditPage(1, [{ ...ok, kind: 'card', cardW: CARD_MAX + 1 }])[0].rule).toBe('card-ceiling');
   });
 
-  it('catches two components drawn on top of each other', () => {
-    const f = auditPage(page([box({ y: 40, h: 30 }), box({ y: 50, h: 30 })]));
-    expect(f.map((x) => x.rule)).toContain('overlap');
+  it('flags body content that bleeds into the margin or the footer', () => {
+    expect(auditPage(1, [{ ...ok, x: PAGE_W - MARGIN - 5, w: 20 }])[0].rule).toBe('bleed');
+    expect(auditPage(1, [{ ...ok, y: BODY_BOTTOM - 2, h: 10 }])[0].rule).toBe('bleed');
   });
 
-  it('does not read legitimate containment as an overlap', () => {
-    const f = auditPage(page([
-      box({ y: 40, h: 30, kind: 'module' }),
-      box({ y: 45, h: 10, kind: 'card', nested: true }),
-    ]));
-    expect(f.map((x) => x.rule)).not.toContain('overlap');
+  it('exempts the brand bar and footer, which live outside the body', () => {
+    expect(auditPage(1, [{ ...ok, y: 2, zone: 'chrome' }])).toEqual([]);
   });
 
-  it('catches a heading with nothing under it', () => {
-    const f = auditPage(page([box({ y: 40, kind: 'row' }), box({ y: 70, kind: 'heading' })]));
-    expect(f.map((x) => x.rule)).toContain('orphan-heading');
+  it('numbers issues by page', () => {
+    const issues = auditDocument([[ok], [{ ...ok, kind: 'text', font: 3 }]]);
+    expect(issues[0].page).toBe(2);
+  });
+});
+
+/* ----------------------------------------------------------------- palette */
+
+describe('theme', () => {
+  it('holds the secondary and caption inks above 4.5:1 on a panel', () => {
+    expect(contrast(P.text2, P.panel)).toBeGreaterThan(4.5);
+    expect(contrast(P.text3, P.panel)).toBeGreaterThan(4.5);
   });
 
-  it('does not call a heading orphaned when content follows it', () => {
-    const f = auditPage(page([box({ y: 40, kind: 'heading' }), box({ y: 70, kind: 'row' })]));
-    expect(f.map((x) => x.rule)).not.toContain('orphan-heading');
+  it('holds every hue ink above 4.5:1 on a panel', () => {
+    for (const [name, h] of Object.entries(HUES)) {
+      expect(contrast(h.ink, P.panel), name).toBeGreaterThan(4.5);
+    }
   });
 
-  it('catches art starved below the legibility floor', () => {
-    const f = auditPage(page([box({ kind: 'card', imageW: 4, nested: true })]));
-    expect(f.map((x) => x.rule)).toContain('art-too-small');
+  it('holds white button labels on every deep step', () => {
+    for (const [name, h] of Object.entries(HUES)) {
+      if (name === 'neutral' || name === 'amber') continue;
+      expect(contrast(P.text, h.deep), name).toBeGreaterThan(4.5);
+    }
   });
 
-  it('catches type starved below the legibility floor', () => {
-    const f = auditPage(page([box({ kind: 'row', fontSize: 4 })]));
-    expect(f.map((x) => x.rule)).toContain('type-too-small');
+  it('colours a win rate only outside the coin-flip band', () => {
+    expect(rateColor(60)).toEqual(HUES.green.ink);
+    expect(rateColor(40)).toEqual(HUES.red.ink);
+    expect(rateColor(50)).toEqual(P.text);
+    expect(rateColor(90, true)).toEqual(P.text3);
+    expect(rateColor(null)).toEqual(P.text3);
   });
 
-  it('catches a blank page', () => {
-    expect(auditPage(page([])).map((x) => x.rule)).toContain('blank-page');
+  it('reads a percentage back out of a printed figure', () => {
+    expect(parsePct('63.3%')).toBe(63.3);
+    expect(parsePct('3-1')).toBeNull();
   });
 
-  it('exempts a cover or divider from every page-shape rule', () => {
-    expect(auditPage(page([], { exempt: true }))).toEqual([]);
+  it('runs the matrix ramp red to green', () => {
+    expect(heat(0)[0]).toBeGreaterThan(heat(0)[1]);
+    expect(heat(1)[1]).toBeGreaterThan(heat(1)[0]);
+    expect(mix([0, 0, 0], [255, 255, 255], 0.5)).toEqual([128, 128, 128]);
+  });
+});
+
+/* ------------------------------------------------------------------ glyphs */
+
+describe('text', () => {
+  it('keeps accented Latin and drops what the fonts cannot draw', () => {
+    expect(drawable('Łukasz ✨', 'body', true)).toBe('Łukasz');
+    expect(drawable('Zoë 😀 Hog', 'body', true)).toBe('Zoë Hog');
   });
 
-  it('warns rather than errors on a half-empty page', () => {
-    const f = auditPage(page([box({})], { fill: 0.2 }));
-    const under = f.find((x) => x.rule === 'underfilled')!;
-    expect(under.severity).toBe('warn');
+  it('keeps the en dash in a score with the embedded fonts, maps it for Helvetica', () => {
+    expect(drawable('2–1', 'body', true)).toBe('2–1');
+    expect(latin1('2–1')).toBe('2-1');
   });
 
-  it('does not judge the last page on how full it is', () => {
-    const f = auditPage(page([box({})], { fill: 0.2, last: true }));
-    expect(f.map((x) => x.rule)).not.toContain('underfilled');
+  it('falls back to the tag when most of a name cannot be printed', () => {
+    // Keeps only the Latin "i": printed, it was a different player.
+    expect(printableName('Потужнi лававод', '#J00VYRCR2')).toBe('#J00VYRCR2');
+    expect(printableName('ゴリラ✨', '#RQ0J8GQRJ')).toBe('#RQ0J8GQRJ');
+    expect(printableName('EthanWinters', '#8CRPJ2RCG')).toBe('EthanWinters');
+    expect(printableName('', '#TAG')).toBe('#TAG');
   });
 
-  it('totals errors and warnings across a document', () => {
-    const result = auditDocument([
-      page([box({})]),
-      page([box({ y: 185, h: 20 })], { index: 3 }),
-      page([box({})], { index: 4, fill: 0.1 }),
-    ]);
-    expect(result.errors).toBe(1);
-    expect(result.warnings).toBe(1);
-    expect(result.clean).toBe(false);
+  it('gives a bare tag its hash, and leaves names alone', () => {
+    expect(tagged('yypcuuy0')).toBe('#YYPCUUY0');
+    expect(tagged('#YYPCUUY0')).toBe('#YYPCUUY0');
+    expect(tagged('3 v 3 — #ABC')).toBe('3 v 3 — #ABC');
+  });
+});
+
+/* ---------------------------------------------------------------- art sweep */
+
+describe('collectArt', () => {
+  const deck = { name: 'd', cards: ['hog-rider', 'musketeer'], art: { musketeer: 'evolution' as const } };
+  const all: ReportBlock[] = [
+    { kind: 'decks', decks: [deck] },
+    { kind: 'versus', pairs: [{ left: deck, right: null }] },
+    { kind: 'series', rows: [{ leftLabel: '', rightLabel: '', score: '', caption: '', date: '', format: '', won: true, left: [deck], right: [] }] },
+    { kind: 'battles', rows: [{ result: 'win', score: '', when: '', mode: '', leftLabel: '', rightLabel: '', left: deck, right: { name: 'x', cards: ['zap'] } }] },
+    { kind: 'pairs', pairs: [{ a: 'knight', b: 'wizard', artB: 'hero', name: '' }] },
+    { kind: 'cards', cards: [{ key: 'valkyrie', form: 'hero', stats: [] }] },
+  ];
+
+  it('finds the art of every block kind that draws cards', () => {
+    // A kind missed here prints name-only placeholders for its whole section,
+    // silently — a placeholder is a valid-looking tile.
+    for (const b of all) {
+      expect(collectArt([b]).length, b.kind).toBeGreaterThan(0);
+    }
   });
 
-  it('says a document is clean when it is', () => {
-    const result = auditDocument([page([box({})]), page([box({})], { index: 3 })]);
-    expect(result.clean).toBe(true);
-    expect(shouldReflow(result)).toBe(false);
+  it('asks for the evolution or hero art where the deck fields that form', () => {
+    const urls = collectArt(all);
+    expect(urls.some((u) => /evolutions\/musketeer/.test(u))).toBe(true);
+    expect(urls.some((u) => /heroes\/wizard/.test(u))).toBe(true);
+    expect(urls.some((u) => /heroes\/valkyrie/.test(u))).toBe(true);
   });
 
-  it('marks the findings the engine knows how to fix', () => {
-    const result = auditDocument([page([box({ y: 185, h: 20 })])]);
-    expect(shouldReflow(result)).toBe(true);
+  it('deduplicates', () => {
+    const urls = collectArt([{ kind: 'decks', decks: [deck, deck] }]);
+    expect(new Set(urls).size).toBe(urls.length);
   });
+});
+
+/* ----------------------------------------------------- the lag tripwire */
+
+describe('no transparency in the report engine', () => {
+  /* THE REASON THE OLD EXPORT WAS SLOW. A PDF viewer composites every
+     transparency state per pixel; the print export carried 60-263 of them and
+     painted a page in ~430 ms. The engine draws opaque fills only — muted
+     colours are real colours, glows are baked into images — and this fails
+     if a GState or an opacity creeps back in. */
+  const dir = path.resolve(__dirname, '../src/utils/report');
+  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.ts'))) {
+    it(f, () => {
+      const src = fs.readFileSync(path.join(dir, f), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '');
+      expect(src).not.toMatch(/setGState|new GState|GState\(/);
+      expect(src).not.toMatch(/opacity\s*:/);
+    });
+  }
 });

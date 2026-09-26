@@ -2782,12 +2782,22 @@
    list is drawn by the OS and ignored the theme completely. */
 .topSeason {
   display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   flex-shrink: 0;
 }
 
+.topSeasonMenu {
+  display: inline-flex;
+}
+
+/* THE SEASON PICKER GOES ON A NARROW SCREEN; THE EXPORT BUTTON DOES NOT.
+   They shared this slot and the whole slot was hidden below 1080px, which
+   meant a tablet or a phone had no way to export a player's report at all.
+   Only the picker is hidden now. */
 @media (max-width: 1080px) {
   .topScope,
-  .topSeason {
+  .topSeasonMenu {
     display: none;
   }
 }

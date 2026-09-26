@@ -1,3 +1,4 @@
+import { useScreenExport } from '../Export/ExportButton';
 import { useEffect, useRef, useState } from 'react';
 import { CardArt } from './CardArt';
 import { ContinuousPagination } from '../ui/continuous-pagination';
@@ -208,6 +209,21 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
     report?.coverage.end ?? null,
   );
 
+  /* The export is not the page on screen (ten rows) but the fifty most recent
+     battles in the window — the server's own page ceiling — read at the click. */
+  const exportButton = useScreenExport({
+    id: 'battles',
+    ready: Boolean(report),
+    win,
+    build: async () => {
+      const [{ recentBattlesDoc }, full] = await Promise.all([
+        import('../../utils/screenAdapters'),
+        fetchRecentBattles(tag, win, 1, 50),
+      ]);
+      return recentBattlesDoc(full, tag);
+    },
+  });
+
   useEffect(() => {
     let live = true;
     setLoading(true);
@@ -295,6 +311,7 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
           </div>
 
           <div className={styles.range}>
+            {exportButton}
             {RANGE_PRESETS.filter((r) => r.days >= 0).map((r) => (
               <button
                 key={r.label}

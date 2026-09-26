@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ReportButton } from '../Export/ReportButton';
+import { useScreenExport } from '../Export/ExportButton';
 import { CardArt } from './CardArt';
 import { DuelInsights } from './DuelInsights';
-import { useIsPrinting } from '../../state/printMode';
 import {
   AnalyticsError,
   fetchDuelReport,
+  fetchDuelZone,
   type ApiCombo,
   type DuelReport,
   type TabId,
@@ -177,7 +177,6 @@ function TileCombo({
 }
 
 export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; season?: Season }) {
-  const printing = useIsPrinting();
   const [tab, setTab] = useState<TabId>('win-conditions');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -191,6 +190,23 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
     season,
     report?.coverage.end ?? null,
   );
+
+  /* The export carries ALL THREE TABS and the Duel Insights panel at the
+     foot of the screen, which reads the Duel Zone payload — fetched only when
+     the button is pressed. */
+  const exportButton = useScreenExport({
+    id: 'duel-analysis',
+    ready: Boolean(report),
+    win,
+    build: async () => {
+      const [{ duelAnalysisDoc }, { duelInsightBlocks }] = await Promise.all([
+        import('../../utils/duelAdapters'),
+        import('../../utils/screenAdapters'),
+      ]);
+      const zone = await fetchDuelZone(tag, win).catch(() => null);
+      return duelAnalysisDoc(report as DuelReport, tag, zone ? duelInsightBlocks(zone) : []);
+    },
+  });
 
   useEffect(() => {
     let live = true;
@@ -258,11 +274,9 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
      duel behaviour it has always had. */
   const hasSlots = report.hasSlots !== false;
 
-  // WHICH TABS TO DRAW. On screen, the one you picked. On paper, all of them —
-  // the three tabs are slices of ONE payload (`report.tabs`), so drawing the
-  // other two costs no fetch, and a tab bar in a PDF is a control nobody can
-  // press. See `state/printMode`.
-  const tabsToRender: TabId[] = printing ? TAB_ORDER : [tab];
+  // The tab you picked. The PDF export draws all three from the same payload
+  // (`duelAnalysisDoc`), so the screen no longer needs a print mode for it.
+  const tabsToRender: TabId[] = [tab];
 
   // NOT MEASURED, as opposed to measured-and-zero. Only Evolutions can hit this:
   // the other two tabs read the card lists, which are always stored. Derived
@@ -295,11 +309,7 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
 
           <div className={styles.headTools}>
             {/* See the note in DuelZone: same placement, same dynamic import. */}
-            <ReportButton
-              build={async () =>
-                (await import('../../utils/duelAdapters')).duelAnalysisDoc(report, tag)
-              }
-            />
+            {exportButton}
             <div className={styles.rangeWrap}>
               <button
                 type="button"
@@ -423,17 +433,13 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
         {tabsToRender.map((tabId) => {
           const t = report.tabs[tabId];
           const unmeasured = tabId === 'evolutions' && evoUnmeasured;
-          // Printing shows every row: "top 8 of 24" is a screen affordance for
-          // a list you can expand, and there is nothing to expand on paper.
-          const rows = showAll || printing ? t.rows : t.rows.slice(0, PAGE);
+          const rows = showAll ? t.rows : t.rows.slice(0, PAGE);
           // One ruler for every G1/G2/G3 bar in THIS tab, taken from the whole
           // tab rather than the visible page so "view all" cannot rescale rows
           // already on screen.
           const slotScale = Math.max(1, ...t.rows.flatMap((c) => c.slotShare));
           return (
             <div key={tabId} className={styles.tabBlock}>
-              {/* Only when several are stacked does each need naming. */}
-              {printing && <h2 className={styles.printTabHeading}>{t.label}</h2>}
         <div className={styles.tiles}>
           <div className={styles.tile}>
             <span className={styles.tileLabel}>Total {t.noun} Combos</span>

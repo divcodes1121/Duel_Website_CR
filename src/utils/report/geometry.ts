@@ -1,167 +1,116 @@
 /**
- * PAGE GEOMETRY, THE TYPE SCALE, AND THE LEGIBILITY FLOORS.
+ * PAGE GEOMETRY AND THE TYPE SCALE — no imports, so every layout decision that
+ * depends on a number here is testable without jsPDF or a browser.
  *
- * NO IMPORTS, deliberately — the same rule `tiers.ts`, `format.ts`,
- * `passwordRules.ts`, `squadParse.ts` and `releases.ts` follow. Everything in
- * here is a number that decides what a page looks like, which makes it the
- * half most worth testing exhaustively, and a module that imports jsPDF cannot
- * be imported by a test without constructing a renderer.
+ * A4 LANDSCAPE, because the thing these reports mostly draw is a deck — eight
+ * cards in a row — and a comparison of two of them side by side. Portrait
+ * fits one strip a line at a card size nobody can read across a table.
  *
- * THE FLOORS ARE THE POINT OF THIS FILE. A layout engine that may choose its
- * own density will always find that one more column fits, because arithmetic
- * has no opinion about whether a 9 mm card is still a card. The floors are
- * where that opinion is written down, once, so that every component inherits
- * the same answer and no single component can quietly decide it is the
- * exception.
+ * Every figure is in millimetres unless it says `pt`.
  */
 
-/* ------------------------------------------------------------------- page */
-
-/** A4 landscape, in millimetres. Matches the deck report and the team dossier
- *  so the three exports read as one product. */
 export const PAGE_W = 297;
 export const PAGE_H = 210;
 
-/** The outer panel inset — the frame the whole document is drawn inside. */
-export const FRAME = 6;
-
-export const MARGIN = 14;
+/** Side margin. The content column is everything between the two. */
+export const MARGIN = 12;
 export const CONTENT_W = PAGE_W - MARGIN * 2;
 
-/** Where a body page's content starts, under the section bar. */
-export const BODY_TOP = 34;
-export const FOOTER_Y = PAGE_H - 10;
-/** The last millimetre a block may occupy. */
-export const BODY_BOTTOM = FOOTER_Y - 8;
+/** The running brand bar at the top of every page, and the rule under it. */
+export const HEADER_H = 15;
+/** Where page content starts and must stop. */
+export const BODY_TOP = 21;
+export const BODY_BOTTOM = PAGE_H - 13;
 export const BODY_H = BODY_BOTTOM - BODY_TOP;
+/** Baseline of the footer line. */
+export const FOOTER_Y = PAGE_H - 6.2;
 
-/**
- * The room a block actually has on a SPILL page, which is less than the body.
- *
- * A continued block repeats its heading as "(continued)", so solving a row
- * pitch against `BODY_H` produces a layout that fits the first page of a
- * section and no other. That mistake has already been made and measured here:
- * a four-row pairs grid solved against the bare body came to 154 mm, cleared
- * `BODY_H`, and fitted four rows on ZERO of six real pages.
- */
-export const CONTINUED_H = 7;
-export const SPILL_H = BODY_H - CONTINUED_H;
+/** One typographic point in millimetres. */
+export const PT = 25.4 / 72;
 
-/** The insight bar at the foot of a section, and the gap above it. */
-export const READ_H = 16;
-export const READ_GAP = 4;
-
-/* ------------------------------------------------------------- type scale */
-
-/**
- * FIVE LEVELS, AND NOTHING BETWEEN THEM.
- *
- * Hierarchy comes from contrast, not from size alone — so the levels are far
- * apart and there is no sixth. A renderer that may pick any point size between
- * 6 and 34 produces a document where every page has slightly different
- * headings, which reads as carelessness rather than as emphasis.
- */
-export const TYPE = {
-  /** L1 — the section title. Uppercase, tracked, display cut. */
-  title: { size: 17, track: 1.1 },
-  /** L1b — a block heading inside a section. */
-  heading: { size: 9, track: 0.5 },
-  /** L2 — the context line: window, counts, filters, what is ranked by what. */
-  context: { size: 6.4, track: 0.55 },
-  /** L2b — the small uppercase label over a figure or beside a module. */
-  label: { size: 5.8, track: 0.6 },
-  /** L3 — a primary metric. The only text allowed to be large. */
-  metric: { size: 30, track: 0 },
-  /** L3b — a metric inside a module rather than a hero slot. */
-  metricSmall: { size: 15, track: 0 },
-  /** L4 — supporting data: names, counts, percentages in a row. */
-  body: { size: 7.4, track: 0 },
-  bodySmall: { size: 6.2, track: 0 },
-  /** L5 — the insight sentence. */
-  read: { size: 10.5, track: 0 },
-  /** Page furniture. */
-  footer: { size: 6, track: 0.5 },
-} as const;
-
-/** Millimetres per point, for turning a font size into a line box. */
-export const PT = 0.3528;
-
-/** The height one line of `size` occupies, including its leading. */
-export function lineH(size: number, leading = 1.32): number {
-  return size * PT * leading;
-}
-
-/* --------------------------------------------------------------- spacing */
-
-/**
- * ONE SPACING LADDER. Every gap in the document is one of these, so the
- * rhythm survives a component being added by someone who never read this file.
- */
-export const SPACE = {
-  hair: 1.2,
-  tight: 2.4,
-  snug: 3.6,
-  base: 5,
-  wide: 8,
-  section: 12,
-} as const;
-
-/* ------------------------------------------------------------------- art */
-
-/** Clash Royale card art. Every card tile is drawn to this, never stretched. */
+/** The card art's own frame: 119 of 122 base cards are exactly 302 x 363. */
 export const CARD_RATIO = 302 / 363;
 
-/**
- * THE LEGIBILITY FLOORS — the numbers that stop the engine optimising a page
- * into something nobody can read.
- *
- * `CARD_MIN` is the width below which a reader cannot name the card from
- * across a table, which is what these reports get used for. It is measured
- * against what already ships: the series log draws 8.5 mm and that was
- * accepted, the pair board draws 16.2 mm. So 8 mm is the floor and anything
- * that wants to go under it must paginate instead.
- *
- * `CARD_IDEAL` is what a component gets when there is room, so that having
- * space does not silently produce enormous art — the SaaS failure the brief
- * names. A component asks for `IDEAL`, accepts down to `MIN`, and the engine
- * paginates rather than going below.
- */
-export const CARD_MIN = 8;
-export const CARD_IDEAL = 15;
-export const CARD_MAX = 22;
+/** Vertical rhythm between blocks and between the rows inside one. */
+export const BLOCK_GAP = 6;
+export const ROW_GAP = 2.4;
 
-/** Below this a font is decoration, not information. jsPDF will happily draw
- *  4 pt; a printed page will not show it. */
-export const FONT_MIN = 5.2;
-
-/* ---------------------------------------------------------------- fitting */
-
-/** Fit `n` items across `w` millimetres with `gap` between, as an item width. */
-export function itemWidth(w: number, n: number, gap: number): number {
-  if (n <= 0) return 0;
-  return (w - gap * (n - 1)) / n;
-}
-
-/** The inverse: how many items of `min` width fit across `w`. */
-export function itemsAcross(w: number, min: number, gap: number): number {
-  if (min <= 0) return 0;
-  return Math.max(1, Math.floor((w + gap) / (min + gap)));
-}
-
-/** Clamp, because every fitting decision in this directory ends in one. */
-export function clamp(n: number, lo: number, hi: number): number {
-  return n < lo ? lo : n > hi ? hi : n;
-}
+/** Corner radius of a panel, and of the smaller things inside one. */
+export const RADIUS = 2.6;
+export const RADIUS_SM = 1.4;
 
 /**
- * How full a page has to be before it counts as a page rather than a gap.
+ * THE TYPE SCALE. Four roles and no more — the rule every report and
+ * dashboard reference agrees on is that size and weight do the scanning, and
+ * a fifth size is a size nobody can tell from its neighbour.
  *
- * Used by the audit: a body page under this is reported, because the usual
- * cause is a block that was moved wholesale for orphan control and left the
- * sheet before it half empty — which is a reflow opportunity, not a fact about
- * the data. The LAST page of a document is exempt; a report is allowed to end.
+ *   display  Bebas Neue — titles and the big figures. Draws capitals only.
+ *   heading  Bebas Neue at block-title size.
+ *   body     Inter 400/600 — names, table cells, notes.
+ *   label    Inter 600, upper case, tracked — the small print that names a
+ *            figure.
+ *
+ * `track` is letterspacing in MILLIMETRES (jsPDF's `charSpace` is in the
+ * document unit and is applied after every glyph, the last one included).
  */
-export const FILL_MIN = 0.55;
+export const TYPE = {
+  coverTitle: { size: 46, track: 0.4 },
+  heroTitle: { size: 30, track: 0.3 },
+  sectionTitle: { size: 24, track: 0.3 },
+  heading: { size: 14, track: 0.28 },
+  figure: { size: 17, track: 0.1 },
+  figureSmall: { size: 13, track: 0.08 },
+  name: { size: 7.6 },
+  body: { size: 7.2 },
+  small: { size: 6.2 },
+  label: { size: 5.4, track: 0.28 },
+  footer: { size: 5.2, track: 0.3 },
+} as const;
 
-/** And the other end. Over this a page is packed to its edges with no air. */
-export const FILL_MAX = 0.985;
+/**
+ * LEGIBILITY FLOORS. A layout engine free to choose density will always find
+ * that one more column fits; these are where that stops. Measured against
+ * printed output, not guessed: 5 pt is the smallest caption that survives an
+ * office printer, and a card under 7 mm wide stops being recognisable.
+ */
+export const FONT_MIN = 5;
+export const CARD_MIN = 7;
+/** And a ceiling, because the complaint that started this engine was cards
+ *  and type drawn far larger than the website draws them. */
+export const CARD_MAX = 11.5;
+
+/** Height of a card of width `w`, at the art's true ratio. */
+export function cardH(w: number): number {
+  return w / CARD_RATIO;
+}
+
+/**
+ * The widest card that lets `n` cards and their gaps fit in `room`,
+ * clamped to [min, max]. Never returns more than `max` however much room
+ * there is — spare width is left as margin, not spent on art.
+ */
+export function cardWidthFor(room: number, n: number, gap: number, min = CARD_MIN, max = CARD_MAX): number {
+  if (n <= 0) return max;
+  const w = (room - gap * (n - 1)) / n;
+  return Math.max(min, Math.min(max, w));
+}
+
+/** Width of `n` cards of width `w` with `gap` between them. */
+export function stripWidth(n: number, w: number, gap: number): number {
+  return n <= 0 ? 0 : n * w + (n - 1) * gap;
+}
+
+/**
+ * How many equal columns of at least `minW` fit in `room` with `gap` between
+ * them, capped at `max`.
+ */
+export function columnsFor(room: number, minW: number, gap: number, max = 8): number {
+  let n = Math.max(1, Math.floor((room + gap) / (minW + gap)));
+  if (n > max) n = max;
+  return n;
+}
+
+/** Width of one of `n` equal columns across `room`. */
+export function columnWidth(room: number, n: number, gap: number): number {
+  return (room - gap * (n - 1)) / n;
+}

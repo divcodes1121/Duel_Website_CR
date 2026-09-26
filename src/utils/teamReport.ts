@@ -1,4 +1,4 @@
-import { pdfSafe } from './analyticsReport';
+import { printableName } from './report/text';
 import type {
   TeamFolder,
   TeamMatchupRow,
@@ -75,7 +75,7 @@ function who(m: { name: string; tag: string }): string {
      blank where a person belongs. A tag is a worse label than a name and a
      far better one than empty. */
   const named = m.name && m.name !== m.tag ? m.name : '';
-  return pdfSafe(named) ? named : m.tag;
+  return printableName(named, m.tag);
 }
 
 /**
@@ -241,10 +241,7 @@ function overallBlocks(report: TeamReport): ReportBlock[] {
     blocks.push({
       kind: 'spread',
       heading: 'What you will meet',
-      note:
-        'Every considered deck on the roster pooled into one spread, weighted by GAMES rather ' +
-        'than by player — so the busiest member of a roster counts for more than its quietest, ' +
-        'which is what actually decides what turns up across a match.',
+      note: 'Every considered deck on the roster, pooled and weighted by games',
       segments: o.spread.map((s) => ({
         label: s.name,
         share: s.share,
@@ -257,11 +254,7 @@ function overallBlocks(report: TeamReport): ReportBlock[] {
     blocks.push({
       kind: 'decks',
       heading: 'What to practise',
-      note:
-        'Ranked against the pooled spread above. Each is the most-played real list of its ' +
-        'archetype — nothing here is generated, and every one has a record of its own to be ' +
-        'scored on. The second figure is that record against the whole field, which is what ' +
-        'separates a deck that beats THEM from a deck that beats everybody.',
+      note: 'Ranked against the pooled spread · second figure: record against the whole field',
       decks: o.recommended.map((r) => recLine(r)),
     });
   } else if (o.reason) {
@@ -286,10 +279,7 @@ function scoutRosterBlocks(report: TeamReport): ReportBlock[] {
     {
       kind: 'table',
       heading: 'The roster',
-      note:
-        'Each of these gets a section below, in this order. A player read from the live ' +
-        'battlelog has never been collected before — everything printed about them rests on ' +
-        'roughly their last twenty-five battles.',
+      note: 'One section each below, in this order · a live read rests on ~25 battles',
       columns: [
         { key: 'n', label: '#', width: 10 },
         { key: 'name', label: 'Player', flex: true },
@@ -399,9 +389,7 @@ function boardBlocks(report: TeamReport): ReportBlock[] {
     blocks.push({
       kind: 'matrix',
       heading: 'Expected win rate, best deck each',
-      note:
-        'One cell per pairing: the expected win rate of the best deck that teammate already ' +
-        'plays, against that opponent’s spread. It is a ranking aid, not a prediction of a match.',
+      note: 'Best deck each teammate already plays, against each opponent’s spread',
       columns: report.folders.map((f) => ({
         label: who(f.player),
         sub: f.player.tag,
@@ -421,11 +409,7 @@ function boardBlocks(report: TeamReport): ReportBlock[] {
           };
         }),
       })),
-      legend:
-        'Green is the strongest pairing on this board and red the weakest — the scale is ' +
-        'stretched across the range actually present, so the colours compare pairings with ' +
-        'each other and not against 50%. A struck cell is no evidence, which is not the same ' +
-        'as a bad matchup. Pale figures cover under half of what that opponent plays.',
+      legend: 'Green strongest, red weakest on this board · struck = no evidence · pale = covers under half',
     });
   }
 
@@ -437,9 +421,7 @@ function boardBlocks(report: TeamReport): ReportBlock[] {
     blocks.push({
       kind: 'table',
       heading: 'The squad’s single best answer to each opponent',
-      note:
-        'Deduplicated by deck, so the same list can appear against two opponents — that is a ' +
-        'real answer, not a repeat, and the owner column says who would fly it.',
+      note: 'Deduplicated by deck · one list may answer two opponents',
       columns: [
         { key: 'opp', label: 'Opponent', width: 44 },
         { key: 'tag', label: 'Tag', width: 30 },
@@ -527,9 +509,7 @@ function folderBlocks(
     blocks.push({
       kind: 'spread',
       heading: 'What they play',
-      note:
-        'Their archetype spread over the window, weighted by how much of their play each one ' +
-        'is. This is the thing every recommendation below is scored against.',
+      note: 'Share of their play by archetype · every pick below is scored against this',
       segments: folder.spread.map((s) => ({
         label: s.name,
         share: s.share,
@@ -542,7 +522,7 @@ function folderBlocks(
     blocks.push({
       kind: 'decks',
       heading: `${name}’s decks`,
-      note: `Ordered by how often they bring it. Only decks over ${report.limits.minOpponentDeckGames} games are listed — their long tail says nothing about what they will bring on the day.`,
+      note: `Most-played first · decks over ${report.limits.minOpponentDeckGames} games`,
       decks: folder.theirDecks.map(theirLine),
     });
   }
@@ -558,10 +538,7 @@ function folderBlocks(
       // diversity pass rather than by a constant — so a printed number here
       // would go stale the next time that pass changes its mind, and a PDF is
       // the one surface nobody re-reads to notice.
-      note:
-        'The squad-wide portfolio, deduplicated by deck and chosen to cover what they are ' +
-        'likely to bring rather than to repeat one answer. Every one is a list somebody on ' +
-        'your side already flies, with the games behind it printed beside the name.',
+      note: 'Squad-wide, deduplicated by deck, chosen to cover their spread',
       decks: folder.recommended.map((r) => recLine(r, { showOwner: true })),
     });
 
@@ -572,22 +549,15 @@ function folderBlocks(
       left: theirLine(d),
       right: folder.recommended[i] ? recLine(folder.recommended[i], { showOwner: true }) : null,
       note: folder.recommended[i]
-        ? `${pilot(folder.recommended[i])} flies ${folder.recommended[i].name} — expected ` +
-          `${pct(folder.recommended[i].expectedWinRate)} across ${name}’s whole spread, not ` +
-          'against this one deck.'
+        ? [folder.recommended[i].owner ? `Flown by ${pilot(folder.recommended[i])}` : 'Deckkies pick',
+          `${pct(folder.recommended[i].expectedWinRate)} vs their whole spread`].join(' · ')
         : undefined,
     }));
     if (pairs.length) {
       blocks.push({
-        kind: 'break',
-      });
-      blocks.push({
         kind: 'versus',
         heading: `${name}: head to head`,
-        note:
-          'Their most-played decks on the left, your squad’s answers on the right. The pairing ' +
-          'is by rank, not by matchup — each recommendation is scored against their whole ' +
-          'spread rather than against the deck it is printed beside.',
+        note: 'Paired by rank · each answer is scored against their whole spread',
         leftLabel: `${name} plays`,
         rightLabel: 'Your squad answers',
         pairs,
@@ -625,10 +595,7 @@ function folderBlocks(
       blocks.push({
         kind: 'table',
         heading: `Why ${top.name} — the rung behind every archetype`,
-        note:
-          'Each row is one archetype of their play, what this deck does against it, and which ' +
-          'rung of the ladder that came from. An archetype no rung can answer is left out of ' +
-          'the average rather than counted as even, which is why "covers" is below 100%.',
+        note: 'One row per archetype of their play · unanswerable archetypes are left out',
         columns: [
           { key: 'arch', label: 'Their archetype', flex: true },
           { key: 'share', label: 'Share of play', width: 30, align: 'right' },
@@ -658,10 +625,7 @@ function folderBlocks(
     blocks.push({
       kind: 'table',
       heading: `Every teammate against ${name}`,
-      note:
-        'In roster order, and everyone appears. A player with nothing to offer is a different ' +
-        'fact from a player who is not on the team, and a roster of five must not print as ' +
-        'a roster of three.',
+      note: 'Roster order · every teammate listed',
       columns: [
         { key: 'who', label: 'Teammate', width: 42 },
         { key: 'tag', label: 'Tag', width: 30 },
@@ -773,9 +737,7 @@ function teammateBlocks(
   blocks.push({
     kind: 'decks',
     heading: `What ${name} flies`,
-    note:
-      'Every deck of theirs that entered the pool, with their own record on it. This is the ' +
-      'comfort half of the score — the tiebreak, never the ranking.',
+    note: 'Their decks in the pool, with their own record on each',
     /* The value column is 22 mm. "their own record, 14 games" does not fit in
        it, and a right-aligned overflow grows leftwards over the card art —
        the renderer clips it now, but the honest fix is to say it in the width
@@ -790,9 +752,7 @@ function teammateBlocks(
   blocks.push({
     kind: 'table',
     heading: `${name}’s assignment board`,
-    note:
-      'Every opponent, and the best deck this player has against them. Read down the Expected ' +
-      'column to see where they are the right pick and where somebody else is.',
+    note: 'Best deck this player has against each opponent',
     columns: [
       { key: 'opp', label: 'Opponent', width: 42 },
       { key: 'tag', label: 'Tag', width: 30 },

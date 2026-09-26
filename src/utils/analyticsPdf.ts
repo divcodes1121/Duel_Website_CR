@@ -1,59 +1,32 @@
 /**
- * THE ANALYTICS RENDERER — now a seam, and a lazy one.
+ * THE REPORT ENGINE'S FRONT DOOR — a lazy seam.
  *
- * The 1,962-line greedy renderer that used to live here has been replaced by
- * the measure-then-commit pipeline in `report/`. This file survives as the
- * import path, because `ReportButton` already points at it and a rename that
- * moves code between two directories buys nothing.
+ * Every PDF the site produces is drawn by `report/`: the analytics screens,
+ * the Team Analysis dossier, the full player report and the builder's deck
+ * report alike. Nothing here runs until somebody presses Export, so none of it
+ * belongs in the bundle every reader downloads; the engine and jsPDF are one
+ * chunk fetched by that click. It is an `import()` inside a function rather
+ * than `React.lazy`, because a dynamic import in an event handler never
+ * touches Suspense (see the render-loop note in the README).
  *
- * WHAT MOVED, AND WHERE TO LOOK:
- *
- *   report/geometry.ts   page geometry, the five-level type scale, and the
- *                        legibility floors. No imports.
- *   report/fit.ts        the decision layer: grid solving, row balancing, atom
- *                        packing, variant scoring. No imports but geometry, so
- *                        it is testable without a renderer.
- *   report/audit.ts      the page-level quality check, read independently off
- *                        the committed boxes.
- *   report/palette.ts    colour, read off the live page. Was here.
- *   report/paint.ts      drawing primitives. No decisions in any of them.
- *   report/sections.ts   the components, each measuring itself and offering
- *                        the compositions its data supports.
- *   report/art.ts        card tiles, downscaled once. Was here.
- *   report/engine.ts     the pipeline that runs them in order.
- *
- * THE IMPORT IS DYNAMIC, AND IT PAYS FOR ITSELF TWICE OVER. Nothing here runs
- * until somebody presses Export, so none of it belongs in the bundle every
- * reader downloads — the same arrangement `teamReport.ts` already uses, and
- * for the same reason it is an `import()` inside a function rather than
- * `React.lazy`: a dynamic import in an event handler never touches Suspense,
- * so it is unaffected by the render-loop trap recorded in the README.
- *
- * MEASURED, baseline taken by stashing and rebuilding rather than assumed:
- * main bundle 346.07 kB gzip at HEAD, 352.00 with the engine eager, and
- * 346.07 with it lazy. The engine lands in its own chunk beside jspdf's
- * 390 kB, which is only ever fetched by the same click.
- *
- * The old implementation is in git rather than commented out here; what was
- * worth keeping from its comments has been carried into the module that now
- * owns each decision, which is where somebody changing that decision will
- * actually be standing.
+ *   report/geometry.ts  page geometry, the type scale, the legibility floors
+ *   report/theme.ts     the fixed Deckkies dark palette (not read off the page)
+ *   report/text.ts      strings filtered to the glyphs the fonts really hold
+ *   report/fonts.ts     Inter + Bebas Neue, fetched once, embedded subset
+ *   report/art.ts       every raster, baked opaque (cards, plates, cover, logo)
+ *   report/surface.ts   drawing primitives — no transparency, ever
+ *   report/blocks.ts    each block kind measured into atoms
+ *   report/pack.ts      pagination, pure
+ *   report/audit.ts     the page check, read off what was committed
+ *   report/engine.ts    the pipeline
  */
 
 import type { ReportDoc } from './analyticsReport';
 import type { RenderResult } from './report/engine';
 
 export type { RenderResult };
-export type { Palette } from './report/palette';
 
-/**
- * Draw a report and hand back the blob, the layout audit and the page count.
- *
- * The audit travels WITH the result rather than being logged and dropped: it
- * runs on every export in production, and a caller that wants to know whether
- * the document it just produced is well formed should not have to re-derive
- * that from the PDF.
- */
+/** Draw a report: the blob, the audit, the page count and how long it took. */
 export async function renderReport(model: ReportDoc): Promise<RenderResult> {
   const { renderReport: run } = await import('./report/engine');
   return run(model);
@@ -64,14 +37,7 @@ export async function renderAnalyticsReport(model: ReportDoc): Promise<Blob> {
   return run(model);
 }
 
-export async function downloadAnalyticsReport(model: ReportDoc): Promise<void> {
+export async function downloadAnalyticsReport(model: ReportDoc): Promise<RenderResult> {
   const { downloadAnalyticsReport: run } = await import('./report/engine');
   return run(model);
-}
-
-/** The live palette, for anything that wants to draw in the report's colours.
- *  Async only because the module it lives in is fetched on demand. */
-export async function readPalette() {
-  const { readPalette: run } = await import('./report/palette');
-  return run();
 }

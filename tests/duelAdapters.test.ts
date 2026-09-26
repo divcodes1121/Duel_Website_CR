@@ -158,8 +158,8 @@ describe('duelZoneDoc', () => {
     expect(s.rows[1].rightLabel).toBe('#XYZ');
   });
 
-  it('caps the log and counts what it left out', () => {
-    const many = Array.from({ length: 30 }, (_, i) => ({
+  it('caps the log at 60 and counts what it left out', () => {
+    const many = Array.from({ length: 70 }, (_, i) => ({
       id: `n${i}`, startTime: '2026-09-02T10:00:00Z', opponentTag: '#XYZ',
       opponentName: '#XYZ', source: 'native', format: 'bo3',
       games: [game(0, 'Loadout', false)],
@@ -167,7 +167,7 @@ describe('duelZoneDoc', () => {
     }));
     const big = duelZoneDoc(zone({ series: many }), 'X');
     const s = big.blocks.find((b) => b.kind === 'series') as { rows: unknown[] };
-    expect(s.rows).toHaveLength(24);
+    expect(s.rows).toHaveLength(60);
     expect(big.blocks.some(
       (b) => b.kind === 'note' && (b as { body?: string }).body?.includes('older duels'),
     )).toBe(true);

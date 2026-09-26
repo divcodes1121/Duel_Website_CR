@@ -1,5 +1,6 @@
 import { CARDS_BY_KEY } from '../data/cards';
 import type {
+  ApiCardRow,
   ApiProfile,
   CardBoard,
   LivePlayerReport,
@@ -24,7 +25,14 @@ import { frac, int, pct, type ReportDoc } from './analyticsReport';
  * of its own data is restated here on purpose.
  */
 
-const DAY = (s: string | null | undefined) => (s ? s.slice(0, 10) : '—');
+/** A date as YYYY-MM-DD, from either an ISO string or Supercell's battle
+ *  stamp (`20260926T161011.000Z`) — slicing the stamp's first ten characters
+ *  printed "20260926T0" under "Last played" in every player report. */
+export const DAY = (s: string | null | undefined): string => {
+  if (!s) return '—';
+  const m = /^(\d{4})(\d{2})(\d{2})T/.exec(s);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : s.slice(0, 10);
+};
 
 function windowLabel(w: { from: string | null; to: string | null }): string {
   if (!w.from && !w.to) return 'All stored history';
@@ -38,9 +46,6 @@ function tiersLabel(sources: { hot: { available: boolean }; archive: { available
   return parts.length ? parts.join(' + ') : 'none readable';
 }
 
-function cardName(key: string): string {
-  return CARDS_BY_KEY.get(key)?.name ?? key.replace(/-/g, ' ');
-}
 
 /* ------------------------------------------------------- player (stored) */
 
@@ -68,11 +73,32 @@ function rankedMeta(p: ApiProfile | null | undefined): { label: string; value: s
 
 export function playerReportDoc(r: StoredPlayerReport, tag: string): ReportDoc {
   const decided = r.player.wins + r.player.losses;
-  const top = r.decks.slice(0, 10);
+  const decks = [...r.decks].sort((a, b) => a.rank - b.rank);
+  const top = decks.slice(0, 10);
   // Bars are scaled to the LARGEST row rather than to 1. A use rate of 12% on
   // a 0..1 axis is a sliver, and the question this chart answers is "which of
   // these do they play most", which is a comparison between the rows.
   const maxUse = Math.max(...top.map((d) => d.useRate), 0.0001);
+
+  // The two trend charts, exactly as the screen draws them: one line per deck,
+  // the top eight by rank, keyed by hash so two decks sharing a name stay two.
+  const byHash = new Map(r.trends.series.map((x) => [x.deckHash, x]));
+  const ticks = r.trends.days.map((d) => DAY(d).slice(5));
+  // A win rate on a day the deck was not played is NOT 0% — the server sends 0
+  // there, and plotted as a value every line dives to the axis and back. It
+  // is a gap. Six lines, not ten: past that a line chart is a tangle.
+  const trend = (pick: 'use' | 'win') => decks.slice(0, 6)
+    .filter((d) => byHash.has(d.deckHash))
+    .map((d) => {
+      const row = byHash.get(d.deckHash);
+      const use = row?.use ?? [];
+      return {
+        label: d.name,
+        points: (row?.[pick] ?? []).map((v, i) => (!Number.isFinite(v) || (pick === 'win' && !use[i]) ? null : v)),
+      };
+    });
+
+  const last = decks.map((d) => d.lastSeen).filter(Boolean).sort().slice(-1)[0] ?? null;
 
   return {
     screen: 'Player Analysis',
@@ -82,12 +108,11 @@ export function playerReportDoc(r: StoredPlayerReport, tag: string): ReportDoc {
       { label: 'Window', value: windowLabel(r.window) },
       { label: 'Stored history', value: `${DAY(r.coverage.start)} – ${DAY(r.coverage.end)}` },
       { label: 'Battles', value: int(r.player.battles) },
-      { label: 'Databases', value: tiersLabel(r.sources) },
       // Mirrors the header tile, including its fallback order — a PDF that
       // quotes trophy road while the screen quotes ranked is two answers to
       // one question. See the note on the tile in PlayerAnalysis.tsx.
       ...rankedMeta(r.profile),
-      { label: 'Collection', value: r.tracking?.state ?? 'unknown' },
+      { label: 'Databases', value: tiersLabel(r.sources) },
     ],
     blocks: [
       {
@@ -102,36 +127,17 @@ export function playerReportDoc(r: StoredPlayerReport, tag: string): ReportDoc {
             note: `${r.player.wins}W ${r.player.losses}L${r.player.draws ? ` ${r.player.draws}D` : ''}`,
             hue: 'green',
           },
-          {
-            label: 'Crowns',
-            value: `${int(r.player.crownsFor)}–${int(r.player.crownsAgainst)}`,
-            note: 'for and against',
-          },
-          { label: 'Decks', value: int(r.decks.length), note: 'in this window' },
-          {
-            // The most recent battle is on the DECK rows, not on `player` —
-            // `ApiPlayer` declares a `lastSeen` the server has never sent, so
-            // reading it printed an em dash. Taken from the deck rows instead,
-            // which do carry it.
-            label: 'Last played',
-            // `.at()` is ES2022 and this project targets lower; index instead.
-            value: DAY(
-              r.decks
-                .map((d) => d.lastSeen)
-                .filter(Boolean)
-                .sort()
-                .slice(-1)[0] ?? null,
-            ),
-            note: 'most recent battle',
-          },
+          { label: 'Crowns', value: `${int(r.player.crownsFor)}–${int(r.player.crownsAgainst)}`, note: 'for and against' },
+          { label: 'Decks', value: int(decks.length), note: 'in this window' },
+          { label: 'Last played', value: DAY(last), note: 'most recent battle' },
         ],
       },
       {
         kind: 'decks',
-        heading: 'Top decks',
-        note: 'Ranked by use rate inside the window. Art is what the deck was observed being fielded with.',
-        decks: top.map((d) => ({
-          name: d.name,
+        heading: 'Every deck played',
+        note: `${int(decks.length)} decks · ranked by use rate inside the window`,
+        decks: decks.map((d) => ({
+          name: `${d.rank}. ${d.name}`,
           meta: `${int(d.matches)} battles · ${pct(d.useRate)} of play${
             d.avgElixir != null ? ` · ${d.avgElixir.toFixed(1)} elixir` : ''
           }`,
@@ -145,7 +151,7 @@ export function playerReportDoc(r: StoredPlayerReport, tag: string): ReportDoc {
       {
         kind: 'bars',
         heading: 'Share of play',
-        note: 'Bars are scaled to the most-played deck, not to 100%.',
+        note: 'Top 10 · scaled to the most-played deck',
         bars: top.map((d) => ({
           label: d.name,
           value: pct(d.useRate),
@@ -153,6 +159,12 @@ export function playerReportDoc(r: StoredPlayerReport, tag: string): ReportDoc {
           hue: 'blue',
         })),
       },
+      ...(ticks.length >= 2
+        ? ([
+          { kind: 'trend', heading: 'Use rate trend', note: 'Top 6 decks · % of the day’s battles', ticks, series: trend('use'), format: 'pct' },
+          { kind: 'trend', heading: 'Win rate trend', note: 'Top 6 decks · a day the deck was not played is a gap', ticks, series: trend('win'), format: 'pct' },
+        ] as ReportDoc['blocks'])
+        : []),
     ],
     caveats: [
       'Deck rows are aggregated from battles inside the window, so a different window gives a different ranking — these figures are not lifetime totals.',
@@ -311,8 +323,8 @@ export function metaBoardDoc(b: MetaBoard): ReportDoc {
       {
         kind: 'decks',
         heading: 'The board',
-        note: 'Ranked by share of every competitive battle in the window — a share of all play, not of the board.',
-        decks: b.decks.slice(0, 24).map((d) => ({
+        note: `${int(b.decks.length)} decks · ranked by share of every competitive battle in the window`,
+        decks: b.decks.map((d) => ({
           name: `${d.rank}. ${d.name}`,
           meta: `${pct(d.useRate, 2)} use · ${int(d.players)} players · ${int(d.battles)} battles${
             d.variants > 1 ? ` · ${d.variants} variants` : ''
@@ -323,7 +335,6 @@ export function metaBoardDoc(b: MetaBoard): ReportDoc {
           art: d.art,
         })),
       },
-      { kind: 'break' },
       {
         kind: 'bars',
         heading: 'Use rate',
@@ -349,7 +360,47 @@ export function metaBoardDoc(b: MetaBoard): ReportDoc {
 
 export function cardBoardDoc(b: CardBoard, tag: string): ReportDoc {
   const played = b.cards.filter((c) => c.battles > 0);
-  const byUse = [...played].sort((a, b2) => b2.useRate - a.useRate);
+  const byUse = (rows: ApiCardRow[]) => [...rows].sort((a, c) => c.useRate - a.useRate || c.battles - a.battles);
+  const meta = (key: string) => CARDS_BY_KEY.get(key);
+
+  /* EVERY TAB, AS A GRID OF THE CARDS THEMSELVES. The export used to be one
+     text table — 98 names and no art, on a screen whose subject is cards.
+     Troops, Buildings and Spells partition the All tab, so printing those
+     three IS the All tab with nothing repeated; Win Conditions and Champions
+     are the screen's subset tabs; Evolutions and Heroes print each card in
+     THAT form's art, with the figures counted over that form alone. */
+  const grid = (rows: ApiCardRow[]) => rows.map((c) => ({
+    key: c.key,
+    stats: [
+      { label: 'Battles', value: int(c.battles) },
+      { label: 'Use', value: pct(c.useRate), fraction: frac(c.useRate), hue: 'blue' as const },
+      { label: 'Win', value: pct(c.winRate), fraction: frac(c.winRate), hue: 'green' as const, thin: !c.tiered },
+    ],
+  }));
+  const formGrid = (rows: ApiCardRow[], form: 'evolution' | 'hero') => rows
+    .map((c) => ({ c, f: c.forms?.[form] }))
+    .filter((x) => x.f && x.f.battles > 0)
+    .sort((a, c) => (c.f!.useRate - a.f!.useRate) || (c.f!.battles - a.f!.battles))
+    .map(({ c, f }) => ({
+      key: c.key,
+      form,
+      stats: [
+        { label: 'Battles', value: int(f!.battles) },
+        { label: 'Use', value: pct(f!.useRate), fraction: frac(f!.useRate), hue: 'blue' as const },
+        { label: 'Win', value: pct(f!.winRate), fraction: frac(f!.winRate), hue: 'green' as const, thin: !f!.tiered },
+      ],
+    }));
+
+  const tab = (label: string, rows: ApiCardRow[]) => (rows.length
+    ? [{ kind: 'cards' as const, heading: label, note: `${int(rows.length)} cards · sorted by use rate`, cards: grid(byUse(rows)) }]
+    : []);
+  const troops = played.filter((c) => meta(c.key)?.type === 'Troop');
+  const buildings = played.filter((c) => meta(c.key)?.type === 'Building');
+  const spells = played.filter((c) => meta(c.key)?.type === 'Spell');
+  const wincons = played.filter((c) => meta(c.key)?.isWinCondition);
+  const champions = played.filter((c) => meta(c.key)?.isChampion);
+  const evo = formGrid(played.filter((c) => meta(c.key)?.canEvolve), 'evolution');
+  const heroes = formGrid(played.filter((c) => meta(c.key)?.canBeHero), 'hero');
 
   return {
     screen: 'Cards',
@@ -360,8 +411,7 @@ export function cardBoardDoc(b: CardBoard, tag: string): ReportDoc {
       { label: 'Mode', value: b.mode },
       { label: 'Battles', value: int(b.totals.battles) },
       { label: 'Cards played', value: `${played.length} of ${b.totals.cards}` },
-      { label: 'Evidence floor', value: `${b.totals.minBattles} battles to rank` },
-      { label: 'Databases', value: tiersLabel(b.sources) },
+      { label: 'Evidence floor', value: `${b.totals.minBattles} battles` },
     ],
     blocks: [
       {
@@ -375,56 +425,22 @@ export function cardBoardDoc(b: CardBoard, tag: string): ReportDoc {
             hue: 'green',
           },
           { label: 'Cards played', value: int(played.length), note: `of ${b.totals.cards}` },
-          {
-            label: 'Ranked',
-            value: int(b.totals.ranked),
-            note: `clear ${b.totals.minBattles} battles`,
-          },
-          {
-            label: 'Form coverage',
-            value: pct(b.formCoverage.share),
-            note: `${int(b.formCoverage.battles)} battles record a form`,
-          },
+          { label: 'Ranked', value: int(b.totals.ranked), note: `clear ${b.totals.minBattles} battles` },
+          { label: 'Form coverage', value: pct(b.formCoverage.share), note: `${int(b.formCoverage.battles)} battles record a form` },
         ],
       },
-      {
-        kind: 'table',
-        heading: 'Every card played',
-        note: 'Sorted by use rate — a plain count that needs no evidence floor, which is why it is the default on screen too.',
-        columns: [
-          { key: 'rank', label: '#', width: 10, align: 'right' },
-          { key: 'card', label: 'Card', flex: true },
-          { key: 'battles', label: 'Battles', width: 22, align: 'right' },
-          { key: 'use', label: 'Use rate', width: 40, align: 'right' },
-          { key: 'win', label: 'Win rate', width: 40, align: 'right' },
-          { key: 'tier', label: 'Evidence', width: 24 },
-        ],
-        rows: byUse.map((c, i) => ({
-          rank: String(i + 1),
-          card: cardName(c.key),
-          battles: int(c.battles),
-          use: { text: pct(c.useRate), bar: frac(c.useRate), hue: 'blue' as const },
-          win: {
-            text: pct(c.winRate),
-            bar: c.winRate,
-            hue: 'green' as const,
-            thin: !c.tiered,
-          },
-          // `null` means the claim is not made at all, which is a different
-          // statement from "low confidence" and must not print as one.
-          tier: { text: c.tier ?? 'thin', thin: !c.tiered },
-        })),
-      },
+      ...tab('Troops', troops),
+      ...tab('Buildings', buildings),
+      ...tab('Spells', spells),
+      ...tab('Win conditions', wincons),
+      ...tab('Champions', champions),
+      ...(evo.length ? [{ kind: 'cards' as const, heading: 'Evolutions', note: `${int(evo.length)} cards · figures for the evolved form only`, cards: evo }] : []),
+      ...(heroes.length ? [{ kind: 'cards' as const, heading: 'Heroes', note: `${int(heroes.length)} cards · figures for the hero form only`, cards: heroes }] : []),
     ],
     caveats: [
-      `A win rate is only ranked once ${b.totals.minBattles} battles sit behind it. Below that the card still appears but is marked thin — without the floor, the top of a "best cards" board is whatever was played once and won once.`,
+      `A win rate is ranked only once ${b.totals.minBattles} battles sit behind it; under that it is greyed.`,
       'Use rate is a share of battles in the window that fielded the card, so the column does not sum to 100%.',
-      b.formCoverage.share < 0.5
-        ? `Per-form figures rest on the ${pct(b.formCoverage.share)} of battles whose payload recorded which form was fielded (${DAY(b.formCoverage.from)} – ${DAY(b.formCoverage.to)}). A card with no per-form record was not observed in that form, which is not the same as never having been played in it.`
-        : 'Per-form figures are computed only over battles whose payload recorded the form.',
-      b.previous
-        ? `Movement, where shown on screen, is against ${DAY(b.previous.from)} – ${DAY(b.previous.to)} (${int(b.previous.battles)} battles).`
-        : 'There is no preceding window of equal length, so no movement figures are available.',
+      `Evolution and hero figures rest on the ${pct(b.formCoverage.share)} of battles whose payload recorded the form (${DAY(b.formCoverage.from)} – ${DAY(b.formCoverage.to)}).`,
     ],
   };
 }

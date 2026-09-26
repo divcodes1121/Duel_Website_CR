@@ -1,848 +1,500 @@
 /**
- * THE RENDERER. Measure, choose, pack, audit, reflow, draw — in that order,
- * and nothing draws before the page it lands on is decided.
+ * THE PIPELINE: fonts and art -> atoms -> pages -> ink -> audit -> blob.
  *
- * WHAT THIS REPLACED, and why the order matters. The previous renderer walked
- * the blocks and drew as it went, keeping a `y` cursor and calling `reserve()`
- * to break when it ran out of room. That is a perfectly ordinary way to build
- * a PDF and it produced, in shipped documents: headings alone at the foot of a
- * sheet, a 30 mm empty band at the top of every spill page, card art printed
- * 3.3 mm over the note beneath it, blank pages, and a document that simply
- * stopped. Every one of those is the same root cause — a decision made with
- * incomplete information, because the thing that would have informed it had
- * not been measured yet.
+ *   1. Register the embedded faces (Helvetica if they cannot be fetched).
+ *   2. Bake every raster the document will use — card tiles, the page plate
+ *      per hue, the hero band or cover, the logo — opaque, once each.
+ *   3. Turn every block into atoms that know their height (`blocks.ts`).
+ *   4. Pack the atoms onto pages (`pack.ts`), pure and greedy.
+ *   5. Draw: page plate, brand bar, footer, then each atom where it landed,
+ *      with a "continued" heading wherever a block spilled onto a new sheet.
+ *   6. Outline (the viewer's bookmark panel), contents links, audit.
  *
- * So the pipeline is:
- *
- *   1. MEASURE   every block, at real text metrics and real art ratios, into
- *                atoms with true heights.
- *   2. CHOOSE    a composition per block, against the room actually left —
- *                which is why this happens per block and not up front.
- *   3. PACK      atoms into pages, never splitting one, never stranding a
- *                heading.
- *   4. AUDIT     the committed boxes, independently.
- *   5. REFLOW    once, on a different variant, if the audit found something it
- *                knows how to fix.
- *   6. DRAW      — and by this point drawing is replay, with no decisions left
- *                in it.
- *
- * THE AUDIT IS NOT A TEST. It runs on every export, in production, and its
- * summary is available to the caller. A layout invariant that only holds when
- * somebody remembers to run a script is not an invariant.
+ * Nothing is drawn until everything is measured, so the contents page quotes
+ * real page numbers and every footer knows the total.
  */
 
-import { pdfSafe, reportFilename, type ReportBlock, type ReportDoc, type ReportHue } from '../analyticsReport';
+import type { jsPDF } from 'jspdf';
+import { reportFilename, type ReportBlock, type ReportDoc, type StatsBlock } from '../analyticsReport';
+import { artUrl, coverPlate, heroPlate, logoTile, glowPlate, cardTile, CROWN, GHOST, type Form, type Glow, type Raster } from './art';
+import { auditPage, type Issue } from './audit';
 import {
-  BODY_BOTTOM, BODY_TOP, CONTENT_W, CONTINUED_H, MARGIN, PAGE_H, PAGE_W,
-  READ_GAP, READ_H, SPACE, TYPE, lineH,
+  blockAtoms, drawTile, readAtom, statsAtoms, TILE_H, type Atom, type BlockCtx,
+} from './blocks';
+import { loadFonts } from './fonts';
+import {
+  BLOCK_GAP, BODY_BOTTOM, BODY_H, BODY_TOP, CONTENT_W, FOOTER_Y, HEADER_H, MARGIN, PAGE_H, PAGE_W, PT, TYPE,
 } from './geometry';
-import { balanceFlow, chooseVariant, type PackedPage } from './fit';
-import { auditDocument, auditSummary, type AuditPage, type AuditResult } from './audit';
-import { hueColor, mix, readPalette, semanticColor, type Palette } from './palette';
-import { Surface, setGState } from './paint';
-import { buildVariants, dividerAtom, headingAtom, type PlacedAtom } from './sections';
-import { artUrl, buildTile, cardName, collectArt } from './art';
-
-export { readPalette };
-export type { Palette };
-
-/* ----------------------------------------------------------------- state */
-
-interface Section {
-  /** "01 /", "02 /" — printed beside the title. Absent on the closing matter,
-   *  which belongs to the document rather than to any one section. */
-  number?: number;
-  title: string;
-  hue: ReportHue;
-  context?: string;
-  tabs?: string[];
-  activeTab?: string;
-}
-
-class Pager {
-  readonly s: Surface;
-
-  readonly model: ReportDoc;
-
-  page = 1;
-
-  y = BODY_TOP;
-
-  section: Section;
-
-  /** The heading of the block in flight, so a page it spills onto can say what
-   *  it is continuing. */
-  flow: string | null = null;
-
-  /** Redrawn at the top of every page a table spills onto. */
-  repeatHead: ((s: Surface, x: number, y: number, w: number) => void) | null = null;
-
-  repeatHeadH = 0;
-
-  pages: AuditPage[] = [];
-
-  contents: { title: string; page: number; depth: number }[] = [];
-
-  /** Set while the current page must not be judged on how full it is. */
-  exempt = false;
-
-  constructor(s: Surface, model: ReportDoc, section: Section) {
-    this.s = s;
-    this.model = model;
-    this.section = section;
-  }
-
-  /** Close the page being drawn and record it for the audit. */
-  private seal(): void {
-    const used = Math.max(0, this.y - BODY_TOP);
-    this.pages.push({
-      index: this.page,
-      boxes: this.s.boxes,
-      fill: used / (BODY_BOTTOM - BODY_TOP),
-      exempt: this.exempt,
-    });
-    this.s.resetBoxes();
-  }
-
-  /** A fresh sheet, with its chrome. `bare` is for pages that paint their own
-   *  band — the cover and a section divider. */
-  newPage(chrome: 'body' | 'bare' = 'body'): void {
-    this.seal();
-    this.s.doc.addPage();
-    this.page += 1;
-    this.exempt = chrome === 'bare';
-    this.s.pageFrame();
-    if (chrome === 'bare') {
-      this.y = BODY_TOP;
-      return;
-    }
-    this.s.sectionBar({
-      number: this.section.number,
-      title: this.section.title,
-      tabs: this.section.tabs,
-      activeTab: this.section.activeTab,
-      context: this.section.context,
-      hue: this.section.hue,
-      continued: this.flow !== null,
-    });
-    this.y = BODY_TOP;
-
-    /* A CONTINUED BLOCK SAYS SO, and a continued TABLE gets its column header
-       back. Landing on a sheet of unlabelled figures because the header was on
-       the sheet before is the most disorienting thing a paginated document
-       can do.
-
-       SAID ONCE, THOUGH. When the block's heading was promoted into the
-       section bar, that bar is already wearing a CONTINUED pill, and printing
-       a second "(continued)" line under it says the same thing twice and
-       charges the page 7 mm for the privilege. */
-    if (this.continuationH > 0) {
-      this.s.text(`${this.flow} (continued)`, MARGIN, this.y + 3.4, {
-        size: TYPE.bodySmall.size, bold: true, color: this.s.p.muted, caps: true, track: 0.3,
-      });
-      this.y += CONTINUED_H;
-    }
-    if (this.repeatHead) {
-      this.repeatHead(this.s, MARGIN, this.y, CONTENT_W);
-      this.s.box({
-        x: MARGIN, y: this.y, w: CONTENT_W, h: this.repeatHeadH, kind: 'columns',
-      });
-      this.y += this.repeatHeadH;
-    }
-  }
-
-  /** Room left on this page, and on a fresh one. */
-  get room(): number { return BODY_BOTTOM - this.y; }
-
-  /**
-   * What a continuation line costs on the NEXT page — zero when the section
-   * bar is already saying it.
-   *
-   * This getter is the fix for a 3.4 mm overflow the audit caught: the spill
-   * budget was computed while `flow` was still null, so a page that would go
-   * on to draw a continuation line was measured as if it would not, and the
-   * third series row on every spill sheet ran through the footer.
-   */
-  get continuationH(): number {
-    if (!this.flow) return 0;
-    return this.flow === this.section.title ? 0 : CONTINUED_H;
-  }
-
-  /** Room on a fresh page, given what its chrome will cost. `assumeFlow` is
-   *  for a block that has not spilled YET but is about to — the budget has to
-   *  be the one the spill page will really have. */
-  freshRoomFor(assumeFlow: string | null = this.flow): number {
-    const cont = !assumeFlow || assumeFlow === this.section.title ? 0 : CONTINUED_H;
-    return BODY_BOTTOM - BODY_TOP - cont - this.repeatHeadH;
-  }
-
-  get freshRoom(): number { return this.freshRoomFor(); }
-
-  finish(): AuditPage[] {
-    this.seal();
-    if (this.pages.length) this.pages[this.pages.length - 1].last = true;
-    return this.pages;
-  }
-}
-
-/* ------------------------------------------------------------------ cover */
-
-/**
- * THE COVER. One hero figure, a ruled strip of supporting numbers, and the
- * query's own facts.
- *
- * The meta rows are on the cover rather than omitted for tidiness because
- * every one of them is something a reader needs in order to interpret the
- * figures — which window, which mode, how old the snapshot is. A report that
- * hides its own denominators looks cleaner and says less.
- */
-function coverHero(model: ReportDoc): { label: string; value: string; note?: string } | null {
-  /* THE HERO FIGURE IS PROMOTED OUT OF THE BODY, not invented for the cover.
-     The first tile of the first stats block is the screen's own headline —
-     the number the adapter already decided mattered most — so the cover states
-     it rather than making a second claim the pages behind it do not support. */
-  for (const b of model.blocks) {
-    if (b.kind === 'stats' && b.tiles.length) {
-      const t = b.tiles[0];
-      return { label: t.label, value: t.value, note: t.note };
-    }
-    if (b.kind !== 'break') break;
-  }
-  return null;
-}
-
-function drawCover(s: Surface, model: ReportDoc): void {
-  const { p } = s;
-  const accent = hueColor(p, model.hue);
-  const cx = PAGE_W / 2;
-
-  s.text('DECKKIES INTELLIGENCE REPORT', cx, 28, {
-    size: TYPE.label.size, bold: true, track: 1.6, color: p.muted, align: 'center', caps: true,
-  });
-
-  s.fill(p.gold);
-  s.crown(cx - 8, 33, 16);
-
-  s.text(model.screen, cx, 55, { size: 26, bold: true, color: p.text, align: 'center' });
-  if (model.subject) {
-    s.text(model.subject, cx, 61.5, {
-      size: TYPE.context.size, bold: true, track: 0.9, color: p.muted,
-      align: 'center', caps: true,
-    });
-  }
-
-  // The hero panel — level 3, and the only figure on the page allowed to be
-  // this size.
-  const hero = coverHero(model);
-  let y = 70;
-  if (hero) {
-    const H = 40;
-    s.module(MARGIN, y, CONTENT_W, H, { accent: mix(accent, p.border, 0.55), kind: 'hero' });
-    s.label(hero.label, cx, y + 9, { align: 'center' });
-    s.text(hero.value, cx, y + 27, {
-      size: TYPE.metric.size, bold: true, color: accent, align: 'center',
-    });
-    if (hero.note) {
-      s.text(hero.note, cx, y + 34, {
-        size: TYPE.label.size, bold: true, track: 0.6, color: p.muted,
-        align: 'center', caps: true,
-      });
-    }
-    y += H + SPACE.wide;
-  }
-
-  if (model.summary) {
-    const lines = s.wrap(model.summary, CONTENT_W * 0.62, { size: TYPE.body.size });
-    lines.forEach((ln, i) => {
-      s.text(ln, cx, y + 4 + i * lineH(TYPE.body.size), {
-        size: TYPE.body.size, color: p.muted, align: 'center',
-      });
-    });
-    y += lines.length * lineH(TYPE.body.size) + SPACE.base;
-  }
-
-  // The query's own facts. Every one of them is something a reader needs in
-  // order to interpret the figures, which is why they are on the cover and not
-  // omitted for tidiness.
-  const meta = model.meta.slice(0, 8);
-  if (meta.length) {
-    const perRow = Math.min(4, meta.length);
-    const gap = SPACE.base;
-    const cwid = (CONTENT_W - gap * (perRow - 1)) / perRow;
-    meta.forEach((m, i) => {
-      s.kpi(MARGIN + (i % perRow) * (cwid + gap), y + Math.floor(i / perRow) * 22, cwid, {
-        label: m.label, value: m.value, accent,
-      });
-    });
-  }
-
-  s.text('DECKKIES', MARGIN, PAGE_H - 10, {
-    size: TYPE.footer.size, bold: true, track: TYPE.footer.track, color: p.muted, caps: true,
-  });
-  s.text(new Date().toLocaleDateString('en-GB'), PAGE_W - MARGIN, PAGE_H - 10, {
-    size: TYPE.footer.size, bold: true, track: TYPE.footer.track,
-    color: p.muted, align: 'right', caps: true,
-  });
-}
-
-/* --------------------------------------------------------------- contents */
-
-function drawContents(pg: Pager): void {
-  const { s } = pg;
-  const { p } = s;
-  s.text('CONTENTS', MARGIN, 26, {
-    size: TYPE.title.size, bold: true, track: TYPE.title.track, color: p.text, caps: true,
-  });
-  s.stroke(p.border);
-  s.doc.setLineWidth(0.3);
-  s.doc.line(MARGIN, 30, PAGE_W - MARGIN, 30);
-
-  const perCol = Math.ceil(pg.contents.length / 2);
-  const colW = (CONTENT_W - SPACE.section) / 2;
-  pg.contents.forEach((e, i) => {
-    const col = perCol > 0 ? Math.floor(i / perCol) : 0;
-    const row = perCol > 0 ? i % perCol : i;
-    const x = MARGIN + col * (colW + SPACE.section);
-    const y = 42 + row * 7.2;
-    if (y > BODY_BOTTOM) return;
-    const indent = e.depth * 5;
-    const style = {
-      size: e.depth === 0 ? 8 : 7.4,
-      bold: e.depth === 0,
-      color: e.depth === 0 ? p.text : p.muted,
-    };
-    const label = s.clip(e.title, colW - indent - 14, style);
-    s.text(label, x + indent, y, style);
-    const lw = s.width(label, style);
-    if (colW - indent - lw - 16 > 4) {
-      s.stroke(p.border);
-      s.doc.setLineWidth(0.2);
-      s.alpha(0.6, () => s.doc.line(x + indent + lw + 2, y - 1, x + colW - 12, y - 1));
-    }
-    s.text(String(e.page), x + colW - 2, y, {
-      size: 8, bold: true, color: p.muted, align: 'right',
-    });
-  });
-}
-
-/* ----------------------------------------------------------------- layout */
-
-/**
- * PLACE ONE BLOCK.
- *
- * THE PROMOTION RULE, and it is one rule rather than three because the first
- * two versions of it let the section bar lie.
- *
- *   A HEADED BLOCK THAT DOES NOT FIT IN THE ROOM LEFT TAKES A NEW PAGE, AND
- *   ITS HEADING GOES INTO THE BAR. A headed block that does fit is drawn where
- *   it stands, with an inline heading.
- *
- * The version before this promoted only a block that happened to be first on
- * its page, which produced a document where a series log moved wholesale to a
- * fresh sheet — correct — and that sheet was still titled MOST-PLAYED
- * LOADOUTS, because the section had been set by the block before it. Three
- * consecutive pages carried a heading for content that was not on them.
- *
- * Stating it as "does it fit" rather than "is it first" also closes the gap
- * that exposed it: the block needed 62.6 mm and had 60.4, so it moved, and the
- * 10.9 mm inline heading was the reason it did not fit. Promoted, the heading
- * costs the page nothing, and a block that was 2 mm too tall is no longer 2 mm
- * too tall.
- *
- * A block that fits inline cannot spill, so the bar it sits under stays true
- * for the whole page — which is what makes one rule sufficient.
- */
-function placeBlock(pg: Pager, block: ReportBlock, deps: { hue: ReportHue },
-                    canPromote: boolean,
-                    promote: (title: string, note?: string) => void,
-                    alreadyPromoted = false,
-                    isolated = false): void {
-  const { s } = pg;
-  const heading = 'heading' in block ? block.heading : undefined;
-  const note = 'note' in block ? block.note : undefined;
-
-  /* THE SPILL BUDGET ASSUMES THE BLOCK WILL SPILL. If it does not, nothing is
-     lost — the first page's budget is exact either way — but if it does, the
-     page it lands on has already been charged for the line that says so. */
-  const build = (first: number, rest: number) => buildVariants(block, {
-    s,
-    hue: block.kind === 'divider' ? (block.hue ?? deps.hue) : deps.hue,
-    width: CONTENT_W,
-    first,
-    rest,
-  }, { artUrl, nameOf: cardName });
-
-  let rest = pg.freshRoomFor(heading ?? pg.flow ?? null);
-  let variants = build(pg.room, rest);
-  if (variants.length === 0) return;
-
-  const total = (v: { atoms: { h: number }[] }) => v.atoms.reduce((sum, a) => sum + a.h, 0);
-  const headAtom = () => (alreadyPromoted ? null : headingAtom(s, heading, note, CONTENT_W));
-  const headH = headAtom()?.h ?? 0;
-
-  const fitsInline = Math.min(...variants.map(total)) + headH <= pg.room;
-  let carried: PlacedAtom | null = null;
-
-  if (!alreadyPromoted && !fitsInline && canPromote && heading) {
-    // The heading becomes the page's title, so it is not drawn in the flow.
-    promote(heading, note);
-    pg.newPage();
-    rest = pg.freshRoomFor(heading);
-    variants = build(pg.room, rest);
-    if (variants.length === 0) return;
-  } else {
-    carried = headAtom();
-    if (heading && !alreadyPromoted) pg.flow = null;
-  }
-
-  const withHeading = (vs: typeof variants) => vs.map((v) => ({
-    ...v,
-    atoms: carried ? [carried, ...v.atoms] : v.atoms,
-  }));
-
-  /* BREAK BEFORE A BLOCK WHOSE FIRST CHUNK CANNOT FIT HERE — measured, not
-     estimated, which is the whole point of this rewrite. `packAtoms` handles
-     this too, by emitting a leading empty page; doing it here as well means
-     the composition is chosen against the page the block actually lands on
-     rather than against the one it was measured against. */
-  const firstChunk = (vs: typeof variants) => Math.min(...vs.map((v) => {
-    let end = 0;
-    while (end < v.atoms.length - 1 && v.atoms[end].keepWithNext) end += 1;
-    return v.atoms.slice(0, end + 1).reduce((sum, a) => sum + a.h, 0);
-  }));
-
-  const need = firstChunk(withHeading(variants));
-  if (need > pg.room && need <= rest) {
-    pg.newPage();
-    variants = build(pg.room, rest);
-    if (variants.length === 0) return;
-  }
-
-  const choice = chooseVariant(withHeading(variants), { first: pg.room, rest, gap: 0 });
-  if (!choice) return;
-
-  const headPayload = choice.variant.atoms.find((a) =>
-    (a.payload as { repeatHead?: unknown } | undefined)?.repeatHead) as
-    { payload: { repeatHead: (s: Surface, x: number, y: number, w: number) => void; headH: number } }
-    | undefined;
-
-  /* SPREAD BEFORE DRAWING, not while packing: the variant was chosen on page
-     count and this cannot change it, so the choice stays valid. */
-  /* SPREAD BEFORE DRAWING, and ONLY WHEN NOTHING FOLLOWS ON THIS PAGE.
-
-     `balanceFlow` preserves the page count of the block it is given, but not
-     of the document: moving rows off the first sheet changes where the block
-     ENDS, and whatever comes next can then need a page it did not need before.
-     MEASURED on the 15-page fixture — applying it everywhere cost exactly one
-     sheet, which by this engine own scoring is a worse document than the
-     half-empty tail it was fixing.
-
-     A block followed by a deliberate break, a divider, or the end of the
-     report has nothing to push, so there the spread is free. That is where it
-     is applied and nowhere else. */
-  drawPacked(pg,
-             isolated ? balanceFlow(choice.pages, { first: pg.room, rest, gap: 0 })
-                      : choice.pages,
-             heading);
-
-  if (headPayload) {
-    pg.repeatHead = headPayload.payload.repeatHead;
-    pg.repeatHeadH = headPayload.payload.headH;
-  }
-}
-
-/** Commit a packed flow, opening pages as the packing says to. */
-function drawPacked(pg: Pager, pages: PackedPage[], heading: string | undefined): void {
-  /* SET THE CONTINUATION FLAG BEFORE THE SPILL PAGES ARE OPENED, not after.
-     `newPage` reads it to decide whether to print "(continued)", so setting it
-     at the end of the flow means every page a block spills onto is drawn
-     without the one line that says whose rows these are. */
-  if (pages.length > 1 && heading) pg.flow = heading;
-
-  /* A LEADING EMPTY PAGE MEANS "THIS BLOCK DOES NOT START HERE". The packer
-     emits one when the first chunk cannot fit in what is left under the
-     previous block; it is an instruction to turn the page, not a sheet. */
-  const sheets = [...pages];
-  if (sheets.length > 0 && sheets[0].atoms.length === 0) {
-    pg.newPage();
-    sheets.shift();
-  }
-
-  sheets.forEach((page, i) => {
-    if (i > 0) pg.newPage();
-    const atoms = page.atoms as PlacedAtom[];
-
-    /* JUSTIFY A PAGE THAT IS NOT THE LAST ONE OF ITS BLOCK.
-
-       A page whose block continues overleaf has no honest reason to end early,
-       so the leftover height is distributed between its rows instead of
-       pooling at the foot — which is the "large empty area" the brief names,
-       and which a packer produces naturally whenever the row pitch does not
-       divide the body.
-
-       ONLY FOR A HOMOGENEOUS RUN, and CAPPED. Spreading a heading away from
-       its rows would undo the orphan guarantee, and unlimited spreading turns
-       a 60% page into obvious padding rather than a composition. Beyond the
-       cap the slack is left alone and the audit is allowed to complain. */
-    const uniform = atoms.length > 1 && atoms.every((a) => a.kind === atoms[0].kind);
-    const spill = i < sheets.length - 1;
-    const slack = spill && uniform ? Math.max(0, page.room - page.used) : 0;
-    const extra = Math.min(slack / (atoms.length - 1 || 1), 9);
-
-    atoms.forEach((atom, j) => {
-      atom.draw(pg.s, MARGIN, pg.y, CONTENT_W);
-      pg.y += atom.h + (j < atoms.length - 1 ? extra : 0);
-    });
-  });
-}
-
-/* ----------------------------------------------------------------- render */
+import { pack, type Placement } from './pack';
+import { CAP, Surface, type TextStyle } from './surface';
+import { HUES, P, hue, mix, type HueName } from './theme';
 
 export interface RenderResult {
   blob: Blob;
-  audit: AuditResult;
-  summary: string;
   pages: number;
+  issues: Issue[];
+  /** Milliseconds from call to blob. */
+  ms: number;
 }
 
+const HERO_H = 46;
+export const BRAND = 'DECKKIES';
+export const FAN_LINE = 'Unofficial fan content, not affiliated with or endorsed by Supercell.';
+
+/* ------------------------------------------------------------ art sweep */
+
+type Deckish = { cards: string[]; art?: Record<string, Form> };
+
 /**
- * Lay the whole document out and draw it.
+ * EVERY CARD URL THE DOCUMENT WILL DRAW, swept out of the model first.
  *
- * `attempt` exists so the reflow pass can run the entire thing again against a
- * different starting decision rather than patching a page in place. Patching
- * is how a fix for one page pushes a fault onto the next; re-laying it out is
- * the only way the second result is as coherent as the first.
+ * A block kind missing from this sweep would draw name-only placeholders for
+ * its whole section — silently, because a placeholder is a valid-looking
+ * tile. That happened twice to the previous renderer, so the sweep is written
+ * over every art-bearing kind, and a test fails if a new kind carrying cards
+ * is added without appearing here.
  */
-async function layout(model: ReportDoc, p: Palette, tiles: Map<string, string | null>,
-                      attempt: number): Promise<{ doc: import('jspdf').jsPDF;
-                                                  pages: AuditPage[];
-                                                  contents: { title: string; page: number; depth: number }[] }> {
-  const { jsPDF, GState } = await import('jspdf');
-  setGState(GState);
-
-  /* `compress: true` — MEASURED: a shipped 101-page dossier was 2.26 MB, of
-     which 1.27 MB was uncompressed content streams. */
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
-  guardText(doc as unknown as { text: (...a: unknown[]) => unknown });
-
-  const s = new Surface(doc, p, tiles);
-  s.pageFrame();
-  drawCover(s, model);
-
-  const baseContext = model.meta.slice(0, 3)
-    .map((m) => `${m.label} ${m.value}`).join('  //  ');
-  const pg = new Pager(s, model, {
-    number: 1,
-    title: model.screen,
-    hue: model.hue,
-    context: baseContext,
-  });
-  pg.exempt = true;
-
-  // Page 2 is RESERVED and filled on the second pass — a page number cannot be
-  // known until the thing it points at has been laid out, and a contents page
-  // that guesses is worse than none.
-  const contentsPage = model.contents ? 2 : 0;
-  if (contentsPage) {
-    pg.newPage('bare');
-  }
-
-  let opened = false;
-  const openBody = () => {
-    if (opened) return;
-    pg.newPage();
-    opened = true;
+export function collectArt(blocks: readonly ReportBlock[]): string[] {
+  const seen = new Set<string>();
+  const deck = (d: Deckish | null | undefined) => {
+    if (!d) return;
+    for (const c of d.cards) seen.add(artUrl(c, d.art?.[c]));
   };
-
-  /* A HEADING IS CARRIED TO THE BLOCK IT INTRODUCES rather than placed on its
-     own. An adapter may emit a heading and its note as one block and the rows
-     as the next, heading-less one, so a heading placed independently is legal
-     at the foot of a sheet with nothing under it. Carried, it is part of the
-     same keep-with-next chain as the first row and cannot be separated from
-     it by anything. */
-  let sectionNo = 0;
-  /** The block whose heading a preceding lead-in already put in the bar. */
-  let borrowedBy = -1;
-  const hasDividers = model.blocks.some((b) => b.kind === 'divider');
-  for (let i = 0; i < model.blocks.length; i += 1) {
-    const block = model.blocks[i];
-
-    if (block.kind === 'break') {
-      /* A DELIBERATE BREAK EXEMPTS THE PAGE IT ENDS from the fill check. The
-         brief asks for page breaks used intentionally rather than when content
-         overflows; a page that stops short because the author said so is not
-         the same fault as one that gave up, and reporting them identically
-         would train a reader to ignore the audit. */
-      pg.exempt = true;
-      pg.flow = null;
-      pg.repeatHead = null;
-      pg.repeatHeadH = 0;
-      opened = false;
-      continue;
+  for (const b of blocks) {
+    switch (b.kind) {
+      case 'decks': b.decks.forEach(deck); break;
+      case 'versus': b.pairs.forEach((p) => { deck(p.left); deck(p.right); }); break;
+      case 'series': b.rows.forEach((r) => { r.left.forEach(deck); r.right.forEach(deck); }); break;
+      case 'battles': b.rows.forEach((r) => { deck(r.left); deck(r.right); }); break;
+      case 'pairs': b.pairs.forEach((p) => { seen.add(artUrl(p.a, p.artA)); seen.add(artUrl(p.b, p.artB)); }); break;
+      case 'cards': b.cards.forEach((c) => seen.add(artUrl(c.key, c.form))); break;
+      default: break;
     }
+  }
+  return [...seen];
+}
 
-    if (block.kind === 'divider') {
-      sectionNo += 1;
-      pg.flow = null;
-      pg.repeatHead = null;
-      pg.repeatHeadH = 0;
-      pg.section = {
-        number: sectionNo,
-        title: block.title,
-        hue: block.hue ?? model.hue,
-        context: block.subtitle,
-      };
-      pg.newPage('bare');
-      pg.contents.push({
-        title: block.contents ?? block.title,
-        page: pg.page,
-        depth: block.depth ?? 0,
-      });
-      const atom = dividerAtom(block, {
-        s, hue: model.hue, width: CONTENT_W, first: pg.room, rest: pg.freshRoom,
-      });
-      atom.draw(s, MARGIN, pg.y, CONTENT_W);
-      pg.y += atom.h;
-      opened = true;
-      continue;
+/* ------------------------------------------------------------- chrome */
+
+export function stamp(d: Date): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** A bare player tag gets its '#', so every header prints it the same way
+ *  whichever adapter produced it. Anything that is not a tag is left alone. */
+export function tagged(subject: string | undefined): string | undefined {
+  if (!subject) return subject;
+  const t = subject.trim();
+  return /^#?[0289PYLQGRJCUV]{4,12}$/i.test(t) ? `#${t.replace(/^#/, '').toUpperCase()}` : t;
+}
+
+const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
+
+export function logoMark(s: Surface, logo: Raster | null, x: number, y: number, size: number): void {
+  s.round(x, y, size, size, size * 0.24, P.brandTile, mix(P.brandTile, P.text, 0.18), 0.2);
+  if (logo) {
+    s.clipTo(x, y, size, size, size * 0.24, () => s.image(logo, x, y, size, size));
+  } else {
+    s.crown(x + size * 0.2, y + size * 0.3, size * 0.6, P.gold, CROWN);
+  }
+}
+
+/** The wordmark with its trademark sign. Returns the width drawn. */
+export function wordmark(s: Surface, x: number, y: number, size: number): number {
+  const w = s.text(BRAND, x, y, { role: 'display', size, track: size * 0.018, color: P.text });
+  const tm = Math.max(5.2, size * 0.36);
+  s.text('™', x + w + 0.5, y - size * PT * 0.42, { role: 'body', size: tm, color: P.text2 });
+  return w + 0.5 + s.width('™', { size: tm });
+}
+
+export function brandBar(s: Surface, logo: Raster | null, model: { screen: string; subject?: string }, section: { title: string; hue: HueName }, page: number, total: number): void {
+  s.chrome(() => {
+    const y = 9.6;
+    logoMark(s, logo, MARGIN, 4.4, 7);
+    const ww = wordmark(s, MARGIN + 9.4, y + 0.3, 13);
+    const sx = MARGIN + 9.4 + ww + 4.5;
+    s.line(sx, 5.4, sx, 10.6, P.lineStrong, 0.22);
+    const crumbs = [model.screen, model.subject].filter(Boolean).join('  ·  ');
+    const tail = section.title && section.title !== model.screen ? `  ›  ${section.title}` : '';
+    const label: TextStyle = { role: 'bodyBold', size: 5.8, track: 0.26, caps: true, color: P.text2 };
+    s.text(s.clip(crumbs + tail, 170, label), sx + 4.5, y - 0.4, label);
+    s.text(`${String(page).padStart(2, '0')} / ${String(total).padStart(2, '0')}`, PAGE_W - MARGIN, y - 0.4, {
+      role: 'bodyBold', size: 6.4, track: 0.3, color: P.text2, align: 'right',
+    });
+    const c = hue(section.hue);
+    s.gradient(MARGIN, HEADER_H, 70, 0.4, 0, c.ink, P.line, 'h', 12);
+    s.rect(MARGIN + 70, HEADER_H, CONTENT_W - 70, 0.4, P.line);
+  });
+}
+
+export function footer(s: Surface, generated: string, label = 'Intelligence report'): void {
+  s.chrome(() => {
+    const st: TextStyle = { role: 'bodyBold', size: TYPE.footer.size, track: TYPE.footer.track, caps: true, color: P.text3 };
+    s.text(`${BRAND}™  ·  ${label}`, MARGIN, FOOTER_Y, st);
+    s.text(`Generated ${generated}  ·  build ${BUILD}`, PAGE_W - MARGIN, FOOTER_Y, { ...st, align: 'right' });
+  });
+}
+
+/** The page ground: a solid vector fill, the section's glow in the top-right
+ *  corner, and the ghost crown as a pre-mixed opaque fill. */
+export function ground(s: Surface, glow: Glow | null): void {
+  s.chrome(() => {
+    s.rect(0, 0, PAGE_W, PAGE_H, P.ground);
+    if (glow) s.image(glow, glow.x, glow.y, glow.w, glow.h);
+    s.crown(PAGE_W - 62, PAGE_H - 44, 44, GHOST, CROWN);
+  });
+}
+
+/* ----------------------------------------------------------- front page */
+
+function heroBand(s: Surface, plate: Raster | null, model: ReportDoc): void {
+  const x = MARGIN;
+  const y = BODY_TOP;
+  const w = CONTENT_W;
+  const c = hue(model.hue as HueName);
+  if (plate) s.clipTo(x, y, w, HERO_H, 3.2, () => s.image(plate, x, y, w, HERO_H));
+  else s.gradient(x, y, w, HERO_H, 3.2, mix(P.panel, c.deep, 0.45), P.panel, 'h', 24);
+  s.round(x, y, w, HERO_H, 3.2, null, mix(P.line, c.ink, 0.25), 0.25);
+  s.box({ x, y, w, h: HERO_H, kind: 'hero' });
+  const lx = x + 8;
+  const copyW = w * 0.62;
+  s.label('Intelligence report', lx, y + 9, { color: c.ink, size: 6 });
+  const T = TYPE.heroTitle;
+  s.text(s.clip(model.screen, copyW, { role: 'display', size: T.size, track: T.track }), lx, base(y + 12, T.size), {
+    role: 'display', size: T.size, track: T.track, color: P.text,
+  });
+  const sub = [model.subject, model.summary].filter(Boolean).join('  ·  ');
+  if (sub) s.text(s.clip(sub, copyW, { role: 'bodyBold', size: 9 }), lx, y + 29.4, { role: 'bodyBold', size: 9, color: P.text2 });
+  // The query facts, as a line of label/value pairs.
+  let mx = lx;
+  const my = y + HERO_H - 7.6;
+  for (const m of model.meta) {
+    const lab: TextStyle = { role: 'bodyBold', size: 5.2, track: 0.24, caps: true, color: P.text3 };
+    const val: TextStyle = { role: 'bodyBold', size: 6.6, color: P.text };
+    const need = s.width(m.label, lab) + 2 + s.width(m.value, val) + 7;
+    if (mx + need > x + w * 0.7) break;
+    const lw = s.text(m.label, mx, my, lab);
+    const vw = s.text(m.value, mx + lw + 2, my, val);
+    mx += lw + 2 + vw + 7;
+  }
+}
+
+const base = (top: number, size: number) => top + size * PT * CAP;
+
+interface ContentsEntry { title: string; depth: 0 | 1; page: number }
+
+function coverPage(s: Surface, plate: Raster | null, logo: Raster | null, model: ReportDoc, lead: StatsBlock | null,
+  entries: ContentsEntry[], generated: string, contentsPages: number): void {
+  s.chrome(() => {
+    const h = model.hue as HueName;
+    const c = hue(h);
+    if (plate) s.image(plate, 0, 0, PAGE_W, PAGE_H);
+    else s.rect(0, 0, PAGE_W, PAGE_H, P.ground);
+    logoMark(s, logo, MARGIN, 13, 12);
+    wordmark(s, MARGIN + 15.5, 23.2, 24);
+    s.text(`Generated ${generated}`, PAGE_W - MARGIN, 20.6, {
+      role: 'bodyBold', size: 6, track: 0.26, caps: true, color: P.text2, align: 'right',
+    });
+    const lx = MARGIN;
+    const copyW = entries.length ? 158 : 200;
+    s.label('Intelligence report', lx, 56, { color: c.ink, size: 7 });
+    const T = TYPE.coverTitle;
+    const titleLines = s.wrap(model.screen, copyW, { role: 'display', size: T.size, track: T.track }, 2);
+    let ty = base(60, T.size);
+    for (const ln of titleLines) {
+      s.text(ln, lx, ty, { role: 'display', size: T.size, track: T.track, color: P.text });
+      ty += T.size * PT * 0.92;
     }
-
-    /* A HEADING-LESS BLOCK OPENING A PAGE IS A LEAD-IN, NOT A SECTION.
-
-       Every adapter opens with a KPI strip and then names its first real
-       block, so a strip that opens a page would take the sheet under the
-       screen's own name, the headed block after it would not fit in what is
-       left, and the strip would be left alone on a 13%-full page while the
-       series started overleaf. Reported by the audit on all three Duel Zone
-       fixtures, and it is the shape of every real report this thing draws.
-
-       So the strip BORROWS the heading of the block it introduces: the bar
-       reads "01 / THE SERIES LOG", the strip sits under it, and the series
-       follows on the same sheet — which is how the section-divider pages
-       already work, and how the reference document opens a section.
-
-       ONLY `stats` AND `note` BORROW. They are the two kinds an adapter emits
-       without a heading as a preamble; a heading-less table or series is a
-       continuation of something and would mislabel the pages it ran onto. */
-    if (!opened && !hasDividers && !block.heading
-        && (block.kind === 'stats' || block.kind === 'note')) {
-      for (let j = i + 1; j < model.blocks.length; j += 1) {
-        const nb = model.blocks[j];
-        if (nb.kind === 'break' || nb.kind === 'divider') break;
-        if ('heading' in nb && nb.heading) {
-          sectionNo += 1;
-          pg.section = {
-            number: sectionNo,
-            title: nb.heading,
-            hue: model.hue,
-            context: nb.note ?? baseContext,
-          };
-          borrowedBy = j;
-          break;
-        }
+    ty += 1;
+    if (model.subject) {
+      s.text(s.clip(model.subject, copyW, { role: 'bodyBold', size: 12 }), lx, ty, { role: 'bodyBold', size: 12, color: P.text });
+      ty += 6.6;
+    }
+    if (model.summary) {
+      for (const ln of s.wrap(model.summary, copyW, { size: 8 }, 3)) {
+        s.text(ln, lx, ty, { size: 8, color: P.text2 });
+        ty += 8 * PT * 1.35;
       }
     }
-
-    /* THE SECTION IS SET BY WHICHEVER BLOCK OPENS A PAGE, and `placeBlock`
-       decides that — it is the only thing that knows whether the block fits
-       where it stands. A document that uses dividers already has its sections
-       named, so promotion is off there and the two mechanisms cannot fight. */
-    const promote = (title: string, note?: string) => {
-      sectionNo += 1;
-      pg.section = {
-        number: sectionNo,
-        title,
-        hue: model.hue,
-        context: note ?? baseContext,
-      };
-      pg.flow = null;
-    };
-    /* Nothing follows this block on its own last page when the next thing
-       starts a page of its own — or when there is no next thing. */
-    const next = model.blocks[i + 1];
-    const isolated = !next || next.kind === 'break' || next.kind === 'divider';
-
-    if (i === borrowedBy) {
-      // Its heading is already in the bar; draw it without one and let it flow
-      // under the strip that introduced it.
-      openBody();
-      placeBlock(pg, block, { hue: model.hue }, false, promote, true, isolated);
-      pg.y += SPACE.base;
-      continue;
+    ty += 5;
+    const tiles = (lead?.tiles ?? []).slice(0, 4);
+    if (tiles.length) {
+      const tw = Math.min(40, (copyW - (tiles.length - 1) * 3) / tiles.length);
+      tiles.forEach((t, i) => drawTile(s, lx + i * (tw + 3), ty, tw, t, h));
+      ty += TILE_H + 7;
     }
-
-    if (!opened && block.heading && !hasDividers) {
-      /* It is opening a page by definition, so it is the section.
-
-         THE BLOCK IS PASSED WHOLE, with a flag, rather than with its heading
-         stripped out. Stripping it was the first version and it silently
-         disabled the continuation marker: `drawPacked` reads the heading to
-         decide whether a spill page says CONTINUED, so four spill pages across
-         two documents came out titled but with no indication they were a
-         second sheet of the same thing. */
-      promote(block.heading, block.note);
-      openBody();
-      placeBlock(pg, block, { hue: model.hue }, false, promote, true, isolated);
-    } else {
-      openBody();
-      placeBlock(pg, block, { hue: model.hue }, !hasDividers, promote, false, isolated);
-    }
-    pg.y += SPACE.base;
-  }
-
-  openBody();
-
-  /* THE CLOSING MATTER BELONGS TO THE DOCUMENT, NOT TO THE LAST BLOCK.
-
-     The read, the caveats and the end rule are about the whole report, so if
-     they open a sheet of their own that sheet must not be titled with whatever
-     section happened to end last — a page carrying the method note and END OF
-     REPORT came out headed "07 / WHAT TO BRING", which is a heading for
-     content that is not on the page.
-
-     Set BEFORE the conditional page break, so it costs nothing when the read
-     fits under the last section: the bar there is already drawn, and a section
-     nobody opens a page for is a section nobody sees. */
-  pg.section = { title: model.screen, hue: model.hue, context: baseContext };
-  pg.flow = null;
-  pg.repeatHead = null;
-  pg.repeatHeadH = 0;
-
-  /* THE READ — the one sentence saying what all of it meant, sitting where a
-     reader who has finished will look. Its accent is semantic, so the colour
-     carries the reading before the sentence does. */
-  if (model.read) {
-    if (pg.room < READ_H + READ_GAP + 4) pg.newPage();
-    pg.y += READ_GAP;
-    pg.y += s.readBar(MARGIN, pg.y, CONTENT_W, model.read, hueColor(p, model.hue));
-  }
-
-  if (model.caveats?.length) {
-    pg.flow = null;
-    if (pg.room < 18) pg.newPage();
-    pg.y += SPACE.base;
-    s.text('WHAT THIS REPORT DOES NOT SAY', MARGIN, pg.y + 3.4, {
-      size: 7.5, bold: true, track: 0.4, color: p.muted, caps: true,
+    // The query facts in two columns.
+    const facts = model.meta.slice(0, 8);
+    const colW = copyW / 2;
+    facts.forEach((m, i) => {
+      const fx = lx + (i % 2) * colW;
+      const fy = ty + Math.floor(i / 2) * 8.4;
+      if (fy > PAGE_H - 26) return;
+      s.label(m.label, fx, fy, { color: P.text3 });
+      s.text(s.clip(m.value, colW - 4, { role: 'bodyBold', size: 7.4 }), fx, fy + 3.8, { role: 'bodyBold', size: 7.4, color: P.text });
     });
-    s.box({ x: MARGIN, y: pg.y, w: CONTENT_W, h: 6, kind: 'caveat-heading' });
-    pg.y += 7;
-    for (const c of model.caveats) {
-      const lines = s.wrap(`— ${c}`, CONTENT_W, { size: 7 });
-      const h = lines.length * 3.6 + 1.5;
-      // The WHOLE entry moves rather than splitting one bullet across a page.
-      if (pg.room < h) pg.newPage();
-      lines.forEach((ln, li) => s.text(ln, MARGIN, pg.y + li * 3.6, {
-        size: 7, color: p.muted,
-      }));
-      s.box({ x: MARGIN, y: pg.y, w: CONTENT_W, h, kind: 'caveat', fontSize: 7 });
-      pg.y += h;
-    }
-  }
 
-  /* A DOCUMENT THAT STOPS HAS NOT ENDED. Pages of sections that each open with
-     a title sheet, and then the last one simply runs out mid-column, reads as
-     a truncated file — the reader's first question is whether they got all of
-     it. This is the answer. */
-  pg.flow = null;
-  if (pg.room < 20) pg.newPage();
-  pg.y += SPACE.base;
-  s.stroke(p.border);
-  doc.setLineWidth(0.3);
-  doc.line(MARGIN, pg.y, PAGE_W - MARGIN, pg.y);
-  pg.y += 6;
-  s.text('END OF REPORT', MARGIN, pg.y, {
-    size: 10, bold: true, track: 0.8, color: hueColor(p, model.hue), caps: true,
+    if (entries.length) {
+      const px = 190;
+      const pw = PAGE_W - MARGIN - px;
+      const py = 40;
+      // Short enough to clear the king under it; a longer list moves whole
+      // to the contents page(s) after the cover.
+      const maxRows = COVER_ROWS;
+      const shown = entries.slice(0, maxRows);
+      const ph = 14 + shown.length * 6.4 + (entries.length > maxRows ? 6 : 0);
+      s.round(px, py, pw, ph, 3, mix(P.ground, P.panel, 0.9), P.line, 0.22);
+      s.label('Contents', px + 5, py + 8, { color: c.ink });
+      shown.forEach((e, i) => {
+        const ey = py + 15 + i * 6.4;
+        const indent = e.depth ? 4 : 0;
+        const st: TextStyle = e.depth ? { size: 6.6, color: P.text2 } : { role: 'bodyBold', size: 7, color: P.text };
+        s.text(s.clip(e.title, pw - 22 - indent, st), px + 5 + indent, ey + 2.4, st);
+        s.text(String(e.page), px + pw - 5, ey + 2.4, { role: 'bodyBold', size: 7, color: c.ink, align: 'right' });
+        s.pageLink(px + 3, ey - 1.6, pw - 6, 6, e.page);
+      });
+      if (entries.length > maxRows) {
+        s.text(`Full contents on page${contentsPages > 1 ? 's' : ''} 2${contentsPages > 1 ? `-${1 + contentsPages}` : ''}`,
+          px + 5, py + ph - 3.4, { size: 6, color: P.text3 });
+      }
+    }
+    s.text(`${BRAND}™  ·  ${FAN_LINE}`, MARGIN, PAGE_H - 9, {
+      role: 'bodyBold', size: 5.4, track: 0.22, caps: true, color: P.text3,
+    });
   });
-  s.text(
-    `${model.screen}${model.subject ? ` — ${model.subject}` : ''}`
-      + ` · generated ${new Date().toLocaleString('en-GB')}`
-      + ` · build ${typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev'}`
-      + (attempt > 0 ? ` · reflow ${attempt}` : ''),
-    PAGE_W - MARGIN, pg.y, { size: 7, color: p.muted, align: 'right' },
-  );
-  s.box({ x: MARGIN, y: pg.y - 6, w: CONTENT_W, h: 10, kind: 'end' });
-  pg.y += 4;
+}
 
-  const pages = pg.finish();
+const COVER_ROWS = 8;
+const CONTENTS_ROW = 6.2;
+const CONTENTS_TOP = BODY_TOP + 12;
+const CONTENTS_PER_COL = Math.floor((BODY_BOTTOM - CONTENTS_TOP) / CONTENTS_ROW);
 
-  // The contents, now that the body has told us where every section landed.
-  if (contentsPage) {
-    doc.setPage(contentsPage);
-    drawContents(pg);
-  }
+function contentsPage(s: Surface, entries: ContentsEntry[], h: HueName): void {
+  const c = hue(h);
+  s.gradient(MARGIN, BODY_TOP - 0.3, 1.2, 14 * PT * CAP + 0.6, 0.6, c.ink, c.deep, 'v', 6);
+  s.text('Contents', MARGIN + 3.4, base(BODY_TOP, 14), { role: 'display', size: 14, track: 0.28, caps: true, color: P.text });
+  const colW = (CONTENT_W - 8) / 2;
+  entries.forEach((e, i) => {
+    const col = Math.floor(i / CONTENTS_PER_COL);
+    const row = i % CONTENTS_PER_COL;
+    const x = MARGIN + col * (colW + 8);
+    const y = CONTENTS_TOP + row * CONTENTS_ROW;
+    s.rect(x, y, colW, CONTENTS_ROW - 0.6, e.depth ? P.panel : P.panelHi);
+    const indent = e.depth ? 5 : 2.4;
+    const st: TextStyle = e.depth ? { size: 6.6, color: P.text2 } : { role: 'bodyBold', size: 7, color: P.text };
+    s.text(s.clip(e.title, colW - 20 - indent, st), x + indent, y + 3.7, st);
+    s.text(String(e.page), x + colW - 2.4, y + 3.7, { role: 'bodyBold', size: 7, color: c.ink, align: 'right' });
+    s.pageLink(x, y, colW, CONTENTS_ROW - 0.6, e.page);
+  });
+}
 
-  // Footers last: the page total is not known until everything is laid out.
-  const total = doc.getNumberOfPages();
-  for (let i = 2; i <= total; i += 1) {
-    doc.setPage(i);
-    s.footer({
-      left: 'DECKKIES',
-      centre: model.screen,
-      right: `PAGE ${i} / ${total}`,
+/* ------------------------------------------------------------ the tail */
+
+function caveatAtoms(ctx: BlockCtx, caveats: string[]): Atom[] {
+  const { s, w } = ctx;
+  const style: TextStyle = { size: 6.2, color: P.text2 };
+  const step = 6.2 * PT * 1.35;
+  const items = caveats.map((c) => s.wrap(c, w - 14, style));
+  const atoms: Atom[] = [];
+  const title = 'About these figures';
+  atoms.push({
+    h: 5.2, gap: BLOCK_GAP + 2, keep: true,
+    draw: (sf, x, y) => sf.label(title, x, base(y + 1, 6), { size: 6, color: P.text2 }),
+  });
+  items.forEach((lines) => {
+    const h = (lines.length - 1) * step + 6.2 * PT * CAP + 2.4;
+    atoms.push({
+      h, gap: 0.8,
+      draw: (sf, x, y) => {
+        sf.round(x + 1, y + 0.9, 1.3, 1.3, 0.65, P.text3);
+        lines.forEach((ln, i) => sf.text(ln, x + 5, base(y + 0.6, 6.2) + i * step, style));
+      },
     });
-  }
-
-  return { doc, pages, contents: pg.contents };
+  });
+  return atoms;
 }
 
-/**
- * Sanitise EVERY string the document draws, at the one place they all pass
- * through. Guarding call sites one at a time guarantees the next one added
- * forgets, and the failure is SILENT because a garbled name still renders
- * something. Patching the method once cannot be bypassed.
- */
-function guardText(doc: { text: (...a: unknown[]) => unknown }): void {
-  const orig = doc.text.bind(doc);
-  doc.text = (txt: unknown, ...rest: unknown[]) =>
-    orig(
-      Array.isArray(txt) ? txt.map((x) => pdfSafe(String(x))) : pdfSafe(String(txt)),
-      ...rest,
-    );
-}
-
-export async function renderReport(model: ReportDoc): Promise<RenderResult> {
-  const p = readPalette();
-
-  // Every card in the report, built once and reused by jsPDF's image alias.
-  const tiles = new Map<string, string | null>();
-  await Promise.all(
-    collectArt(model.blocks).map(async ({ url }) => {
-      tiles.set(url, await buildTile(url, p.nested));
-    }),
-  );
-
-  const first = await layout(model, p, tiles, 0);
-  const audit = auditDocument(first.pages);
-
+function endAtom(generated: string): Atom {
   return {
-    blob: first.doc.output('blob'),
-    audit,
-    summary: auditSummary(first.pages, audit),
-    pages: first.doc.getNumberOfPages(),
+    h: 12,
+    gap: BLOCK_GAP + 2,
+    draw: (s, x, y, w) => {
+      const cx = x + w / 2;
+      s.line(x, y + 3, cx - 22, y + 3, P.line, 0.25);
+      s.line(cx + 22, y + 3, x + w, y + 3, P.line, 0.25);
+      s.text('End of report', cx, y + 4.1, { role: 'bodyBold', size: 5.8, track: 0.4, caps: true, color: P.text2, align: 'center' });
+      s.text(`${BRAND}™  ·  ${FAN_LINE}  ·  ${generated}`, cx, y + 10, { size: 5.4, color: P.text3, align: 'center' });
+    },
   };
 }
 
-/** The signature the ten adapters and `ReportButton` already call. */
-export async function renderAnalyticsReport(model: ReportDoc): Promise<Blob> {
-  const out = await renderReport(model);
-  if (!out.audit.clean && import.meta.env?.DEV) {
-    console.warn(out.summary);
+/* --------------------------------------------------------------- render */
+
+export async function renderReport(input: ReportDoc): Promise<RenderResult> {
+  let model = input;
+  const t0 = performance.now();
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true, putOnlyUsedFonts: true });
+  const embedded = await loadFonts(doc);
+  const docHue = (model.hue ?? 'violet') as HueName;
+  const fullCover = (model.cover ?? (model.contents ? 'full' : 'band')) === 'full';
+  const generated = stamp(new Date());
+  model = { ...model, subject: tagged(model.subject) };
+
+  // A leading, un-headed stats row is the report's headline: it goes on the
+  // cover when there is one, and straight under the hero band otherwise.
+  let blocks = [...model.blocks];
+  let lead: StatsBlock | null = null;
+  if (blocks[0]?.kind === 'stats' && !blocks[0].heading) {
+    lead = blocks[0];
+    blocks = blocks.slice(1);
   }
-  return out.blob;
+
+  // Rasters, all in parallel.
+  const urls = collectArt(blocks);
+  const hues = new Set<HueName>([docHue]);
+  for (const b of blocks) if (b.kind === 'divider' && b.hue) hues.add(b.hue as HueName);
+  const [tileList, plateList, front, logo] = await Promise.all([
+    Promise.all(urls.map((u) => cardTile(u, P.slot))),
+    Promise.all([...hues].map(async (h) => [h, await glowPlate(h)] as const)),
+    fullCover ? coverPlate(docHue) : heroPlate(CONTENT_W, HERO_H, docHue),
+    logoTile(),
+  ]);
+  const tiles = new Map<string, Raster | null>(urls.map((u, i) => [u, tileList[i]]));
+  const plates = new Map(plateList);
+
+  const s = new Surface(doc, embedded, tiles);
+  const ctx: BlockCtx = { s, w: CONTENT_W, hue: docHue };
+
+  // Atoms.
+  const raw: Atom[] = [];
+  if (!fullCover && lead) raw.push(...statsAtoms(ctx, lead, docHue));
+  if (model.read) raw.push(readAtom(ctx, model.read, docHue));
+  for (const b of blocks) raw.push(...blockAtoms(ctx, b));
+  if (model.caveats?.length) raw.push(...caveatAtoms(ctx, model.caveats));
+  raw.push(endAtom(generated));
+
+  // A `break` is a zero-height marker: fold it into the atom after it.
+  const atoms: Atom[] = [];
+  let pendingBreak = false;
+  for (const a of raw) {
+    if (a.h === 0 && a.breakBefore) { pendingBreak = true; continue; }
+    if (pendingBreak) { a.breakBefore = true; pendingBreak = false; }
+    atoms.push(a);
+  }
+  if (atoms.length) atoms[0].gap = 0;
+
+  const pages = pack(atoms, {
+    top: BODY_TOP,
+    bottom: BODY_BOTTOM,
+    firstTop: fullCover ? BODY_TOP : BODY_TOP + HERO_H + 5,
+    contGap: 0,
+  });
+
+  // Where every marked atom landed — for the contents and the outline.
+  const contentsCount = atoms.filter((a) => a.mark?.contents).length;
+  const contentsPages = fullCover && contentsCount > COVER_ROWS ? Math.ceil(contentsCount / (CONTENTS_PER_COL * 2)) : 0;
+  const offset = fullCover ? 1 + contentsPages : 0;
+  const total = offset + pages.length;
+  const marks: { atom: Atom; page: number }[] = [];
+  pages.forEach((pg, pi) => pg.forEach((pl) => {
+    if (!pl.cont && atoms[pl.item].mark) marks.push({ atom: atoms[pl.item], page: offset + pi + 1 });
+  }));
+  const entries: ContentsEntry[] = marks
+    .filter((m) => m.atom.mark!.contents)
+    .map((m) => ({ title: m.atom.mark!.title, depth: m.atom.mark!.depth, page: m.page }));
+
+  const issues: Issue[] = [];
+  let pageNo = 0;
+  const openPage = () => {
+    if (pageNo > 0) doc.addPage();
+    pageNo += 1;
+    s.boxes = [];
+  };
+  const closePage = () => { issues.push(...auditPage(pageNo, s.boxes)); };
+
+  if (fullCover) {
+    openPage();
+    coverPage(s, front, logo, model, lead, entries, generated, contentsPages);
+    closePage();
+    for (let cp = 0; cp < contentsPages; cp += 1) {
+      openPage();
+      ground(s, plates.get(docHue) ?? null);
+      brandBar(s, logo, model, { title: 'Contents', hue: docHue }, pageNo, total);
+      footer(s, generated);
+      const per = CONTENTS_PER_COL * 2;
+      contentsPage(s, entries.slice(cp * per, (cp + 1) * per), docHue);
+      closePage();
+    }
+  }
+
+  let running = { title: model.screen, hue: docHue };
+  pages.forEach((pg: Placement[], pi) => {
+    openPage();
+    const first = pg.find((pl) => !pl.cont);
+    const sec = first ? atoms[first.item].section : undefined;
+    if (sec) running = sec;
+    ground(s, plates.get(running.hue) ?? plates.get(docHue) ?? null);
+    brandBar(s, logo, model, running, pageNo, total);
+    footer(s, generated);
+    if (pi === 0 && !fullCover) heroBand(s, front, model);
+    for (const pl of pg) {
+      const a = atoms[pl.item];
+      if (pl.cont) a.drawCont?.(s, MARGIN, pl.y, CONTENT_W);
+      else a.draw(s, MARGIN, pl.y, CONTENT_W);
+    }
+    closePage();
+  });
+
+  // The viewer's bookmark panel: sections, and the headings inside them.
+  let parent: unknown = null;
+  const outline = (doc as unknown as { outline?: { add: (p: unknown, t: string, o: { pageNumber: number }) => unknown } }).outline;
+  if (outline) {
+    for (const m of marks) {
+      const title = s.prep(m.atom.mark!.title, { size: 7 });
+      if (!title) continue;
+      if (m.atom.mark!.depth === 0) parent = outline.add(null, title, { pageNumber: m.page });
+      else outline.add(parent, title, { pageNumber: m.page });
+    }
+  }
+
+  doc.setProperties({
+    title: `${BRAND} — ${model.screen}${model.subject ? ` — ${model.subject}` : ''}`,
+    subject: `${model.screen} intelligence report`,
+    author: BRAND,
+    creator: `${BRAND} report engine (build ${BUILD})`,
+  });
+
+  if (issues.length && import.meta.env.DEV) {
+    console.warn(`[report] audit ${issues.length}: ${issues.slice(0, 12).map((i) => `p${i.page} ${i.rule} ${i.detail}`).join(' | ')}`);
+  }
+  const blob = doc.output('blob');
+  return { blob, pages: total, issues, ms: Math.round(performance.now() - t0) };
 }
 
-export async function downloadAnalyticsReport(model: ReportDoc): Promise<void> {
-  const blob = await renderAnalyticsReport(model);
-  const url = URL.createObjectURL(blob);
+export async function renderAnalyticsReport(model: ReportDoc): Promise<Blob> {
+  return (await renderReport(model)).blob;
+}
+
+export async function downloadAnalyticsReport(model: ReportDoc): Promise<RenderResult> {
+  const result = await renderReport(model);
+  const url = URL.createObjectURL(result.blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = reportFilename(model);
   document.body.appendChild(a);
   a.click();
   a.remove();
-  // Revoked on the next tick — revoking synchronously races the download in
+  // Revoked on a later tick — revoking synchronously races the download in
   // Firefox and the file arrives empty.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  return result;
 }
 
-export { semanticColor };
+/** For callers that draw their own documents in the report's look. */
+export { Surface };
+export type { jsPDF };
+export { BODY_H };
+export { HUES };

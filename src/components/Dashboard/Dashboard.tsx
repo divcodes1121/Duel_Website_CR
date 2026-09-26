@@ -56,7 +56,8 @@ import { DeckCounter } from '../Analytics/DeckCounter';
 import { DeckLab } from '../Analytics/DeckLab';
 import { CounterLab } from '../Analytics/CounterLab';
 import { GlobalCards } from '../Analytics/GlobalCards';
-import { PrintButton } from '../Export/PrintButton';
+import { ShellExportButton } from '../Export/ShellExportButton';
+import { ReportHost } from '../../state/reportExport';
 import { ProContact } from '../Analytics/ProContact';
 import { SEASONS, type Season } from '../Analytics/playerData';
 import { SeasonMenu } from '../Analytics/SeasonMenu';
@@ -995,19 +996,23 @@ export function Dashboard({
                 </button>
               </form>
               <div className={styles.topSeason}>
-                <SeasonMenu value={season as Season} onChange={(s) => setSeason(s)} />
-                {/* Export sits in the SHELL rather than in each analytics
-                    component, so every section gets it — Duel Analysis, Duel
-                    Zone, Cards, Deck Counter, Coach Assist, Meta and Player
-                    Analysis alike — from one place, in one position, with no
-                    chance of a screen being forgotten. It prints whatever the
-                    section below has rendered. */}
-                <PrintButton />
+                <span className={styles.topSeasonMenu}>
+                  <SeasonMenu value={season as Season} onChange={(s) => setSeason(s)} />
+                </span>
+                {/* THE ONE EXPORT BUTTON for every player section, in the same
+                    place on each. The open section registers its whole report
+                    (every tab) with it through `ReportHost` below; the menu
+                    also offers the full player report, every section in one
+                    document. It used to print the live page through the
+                    browser, which rasterised the glass UI into a slow,
+                    screenshot-like PDF — see `report/art.ts`. */}
+                <ShellExportButton tag={playerTag} access={access} />
               </div>
             </div>
           )}
 
           {view === 'player' ? (
+            <ReportHost>{
             /* The same eight areas, reached by tag instead of by the sidebar.
                Gating one route and not the other is not a gate — anyone who
                noticed the URL shape would walk straight past it. The slug is
@@ -1043,6 +1048,7 @@ export function Dashboard({
             ) : (
               <PlayerAnalysis tag={playerTag} season={season as Season} />
             )
+            }</ReportHost>
           ) : view === 'home' && section !== 'Search Player' ? (
             /* THE GATE, in place of the content rather than over it. A modal
                would have to be dismissed before anything else could be reached,

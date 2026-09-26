@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CardArt, type ArtVariant } from './CardArt';
-import { ReportButton } from '../Export/ReportButton';
-import { cardBoardDoc } from '../../utils/reportAdapters';
+import { useScreenExport } from '../Export/ExportButton';
 import { CARDS_BY_KEY } from '../../data/cards';
 import {
   AnalyticsError,
@@ -323,6 +322,15 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
     board?.coverage.end ?? null,
   );
 
+  const exportButton = useScreenExport({
+    id: 'cards',
+    ready: Boolean(board),
+    win,
+    // Every tab: Troops, Buildings and Spells (together the All tab), Win
+    // Conditions, Champions, and Evolutions and Heroes in their own art.
+    build: async () => (await import('../../utils/reportAdapters')).cardBoardDoc(board as CardBoard, tag),
+  });
+
   useEffect(() => {
     let live = true;
     setLoading(true);
@@ -502,7 +510,7 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
           </div>
 
           <div className={styles.range}>
-            <ReportButton build={() => cardBoardDoc(board, tag)} />
+            {exportButton}
             {RANGE_PRESETS.filter((r) => r.days >= 0).map((r) => (
               <button
                 key={r.label}

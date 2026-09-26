@@ -26,7 +26,7 @@ import {
 import { ago } from '../../../utils/format';
 import { ElectricBorder } from '../../ui/electric-border';
 import { readToken } from '../../../three/runtime';
-import { ReportButton } from '../../Export/ReportButton';
+import { useScreenExport } from '../../Export/ExportButton';
 import { ReadingState } from '../ReadingState';
 import { VsMark } from '../../VsMark/VsMark';
 import { FolderGallery, OpenFolder, RosterRead } from './TeamFolders';
@@ -278,6 +278,11 @@ export function TeamAnalysis() {
   /* Set only when a board came OUT of storage. `report.days` cannot answer
      this — every report has a window, and only a restored one is stale. */
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const exportButton = useScreenExport({
+    id: 'teams',
+    ready: Boolean(report),
+    build: async () => (await import('../../../utils/teamReport')).teamAnalysisReport(report as TeamReport, { savedAt }),
+  });
   const [saveNote, setSaveNote] = useState<string | null>(null);
 
   const saves = useTeamSaves((s) => s.saves);
@@ -596,14 +601,7 @@ export function TeamAnalysis() {
                   forty-page model on every keystroke) and it guarantees the
                   PDF describes the report as it is at the moment of the click,
                   including a restored save's own age. */}
-              <ReportButton
-                build={async () =>
-                  (await import('../../../utils/teamReport')).teamAnalysisReport(report, {
-                    savedAt,
-                  })
-                }
-                label="Export PDF"
-              />
+              {exportButton}
             </>
           )}
         </div>

@@ -1,7 +1,6 @@
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
-import { ReportButton } from '../Export/ReportButton';
-import { livePlayerReportDoc } from '../../utils/reportAdapters';
+import { useScreenExport } from '../Export/ExportButton';
 import type { LivePlayerReport } from '../../state/analyticsClient';
 import styles from './LivePlayer.module.css';
 
@@ -59,6 +58,11 @@ function stamp(raw: string | null): string {
 export function LivePlayer({ report, tag }: { report: LivePlayerReport; tag: string }) {
   const { tracking, profile } = report;
   const decided = report.wins + report.losses;
+  const exportButton = useScreenExport({
+    id: 'player-live',
+    ready: true,
+    build: async () => (await import('../../utils/reportAdapters')).livePlayerReportDoc(report, tag),
+  });
 
   return (
     <div className={styles.page}>
@@ -149,7 +153,7 @@ export function LivePlayer({ report, tag }: { report: LivePlayerReport; tag: str
           <h3 className={styles.panelTitle}>Decks played</h3>
           <span className={styles.panelNote}>
             {stamp(report.span.from)} → {stamp(report.span.to)}
-            <ReportButton build={() => livePlayerReportDoc(report, tag)} />
+            {exportButton}
           </span>
         </header>
 

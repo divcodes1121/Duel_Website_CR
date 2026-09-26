@@ -82,6 +82,16 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-26-pdf-reports',
+    date: '2026-09-26',
+    kind: 'improved',
+    title: 'PDF reports are rebuilt: fast to open, and every tab is in them',
+    body: [
+      'Export PDF now draws a proper Deckkies report instead of printing the page. Files are a fraction of the size and open and scroll about ten times faster. Every card sits in its slot with its evolution or hero art, and every deck carries an Open in game button that works from the PDF.',
+      'On a player’s page the one Export button covers every tab of the screen you are on, or the full player report: every section you can open, in one document with a contents page. Team Analysis, 2v2 Decks, Recent Battles, Deck Counter and Coach Assist export too.',
+    ],
+  },
+  {
     id: '2026-09-21-team-analysis-12',
     date: '2026-09-21',
     kind: 'improved',
