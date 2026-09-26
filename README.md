@@ -9477,6 +9477,19 @@ export themselves as, with four new blocks rather than a second renderer: a
 archetype mix as one proportional band) and a **versus** (two 4×2 deck plates
 with the word between them). A change to how a table looks still happens once.
 
+**Every teammate's own options, per opponent (2026-09-26, asked for by name).**
+After each opponent's head-to-head overlays and summary table, every teammate
+gets a ranked list of THEIR decks against that opponent — what the screen shows
+when a teammate's row is opened: rank, **Squad pick** (their assigned #1) or
+**Deckkies pick** (a deck nobody on the squad plays, ranked in with theirs) and
+how many of its cards they play, the 8-card strip, the expected rate, the win
+rate against each of the opponent's archetypes as chips, and Open in game. One
+deck a line (`DecksBlock.layout: 'rows'`), because the order is the answer. A
+teammate with nothing gets the reason instead of vanishing. Every list is a
+bookmark nested under its opponent — section openers are top-level bookmarks
+now (a divider's `depth` used to nest every opponent under "The board at a
+glance"). A real 3 v 3 went 26 -> 32 pages; a 12 v 10 roughly doubles.
+
 **Since 2026-09-26 it is drawn by the rebuilt engine**, always dark (it used to
 follow the reader's theme), with a section opener as a band at the top of a
 sheet rather than a whole empty page, two head-to-head pairs to a row, every

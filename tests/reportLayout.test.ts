@@ -198,6 +198,10 @@ describe('text', () => {
     expect(printableName('ゴリラ✨', '#RQ0J8GQRJ')).toBe('#RQ0J8GQRJ');
     expect(printableName('EthanWinters', '#8CRPJ2RCG')).toBe('EthanWinters');
     expect(printableName('', '#TAG')).toBe('#TAG');
+    // Cleaned, not raw: the space before a stripped emoji must not survive
+    // into "Danzai ’s decks".
+    expect(printableName('Danzai ✨', '#TAG')).toBe('Danzai');
+    expect(`${printableName('Danzai ✨', '#TAG')}’s decks`).toBe('Danzai’s decks');
   });
 
   it('gives a bare tag its hash, and leaves names alone', () => {

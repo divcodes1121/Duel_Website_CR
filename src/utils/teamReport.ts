@@ -202,6 +202,54 @@ const NO_OPTION: Record<string, string> = {
   no_evidence: 'Decks, but no measured record against this spread',
 };
 
+/** Archetype key -> display name, most likely first: the squad plan's own
+ *  order, which is the order the screen's chips read in. A server without a
+ *  squad plan sends no `squadCover`; the spread (what they HAVE played) is the
+ *  honest fallback. */
+function archetypeLabels(folder: TeamFolder): [string, string][] {
+  if (folder.squadCover?.length) return folder.squadCover.map((c) => [c.archetype, c.name]);
+  return folder.spread.map((r) => [r.archetype, r.name]);
+}
+
+/**
+ * One of a teammate's options against one opponent, as a ranked line — what
+ * the screen shows when that teammate's row is opened.
+ *
+ * "Squad pick" is the teammate's assigned #1 (chosen with the squad, so two
+ * teammates do not bring the same answer); "Deckkies pick" is a deck nobody on
+ * the squad plays, ranked in with their own. The chips are the deck's win rate
+ * against each archetype the opponent may bring — the headline is their
+ * weighted average, and a deck strong overall that loses to one of them has
+ * to be visible as that.
+ */
+function optionLine(r: TeamRecommendation, rank: number, labels: [string, string][]): DeckLine {
+  const deckkies = !!r.fill || !r.owner;
+  const meta: string[] = [];
+  if (deckkies && r.squadPick) meta.push('Deckkies pick');
+  if (!deckkies && r.comfort) meta.push(`${int(r.comfort.games)} games at ${pct(r.comfort.winRate)}`);
+  if (deckkies && r.known) meta.push(`${r.known}/8 cards they play`);
+  if (deckkies && r.overallWinRate !== null && r.overallWinRate !== undefined) {
+    meta.push(`${pct(r.overallWinRate)} vs the field`);
+  }
+  // Coverage only when it is short of everything: at 100% it is the normal
+  // case and it pushed the figures that differ off the end of the line.
+  if (r.spreadCovered < 99.5) meta.push(`covers ${pct(r.spreadCovered, 0)}`);
+  return {
+    rank,
+    name: r.name,
+    badge: r.squadPick
+      ? { text: 'Squad pick', hue: 'green' }
+      : deckkies ? { text: 'Deckkies pick', hue: 'violet' } : undefined,
+    meta: meta.join(' · '),
+    value: pct(r.expectedWinRate),
+    valueNote: 'expected',
+    chips: labels
+      .filter(([k]) => r.vs?.[k] !== undefined)
+      .map(([k, label]) => ({ label, value: `${Math.round(r.vs![k])}%`, good: r.vs![k] >= 50 })),
+    ...seated(r.cards, r.art),
+  };
+}
+
 /* -------------------------------------------------------------- sections */
 
 /**
@@ -665,6 +713,34 @@ function folderBlocks(
         };
       }),
     });
+  }
+
+  /* ── Every teammate's own options against them ──────────────────────────
+     What the screen shows when a teammate's row is opened: that player's own
+     ranked decks against this opponent, Deckkies picks included, each with
+     its win rate against every archetype they may bring. The table above
+     names only each teammate's best; a coach choosing between two of their
+     options needs the list. Roster order, and everyone appears — a teammate
+     with nothing gets a line saying which of the three reasons it is. */
+  const labels = archetypeLabels(folder);
+  for (const m of report.blue) {
+    const row = folder.perPlayer.find((r) => r.owner.tag === m.tag);
+    const mate = who(m);
+    if (row?.decks.length) {
+      blocks.push({
+        kind: 'decks',
+        layout: 'rows',
+        heading: `${mate} vs ${name}`,
+        note: `${row.decks.length} options · ${int(row.considered)} of their decks weighed`,
+        decks: row.decks.map((r, i) => optionLine(r, i + 1, labels)),
+      });
+    } else {
+      blocks.push({
+        kind: 'note',
+        heading: `${mate} vs ${name}`,
+        body: row?.reason ? NO_OPTION[row.reason] : 'Not analysed against this opponent',
+      });
+    }
   }
 
   return blocks;

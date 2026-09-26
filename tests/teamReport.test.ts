@@ -6,7 +6,7 @@ import type {
   TeamRecommendation,
   TeamReport,
 } from '../src/state/analyticsClient';
-import type { DividerBlock, ReportBlock } from '../src/utils/analyticsReport';
+import type { DecksBlock, DividerBlock, ReportBlock } from '../src/utils/analyticsReport';
 import { teamAnalysisReport } from '../src/utils/teamReport';
 
 /**
@@ -297,6 +297,44 @@ describe('teamAnalysisReport — what the page will look like', () => {
     expect(entries).toContain('Ravi — opponent');
     expect(entries).toContain('Ravi — your squad');
     expect(new Set(entries).size).toBe(entries.length);
+  });
+
+  /* ── Every teammate's own options, per opponent ─────────────────────────
+   * What the screen shows when a teammate's row is opened, asked for in the
+   * PDF by name (2026-09-26): each teammate's ranked decks against this
+   * opponent, Deckkies picks included, with the per-archetype figures. */
+  it('lists every teammate’s own ranked options against each opponent, in roster order', () => {
+    const r = report();
+    const f = r.folders[0];
+    f.perPlayer[0].decks = [
+      { ...rec('#B1', 'Ravi'), squadPick: true, vs: { 'log-bait': 61.4, 'x-bow': 44.2 } },
+      { ...rec('#B1', 'Ravi', CARDS_B), name: 'Giant Beatdown', owner: null, comfort: null, fill: true, known: 6, overallWinRate: 52.1, expectedWinRate: 54.9 },
+    ];
+    const doc = teamAnalysisReport(r);
+    const lists = doc.blocks.filter(
+      (b): b is DecksBlock => b.kind === 'decks' && (b as DecksBlock).layout === 'rows',
+    );
+    expect(lists.map((b) => b.heading)).toEqual(['Ravi vs Mohamed']);
+    const [first, second] = lists[0].decks;
+    expect(first.rank).toBe(1);
+    expect(first.badge?.text).toBe('Squad pick');
+    expect(first.value).toBe('56.3%');
+    // Chips follow the opponent's archetypes in order, coloured by 50%.
+    expect(first.chips).toEqual([
+      { label: 'Log Bait', value: '61%', good: true },
+      { label: 'X-Bow', value: '44%', good: false },
+    ]);
+    expect(second.rank).toBe(2);
+    expect(second.badge?.text).toBe('Deckkies pick');
+    expect(second.meta).toContain('6/8 cards they play');
+  });
+
+  it('gives a teammate with nothing a line saying why, instead of dropping them', () => {
+    const doc = teamAnalysisReport(report());
+    const aditya = doc.blocks.find(
+      (b) => b.kind === 'note' && (b as { heading?: string }).heading === 'Aditya vs Mohamed',
+    ) as { body: string } | undefined;
+    expect(aditya?.body).toBe('No deck played often enough to count');
   });
 
   it('lets the engine place a versus block instead of forcing a sheet for it', () => {

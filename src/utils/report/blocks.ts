@@ -455,9 +455,88 @@ function deckRow(s: Surface, x: number, y: number, w: number, d: DeckLine, cw: n
   if (d.valueNote) s.text(d.valueNote, fx, y + h / 2 + 4.2, { size: 5.8, color: P.text3, align: 'right' });
 }
 
+/**
+ * ONE DECK A LINE, for a ranked list: rank, name and badge, the strip, the
+ * figure, the per-archetype chips, the button. Built for a teammate's
+ * options against one opponent, where the ORDER is the answer and a reader
+ * runs a finger down it — the two-up cards scatter a ranking across columns.
+ */
+const ROW_CW = 7.4;
+const ROW_PAD = 1.8;
+
+function deckListRow(s: Surface, x: number, y: number, w: number, d: DeckLine, hueName: HueName, h: number) {
+  s.panel(x, y, w, h, { kind: 'deckRow' });
+  const c = hue(hueName);
+  let cx = x + ROW_PAD;
+  if (d.rank !== undefined) {
+    const first = d.rank === 1;
+    s.text(String(d.rank), cx + 3.2, base(y + (h - 12 * PT * CAP) / 2, 12), {
+      role: 'display', size: 12, color: first ? c.ink : P.text3, align: 'center',
+    });
+    cx += 7.4;
+  }
+  // Name, badge, meta.
+  const nameW = 58;
+  const badgeStyle: TextStyle = { role: 'bodyBold', size: 5.2, track: 0.18, caps: true };
+  const badgeW = d.badge ? s.width(d.badge.text, badgeStyle) + 4.6 : 0;
+  const nameStyle: TextStyle = { role: 'bodyBold', size: 7, color: P.text };
+  const shown = s.clip(d.name, nameW - (badgeW ? badgeW + 2 : 0), nameStyle);
+  const ny = y + ROW_PAD + 3.1;
+  const nw = s.text(shown, cx, ny, nameStyle);
+  if (d.badge) {
+    const bc = hue((d.badge.hue ?? hueName) as HueName).ink;
+    s.chip(cx + nw + 2, ny - 3.1, d.badge.text, bc, 4);
+  }
+  const meta = metaOf(d);
+  if (meta) s.text(s.clip(meta, nameW, { size: 5.5 }), cx, y + h - ROW_PAD - 1.4, { size: 5.5, color: P.text3 });
+  cx += nameW + 3;
+  // The strip.
+  s.deck(cx, y + ROW_PAD, ROW_CW, DECK_GAP, d.cards.slice(0, 8), d.art as Record<string, Form> | undefined, 8);
+  cx += stripWidth(8, ROW_CW, DECK_GAP) + 4;
+  // The figure.
+  const figW = 17;
+  if (d.value) {
+    s.text(d.value, cx + figW, base(y + 2.2, 13), { role: 'display', size: 13, track: 0.1, color: valueColor(d), align: 'right' });
+  }
+  if (d.valueNote) s.text(s.clip(d.valueNote, figW + 2, { size: 5 }), cx + figW, y + h - ROW_PAD - 0.6, { size: 5, color: P.text3, align: 'right' });
+  cx += figW + 4;
+  // The button, pinned right; chips fill what is between.
+  const link = deckLink(d);
+  const bh = 4.4;
+  const bw = link ? s.buttonWidth('Open in game', bh) : 0;
+  const bx = x + w - ROW_PAD - bw;
+  if (link) s.button(bx, y + (h - bh) / 2, bh, 'Open in game', { hue: hueName, url: link });
+  const limit = (link ? bx - 3 : x + w - ROW_PAD);
+  let chx = cx;
+  const chipH = 4.2;
+  const chy = y + (h - chipH) / 2;
+  for (const chip of d.chips ?? []) {
+    const ls: TextStyle = { size: 5.2, color: P.text2 };
+    const vs: TextStyle = { role: 'bodyBold', size: 5.6, color: chip.good === undefined ? P.text : chip.good ? HUES.green.ink : HUES.red.ink };
+    const lw = s.width(chip.label, ls);
+    const vw = s.width(chip.value, vs);
+    const cw = lw + vw + 5.2;
+    if (chx + cw > limit) break;
+    s.round(chx, chy, cw, chipH, chipH / 2, mix(P.panel, P.slot, 0.7), P.line, 0.18);
+    const ty = base(chy + (chipH - 5.6 * PT * CAP) / 2, 5.6);
+    s.text(chip.label, chx + 2.2, ty, ls);
+    s.text(chip.value, chx + 2.2 + lw + 1, ty, vs);
+    chx += cw + 1.6;
+  }
+}
+
 export function decksAtoms(ctx: BlockCtx, b: DecksBlock, hueName: HueName): Atom[] {
   const { w } = ctx;
   if (!b.decks.length) return [];
+  if (b.layout === 'rows') {
+    const h = cardH(ROW_CW) + ROW_PAD * 2;
+    const rows = b.decks.map((d): Atom => ({
+      h,
+      gap: 1.2,
+      draw: (s, x, y, ww) => deckListRow(s, x, y, ww, d, hueName, h),
+    }));
+    return titled(ctx, b, hueName, rows);
+  }
   const oneUp = b.decks.length <= 2;
   const body: Atom[] = [];
   if (oneUp) {

@@ -97,11 +97,24 @@ export interface DeckLine {
    *  absolute rate: a 63% "worst matchup" is nine points under the player's
    *  own average, and printed green it reads as a strength. */
   valueHue?: ReportHue;
+  /** Position in a ranked list, printed in its own column (`layout: 'rows'`). */
+  rank?: number;
+  /** A short label beside the name — "Squad pick", "Deckkies pick". */
+  badge?: { text: string; hue?: ReportHue };
+  /** Small figures after the strip — the deck's win rate against each of the
+   *  opponent's archetypes, the screen's chips. `good` colours it. */
+  chips?: { label: string; value: string; good?: boolean }[];
 }
 
 export interface DecksBlock extends BlockBase {
   kind: 'decks';
   decks: DeckLine[];
+  /**
+   * `cards` (the default): two decks a row, the strip under the name.
+   * `rows`: one deck a line — rank, name, strip, figure, chips, button — for a
+   * RANKED list, where the order is the point and a reader runs down it.
+   */
+  layout?: 'cards' | 'rows';
 }
 
 export interface NoteBlock extends BlockBase {

@@ -458,14 +458,17 @@ export async function renderReport(input: ReportDoc): Promise<RenderResult> {
     closePage();
   });
 
-  // The viewer's bookmark panel: sections, and the headings inside them.
+  /* The viewer's bookmark panel: every section opener at the top level, and
+     the headings inside a section nested under it. A divider's `depth` only
+     indents the printed contents list; used for nesting here it filed every
+     opponent of a 12 v 10 under "The board at a glance". */
   let parent: unknown = null;
   const outline = (doc as unknown as { outline?: { add: (p: unknown, t: string, o: { pageNumber: number }) => unknown } }).outline;
   if (outline) {
     for (const m of marks) {
       const title = s.prep(m.atom.mark!.title, { size: 7 });
       if (!title) continue;
-      if (m.atom.mark!.depth === 0) parent = outline.add(null, title, { pageNumber: m.page });
+      if (m.atom.mark!.contents) parent = outline.add(null, title, { pageNumber: m.page });
       else outline.add(parent, title, { pageNumber: m.page });
     }
   }

@@ -105,8 +105,11 @@ export function printableName(name: string | null | undefined, fallback: string)
   if (!name) return fallback;
   const letters = [...name].filter((ch) => /[\p{L}\p{N}]/u.test(ch));
   if (!letters.length) return fallback;
-  const kept = [...drawable(name, 'body', true)].filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length;
-  return kept >= 2 && kept / letters.length >= 0.6 ? name : fallback;
+  // Returned CLEANED, not raw: "Danzai ✨" printed as "Danzai ’s decks" and
+  // "Danzai : head to head" — the emoji went and the space before it stayed.
+  const clean = drawable(name, 'body', true);
+  const kept = [...clean].filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length;
+  return kept >= 2 && kept / letters.length >= 0.6 ? clean : fallback;
 }
 
 /** True when every character of `s` is drawable in `role` as it stands. */
