@@ -81,6 +81,35 @@
   color: var(--error);
 }
 
+/* A tab older than the deploy is not a failure of the export, and saying
+   "Export failed" for it sent the reader hunting for a bug. It says what
+   happened and offers the one thing that fixes it. */
+.stale {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  font-size: 0.74rem;
+  color: var(--text);
+}
+
+.reload {
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--accent-select);
+  background: var(--accent-select-wash);
+  color: var(--accent-select);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .reload {
+    min-height: 44px;
+  }
+}
+
 /* Opaque, portalled, anchored under the button's right edge. */
 .menu {
   position: fixed;

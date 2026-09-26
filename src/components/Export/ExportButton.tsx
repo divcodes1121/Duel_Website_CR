@@ -4,6 +4,7 @@ import { downloadAnalyticsReport } from '../../utils/analyticsPdf';
 import type { ReportDoc } from '../../utils/analyticsReport';
 import { useReportRegistration, type ReportBuild } from '../../state/reportExport';
 import type { DateWindow } from '../../state/analyticsClient';
+import { beginExport, endExport, isStaleChunkError, reloadPage } from '../../state/staleBuild';
 import styles from './ExportButton.module.css';
 
 /* THE EXPORT BUTTON — the only one on the site.
@@ -63,6 +64,9 @@ export function ExportButton({
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* The page is older than the latest deploy: the export's own files are
+     gone from the server, and only a reload can fetch the new ones. */
+  const [stale, setStale] = useState(false);
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -74,16 +78,24 @@ export function ExportButton({
     setBusy('Building PDF…');
     setDone(null);
     setError(null);
+    setStale(false);
+    beginExport();
     try {
       const model = await make((t) => setBusy(t));
       setBusy('Drawing pages…');
       const result = await downloadAnalyticsReport(model);
       setDone(`Saved · ${result.pages} page${result.pages === 1 ? '' : 's'}`);
     } catch (e) {
-      setError('Export failed');
-      // The message matters for diagnosis and does not belong in the UI.
       console.error('[report] export failed', e);
+      if (isStaleChunkError(e)) {
+        setStale(true);
+      } else {
+        // The full message goes in the tooltip, for a reader reporting it;
+        // the label stays short.
+        setError(`Export failed${(e as Error)?.message ? `: ${String((e as Error).message).slice(0, 160)}` : ''}`);
+      }
     } finally {
+      endExport();
       setBusy(null);
     }
   }, []);
@@ -155,7 +167,15 @@ export function ExportButton({
         <span className={styles.label} aria-live="polite">{text}</span>
         {full && !busy && <Caret />}
       </button>
-      {error && <span className={styles.error} role="alert">{error}</span>}
+      {error && <span className={styles.error} role="alert" title={error}>Export failed</span>}
+      {stale && (
+        <span className={styles.stale} role="alert">
+          Deckkies was updated since this page opened.
+          <button type="button" className={styles.reload} onClick={reloadPage}>
+            Reload to export
+          </button>
+        </span>
+      )}
       {open && pos && createPortal(
         <div
           ref={menu}

@@ -1096,6 +1096,15 @@ only some screens had.
   three seconds, and a stated "Export failed" otherwise. The spinner is a
   continuous animation that exists only while an export is running; reduced
   motion stills it.
+- **A tab older than the latest deploy says so.** Every export's code is a
+  lazily loaded file with a hashed name, and Vercel serves only the newest
+  deployment's files, so an old tab's export can 404. It shows "Deckkies was
+  updated since this page opened" and a **Reload to export** button instead
+  of "Export failed" (`state/staleBuild.ts`); it does not reload by itself,
+  because an unsaved Team Analysis board may be on the page. A lazy SCREEN
+  that fails the same way reloads once, loop-guarded. The commit id is in an
+  `index.html` meta tag, never in the JavaScript, so a commit that changes no
+  code renames no file.
 - **It no longer disappears on a narrow screen.** The old button shared
   `.topSeason` with the season picker and the whole slot was `display: none`
   below 1080px, so tablets and phones had no export at all. Only

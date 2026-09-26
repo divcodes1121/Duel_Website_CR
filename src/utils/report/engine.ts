@@ -90,7 +90,17 @@ export function tagged(subject: string | undefined): string | undefined {
   return /^#?[0289PYLQGRJCUV]{4,12}$/i.test(t) ? `#${t.replace(/^#/, '').toUpperCase()}` : t;
 }
 
-const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
+/** The commit that built the page, from the `deckkies-build` meta tag
+ *  `vite.config.ts` writes into index.html. Read at export time, NOT compiled
+ *  in — a per-commit value inside this lazy chunk renamed it on every deploy
+ *  and broke exporting in every tab opened before one. */
+export function buildId(): string {
+  try {
+    return document.querySelector('meta[name="deckkies-build"]')?.getAttribute('content') || 'dev';
+  } catch {
+    return 'dev';
+  }
+}
 
 export function logoMark(s: Surface, logo: Raster | null, x: number, y: number, size: number): void {
   s.round(x, y, size, size, size * 0.24, P.brandTile, mix(P.brandTile, P.text, 0.18), 0.2);
@@ -133,7 +143,7 @@ export function footer(s: Surface, generated: string, label = 'Intelligence repo
   s.chrome(() => {
     const st: TextStyle = { role: 'bodyBold', size: TYPE.footer.size, track: TYPE.footer.track, caps: true, color: P.text3 };
     s.text(`${BRAND}™  ·  ${label}`, MARGIN, FOOTER_Y, st);
-    s.text(`Generated ${generated}  ·  build ${BUILD}`, PAGE_W - MARGIN, FOOTER_Y, { ...st, align: 'right' });
+    s.text(`Generated ${generated}  ·  build ${buildId()}`, PAGE_W - MARGIN, FOOTER_Y, { ...st, align: 'right' });
   });
 }
 
@@ -464,7 +474,7 @@ export async function renderReport(input: ReportDoc): Promise<RenderResult> {
     title: `${BRAND} — ${model.screen}${model.subject ? ` — ${model.subject}` : ''}`,
     subject: `${model.screen} intelligence report`,
     author: BRAND,
-    creator: `${BRAND} report engine (build ${BUILD})`,
+    creator: `${BRAND} report engine (build ${buildId()})`,
   });
 
   if (issues.length && import.meta.env.DEV) {

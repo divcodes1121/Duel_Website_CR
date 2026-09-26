@@ -2,14 +2,21 @@ import { execSync } from 'node:child_process'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-/* THE BUILD'S OWN IDENTITY, COMPILED IN.
+/* THE BUILD'S OWN IDENTITY — IN index.html, NEVER IN THE JAVASCRIPT.
  *
- * "The export is still the old layout" has now been reported twice against a
- * deploy that was provably current, and settling it each time meant fetching
- * the served bundle and grepping it for a minified fragment. A PDF that names
- * the commit it came from answers the question by itself: if the stamp is not
- * the commit that shipped the change, the reader's browser is running JS from
- * before it, and nothing about the deploy is in question.
+ * Every PDF names the commit that built it, so "the export is still the old
+ * layout" can be settled from the file itself. It used to be compiled into
+ * the bundle through `define`, and THAT WAS A BUG WITH A LONG FUSE: the sha
+ * changes on every commit, so the lazy report-engine chunk that printed it got
+ * a new content hash on every deploy — a README-only commit included. Vercel
+ * serves only the newest deployment's files, so every tab opened before a
+ * deploy asked for an engine file that no longer existed and every export in
+ * it failed ("Export failed", reported 2026-09-26 minutes after a docs push).
+ *
+ * `index.html` is not a hashed asset and is served with `max-age=0`, so the
+ * meta tag is always current and costs no chunk its name. The engine reads it
+ * at export time. `tests/staleBuild.test.ts` fails if `__BUILD_ID__` or any
+ * other per-commit value comes back into `src/`.
  *
  * Vercel does not run the build inside a git checkout with history, so the
  * environment variable is the primary source and `git` is the local fallback.
@@ -26,8 +33,15 @@ const buildId = (() => {
 
 // https://vite.dev/config/
 export default defineConfig({
-  define: { __BUILD_ID__: JSON.stringify(buildId) },
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'deckkies-build-meta',
+      transformIndexHtml: (html) =>
+        html.replace('</head>', `  <meta name="deckkies-build" content="${buildId}" />
+  </head>`),
+    },
+  ],
   server: {
     proxy: {
       // The analytics API is a separate local process (server/app.py) reading
