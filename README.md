@@ -10276,10 +10276,34 @@ phones had no export at all. Only the picker is hidden now.
 | Deck Counter | worst / best / bring-this, plus deck-vs-deck and find-a-counter when run |
 | Coach Assist | the prediction or suggestion on screen |
 | Top Meta Decks | the whole board (was 24) |
-| Team Analysis | the dossier, notes cut to one line each, forced breaks removed |
+| Team Analysis | the dossier, notes cut to one line each, forced breaks removed; a **PDF covers** dropdown picks the whole plan or ONE player (see below) |
 | 2v2 Decks | the page of pairs on screen, teammates joined by a `+` |
 | Global Cards | a grid per card type |
 | Builder (Royal Duels / Deck's Home) | `pdfRenderer.ts` on the same engine; pagination unchanged in `deckExport.ts` |
+
+**One player's PDF (Team Analysis, 2026-09-26).** A dropdown beside the
+export button, captioned *PDF covers*, lists the whole plan first and then every
+player grouped *Your squad* / *Opponents* (*Roster* on a scouting report).
+Picking a teammate prints their **Player Plan**: what they fly and their
+assignment board, then for every opponent what that opponent plays, their decks
+and this teammate's ranked options against them — nobody else's assignments.
+Picking an opponent prints their **Opponent Plan**: that opponent's whole
+section, every teammate's options included. Both are built from the SAME block
+functions the whole plan uses (`opponentDivider`, `opponentPlayBlocks`,
+`mateOptions`, `teammateBlocks`), so a player's own PDF cannot disagree with
+their pages inside the full document; the section opener's figures move onto
+the page-one band so the name is not introduced twice. A tag not in the
+analysis throws rather than printing an empty file. The pick resets whenever
+the board changes. Measured on a real 3v3: whole plan 32 pages, a teammate 9, an
+opponent 6.
+
+Two print faults the first downloads showed, both fixed in `printableName`'s
+callers: a name the fonts cannot print falls back to its tag, and the cover then
+printed `#J00VYRCR2 · #J00VYRCR2` — the tag line is dropped when the name
+already IS the tag (`tagLine`). And `傳奇 | Sir✨Jose✨` lost its CJK title and
+sparkles and kept the separator, so the contents listed `| SirJose`; a separator
+left dangling at either end is trimmed, but only when glyphs were actually
+dropped.
 
 `print.css` is kept for a reader who presses Ctrl+P; nothing in the product
 calls `window.print()` any more. `PrintButton`, `ReportButton` and

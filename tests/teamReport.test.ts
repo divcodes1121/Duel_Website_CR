@@ -337,6 +337,50 @@ describe('teamAnalysisReport — what the page will look like', () => {
     expect(aditya?.body).toBe('No deck played often enough to count');
   });
 
+  /* ── One player's PDF, from the export dropdown (2026-09-26) ───────────── */
+  it('a teammate’s own PDF holds their section and their options against every opponent', () => {
+    const doc = teamAnalysisReport(report(), { focus: { side: 'blue', tag: '#B1' } });
+    expect(doc.screen).toBe('Player Plan');
+    expect(doc.subject).toBe('Ravi');
+    // Their figures lead the document (the hero band carries the name).
+    expect(doc.blocks[0].kind).toBe('stats');
+    const text = JSON.stringify(doc.blocks);
+    expect(text).toContain('What Ravi flies');
+    expect(text).toContain('Ravi vs Mohamed');
+    // Nobody else's options.
+    expect(text).not.toContain('Aditya vs Mohamed');
+    // Each opponent opens its own section.
+    expect(dividers(doc.blocks).map((d) => d.title)).toEqual(['Mohamed']);
+  });
+
+  it('an opponent’s own PDF is that opponent’s whole section, every teammate included', () => {
+    const doc = teamAnalysisReport(report(), { focus: { side: 'red', tag: '#R1' } });
+    expect(doc.screen).toBe('Opponent Plan');
+    expect(doc.subject).toBe('Mohamed');
+    expect(doc.cover).toBe('band');
+    const text = JSON.stringify(doc.blocks);
+    expect(text).toContain('What they play');
+    expect(text).toContain('Ravi vs Mohamed');
+    expect(text).toContain('Aditya vs Mohamed');
+    // The opener's figures moved onto the hero band; no second opener.
+    expect(dividers(doc.blocks)).toHaveLength(0);
+  });
+
+  it('prints the tag under the name once, never twice when the name fell back to it', () => {
+    const named = teamAnalysisReport(report(), { focus: { side: 'red', tag: '#R1' } });
+    expect(named.summary).toBe('#R1');
+    // A Cyrillic name cannot be printed in the report's fonts, so the subject
+    // IS the tag; a summary repeating it printed "#J00VYRCR2 · #J00VYRCR2".
+    const cyr = report({ folders: [folder('#R1', 'Потужнi лававод')] });
+    const doc = teamAnalysisReport(cyr, { focus: { side: 'red', tag: '#R1' } });
+    expect(doc.subject).toBe('#R1');
+    expect(doc.summary).toBeUndefined();
+  });
+
+  it('refuses a player who is not in the analysis rather than printing an empty file', () => {
+    expect(() => teamAnalysisReport(report(), { focus: { side: 'blue', tag: '#NOPE' } })).toThrow();
+  });
+
   it('lets the engine place a versus block instead of forcing a sheet for it', () => {
     // The old renderer could strand a heading, so a break opened a sheet for
     // every head-to-head and left half-empty pages behind. The new packer

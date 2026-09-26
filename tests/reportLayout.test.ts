@@ -202,6 +202,11 @@ describe('text', () => {
     // into "Danzai ’s decks".
     expect(printableName('Danzai ✨', '#TAG')).toBe('Danzai');
     expect(`${printableName('Danzai ✨', '#TAG')}’s decks`).toBe('Danzai’s decks');
+    // A separator whose other half was dropped goes with it: the contents
+    // listed "| SirJose" for "傳奇 | Sir✨Jose✨".
+    expect(printableName('傳奇 | Sir✨Jose✨', '#YYPCUUY0')).toBe('SirJose');
+    // Nothing dropped, nothing trimmed.
+    expect(printableName('-Bob-', '#TAG')).toBe('-Bob-');
   });
 
   it('gives a bare tag its hash, and leaves names alone', () => {

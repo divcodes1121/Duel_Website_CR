@@ -27,6 +27,7 @@ import { ago } from '../../../utils/format';
 import { ElectricBorder } from '../../ui/electric-border';
 import { readToken } from '../../../three/runtime';
 import { useScreenExport } from '../../Export/ExportButton';
+import { Dropdown, type DropdownOption } from '../../ui/dropdown-menu-14';
 import { ReadingState } from '../ReadingState';
 import { VsMark } from '../../VsMark/VsMark';
 import { FolderGallery, OpenFolder, RosterRead } from './TeamFolders';
@@ -278,10 +279,47 @@ export function TeamAnalysis() {
   /* Set only when a board came OUT of storage. `report.days` cannot answer
      this — every report has a window, and only a restored one is stale. */
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  /* WHO THE PDF COVERS: the whole plan, or one player from either side.
+     'all' | 'b:<tag>' (a teammate) | 'r:<tag>' (an opponent). Reset whenever
+     the board changes — a player picked on the last analysis may not be in
+     this one. */
+  const [exportFocus, setExportFocus] = useState<string>('all');
+  useEffect(() => { setExportFocus('all'); }, [report]);
+  const focusOptions = useMemo((): DropdownOption[] => {
+    if (!report) return [];
+    const isScout = report.mode === 'scout';
+    return [
+      {
+        value: 'all',
+        label: isScout ? 'Whole scouting report' : 'Whole match plan',
+        description: 'Every player, one document',
+      },
+      ...report.blue.map((m) => ({
+        value: `b:${m.tag}`,
+        label: m.name && m.name !== m.tag ? m.name : m.tag,
+        description: m.tag,
+        group: 'Your squad',
+      })),
+      ...report.folders.map((f) => ({
+        value: `r:${f.player.tag}`,
+        label: f.player.name && f.player.name !== f.player.tag ? f.player.name : f.player.tag,
+        description: f.player.tag,
+        group: isScout ? 'Roster' : 'Opponents',
+      })),
+    ];
+  }, [report]);
   const exportButton = useScreenExport({
     id: 'teams',
     ready: Boolean(report),
-    build: async () => (await import('../../../utils/teamReport')).teamAnalysisReport(report as TeamReport, { savedAt }),
+    build: async () => {
+      const { teamAnalysisReport } = await import('../../../utils/teamReport');
+      const focus = exportFocus.startsWith('b:')
+        ? { side: 'blue' as const, tag: exportFocus.slice(2) }
+        : exportFocus.startsWith('r:')
+          ? { side: 'red' as const, tag: exportFocus.slice(2) }
+          : null;
+      return teamAnalysisReport(report as TeamReport, { savedAt, focus });
+    },
   });
   const [saveNote, setSaveNote] = useState<string | null>(null);
 
@@ -601,6 +639,22 @@ export function TeamAnalysis() {
                   forty-page model on every keystroke) and it guarantees the
                   PDF describes the report as it is at the moment of the click,
                   including a restored save's own age. */}
+              {/* ONE PLAYER OR EVERYONE. A coach handing each teammate their
+                  own sheet should not have to print the whole plan and cut it
+                  up; the dropdown picks whose PDF the button draws. */}
+              {focusOptions.length > 1 && (
+                <Dropdown
+                  value={exportFocus}
+                  options={focusOptions}
+                  onChange={setExportFocus}
+                  caption="PDF covers"
+                  heading="Export PDF for"
+                  size="sm"
+                  align="end"
+                  searchable={focusOptions.length > 10}
+                  panelWidth={280}
+                />
+              )}
               {exportButton}
             </>
           )}

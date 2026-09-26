@@ -101,13 +101,21 @@ export function latin1(s: string): string {
  * a different player. So a name is kept only when most of its letters and
  * digits survive; otherwise the tag, which is always printable, stands in.
  */
+/** Separators and spaces at either end of a name, once glyphs were dropped. */
+const DANGLING = /^[\s|·•\-_/\\:~.,;]+|[\s|·•\-_/\\:~.,;]+$/gu;
+
 export function printableName(name: string | null | undefined, fallback: string): string {
   if (!name) return fallback;
   const letters = [...name].filter((ch) => /[\p{L}\p{N}]/u.test(ch));
   if (!letters.length) return fallback;
   // Returned CLEANED, not raw: "Danzai ✨" printed as "Danzai ’s decks" and
   // "Danzai : head to head" — the emoji went and the space before it stayed.
-  const clean = drawable(name, 'body', true);
+  let clean = drawable(name, 'body', true);
+  /* A SEPARATOR LEFT HANGING. "傳奇 | Sir✨Jose✨" loses its CJK title and its
+     sparkles to the font, and the " | " that divided title from name was left
+     leading the line: "| SirJose" in a contents listing. Only when something
+     WAS dropped — a name that really starts with a dash keeps it. */
+  if (clean !== name) clean = clean.replace(DANGLING, '').replace(/\s{2,}/g, ' ');
   const kept = [...clean].filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length;
   return kept >= 2 && kept / letters.length >= 0.6 ? clean : fallback;
 }

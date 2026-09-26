@@ -67,6 +67,12 @@ function windowLabel(w: { from: string | null; to: string | null }): string {
   return `${DAY(w.from)} – ${DAY(w.to)}`;
 }
 
+/** The tag under a focused PDF's name — unless the name could not be printed
+ *  and `who()` already fell back to the tag, which would print it twice. */
+function tagLine(m: { name: string; tag: string }): string | undefined {
+  return who(m) === m.tag ? undefined : m.tag;
+}
+
 /** A member's name, falling back to the tag the way every screen does. */
 function who(m: { name: string; tag: string }): string {
   /* THE TAG WHEN THE NAME CANNOT BE PRINTED. A Clash Royale name may be
@@ -499,16 +505,10 @@ function boardBlocks(report: TeamReport): ReportBlock[] {
 }
 
 /** One opponent: what they play, and what the squad answers with. */
-function folderBlocks(
-  folder: TeamFolder,
-  index: number,
-  total: number,
-  report: TeamReport,
-): ReportBlock[] {
-  const blocks: ReportBlock[] = [];
+/** An opponent's opening band: name, side, and the four figures. */
+function opponentDivider(folder: TeamFolder, index: number, total: number): ReportBlock {
   const name = who(folder.player);
-
-  blocks.push({
+  return {
     kind: 'divider',
     title: name,
     subtitle: `Opponent ${index + 1} of ${total}`,
@@ -536,36 +536,42 @@ function folderBlocks(
         note: 'decks from your squad',
       },
     ],
-  });
+  };
+}
 
-  if (folder.reason) {
-    blocks.push({
-      kind: 'note',
-      body:
-        folder.reason === 'no_history'
-          ? `Nothing is stored for ${name} in this window, so there is no spread to answer. ` +
-            'A newly searched tag is queued for collection and fills in within a couple of hours.'
-          : `${name} has stored decks, but no rung of the matchup ladder had evidence against ` +
-            'them, so no recommendation would be more than a guess. The decks below are still ' +
-            'what they play, and are worth reading on their own.',
-    });
-  }
+/** Why a folder has no recommendation, when it has none. */
+function opponentReason(folder: TeamFolder): ReportBlock[] {
+  if (!folder.reason) return [];
+  const name = who(folder.player);
+  return [{
+    kind: 'note',
+    body:
+      folder.reason === 'no_history'
+        ? `Nothing is stored for ${name} in this window, so there is no spread to answer. ` +
+          'A newly searched tag is queued for collection and fills in within a couple of hours.'
+        : `${name} has stored decks, but no rung of the matchup ladder had evidence against ` +
+          'them, so no recommendation would be more than a guess. The decks below are still ' +
+          'what they play, and are worth reading on their own.',
+  }];
+}
 
-  /* ── What they play ─────────────────────────────────────────────────── */
-
+/** What an opponent plays: their archetype spread and their own decks. */
+function opponentPlayBlocks(folder: TeamFolder, report: TeamReport): ReportBlock[] {
+  const blocks: ReportBlock[] = [];
+  const name = who(folder.player);
   if (folder.spread.length) {
     blocks.push({
       kind: 'spread',
       heading: 'What they play',
       note: 'Share of their play by archetype · every pick below is scored against this',
+      // The legend prints each share itself; the note carries only the games.
       segments: folder.spread.map((s) => ({
         label: s.name,
         share: s.share,
-        note: `${pct(s.share, 1)} · ${int(s.games)} games`,
+        note: `${int(s.games)} games`,
       })),
     });
   }
-
   if (folder.theirDecks.length) {
     blocks.push({
       kind: 'decks',
@@ -574,6 +580,43 @@ function folderBlocks(
       decks: folder.theirDecks.map(theirLine),
     });
   }
+  return blocks;
+}
+
+/** One teammate's ranked options against one opponent — the list the screen
+ *  shows when that teammate's row is opened. A teammate with nothing gets the
+ *  reason, never silence. */
+function mateOptions(folder: TeamFolder, member: TeamMember, labels: [string, string][]): ReportBlock {
+  const row = folder.perPlayer.find((r) => r.owner.tag === member.tag);
+  const heading = `${who(member)} vs ${who(folder.player)}`;
+  if (row?.decks.length) {
+    return {
+      kind: 'decks',
+      layout: 'rows',
+      heading,
+      note: `${row.decks.length} options · ${int(row.considered)} of their decks weighed`,
+      decks: row.decks.map((r, i) => optionLine(r, i + 1, labels)),
+    };
+  }
+  return {
+    kind: 'note',
+    heading,
+    body: row?.reason ? NO_OPTION[row.reason] : 'Not analysed against this opponent',
+  };
+}
+
+function folderBlocks(
+  folder: TeamFolder,
+  index: number,
+  total: number,
+  report: TeamReport,
+): ReportBlock[] {
+  const blocks: ReportBlock[] = [
+    opponentDivider(folder, index, total),
+    ...opponentReason(folder),
+    ...opponentPlayBlocks(folder, report),
+  ];
+  const name = who(folder.player);
 
   /* ── What the squad brings ──────────────────────────────────────────── */
 
@@ -723,25 +766,7 @@ function folderBlocks(
      options needs the list. Roster order, and everyone appears — a teammate
      with nothing gets a line saying which of the three reasons it is. */
   const labels = archetypeLabels(folder);
-  for (const m of report.blue) {
-    const row = folder.perPlayer.find((r) => r.owner.tag === m.tag);
-    const mate = who(m);
-    if (row?.decks.length) {
-      blocks.push({
-        kind: 'decks',
-        layout: 'rows',
-        heading: `${mate} vs ${name}`,
-        note: `${row.decks.length} options · ${int(row.considered)} of their decks weighed`,
-        decks: row.decks.map((r, i) => optionLine(r, i + 1, labels)),
-      });
-    } else {
-      blocks.push({
-        kind: 'note',
-        heading: `${mate} vs ${name}`,
-        body: row?.reason ? NO_OPTION[row.reason] : 'Not analysed against this opponent',
-      });
-    }
-  }
+  for (const m of report.blue) blocks.push(mateOptions(folder, m, labels));
 
   return blocks;
 }
@@ -888,10 +913,92 @@ function teammateBlocks(
  * being restated here, so a change on the server reaches the printed page
  * without an edit.
  */
+/** Which single player a focused export is about. */
+export interface TeamFocus {
+  side: 'blue' | 'red';
+  tag: string;
+}
+
+/** A section's opening figures, lifted onto the page-one hero band when the
+ *  document is about that one player — the band already carries the name, so
+ *  a second opener repeating it would open the file twice. */
+function liftOpener(blocks: ReportBlock[]): ReportBlock[] {
+  const [first, ...rest] = blocks;
+  if (first?.kind !== 'divider') return blocks;
+  const tiles = (first.stats ?? []).map((t) => ({ label: t.label, value: t.value, note: t.note }));
+  return tiles.length ? [{ kind: 'stats', tiles }, ...rest] : rest;
+}
+
+/**
+ * ONE PLAYER'S PDF, picked from the Team Analysis export dropdown.
+ *
+ *   * a TEAMMATE: what they fly and their assignment board, then — for every
+ *     opponent — what that opponent plays, their decks, and this teammate's
+ *     ranked options against them. Everything they need to prepare, and
+ *     nothing about anybody else's assignments.
+ *   * an OPPONENT: that opponent's whole section — what they play, their
+ *     decks, what the squad should bring, the head-to-head overlays, and
+ *     every teammate's options against them.
+ *
+ * Same blocks as the whole plan, so a player's own PDF and their pages inside
+ * the full document can never disagree.
+ */
+function focusedReport(report: TeamReport, focus: TeamFocus, opts: { savedAt?: string | null }): ReportDoc {
+  const caveats = [
+    'Every figure is a snapshot of stored history over the stated window, not a prediction of a match.',
+    ...(opts.savedAt
+      ? [`This is a SAVED analysis, run on ${new Date(opts.savedAt).toLocaleString('en-GB')}; nothing in it has been recomputed since.`]
+      : []),
+  ];
+  const scout = report.mode === 'scout';
+  const meta = [
+    { label: 'Window', value: `${report.days} days` },
+    ...(scout ? [] : [{ label: 'Your squad', value: `${report.blue.length} player${report.blue.length === 1 ? '' : 's'}` }]),
+    { label: scout ? 'Roster' : 'Opponents', value: `${report.red.length} player${report.red.length === 1 ? '' : 's'}` },
+    { label: 'Analysis run', value: opts.savedAt ? new Date(opts.savedAt).toLocaleString('en-GB') : 'just now' },
+  ];
+
+  if (focus.side === 'red') {
+    const i = report.folders.findIndex((f) => f.player.tag === focus.tag);
+    if (i < 0) throw new Error(`${focus.tag} is not an opponent in this analysis`);
+    const f = report.folders[i];
+    return {
+      screen: 'Opponent Plan',
+      subject: who(f.player),
+      summary: tagLine(f.player),
+      hue: 'red',
+      meta,
+      blocks: liftOpener(folderBlocks(f, i, report.folders.length, report)),
+      caveats,
+      cover: 'band',
+    };
+  }
+
+  const i = report.blue.findIndex((m) => m.tag === focus.tag);
+  if (i < 0) throw new Error(`${focus.tag} is not on your squad in this analysis`);
+  const m = report.blue[i];
+  const perOpponent = report.folders.flatMap((f, fi) => [
+    opponentDivider(f, fi, report.folders.length),
+    ...opponentPlayBlocks(f, report),
+    mateOptions(f, m, archetypeLabels(f)),
+  ]);
+  return {
+    screen: 'Player Plan',
+    subject: who(m),
+    summary: tagLine(m),
+    hue: 'blue',
+    meta,
+    blocks: [...liftOpener(teammateBlocks(m, i, report.blue.length, report)), ...perOpponent],
+    caveats,
+    contents: report.folders.length > 1,
+  };
+}
+
 export function teamAnalysisReport(
   report: TeamReport,
-  opts: { savedAt?: string | null } = {},
+  opts: { savedAt?: string | null; focus?: TeamFocus | null } = {},
 ): ReportDoc {
+  if (opts.focus) return focusedReport(report, opts.focus, opts);
   const blue = report.blue.length;
   const red = report.red.length;
   /* AN UNSTAMPED REPORT IS A MATCH PLAN. Only a server that predates the two
