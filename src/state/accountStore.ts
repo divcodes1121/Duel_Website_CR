@@ -6,6 +6,7 @@ import { type Profile, type Tier, supabase, tierOf } from './supabase';
    `tiers.ts` and `utils/format.ts`. Re-exported below, so every existing
    `import { deviceKind } from './accountStore'` keeps working. */
 import { type DeviceKind, deviceId, deviceKind } from './deviceIdentity';
+import { fetchTracking } from './analyticsClient';
 
 export { deviceId, deviceKind };
 export type { DeviceKind };
@@ -289,6 +290,14 @@ export const useAccountStore = create<AccountState>()((set, get) => ({
       })
       .eq('id', id);
     if (error) return error.message;
+    /* A TAG SAVED HERE STARTS BEING COLLECTED. The profile lives in Supabase,
+       which the analytics server never reads, so without this a player who
+       entered their own tag in onboarding was never queued for the bot and
+       their dashboards stayed empty until someone happened to search them.
+       Fire-and-forget, like the coach roster's Add Player: queuing is a side
+       effect and must not fail the save. The bot enrols the queue at the start
+       of its next poll and collects the player in that same pass. */
+    if (patch.player_tag) void fetchTracking(patch.player_tag).catch(() => undefined);
     await get().refreshProfile();
     return null;
   },

@@ -318,6 +318,70 @@ class Ceiling(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Room in the next drain for tags searched on the site
+# ---------------------------------------------------------------------------
+
+class DrainHeadroom(unittest.TestCase):
+    """A searched tag must be inside the NEXT poll's batch. The bot drains
+    oldest-first with a LIMIT, so bulk sources may only fill the queue to
+    `BULK_QUEUE_CAP`; the rest is deferred to a later run, never dropped."""
+
+    def run_enqueue(self, tags, queued_seq, prune=lambda: 0):
+        recorded = {}
+        calls = {"n": 0}
+
+        def queued_tags():
+            i = min(calls["n"], len(queued_seq) - 1)
+            calls["n"] += 1
+            return set(queued_seq[i])
+
+        def bulk(ts, source):
+            recorded["tags"] = list(ts)
+            return len(list(ts))
+
+        with Stub(tracking,
+                  bot_tracked_set=lambda: set(),
+                  queued_tags=queued_tags,
+                  prune_enrolled=prune,
+                  bulk_request=bulk):
+            out = recruit.enqueue(tags, "test", ceiling=10**9)
+        out["_written"] = recorded.get("tags", [])
+        return out
+
+    def test_the_cap_leaves_a_quarter_of_every_drain_free(self):
+        self.assertLess(recruit.BULK_QUEUE_CAP, recruit.DRAIN_BATCH)
+        self.assertGreaterEqual(recruit.DRAIN_BATCH - recruit.BULK_QUEUE_CAP,
+                                recruit.DRAIN_BATCH // 4)
+
+    def test_a_bulk_run_stops_at_the_cap_and_defers_the_rest(self):
+        full = ["#Q%d" % i for i in range(recruit.BULK_QUEUE_CAP - 3)]
+        out = self.run_enqueue(["#N%d" % i for i in range(10)], [full])
+        self.assertEqual(len(out["_written"]), 3)
+        self.assertEqual(out["deferredForSearches"], 7)
+
+    def test_a_full_queue_takes_nothing_from_a_bulk_source(self):
+        full = ["#Q%d" % i for i in range(recruit.BULK_QUEUE_CAP)]
+        out = self.run_enqueue(["#N1", "#N2"], [full, full])
+        self.assertEqual(out["_written"], [])
+        self.assertEqual(out["deferredForSearches"], 2)
+
+    def test_enrolled_rows_are_pruned_before_the_room_is_measured(self):
+        """Rows the bot already enrolled still take a slot in the drain until
+        pruned; pruning first is what lets the recruiter keep moving."""
+        full = ["#Q%d" % i for i in range(recruit.BULK_QUEUE_CAP)]
+        pruned = {"n": 0}
+
+        def prune():
+            pruned["n"] += 1
+            return len(full)
+
+        out = self.run_enqueue(["#N1", "#N2"], [full, []], prune=prune)
+        self.assertEqual(pruned["n"], 1)
+        self.assertEqual(out["_written"], ["#N1", "#N2"])
+        self.assertEqual(out["deferredForSearches"], 0)
+
+
+# ---------------------------------------------------------------------------
 # The queue write itself, for real
 # ---------------------------------------------------------------------------
 

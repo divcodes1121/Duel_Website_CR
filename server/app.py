@@ -292,13 +292,15 @@ def _sources() -> dict:
             for tier, v in cd.sources().items()}
 
 
-def _enrol(tag: str) -> dict:
-    """Queue a searched tag for collection, and report where it stands.
+def _enrol(tag: str, source: str = "search") -> dict:
+    """Queue a tag for collection, and report where it stands.
 
     Only tags the bot is NOT already polling are queued — `request()` is
-    idempotent, but skipping the write for the ~1,460 already-tracked players
-    keeps our queue to what it is for, which is the backlog someone still has
-    to act on.
+    idempotent, but skipping the write for the already-tracked players keeps
+    our queue to what it is for, which is the backlog someone still has to act
+    on. The bot enrols the queue at the START of its next poll and collects
+    those players in that same pass (`poll_tracked_players` drains before it
+    reads `tracked_players`).
 
     Never raises. Enrolment is a side effect of looking at a screen, so a
     failure here must not be able to take the screen down with it.
@@ -306,12 +308,40 @@ def _enrol(tag: str) -> dict:
     try:
         st = tracking.status(tag)
         if not st["tracked"] and not st["requested"]:
-            tracking.request(tag, "search")
+            tracking.request(tag, source)
             st = tracking.status(tag)
+        if st.get("tracked") or st.get("requested"):
+            _ENROLLED[tag] = time.monotonic()
         return st
     except Exception:  # noqa: BLE001
         traceback.print_exc()
         return {"tag": tag, "state": "unknown", "tracked": False, "requested": False}
+
+
+#: Tags confirmed tracked or queued recently, so a screen that pages (Recent
+#: Battles) or a roster-wide read does not re-check the bot's table on every
+#: request. Ten minutes: long enough to absorb a session, short enough that a
+#: tag the bot dropped is noticed.
+_ENROLLED: dict[str, float] = {}
+_ENROLLED_TTL_S = 600.0
+
+
+def _note_tag(tag: str, source: str) -> None:
+    """EVERY TAG THE API IS ASKED ABOUT STARTS BEING COLLECTED.
+
+    Before 2026-09-26 only the player search, `/track` and `/live` (and Team
+    Analysis, in its own module) queued an untracked tag. Every other route
+    that takes one — Duel Analysis, Duel Zone, Recent Battles, Cards, Deck
+    Counter, all three Coach Assist reads, the Coach Roster's intel and field
+    plan — read it and forgot it, so a player reached by a shared link, a
+    Coach Assist opponent or a roster read was never collected. Asked for by
+    name: a tag searched or added anywhere is in the database now and polled
+    from the next poll. `test_enrol_routes.py` fails if a tag route skips it.
+    """
+    seen = _ENROLLED.get(tag)
+    if seen is not None and time.monotonic() - seen < _ENROLLED_TTL_S:
+        return
+    _enrol(tag, source)
 
 
 def _window(q: dict, cov: dict) -> tuple[str | None, str | None]:
@@ -605,6 +635,8 @@ class Handler(BaseHTTPRequestHandler):
                 q = parse_qs(parsed.query)
                 raw = (q.get("tag") or [""])[0]
                 tag = cd.normalize_tag(raw) if raw else None
+                if tag:
+                    _note_tag(tag, "coverage")
                 # HOW MANY PLAYERS THE BOT IS COLLECTING. It rides here rather
                 # than on `/status` because `/status` is the one route that
                 # answers without a key, and the size of the collection is a
@@ -636,6 +668,7 @@ class Handler(BaseHTTPRequestHandler):
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "duels")
 
                 cov = cd.coverage(tag)
                 since, until = _window(parse_qs(parsed.query), cov)
@@ -652,6 +685,7 @@ class Handler(BaseHTTPRequestHandler):
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "duelzone")
 
                 q = parse_qs(parsed.query)
                 cov = cd.coverage(tag)
@@ -674,6 +708,7 @@ class Handler(BaseHTTPRequestHandler):
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "battles")
 
                 q = parse_qs(parsed.query)
                 cov = cd.coverage(tag)
@@ -744,6 +779,7 @@ class Handler(BaseHTTPRequestHandler):
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "coach")
                 q = parse_qs(parsed.query)
                 since, until = _window(q, cd.coverage(tag))
                 # `brief=1` trims the payload for a roster-wide read (one row
@@ -768,6 +804,7 @@ class Handler(BaseHTTPRequestHandler):
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "coach")
                 q = parse_qs(parsed.query)
                 revealed = _decks(q, ("r1", "r2"))
                 # WINDOWED like every other player screen, and through the same
@@ -790,6 +827,7 @@ class Handler(BaseHTTPRequestHandler):
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "coach")
                 return self._send(coach.opponent_read(tag))
 
             if path == "/api/analytics/coach/suggest":
@@ -802,6 +840,9 @@ class Handler(BaseHTTPRequestHandler):
                 # meta decks and says so, which is a weaker answer rather than
                 # no answer.
                 opp = cd.normalize_tag((q.get("opp") or [""])[0]) or ""
+                _note_tag(me, "coach")
+                if opp:
+                    _note_tag(opp, "coach")
                 # ONE `days`, TWO WINDOWS. The span is resolved per tag against
                 # that player's own coverage, so "30 days" means thirty days of
                 # each player's play rather than one calendar range that may be
@@ -879,6 +920,7 @@ class Handler(BaseHTTPRequestHandler):
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "counter")
                 q = parse_qs(parsed.query)
                 cov = cd.coverage(tag)
                 since, until = _window(q, cov)
@@ -893,6 +935,7 @@ class Handler(BaseHTTPRequestHandler):
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "cards")
 
                 q = parse_qs(parsed.query)
                 cov = cd.coverage(tag)
@@ -956,6 +999,7 @@ class Handler(BaseHTTPRequestHandler):
                 tag = cd.normalize_tag(raw)
                 if not tag:
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "roster")
                 since, until = _window(parse_qs(parsed.query), cd.coverage(tag))
                 return self._send(coach_intel.report(tag, since, until))
 

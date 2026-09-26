@@ -312,6 +312,22 @@ def opponent_tags(days: int = OPP_DAYS,
 # The sink
 # --------------------------------------------------------------------------
 
+#: THE BOT DRAINS THIS MANY ROWS A POLL, OLDEST FIRST (`CLASH_TAG_DRAIN_BATCH`
+#: in `/opt/clashbot/.env`, 2000 in production). A tag searched on the site is
+#: queued behind whatever is already waiting, so a bulk backlog bigger than one
+#: batch would push it past its next poll.
+DRAIN_BATCH = int(os.getenv("CLASH_TAG_DRAIN_BATCH", "2000"))
+
+#: BULK SOURCES FILL THE QUEUE ONLY TO HERE. A quarter of every drain is left
+#: for tags searched or added on the site, so one of those queued at any time
+#: is always inside the NEXT poll's batch — asked for by name (2026-09-26): a
+#: new tag is in the database now and polled from the next poll. What a bulk
+#: run cannot queue is DEFERRED, not dropped: the leaderboard and the 2v2
+#: population are re-read on every run, so it is queued on a later one, and a
+#: poll never has to swallow a backlog bigger than its batch.
+BULK_QUEUE_CAP = max(0, (DRAIN_BATCH * 3) // 4)
+
+
 def enqueue(tags, source: str, ceiling: int = CEILING) -> dict:
     """Queue tags we are not already collecting or already holding.
 
@@ -339,6 +355,21 @@ def enqueue(tags, source: str, ceiling: int = CEILING) -> dict:
         fresh = fresh[:room]
         capped = True
 
+    # The queue's LENGTH is what the drain's LIMIT sees — rows the bot has
+    # already enrolled still take a slot until `prune_enrolled` removes them,
+    # so prune before measuring when the queue is near the cap.
+    if len(queued) >= BULK_QUEUE_CAP:
+        tracking.prune_enrolled()
+        queued = tracking.queued_tags()
+    drain_room = BULK_QUEUE_CAP - len(queued)
+    deferred = 0
+    if drain_room <= 0:
+        deferred = len(fresh)
+        fresh = []
+    elif len(fresh) > drain_room:
+        deferred = len(fresh) - drain_room
+        fresh = fresh[:drain_room]
+
     added = tracking.bulk_request(fresh, source) if fresh else 0
     return {
         "source": source,
@@ -347,6 +378,8 @@ def enqueue(tags, source: str, ceiling: int = CEILING) -> dict:
         "skippedTracked": skipped_tracked,
         "skippedQueued": skipped_queued,
         "cappedByCeiling": capped,
+        "deferredForSearches": deferred,
+        "bulkQueueCap": BULK_QUEUE_CAP,
         "tracked": len(tracked),
         "queued": len(queued) + added,
         "ceiling": ceiling,
