@@ -26,7 +26,7 @@ import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
 import { useReportRegistration } from '../../state/reportExport';
-import { useAccess } from '../../state/gate';
+import { isPaid, useAccess } from '../../state/gate';
 import { DAY_PRESETS } from '../../utils/datePresets';
 
 /* Coach Assist — two windows over `server/coach.py`.
@@ -1181,7 +1181,7 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
               <span className={styles.swapSide}>
                 {s.in.map((c) => (
                   <CardArt key={c} card={c} variant={s.view.art[c]}
-                           inferred={s.view.inferredArt} />
+                           inferred={s.view.inferredArt || !!s.view.artFilled?.includes(c)} />
                 ))}
               </span>
               {s.thin && (
@@ -1219,7 +1219,7 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
                 <span className={styles.blockNote}> · {d.familiar}/8 cards you play</span>
               )}
               <Strip cards={d.view.cards} art={d.view.art}
-                     inferred={d.view.inferredArt} size="sm" />
+                     inferred={d.view.inferredArt} filled={d.view.artFilled} size="sm" />
               <VsChips vs={d.vs} />
             </div>
           ))}
@@ -1246,7 +1246,7 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
             <div key={d.hash} style={{ marginBottom: '.5rem' }}>
               <strong>{d.name ?? d.archetype}</strong>
               <Strip cards={d.view.cards} art={d.view.art}
-                     inferred={d.view.inferredArt} size="sm" />
+                     inferred={d.view.inferredArt} filled={d.view.artFilled} size="sm" />
               <VsChips vs={d.vs} />
             </div>
           ))}
@@ -1297,15 +1297,19 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
     build: async () => (await import('../../utils/screenAdapters')).coachSuggestionDoc(data as CoachSuggestion),
   });
 
-  /* THE STAGING SHELF. Card-level swaps are unmeasured against real data, and
-     `main` deploys straight to production — so an admin session is the only
-     way to try this without shipping it to everyone.
+  /* THE TUNER IS PRO, NOT MEMBERS (2026-09-27, asked for). It sat on the admin
+     staging shelf while it was unmeasured; it has been measured, and it follows
+     the three-slot rule now. `isPaid` is the project's ONE predicate for "paid
+     Pro or admin, not a trial" — the line Coach Assist itself sits behind
+     (`PRO_ONLY_SECTIONS`), stated again here so the block cannot outlive a
+     change to the section gate. Measured before opening it: the swap scan adds
+     1.4–2.4 s to the first suggestion for a deck, and nothing once warm.
 
      `useAccess()`, NEVER `useAccountStore(s => s.tier)`. The raw store
      initialises to 'free' and RESETS to 'free' on sign-out, so reading it
      would hand a signed-out visitor whatever 'free' happens to unlock. Only
      `useAccess` knows 'anon' is not a tier. */
-  const admin = useAccess() === 'admin';
+  const tunerAllowed = isPaid(useAccess());
 
   useEffect(() => setOpp(tag), [tag]);
 
@@ -1313,9 +1317,9 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
     (mine: string[][], theirs: string[][]) => {
       setBusy(true);
       setError(null);
-      /* The flag gates the REQUEST, not just the render. A non-admin must not
-         pay the sibling scan for a block they will never be shown. */
-      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs, { days }, admin)
+      /* The flag gates the REQUEST, not just the render. A reader who will
+         never be shown the block must not pay the sibling scan for it. */
+      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs, { days }, tunerAllowed)
         .then((d) => {
           setData(d);
           setStep({ kind: 'result' });
@@ -1323,7 +1327,7 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
         .catch((e) => setError(e as AnalyticsError))
         .finally(() => setBusy(false));
     },
-    [me, opp, days, admin],
+    [me, opp, days, tunerAllowed],
   );
 
   /* As in Window 1: refresh the answer, keep the interview. */
@@ -1614,9 +1618,9 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
         </div>
       )}
 
-      {/* ADMIN ONLY, AND OPT-IN AT THE REQUEST. Absent for everyone else —
+      {/* PRO AND ADMIN, AND OPT-IN AT THE REQUEST. Absent for everyone else —
           the server was never asked, so there is nothing to hide here. */}
-      {admin && data.tuner && <TunerPanel tuner={data.tuner} />}
+      {tunerAllowed && data.tuner && <TunerPanel tuner={data.tuner} />}
 
       {/* Every reason the answer might be weaker than it looks, listed rather
           than folded into one flag nobody can interrogate. */}

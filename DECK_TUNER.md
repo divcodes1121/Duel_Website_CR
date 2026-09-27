@@ -8,7 +8,7 @@
 | A | `deck_tuner.neighbours()` / `rank()` — swaps | **built**, 79 checks |
 | B | `cardRoles.json` + `deck_harmony.py` — the veto | **built**, 74 checks |
 | C | `_build_seeds()` + `compose()` / `loadout()` | **built**, in A's suite |
-| D | `swaps=1` on the route + admin panel | **built** |
+| D | `swaps=1` on the route + the panel — **Pro and admin** (`isPaid`) since 2026-09-27, admin-only before | **built** |
 
 **Nothing has run against the real database.** Every figure below that is
 called an estimate is still an estimate, the cost discrepancy in section 6 is
@@ -31,8 +31,10 @@ Two modes, one engine:
   explained, with alternatives per slot.
 
 Everything the Coach already outputs stays exactly as it is. This runs
-beside it, admin-gated, because `main` deploys straight to production and an
-admin gate is the only staging this project has.
+beside it. It was admin-gated while it was unmeasured, because `main` deploys
+straight to production and an admin gate is the only staging this project has;
+**since 2026-09-27 it is Pro and admin (`isPaid`), never a Member** — asked for,
+after it was measured and brought under the three-slot rule (§9).
 
 ---
 
@@ -454,17 +456,16 @@ Three risks worth naming:
   `releases.ts`, and for the same reason: the rules most worth testing
   exhaustively must be importable without constructing anything.
 - **A small change to `deck_counter._build_reps()`** to keep top-N seeds.
-- **THE THREE-SLOT RULE (2026-09-27) DOES NOT COVER THIS MODULE YET.** Every
-  public "what to play" list draws its decks with
-  `clash_data.complete_seating` (every special slot the cards can fill) and
-  offers only lists that CAN fill all three. Here `_view()` still draws a list
-  the way the meta board saw it fielded, and `compose`'s seed pool is not
-  filtered, so a swap candidate (`rank`), a composed deck or a loadout deck
-  can leave the evolution, hero or wild slot empty. It reaches only an admin
-  session, like everything in this file. Bringing it under the rule means
-  `complete_seating` for the decks OFFERED (`rank`'s candidates and
-  `compose`'s rows) — not for `rank`'s base deck, which is the player's own
-  list and is drawn as fielded — plus a `fillable_slots` filter on the pool.
+- **THE THREE-SLOT RULE COVERS THIS MODULE (2026-09-27).** A screenshot caught
+  a composed Bridge Spam list with Battle Ram and P.E.K.K.A evolutions and a
+  plain Bandit in slot 2 — no hero-capable card, no champion. Every deck the
+  tuner OFFERS is `_offered(cards)`: `_view`, then `clash_data.complete_seating`,
+  with `artFilled` naming the forms that were filled. `_full_loadout(cards)`
+  (`fillable_slots` == 3) skips a list that cannot field three, in `compose`'s
+  pool and among `rank`'s candidates, counted as `skipped.slots`; `loadout`
+  draws from `compose`. `rank`'s BASE deck is the player's own list and keeps
+  `_view`. Staged over 10 real pairs: 7 of 170 offered decks were short before,
+  0 after; live 85 decks, 0 short. `test_deck_tuner.py` 111 -> 119.
 - **NO NEW ROUTE.** It rides on `/api/analytics/coach/suggest` behind an
   opt-in `swaps=1` parameter, returning a `tuner` field — the arrangement
   `ops_snapshot` uses on `/coverage`, for the same three reasons: the
@@ -480,8 +481,11 @@ Three risks worth naming:
 
 - **Gated in the component, not in `ADMIN_ONLY_SECTIONS`.** That list HIDES a
   whole section and Coach Assist must stay visible to Pro. The panel checks
-  `useAccess() === 'admin'`, and the client sends `swaps=1` only for admin so
-  nobody else pays the cost.
+  `isPaid(useAccess())` — Pro and admin, never a trial ("Member"), the same
+  line Coach Assist's section gate draws — and the client sends `swaps=1` only
+  then, so nobody else pays the cost (1.4–2.4 s on the first suggestion for a
+  deck, measured live; nothing warm). It was `=== 'admin'` until 2026-09-27.
+  `tests/coachTunerGate.test.ts` pins it.
 - **`useAccess()`, never `useAccountStore(s => s.tier)`** — `CLAUDE.md`
   records that exact regression: the raw store initialises and resets to
   `'free'`, and only `useAccess()` knows `'anon'` is not a tier.
@@ -524,7 +528,7 @@ on every request.
 ## 11. What cannot be verified locally
 
 - `/api/analytics` needs the VPS key and 500s under `vite dev`.
-- Coach Assist is `PRO_ONLY_SECTIONS`; the tuner is admin-only on top.
+- Coach Assist is `PRO_ONLY_SECTIONS`, and the tuner follows it (Pro and admin).
 - The verify login recorded in `CLAUDE.md` is dead — the 20-account gate was
   deleted and auth is Supabase now.
 

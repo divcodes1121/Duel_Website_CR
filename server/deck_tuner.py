@@ -160,6 +160,40 @@ def _view(cards: list[str]) -> dict:
     return {"cards": order, "art": art, "inferredArt": not observed}
 
 
+def _offered(cards: list[str]) -> dict:
+    """A deck Deckkies OFFERS: `_view`, then every special slot its cards can
+    fill (`clash_data.complete_seating`, 2026-09-27).
+
+    THE RULE EVERY "WHAT TO PLAY" LIST FOLLOWS, and this module was the one
+    list it did not reach. `_view` draws a list the way the meta board saw it
+    FIELDED, so a hero-capable card nobody was seen fielding as a hero stayed
+    plain in slot 2 — correct for a record, wrong for advice. The cards whose
+    form was filled rather than observed ride along as `artFilled`, so the
+    screen can say so per card. `rank`'s BASE deck is the player's own list and
+    keeps `_view`.
+    """
+    view = _view(cards)
+    try:
+        seated, art, filled = cd.complete_seating(
+            view["cards"], view.get("art") or {},
+            slot_of=cd.seated_positions(view["cards"], view.get("art")))
+    except Exception:  # noqa: BLE001 - the fielded drawing still stands
+        return view
+    out = {"cards": seated, "art": art, "inferredArt": view["inferredArt"]}
+    if filled:
+        out["artFilled"] = filled
+    return out
+
+
+def _full_loadout(cards: list[str]) -> bool:
+    """Whether a list's cards CAN field all three special slots — an evolution,
+    a hero or champion, and the wild. A list with no hero-capable card and no
+    champion leaves slot 2 to a plain card whatever the seating; Deckkies does
+    not offer one (the rule Team Analysis's scout pool and Coach Assist's fills
+    already apply). Skipped, never ranked lower, and counted in `skipped`."""
+    return cd.fillable_slots(cards) >= cd.SPECIAL_SLOTS
+
+
 def neighbours(cards: list[str], archetypes: list[str] | None = None) -> dict:
     """Every real deck within `MAX_SWAP` cards of `cards`, scored per archetype.
 
@@ -390,7 +424,8 @@ def rank(cards: list[str],
     base_mean, base_weight = _mean(base_profile, archetypes, weights)
 
     nb = neighbours(cards, archetypes)
-    out, skipped = [], {"swap_too_big": 0, "illegal": 0, "vetoed": 0, "no_floor": 0}
+    out, skipped = [], {"swap_too_big": 0, "illegal": 0, "vetoed": 0, "no_floor": 0,
+                        "slots": 0}
 
     for h, rec in nb["decks"].items():
         other = h.split(",")
@@ -400,6 +435,12 @@ def rank(cards: list[str],
             continue
         if used and (set(arrived) & used):
             skipped["illegal"] += 1
+            continue
+        # A SWAP IS A DECK WE TELL THEM TO PLAY, so it must field all three
+        # special slots. On a list that cannot, this is what surfaces the
+        # swaps that bring a hero or champion in.
+        if not _full_loadout(other):
+            skipped["slots"] += 1
             continue
         if veto is not None:
             why = veto(other)
@@ -417,7 +458,7 @@ def rank(cards: list[str],
         # convenient subset.
         cmp = _comparable(base_profile, rec, archetypes)
         m, mw = _mean(rec, archetypes, weights)
-        view = _view(other)
+        view = _offered(other)
         out.append({
             "deck": view["cards"],
             "view": view,
@@ -569,7 +610,8 @@ def compose(archetypes: list[str],
     seedmap = pool if pool is not None else counter.seeds()
     used = used or set()
     exclude = exclude or set()
-    out, skipped = [], {"illegal": 0, "vetoed": 0, "no_floor": 0, "excluded": 0}
+    out, skipped = [], {"illegal": 0, "vetoed": 0, "no_floor": 0, "excluded": 0,
+                        "slots": 0}
 
     for _arch, decks in seedmap.items():
         for d in decks:
@@ -578,6 +620,11 @@ def compose(archetypes: list[str],
                 continue
             if used & set(d["cards"]):
                 skipped["illegal"] += 1
+                continue
+            # Skip-and-replace, as Team Analysis's scout pool does: the next
+            # seed takes the place of a list that cannot field three slots.
+            if not _full_loadout(d["cards"]):
+                skipped["slots"] += 1
                 continue
             if veto is not None and veto(d["cards"]):
                 skipped["vetoed"] += 1
@@ -588,7 +635,7 @@ def compose(archetypes: list[str],
                 continue
             m, mw = _mean(d, archetypes, weights)
             covered = sum(1 for a in archetypes if a in d["archetypes"])
-            view = _view(d["cards"])
+            view = _offered(d["cards"])
             out.append({
                 "deck": view["cards"],
                 "view": view,

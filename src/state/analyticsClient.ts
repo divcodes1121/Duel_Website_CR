@@ -1267,6 +1267,9 @@ export interface DeckView {
   art: Record<string, WildForm>;
   /** The art was inferred from slot position, not observed on the board. */
   inferredArt: boolean;
+  /** Forms FILLED because the deck can field them (`deck_tuner._offered`,
+   *  2026-09-27) — a deck Deckkies offers fields every special slot. */
+  artFilled?: string[];
 }
 
 /** One swap: which card leaves, which arrives, and what the database says. */
@@ -1474,9 +1477,11 @@ export function fetchCoachSuggestion(
   if (opp) q.set('opp', opp);
   myPlayed.forEach((d, i) => q.set(`m${i + 1}`, d.join(',')));
   oppPlayed.forEach((d, i) => q.set(`o${i + 1}`, d.join(',')));
-  /* OPT-IN, AND ONLY EVER FOR AN ADMIN. The swap scan walks every stored deck
-     hash, so sending this by default would put a multi-second cost on the one
-     screen people use mid-duel. The caller decides; nothing here infers it. */
+  /* OPT-IN, AND ONLY FOR PRO OR ADMIN (`isPaid`, 2026-09-27; admin-only
+     before). The swap scan walks the stored deck hashes — measured 1.4–2.4 s
+     on the first suggestion for a deck, nothing once warm — so it is never sent
+     for a reader who will not see the block. The caller decides; nothing here
+     infers it. */
   if (swaps) q.set('swaps', '1');
   return get<CoachSuggestion>(`/api/analytics/coach/suggest?${q.toString()}`);
 }

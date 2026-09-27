@@ -1414,8 +1414,8 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         "oppPlayed": _decorate(opp_played, opp_hist),
         # OPT-IN, and absent rather than null when it was not asked for -- a
         # null would read as "no swaps found" where the truth is "nobody
-        # asked". Costs a full sibling scan, so the route only sets `swaps`
-        # for an admin. See `DECK_TUNER.md`.
+        # asked". Costs a sibling scan, so the client only asks for Pro and
+        # admin sessions (`isPaid`). See `DECK_TUNER.md`.
         **({"tuner": tune(best["cards"], opp["decks"], used_mine, mine_hist,
                           _playstyle(my_tag, my_since, my_until, mine_hist),
                           chips)}

@@ -24,7 +24,7 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **1,032 vitest** (41 files), **3,366 Python checks** across 58 suites (one known failure, `test_ml_21a`), route count **25** — counted 2026-09-27 night |
+| Tests | **1,036 vitest** (42 files), **3,374 Python checks** across 58 suites (one known failure, `test_ml_21a`), route count **25** — counted 2026-09-27 night |
 
 ## What the field plan answers
 
@@ -197,8 +197,8 @@ real architectural decision rather than a feature.
   8-card list.
 - **A deck somebody is told to play is drawn by `clash_data.complete_seating`**
   (every special slot its cards can fill); **a deck somebody PLAYED is drawn as
-  fielded.** Opponents and threats are records, not advice. One list is not
-  under it yet: Coach Assist's admin-only tuner rows (`DECK_TUNER.md` §9).
+  fielded.** Opponents and threats are records, not advice. Coach Assist's
+  tuner rows joined on 2026-09-27; there is no exception left.
 - **`team_scout.score`'s `rate_for_threat` stays optional.** Team Analysis
   passes the fused rate; `coach_daily` passes nothing, and that is what keeps
   its 204 checks meaning what they meant.

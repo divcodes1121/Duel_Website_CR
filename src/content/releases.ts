@@ -82,6 +82,16 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-27-coach-tuner-pro',
+    date: '2026-09-27',
+    kind: 'new',
+    title: 'Pro: Coach Assist can now suggest card swaps, other decks and a full three-deck loadout',
+    body: [
+      'Below the Suggestion, Pro accounts now see three more answers: a card or two to switch in the deck you picked and how much that moves your worst matchup, other decks that beat what they bring, and a full loadout of three decks that share no cards.',
+      'Every deck in them uses its evolution, hero and wild slots — a deck whose cards cannot fill all three is not suggested.',
+    ],
+  },
+  {
     id: '2026-09-27-coach-duels',
     date: '2026-09-27',
     kind: 'improved',

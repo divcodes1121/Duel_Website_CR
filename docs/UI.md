@@ -1266,9 +1266,10 @@ observed forms beside them read as observed. Wired on every strip that draws a
 suggestion: Team Analysis's rows and folder faces, the field plan board, the
 roster's Today board, `#/my`'s practice deck, the roster's Opponent tab and
 Coach Assist's options. An opponent's deck has no `artFilled` — it is drawn as
-fielded. `tests/deckSeating.test.ts` pins the per-card rule. Not yet reached:
-Coach Assist's admin-only tuner block (swaps, "bring this deck instead", the
-loadout) — `DECK_TUNER.md` §9.
+fielded. `tests/deckSeating.test.ts` pins the per-card rule. Coach Assist's
+tuner block (swaps, "bring this deck instead", the loadout) joined later the
+same day: its deck views carry `artFilled` and its strips pass it to the same
+`Strip`. That block is Pro and admin now (`isPaid`), not admin-only.
 
 ## The PDF's per-archetype table averages the lists (2026-09-27)
 

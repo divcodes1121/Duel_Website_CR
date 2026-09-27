@@ -676,12 +676,15 @@ and the earlier card, and hands them to `arrange_deck`, so its rules still
 hold; it returns `filled`, the cards whose form was not observed, which the
 rows publish as `artFilled`. Callers: every row `team_analysis._score` returns,
 `coach_daily`'s picks / families / closest / learn (its `seat_pick`), and
-`coach.suggest`'s options. Threats and opponents' decks stay as fielded.
+`coach.suggest`'s options, and every deck Coach Assist's tuner offers
+(`deck_tuner._offered`, since a screenshot caught one short). Threats and
+opponents' decks stay as fielded.
 `seated_positions(cards, art)` is the `slot_of` that keeps a re-seat from
 moving what is already in place. **A Deckkies pick is also drawn only from
 lists that can fill all three** (`fillable_slots(cards) == 3`): the scout pool
 skips and replaces, `_DuelContext` filters the catalogue, and `coach._fills`
-takes `full_loadout=True` for the player's own side. Counted as
+takes `full_loadout=True` for the player's own side; the tuner's `compose`
+pool and `rank` candidates skip such lists too (`skipped.slots`). Counted as
 `slots.poolSkipped` / `slots.duelSkipped` (Team Analysis) and `poolSlotSkipped`
 (field plan). `test_suggested_seating.py` (49) pins it.
 

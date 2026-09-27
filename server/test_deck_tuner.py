@@ -465,6 +465,43 @@ def main() -> int:
           all(x.get("name") and x["name"] != x["family"] for x in c["decks"]),
           str([(x.get("family"), x.get("name")) for x in c["decks"]]))
 
+    print("\nevery offered deck can field all three special slots (2026-09-27)")
+    # THE DECK A SCREENSHOT CAUGHT, offered as "Bridge Spam": Battle Ram and
+    # P.E.K.K.A evolutions with a PLAIN Bandit in slot 2. No card in it can be
+    # a hero and there is no champion, so slot 2 can never be special. It
+    # passes the composition veto and is given the best numbers in the pool,
+    # so only the slot rule can keep it out (proven: with `_full_loadout`
+    # removed from `compose`, the first check below fails).
+    NO_HERO = ["battle-ram", "bandit", "pekka", "electro-wizard",
+               "fireball", "royal-ghost", "skeleton-dragons", "zap"]
+    check("the fixture really cannot field a hero, and the veto passes it",
+          cd.fillable_slots(NO_HERO) == 2 and harmony.veto(NO_HERO) is None)
+    slot_pool = dict(pool)
+    slot_pool["bridge-spam"] = [seed(NO_HERO, 950, golem=90.0, balloon=90.0, xbow=90.0)]
+    cs = tuner.compose(archs, pool=slot_pool, veto=harmony.veto)
+    no_hero = ",".join(sorted(NO_HERO))
+    check("a list that cannot field three special slots is never composed, however strong",
+          no_hero not in [x["hash"] for x in cs["decks"]], str([x["hash"][:30] for x in cs["decks"]]))
+    check("the skip is counted", cs["skipped"].get("slots") == 1, str(cs["skipped"]))
+    check("and the rest of the list is exactly what it was",
+          [x["hash"] for x in cs["decks"]] == names)
+
+    def specials(view):
+        return sum(1 for card in view["cards"][:3]
+                   if (view.get("art") or {}).get(card) or cd.slot_kind(card) == "champion")
+
+    check("every composed deck fields all three special slots",
+          all(specials(x["view"]) == 3 for x in cs["decks"]),
+          str([(x["view"]["cards"][:3], x["view"].get("art")) for x in cs["decks"]]))
+    check("the deck and its view agree on the order",
+          all(x["deck"] == x["view"]["cards"] for x in cs["decks"]))
+    lo2 = tuner.loadout(archs, pool=slot_pool, veto=harmony.veto)
+    check("the loadout never takes that list either",
+          all(d["hash"] != no_hero for d in lo2["decks"]))
+    check("`_offered` fills what `_view` leaves plain; `_view` still draws a record as fielded",
+          specials(tuner._offered(ALLROUND)) == 3
+          and set(tuner._offered(ALLROUND)["cards"]) == set(ALLROUND))
+
     print("\nan empty pool is a SNAPSHOT problem, not 'no good decks'")
     c0 = tuner.compose(archs, pool={})
     check("an empty pool says so", c0["poolReady"] is False and c0["decks"] == [])

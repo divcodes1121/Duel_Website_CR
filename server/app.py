@@ -860,11 +860,12 @@ class Handler(BaseHTTPRequestHandler):
                 my_since, my_until = _window(q, cd.coverage(me))
                 opp_since, opp_until = (_window(q, cd.coverage(opp)) if opp
                                         else (None, None))
-                # CARD-LEVEL SWAPS ARE OPT-IN. They cost a full sibling scan
-                # over every stored deck hash, so this must never be on by
-                # default -- the client sends it only for an admin session,
-                # which is the staging shelf this project uses for a screen
-                # that has not been measured against real data yet.
+                # CARD-LEVEL SWAPS ARE OPT-IN. They cost a sibling scan over
+                # the stored deck hashes (1.4-2.4 s cold, measured), so this
+                # is never on by default -- the client sends it for PRO and
+                # admin sessions (`isPaid`, 2026-09-27; it was the admin
+                # staging shelf until it was measured and followed the
+                # three-slot rule).
                 #
                 # NO NEW ROUTE, deliberately: the tripwire in
                 # `test_api_security.py` stays at 21 and there is no second
