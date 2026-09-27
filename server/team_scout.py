@@ -220,6 +220,12 @@ EVIDENCE_WEIGHT = 2.0
 #: this cautious rather than break the request.
 SOURCE_STRENGTH = {
     "exact": 1.0,       # these two lists have actually played each other
+    # `matchup_fusion`: this list or its one-card variants against THIS exact
+    # threat or its variants, 8+ games of ladder and duels together. Below
+    # "exact" because most of it is variants rather than the two lists
+    # themselves; above "deck" because it is about the threat's version, not
+    # its archetype.
+    "version": 0.9,
     "deck": 0.85,       # this exact list, against that archetype
     "cluster7": 0.60,   # decks within one card of it
     "cluster6": 0.45,   # within two
@@ -724,12 +730,20 @@ def _threat_confidence(t: dict) -> str:
 # ── 3. Scoring one of OUR decks against the projection ──────────────────────
 
 
-def score(rate_for, threats, *, cards, archetype, fit_games=None) -> dict | None:
+def score(rate_for, threats, *, cards, archetype, fit_games=None,
+          rate_for_threat=None) -> dict | None:
     """One candidate deck against the whole projected threat space.
 
     `rate_for(archetype) -> {winRate, source, games, ...} | None` is
     `deck_counter.matchup_ladder`'s answer, handed in rather than imported —
     the caller owns the database and this module owns the arithmetic.
+
+    `rate_for_threat(threat) -> same | None`, when given, is asked INSTEAD, with
+    the whole threat row — its cards, not just its archetype — which is what
+    lets a rate differ between two Log Bait lists (`matchup_fusion`, Team
+    Analysis). Optional and keyword-only, because this function has a SECOND
+    CONSUMER (`coach_daily`) that calls it with archetype rates and must not
+    change behaviour because this one did.
 
     Returns None when NOTHING in the projection could be answered. That is a
     real state and it must not be rendered as 50%, which is what averaging over
@@ -751,7 +765,7 @@ def score(rate_for, threats, *, cards, archetype, fit_games=None) -> dict | None
     weighted_strength = 0.0
 
     for t in threats:
-        m = rate_for(t["archetype"])
+        m = rate_for_threat(t) if rate_for_threat is not None else rate_for(t["archetype"])
         like = float(t.get("likelihood") or 0.0)
         if not m or m.get("winRate") is None:
             rows.append({

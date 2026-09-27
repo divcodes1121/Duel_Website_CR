@@ -1264,6 +1264,16 @@ roster's Today board, `#/my`'s practice deck, the roster's Opponent tab and
 Coach Assist's options. An opponent's deck has no `artFilled` — it is drawn as
 fielded. `tests/deckSeating.test.ts` pins the per-card rule.
 
+## The PDF's per-archetype table averages the lists (2026-09-27)
+
+The Team Analysis dossier's "Why <deck> — the rung behind every archetype"
+table is one row per archetype. It used to print the leading list's rate, which
+was right while every list of an archetype carried one rate; the fused rate is
+per LIST now (`matchup_fusion`), so the row prints the likelihood-weighted mean
+of that archetype's lists and their games together — the same arithmetic as the
+screen's per-archetype chips. The screen itself did not change: the chips were
+already weighted. `tests/teamReport.test.ts` pins it.
+
 ## Working on this
 
 ```bash

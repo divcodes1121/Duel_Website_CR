@@ -923,5 +923,107 @@ try:
 finally:
     ta._duel_index, ta._duel = _saved_index, _saved_brain
 
+
+# ── the fused rate (`matchup_fusion`) ───────────────────────────────────────
+#
+# `matchup_fusion` decides and has its own suite; this checks the WIRING: a
+# hub candidate reads the version cells, a teammate's own list reads its own
+# ladder history, two lists of ONE archetype can score differently, and with
+# the module missing every rate is the ladder rung exactly as before.
+
+print(NL + "the fused rate")
+import matchup_fusion as mf  # noqa: E402
+
+FA = cards("fa")                                  # a candidate the cells cover
+FB = cards("fb")                                  # a teammate's own list, outside them
+T1 = cards("tx")                                  # a threat hub
+T2 = [c if c != "tx-7" else "ty-7" for c in T1]   # another list of the SAME archetype
+T3 = cards("tz")                                  # a threat nobody hubs
+PROFILES[_k(FA)] = {"xbow": {"winRate": 55.0, "games": 100, "wins": 55, "losses": 45,
+                             "tier": "high"}}
+PROFILES[_k(FB)] = {"xbow": {"winRate": 50.0, "games": 40, "wins": 20, "losses": 20,
+                             "tier": "high"}}
+_fx_hubs = {_k(FA), _k(T1), _k(T2)}
+_fx_cells = {_k(T1): {_k(FA): (40.0, 30.0, 20.0, 16.0, 5.0, 4.0, 0.0, 0.0)},
+             _k(T2): {_k(FA): (40.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)}}
+_fx_index = types.SimpleNamespace(
+    is_version_hub=lambda cs: _k(cs) in _fx_hubs,
+    version_cells=lambda cs: _fx_cells.get(_k(cs)),
+    _subs=dix._subs,
+    status=lambda: {"versionCells": 2},
+)
+_saved = (ta._duel_index, ta._fusion, ta._ladder_history)
+ta._duel_index = _fx_index
+ta._ladder_history = (lambda key: {_k(T1): [10, 9], _k(T3): [6, 1], _k(GOLEM): [50, 25]}
+                      if key == _k(FB) else None)
+try:
+    fx = ta._FusionContext(None, None)
+    fctx = types.SimpleNamespace(fx=fx)
+    card_a = ta._Candidate({"cards": FA, "winCondition": "hog", "name": "A"}, None,
+                           ta._DeckProfile(FA, "hog"))
+    card_b = ta._Candidate({"cards": FB, "winCondition": "hog", "name": "B", "matches": 30,
+                            "wins": 15, "winRate": 50.0},
+                           {"tag": "#B1", "name": "Ravi"}, ta._DeckProfile(FB, "hog"))
+    _fx_threats = [
+        {"key": "t1", "cards": T1, "archetype": "xbow", "likelihood": 0.4,
+         "evidence": ts.OBSERVED, "name": "X-Bow"},
+        {"key": "t2", "cards": T2, "archetype": "xbow", "likelihood": 0.4,
+         "evidence": ts.OBSERVED, "name": "X-Bow"},
+        {"key": "t3", "cards": T3, "archetype": "xbow", "likelihood": 0.2,
+         "evidence": ts.OBSERVED, "name": "X-Bow"},
+    ]
+    fx.prepare([card_a, card_b], _fx_threats)
+    row_a = ta._score(card_a, _fx_threats, None, fctx)
+    by = {m["threat"]: m for m in row_a["matchups"]}
+    want1 = mf.fused(None, arch_ladder=(100, 55), fam_ladder=(40, 30), fam_duel=(5, 4.0),
+                     ver_ladder=(20, 16), ver_duel=(0, 0.0))
+    check("a hub candidate against a threat hub reads the version cells",
+          by["t1"]["winRate"] == want1["winRate"] and by["t1"]["source"] == "version",
+          f"{by['t1']} want {want1}")
+    check("two lists of ONE archetype now score differently",
+          by["t1"]["winRate"] != by["t2"]["winRate"], f"{by['t1']['winRate']} {by['t2']['winRate']}")
+    want3 = mf.fused(None, arch_ladder=(100, 55))
+    check("a threat no hub covers is scored at the archetype levels only",
+          by["t3"]["winRate"] == want3["winRate"] and by["t3"]["source"] == "deck", str(by["t3"]))
+    check("every fused row carries the site's own confidence tier",
+          by["t1"]["tier"] in ("high", "medium", "low", None) and "interval" in by["t1"])
+    row_b = ta._score(card_b, _fx_threats, None, fctx)
+    byb = {m["threat"]: m for m in row_b["matchups"]}
+    want_b1 = mf.fused(None, arch_ladder=(40, 20), fam_ladder=(10, 9))
+    check("a teammate's own list reads its family level off its own history",
+          byb["t1"]["winRate"] == want_b1["winRate"], f"{byb['t1']} want {want_b1}")
+    want_b3 = mf.fused(None, arch_ladder=(40, 20), fam_ladder=(6, 1))
+    check("and it works against a threat no hub covers too",
+          byb["t3"]["winRate"] == want_b3["winRate"], f"{byb['t3']} want {want_b3}")
+    # T2 is T1 with one card changed, so T1 IS in T2's family: games against
+    # the neighbouring list are evidence about this one — the version level's
+    # whole point. (Its Golem games, in no threat's family, count nowhere: the
+    # t1 figure above is exactly 10 games.)
+    check("the list one card off a threat is in that threat's family",
+          byb["t2"]["winRate"] == want_b1["winRate"], f"{byb['t2']} want {want_b1}")
+    check("the context counts which level each rate came off",
+          fx.stats["version"] >= 1 and fx.stats["deck"] >= 1, str(fx.stats))
+    check("a rate asked twice is computed once",
+          ta._score(card_a, _fx_threats, None, fctx)["matchups"][0]["winRate"] == by["t1"]["winRate"])
+
+    # THE SWITCH-OFF PATH: no module, no fused rate — the ladder rung, exactly.
+    ta._fusion = None
+    off = ta._FusionContext(None, None)
+    check("with the module missing the context is off", not off.on)
+    row_off = ta._score(card_a, _fx_threats, None, types.SimpleNamespace(fx=off))
+    check("and every rate is the ladder rung it always was",
+          [m["winRate"] for m in row_off["matchups"]] == [55.0, 55.0, 55.0]
+          and all(m["source"] == "deck" for m in row_off["matchups"]),
+          str([m["winRate"] for m in row_off["matchups"]]))
+    row_none = ta._score(card_a, _fx_threats, None)
+    check("as it is with no context at all",
+          [m["winRate"] for m in row_none["matchups"]] == [55.0, 55.0, 55.0])
+finally:
+    ta._duel_index, ta._fusion, ta._ladder_history = _saved
+
+check("the report says which brain rated it",
+      (scout_rep.get("fusion") or {}).get("brain") == mf.FUSION_VERSION
+      and "sources" in scout_rep["fusion"], str(scout_rep.get("fusion")))
+
 print(f"{NL}{PASS} passed, {FAIL} failed{NL}")
 sys.exit(1 if FAIL else 0)

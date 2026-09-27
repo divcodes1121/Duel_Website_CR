@@ -132,6 +132,14 @@ RECORD_CACHE = 4096
 #: `duo_pairs` learned when Minion Giant shipped a commit ahead of the host.
 RETRYABLE = ("unknown_card",)
 
+#: Opponent lists whose family matches are remembered during one build of the
+#: version cells. A popular opponent turns up in hundreds of hubs' histories,
+#: and its eight subsets need looking up once, not once per hub.
+VCELL_MATCH_CACHE = 400_000
+
+#: Threat hubs whose version cells a reader keeps in memory, per build.
+VCELL_CACHE = 512
+
 
 def _dcx():
     # Imported late: `deck_counter` is heavy and only the classifier is needed.
@@ -455,6 +463,234 @@ SELECT d.id, o.wc, COUNT(*), SUM(s.won), SUM(s.exp)
 """
 
 
+# ── Version cells (`matchup_fusion`, 2026-09-27) ────────────────────────────
+#
+# The table behind the fused rate's two VERSION levels:
+#
+#   family   (V2)  this list  vs  the threat's one-card family
+#   version  (V4)  this list's one-card family  vs  the threat exactly
+#
+# each from the ladder (`pair_matchup_agg`, all time, as every ladder figure on
+# the site) and from the duels (this build's window, pilot-adjusted). Both
+# levels together took a temporal holdout from 0.6838 to 0.6798 log loss, and
+# where the threat is a popular list from 0.6773 to 0.6582 — the whole case is
+# in `matchup_fusion`'s docstring.
+#
+# HUBS, NOT EVERY LIST. Computing either level needs a list's whole opponent
+# history, which is a read of the 55 GB file per list: fine off the request
+# path for a few thousand lists, impossible on it for every candidate. So the
+# table covers the lists that come up on EVERY request:
+#
+#   candidate hubs  the duel catalogue + every counter-snapshot seed + the meta
+#                   board — the population Deckkies picks from
+#   threat hubs     the seeds + the board — what the threat projection is built
+#                   from, and where the holdout put the gain
+#
+# A teammate's own list is computed per request by `team_analysis` from its own
+# history, which is small; a threat that is nobody's hub gets the archetype
+# levels only, which the holdout measured as close to free (0.6864 -> 0.6858).
+#
+# ONE PASS OVER EACH HUB'S HISTORY FILLS BOTH LEVELS: as a candidate its
+# opponents in a threat's family are V2 evidence; as a threat its opponents in
+# a candidate's family are V4 evidence for that candidate.
+
+
+def _subs(key: str) -> list[str]:
+    """The eight 7-card subsets of a list, as strings — two lists share seven
+    cards exactly when they share one. Strings, not `sub7_hashes`: nothing here
+    leaves the build process, and a dict hashes a string for free."""
+    cards = key.split(",")
+    return [",".join(cards[:i] + cards[i + 1:]) for i in range(len(cards))]
+
+
+def _version_hubs(catalogue_keys) -> tuple[list[str], set[str]]:
+    """`(candidate hubs, threat hubs)`. Threat hubs are a subset of candidates."""
+    dcx = _dcx()
+    seeds = dcx.seeds() or {}
+    if not seeds:
+        try:
+            dcx._load_snapshot()
+            seeds = dcx.seeds() or {}
+        except Exception:  # noqa: BLE001 - no snapshot is a smaller table, not a failure
+            seeds = {}
+    threats = {deck_key(s.get("cards")) for lst in seeds.values() for s in lst
+               if len(set(s.get("cards") or [])) == 8}
+    try:
+        import meta as meta_board
+        board = meta_board.board()
+        if not board.get("decks"):
+            meta_board._load_snapshot()
+            board = meta_board.board()
+        threats |= {deck_key(d.get("cards")) for d in (board.get("decks") or [])
+                    if len(set(d.get("cards") or [])) == 8}
+    except Exception:  # noqa: BLE001
+        pass
+    cands = set(catalogue_keys) | threats
+    return sorted(cands), threats
+
+
+def _history(src: sqlite3.Connection, key: str) -> dict[str, list[int]]:
+    """`{opponent list: [games, this list's wins]}` from the ladder, both
+    sides of `pair_matchup_agg` folded (a row is stored once, either way round;
+    draws are not games here, as in every ladder rate on the site)."""
+    out: dict[str, list[int]] = {}
+    for opp, w, l in src.execute(
+            "SELECT deck_b, a_wins, a_losses FROM pair_matchup_agg WHERE deck_a = ?", (key,)):
+        r = out.get(opp)
+        if r is None:
+            out[opp] = [w + l, w]
+        else:
+            r[0] += w + l
+            r[1] += w
+    for opp, w, l in src.execute(
+            "SELECT deck_a, a_wins, a_losses FROM pair_matchup_agg WHERE deck_b = ?", (key,)):
+        r = out.get(opp)           # stored the other way round: our wins are a_losses
+        if r is None:
+            out[opp] = [w + l, l]
+        else:
+            r[0] += w + l
+            r[1] += l
+    return out
+
+
+def _build_vcells(con: sqlite3.Connection, source: str, catalogue_keys) -> dict | None:
+    """Write `vhub_new` and `vcell_new`. Run while `temp.sides` still holds the
+    window's pilot-adjusted duel sides. Returns counts, or None when there is
+    nothing to build — no counter snapshot means no threat hubs, and then the
+    last build's cells stay rather than being swapped for tables that were
+    never written."""
+    cands, threats = _version_hubs(catalogue_keys)
+    if not cands or not threats:
+        return None
+    hub_id = {k: i + 1 for i, k in enumerate(cands)}
+    cand_by_sub: dict[str, list[int]] = {}
+    threat_by_sub: dict[str, list[int]] = {}
+    for k, i in hub_id.items():
+        for s in _subs(k):
+            cand_by_sub.setdefault(s, []).append(i)
+            if k in threats:
+                threat_by_sub.setdefault(s, []).append(i)
+
+    none = ((), ())
+    cache: dict[str, tuple] = {}
+
+    def match(opp: str) -> tuple[tuple, tuple]:
+        """`(threat ids whose family holds opp, candidate ids whose family holds opp)`."""
+        hit = cache.get(opp)
+        if hit is None:
+            ts: set[int] = set()
+            cs: set[int] = set()
+            for s in _subs(opp):
+                ts.update(threat_by_sub.get(s, ()))
+                cs.update(cand_by_sub.get(s, ()))
+            hit = (tuple(ts), tuple(cs)) if ts or cs else none
+            if len(cache) < VCELL_MATCH_CACHE:
+                cache[opp] = hit
+        return hit
+
+    con.execute("DROP TABLE IF EXISTS temp.vparts")
+    con.execute("CREATE TEMP TABLE vparts(t INTEGER, c INTEGER, k INTEGER, n REAL, w REAL)")
+    parts: list[tuple] = []
+
+    def flush() -> None:
+        if parts:
+            con.execute("BEGIN")
+            con.executemany("INSERT INTO vparts VALUES (?,?,?,?,?)", parts)
+            con.execute("COMMIT")
+            parts.clear()
+
+    src = cd.connect(source)
+    try:
+        for key, cid in hub_id.items():
+            hist = _history(src, key)
+            # V2 — this list against every threat's family.
+            acc: dict[int, list[float]] = {}
+            for opp, (n, w) in hist.items():
+                for tid in match(opp)[0]:
+                    a = acc.get(tid)
+                    if a is None:
+                        acc[tid] = [n, w]
+                    else:
+                        a[0] += n
+                        a[1] += w
+            parts.extend((tid, cid, 0, n, w) for tid, (n, w) in acc.items())
+            # V4 — every candidate's family against THIS list, when it is a
+            # threat: the opponent's wins are this list's losses.
+            if key in threats:
+                acc = {}
+                for opp, (n, w) in hist.items():
+                    for c2 in match(opp)[1]:
+                        a = acc.get(c2)
+                        if a is None:
+                            acc[c2] = [n, n - w]
+                        else:
+                            a[0] += n
+                            a[1] += n - w
+                parts.extend((cid, c2, 1, n, w) for c2, (n, w) in acc.items())
+            if len(parts) >= WRITE_BATCH:
+                flush()
+    finally:
+        src.close()
+
+    # The duels, from this build's window, with who flew them taken out.
+    d2: dict[tuple, list[float]] = {}
+    d4: dict[tuple, list[float]] = {}
+    for deck, opp, won, exp in con.execute("SELECT deck, opp, won, exp FROM sides"):
+        adj = 0.5 + won - exp
+        cid = hub_id.get(deck)
+        if cid is not None:
+            for tid in match(opp)[0]:
+                a = d2.get((tid, cid))
+                if a is None:
+                    d2[(tid, cid)] = [1, adj]
+                else:
+                    a[0] += 1
+                    a[1] += adj
+        if opp in threats:
+            tid = hub_id[opp]
+            for c2 in match(deck)[1]:
+                a = d4.get((tid, c2))
+                if a is None:
+                    d4[(tid, c2)] = [1, adj]
+                else:
+                    a[0] += 1
+                    a[1] += adj
+    parts.extend((t, c, 2, n, w) for (t, c), (n, w) in d2.items())
+    parts.extend((t, c, 3, n, w) for (t, c), (n, w) in d4.items())
+    flush()
+    del d2, d4, cache
+
+    con.executescript(
+        """
+        DROP TABLE IF EXISTS vhub_new;
+        DROP TABLE IF EXISTS vcell_new;
+        CREATE TABLE vhub_new(id INTEGER PRIMARY KEY, key TEXT NOT NULL UNIQUE,
+                              threat INTEGER NOT NULL);
+        CREATE TABLE vcell_new(
+            t INTEGER NOT NULL, c INTEGER NOT NULL,
+            l2n REAL NOT NULL, l2w REAL NOT NULL, l4n REAL NOT NULL, l4w REAL NOT NULL,
+            d2n REAL NOT NULL, d2w REAL NOT NULL, d4n REAL NOT NULL, d4w REAL NOT NULL,
+            PRIMARY KEY (t, c)) WITHOUT ROWID;
+        """)
+    con.execute("BEGIN")
+    con.executemany("INSERT INTO vhub_new VALUES (?, ?, ?)",
+                    ((i, k, int(k in threats)) for k, i in hub_id.items()))
+    con.execute(
+        """
+        INSERT INTO vcell_new
+        SELECT t, c,
+               TOTAL(CASE k WHEN 0 THEN n END), TOTAL(CASE k WHEN 0 THEN w END),
+               TOTAL(CASE k WHEN 1 THEN n END), TOTAL(CASE k WHEN 1 THEN w END),
+               TOTAL(CASE k WHEN 2 THEN n END), TOTAL(CASE k WHEN 2 THEN w END),
+               TOTAL(CASE k WHEN 3 THEN n END), TOTAL(CASE k WHEN 3 THEN w END)
+          FROM vparts GROUP BY t, c
+        """)
+    con.execute("COMMIT")
+    cells = con.execute("SELECT COUNT(*) FROM vcell_new").fetchone()[0]
+    con.execute("DROP TABLE IF EXISTS temp.vparts")
+    return {"hubs": len(hub_id), "threats": len(threats), "cells": cells}
+
+
 def build(path: str | None = None, source: str | None = None, *, full: bool = False) -> dict:
     """Bring the index up to date. Returns a summary.
 
@@ -612,8 +848,26 @@ def build(path: str | None = None, source: str | None = None, *, full: bool = Fa
         con.executemany("INSERT INTO catalogue_new VALUES (?, ?)", recs)
         con.execute("COMMIT")
         n_rows = con.execute("SELECT COUNT(*) FROM deck_wc_new").fetchone()[0]
-        con.execute("DROP TABLE IF EXISTS temp.sides")
         t_agg = time.perf_counter() - t1
+
+        # 3b. The version cells (`matchup_fusion`), while `sides` still holds
+        # the window's duels. THIS STAGE MAY FAIL WITHOUT COSTING THE BUILD:
+        # the duel brain's own tables are already written, and a request with
+        # no version cells scores at the archetype levels, which is the fused
+        # rate minus its narrowest evidence — never a wrong one.
+        t_v = time.perf_counter()
+        try:
+            vstats = _build_vcells(con, source, [k for _, k, _ in cat])
+        except Exception as exc:  # noqa: BLE001
+            if con.in_transaction:
+                con.execute("ROLLBACK")
+            con.execute("DROP TABLE IF EXISTS vhub_new")
+            con.execute("DROP TABLE IF EXISTS vcell_new")
+            print(f"duel_index: version cells skipped: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            vstats = None
+        t_vcell = time.perf_counter() - t_v
+        con.execute("DROP TABLE IF EXISTS temp.sides")
 
         # 4. The swap.
         built_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -637,8 +891,16 @@ def build(path: str | None = None, source: str | None = None, *, full: bool = Fa
             "catalogue": str(len(recs)),
             "buildSeconds": f"{time.time() - started:.1f}",
         }
+        swap = ["deck", "deck_wc", "sub7", "catalogue"]
+        if vstats is not None:
+            # Only a stage that finished replaces the last build's cells; a
+            # failed one leaves them, stale by one build and consistent with
+            # their own hub ids.
+            swap += ["vhub", "vcell"]
+            stamp.update({"vhubs": str(vstats["hubs"]), "vthreats": str(vstats["threats"]),
+                          "vcells": str(vstats["cells"]), "vcellSeconds": f"{t_vcell:.1f}"})
         con.execute("BEGIN IMMEDIATE")
-        for t in ("deck", "deck_wc", "sub7", "catalogue"):
+        for t in swap:
             con.execute(f"DROP TABLE IF EXISTS {t}")
             con.execute(f"ALTER TABLE {t}_new RENAME TO {t}")
         con.executemany("INSERT OR REPLACE INTO meta(k, v) VALUES (?, ?)", stamp.items())
@@ -657,7 +919,9 @@ def build(path: str | None = None, source: str | None = None, *, full: bool = Fa
         "decks": n_decks,
         "rows": n_rows,
         "catalogue": len(recs),
+        "versionCells": vstats,
         "seconds": {"ingest": round(t_ingest, 1), "aggregate": round(t_agg, 1),
+                    "versionCells": round(t_vcell, 1),
                     "total": round(time.time() - started, 1)},
     }
 
@@ -666,8 +930,10 @@ def build(path: str | None = None, source: str | None = None, *, full: bool = Fa
 
 
 _lock = threading.Lock()
-_state: dict = {"buildId": None, "meta": {}, "checked": 0.0, "catalogue": None}
+_state: dict = {"buildId": None, "meta": {}, "checked": 0.0, "catalogue": None,
+                "vhubs": None, "vhub_keys": None}
 _cache: "OrderedDict[str, dict]" = OrderedDict()
+_vcache: "OrderedDict[str, dict]" = OrderedDict()
 
 
 def _ro(path: str) -> sqlite3.Connection:
@@ -693,7 +959,8 @@ def _current() -> dict | None:
             return _state["meta"] if _usable(_state["meta"]) else None
         _state["checked"] = now
         if not os.path.exists(PATH):
-            _state.update(buildId=None, meta={}, catalogue=None)
+            _state.update(buildId=None, meta={}, catalogue=None, vhubs=None, vhub_keys=None)
+            _vcache.clear()
             return None
         try:
             con = _ro(PATH)
@@ -702,11 +969,14 @@ def _current() -> dict | None:
             finally:
                 con.close()
         except sqlite3.Error:
-            _state.update(buildId=None, meta={}, catalogue=None)
+            _state.update(buildId=None, meta={}, catalogue=None, vhubs=None, vhub_keys=None)
+            _vcache.clear()
             return None
         if meta.get("buildId") != _state["buildId"]:
             _cache.clear()
-            _state.update(buildId=meta.get("buildId"), catalogue=None)
+            _vcache.clear()
+            _state.update(buildId=meta.get("buildId"), catalogue=None, vhubs=None,
+                          vhub_keys=None)
         _state["meta"] = meta
         return meta if _usable(meta) else None
 
@@ -782,6 +1052,74 @@ def catalogue() -> list[dict]:
     out.sort(key=lambda d: (-d["games"], d["key"]))
     with _lock:
         _state["catalogue"] = out
+    return out
+
+
+def _vhubs() -> dict[str, tuple[int, bool]]:
+    """`{list key: (hub id, is a threat hub)}` for the live build, loaded once
+    per build. Empty when the build has no version cells (an index written
+    before they existed, or a build whose stage failed) — a state, not an error."""
+    if _current() is None:
+        return {}
+    with _lock:
+        if _state["vhubs"] is not None:
+            return _state["vhubs"]
+    try:
+        con = _ro(PATH)
+        try:
+            rows = con.execute("SELECT id, key, threat FROM vhub").fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        rows = []
+    hubs = {k: (i, bool(t)) for i, k, t in rows}
+    with _lock:
+        _state["vhubs"] = hubs
+        _state["vhub_keys"] = {i: k for k, (i, _t) in hubs.items()}
+    return hubs
+
+
+def is_version_hub(cards) -> bool:
+    """Whether the version cells cover this list AS A CANDIDATE."""
+    return deck_key(cards) in _vhubs()
+
+
+def version_cells(threat_cards) -> dict[str, tuple] | None:
+    """`{candidate key: (l2n, l2w, l4n, l4w, d2n, d2w, d4n, d4w)}` against ONE
+    threat, or None when the threat is not a hub of this build.
+
+    `l2`/`d2` are the candidate against the threat's one-card family, `l4`/`d4`
+    the candidate's family against the threat exactly — games and wins from
+    the candidate's side, ladder then duel (duel wins pilot-adjusted). A
+    candidate hub missing from the dict has no evidence at either level, which
+    is a real answer: zero games. Cached per build.
+    """
+    key = deck_key(threat_cards)
+    hubs = _vhubs()
+    hit = hubs.get(key)
+    if not hit or not hit[1]:
+        return None
+    with _lock:
+        got = _vcache.get(key)
+        if got is not None:
+            _vcache.move_to_end(key)
+            return got
+        names = _state["vhub_keys"] or {}
+    try:
+        con = _ro(PATH)
+        try:
+            rows = con.execute(
+                "SELECT c, l2n, l2w, l4n, l4w, d2n, d2w, d4n, d4w FROM vcell WHERE t = ?",
+                (hit[0],)).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+    out = {names[r[0]]: tuple(r[1:]) for r in rows if r[0] in names}
+    with _lock:
+        _vcache[key] = out
+        while len(_vcache) > VCELL_CACHE:
+            _vcache.popitem(last=False)
     return out
 
 
@@ -863,6 +1201,11 @@ def status() -> dict:
         "windowTo": meta.get("windowTo"),
         "decks": num("decks"),
         "catalogue": num("catalogue"),
+        # The version cells behind `matchup_fusion`: absent (None) on a build
+        # written before they existed.
+        "versionHubs": num("vhubs"),
+        "versionThreats": num("vthreats"),
+        "versionCells": num("vcells"),
         "buildSeconds": float(meta["buildSeconds"]) if meta.get("buildSeconds") else None,
     }
 

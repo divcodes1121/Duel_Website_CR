@@ -1286,6 +1286,9 @@ SOURCE_ARCHETYPE = "archetype"  # archetype against archetype
 
 SOURCE_TEXT = {
     SOURCE_EXACT: "these two exact decks have met",
+    # `matchup_fusion`'s version levels (Team Analysis only). Not a rung this
+    # ladder walks — named here because every source a row can carry is.
+    "version": "this deck and its one-card variants against this exact list and its variants — ladder and duels",
     SOURCE_DECK: "this exact deck, against every deck of that archetype",
     SOURCE_C7: "decks one card different from this one",
     SOURCE_C6: "decks two cards different from this one",

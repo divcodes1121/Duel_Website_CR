@@ -492,9 +492,42 @@ def property_contract():
     check("the fit tiebreak is unchanged from team_analysis.COMFORT_WEIGHT",
           ts.FIT_WEIGHT == 1.5)
     check("every ladder source has a strength and the weakest is the default",
-          set(ts.SOURCE_STRENGTH) == {"exact", "deck", "cluster7",
+          set(ts.SOURCE_STRENGTH) == {"exact", "version", "deck", "cluster7",
                                       "cluster6", "archetype"}
           and ts.SOURCE_STRENGTH["exact"] > ts.SOURCE_STRENGTH["archetype"])
+    # `matchup_fusion`'s version level: about the threat's own list, so above
+    # the archetype-level "deck", and below two lists that met exactly.
+    check("a version-level rate ranks between an exact pairing and a deck rate",
+          ts.SOURCE_STRENGTH["exact"] > ts.SOURCE_STRENGTH["version"]
+          > ts.SOURCE_STRENGTH["deck"])
+
+    # rate_for_threat: asked INSTEAD of rate_for, with the whole threat row.
+    _seen = []
+
+    def _by_threat(t):
+        _seen.append(t["key"])
+        return {"winRate": 70.0 if t["key"] == "bait-a" else 40.0,
+                "games": 50, "source": "version"}
+
+    _two = [{"key": "bait-a", "archetype": "bait", "evidence": ts.OBSERVED,
+             "likelihood": 0.5},
+            {"key": "bait-b", "archetype": "bait", "evidence": ts.OBSERVED,
+             "likelihood": 0.5}]
+    _r = ts.score(lambda a: {"winRate": 55.0, "games": 50, "source": "deck"}, _two,
+                  cards=list("abcdefgh"), archetype="x", rate_for_threat=_by_threat)
+    check("two lists of ONE archetype can now score differently",
+          _r and [m["winRate"] for m in _r["matchups"]] == [70.0, 40.0],
+          str(_r and [m["winRate"] for m in _r["matchups"]]))
+    check("and the per-threat rate replaced the archetype rate entirely",
+          _r and _r["matchupValue"] == 55.0 and _seen == ["bait-a", "bait-b"],
+          str(_r and _r["matchupValue"]))
+    check("a version-level source earns the version strength",
+          _r and abs(_r["evidenceStrength"] - ts.SOURCE_STRENGTH["version"]) < 1e-9)
+    _old = ts.score(lambda a: {"winRate": 55.0, "games": 50, "source": "deck"}, _two,
+                    cards=list("abcdefgh"), archetype="x")
+    check("without rate_for_threat the archetype path is unchanged (coach_daily)",
+          _old and [m["winRate"] for m in _old["matchups"]] == [55.0, 55.0]
+          and _old["evidenceStrength"] == ts.SOURCE_STRENGTH["deck"])
     check("threats are capped so the scoring loop is bounded",
           ts.MAX_THREATS <= 12)
 

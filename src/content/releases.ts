@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-27-version-matchups',
+    date: '2026-09-27',
+    kind: 'improved',
+    title: 'Team Analysis rates every matchup against the exact list your opponent plays',
+    body: [
+      'Two Log Bait lists are not the same matchup, and now they are not rated as one. Every expected win rate on Team Analysis is worked out against each specific list the opponent is likely to bring — from how your deck and its one-card variants have done against that list and its variants — instead of against the deck type as a whole.',
+      'It also reads the ladder and real duels together as one number, instead of two brains side by side. How much each kind of game counts was measured against thousands of later duels, not chosen. Suggestions still mix your own decks with the strongest lists anyone plays, so where one list clearly beats an opponent, more of your squad may be pointed at it.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-09-27-full-loadout',
     date: '2026-09-27',
     kind: 'fixed',

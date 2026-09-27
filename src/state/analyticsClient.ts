@@ -2053,6 +2053,20 @@ export interface TeamReport {
     /** Decks with enough games and pilots to be offered to anyone. */
     catalogue?: number | null;
   };
+  /** THE FUSED RATE behind every matchup on this board (`matchup_fusion`):
+   *  the ladder and the duels as one rate per threat LIST, not per archetype.
+   *  `sources` counts how many rates came off each level — `version` is a rate
+   *  read at the threat's own list. `available: false` on a server without it;
+   *  absent on an older server. */
+  fusion?: {
+    available?: false;
+    brain?: string;
+    versionCells?: boolean;
+    sources?: Partial<Record<'version' | 'deck' | 'cluster7' | 'archetype' | 'none', number>>;
+  };
+  /** What the three-slot rule skipped: population lists that cannot fill all
+   *  three special slots. Absent on an older server. */
+  slots?: { poolSkipped?: number; duelSkipped?: number };
   /** Tags the server could not read, per side. Named so a paste can be fixed. */
   rejected: { blue: string[]; red: string[] };
   status: CounterStatus;

@@ -201,6 +201,29 @@ describe('teamAnalysisReport — the qualifications travel', () => {
     expect(JSON.stringify(xbow)).toContain('no evidence');
   });
 
+  it('averages the lists of one archetype, now that each list has its own rate', () => {
+    // The fused rate is per LIST (`matchup_fusion`), so two Log Bait lists can
+    // read 60% and 40%. The table is one row per archetype, so it prints their
+    // likelihood-weighted mean — the screen's own per-archetype arithmetic —
+    // and the games behind both, never just the leader's figure.
+    const top = rec('#B1', 'Ravi');
+    top.matchups = [
+      { archetype: 'log-bait', name: 'Log Bait', share: 30, likelihood: 0.3, winRate: 60,
+        source: 'version', games: 40, tier: 'medium' },
+      { archetype: 'log-bait', name: 'Log Bait', share: 10, likelihood: 0.1, winRate: 40,
+        source: 'version', games: 20, tier: 'low' },
+    ];
+    const doc = teamAnalysisReport(report({ folders: [folder('#R1', 'Mohamed', { recommended: [top] })] }));
+    const detail = doc.blocks.find(
+      (b) => b.kind === 'table' && (b.heading ?? '').startsWith('Why '),
+    );
+    if (detail?.kind !== 'table') throw new Error('no evidence table');
+    const bait = detail.rows.filter((r) => (r.arch as string) === 'Log Bait');
+    expect(bait).toHaveLength(1);
+    expect(JSON.stringify(bait[0])).toContain('55.0%');
+    expect(JSON.stringify(bait[0])).toContain('"60"');
+  });
+
   it('says a saved report is a snapshot, with the date it was run', () => {
     const doc = teamAnalysisReport(report(), { savedAt: '2026-08-01T10:00:00.000Z' });
     expect(doc.caveats?.[0]).toContain('SAVED analysis');

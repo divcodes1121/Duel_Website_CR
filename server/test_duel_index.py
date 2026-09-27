@@ -74,6 +74,19 @@ def gw(rec):
     return list(rec[:2]) if rec else rec
 
 
+# HERMETIC HUBS. The version-cell stage reads the counter snapshot's seeds and
+# the meta board; left alone it would load this checkout's real snapshot files.
+# No seeds and no board until the section that sets its own.
+import deck_counter as dcx_mod  # noqa: E402
+import meta as meta_mod  # noqa: E402
+
+_orig_seeds, _orig_dload = dcx_mod.seeds, dcx_mod._load_snapshot
+_orig_board, _orig_mload = meta_mod.board, meta_mod._load_snapshot
+dcx_mod.seeds = lambda: {}
+dcx_mod._load_snapshot = lambda: None
+meta_mod.board = lambda: {"decks": []}
+meta_mod._load_snapshot = lambda: None
+
 TMP = tempfile.mkdtemp(prefix="duelidx-")
 BOT = os.path.join(TMP, "bot.db")
 IDX = os.path.join(TMP, "duel.db")
@@ -239,6 +252,94 @@ try:
     di._state["checked"] = 0.0
     check("and is served again for its own", di.available())
 
+    print("\n-- Version cells --")
+    check("a build with no seeds writes no version cells, and says so",
+          out.get("versionCells") is None and di.status()["versionCells"] is None,
+          str(out.get("versionCells")))
+    k = di.deck_key
+    BAIT_N = [c if c != "knight" else "valkyrie" for c in BAIT]            # one card off Bait
+    BAIT_2 = [c if c not in ("knight", "rocket") else
+              ("valkyrie" if c == "knight" else "poison") for c in BAIT]   # two cards off
+    STRAY_A = ["x-bow", "tesla", "archers", "knight", "the-log", "electro-spirit",
+               "skeletons", "fireball"]
+    STRAY_B = ["lava-hound", "balloon", "minions", "mega-minion", "arrows",
+               "inferno-dragon", "tombstone", "zap"]
+    dcx_mod.seeds = lambda: {"bait": [{"cards": BAIT}], "golem": [{"cards": GOLEM}]}
+    out = di.build(IDX, BOT)
+    check("threat hubs but no ladder table: the stage is skipped, the build is not",
+          out.get("versionCells") is None and di.available(), str(out.get("versionCells")))
+    bot.execute("CREATE TABLE pair_matchup_agg(deck_a TEXT, deck_b TEXT, a_wins INTEGER, "
+                "a_losses INTEGER, a_draws INTEGER, games INTEGER, PRIMARY KEY (deck_a, deck_b))")
+    ladder = [
+        (MORTAR, BAIT, 20, 10),      # Mortar 20-10 against Bait itself
+        (BAIT_N, MORTAR, 7, 3),      # stored the other way round: Mortar 3-7 against a Bait variant
+        (BAIT_2, MORTAR, 0, 50),     # two cards off Bait: NOT Bait's family
+        (HOG, BAIT, 8, 12),          # Hog 8-12 against Bait
+        (HOG_N, BAIT, 9, 3),         # a Hog variant 9-3 against Bait
+        (GOLEM, BAIT_N, 6, 2),       # Golem 6-2 against a Bait variant
+        (STRAY_A, STRAY_B, 40, 40),  # two lists no hub is near
+    ]
+    bot.executemany("INSERT INTO pair_matchup_agg VALUES (?,?,?,?,0,?)",
+                    [(k(a), k(b), w, l, w + l) for a, b, w, l in ladder])
+    bot.commit()
+    out = di.build(IDX, BOT)
+    vs = out.get("versionCells") or {}
+    check("hubs are the catalogue plus the seeds; threats are the seeds",
+          vs.get("hubs") == 4 and vs.get("threats") == 2, str(vs))
+    di._state["checked"] = 0.0
+    st = di.status()
+    check("status publishes the version cells",
+          st["versionHubs"] == 4 and st["versionThreats"] == 2 and st["versionCells"] == vs.get("cells"),
+          str(st))
+    check("a catalogue list is a candidate hub", di.is_version_hub(MORTAR))
+    check("a list nobody hubs is not", not di.is_version_hub(STRAY_A))
+    check("a list that is not a THREAT hub has no cells to be scored against",
+          di.version_cells(MORTAR) is None)
+    vb = di.version_cells(BAIT)
+    mb = vb.get(k(MORTAR)) if vb else None
+    check("Mortar vs Bait's family: Bait 20-10 plus the variant 3-7, not the list two cards off",
+          mb is not None and mb[0] == 40 and mb[1] == 23, str(mb))
+    check("Mortar's family vs Bait exactly: 20-10", mb is not None and mb[2] == 30 and mb[3] == 20,
+          str(mb))
+    hb = vb.get(k(HOG)) if vb else None
+    check("Hog vs Bait's family: 8-12", hb is not None and hb[0] == 20 and hb[1] == 8, str(hb))
+    check("Hog's family vs Bait: Hog 8-12 plus its variant 9-3",
+          hb is not None and hb[2] == 32 and hb[3] == 17, str(hb))
+    gb = vb.get(k(GOLEM)) if vb else None
+    check("Golem vs Bait's family counts the variant it beat 6-2",
+          gb is not None and gb[0] == 8 and gb[1] == 6 and gb[2] == 0, str(gb))
+    vg = di.version_cells(GOLEM)
+    bg = vg.get(k(BAIT)) if vg else None
+    check("Bait's family vs Golem: the Bait variant lost 2-6, from Bait's side",
+          bg is not None and bg[2] == 8 and bg[3] == 2, str(bg))
+    # The duels: every Mortar-Bait game in the window (13, with the one the
+    # incremental section added), Hog beat Golem 6 of 12, and the two Hog
+    # variants won their single games against Golem.
+    # (A record rounds its expected result to 2 dp; a cell sums it unrounded,
+    # so the two agree to within that rounding, not to the last digit.)
+    rm = di.records(MORTAR)["exact"]["bait"]
+    check("Mortar's duels vs Bait's family: every window game, pilot-adjusted wins",
+          mb is not None and rm[0] == 13 and mb[4] == rm[0]
+          and abs(mb[5] - (rm[0] / 2 + rm[1] - rm[2])) < 0.01, f"{mb} {rm}")
+    check("and the same games as Mortar's family vs Bait", mb is not None and mb[6] == mb[4]
+          and abs(mb[7] - mb[5]) < 1e-6, str(mb))
+    hg = vg.get(k(HOG)) if vg else None
+    r_h = di.records(HOG)["exact"]["golem"]
+    r_n = di.records(HOG_N)["exact"]["golem"]
+    r_x = di.records(HOG_X)["exact"]["golem"]
+    want = (6 + 6 - r_h[2]) + (0.5 + 1 - r_n[2]) + (0.5 + 1 - r_x[2])
+    check("Hog's family vs Golem in duels: Hog's 12 and both one-card variants' single games",
+          hg is not None and hg[6] == 14 and abs(hg[7] - want) < 0.02, str(hg))
+    check("while Hog alone vs Golem's family is its own 12",
+          hg is not None and hg[4] == 12, str(hg))
+    check("no cell anywhere names a list no hub is near",
+          all(k(STRAY_A) not in (di.version_cells(t) or {}) for t in (BAIT, GOLEM)))
+    rebuilt = di.build(IDX, BOT)
+    di._state["checked"] = 0.0
+    check("a rebuild gives the same cells", (rebuilt.get("versionCells") or {}).get("cells")
+          == vs.get("cells") and (di.version_cells(BAIT) or {}).get(k(MORTAR)) == mb)
+    dcx_mod.seeds = lambda: {}
+
     print("\n-- Pilot strength --")
     # One pilot who wins every duel, with both decks, against ten opponents
     # who lose every game. Their X-Bow deck is 10-0 — and the index must
@@ -291,6 +392,8 @@ try:
 finally:
     cd._tier_paths = _orig_tiers
     di.PATH = _orig_path
+    dcx_mod.seeds, dcx_mod._load_snapshot = _orig_seeds, _orig_dload
+    meta_mod.board, meta_mod._load_snapshot = _orig_board, _orig_mload
     shutil.rmtree(TMP, ignore_errors=True)
 
 print(f"\n{PASS} passed, {FAIL} failed")

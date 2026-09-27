@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Team Analysis rates every matchup against the opponent's exact list, from the ladder and the duels as one number** | **2026-09-27.** Asked for directly: *"log bait has so many versions, each card brings the matchup up and down, and it's just using one deck"* and *"the prediction should use the ranked matchups and the duel rows both, collaboratively, then weight them"*. Both were true: `team_scout.score` asked for one rate per ARCHETYPE, and the ladder and the duels were two brains side by side. `server/matchup_fusion.py` (pure) is one shrinkage chain — archetype matrix, the list's one-card variants, the list vs the archetype, the list vs the threat's one-card family, the list's family vs the exact threat — with a duel game worth four ladder games; **every constant fitted on a temporal holdout of real duel games, log loss 0.6873 (the engine that shipped) -> 0.6793 on 10,839 unseen games, and 0.6773 -> 0.6582 where the threat is a popular list**. The version levels come from a new table in the duel index's 4-hourly build (**1,164,864 cells**, 2,189 candidate lists x 680 threat lists, 44-64 s), a teammate's own lists from their own ladder history per request. Live: most rates read at the threat's own list, warm reads 0.45-0.98 s. Honest trade: where one list clearly beats an opponent the squad plan now shares it (distinct #1s 8/14 -> 6/14 on 14 real folders) — e.g. a Bait list at **84.4% over 201 games against that opponent's own Miner list**. See [One matchup rate from the ladder and the duels, at the version](#one-matchup-rate-from-the-ladder-and-the-duels-at-the-version-matchup_fusion-2026-09-27) |
 | **Every deck Deckkies suggests fields all three special slots** | **2026-09-27.** Asked for directly: *"make sure the 3 slots are correctly utilised with evo, champs, heroes — the suggestion by Deckkies must fill those correctly, right now it skips an evo, champ or hero"*. Two faults, both measured on the live service. **Seating:** a suggested deck was drawn the way someone had FIELDED it, so a capable card nobody was seen fielding stayed plain — live, a teammate's own list came back Bats evolution / Little Prince / a PLAIN Cannon in the wild slot. `clash_data.complete_seating` now draws every suggestion with the most special slots its cards can fill, keeping every observed form that costs no slot, on Team Analysis (own decks, Deckkies picks, duel picks, the scouting report), the coach's field plan and Coach Assist. **Composition:** a Deckkies pick is now drawn only from lists whose cards CAN fill all three — 21 of 680 seeds and 99 of 1,972 duel-catalogue lists cannot (no hero card and no champion, say); the next list of that archetype takes the place, and the skip is counted in the payload. A teammate's own deck is never dropped. Opponents' decks stay drawn as fielded, because that is a record, not advice. Staged on the VPS against production data: 0 suggestion rows drawn short across all three screens. A filled form says so in the card's tooltip. See [A suggestion fields every slot its cards can fill](#a-suggestion-fields-every-slot-its-cards-can-fill-2026-09-27) |
 | **Team Analysis reads real duels — a second brain** | **2026-09-27.** Asked for directly: search the duels for decks that beat the win conditions the opponent brings, notice a teammate's own decks that do, keep only the strong ones, and put them in the seven. `server/duel_index.py` reads every native duel game out of `battle_raw`'s round-by-round payloads (**332,723 games** from 137,427 duels) into its own file, every four hours; `server/duel_brain.py` (pure) scores each deck against each win condition, takes the pilots' own strength out, and shrinks toward 50/50 by 30 games — **fitted on a temporal holdout, where the decks it calls strong went on to win 60.6% of unseen duels and it printed 60.6%**. Two of each teammate's seven are held for duel-proven decks, their own first, shared out across the squad; every row with evidence shows `Duel 61.5% · 1,571`. On 15 real folders: picks in all 15, 97 picks, 390 of 525 rows with a duel figure, +0.3–0.6 s a board. 73/73 in a browser. See [A second brain that reads real duels](#a-second-brain-that-reads-real-duels-duel_brain-2026-09-27) |
 | **PDF reports, rebuilt** | **LIVE 2026-09-26 (`61e6a14`)** — `/api/health` reported it ~60 s after the push; the served main bundle carries the new button, menu and release note and none of the old print button's strings, the lazy engine chunk has zero `setGState`, and the three report fonts serve (24/24/18 kB). Every PDF — analytics screens, the new full player report, the Team Analysis dossier, 2v2 Decks and the builder's deck report — is drawn by one rewritten engine in `src/utils/report/`: always dark, Deckkies-branded, cards in slots at the site's size, a working **Open in game** button on every deck, zero transparency states. The shell's Export PDF used to `window.print()` the glass UI — **2.5–8.6 MB and 175–229 ms a page to paint against 0.26–1.5 MB and 14–25 ms now**, same run, same data. One Export button per screen through `state/reportExport.ts`; on a player it offers **This page** (every tab) or **Full player report** (every allowed section, one document with contents). Recent Battles, Deck Counter, Coach Assist, 2v2 and Global Cards export for the first time; the button no longer vanishes below 1080px. **Follow-up the same hour:** every export failed in tabs opened before a deploy (the build id was compiled into the engine chunk, renaming it on every commit) — the id moved to an `index.html` meta tag and stale tabs now get **Reload to export**; see the PDF chapter. 983 vitest (+64), 14/14 UI checks, every export rendered and looked at. See [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf) |
@@ -109,7 +110,7 @@ bot's SQLite files read-only.
 | Coach Assist — Suggestion | **personal and archetype-by-archetype (2026-09-25, live).** "Or bring one of these" is chosen per player from their playstyle (12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition), and every deck shows its rate against **five** archetypes — their likely ones, their other win conditions, then the meta — on one line |
 | R3 prediction sampler | **STOPPED 2026-09-19 21:05 UTC** by its own stop condition (a royalweb restart during a deploy), ~8 h into 7 days; found 2026-09-25, not restarted per protocol. Re-running needs a deploy freeze or an amendment — the account holder's call. See `server/README.md` |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **3,280 Python checks** across **57 suites** and **1,026 vitest** across 39 files as of 2026-09-27 night, **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **3,351 Python checks** across **58 suites** and **1,027 vitest** across 39 files as of 2026-09-27 night, **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -8632,6 +8633,131 @@ Tests: `test_duel_brain.py` 83, `test_duel_index.py` 41 (synthetic
 plan), `test_team_analysis.py` 119 → 142 (the wiring, against a fake index),
 `duelFigures.test.ts` 5 and 2 PDF checks. **73/73 in a browser** on a real
 staged payload (both themes, 1440 and 390, the PDF exported and read back).
+
+### One matchup rate from the ladder and the duels, at the version (`matchup_fusion`, 2026-09-27)
+
+**Asked for directly**, the same day the duel brain shipped: *"log bait has so
+many versions, each card brings the matchup up and down, and it's just using
+one deck and using it all"*, and *"the prediction mechanism should use all the
+non-duel ranked matchups and the duel rows both, collaboratively, and then
+weight them"*. Both described the engine exactly. `team_scout.score` asked for
+ONE rate per archetype of the threat, so every Log Bait list an opponent might
+bring was the same number; and the ladder brain and the duel brain were printed
+side by side and never combined.
+
+**`server/matchup_fusion.py`** is the combination — pure, no imports, every
+rule tested against literals. One shrinkage chain, each level pulling its
+evidence toward the estimate above it:
+
+| level | evidence | prior weight |
+|---|---|---:|
+| p0 | the archetype matrix (win condition vs win condition) | — |
+| p0' | this list's one-card VARIANTS vs the threat's archetype (the ladder's `cluster7` rung, the list itself taken out) | K = 10 |
+| p1 | this list vs the threat's archetype — ladder, plus its pilot-adjusted duel record | K = 100 |
+| p2 | this list vs the threat's one-card FAMILY | K = 30 |
+| p3 | this list's family vs the threat EXACTLY | K = 30 |
+
+and at every level **one duel game counts four ladder games**.
+
+**NOTHING THERE WAS CHOSEN.** Every constant was fitted on a temporal holdout
+of real duel games — train before 2026-09-13, fitted on the week after,
+reported on the week after that, 10,839 held-out games. Log loss, lower is
+better:
+
+| predictor | all games | threat is a popular list | 10+ version-level games |
+|---|---:|---:|---:|
+| ladder list vs archetype — the engine that shipped | 0.6873 | — | — |
+| fused at the archetype level (p1) | 0.6838 | 0.6773 | 0.6760 |
+| + list vs the threat's family (p2) | 0.6814 | 0.6655 | 0.6650 |
+| + the list's family vs the exact threat (p3) | 0.6798 | 0.6582 | 0.6587 |
+| + the variants prior (p0') | 0.6793 | | |
+
+**THE MODULE'S OWN CODE WAS RUN ON THOSE ROWS**, not a re-implementation: its
+`fused()` scored 0.6798 on the same games, exactly the research figure, before
+p0' was added. Three things the holdout settled, so nobody re-litigates them:
+
+* **The exact pairing is not its own level.** Fitted alone it wanted K = 1000,
+  almost no weight — the exact pair is too sparse to beat the family it sits
+  in. It is counted inside both family levels instead.
+* **A hub proxy loses a sixth of the gain.** Standing each threat in for its
+  nearest popular list scored 0.6818 against the true family's 0.6814, so the
+  families are read, not approximated.
+* **The variants prior matters a little and it is the ladder's own rung.**
+  Leaving it out would have been a small regression — the engine that shipped
+  already used `cluster7` for a thin list — hiding inside a large improvement.
+
+**WHERE THE EVIDENCE COMES FROM.** Both version levels need a list's WHOLE
+opponent history, a read of the 55 GB database per list — fine off the request
+path for a few thousand lists, impossible on it for every candidate. So the
+duel index's 4-hourly build gained a **version-cell** stage: for every
+candidate hub (the duel catalogue, every counter-snapshot seed, the meta board)
+against every threat hub (the seeds and the board — what the threat projection
+is built from, and where the holdout put the gain), both levels from the ladder
+(`pair_matchup_agg`, all time) and from the window's pilot-adjusted duels. ONE
+pass over each hub's history fills both levels. Live: **2,189 candidate lists x
+680 threat lists, 1,164,864 cells, 44-64 s**, the build 91-115 s in all.
+**A teammate's own list** is outside the cells; its family level is computed per
+request from its own ladder history (small, read on the shared pool, cached an
+hour). **A threat nobody hubs** gets the archetype levels only, which the
+holdout measured as nearly free (0.6864 -> 0.6858).
+
+**IT CANNOT MAKE THINGS WORSE THAN THEY WERE BY BEING ABSENT.** No version
+cells (an old index, a failed stage) scores at the archetype levels — the fused
+rate minus its narrowest evidence, never a wrong one. No `matchup_fusion`
+module scores exactly as before, which a test pins. The stage may fail without
+costing the duel brain its build.
+
+**`team_scout.score` gained `rate_for_threat`** — asked instead of `rate_for`,
+with the whole threat row. Keyword-only and optional, because `coach_daily`
+calls `score()` with archetype rates and does not change because Team Analysis
+did (its suite is unchanged at 204). A new source name, `version` (strength
+0.9, between an exact pairing and a deck rate), and `deck_counter.SOURCE_TEXT`
+names it for the PDF. The report publishes `fusion: {brain, versionCells,
+sources}` — `sources.version` is how many threat rates were read at the
+threat's own list.
+
+**MEASURED, production code against staged code, the same 14 real folders
+(6 squads, one scouting report), each run twice:**
+
+| | the engine that shipped | fused |
+|---|---:|---:|
+| folders where every teammate has a different #1 | 8 / 14 | 6 / 14 |
+| distinct decks across the teammates' lists | 220 / 385 | 206 / 385 |
+| rows that are a teammate's own deck | 62 | 51 |
+| archetypes the squad's #1s answer | 83 / 83 | 83 / 83 |
+| warm time, the six boards | 10.0 / 2.1 / 2.4 / 1.2 / 2.5 / 0.7 s | 9.6 / 2.1 / 3.6 / 1.7 / 1.8 / 0.9 s |
+
+**THE HONEST TRADE IS THE FIRST ROW.** The squad plan gives teammates different
+#1s only among options the evidence cannot separate (`PRIMARY_BAND`, 3 points),
+and the fused rate separates more often — both because a teammate's thin
+record is now shrunk toward the matrix the way the holdout says it should be,
+and because version-level evidence finds real counters. The folder that went
+from distinct to shared is the clearest case: a Bait list at **84.4% over 201
+version-level games against the opponent's own Miner list** and 79.1% over 95
+against its variant, where Miner is 70% of what that opponent brings. Every
+teammate is pointed at it, and the rest of each list still differs. The band
+was NOT re-tuned: it is a separate product decision, and "one list clearly
+beats this opponent" is exactly the case it was written to share.
+
+**THE PDF's per-archetype evidence table averages now.** It kept the leading
+list's rate for each archetype, which was right while every list carried the
+same one; it prints the likelihood-weighted mean of that archetype's lists and
+their games together — the screen's own per-archetype arithmetic
+(`team_scout.vs_archetypes`).
+
+**Traps hit, both already in this project's notes:** a staged `deck_counter.py`
+in `/tmp` looks for `.counter_snapshot.json` beside ITSELF, so the first staged
+build had 50 threat hubs instead of 680 — copy the snapshot too; and a script
+run from the staging directory imports the staged modules FIRST (a script's own
+directory leads `sys.path`), so the first "production" baseline was the staged
+code — run the baseline from a directory holding nothing else.
+
+Tests: `test_matchup_fusion.py` 34 (the arithmetic, the fitted constants, the
+keyword-only guard — its own first draft passed family evidence into the duel
+slot), `test_duel_index.py` 41 -> 60 (hand-computed cells on a synthetic
+ladder, both storage directions, a list two cards off excluded, a failed stage
+not costing the build), `test_team_scout.py` 155 -> 160, `test_team_analysis.py`
+150 -> 163, one vitest for the PDF table.
 
 ### Every teammate gets their own #1, chosen as a squad (`squad_plan`, brain 2.1, 2026-09-25)
 

@@ -508,6 +508,22 @@ carries `slots: {poolSkipped, duelSkipped}`. Threats and `theirDecks` are drawn
 as fielded. This changes no score: seating is presentation, and the filter
 only removes candidates.
 
+## 4i. One fused rate per threat LIST, from the ladder and the duels (2026-09-27)
+
+`score()` gained an optional keyword `rate_for_threat(threat)`, asked instead
+of `rate_for(archetype)` with the whole threat row — what lets two lists of
+one archetype score differently. Team Analysis passes
+`_FusionContext.rater(card)` (`matchup_fusion.fused` over the matrix, the
+list's variants, its archetype record plus pilot-adjusted duels, and the two
+version levels from the duel index's version cells); `coach_daily` passes
+nothing and is unchanged (204/204). `SOURCE_STRENGTH` gained `version` (0.9).
+Every constant is fitted on a temporal duel holdout (0.6873 -> 0.6793 log
+loss). `PRIMARY_BAND` was NOT re-tuned, and the consequence is measured: every
+teammate's #1 distinct in 8/14 real folders before, 6/14 after, because the
+fused rate separates a clear counter more often — the case the band was
+written to share. See the README section "One matchup rate from the ladder and
+the duels, at the version".
+
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
 Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it

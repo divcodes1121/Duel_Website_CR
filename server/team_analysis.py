@@ -117,7 +117,10 @@ from __future__ import annotations
 
 import datetime
 import os
+import threading
+import time
 import traceback
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
 import clash_data as cd
@@ -142,6 +145,14 @@ except Exception:  # noqa: BLE001 - deployment shape
 #: is copied by hand, and a deployment missing either file must cost the duel
 #: evidence and nothing else. Without them every list is exactly what the
 #: ladder brain made it, and the report says the duel brain is unavailable.
+try:
+    # THE FUSED RATE (2026-09-27): the ladder and the duels as one matchup rate,
+    # at the level of the threat's version. Pure arithmetic; soft like the duel
+    # brain, so a deployment without it scores exactly as before.
+    import matchup_fusion as _fusion
+except Exception:  # noqa: BLE001
+    _fusion = None
+
 try:
     import duel_brain as _duel
     import duel_index as _duel_index
@@ -570,6 +581,28 @@ class _DeckProfile:
         self.overall = (exact.get("overall")
                         or c7.get("overall") or c6.get("overall"))
 
+    def exact_record(self, other: str) -> tuple[int, int] | None:
+        """`(decided games, wins)` of THIS list against an archetype, from the
+        exact rung (8+ games, the site's floor), for `matchup_fusion`."""
+        m = self._exact.get(other)
+        if not m:
+            return None
+        w, l = int(m.get("wins") or 0), int(m.get("losses") or 0)
+        return (w + l, w) if w + l else None
+
+    def cluster_record(self, other: str) -> tuple[int, int] | None:
+        """`(decided games, wins)` of this list's ONE-CARD VARIANTS against an
+        archetype — the `cluster7` rung with the list itself taken out, so the
+        same games are not counted at two levels of `matchup_fusion`."""
+        c = self._c7.get(other)
+        if not c:
+            return None
+        e = self._exact.get(other) or {}
+        w = int(c.get("wins") or 0) - int(e.get("wins") or 0)
+        n = (int(c.get("wins") or 0) + int(c.get("losses") or 0)
+             - int(e.get("wins") or 0) - int(e.get("losses") or 0))
+        return (n, max(0, min(w, n))) if n > 0 else None
+
     def against(self, other: str, snap: dict | None) -> dict | None:
         """This deck versus one archetype, narrowest evidence first.
 
@@ -629,6 +662,18 @@ class _SeedProfile:
                       for r in self._records.values())
         self.overall = ({"winRate": round(100 * wins / decided, 1),
                          "games": games} if decided else None)
+
+    def exact_record(self, other: str) -> tuple[int, int] | None:
+        m = self._records.get(other)
+        if not m:
+            return None
+        w, l = int(m.get("wins") or 0), int(m.get("losses") or 0)
+        return (w + l, w) if w + l else None
+
+    def cluster_record(self, other: str) -> None:
+        # A seed carries no cluster (see the class note), so its variants are
+        # simply not read — the fused rate's prior is then the matrix.
+        return None
 
     def against(self, other: str, snap: dict | None) -> dict | None:
         m = self._records.get(other)
@@ -902,7 +947,8 @@ def _comfort(games: int) -> float:
     return COMFORT_WEIGHT * min(1.0, games / COMFORT_FULL)
 
 
-def _score(card: _Candidate, threats: list[dict], snap: dict | None) -> dict | None:
+def _score(card: _Candidate, threats: list[dict], snap: dict | None,
+           ctx: "_DuelContext | None" = None) -> dict | None:
     """One candidate against a whole projected threat space.
 
     `threats` IS EITHER. A `_spread()` row carries `likelihood` and `evidence`
@@ -923,6 +969,11 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None) -> dict | N
     real state on a thin database and it must not be rendered as 50.0%, which
     is what averaging over an empty set produces.
     """
+    # THE FUSED RATE, when this request has one: the ladder and the duels as
+    # one number per THREAT, not per archetype, so two Log Bait lists an
+    # opponent might bring can score differently (`_FusionContext`). Without
+    # it the ladder rung `against` walks is the rate, exactly as before.
+    fx = getattr(ctx, "fx", None) if ctx is not None else None
     base = scout.score(
         lambda arch: card.against(arch, snap),
         threats,
@@ -933,6 +984,7 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None) -> dict | N
         # at; publishing a zero would state that somebody has piloted it none
         # of the time, which is a claim about a roster that was never pasted.
         fit_games=card.games if card.owner else None,
+        rate_for_threat=fx.rater(card) if fx is not None and fx.on else None,
     )
     if base is None:
         return None
@@ -1037,6 +1089,9 @@ class _DuelContext:
         self._profiles: dict[str, "_DeckProfile | None"] = {}
         self._decks: dict[tuple, list[dict]] = {}
         self._seat = None
+        # The fused rate's per-request state (`_FusionContext`), set by
+        # `analyze`. On the duel context because every scorer already has it.
+        self.fx: "_FusionContext | None" = None
 
     def prefetch(self, decks) -> None:
         """Duel records for many lists at once, on the shared pool."""
@@ -1103,6 +1158,205 @@ class _DuelContext:
         return self._seat(list(cards))
 
 
+# ── The fused rate (`matchup_fusion`, 2026-09-27) ───────────────────────────
+
+#: Ladder opponent histories of lists OUTSIDE the version cells — in practice a
+#: teammate's own lists — kept between requests. A history moves only as fast
+#: as the bot writes, and the cells beside it are rebuilt every four hours, so
+#: an hour is the same order of staleness.
+HISTORY_CACHE = 1024
+HISTORY_TTL_S = 3600.0
+_HISTORY: "OrderedDict[str, tuple[float, dict]]" = OrderedDict()
+_HISTORY_LOCK = threading.Lock()
+
+
+def _ladder_history(key: str) -> dict | None:
+    """`{opponent list: [games, this list's wins]}` off `pair_matchup_agg`,
+    cached. None when there is no database or the read fails."""
+    now = time.monotonic()
+    with _HISTORY_LOCK:
+        hit = _HISTORY.get(key)
+        if hit is not None and now - hit[0] < HISTORY_TTL_S:
+            _HISTORY.move_to_end(key)
+            return hit[1]
+    path = (cd._tier_paths() or [None])[0]
+    if not path or _duel_index is None:
+        return None
+    try:
+        con = cd.connect(path)
+        try:
+            hist = _duel_index._history(con, key)
+        finally:
+            con.close()
+    except Exception:  # noqa: BLE001 - no history is a smaller answer, not an error
+        traceback.print_exc()
+        return None
+    with _HISTORY_LOCK:
+        _HISTORY[key] = (now, hist)
+        while len(_HISTORY) > HISTORY_CACHE:
+            _HISTORY.popitem(last=False)
+    return hist
+
+
+class _FusionContext:
+    """The fused, version-level matchup rate for ONE request.
+
+    Every rate is `matchup_fusion.fused` over what this request can read:
+
+        matrix       the archetype matrix, from the counter snapshot
+        cluster      the list's one-card variants vs the archetype (`_DeckProfile`)
+        archetype    the list vs the archetype — ladder, plus its duel record
+        family       the list vs the threat's one-card family
+        version      the list's one-card family vs the threat exactly
+
+    The two version levels come from the duel index's VERSION CELLS when the
+    list and the threat are both hubs (the population and the seeds); for a
+    list outside the cells — a teammate's own — the family level is computed
+    here from its own ladder history, and the version level is not read (it
+    would need the threat's whole history per request). A threat that is no
+    hub gets the archetype levels only; a temporal holdout put that loss at
+    0.0006 of log loss.
+
+    ON whenever `matchup_fusion` imports; the cells and the duels are optional
+    beneath it, so a box with neither still gets the archetype levels fused
+    with the variants prior.
+    """
+
+    def __init__(self, duel: "_DuelContext | None", snap: dict | None):
+        self.on = _fusion is not None
+        self.duel = duel
+        self.snap = snap
+        self._matrix: dict[tuple, tuple | None] = {}
+        self._cells: dict[str, dict | None] = {}
+        self._hub: dict[str, bool] = {}
+        self._fam: dict[str, dict[str, tuple]] = {}
+        self._fam_done: dict[str, set] = {}
+        self._rates: dict[tuple, dict | None] = {}
+        self.stats = {"version": 0, "deck": 0, "cluster7": 0, "archetype": 0, "none": 0}
+
+    def matrix(self, a: str, b: str) -> tuple | None:
+        k = (a, b)
+        if k not in self._matrix:
+            m = dcx._symmetric(self.snap, a, b) if self.snap else None
+            decided = (int(m["wins"]) + int(m["losses"])) if m else 0
+            self._matrix[k] = (int(m["wins"]) / decided, int(m["games"])) if decided else None
+        return self._matrix[k]
+
+    def is_hub(self, key: str) -> bool:
+        if key not in self._hub:
+            try:
+                self._hub[key] = bool(_duel_index) and _duel_index.is_version_hub(key.split(","))
+            except Exception:  # noqa: BLE001
+                self._hub[key] = False
+        return self._hub[key]
+
+    def cells(self, tkey: str) -> dict | None:
+        if tkey not in self._cells:
+            try:
+                self._cells[tkey] = (_duel_index.version_cells(tkey.split(","))
+                                     if _duel_index else None)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                self._cells[tkey] = None
+        return self._cells[tkey]
+
+    def prepare(self, cards, threats) -> None:
+        """The family level for every candidate OUTSIDE the cells, against
+        every deck-level threat, in one pass over each list's own history.
+        Histories are read on the shared pool; a list already prepared for a
+        threat is not prepared again."""
+        if not self.on:
+            return
+        tkeys = {scout.deck_key(t.get("cards")) for t in threats
+                 if len(set(t.get("cards") or [])) == 8}
+        want: dict[str, set] = {}
+        for c in cards:
+            if len(set(c.cards)) != 8 or self.is_hub(c.key):
+                continue
+            missing = tkeys - self._fam_done.get(c.key, set())
+            if missing:
+                want[c.key] = missing
+        if not want:
+            return
+        keys = list(want)
+        hists = dict(zip(keys, _POOL.map(_ladder_history, keys)))
+        for key, missing in want.items():
+            by_sub: dict[str, list[str]] = {}
+            for tk in missing:
+                for sub in _duel_index._subs(tk):
+                    by_sub.setdefault(sub, []).append(tk)
+            acc = self._fam.setdefault(key, {})
+            fresh: dict[str, list[float]] = {}
+            for opp, (n, w) in (hists.get(key) or {}).items():
+                hit: set[str] = set()
+                for sub in _duel_index._subs(opp):
+                    hit.update(by_sub.get(sub, ()))
+                for tk in hit:
+                    a = fresh.get(tk)
+                    if a is None:
+                        fresh[tk] = [n, w]
+                    else:
+                        a[0] += n
+                        a[1] += w
+            for tk, (n, w) in fresh.items():
+                acc[tk] = (n, w)
+            self._fam_done.setdefault(key, set()).update(missing)
+
+    def family(self, key: str, tkey: str) -> tuple | None:
+        if tkey not in self._fam_done.get(key, set()):
+            return None
+        return self._fam.get(key, {}).get(tkey)
+
+    def rater(self, card: "_Candidate"):
+        """`rate_for_threat` for `team_scout.score`, for one candidate."""
+        prof = card.profile
+        duel_rec = self.duel.records(card.cards) if self.duel is not None and self.duel.on else None
+        hub = self.is_hub(card.key)
+        exact_of = getattr(prof, "exact_record", None)
+        cluster_of = getattr(prof, "cluster_record", None)
+
+        def rate(t: dict) -> dict | None:
+            arch_t = t.get("archetype") or "other"
+            tcards = t.get("cards") or []
+            tkey = scout.deck_key(tcards) if len(set(tcards)) == 8 else None
+            memo = (card.key, tkey or "archetype:" + arch_t)
+            if memo in self._rates:
+                return self._rates[memo]
+            arch_duel = None
+            r = ((duel_rec or {}).get("exact") or {}).get(arch_t)
+            if r:
+                g, w = float(r[0]), float(r[1])
+                e = float(r[2]) if len(r) > 2 else g / 2
+                arch_duel = (g, g / 2 + w - e)
+            fam_l = fam_d = ver_l = ver_d = None
+            if tkey:
+                if hub:
+                    cells = self.cells(tkey)
+                    v = cells.get(card.key) if cells else None
+                    if v:
+                        fam_l, ver_l = (v[0], v[1]), (v[2], v[3])
+                        fam_d, ver_d = (v[4], v[5]), (v[6], v[7])
+                else:
+                    fam_l = self.family(card.key, tkey)
+            out = _fusion.fused(
+                self.matrix(card.archetype, arch_t),
+                cluster=cluster_of(arch_t) if cluster_of else None,
+                arch_ladder=exact_of(arch_t) if exact_of else None,
+                arch_duel=arch_duel,
+                fam_ladder=fam_l, fam_duel=fam_d, ver_ladder=ver_l, ver_duel=ver_d)
+            if out is not None:
+                games = int(out["games"])
+                tier, interval = dx.confidence_tier(
+                    int(round(out["winRate"] / 100.0 * games)), games)
+                out["tier"], out["interval"] = tier, interval
+            self.stats[out["source"] if out else "none"] = (
+                self.stats.get(out["source"] if out else "none", 0) + 1)
+            self._rates[memo] = out
+            return out
+
+        return rate
+
+
 def _duel_row(pick: dict, owner: dict | None, threats: list[dict], snap: dict | None,
               ctx: _DuelContext, *, fill: bool) -> dict | None:
     """A duel pick as a full recommendation row.
@@ -1131,7 +1385,7 @@ def _duel_row(pick: dict, owner: dict | None, threats: list[dict], snap: dict | 
         "useRate": 0.0,
     }
     try:
-        row = _score(_Candidate(deck, owner, prof), threats, snap)
+        row = _score(_Candidate(deck, owner, prof), threats, snap, ctx)
     except Exception:  # noqa: BLE001
         traceback.print_exc()
         return None
@@ -1314,8 +1568,13 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
 
     scored: list[dict] = []
     if threats:
+        if ctx is not None and getattr(ctx, "fx", None) is not None:
+            # A teammate's own lists are outside the version cells; their
+            # family evidence comes off their own ladder histories, read once
+            # each, on the shared pool, before anything is scored.
+            ctx.fx.prepare(cards, threats)
         for card in cards:
-            row = _score(card, threats, snap)
+            row = _score(card, threats, snap, ctx)
             if row:
                 scored.append(row)
         # The second key is games piloted, which a scout row does not have —
@@ -1370,7 +1629,7 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             # most, and `_scout_candidates()` already returns [] when there is
             # no snapshot at all — which is the right degradation and says so.
             for card in _scout_candidates():
-                row = _score(card, threats, snap)
+                row = _score(card, threats, snap, ctx)
                 if row:
                     scored_fills.append(row)
             scored_fills.sort(key=lambda r: (-r["score"], r["name"]))
@@ -1593,7 +1852,7 @@ def _combined(red: list[dict], cards: list[_Candidate],
                 "recommended": [], "reason": "no_history",
                 "brain": scout.BRAIN_VERSION}
 
-    scored = [row for row in (_score(c, threats, snap) for c in cards) if row]
+    scored = [row for row in (_score(c, threats, snap, ctx) for c in cards) if row]
     scored.sort(key=lambda r: (-r["score"], r["name"]))
     recommended = scout.diversify(_distinct(scored), limit=SCOUT_TOP_N)
 
@@ -1683,6 +1942,7 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     # so both have their duel records fetched up front, on the pool, instead of
     # one at a time inside the folder loop.
     ctx = _DuelContext()
+    ctx.fx = _FusionContext(ctx, snap)
     if ctx.on:
         try:
             ctx.prefetch([c.cards for c in cards]
@@ -1744,6 +2004,15 @@ def analyze(blue_tags: list[str], red_tags: list[str],
             "games": ctx.status.get("windowGames"),
             "catalogue": ctx.status.get("catalogue"),
         } if ctx.on and ctx.status else {"available": False}),
+        # THE FUSED RATE, and what it stood on: which brain, whether the
+        # version cells were there, and how many rates came off each level.
+        # `sources.version` is how many threat rates this board read at the
+        # threat's own list — the number that says the rate was version-aware.
+        "fusion": ({
+            "brain": _fusion.FUSION_VERSION,
+            "versionCells": bool(_duel_index and _duel_index.status().get("versionCells")),
+            "sources": dict(ctx.fx.stats),
+        } if ctx.fx is not None and ctx.fx.on else {"available": False}),
         # WHAT THE THREE-SLOT RULE SKIPPED: lists Deckkies would otherwise have
         # offered whose cards cannot fill every special slot. Counted, because
         # a filter nobody can see is a filter nobody can check.

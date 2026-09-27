@@ -677,9 +677,18 @@ function folderBlocks(
      * The FIRST occurrence is kept because `matchups` arrives in projection
      * order, so it is the likeliest threat of that archetype; the shares are
      * summed, because the archetype's real weight in the projection is all of
-     * its decks together and printing only the leader's would understate it. */
+     * its decks together and printing only the leader's would understate it.
+     *
+     * THE RATE IS THE LIKELIHOOD-WEIGHTED MEAN OF THAT ARCHETYPE'S LISTS
+     * (2026-09-27). Keeping the leader's figure was right while every list of
+     * an archetype carried one rate; the fused rate is per LIST now
+     * (`matchup_fusion`), so two Bait lists can read 58% and 44%, and the
+     * leader's figure alone would misstate the row. Same arithmetic as the
+     * screen's per-archetype chips (`team_scout.vs_archetypes`); games are
+     * summed across the lists, since that is the evidence behind the mean. */
     const byArchetype: TeamMatchupRow[] = [];
     const seenArch = new Map<string, number>();
+    const meanOf = new Map<string, { num: number; den: number }>();
     for (const m of top.matchups ?? []) {
       const at = seenArch.get(m.archetype);
       if (at === undefined) {
@@ -687,7 +696,19 @@ function folderBlocks(
         byArchetype.push({ ...m });
       } else {
         byArchetype[at].share += m.share;
+        byArchetype[at].games += m.games;
       }
+      if (m.winRate !== null) {
+        const weight = m.likelihood ?? m.share / 100;
+        const acc = meanOf.get(m.archetype) ?? { num: 0, den: 0 };
+        acc.num += weight * m.winRate;
+        acc.den += weight;
+        meanOf.set(m.archetype, acc);
+      }
+    }
+    for (const row of byArchetype) {
+      const acc = meanOf.get(row.archetype);
+      if (acc && acc.den > 0) row.winRate = Math.round((acc.num / acc.den) * 10) / 10;
     }
     if (byArchetype.length) {
       blocks.push({

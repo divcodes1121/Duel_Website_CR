@@ -1741,6 +1741,47 @@ shows as an age. No new route: the figures ride on `/api/analytics/teams`
 (`folders[].duel`, `perPlayer[].decks[].duel|duelPick|duelProven`, and
 `duelBrain` at the top). CLI: `python duel_index.py --build | --full | --status`.
 
+### The version cells, and one fused rate (`matchup_fusion.py`, 2026-09-27)
+
+`matchup_fusion.fused(matrix, *, cluster, arch_ladder, arch_duel, fam_ladder,
+fam_duel, ver_ladder, ver_duel)` — one shrinkage chain from the archetype
+matrix through the list's variants (K 10), the list vs the archetype (K 100),
+the list vs the threat's one-card family (K 30) and the list's family vs the
+exact threat (K 30), a duel game worth four ladder games. Every constant fitted
+on a temporal duel holdout (log loss 0.6873 -> 0.6793); the case, and what was
+ruled out, is in the module docstring and the main README. Keyword-only: seven
+arguments of one shape are one transposition from a plausible wrong number.
+
+The version levels come from the duel index build's **version-cell stage**
+(`_build_vcells`, between the catalogue and the swap, while `temp.sides` still
+holds the window's pilot-adjusted duels):
+
+    vhub  (id, key, threat)                              candidate hubs; threat = 1 for the threat hubs
+    vcell (t, c, l2n, l2w, l4n, l4w, d2n, d2w, d4n, d4w) PK (t, c), WITHOUT ROWID
+
+Candidate hubs are the catalogue, every counter-snapshot seed and the meta
+board; threat hubs are the seeds and the board. `l2`/`d2` = candidate vs the
+threat's family, `l4`/`d4` = the candidate's family vs the threat exactly,
+ladder then duel, games and wins from the candidate's side. One pass over each
+hub's ladder history (`_history`, both storage directions of
+`pair_matchup_agg`) fills both levels; opponents' family matches are memoised
+(`VCELL_MATCH_CACHE`). **The stage may fail without costing the build** — the
+duel brain's tables are already written, a failed stage leaves the last build's
+cells, and a request with none scores at the archetype levels. With no counter
+snapshot there are no threat hubs and the stage returns None rather than
+swapping in tables it never wrote (a test found that one). Live: 2,189 x 680,
+1,164,864 cells, 44-64 s. Readers: `is_version_hub(cards)`,
+`version_cells(threat_cards) -> {candidate key: tuple}` (cached per build, 512
+threats); `status()` adds `versionHubs` / `versionThreats` / `versionCells`.
+
+`team_analysis._FusionContext` (per request, on the duel context as `ctx.fx`)
+feeds it: the matrix off the counter snapshot, the variants and exact records
+off `_DeckProfile` / `_SeedProfile` (`cluster_record`, `exact_record`), the
+duel exact rung off `ctx.records`, the cells for a hub candidate against a
+threat hub, and — for a teammate's own list — the family level from its own
+ladder history (`_ladder_history`, read on `_POOL`, cached an hour). Tier and
+interval come from `duel_combos.confidence_tier`, the site's one rule.
+
 ## Safety
 
 Connections open with `mode=ro`, so SQLite itself refuses writes — this process
