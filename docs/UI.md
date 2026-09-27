@@ -1251,6 +1251,19 @@ export**, and `vite --force` cleared it. Element screenshots of a teammate's
 list caught the sticky header over it; scroll the rows into the viewport and
 take a page screenshot instead.
 
+## A filled slot says so, per card (2026-09-27)
+
+Every deck Deckkies suggests now fields every special slot its cards can fill
+(`clash_data.complete_seating`), and the server names the cards whose form it
+FILLED rather than observed as `artFilled`. `drawnDeck(cards, art, inferred,
+filled)` carries the list and `formInferred(d, card)` answers per card, so
+`CardArt`'s tooltip says "from slot position" on exactly those cards while the
+observed forms beside them read as observed. Wired on every strip that draws a
+suggestion: Team Analysis's rows and folder faces, the field plan board, the
+roster's Today board, `#/my`'s practice deck, the roster's Opponent tab and
+Coach Assist's options. An opponent's deck has no `artFilled` — it is drawn as
+fielded. `tests/deckSeating.test.ts` pins the per-card rule.
+
 ## Working on this
 
 ```bash

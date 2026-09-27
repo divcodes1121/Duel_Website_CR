@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-27-full-loadout',
+    date: '2026-09-27',
+    kind: 'fixed',
+    title: 'Every suggested deck now fills its evolution, hero and champion slots',
+    body: [
+      'Decks Deckkies suggests — on Team Analysis, the coach’s plan against the field and Coach Assist — are now drawn with every special slot their cards can fill. Before, a deck was shown the way someone had last played it, so an evolution nobody had used stayed a plain card even though the deck could field it.',
+      'Deckkies also stopped suggesting its own picks from lists that cannot fill all three slots, and takes the next list of that deck type instead. Your own decks are never dropped, and an opponent’s decks are still shown exactly as they were played. A form Deckkies filled in says so when you hover the card.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-09-27-duel-brain',
     date: '2026-09-27',
     kind: 'new',

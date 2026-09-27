@@ -117,7 +117,17 @@ def fake_archetype_of(cs):
     return "other"
 
 
+def fake_fillable(cs):
+    """How many special slots a fixture deck can fill. The fixtures are
+    synthetic keys the card metadata has never heard of, so the real search
+    reads every one as plain; this suite checks the WIRING of the three-slot
+    rule (`test_suggested_seating.py` checks the rule), so every fixture deck
+    fills all three except the one built short on purpose."""
+    return 2 if any(str(c).startswith("short-") for c in cs) else 3
+
+
 def install_fakes():
+    ta.cd.fillable_slots = fake_fillable
     dcx.deck_profile = fake_deck_profile
     dcx.cluster_profile = fake_cluster_profile
     dcx._symmetric = fake_symmetric
@@ -452,13 +462,20 @@ REPS = {
     "xbow": {"cards": list(XBOW), "art": {}, "name": "Xbow"},
     "lava": {"cards": list(LAVA), "art": {}, "name": "Lava"},
 }
-ta.dcx._representatives = lambda: REPS
+SHORT = cards("short")
+ta.dcx._representatives = lambda: {**REPS,
+                                   "short": {"cards": list(SHORT), "art": {}, "name": "Short"}}
 ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 1000.0}
 ta._SCOUT_POOL = None
 
 scout_pool = ta._scout_candidates()
 check("the scout pool is one candidate per archetype representative",
       len(scout_pool) == len(REPS))
+# A DECKKIES PICK FIELDS ALL THREE SPECIAL SLOTS. A list whose cards cannot is
+# never offered — and never dropped silently: the pool says how many it skipped.
+check("a list that cannot fill all three special slots is not in the pool",
+      not any(c.key == ",".join(sorted(SHORT)) for c in scout_pool))
+check("and the skip is counted", ta.scout_pool_slot_gaps() == 1, str(ta.scout_pool_slot_gaps()))
 check("a scout candidate has NO owner", all(c.owner is None for c in scout_pool),
       "an archetype representative is nobody's deck, and a zero games-piloted "
       "figure would be a claim about a roster that was never pasted")
@@ -473,6 +490,7 @@ check("and rebuilt when it has", ta._scout_candidates() is not scout_pool,
       "the representatives come off snapshot['reps'], so a rebuild is exactly "
       "when they may differ and nothing else is")
 
+ta.dcx._representatives = lambda: REPS
 ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 1000.0}
 ta._SCOUT_POOL = None
 scout_pool = ta._scout_candidates()
@@ -601,6 +619,46 @@ check("the same scorer produced it — the top row still names its rung",
 check("the per-threat table rides on the TOP row only — the PDF's one reader",
       all("matchups" not in r for r in scout_folder["recommended"][1:]),
       "every other copy was 80% of a match plan's payload and nothing drew it")
+
+# ── a suggestion fields every special slot its cards can fill ───────────────
+#
+# Every row `_score` returns is advice, and it is the one chokepoint every list
+# on this screen passes through — own decks, Deckkies picks, duel picks, the
+# scouting report. REAL card keys here, because the rule reads what each card
+# can be; the case is the one measured live: a teammate's own list, fielded
+# with Bats as the evolution and Little Prince as the champion, Cannon plain.
+
+print(NL + "a suggested deck fields every special slot its cards can fill")
+
+
+class _FlatProfile:
+    def against(self, other, snap):
+        return {"winRate": 55.0, "games": 200, "source": "deck", "tier": "high"}
+
+
+_live_cards = ["bats", "little-prince", "cannon", "arrows", "fireball", "the-log",
+               "hog-rider", "poison"]
+_live = ta._Candidate(
+    {"cards": _live_cards, "art": {"bats": "evolution"}, "winCondition": "hog",
+     "name": "Hog", "matches": 30, "wins": 18, "winRate": 60.0, "useRate": 20.0},
+    {"tag": "#B1", "name": "Ravi"}, _FlatProfile())
+_row = ta._score(_live, [{"key": "t1", "archetype": "golem", "likelihood": 1.0,
+                          "evidence": ts.OBSERVED, "name": "Golem"}], None)
+check("the plain Cannon in the wild slot is drawn as the second evolution",
+      _row["cards"][:3] == ["bats", "little-prince", "cannon"]
+      and _row["art"].get("cannon") == "evolution", str((_row["cards"][:3], _row["art"])))
+check("the observed Bats evolution is kept", _row["art"].get("bats") == "evolution")
+check("and the filled form is named, so it is not passed off as observed",
+      _row.get("artFilled") == ["cannon"], str(_row.get("artFilled")))
+_full = ta._score(ta._Candidate(
+    {"cards": _live_cards, "art": {"bats": "evolution", "cannon": "evolution"},
+     "winCondition": "hog", "name": "Hog", "matches": 30, "wins": 18,
+     "winRate": 60.0, "useRate": 20.0},
+    {"tag": "#B1", "name": "Ravi"}, _FlatProfile()),
+    [{"key": "t1", "archetype": "golem", "likelihood": 1.0,
+      "evidence": ts.OBSERVED, "name": "Golem"}], None)
+check("a deck already fielded full carries no `artFilled` at all",
+      "artFilled" not in _full, str(_full.get("artFilled")))
 
 # ── the roster-wide read ────────────────────────────────────────────────────
 
@@ -741,11 +799,15 @@ for _cs, _rate in ((DUEL_A, 57.0), (DUEL_B, 55.0), (DUEL_C, 54.0), (OWN_D, 56.0)
     PROFILES[_k(_cs)] = {"golem": {"winRate": _rate, "games": 300, "tier": "high"},
                          "xbow": {"winRate": _rate, "games": 300, "tier": "high"}}
 
+DUEL_SHORT = cards("short-duel")
 _CATALOGUE = [
     {"key": _k(c), "cards": list(c), "archetype": a, "games": 500, "wins": 300,
      "players": 30, "records": r}
     for c, a, r in ((DUEL_A, "hog", _rec(400, 280)), (DUEL_B, "giant", _rec(400, 270)),
-                    (DUEL_C, "miner", _rec(400, 262)))
+                    (DUEL_C, "miner", _rec(400, 262)),
+                    # The strongest list in the catalogue — and it cannot fill
+                    # all three special slots, so it must never be offered.
+                    (DUEL_SHORT, "hog", _rec(400, 330)))
 ]
 _RECORDS = {_k(HOG): _rec(300, 150), _k(OWN_D): _rec(300, 210)}
 _PLAYER_DECKS = {
@@ -776,6 +838,9 @@ ta._duel_index, ta._duel = _fake_index, dbr
 try:
     ctx = ta._DuelContext()
     check("the context is on when the index answers", ctx.on and len(ctx.catalogue) == 3)
+    check("a catalogue list that cannot fill all three special slots is skipped, and counted",
+          ctx.slot_gaps == 1 and all(d["key"] != _k(DUEL_SHORT) for d in ctx.catalogue),
+          str(ctx.slot_gaps))
     base = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, None)
     duel_f = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, ctx)
     d = duel_f["duel"]
@@ -822,6 +887,9 @@ try:
           any(x.get("duel") is None for r in rows.values() for x in r["decks"]))
     check("the squad-wide list gets its reserved slots too",
           any(x.get("duelPick") for x in duel_f["recommended"]) and len(duel_f["recommended"]) <= ta.TOP_N)
+    check("the short list, strongest of all, is offered to nobody",
+          all(x["key"] != _k(DUEL_SHORT) for r in rows.values() for x in r["decks"])
+          and all(x["key"] != _k(DUEL_SHORT) for x in duel_f["recommended"]))
 
     _PLAYER_DECKS["#R1"] = [{"key": _k(DUEL_A), "cards": list(DUEL_A), "archetype": "hog",
                              "games": 30, "wins": 18, "lastSeen": "20260820T120000.000Z"}]

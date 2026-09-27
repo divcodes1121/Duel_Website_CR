@@ -757,7 +757,13 @@ def _candidates(blue: list[dict]) -> list["_Candidate"]:
 #: it: `_representatives()` reads `snapshot["reps"]`, so a rebuild is exactly
 #: when these decks may differ and nothing else is. A time-based TTL here would
 #: be a second, weaker statement of the same fact and could disagree with it.
-_SCOUT_POOL: tuple[object, list["_Candidate"]] | None = None
+_SCOUT_POOL: tuple[object, list["_Candidate"], int] | None = None
+
+
+def scout_pool_slot_gaps() -> int:
+    """How many seeds the current pool skipped because their cards cannot fill
+    all three special slots — published, so the filter is never silent."""
+    return _SCOUT_POOL[2] if _SCOUT_POOL is not None else 0
 
 
 def _scout_candidates() -> list["_Candidate"]:
@@ -801,6 +807,13 @@ def _scout_candidates() -> list["_Candidate"]:
         return _SCOUT_POOL[1]
 
     out: list["_Candidate"] = []
+    # EVERY DECK IN THIS POOL IS ONE DECKKIES WILL SUGGEST, and a suggestion
+    # fields all three special slots. A list whose cards cannot fill them — no
+    # hero-capable card and no champion, say, so slot 2 can only ever hold a
+    # plain card — is skipped and the NEXT seed of that archetype takes its
+    # place, so each archetype still offers its full count. Measured on the
+    # live snapshot: 21 of 680 seeds. The count is published, never silent.
+    gaps = 0
     seeds = dcx.seeds() or {}
     # A seed is its hash split on commas — alphabetical and bare. Seated once
     # here, with the pool, so every "Deckkies pick" and every scouting row is
@@ -808,9 +821,15 @@ def _scout_candidates() -> list["_Candidate"]:
     seat = dcx.seater()
 
     for arch, decks in seeds.items():
-        for seed in decks[:SCOUT_SEEDS_PER_ARCHETYPE]:
+        taken = 0
+        for seed in decks:
+            if taken >= SCOUT_SEEDS_PER_ARCHETYPE:
+                break
             cards = list(seed.get("cards") or [])
             if len(set(cards)) != 8:
+                continue
+            if cd.fillable_slots(cards) < cd.SPECIAL_SLOTS:
+                gaps += 1
                 continue
             try:
                 prof = _SeedProfile(seed, arch)
@@ -833,6 +852,7 @@ def _scout_candidates() -> list["_Candidate"]:
                 None,
                 prof,
             ))
+            taken += 1
 
     if not out:
         # THE PRE-SEED SNAPSHOT PATH, kept because a deployment can be mid
@@ -851,6 +871,9 @@ def _scout_candidates() -> list["_Candidate"]:
             cards = list(rep.get("cards") or [])
             if len(set(cards)) != 8:
                 continue
+            if cd.fillable_slots(cards) < cd.SPECIAL_SLOTS:
+                gaps += 1
+                continue
             try:
                 prof = _DeckProfile(cards, arch)
             except Exception:  # noqa: BLE001
@@ -868,7 +891,7 @@ def _scout_candidates() -> list["_Candidate"]:
                 prof,
             ))
 
-    _SCOUT_POOL = (key, out)
+    _SCOUT_POOL = (key, out, gaps)
     return out
 
 
@@ -930,8 +953,19 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None) -> dict | N
     out = dict(base)
     if card.art and card.inferred:
         out["artInferred"] = True
+    # A SUGGESTION FIELDS EVERY SPECIAL SLOT ITS CARDS CAN FILL. The candidate
+    # arrives seated the way it was fielded — a teammate's own list with their
+    # own marks, a population list with the board's — and a capable card nobody
+    # was seen fielding stays plain that way. Every row here is advice, so the
+    # empty slots are filled; `artFilled` names which forms were filled rather
+    # than seen, so the card's tooltip does not pass them off as observed.
+    cards, art, filled = cd.complete_seating(
+        card.cards, card.art, slot_of=cd.seated_positions(card.cards, card.art))
+    out["cards"] = cards
+    if filled:
+        out["artFilled"] = filled
     out.update({
-        "art": card.art,
+        "art": art,
         "name": card.name,
         "avgElixir": dcx._avg_elixir(card.cards),
         "owner": {"tag": card.owner["tag"], "name": card.owner["name"]}
@@ -990,7 +1024,14 @@ class _DuelContext:
 
     def __init__(self):
         self.on = bool(_duel and _duel_index and _duel_index.available())
-        self.catalogue = _duel_index.catalogue() if self.on else []
+        catalogue = _duel_index.catalogue() if self.on else []
+        # A DUEL PICK IS A SUGGESTION TOO, so it is drawn from lists that can
+        # field all three special slots — the rule `_scout_candidates` applies
+        # to the ladder pool. Measured: 99 of 1,972 catalogue lists cannot.
+        # A teammate's OWN duel decks are theirs and are never filtered.
+        self.catalogue = [d for d in catalogue
+                          if cd.fillable_slots(d.get("cards")) >= cd.SPECIAL_SLOTS]
+        self.slot_gaps = len(catalogue) - len(self.catalogue)
         self.status = _duel_index.status() if self.on else None
         self._records: dict[str, dict | None] = {}
         self._profiles: dict[str, "_DeckProfile | None"] = {}
@@ -1703,6 +1744,13 @@ def analyze(blue_tags: list[str], red_tags: list[str],
             "games": ctx.status.get("windowGames"),
             "catalogue": ctx.status.get("catalogue"),
         } if ctx.on and ctx.status else {"available": False}),
+        # WHAT THE THREE-SLOT RULE SKIPPED: lists Deckkies would otherwise have
+        # offered whose cards cannot fill every special slot. Counted, because
+        # a filter nobody can see is a filter nobody can check.
+        "slots": {
+            "poolSkipped": scout_pool_slot_gaps(),
+            "duelSkipped": getattr(ctx, "slot_gaps", 0),
+        },
     }
     # THE ROSTER-WIDE READ, scout only. In a match plan every recommendation
     # belongs to a named teammate, so a squad-wide answer would be advice with

@@ -47,6 +47,8 @@ Three properties matter here and are the whole reason this file exists:
 
 from __future__ import annotations
 
+import functools
+import itertools
 import json
 import os
 import sqlite3
@@ -1465,6 +1467,198 @@ def arrange_deck(cards: list[str], marks: dict, trust_order: bool = False,
             slots[i] = rest.pop(0)
     ordered = [c for c in slots if c] + rest
     return _apply_wild(ordered, art, wild, kind)
+
+
+# ── A DECK DECKKIES SUGGESTS FIELDS EVERY SPECIAL SLOT ITS CARDS CAN FILL ────
+#
+# `arrange_deck` draws a deck the way it was FIELDED: with observations, a card
+# nobody was seen fielding specially stays plain however capable it is. That is
+# right for a record of play — an opponent's deck, a battle — and wrong for a
+# suggestion, which is advice about how to build the deck. Measured on the live
+# Team Analysis: a teammate's own list suggested back to them drew Bats as the
+# evolution, Little Prince as the champion and Cannon PLAIN in the wild slot,
+# because they had never fielded the Cannon evolution. The deck can fill all
+# three; the screen showed two.
+#
+# So a suggestion keeps every observed form — they carry which card the
+# players who run the list actually spend each slot on — and then fills what is
+# still empty from capability, in the order the slots are read:
+#
+#     slot 1   an evolution
+#     slot 2   a hero, or a champion
+#     slot 3   a second evolution, else a hero (a champion seats itself)
+#
+# Capability seating's own choice is preferred at each step, so a deck with no
+# observations comes out exactly as `arrange_deck(cards, {})` draws it.
+
+
+def slot_kind(card: str) -> str:
+    """What `card` is ABLE to be in a special slot: 'evolution', 'hero',
+    'both', 'champion' or ''. Capability, not preference — the same reading as
+    `arrange_deck`'s own `kind`."""
+    try:
+        import duel_combos as _dcx
+    except Exception:
+        return ""
+    info = _dcx.card_info(card)
+    if info.get("is_champion"):
+        return "champion"
+    can_evo = bool(info.get("can_evolve"))
+    can_hero = bool(info.get("can_be_hero"))
+    if can_evo and can_hero:
+        return "both"
+    return "evolution" if can_evo else "hero" if can_hero else ""
+
+
+# Which kinds each special slot takes, numbered as `arrange_deck` numbers them.
+_SLOT_TAKES = (
+    ("evolution", "both"),
+    ("hero", "both", "champion"),
+    ("evolution", "hero", "both", "champion"),
+)
+
+
+def fillable_slots(cards) -> int:
+    """The most special slots these cards can fill at once, 0 to 3.
+
+    A search over which card sits in which slot rather than a count of capable
+    cards, because the slots overlap: a both-form card can serve slot 1 or slot
+    2 but not both, and two champions fill slots 2 and 3 while leaving slot 1 to
+    an evolution. Eight cards and three slots, so each search is trivial — and
+    memoised on the card SET, because the duel catalogue asks it of ~2,000
+    lists on every request and order cannot change the answer.
+    """
+    return _fillable(frozenset(cards or ()))
+
+
+@functools.lru_cache(maxsize=16384)
+def _fillable(cards: frozenset) -> int:
+    kinds = [slot_kind(c) for c in sorted(cards)]
+    able = [i for i, k in enumerate(kinds) if k]
+    best = 0
+
+    def walk(slot: int, used: frozenset, n: int) -> None:
+        nonlocal best
+        if slot == SPECIAL_SLOTS:
+            best = max(best, n)
+            return
+        walk(slot + 1, used, n)
+        for i in able:
+            if i not in used and kinds[i] in _SLOT_TAKES[slot]:
+                walk(slot + 1, used | {i}, n + 1)
+
+    walk(0, frozenset(), 0)
+    return best
+
+
+def complete_marks(cards, marks) -> tuple[dict, list[str]]:
+    """The marks a SUGGESTED deck is drawn with, and which of them are filled.
+
+    Returns `(marks, filled)`: `marks` is `{card: 'evolution' | 'hero'}` and
+    `filled` lists the cards whose drawn form was not observed, in deck order.
+
+    CHOSEN, NOT TOPPED UP. Three things decide, strictly in this order:
+
+      1. the most special slots filled — champions always count, since they
+         seat themselves;
+      2. then the most OBSERVED forms kept — they carry which card the players
+         who run the list actually spend each slot on;
+      3. then capability seating's own choices, so a deck with no observations
+         comes out exactly as `arrange_deck(cards, {})` draws it;
+      4. then the cards that come first in the deck — the rule capability
+         seating itself uses to pick between two evolutions.
+
+    Topping up the observed marks was the first version and it lost a slot in
+    a real shape: players field a both-form Knight as the second evolution, the
+    deck holds no other hero-capable card, and slot 2 stays plain — while Knight
+    as the hero and the deck's other evolution in the wild slot fills all three.
+    Rule 1 outranks rule 2 precisely so that case changes one observed form.
+
+    An observed form the card metadata does not list is still allowed: the
+    payload is newer than `cardMeta.json` whenever Supercell ships a form.
+    """
+    cards = tuple(dict.fromkeys(cards or []))
+    seen = tuple(sorted((c, v) for c, v in (marks or {}).items()
+                        if c in cards and v in ("evolution", "hero")))
+    chosen, filled = _complete(cards, seen)
+    return dict(chosen), list(filled)
+
+
+@functools.lru_cache(maxsize=16384)
+def _complete(cards: tuple, seen_items: tuple) -> tuple[tuple, tuple]:
+    seen = dict(seen_items)
+    kinds = {c: slot_kind(c) for c in cards}
+    # A champion always seats itself, in slot 2 or 3 — `arrange_deck` puts it
+    # there first. At most two; they are not a choice to be made here.
+    n_champs = min(2, sum(1 for c in cards if kinds[c] == "champion"))
+    try:
+        _, capable = arrange_deck(list(cards), {})
+    except Exception:  # noqa: BLE001 - no preference is still a valid answer
+        capable = {}
+
+    options: list[tuple[str, list]] = []
+    for c in cards:
+        if kinds[c] == "champion":
+            continue
+        forms: list = [None]
+        if kinds[c] in ("evolution", "both") or seen.get(c) == "evolution":
+            forms.append("evolution")
+        if kinds[c] in ("hero", "both") or seen.get(c) == "hero":
+            forms.append("hero")
+        if len(forms) > 1:
+            options.append((c, forms))
+
+    at = {c: i for i, c in enumerate(cards)}
+    best_key = None
+    best: dict[str, str] = {}
+    for combo in itertools.product(*(f for _, f in options)):
+        evos = sum(1 for f in combo if f == "evolution")
+        heroes = sum(1 for f in combo if f == "hero")
+        # WHAT THE THREE SLOTS CAN HOLD: slot 1 an evolution, slot 2 a hero or
+        # champion, slot 3 any of the three. So two evolutions at most, two
+        # heroes-or-champions at most, three in all — exactly what
+        # `arrange_deck` will draw, so nothing chosen here is dropped there.
+        if evos > 2 or heroes + n_champs > 2 or evos + heroes + n_champs > 3:
+            continue
+        kept = sum(1 for (c, _), f in zip(options, combo) if f and seen.get(c) == f)
+        agree = sum(1 for (c, _), f in zip(options, combo) if f and capable.get(c) == f)
+        early = -sum(at[c] for (c, _), f in zip(options, combo) if f)
+        key = (evos + heroes, kept, agree, early)
+        if best_key is None or key > best_key:
+            best_key = key
+            best = {c: f for (c, _), f in zip(options, combo) if f}
+    filled = tuple(c for c in cards if c in best and seen.get(c) != best[c])
+    return tuple(best.items()), filled
+
+
+def complete_seating(cards, marks, slot_of: dict | None = None
+                     ) -> tuple[list[str], dict, list[str]]:
+    """`(ordered, art, filled)` for a deck Deckkies is SUGGESTING.
+
+    `arrange_deck` with the marks `complete_marks` returns, so every rule it
+    enforces — champions in slot 2 or 3, no evolution in slot 2, two of each
+    form at most — still holds. `filled` lists only the filled cards that were
+    actually drawn special, for the client to say so in the card's tooltip.
+    `slot_of` keeps the observed marks where they were seen sitting.
+    """
+    done, filled = complete_marks(cards, marks)
+    # AN OBSERVED FORM KEEPS ITS SEAT. A filled card is ordered after every
+    # observed one — `arrange_deck` sorts marks of one form by where each was
+    # seen, and an unseen card defaults to "past the special slots", so one
+    # step further back is behind all of them. Its old seat, if it had one, was
+    # earned in another form and says nothing about this one.
+    seats = dict(slot_of or {})
+    for c in filled:
+        seats[c] = SPECIAL_SLOTS + 1
+    ordered, art = arrange_deck(list(cards), done, slot_of=seats)
+    return ordered, art, [c for c in filled if c in art]
+
+
+def seated_positions(cards, art) -> dict[str, int]:
+    """`{card: index}` for the special cards of an already-seated deck — the
+    `slot_of` that keeps a re-seat from moving what is already in place."""
+    return {c: i for i, c in enumerate(list(cards or [])[:SPECIAL_SLOTS])
+            if (art or {}).get(c) or slot_kind(c) == "champion"}
 
 
 def deck_art(tag: str, hashes: list[str],

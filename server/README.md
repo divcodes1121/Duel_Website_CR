@@ -665,6 +665,26 @@ as `artInferred`. It is a closure so a caller seating hundreds of decks reads
 the board once. `duo_pairs` imports it on the read path only — the hourly fold
 runs that module as a CLI.
 
+**A deck being SUGGESTED goes through `clash_data.complete_seating` on top of
+that (2026-09-27).** `arrange_deck` draws a deck as it was fielded — with
+observations, a capable card nobody was seen fielding stays plain, which is
+right for an opponent's deck and wrong for advice. `complete_seating(cards,
+marks, slot_of)` chooses the marks by (1) the most special slots filled
+(`fillable_slots` is the ceiling, a search over card-to-slot assignments), (2)
+then the most observed forms kept, (3) then capability seating's own choices
+and the earlier card, and hands them to `arrange_deck`, so its rules still
+hold; it returns `filled`, the cards whose form was not observed, which the
+rows publish as `artFilled`. Callers: every row `team_analysis._score` returns,
+`coach_daily`'s picks / families / closest / learn (its `seat_pick`), and
+`coach.suggest`'s options. Threats and opponents' decks stay as fielded.
+`seated_positions(cards, art)` is the `slot_of` that keeps a re-seat from
+moving what is already in place. **A Deckkies pick is also drawn only from
+lists that can fill all three** (`fillable_slots(cards) == 3`): the scout pool
+skips and replaces, `_DuelContext` filters the catalogue, and `coach._fills`
+takes `full_loadout=True` for the player's own side. Counted as
+`slots.poolSkipped` / `slots.duelSkipped` (Team Analysis) and `poolSlotSkipped`
+(field plan). `test_suggested_seating.py` (49) pins it.
+
 **A pasted link's order is authoritative — pass `trust_order=True`.** A
 copyDeck link writes the three special slots first, in slot order, so its first
 three IDs already name the evolution, the hero and the wild. Rebuilding them

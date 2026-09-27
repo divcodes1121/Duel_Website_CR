@@ -10,7 +10,7 @@ import type {
 } from '../../../state/analyticsClient';
 import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
-import { drawnDeck } from '../../../utils/deckSeating';
+import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import { VsMark } from '../../VsMark/VsMark';
 import { duelChip, duelPickLabel, duelTitle } from '../../../utils/duelFigures';
 import styles from './TeamAnalysis.module.css';
@@ -44,18 +44,21 @@ function Strip({
   cards,
   art,
   inferred,
+  filled,
   name,
 }: {
   cards: string[];
   art?: Record<string, 'evolution' | 'hero'>;
   inferred?: boolean;
+  /** Forms filled in because a suggested deck can field them, not observed. */
+  filled?: string[];
   name?: string;
 }) {
-  const d = drawnDeck(cards, art, inferred);
+  const d = drawnDeck(cards, art, inferred, filled);
   return (
     <span className={styles.strip}>
       {d.cards.map((c, i) => (
-        <CardArt key={`${c}-${i}`} card={c} variant={d.art[c]} inferred={d.inferred} />
+        <CardArt key={`${c}-${i}`} card={c} variant={d.art[c]} inferred={formInferred(d, c)} />
       ))}
       {/* Renders nothing unless it is a whole 8-card deck — the guard that
           keeps these off partial lists everywhere else on the site. The SEATED
@@ -185,9 +188,9 @@ export function FolderGallery({
                 <>
                   <span className={styles.folderFaces} aria-hidden="true">
                     {(() => {
-                      const face = drawnDeck(best.cards, best.art, best.artInferred);
+                      const face = drawnDeck(best.cards, best.art, best.artInferred, best.artFilled);
                       return face.cards.slice(0, 4).map((c, i) => (
-                        <CardArt key={`${c}-${i}`} card={c} variant={face.art[c]} inferred={face.inferred} />
+                        <CardArt key={`${c}-${i}`} card={c} variant={face.art[c]} inferred={formInferred(face, c)} />
                       ));
                     })()}
                   </span>
@@ -319,6 +322,7 @@ function Recommendation({ rec, rank, labels }: {
         cards={rec.cards}
         art={rec.art}
         inferred={rec.artInferred}
+        filled={rec.artFilled}
         name={rec.owner ? `${rec.owner.name} — ${rec.name}` : rec.name}
       />
       {/* AGAINST EACH OF THEIR ARCHETYPES. The headline is one weighted

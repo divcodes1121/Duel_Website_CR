@@ -431,6 +431,26 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
     pool = ta._scout_candidates()
     seat = dcx.seater()
 
+    def seat_pick(cards):
+        """A SUGGESTION'S SEATING: as fielded, then every special slot its cards
+        can still fill (`cd.complete_seating`). Every row this plan offers is
+        advice about how to build the deck; only `threats` — what the player
+        will FACE — keeps the seating it was fielded with."""
+        ordered, art, inferred = seat(cards)
+        ordered, art, filled = cd.complete_seating(
+            ordered, art, slot_of=cd.seated_positions(ordered, art))
+        return ordered, art, inferred, filled
+
+    def put(row, cards):
+        ordered, art, inferred, filled = seat_pick(cards)
+        row["cards"] = ordered
+        row["art"] = art
+        row["artInferred"] = inferred
+        if filled:
+            row["artFilled"] = filled
+        else:
+            row.pop("artFilled", None)
+
     def score_all(projection):
         """Every candidate scored. THE WHOLE POOL, which is the change.
 
@@ -478,10 +498,7 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
     for p in picks:
         p["fromWeighting"] = bool(defs) and p["key"] not in base_set
     for p in picks:
-        ordered, art, inferred = seat(p["cards"])
-        p["cards"] = ordered
-        p["art"] = art
-        p["artInferred"] = inferred
+        put(p, p["cards"])
 
     # -- THE THREE ANSWERS ------------------------------------------------
     #
@@ -516,10 +533,7 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         # so anything per-row is paid for sixty-eight times.
         for g in fams:
             for r in g["decks"]:
-                ordered, art, inferred = seat(r["cards"])
-                r["cards"] = ordered
-                r["art"] = art
-                r["artInferred"] = inferred
+                put(r, r["cards"])
                 for k in ("matchups", "brain", "score", "recommendationScore",
                           "threatCovered", "evidenceStrength", "matchupValue",
                           "playerFit", "confidence", "spreadCovered"):
@@ -528,16 +542,10 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
                 if a:
                     a.pop("deckCards", None)
         for r in near:
-            ordered, art, inferred = seat(r["cards"])
-            r["cards"] = ordered
-            r["art"] = art
-            r["artInferred"] = inferred
+            put(r, r["cards"])
             r.pop("matchups", None)
         if learn:
-            ordered, art, inferred = seat(learn["deck"]["cards"])
-            learn["deck"]["cards"] = ordered
-            learn["deck"]["art"] = art
-            learn["deck"]["artInferred"] = inferred
+            put(learn["deck"], learn["deck"]["cards"])
             learn["deck"].pop("matchups", None)
 
     # IT DEGRADES TO THE OLD ANSWER RATHER THAN TAKING THE TAB DOWN. This is
@@ -640,6 +648,9 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         **({} if brief else {"baselinePicks": baseline}),
         "brief": brief,
         "pool": len(pool),
+        # Seeds the pool skipped because their cards cannot fill all three
+        # special slots. Every deck above can; this says how many could not.
+        "poolSlotSkipped": ta.scout_pool_slot_gaps(),
         "meta": {
             "decks": len(board.get("decks") or []),
             "window": board.get("window"),

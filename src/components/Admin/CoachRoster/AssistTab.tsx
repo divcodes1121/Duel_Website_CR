@@ -20,7 +20,7 @@ import {
   type SuggestedDeck,
 } from '../../../state/coachAssist';
 import { CardArt } from '../../Analytics/CardArt';
-import { drawnDeck, positionalArt } from '../../../utils/deckSeating';
+import { drawnDeck, formInferred, positionalArt } from '../../../utils/deckSeating';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ReadingState } from '../../Analytics/ReadingState';
 import { SuggestHeading } from '../../Analytics/TeamAnalysis/SuggestHeading';
@@ -229,13 +229,13 @@ export function AssistTab({
 
 function SuggestionRow({ suggestion, onApprove }: { suggestion: SuggestedDeck; onApprove: () => void }) {
   const { rec, arsenal } = suggestion;
-  const drawn = drawnDeck(rec.cards, rec.art, rec.artInferred);
+  const drawn = drawnDeck(rec.cards, rec.art, rec.artInferred, rec.artFilled);
   return (
     <li className={styles.arsenalItem}>
       <div className={styles.arsenalHead}>
         <div className={styles.deckCards}>
           {drawn.cards.map((c) => (
-            <CardArt key={c} card={c} variant={drawn.art[c]} inferred={drawn.inferred} className={styles.deckCard} />
+            <CardArt key={c} card={c} variant={drawn.art[c]} inferred={formInferred(drawn, c)} className={styles.deckCard} />
           ))}
         </div>
         <div className={styles.arsenalMeta}>

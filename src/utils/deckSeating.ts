@@ -146,15 +146,30 @@ export function seatDeck(cards: readonly string[]): { cards: string[]; art: Slot
  * What an ENGINE deck should draw: the server's seating when it sent one,
  * `seatDeck` when it sent none. `inferred` is true for the fallback, so
  * `CardArt`'s tooltip says the form came from slot position.
+ *
+ * `filled` is the server's `artFilled`: on a deck Deckkies SUGGESTS, the cards
+ * whose form was filled in because the deck can field it, not because anyone
+ * was seen fielding it (`clash_data.complete_seating`). Per card, because the
+ * rest of that deck's forms WERE observed — read it with `formInferred`.
  */
 export function drawnDeck(
   cards: readonly string[],
   art: SlotArt | undefined,
   inferred?: boolean,
-): { cards: string[]; art: SlotArt; inferred: boolean } {
+  filled?: readonly string[],
+): { cards: string[]; art: SlotArt; inferred: boolean; filled: string[] } {
   if ((art && Object.keys(art).length) || cards.length !== 8) {
-    return { cards: [...cards], art: art ?? {}, inferred: !!inferred };
+    return { cards: [...cards], art: art ?? {}, inferred: !!inferred, filled: [...(filled ?? [])] };
   }
   const seated = seatDeck(cards);
-  return { ...seated, inferred: Object.keys(seated.art).length > 0 };
+  return { ...seated, inferred: Object.keys(seated.art).length > 0, filled: [] };
+}
+
+/** Whether `card`'s drawn form was not observed: the whole deck was seated
+ *  from what its cards can be, or this one form was filled in. */
+export function formInferred(
+  d: { inferred: boolean; filled: readonly string[] },
+  card: string,
+): boolean {
+  return d.inferred || d.filled.includes(card);
 }

@@ -495,6 +495,19 @@ distinct of 88 population picks, 390/525 rows with a duel figure, shared decks
 per pair down in most folders, +0.3–0.6 s. The projection blends in the
 opponent's own duels at `g/(g+20)`, capped 0.75: 0.63–0.75 on real duellists.
 
+## 4h. Every suggestion fields all three special slots (2026-09-27)
+
+Every row `_score` returns is drawn by `clash_data.complete_seating`: the most
+special slots its cards can fill, keeping the observed forms that cost no slot
+(see the README section "A suggestion fields every slot its cards can fill").
+Fills and scouting rows come only from seeds that CAN fill all three —
+`_scout_candidates` skips a short seed and takes that archetype's next one, so
+each archetype still offers twelve — and the duel catalogue is filtered the
+same way in `_DuelContext`. A teammate's own deck is never dropped. The report
+carries `slots: {poolSkipped, duelSkipped}`. Threats and `theirDecks` are drawn
+as fielded. This changes no score: seating is presentation, and the filter
+only removes candidates.
+
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
 Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it

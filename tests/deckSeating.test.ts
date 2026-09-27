@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CARDS_BY_KEY } from '../src/data/cards';
-import { drawnDeck, positionalArt, seatDeck } from '../src/utils/deckSeating';
+import { drawnDeck, formInferred, positionalArt, seatDeck } from '../src/utils/deckSeating';
 import fixture from './fixtures/seating.json';
 
 /*
@@ -77,7 +77,7 @@ describe('drawnDeck keeps the server’s seating and only fills the gap', () => 
   it('server art is used exactly as sent', () => {
     const cards = ['mortar', 'bowler', 'skeletons', 'hog-rider', 'fireball', 'the-log', 'rocket', 'arrows'];
     const art = { mortar: 'evolution', bowler: 'hero' } as const;
-    expect(drawnDeck(cards, { ...art }, false)).toEqual({ cards, art, inferred: false });
+    expect(drawnDeck(cards, { ...art }, false)).toEqual({ cards, art, inferred: false, filled: [] });
   });
 
   it('a bare alphabetical deck (a board saved before seating) is seated and flagged', () => {
@@ -85,5 +85,20 @@ describe('drawnDeck keeps the server’s seating and only fills the gap', () => 
     const out = drawnDeck(bare, {});
     expect(out.cards).toEqual(CASES[0].cards);
     expect(out.inferred).toBe(Object.keys(CASES[0].art).length > 0);
+  });
+
+  it('a filled form is marked per card; the observed forms beside it are not', () => {
+    // The live case: a suggestion fielded with Bats as the evolution and Little
+    // Prince as the champion, and Cannon's evolution filled in by the server.
+    const cards = ['bats', 'little-prince', 'cannon', 'arrows', 'fireball', 'the-log', 'hog-rider', 'poison'];
+    const d = drawnDeck(cards, { bats: 'evolution', cannon: 'evolution' }, false, ['cannon']);
+    expect(d.filled).toEqual(['cannon']);
+    expect(formInferred(d, 'cannon')).toBe(true);
+    expect(formInferred(d, 'bats')).toBe(false);
+  });
+
+  it('a deck seated wholly from capability marks every form, filled or not', () => {
+    const d = drawnDeck(['bats'], {}, true);
+    expect(formInferred(d, 'bats')).toBe(true);
   });
 });

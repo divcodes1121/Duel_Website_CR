@@ -612,14 +612,22 @@ def _population_decks(limit: int = 24) -> list[dict]:
     return out
 
 
-def _fills(existing: list[dict], used: set, need: int) -> list[dict]:
+def _fills(existing: list[dict], used: set, need: int, *,
+           full_loadout: bool = False) -> list[dict]:
     """Meta decks to top up a thin list, skipping variants of what is already
-    there — three near-identical Hog lists is one suggestion, not three."""
+    there — three near-identical Hog lists is one suggestion, not three.
+
+    `full_loadout` is for a list of decks to SUGGEST: only lists whose cards
+    can fill all three special slots. The opponent's projection passes False —
+    what they may bring is not ours to improve.
+    """
     if need <= 0:
         return []
     out = []
     seen = [set(d["cards"]) for d in existing]
     for d in _legal(_population_decks(), used):
+        if full_loadout and cd.fillable_slots(d["cards"]) < cd.SPECIAL_SLOTS:
+            continue
         s = set(d["cards"])
         if any(len(s & e) >= MIN_OVERLAP for e in seen):
             continue
@@ -1080,7 +1088,8 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         pool = []
     mine = _legal(pool, used_mine)
     if len(mine) < MY_TOP_DECKS:
-        mine = mine + _fills(mine, used_mine, MY_TOP_DECKS - len(mine))
+        mine = mine + _fills(mine, used_mine, MY_TOP_DECKS - len(mine),
+                             full_loadout=True)
 
     # THE FIVE ARCHETYPES EVERY DECK ON THIS SCREEN IS RATED AGAINST: their
     # likely ones, then the other win conditions they play, then the meta.
@@ -1093,7 +1102,18 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         exp = _expected(md["cards"], opp["decks"], snap)
         if exp:
             exp["vs"] = _chips(md["cards"], exp["per"], chips, snap)
-        recs.append({**md, "expected": exp})
+        rec = {**md, "expected": exp}
+        # A SUGGESTION FIELDS EVERY SPECIAL SLOT ITS CARDS CAN FILL — the rule
+        # every "what to play" list on the site follows (`cd.complete_seating`).
+        # Their own decks and the meta fills both arrive seated as fielded, so a
+        # capable card nobody was seen fielding would otherwise stay plain.
+        cards, art, filled = cd.complete_seating(
+            rec["cards"], rec.get("art") or {},
+            slot_of=cd.seated_positions(rec["cards"], rec.get("art")))
+        rec["cards"], rec["art"] = cards, art
+        if filled:
+            rec["artFilled"] = filled
+        recs.append(rec)
 
     scored = [r for r in recs if r["expected"]]
     if scored:

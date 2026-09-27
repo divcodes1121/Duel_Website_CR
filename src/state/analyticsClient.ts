@@ -1088,6 +1088,10 @@ export interface CoachDeck {
   cards: string[];
   art: Record<string, WildForm>;
   inferredArt?: boolean;
+  /** Cards whose form was filled in because the deck can field it, not
+   *  observed — a suggestion fields every special slot its cards can fill
+   *  (`clash_data.complete_seating`). Absent when nothing was filled. */
+  artFilled?: string[];
   archetype: string;
   deckName: string;
   avgElixir?: number | null;
@@ -1703,6 +1707,10 @@ export interface TeamRecommendation {
    *  seed-pool deck ("Deckkies pick", scouting rows) unless the meta board
    *  holds the exact list. */
   artInferred?: boolean;
+  /** Cards whose form was filled in because the deck can field it, not
+   *  observed — a suggestion fields every special slot its cards can fill
+   *  (`clash_data.complete_seating`). Absent when nothing was filled. */
+  artFilled?: string[];
   archetype: string;
   name: string;
   avgElixir: number;
@@ -2249,6 +2257,10 @@ export interface FieldPick {
   cards: string[];
   art?: Record<string, WildForm>;
   artInferred?: boolean;
+  /** Cards whose form was filled in because the deck can field it, not
+   *  observed — a suggestion fields every special slot its cards can fill
+   *  (`clash_data.complete_seating`). Absent when nothing was filled. */
+  artFilled?: string[];
   archetype: string;
   name: string;
   expectedWinRate: number;

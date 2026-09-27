@@ -4,7 +4,7 @@ import { fetchFieldPlan, type FieldPlan } from '../../../state/analyticsClient';
 import { coachHref, playerLabel, type RosterPlayer } from '../../../state/coachRoster';
 import { todayRow, todaySummary, type TodayRow } from '../../../state/coachToday';
 import { CardArt } from '../../Analytics/CardArt';
-import { drawnDeck } from '../../../utils/deckSeating';
+import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import { FreshnessLine } from './FieldAnswers';
 import { ChartCard, DashBadge } from '../../ui/bionis-dashboard';
 import styles from './CoachRoster.module.css';
@@ -102,13 +102,13 @@ export function TodayBoard({ players }: { players: RosterPlayer[] }) {
                           card in its base form, so an evolution, a hero and a
                           champion in slots 0/1/2 rendered as plain cards. */}
                       {(() => {
-                        const d = drawnDeck(r.pick.cards, r.pick.art, r.pick.artInferred);
+                        const d = drawnDeck(r.pick.cards, r.pick.art, r.pick.artInferred, r.pick.artFilled);
                         return d.cards.map((c) => (
                           <CardArt
                             key={c}
                             card={c}
                             variant={d.art[c]}
-                            inferred={d.inferred}
+                            inferred={formInferred(d, c)}
                             className={styles.deckCard}
                           />
                         ));

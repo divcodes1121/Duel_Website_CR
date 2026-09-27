@@ -4,7 +4,7 @@ import { useMyCoach, type MyRosterSeat } from '../../state/myCoach';
 import { useAccountStore } from '../../state/accountStore';
 import { DAY_PRESETS } from '../../utils/datePresets';
 import { CardArt } from '../Analytics/CardArt';
-import { drawnDeck, positionalArt } from '../../utils/deckSeating';
+import { drawnDeck, formInferred, positionalArt } from '../../utils/deckSeating';
 import { ReadingState } from '../Analytics/ReadingState';
 import { RecentBattles } from '../Analytics/RecentBattles';
 import { DeckActions } from '../DeckActions/DeckActions';
@@ -510,9 +510,9 @@ function Overview({
                     Reading `best.art?.[c]` directly is that bug one call site
                     further along than the three it was found in. */}
                 {(() => {
-                  const d = drawnDeck(best.cards ?? [], best.art, best.artInferred);
+                  const d = drawnDeck(best.cards ?? [], best.art, best.artInferred, best.artFilled);
                   return d.cards.map((c) => (
-                    <CardArt key={c} card={c} variant={d.art[c]} inferred={d.inferred} className={styles.deckCard} />
+                    <CardArt key={c} card={c} variant={d.art[c]} inferred={formInferred(d, c)} className={styles.deckCard} />
                   ));
                 })()}
               </div>

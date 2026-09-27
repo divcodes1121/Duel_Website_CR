@@ -116,19 +116,27 @@ function Strip({
   cards,
   art,
   inferred,
+  filled,
   name,
   size = 'md',
 }: {
   cards: string[];
   art?: Record<string, WildForm>;
   inferred?: boolean;
+  /** Forms filled in because the deck can field them, not observed. */
+  filled?: string[];
   name?: string;
   size?: 'sm' | 'md';
 }) {
   return (
     <span className={size === 'sm' ? styles.stripSm : styles.strip}>
       {cards.map((c, i) => (
-        <CardArt key={`${c}-${i}`} card={c} variant={art?.[c]} inferred={inferred} />
+        <CardArt
+          key={`${c}-${i}`}
+          card={c}
+          variant={art?.[c]}
+          inferred={inferred || !!filled?.includes(c)}
+        />
       ))}
       {/* The whole point of this screen is "bring this next" — so the deck it
           recommends has to be one press from being in the game. */}
@@ -395,6 +403,7 @@ function DeckRow({
         cards={deck.cards}
         art={deck.art}
         inferred={deck.inferredArt}
+        filled={deck.artFilled}
         name={deck.deckName}
         size="sm"
       />
@@ -1496,7 +1505,13 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
               </span>
             )}
           </div>
-          <Strip cards={best.cards} art={best.art} inferred={best.inferredArt} name={best.deckName} />
+          <Strip
+            cards={best.cards}
+            art={best.art}
+            inferred={best.inferredArt}
+            filled={best.artFilled}
+            name={best.deckName}
+          />
           <VsChips vs={best.expected?.vs} />
         </section>
       )}

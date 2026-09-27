@@ -48,6 +48,7 @@ export interface TodayPlanInput {
      *  draws these cards and without it every one renders in its base form. */
     art?: Record<string, 'evolution' | 'hero'>;
     artInferred?: boolean;
+    artFilled?: string[];
     fromWeighting?: boolean;
   }[];
   weighted: { archetype: string; name: string; battles: number; winRate: number; deficit: number }[];
@@ -60,6 +61,7 @@ export interface TodayPlanInput {
     cards?: string[];
     art?: Record<string, 'evolution' | 'hero'>;
     artInferred?: boolean;
+    artFilled?: string[];
     affinity?: { shared: number; of: number; deckBattles: number; familiar: boolean };
   }[];
 }
@@ -79,6 +81,8 @@ export interface TodayRow {
        was on the payload and thrown away one type earlier. */
     art?: Record<string, 'evolution' | 'hero'>;
     artInferred?: boolean;
+    /** Forms filled in because the deck can field them, not observed. */
+    artFilled?: string[];
     /** Cards shared with one of their own decks, and how much they play it.
      *  Present only when the pick IS one of theirs. */
     shared?: number;
@@ -126,6 +130,7 @@ export function todayRow(
         cards: top.cards ?? [],
         art: top.art,
         artInferred: top.artInferred,
+        artFilled: top.artFilled,
         shared: mine?.affinity?.shared,
         deckBattles: mine?.affinity?.deckBattles,
       }

@@ -5,7 +5,7 @@ import { CardArt } from '../../Analytics/CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ChartCard, InsightRow } from '../../ui/bionis-dashboard';
 import { TrendIcon } from '../../Dashboard/icons';
-import { drawnDeck } from '../../../utils/deckSeating';
+import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import styles from './CoachRoster.module.css';
 
 /**
@@ -113,9 +113,9 @@ function DeckRow({ p, note, name = true }: { p: FieldPick; note?: string | null;
               marks it inferred, so the rule is the same at every call site
               and the next reader does not have to work out which are safe. */}
           {(() => {
-            const d = drawnDeck(p.cards ?? [], p.art, p.artInferred);
+            const d = drawnDeck(p.cards ?? [], p.art, p.artInferred, p.artFilled);
             return d.cards.map((c) => (
-              <CardArt key={c} card={c} variant={d.art[c]} inferred={d.inferred} className={styles.deckCard} />
+              <CardArt key={c} card={c} variant={d.art[c]} inferred={formInferred(d, c)} className={styles.deckCard} />
             ));
           })()}
         </div>
