@@ -1284,6 +1284,38 @@
   background: var(--solid-blue);
 }
 
+/* The duel brain's reserved slots. A pill like `Squad pick` — it answers the
+   same question (why is this row here, and this high) — on the green FILL
+   step, which is graded to carry white text; `--hue-green` would not. */
+.recDuel {
+  align-self: flex-start;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--on-solid);
+  background: var(--solid-green);
+}
+
+/* The same deck's DUEL figure, under the ladder figures. Green INK (the body
+   step) only when it clears the strength gate; otherwise it is information,
+   not a verdict, and wears the ordinary ink. */
+.recDuelRate {
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  /* One figure and its count: at 390px it wrapped to "Duel 61.5% ·" over
+     "1,571", which reads as two facts. */
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.recDuelRate[data-strong] {
+  color: var(--hue-green);
+}
+
 .recVs {
   display: flex;
   flex-wrap: wrap;

@@ -1,0 +1,40 @@
+[Unit]
+# Brings the duel index up to date: every native duel GAME (both decks, who
+# won) read out of battle_raw's round-by-round payloads, then each deck's
+# record against each opponent win condition over the last 60 days, with the
+# players' expected result carried beside it. The evidence behind the duel
+# brain on Team Analysis — see server/duel_index.py and server/duel_brain.py.
+#
+# IT DOES NOT WRITE TO battles.db. The bot's database is opened mode=ro; the
+# only file this writes is /opt/royalweb/server/.duel_index.db.
+#
+# IT IS EVIDENCE, NOT A DEPENDENCY. If this never runs, Team Analysis ranks
+# exactly as it did before and reports the duel brain unavailable; a stopped
+# timer shows up as a growing `duelIndex.ageSeconds` on /api/analytics/status.
+Description=Deckkies duel index update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+ExecStart=/usr/bin/python3 -u duel_index.py --build
+
+# BEHIND THE BOT AND THE API. An update is an index range over a few hours of
+# battle_raw plus ~1 minute of aggregation; nothing is waiting on it.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# FAIL VISIBLY, as the other rebuilds do: a non-zero exit marks the unit
+# failed, and the JSON summary each run prints (games, window, catalogue,
+# seconds, any refusals by reason) lands in the log beside it.
+SuccessExitStatus=0
+TimeoutStartSec=3600
+
+StandardOutput=append:/var/log/clashbot/duel-index.log
+StandardError=append:/var/log/clashbot/duel-index.log
+
+[Install]
+WantedBy=multi-user.target

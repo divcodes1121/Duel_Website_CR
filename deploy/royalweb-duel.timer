@@ -1,0 +1,27 @@
+[Unit]
+Description=Update the Deckkies duel index every four hours
+# If the unit is ever removed, the timer goes with it rather than firing at a
+# service that no longer exists.
+Requires=royalweb-duel.service
+
+[Timer]
+# FOUR HOURS, like the cluster index, and for the same reason: the records sum
+# a 60-day window of ~300,000 games, so a few hours of new duels moves no
+# figure that matters. An update costs about two minutes.
+#
+# TWO HOURS OFF THE CLUSTER REBUILD (00/4:40), so the two big readers of the
+# spinning volume never start together.
+OnCalendar=*-*-* 02/4:10:00
+
+# NOT ON THE MARK either: the 2v2 fold runs hourly at a random minute and the
+# bot polls every two hours.
+RandomizedDelaySec=900
+
+# CATCH UP AFTER A REBOOT. Ingest is watermarked and the aggregates are
+# rebuilt whole, so a late run is identical to an on-time one.
+Persistent=true
+
+Unit=royalweb-duel.service
+
+[Install]
+WantedBy=timers.target

@@ -1221,6 +1221,36 @@ as a reference line, sharing their days and their crosshair (`syncId`).
   prove nothing referenced went missing. The roster's module went 1,837 → 1,369
   lines, including rules for tabs deleted weeks ago.
 
+## The duel brain's marks on Team Analysis (2026-09-27)
+
+Two marks, both figures (the screen's no-prose rule), both printed through
+`src/utils/duelFigures.ts` so the screen and the PDF cannot disagree:
+
+- **`Duel pick`** — a pill beside `Squad pick`, on the rows the duel brain put
+  there. It answers the same question (why is this row here, and this high),
+  so it wears the same shape. **`--solid-green`, not `--hue-green`**: it is a
+  fill carrying white text, and the fill step is the one graded for that
+  (measured 5.48:1 in a browser). In the PDF the badge is pink, because green
+  is already the PDF's Squad pick.
+- **`Duel 61.5% · 1,571`** (duel rate · duel games) under the ladder figures,
+  on every row with 10+ effective duel games. **`--hue-green` INK only when it
+  clears the strength gate**; otherwise plain ink, because a duel figure under
+  50 on a ladder pick is information, not an alarm. `white-space: nowrap`: at
+  390px it wrapped to "Duel 61.5% ·" over "1,571", which read as two facts.
+
+A Duel pick can sit ABOVE rows with a higher ladder figure. That is the two
+brains disagreeing and it is shown rather than averaged away; the pill is what
+keeps it from reading as a sorting bug.
+
+**Traps hit verifying it** (73/73 on a real staged payload): the "PDF covers"
+dropdown's trigger is also named "…Export PDF for…", so a loose `/export pdf/i`
+selector opened the menu instead of exporting — use the exact name; and
+installing Playwright while `vite dev` was serving left jsPDF's pre-bundle
+stale (`504 Outdated Optimize Dep`) — the site's own guard showed **Reload to
+export**, and `vite --force` cleared it. Element screenshots of a teammate's
+list caught the sticky header over it; scroll the rows into the viewport and
+take a page screenshot instead.
+
 ## Working on this
 
 ```bash

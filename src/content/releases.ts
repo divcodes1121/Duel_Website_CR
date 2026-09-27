@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-27-duel-brain',
+    date: '2026-09-27',
+    kind: 'new',
+    title: 'Team Analysis now searches real duels for decks that win',
+    body: [
+      'A second brain reads every stored duel game — over 330,000 of them — and finds the decks that have actually won in duels against the win conditions your opponent brings, including the ones they bring to their own duels. Up to two of each teammate’s seven options are held for decks proven that way: a teammate’s own duel decks first, then the ones duel players win with, leaning on cards that teammate already plays, and shared out so the squad does not all get the same deck.',
+      'Rows it chose say Duel pick, and every deck with enough duel games shows its duel win rate beside the usual figures. That rate takes out how strong the players were and is set so it matches what those decks went on to win in later duels, not their best stretch.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-09-27-team-pdf-per-player',
     date: '2026-09-27',
     kind: 'new',

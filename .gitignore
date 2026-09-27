@@ -73,6 +73,14 @@ server/.cluster_index.db
 server/.cluster_index.db-wal
 server/.cluster_index.db-shm
 
+# The duel index (`duel_index.py --build`) — every native duel game read out of
+# battle_raw, updated every four hours by royalweb-duel.timer. Never source,
+# and unlike the cluster index it DOES hold player tags (who played which
+# deck), so it must never be committed to this public repo.
+server/.duel_index.db
+server/.duel_index.db-wal
+server/.duel_index.db-shm
+
 # Phase 2 feature cache — derived data, regenerable via `--dump` (8.7 MB)
 server/ml/results/*.jsonl.gz
 

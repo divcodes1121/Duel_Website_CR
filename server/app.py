@@ -542,6 +542,14 @@ class Handler(BaseHTTPRequestHandler):
                     out["clusterIndex"] = cluster_index.status()
                 except Exception:  # noqa: BLE001 - an accelerator's status must not fail the probe
                     out["clusterIndex"] = {"available": False}
+                # THE DUEL INDEX, same shape and same reason: a stopped timer
+                # breaks nothing and leaves the duel brain reading an ever
+                # older window. Build time, window, counts — never a path.
+                try:
+                    import duel_index
+                    out["duelIndex"] = duel_index.status()
+                except Exception:  # noqa: BLE001
+                    out["duelIndex"] = {"available": False}
                 # HOW MANY DAYS OF META HISTORY EXIST. Same reason again: if
                 # the snapshot timer stops, nothing breaks and no trend is ever
                 # wrong — the span just silently stops growing, which is

@@ -455,6 +455,46 @@ Tests: `property_squad_plan` (24 checks, including a spread check that went red
 with `SHARED_PENALTY = 0`, and a first draft of it that passed vacuously — the
 filter matched no teammate). Browser 52/52.
 
+## 4g. The duel brain — two of the seven held for decks proven in duels (2026-09-27)
+
+Asked for: search the duels for decks that beat the win conditions the opponent
+brings (and notice a teammate's own decks that do), keep only the strong ones,
+put them in the seven, and make it change for every player.
+
+**It is a second brain, not a term in `score()`.** Nothing in this module moved:
+`score`, `squad_plan` and `diversify` produce exactly the lists they did, and
+`coach_daily` (the second consumer, see §7) is untouched. `team_analysis._folder`
+hands each finished list to `duel_brain.merge`, which:
+
+- puts the DUEL figure on every row (`duel`, or `null` under 10 effective duel
+  games — withheld, never 50);
+- counts rows already duel-strong toward `DUEL_SLOTS` (2) and marks them
+  `duelProven`;
+- fills any open slot with the teammate's own duel decks proven against this
+  opponent, then the population's (`duel_index` catalogue), personalised by
+  known cards (`KNOWN_LEAN` 3) and spread across the folder (`SPREAD_PENALTY`
+  5 — at 3 one dominant deck went to all five teammates);
+- inserts picks directly under the #1, which never moves (the squad plan's
+  decision), and drops the lowest unproven rows to stay at seven.
+
+A pick is scored by `score()` too (via `_score`), so it carries `expectedWinRate`,
+`vs`, `known` and `personalScore` like its neighbours, plus `duelPick`
+(`own`|`duel`). A population pick is a `fill`. The folder gains `duel`
+(projection, their duel games, weight, answers, picks); the report gains
+`duelBrain`.
+
+**The evidence, and why it can be trusted**, is in the README ("A second brain
+that reads real duels") and `duel_brain.py`'s docstring: exact and one-card-off
+records per win condition, pilots' own strength taken out (the top-rate decks'
+pilots won 70–94% with their other decks), shrunk toward 50/50 by 30 games —
+fitted on a temporal holdout where the decks it calls strong went on to win
+60.6% and it printed 60.6%.
+
+**Measured** on 15 real staged folders: picks in 15/15, 97 picks (9 own), 62
+distinct of 88 population picks, 390/525 rows with a duel figure, shared decks
+per pair down in most folders, +0.3–0.6 s. The projection blends in the
+opponent's own duels at `g/(g+20)`, capped 0.75: 0.63–0.75 on real duellists.
+
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
 Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it
@@ -701,6 +741,10 @@ loses the variant veto and nothing else.
 | `src/state/coachPlans.ts` | `PlanEngine.brain` |
 | `tests/coachAssist.test.ts` | 14 → 17 |
 | `src/utils/teamReport.ts` | the PDF said "top three" |
+| `server/duel_index.py` | **new (§4g).** Native duel games out of `battle_raw`, per-deck records vs win conditions with the players' expected result; own gitignored file, `royalweb-duel.timer` |
+| `server/duel_brain.py` | **new (§4g).** The duel brain. No imports beyond the standard library |
+| `server/test_duel_brain.py`, `server/test_duel_index.py` | **new.** 83 and 41 checks |
+| `src/utils/duelFigures.ts` | **new.** How a duel figure prints, on the screen and in the PDF |
 
 ### The duplicate-key fix, because it is a real bug and not a cosmetic one
 

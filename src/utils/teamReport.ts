@@ -17,6 +17,7 @@ import {
   type TableRow,
 } from './analyticsReport';
 import { drawnDeck } from './deckSeating';
+import { duelShort } from './duelFigures';
 
 /**
  * A whole team analysis as a printable dossier.
@@ -231,6 +232,10 @@ function archetypeLabels(folder: TeamFolder): [string, string][] {
 function optionLine(r: TeamRecommendation, rank: number, labels: [string, string][]): DeckLine {
   const deckkies = !!r.fill || !r.owner;
   const meta: string[] = [];
+  // THE DUEL FIGURE LEADS THE LINE when the duel brain chose the row — it is
+  // the reason the row is there — and trails it otherwise, as information.
+  const duel = duelShort(r.duel);
+  if (duel && r.duelPick) meta.push(duel);
   if (deckkies && r.squadPick) meta.push('Deckkies pick');
   if (!deckkies && r.comfort) meta.push(`${int(r.comfort.games)} games at ${pct(r.comfort.winRate)}`);
   if (deckkies && r.known) meta.push(`${r.known}/8 cards they play`);
@@ -240,12 +245,14 @@ function optionLine(r: TeamRecommendation, rank: number, labels: [string, string
   // Coverage only when it is short of everything: at 100% it is the normal
   // case and it pushed the figures that differ off the end of the line.
   if (r.spreadCovered < 99.5) meta.push(`covers ${pct(r.spreadCovered, 0)}`);
+  if (duel && !r.duelPick) meta.push(duel);
   return {
     rank,
     name: r.name,
     badge: r.squadPick
       ? { text: 'Squad pick', hue: 'green' }
-      : deckkies ? { text: 'Deckkies pick', hue: 'violet' } : undefined,
+      : r.duelPick ? { text: 'Duel pick', hue: 'pink' }
+        : deckkies ? { text: 'Deckkies pick', hue: 'violet' } : undefined,
     meta: meta.join(' · '),
     value: pct(r.expectedWinRate),
     valueNote: 'expected',

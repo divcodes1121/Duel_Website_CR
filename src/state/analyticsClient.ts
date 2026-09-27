@@ -1811,6 +1811,64 @@ export interface TeamRecommendation {
   squadPick?: boolean;
   /** Archetypes this #1 is the squad's best answer to, at 50% or better. */
   covers?: string[];
+
+  /* ── THE DUEL BRAIN (`server/duel_brain.py`) ─────────────────────────────
+   *
+   * All optional: a server without the duel index sends none of them, and a
+   * row the duels have too few games on carries `duel: null` — withheld, not
+   * 50%. */
+
+  /** This deck in native DUEL games against what this opponent brings. */
+  duel?: TeamDuelFigures | null;
+  /** Its duel figures clear the strength gate (`duel.strong`). */
+  duelProven?: boolean;
+  /** Why the duel brain put it here: the teammate's OWN duel deck (`own`) or a
+   *  deck duel players win with (`duel`). Absent on rows the ladder brain
+   *  chose. */
+  duelPick?: 'own' | 'duel';
+}
+
+/**
+ * One deck's DUEL record against a projection of what an opponent brings.
+ *
+ * `winRate` is against an EQUAL opponent (the pilots' own strength taken out)
+ * and shrunk toward 50/50 by 30 games — calibrated on a temporal holdout, so
+ * it is the rate these decks went on to win, not the optimistic one. `raw` is
+ * the record as played, for comparison. Percent, 0-100.
+ */
+export interface TeamDuelFigures {
+  winRate: number;
+  raw: number;
+  /** One-sided 95% bounds on `winRate`. */
+  low: number;
+  high: number;
+  /** Effective duel games behind the figure, weighted by what they bring. */
+  nEff: number;
+  /** Duel games summed across the win conditions answered. */
+  games: number;
+  /** Share of the projection the figure was measured against, 0..1. */
+  covered: number;
+  /** Share of that answered off this exact list (the rest off lists one card away). */
+  exact: number;
+  strength: number;
+  /** Clears the gate a reserved slot needs. */
+  strong: boolean;
+  brain: string;
+}
+
+/** A folder's line about the duel brain. `available: false` = no index. */
+export interface TeamDuelRead {
+  available: boolean;
+  brain?: string;
+  /** How much of the duel projection is the opponent's own duel games, 0..1. */
+  weight?: number;
+  theirGames?: number;
+  projection?: { archetype: string; name: string; likelihood: number }[];
+  /** Duel-proven answers found against this opponent. */
+  answers?: number;
+  /** Picks the duel brain placed on the teammates' lists. */
+  picked?: number;
+  pickedRecommended?: number;
 }
 
 /** One row of a folder's squad coverage: who answers one of their archetypes. */
@@ -1898,6 +1956,8 @@ export interface TeamFolder {
   /** Which teammate's #1 answers each archetype they may bring, most likely
    *  first. Empty in a scouting report; absent from a brain-2.0 server. */
   squadCover?: TeamSquadCover[];
+  /** The duel brain's read of this opponent. Absent from an older server. */
+  duel?: TeamDuelRead;
   considered: number;
   /** Why there is nothing to show, when there is nothing to show. */
   reason: 'no_history' | 'no_evidence' | null;
@@ -1933,6 +1993,7 @@ export interface TeamOverall {
   recommended: TeamRecommendation[];
   reason: 'no_history' | 'no_evidence' | null;
   brain?: string;
+  duel?: TeamDuelRead;
 }
 
 export interface TeamReport {
@@ -1970,6 +2031,20 @@ export interface TeamReport {
   /** The coaching brain that produced this report. Absent on a server that
    *  predates it, which is how a client tells the two payload shapes apart. */
   brain?: string;
+  /** The duel brain and the evidence it read. `available: false` means every
+   *  list is the ladder brain's alone; absent from an older server. */
+  duelBrain?: {
+    available: boolean;
+    brain?: string;
+    builtAt?: string | null;
+    windowFrom?: string | null;
+    windowTo?: string | null;
+    windowDays?: number | null;
+    /** Duel games inside the evidence window. */
+    games?: number | null;
+    /** Decks with enough games and pilots to be offered to anyone. */
+    catalogue?: number | null;
+  };
   /** Tags the server could not read, per side. Named so a paste can be fixed. */
   rejected: { blue: string[]; red: string[] };
   status: CounterStatus;

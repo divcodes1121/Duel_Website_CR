@@ -138,6 +138,16 @@ try:
 except Exception:  # noqa: BLE001 - deployment shape
     _VETO = None
 
+#: THE DUEL BRAIN (2026-09-27), imported softly for the same reason: `server/`
+#: is copied by hand, and a deployment missing either file must cost the duel
+#: evidence and nothing else. Without them every list is exactly what the
+#: ladder brain made it, and the report says the duel brain is unavailable.
+try:
+    import duel_brain as _duel
+    import duel_index as _duel_index
+except Exception:  # noqa: BLE001 - deployment shape
+    _duel = _duel_index = None
+
 # ── Floors ──────────────────────────────────────────────────────────────────
 
 #: Squad size cap per side. Mirrors `MAX_SQUAD` in `src/utils/squadParse.ts`,
@@ -950,6 +960,217 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None) -> dict | N
     return out
 
 
+# ── The duel brain ──────────────────────────────────────────────────────────
+#
+# `duel_brain.py` decides and `duel_index.py` counts; this section only moves
+# rows between them and the board. See `duel_brain`'s docstring for the rules:
+# every row gets its duel figures, and up to two of each list's seven are held
+# for decks PROVED in duel games against what this opponent brings — the
+# teammate's own duel decks first, the population's second.
+
+
+def _duel_records_safe(cards):
+    try:
+        return _duel_index.records(cards)
+    except Exception:  # noqa: BLE001 - one bad read costs one deck's figures
+        traceback.print_exc()
+        return None
+
+
+class _DuelContext:
+    """What the duel brain needs for ONE request, read once.
+
+    OFF — and every list exactly what the ladder brain made it — when either
+    module is missing or the index is absent, unreadable or built from another
+    database. The duel brain adds evidence; it never takes a board down.
+
+    Folders are built one after another, so nothing here is shared between
+    threads except inside `prefetch`, which writes only after its map returns.
+    """
+
+    def __init__(self):
+        self.on = bool(_duel and _duel_index and _duel_index.available())
+        self.catalogue = _duel_index.catalogue() if self.on else []
+        self.status = _duel_index.status() if self.on else None
+        self._records: dict[str, dict | None] = {}
+        self._profiles: dict[str, "_DeckProfile | None"] = {}
+        self._decks: dict[tuple, list[dict]] = {}
+        self._seat = None
+
+    def prefetch(self, decks) -> None:
+        """Duel records for many lists at once, on the shared pool."""
+        if not self.on:
+            return
+        todo: dict[str, list[str]] = {}
+        for c in decks:
+            k = scout.deck_key(c)
+            if len(set(c or [])) == 8 and k not in self._records:
+                todo[k] = list(c)
+        if todo:
+            keys = list(todo)
+            for k, r in zip(keys, _POOL.map(_duel_records_safe, [todo[k] for k in keys])):
+                self._records[k] = r
+
+    def records(self, cards) -> dict | None:
+        k = scout.deck_key(cards)
+        if k not in self._records:
+            self._records[k] = _duel_records_safe(cards)
+        return self._records[k]
+
+    def figures(self, cards, projection) -> dict | None:
+        """A row's public duel figures against a duel projection."""
+        return _duel.public(_duel.value(projection, self.records(cards)))
+
+    def window(self, player: dict) -> tuple[str | None, str | None]:
+        """The player's own window as stored-format stamps. A player with no
+        stored window (live, unknown) falls back to the evidence window."""
+        win = player.get("window") or {}
+        since = (_duel_index.iso_to_stamp(win.get("from"))
+                 or (self.status or {}).get("windowFrom"))
+        return since, _duel_index.iso_to_stamp(win.get("to"), end=True)
+
+    def player_decks(self, player: dict) -> list[dict]:
+        since, until = self.window(player)
+        k = (player.get("tag"), since, until)
+        if k not in self._decks:
+            try:
+                self._decks[k] = _duel_index.player_decks(player.get("tag"), since, until)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                self._decks[k] = []
+        return self._decks[k]
+
+    def player_wcs(self, player: dict) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for d in self.player_decks(player):
+            out[d["archetype"]] = out.get(d["archetype"], 0) + int(d["games"])
+        return out
+
+    def profile(self, cards, arch: str):
+        k = scout.deck_key(cards)
+        if k not in self._profiles:
+            try:
+                self._profiles[k] = _DeckProfile(list(cards), arch)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                self._profiles[k] = None
+        return self._profiles[k]
+
+    def seat(self, cards):
+        if self._seat is None:
+            self._seat = dcx.seater()
+        return self._seat(list(cards))
+
+
+def _duel_row(pick: dict, owner: dict | None, threats: list[dict], snap: dict | None,
+              ctx: _DuelContext, *, fill: bool) -> dict | None:
+    """A duel pick as a full recommendation row.
+
+    SCORED BY THE LADDER BRAIN TOO, so the row carries every field every other
+    row carries — its expected win rate against the same projection, its
+    archetype figures, its practice line — and the reader can compare it with
+    the rows around it on the same terms. The duel figures ride beside those.
+    None when the ladder has nothing to say about it, which drops the pick
+    rather than drawing a row with half its figures missing.
+    """
+    arch = pick.get("archetype") or dcx._archetype_of_hash(pick["key"])
+    prof = ctx.profile(pick["cards"], arch)
+    if prof is None:
+        return None
+    cards, art, inferred = ctx.seat(pick["cards"])
+    games = int(pick.get("games") or 0) if owner else 0
+    wins = int(pick.get("wins") or 0) if owner else 0
+    deck = {
+        "cards": cards, "art": art, "inferredArt": inferred,
+        "winCondition": arch, "name": dcx._label(arch),
+        # AN OWN DUEL DECK'S PRACTICE IS THEIR DUEL GAMES WITH IT — the one
+        # count of how often they have actually flown it.
+        "matches": games, "wins": wins,
+        "winRate": round(100.0 * wins / games, 1) if games else 0.0,
+        "useRate": 0.0,
+    }
+    try:
+        row = _score(_Candidate(deck, owner, prof), threats, snap)
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        return None
+    if row is None:
+        return None
+    row["vs"] = scout.vs_archetypes(row)
+    row["known"] = 8 if owner else int(pick.get("known") or 0)
+    row["personalScore"] = round(
+        float(row.get("recommendationScore") or row["score"])
+        + scout._known_bonus(row["known"]), 3)
+    if fill and not owner:
+        row["fill"] = True
+    row["duel"] = _duel.public(pick["duel"])
+    row["duelPick"] = pick.get("pick") or _duel.PICK_POPULATION
+    return row
+
+
+def _duel_merge(listing: list[dict], mate: dict | None, ctx: _DuelContext | None,
+                projection: dict, answers: list[dict], threats: list[dict],
+                snap: dict | None, *, taken: dict | None = None, known=(),
+                limit: int, fill: bool) -> tuple[list[dict], int]:
+    """One list with the duel brain's figures on every row and its slots filled.
+
+    `mate` is the teammate the list belongs to — None for a squad-wide or
+    scouting list, which has nobody's own duel decks to offer and no cards to
+    lean on. `taken` counts the population picks already handed to teammates
+    in this folder, so the next teammate is steered to a comparable other one.
+    """
+    if ctx is None or not ctx.on or not projection:
+        return listing, 0
+    for r in listing:
+        r["duel"] = ctx.figures(r.get("cards"), projection)
+    known = set(known or ())
+    own: list[dict] = []
+    if mate is not None:
+        decks = ctx.player_decks(mate)
+        # A duel player's cards are the ones in the decks they DUEL with too.
+        known |= {c for d in decks if d["games"] >= _duel.OWN_MIN_GAMES for c in d["cards"]}
+        own = _duel.own_answers(projection, decks,
+                                records_for=lambda d: ctx.records(d["cards"]))
+    held = [r.get("cards") or [] for r in listing]
+    own = [o for o in own
+           if not any(_duel.same_deck(o["cards"], h) for h in held)][:_duel.DUEL_SLOTS]
+    pop = _duel.personal(answers, known=known, taken=taken,
+                         exclude=held + [o["cards"] for o in own],
+                         slots=_duel.DUEL_SLOTS)
+    rows = []
+    for p in own + pop:
+        row = _duel_row(p, mate if p["pick"] == _duel.PICK_OWN else None,
+                        threats, snap, ctx, fill=fill)
+        if row is not None:
+            rows.append(row)
+    merged, picked = _duel.merge(listing, rows, limit=limit)
+    if taken is not None:
+        for r in merged:
+            if r.get("duelPick") == _duel.PICK_POPULATION:
+                taken[r["key"]] = taken.get(r["key"], 0) + 1
+    return merged, picked
+
+
+def _duel_summary(ctx: _DuelContext | None, projection: dict, weight: float,
+                  their_games: int, answers: list[dict], picked: int) -> dict:
+    """The folder's line about the duel brain: what it projected, from what."""
+    if ctx is None or not ctx.on:
+        return {"available": False}
+    return {
+        "available": True,
+        "brain": _duel.DUEL_BRAIN_VERSION,
+        # How much of the duel projection is the opponent's own duel games.
+        "weight": weight,
+        "theirGames": their_games,
+        "projection": [
+            {"archetype": a, "name": dcx._label(a), "likelihood": round(v, 4)}
+            for a, v in sorted(projection.items(), key=lambda kv: (-kv[1], kv[0]))
+        ],
+        "answers": len(answers),
+        "picked": picked,
+    }
+
+
 # ── The report ──────────────────────────────────────────────────────────────
 
 
@@ -1013,7 +1234,7 @@ def _evidence_on_top(rows: list[dict], keep: int = 1) -> list[dict]:
 
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             snap: dict | None, top_n: int = TOP_N,
-            seeds: dict | None = None) -> dict:
+            seeds: dict | None = None, ctx: _DuelContext | None = None) -> dict:
     """One opponent, and what should be brought against them.
 
     BOTH MODES COME THROUGH HERE. In a scouting report `blue` is empty, so
@@ -1033,6 +1254,22 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     # was never noise, only weak evidence.
     projection = _threats(opponent.get("decks") or [], seeds)
     threats = projection["threats"]
+
+    # THE DUEL BRAIN'S PROJECTION: the one above, blended with what this
+    # opponent actually brought to their own DUELS (which no 8-card reader
+    # ever saw), and the population's duel-proven answers to it. Computed once
+    # per folder; every teammate's list reads the same answers.
+    duel_proj: dict = {}
+    duel_weight, their_duels, answers = 0.0, 0, []
+    if ctx is not None and ctx.on and threats:
+        try:
+            opp_wcs = ctx.player_wcs(opponent)
+            their_duels = sum(opp_wcs.values())
+            duel_proj, duel_weight = _duel.duel_projection(threats, opp_wcs)
+            answers = _duel.population_answers(duel_proj, ctx.catalogue)
+        except Exception:  # noqa: BLE001 - the duel half must never take the board down
+            traceback.print_exc()
+            duel_proj, answers = {}, []
 
     scored: list[dict] = []
     if threats:
@@ -1110,19 +1347,23 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     # `MIN_COMFORT_GAMES` floor that decides which of their decks are
     # candidates, so "built out of your cards" and "a deck you play" cannot
     # disagree about what counts as playing it.
+    mate_cards: dict[str, set[str]] = {}
+    for mate in blue:
+        pool_cards: set[str] = set()
+        for d in mate.get("decks") or []:
+            if int(d.get("matches") or 0) >= MIN_COMFORT_GAMES:
+                pool_cards.update(d.get("cards") or [])
+        mate_cards[mate["tag"]] = pool_cards
+
     plan_lists: dict[str, list[dict]] | None = None
     cover: list[dict] = []
     if blue and threats:
         try:
             squad = []
             for mate in blue:
-                pool_cards: set[str] = set()
-                for d in mate.get("decks") or []:
-                    if int(d.get("matches") or 0) >= MIN_COMFORT_GAMES:
-                        pool_cards.update(d.get("cards") or [])
                 squad.append({"tag": mate["tag"],
                               "own": by_tag.get(mate["tag"], []),
-                              "cards": pool_cards})
+                              "cards": mate_cards[mate["tag"]]})
             plan_lists, cover = scout.squad_plan(squad, fill_pool(), threats,
                                                  limit=PER_PLAYER_TOP_N)
             names = {m["tag"]: m["name"] for m in blue}
@@ -1134,6 +1375,10 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             plan_lists, cover = None, []
 
     per_player = []
+    # Population duel picks already handed to a teammate in THIS folder, so the
+    # next teammate is steered to a comparable other answer.
+    duel_taken: dict[str, int] = {}
+    duel_picked = 0
     for mate in blue:
         rows = by_tag.get(mate["tag"], [])
         # `own`, NOT `decks`. Naming it `decks` rebound the opponent's list
@@ -1141,6 +1386,19 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # player's decks — the left half of the board showing the wrong team.
         own = [d for d in (mate.get("decks") or [])
                if len(set(d.get("cards") or [])) == 8]
+        listing = (plan_lists[mate["tag"]] if plan_lists is not None
+                   else _suggested(rows, fill_pool, PER_PLAYER_TOP_N))
+        # THE DUEL BRAIN'S TWO SLOTS, for THIS teammate: their own duel decks
+        # proven against this opponent first, then the population's answers
+        # leaning on their cards. See `duel_brain.merge`.
+        try:
+            listing, n = _duel_merge(listing, mate, ctx, duel_proj, answers, threats,
+                                     snap, taken=duel_taken,
+                                     known=mate_cards.get(mate["tag"]),
+                                     limit=PER_PLAYER_TOP_N, fill=True)
+            duel_picked += n
+        except Exception:  # noqa: BLE001 - the ladder list stands on its own
+            traceback.print_exc()
         per_player.append({
             "owner": {"tag": mate["tag"], "name": mate["name"]},
             "basis": mate["basis"],
@@ -1166,9 +1424,7 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             # as the `owner` on every row and the `fill` mark on every row that
             # has none — the reader is told which is which, rather than the
             # stronger deck being withheld.
-            "decks": _evidence_on_top(
-                plan_lists[mate["tag"]] if plan_lists is not None
-                else _suggested(rows, fill_pool, PER_PLAYER_TOP_N), keep=0),
+            "decks": _evidence_on_top(listing, keep=0),
             "considered": len(rows),
             # WHICH empty state this is, said rather than inferred from a
             # missing list. The three are genuinely different problems: nothing
@@ -1181,6 +1437,22 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
                 else "no_evidence"
             ),
         })
+
+    # The squad-wide list (a match plan's folder face; a scouting report's
+    # whole answer) gets the same two slots, from the population alone — it
+    # belongs to nobody, so there are no own duel decks and no cards to lean on.
+    recommended = (_suggested(_distinct(scored), fill_pool, top_n) if blue
+                   else scout.diversify(_distinct(scored), limit=top_n))
+    top_picked = 0
+    try:
+        recommended, top_picked = _duel_merge(
+            recommended, None, ctx, duel_proj, answers, threats, snap,
+            limit=top_n, fill=bool(blue))
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+    duel = _duel_summary(ctx, duel_proj, duel_weight, their_duels, answers, duel_picked)
+    if duel.get("available"):
+        duel["pickedRecommended"] = top_picked
 
     return {
         "player": {
@@ -1223,11 +1495,12 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # IN A MATCH PLAN THE SQUAD'S DECKS AND THE POPULATION'S ARE RANKED
         # TOGETHER (`_suggested`), the same sort as each teammate's list. In a
         # scouting report `scored` already IS the population.
-        "recommended": _evidence_on_top(
-            _suggested(_distinct(scored), fill_pool, top_n) if blue
-            else scout.diversify(_distinct(scored), limit=top_n)
-        ),
+        "recommended": _evidence_on_top(recommended),
         "perPlayer": per_player,
+        # THE DUEL BRAIN'S READ OF THIS OPPONENT: what it projected they bring
+        # to a duel, how much of that is their own duel games, and how many
+        # duel-proven answers it found. `{"available": false}` without an index.
+        "duel": duel,
         # WHICH TEAMMATE'S #1 ANSWERS EACH ARCHETYPE THEY MAY BRING, most
         # likely first. Empty in a scouting report (nobody to assign) and on
         # the fallback path; the client draws nothing rather than a strip of
@@ -1244,7 +1517,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
 
 
 def _combined(red: list[dict], cards: list[_Candidate],
-              snap: dict | None, seeds: dict | None = None) -> dict:
+              snap: dict | None, seeds: dict | None = None,
+              ctx: _DuelContext | None = None) -> dict:
     """The whole opposing roster as ONE spread, and what answers all of it.
 
     THE QUESTION A SCOUTING REPORT CAN ASK AND A MATCH PLAN CANNOT. A match
@@ -1280,14 +1554,35 @@ def _combined(red: list[dict], cards: list[_Candidate],
 
     scored = [row for row in (_score(c, threats, snap) for c in cards) if row]
     scored.sort(key=lambda r: (-r["score"], r["name"]))
+    recommended = scout.diversify(_distinct(scored), limit=SCOUT_TOP_N)
+
+    # THE DUEL BRAIN, ROSTER-WIDE: every opponent's own duel games pooled,
+    # weighted by games the way the spread above is, and the population's
+    # duel-proven answers to the whole roster in the two reserved slots.
+    duel = {"available": False}
+    if ctx is not None and ctx.on:
+        try:
+            pooled_wcs: dict[str, int] = {}
+            for opp in red:
+                for a, n in ctx.player_wcs(opp).items():
+                    pooled_wcs[a] = pooled_wcs.get(a, 0) + n
+            proj, weight = _duel.duel_projection(threats, pooled_wcs)
+            answers = _duel.population_answers(proj, ctx.catalogue)
+            recommended, picked = _duel_merge(recommended, None, ctx, proj, answers,
+                                              threats, snap, limit=SCOUT_TOP_N,
+                                              fill=False)
+            duel = _duel_summary(ctx, proj, weight, sum(pooled_wcs.values()),
+                                 answers, picked)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
     return {
         "players": len(red),
         "spread": spread,
         "threats": threats,
         "churn": projection["churn"],
         "mass": projection.get("mass"),
-        "recommended": _evidence_on_top(
-            scout.diversify(_distinct(scored), limit=SCOUT_TOP_N)),
+        "recommended": _evidence_on_top(recommended),
+        "duel": duel,
         "reason": None if scored else "no_evidence",
         "brain": scout.BRAIN_VERSION,
     }
@@ -1342,7 +1637,19 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     cards = _scout_candidates() if is_scout else _candidates(blue)
     top_n = SCOUT_TOP_N if is_scout else TOP_N
 
-    folders = [_folder(opp, blue, cards, snap, top_n, seeds) for opp in red]
+    # THE DUEL BRAIN, read once for the request. Every list the board draws
+    # holds decks from the squad's pool and the population's (the scout seeds),
+    # so both have their duel records fetched up front, on the pool, instead of
+    # one at a time inside the folder loop.
+    ctx = _DuelContext()
+    if ctx.on:
+        try:
+            ctx.prefetch([c.cards for c in cards]
+                         + ([] if is_scout else [c.cards for c in _scout_candidates()]))
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+
+    folders = [_folder(opp, blue, cards, snap, top_n, seeds, ctx) for opp in red]
 
     # A pool with nothing in it is the one failure the screen cannot recover
     # from, and it is worth naming ONCE at the top: every folder below it would
@@ -1383,12 +1690,25 @@ def analyze(blue_tags: list[str], red_tags: list[str],
         # the Coach Roster, so a plan made today can still be told apart from
         # one made by the old scorer when phase 7 reads its results back.
         "brain": scout.BRAIN_VERSION,
+        # THE SECOND BRAIN, and the evidence it read: the duel index's build
+        # and window. `available: false` means every list above is the ladder
+        # brain's alone, and nothing on the screen may claim otherwise.
+        "duelBrain": ({
+            "available": True,
+            "brain": _duel.DUEL_BRAIN_VERSION,
+            "builtAt": ctx.status.get("builtAt"),
+            "windowFrom": ctx.status.get("windowFrom"),
+            "windowTo": ctx.status.get("windowTo"),
+            "windowDays": ctx.status.get("windowDays"),
+            "games": ctx.status.get("windowGames"),
+            "catalogue": ctx.status.get("catalogue"),
+        } if ctx.on and ctx.status else {"available": False}),
     }
     # THE ROSTER-WIDE READ, scout only. In a match plan every recommendation
     # belongs to a named teammate, so a squad-wide answer would be advice with
     # nobody to take it. See `_combined`.
     if is_scout:
-        out["overall"] = _combined(red, cards, snap, seeds)
+        out["overall"] = _combined(red, cards, snap, seeds, ctx)
     return out
 
 

@@ -1659,6 +1659,68 @@ That is the correct answer rather than a bug, and the payload already says so:
 `source` is `archetype` and the denominator is in the tens of thousands. The
 comfort tiebreak does the ordering, which is what it is for.
 
+## The duel index and the duel brain (`duel_index.py`, `duel_brain.py`)
+
+A second brain for Team Analysis (2026-09-27): what actually wins in native
+DUEL games against what an opponent brings. The main README's
+["A second brain that reads real duels"](../README.md#a-second-brain-that-reads-real-duels-duel_brain-2026-09-27)
+is the record, with the holdout that fitted it; this is how it runs.
+
+**`duel_index.py` counts.** A native duel sits in `battles` as one 16/24-card
+loadout with no per-game result, so every 8-card reader drops it; its payload
+in `battle_raw` carries `team[0].rounds[i]` / `opponent[0].rounds[i]` — each
+game's cards and crowns, both players. The index reads those into its own
+file, `server/.duel_index.db` (`CLASH_DUEL_INDEX`), **gitignored because it
+holds player tags**:
+
+| table | what |
+|---|---|
+| `games` | one row per duel GAME, both decks, who won; append-only, deduped on the duel's own identity (`battleTime` + both tags), pruned past 400 days |
+| `deck` | every list in the 60-day evidence window: win condition, games, wins, pilots, busiest pilot's games |
+| `deck_wc` | each list's `[games, wins, expected]` against each opponent win condition — `expected` is what the two players alone predict (see below) |
+| `sub7` | each list's eight 7-card subsets, blake2b-hashed: two lists share seven cards exactly when they share a subset, so "one card away" is an index read |
+| `catalogue` | the decks the brain may offer anyone (10+ games, 3+ pilots, no pilot over half), rungs precomputed |
+
+- **Modes come from `duel_combos.is_native_duel`** — the allowlist the site and
+  the bot share. It fails safe: an unknown mode containing "duel" is not sliced
+  into games on a guess about its payload.
+- **Cards come from `duo_pairs.deck_and_reason`**, the one raw-payload reader
+  (tower troop excluded, unknown ids refused and counted). An unknown card is
+  retryable, so the watermark is held below the first one — `duo_pairs`'
+  Minion Giant lesson.
+- **The first build scans `battle_raw` on `game_mode`** (no index; 141 s on the
+  VPS). **Every later build reads `stored_at > watermark` through
+  `ix_raw_stored`** (~36 s for seven hours of polling). The top is read first,
+  so anything arriving during a run is the next run's.
+- **The expected result**: each player rated on their duels with their OTHER
+  decks (`duel_brain.pilot_rating`, 20 games of prior at 50%), compared by
+  `log5`. Leave-this-deck-out, or a one-deck pilot's rating IS the deck's rate.
+- **The aggregates are rebuilt whole every run** into `*_new` tables and
+  swapped in one transaction; `deck_wc` is one `INSERT ... SELECT` whose
+  `CROSS JOIN` pins the join order (`test_duel_index.py` checks the plan).
+- **Never required.** Missing, unreadable or built from another database
+  (`meta.source`), every reader returns nothing and Team Analysis ranks as it
+  always did.
+
+**`duel_brain.py` decides.** No imports; every rule is tested against literals.
+A deck's figure is its `adjusted` record against each win condition the
+opponent may bring (exact list, else list + one-card siblings of the same win
+condition; never an archetype-level rung), shrunk toward 50/50 by
+`DUEL_PRIOR_GAMES` (30, fitted), likelihood-weighted over a projection that
+blends the ladder brain's with the opponent's own duel games. STRONG = 30+
+effective games, a one-sided 95% bound at or above 50%, half the projection
+covered. `merge` holds two of seven for strong decks — own first, then the
+catalogue, leaning on known cards and spread across the folder — directly
+under the #1.
+
+**Scheduling**: `deploy/royalweb-duel.{service,timer}`, every four hours at
+`02/4:10` (two hours off the cluster rebuild), `Persistent=true`, log
+`/var/log/clashbot/duel-index.log`. `/api/analytics/status` carries
+`duelIndex` — build time, age, window, games, catalogue — so a stopped timer
+shows as an age. No new route: the figures ride on `/api/analytics/teams`
+(`folders[].duel`, `perPlayer[].decks[].duel|duelPick|duelProven`, and
+`duelBrain` at the top). CLI: `python duel_index.py --build | --full | --status`.
+
 ## Safety
 
 Connections open with `mode=ro`, so SQLite itself refuses writes — this process

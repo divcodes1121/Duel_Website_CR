@@ -12,6 +12,7 @@ import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { drawnDeck } from '../../../utils/deckSeating';
 import { VsMark } from '../../VsMark/VsMark';
+import { duelChip, duelPickLabel, duelTitle } from '../../../utils/duelFigures';
 import styles from './TeamAnalysis.module.css';
 import { Threats } from './Threats';
 import { SuggestHeading } from './SuggestHeading';
@@ -251,6 +252,11 @@ function Recommendation({ rec, rank, labels }: {
         {rank !== undefined && <span className={styles.recRank}>{rank}</span>}
         <div className={styles.recWho}>
           {rec.squadPick && labels && <span className={styles.recSquad}>Squad pick</span>}
+          {/* THE DUEL BRAIN'S SLOTS. Up to two of the seven are held for decks
+              proven in real DUEL games against what this opponent brings — the
+              teammate's own first — and the label is what says why a deck the
+              ladder ranks lower sits this high. */}
+          {duelPickLabel(rec) && <span className={styles.recDuel}>{duelPickLabel(rec)}</span>}
           <span className={styles.recDeck}>{rec.name}</span>
           {/* WHO FLIES IT, OR THAT NOBODY HERE DOES. An owned deck names its
               pilot; a fill says it is a Deckkies pick. A scouting row belongs
@@ -293,6 +299,19 @@ function Recommendation({ rec, rank, labels }: {
               </span>
             ) : null}
           </span>
+          {/* THE SAME DECK IN DUELS, on every row the duels have enough games
+              on — so a coach can see where the two brains agree and where the
+              duels say a ladder answer struggles. Absent, not 50%, when the
+              evidence is thin. */}
+          {rec.duel && (
+            <span
+              className={styles.recDuelRate}
+              data-strong={rec.duel.strong || undefined}
+              title={duelTitle(rec.duel)}
+            >
+              {duelChip(rec.duel)}
+            </span>
+          )}
         </div>
       </div>
 

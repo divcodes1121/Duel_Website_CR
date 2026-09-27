@@ -329,6 +329,35 @@ describe('teamAnalysisReport — what the page will look like', () => {
     expect(second.meta).toContain('6/8 cards they play');
   });
 
+  /* ── The duel brain (2026-09-27) ────────────────────────────────────── */
+  const DUEL = {
+    winRate: 61.4, raw: 66.0, low: 57.9, high: 64.9, nEff: 312, games: 540,
+    covered: 0.9, exact: 0.8, strength: 0.8, strong: true, brain: 'duel-brain-1.0',
+  };
+
+  it('marks a duel pick and leads its line with the duel figure', () => {
+    const r = report();
+    r.folders[0].perPlayer[0].decks = [
+      { ...rec('#B1', 'Ravi'), squadPick: true, duel: { ...DUEL, winRate: 49.2, strong: false } },
+      { ...rec('#B1', 'Ravi', CARDS_B), name: 'Mortar', owner: null, comfort: null, fill: true,
+        duelPick: 'duel', duelProven: true, duel: DUEL },
+    ];
+    const lists = teamAnalysisReport(r).blocks.filter(
+      (b): b is DecksBlock => b.kind === 'decks' && (b as DecksBlock).layout === 'rows',
+    );
+    const [first, second] = lists[0].decks;
+    expect(first.badge?.text).toBe('Squad pick');
+    // On a row the ladder brain chose, the duel figure is information: it trails.
+    expect(first.meta?.endsWith('Duel 49%')).toBe(true);
+    // On a row the duel brain chose, it is the reason: it leads, and the badge says so.
+    expect(second.badge?.text).toBe('Duel pick');
+    expect(second.meta?.startsWith('Duel 61%')).toBe(true);
+  });
+
+  it('prints no duel figure a server did not send', () => {
+    expect(allText(teamAnalysisReport(report()))).not.toContain('Duel ');
+  });
+
   it('gives a teammate with nothing a line saying why, instead of dropping them', () => {
     const doc = teamAnalysisReport(report());
     const aditya = doc.blocks.find(

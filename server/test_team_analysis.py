@@ -705,5 +705,155 @@ check("no matchup snapshot is 'no_matchup_data', not 'no_blue_history'",
       "history, a missing pool is the server still building and is fixed by "
       "waiting rather than by pasting more")
 
+# ── the duel brain, wired in ────────────────────────────────────────────────
+#
+# `duel_brain` decides and has its own suite; this checks the WIRING: every
+# row gets its duel figures, picks land under the #1 and keep the list at
+# seven, a teammate's own duel deck comes back as theirs, population picks are
+# marked and spread across the squad, and with no index nothing changes.
+
+print(NL + "the duel brain, wired in")
+
+import types  # noqa: E402
+
+import duel_brain as dbr  # noqa: E402
+import duel_index as dix  # noqa: E402
+
+DUEL_A = cards("duela")
+DUEL_B = cards("duelb")
+DUEL_C = cards("duelc")
+OWN_D = cards("ownd")
+
+
+def _k(cs):
+    return ",".join(sorted(set(cs)))
+
+
+def _rec(games, wins, opps=("golem", "xbow")):
+    # Expected at 50/50, so the adjustment moves nothing and the figures are
+    # just the shrunk records.
+    return {"exact": {o: [games, wins, games / 2] for o in opps}, "near": {}}
+
+
+# The ladder brain must be able to score a duel pick too, or `_duel_row`
+# rightly drops it rather than draw a row with half its figures missing.
+for _cs, _rate in ((DUEL_A, 57.0), (DUEL_B, 55.0), (DUEL_C, 54.0), (OWN_D, 56.0)):
+    PROFILES[_k(_cs)] = {"golem": {"winRate": _rate, "games": 300, "tier": "high"},
+                         "xbow": {"winRate": _rate, "games": 300, "tier": "high"}}
+
+_CATALOGUE = [
+    {"key": _k(c), "cards": list(c), "archetype": a, "games": 500, "wins": 300,
+     "players": 30, "records": r}
+    for c, a, r in ((DUEL_A, "hog", _rec(400, 280)), (DUEL_B, "giant", _rec(400, 270)),
+                    (DUEL_C, "miner", _rec(400, 262)))
+]
+_RECORDS = {_k(HOG): _rec(300, 150), _k(OWN_D): _rec(300, 210)}
+_PLAYER_DECKS = {
+    "#B2": [{"key": _k(OWN_D), "cards": list(OWN_D), "archetype": "hog",
+             "games": 10, "wins": 7, "lastSeen": "20260820T120000.000Z"}],
+}
+_raise_for: set[str] = set()
+
+
+def _fake_records(cs):
+    if _k(cs) in _raise_for:
+        raise RuntimeError("simulated read failure")
+    return _RECORDS.get(_k(cs), {"exact": {}, "near": {}, "neighbours": 0})
+
+
+_fake_index = types.SimpleNamespace(
+    available=lambda: True,
+    catalogue=lambda: _CATALOGUE,
+    status=lambda: {"builtAt": "2026-09-27T00:00:00Z", "windowFrom": "20260729T000000.000Z",
+                    "windowTo": "20260926T000000.000Z", "windowDays": 60,
+                    "windowGames": 1000, "catalogue": len(_CATALOGUE)},
+    records=_fake_records,
+    iso_to_stamp=dix.iso_to_stamp,
+    player_decks=lambda tag, since=None, until=None: _PLAYER_DECKS.get(tag, []),
+)
+_saved_index, _saved_brain = ta._duel_index, ta._duel
+ta._duel_index, ta._duel = _fake_index, dbr
+try:
+    ctx = ta._DuelContext()
+    check("the context is on when the index answers", ctx.on and len(ctx.catalogue) == 3)
+    base = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, None)
+    duel_f = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, ctx)
+    d = duel_f["duel"]
+    check("the folder says the duel brain ran, and which",
+          d["available"] and d["brain"] == dbr.DUEL_BRAIN_VERSION, str(d))
+    check("its projection is a distribution", abs(sum(p["likelihood"] for p in d["projection"]) - 1) < 1e-6)
+    check("an opponent with no duels of their own gives weight 0",
+          d["weight"] == 0.0 and d["theirGames"] == 0, str(d))
+
+    rows = {r["owner"]["tag"]: r for r in duel_f["perPlayer"]}
+    base_rows = {r["owner"]["tag"]: r for r in base["perPlayer"]}
+    check("every list keeps its #1 — the squad plan's pick is a squad decision",
+          all(rows[t]["decks"][0]["key"] == base_rows[t]["decks"][0]["key"] for t in rows))
+    check("no list grows past seven", all(len(r["decks"]) <= ta.PER_PLAYER_TOP_N for r in rows.values()))
+    picked = {t: [x for x in r["decks"] if x.get("duelPick")] for t, r in rows.items()}
+    check("every teammate is offered duel-proven decks", all(picked[t] for t in rows),
+          str({t: len(v) for t, v in picked.items()}))
+    check("picks sit directly under the #1",
+          all(all(i in (1, 2) for i, x in enumerate(r["decks"]) if x.get("duelPick"))
+              for r in rows.values()))
+    own = [x for x in picked["#B2"] if x["duelPick"] == dbr.PICK_OWN]
+    check("a teammate's own proven duel deck comes back as THEIRS",
+          own and own[0]["owner"]["tag"] == "#B2" and own[0]["key"] == _k(OWN_D),
+          str([x["key"] for x in picked["#B2"]]))
+    check("with their duel games as the practice line",
+          own and own[0]["comfort"]["games"] == 10 and not own[0].get("fill"))
+    pops = [x for v in picked.values() for x in v if x["duelPick"] == dbr.PICK_POPULATION]
+    check("a population pick is marked, ownerless, with the cards they play counted",
+          pops and all(x.get("fill") and x["owner"] is None and "known" in x for x in pops))
+    check("every pick carries figures that clear the gate",
+          all(x["duel"]["strong"] and x["duel"]["brain"] == dbr.DUEL_BRAIN_VERSION
+              for v in picked.values() for x in v))
+    check("every pick was scored by the ladder brain too",
+          all(isinstance(x.get("expectedWinRate"), (int, float)) and "vs" in x
+              for v in picked.values() for x in v))
+    sets = {t: frozenset(x["key"] for x in v if x["duelPick"] == dbr.PICK_POPULATION)
+            for t, v in picked.items()}
+    check("the population's answers are shared out, not handed to all alike",
+          len(set(sets.values())) > 1, str({t: sorted(s) for t, s in sets.items()}))
+    hog_row = next(x for x in rows["#B1"]["decks"] if x["key"] == _k(HOG))
+    check("a ladder row with duel evidence carries its figures",
+          hog_row.get("duel") and not hog_row["duel"]["strong"], str(hog_row.get("duel")))
+    check("and one with none carries None, not 50%",
+          any(x.get("duel") is None for r in rows.values() for x in r["decks"]))
+    check("the squad-wide list gets its reserved slots too",
+          any(x.get("duelPick") for x in duel_f["recommended"]) and len(duel_f["recommended"]) <= ta.TOP_N)
+
+    _PLAYER_DECKS["#R1"] = [{"key": _k(DUEL_A), "cards": list(DUEL_A), "archetype": "hog",
+                             "games": 30, "wins": 18, "lastSeen": "20260820T120000.000Z"}]
+    blended = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, ta._DuelContext())["duel"]
+    check("an opponent's own duels enter the duel projection with their weight",
+          blended["theirGames"] == 30 and abs(blended["weight"] - 30 / 50) < 1e-3
+          and any(p["archetype"] == "hog" for p in blended["projection"]), str(blended))
+    del _PLAYER_DECKS["#R1"]
+
+    _raise_for.add(_k(HOG))
+    survived = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, ta._DuelContext())
+    check("a failing duel read costs that deck's figures, never the board",
+          len(survived["perPlayer"]) == 3 and survived["duel"]["available"])
+    _raise_for.clear()
+
+    scout_duel = ta._folder(opp, [], scout_pool, None, ta.SCOUT_TOP_N, None, ta._DuelContext())
+    check("a scouting report's picks are population picks and are not fills",
+          all(not x.get("fill") for x in scout_duel["recommended"] if x.get("duelPick")))
+
+    ta._duel_index = types.SimpleNamespace(**{**vars(_fake_index), "available": lambda: False})
+    off_ctx = ta._DuelContext()
+    off = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, off_ctx)
+    check("with no index the brain is off and says so", not off_ctx.on
+          and off["duel"] == {"available": False})
+    check("and every list is exactly the ladder brain's",
+          [[x["key"] for x in r["decks"]] for r in off["perPlayer"]]
+          == [[x["key"] for x in r["decks"]] for r in base["perPlayer"]]
+          and all("duel" not in x for r in off["perPlayer"] for x in r["decks"]))
+    ta._duel = None
+    check("and with the module missing, the same", not ta._DuelContext().on)
+finally:
+    ta._duel_index, ta._duel = _saved_index, _saved_brain
+
 print(f"{NL}{PASS} passed, {FAIL} failed{NL}")
 sys.exit(1 if FAIL else 0)

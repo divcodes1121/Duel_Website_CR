@@ -48,11 +48,12 @@ bot's SQLite files read-only.
 
 ---
 
-## Status — 2026-09-26
+## Status — 2026-09-27
 
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Team Analysis reads real duels — a second brain** | **2026-09-27.** Asked for directly: search the duels for decks that beat the win conditions the opponent brings, notice a teammate's own decks that do, keep only the strong ones, and put them in the seven. `server/duel_index.py` reads every native duel game out of `battle_raw`'s round-by-round payloads (**332,723 games** from 137,427 duels) into its own file, every four hours; `server/duel_brain.py` (pure) scores each deck against each win condition, takes the pilots' own strength out, and shrinks toward 50/50 by 30 games — **fitted on a temporal holdout, where the decks it calls strong went on to win 60.6% of unseen duels and it printed 60.6%**. Two of each teammate's seven are held for duel-proven decks, their own first, shared out across the squad; every row with evidence shows `Duel 61.5% · 1,571`. On 15 real folders: picks in all 15, 97 picks, 390 of 525 rows with a duel figure, +0.3–0.6 s a board. 73/73 in a browser. See [A second brain that reads real duels](#a-second-brain-that-reads-real-duels-duel_brain-2026-09-27) |
 | **PDF reports, rebuilt** | **LIVE 2026-09-26 (`61e6a14`)** — `/api/health` reported it ~60 s after the push; the served main bundle carries the new button, menu and release note and none of the old print button's strings, the lazy engine chunk has zero `setGState`, and the three report fonts serve (24/24/18 kB). Every PDF — analytics screens, the new full player report, the Team Analysis dossier, 2v2 Decks and the builder's deck report — is drawn by one rewritten engine in `src/utils/report/`: always dark, Deckkies-branded, cards in slots at the site's size, a working **Open in game** button on every deck, zero transparency states. The shell's Export PDF used to `window.print()` the glass UI — **2.5–8.6 MB and 175–229 ms a page to paint against 0.26–1.5 MB and 14–25 ms now**, same run, same data. One Export button per screen through `state/reportExport.ts`; on a player it offers **This page** (every tab) or **Full player report** (every allowed section, one document with contents). Recent Battles, Deck Counter, Coach Assist, 2v2 and Global Cards export for the first time; the button no longer vanishes below 1080px. **Follow-up the same hour:** every export failed in tabs opened before a deploy (the build id was compiled into the engine chunk, renaming it on every commit) — the id moved to an `index.html` meta tag and stale tabs now get **Reload to export**; see the PDF chapter. 983 vitest (+64), 14/14 UI checks, every export rendered and looked at. See [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf) |
 | **Coach Roster** | **PRO-GATED AND ON THE TOP BAR as of 2026-09-24, and a linked player has their own `#/my` as of 2026-09-25.** Coach is a per-account FLAG (`is_coach`, migration 007, applied) rather than a role, so an account on any tier can coach; the tier gate comes first, because the honest answer to a free account is "this is a pro area". Nine tabs became six. Match plans and results are deleted. "Against the field" answers three questions off one scored pool — the win-condition board, the decks closest to what they already run, and one archetype worth learning, ranked by the biggest single gap it closes. `progress` says whether a weakness is closing, recomputed rather than read from a snapshot table that was deliberately never built. The phase history follows. **Phase 1 LIVE 2026-09-20 (`c3e75f8`): admin-only, experimental.** An anonymous caller hitting Supabase's REST API directly is refused on all five tables (`42501`), checked live after the deploy. `#/admin/coach`, linked from the console. A personal roster of coached players with a switcher and a basic profile, on coaching tables in Supabase (`004_coach_roster.sql`) whose Row Level Security admits only an admin, and only to their own rows — verified 14/14 against production. Nothing touches the bot's database. **Phase 2 LIVE 2026-09-20 (`ed04b98`, server by scp first):** Overview / Battles / Decks / Cards / Opponents tabs over own-deck 1v1 only, with evidence-floored insights, served by a new admin-gated route. **Phase 3 LIVE 2026-09-20 (`a1ac2e0`):** the Deck Arsenal — the decks a coach has approved for a player, built by hand, pasted as a link or taken from their battles, ranked and tagged, on 004's `coach_decks` plus one column from 005. **Phase 4 LIVE 2026-09-20 (`7f54bb2`):** the opponent scout — what an opponent plays, on stored history or a live snapshot with the difference stated, plus the head-to-head from the roster player's own battles. **Phase 5 LIVE 2026-09-20 (`a19eea9`):** what to play — the existing team-analysis engine's ranking for one player against one opponent, joined to the arsenal, with "not picked" and "could not be scored" kept apart. **Phase 6 LIVE 2026-09-20 (`7cca499`):** match plans — three slots against one opponent, with everything the screen showed frozen beside them. **Phase 7 LIVE 2026-09-20 (`2ba3f68`):** results and the learning loop — what was actually played, with the slot inferred from the cards, and rates withheld under their floors. **Phase 8 LIVE 2026-09-20 (`e0b4a7c`):** the roster overview — every player's preparation at a glance, with flags that name a state and an action. See [Coach Roster](#coach-roster) |
 | **The console, the roster and the player's page share one dashboard shell — a sidebar that opens, minimises and closes — and their charts are Recharts** | **LIVE 2026-09-27 (`ea79f1b`; served bundle, both lazy chunks and the admin route checked).** Asked for directly: the three screens were "plain"; the ask was a left sidebar with open, close and minimise, a palette for both themes taken from the best admin dashboards, and charts that are not boring. `ui/dash-shell.tsx`: a 264px sidebar that minimises to a 72px icon rail (each item names itself on hover and focus) and closes to nothing, remembered per screen; an off-canvas drawer below 64rem; Ctrl/⌘+B; a closed panel leaves the tab order. **The console is seven views with their own URLs** — Overview, **Tracking (new)**, Collection, Storage, Rollup, Site & domain, Accounts — and the sidebar carries each section's verdict as a dot, from the same thresholds its cards use (`state/consoleHealth.ts`): live it flags Rollup (coverage 45.7%, last full rebuild 23 July) and Site & domain (one integration missing). **Tracking** answers who was queued for collection, from which screen, and whether the bot has them: the bot's additions per day stacked by where each player was asked for (an "Asked on the site" tab re-scales past the leaderboard's 400-570-a-day bulk runs), requests by screen, the median wait from request to enrolment (59 min live) and every request with its state. Server side the queue now KEEPS what a prune used to delete (`tag_history`), and the admin-gated `/api/analytics/admin/tracking` reads it — route count 25. Charts are Recharts v3 (SVG, so the CSS tokens colour them in both themes; a keyboard layer built in; the renderer shadcn's and Tremor's charts use) on a six-colour series palette run through the dataviz validator for both themes (worst adjacent colour-blind ΔE 11.3); every chart has a table view, and the coach's day chart is TWO synced charts instead of a dual axis. 101/101 browser checks on real production payloads (64 console, 26 roster, 11 `#/my`), both themes, 1440 and 390. Main bundle −11.3 kB gzip (the console left it); the kit and Recharts are a 126 kB gzip lazy chunk that only these three routes load |
@@ -107,7 +108,7 @@ bot's SQLite files read-only.
 | Coach Assist — Suggestion | **personal and archetype-by-archetype (2026-09-25, live).** "Or bring one of these" is chosen per player from their playstyle (12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition), and every deck shows its rate against **five** archetypes — their likely ones, their other win conditions, then the meta — on one line |
 | R3 prediction sampler | **STOPPED 2026-09-19 21:05 UTC** by its own stop condition (a royalweb restart during a deploy), ~8 h into 7 days; found 2026-09-25, not restarted per protocol. Re-running needs a deploy freeze or an amendment — the account holder's call. See `server/README.md` |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files as of 2026-09-27 — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files as of 2026-09-27 evening, **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -8446,6 +8447,110 @@ Match Plan is the original screen and is unchanged: paste your roster on the
 left and theirs on the right, press Analyse, and every opponent comes back as a
 **folder** — open it and their decks are on the left, the decks your squad
 should answer them with on the right, the word VS between.
+
+### A second brain that reads real duels (`duel_brain`, 2026-09-27)
+
+**Asked for directly:** when Deckkies suggests decks, search the duels too —
+take the win conditions the opponent brings, find the decks that played
+against those win conditions in duels and won, notice when one of a
+teammate's own decks is one of them, keep only the strong ones, and put them
+in the seven, so the recommendation is more pointed and changes for every
+player.
+
+**Why it needed new evidence, not a new weight.** Every ranking on the site
+scores ladder records (`pair_matchup_agg`). A native duel is stored in
+`battles` as one 16/24-card loadout with no per-game result — every 8-card
+reader drops it — but its raw payload carries each game's eight cards and
+crowns for both players. `server/duel_index.py` reads them into its own SQLite
+file: **137,427 duels, 332,723 games, every one decisive**, 17 win conditions
+with 286 of the 289 pairings on 30+ games. And this project has twice measured
+that a bounded weight on a second signal moves nothing while an unbounded one
+ranks worse decks higher; what worked was **reserved slots behind a strength
+test**, so that is the shape (`server/duel_brain.py`, pure, no imports).
+
+**What a duel figure is:**
+
+1. **This deck against that WIN CONDITION**, off the exact list, else the list
+   and its one-card-off siblings of the same win condition. **No
+   archetype-level rung**: "Mortar beats Bait in duels" says nothing about
+   *this* Mortar list, and would make every list of a strong archetype a pick.
+2. **The pilots are taken out.** On the first real build, all twelve of the
+   highest-rate catalogue decks were flown mostly by players who win **70–94%
+   of their duels with their other decks too** — strong players, not strong
+   decks. Every game carries the result the two players alone predict (each
+   rated on their duels with their OTHER decks, shrunk to 50/50, compared by
+   log5), and a record is wins against that.
+3. **Shrunk toward 50/50 by 30 games — fitted on a temporal holdout.** Records
+   built on the 237,832 games before 13 September, outcomes read off the
+   82,923 after: grouped by the bound, future win rates climb **53 → 56 → 60 →
+   64%**, and the decks the gate calls strong went on to win **60.6%** of their
+   unseen duels against those win conditions. Unshrunk, the printed rate
+   overshot the future by 3–9 points (predicted 76.5%, realised 67.4%);
+   calibration error 3.9 points unshrunk, 2.2 shrunk, and at the gate the rate
+   a reader sees (60.6%) is the rate those decks went on to win (60.6%). The
+   pilot adjustment measured neutral for prediction (error 15.59 vs 15.71) and
+   stays because it is the right figure for a teammate who is not the pilot.
+
+**What "strong" is:** 30+ effective duel games against what this opponent
+brings (Kish, over games actually played), a one-sided 95% bound at or above
+50%, and measured against at least half of what they bring. 95% and not one
+standard error because the population answer is a search over ~2,000 decks: at
+one standard error a hot 10-3 list outranked 58% over 400 games, and a test
+caught it. The ranking leads with the bound, not the rate.
+
+**What they bring to a duel** is the ladder brain's projection blended with the
+opponent's OWN duel games — which no projection had ever seen — at half weight
+by 20 of their duel games, up to 75%. Measured on real duelling opponents: 38–80
+duel games each in a 30-day window, weight 0.63–0.75.
+
+**On every list:**
+
+- **Two of the seven are held** for duel-proven decks: the teammate's own duel
+  decks first (at least 4 of their own games), then decks duel players win
+  with — the catalogue, 10+ games from 3+ pilots with no pilot over half —
+  leaning up to 3 points on cards that teammate plays and costing 5 points per
+  teammate already handed it in this folder, so the squad does not all get the
+  same deck. A deck already on the list with strong duel figures takes a slot
+  and is marked; nothing is displaced for it.
+- **Picks go directly under the #1**, which is the squad plan's and never moves;
+  the list stays seven by dropping the lowest rows that are neither proven nor
+  picked. A pick is scored by the ladder brain too, so it carries every figure
+  the rows around it carry.
+- **Every row with 10+ effective duel games carries its duel figure**; fewer is
+  withheld, not printed as 50%.
+
+**Measured on real squads, staged on the VPS against production** (15 match-plan
+folders — duellists v duellists, ladder v ladder, duellists v ladder — plus a
+scouting report): duel picks in **15 of 15** folders, **97 picks** (9 of them a
+teammate's own duel deck), **62 distinct among 88 population picks**, 55 of the
+ladder brain's own rows already duel-proven (the two brains agree there), and
+**390 of 525 rows carrying a duel figure**. Shared decks per pair of teammates
+fell in most folders (e.g. 4.5 → 3.8). Cost **+0.3–0.6 s** a board.
+
+**On screen** (figures only — the no-prose rule): a green **Duel pick** pill on
+the rows it chose, and `Duel 61.5% · 1,571` (rate · duel games) under the ladder
+figures on every row with evidence — green when it clears the gate, plain ink
+when it is information. A Duel pick can show a LOWER ladder figure than the rows
+under it; that is the two brains disagreeing, shown rather than averaged away.
+The Team Scout PDF carries the same badge, and `Duel 62%` leads a pick's line
+and trails every other line. `src/utils/duelFigures.ts` prints both.
+
+**The index** (`server/.duel_index.db`, gitignored — it holds player tags) is
+built by `royalweb-duel.timer` every four hours, two hours off the cluster
+rebuild: an index range over new `battle_raw` rows (~36 s for seven hours),
+then the 60-day aggregates (~65 s). `/api/analytics/status` carries
+`duelIndex`. Without it, every list is exactly the ladder brain's and the report
+says `duelBrain.available: false`.
+
+**Not in this change:** Coach Assist. Its list is three decks drawn from the
+player's own duel history with cards already spent this duel filtered out — a
+different flow, and the natural next place for the same evidence.
+
+Tests: `test_duel_brain.py` 83, `test_duel_index.py` 41 (synthetic
+`battle_raw`, including a hand-computed pilot adjustment and the `CROSS JOIN`
+plan), `test_team_analysis.py` 119 → 142 (the wiring, against a fake index),
+`duelFigures.test.ts` 5 and 2 PDF checks. **73/73 in a browser** on a real
+staged payload (both themes, 1440 and 390, the PDF exported and read back).
 
 ### Every teammate gets their own #1, chosen as a squad (`squad_plan`, brain 2.1, 2026-09-25)
 
