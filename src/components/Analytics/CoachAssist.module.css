@@ -751,6 +751,33 @@
   color: var(--text-muted);
 }
 
+/* A deck held for DUEL proof — Team Analysis's pill, same fill step (it
+   carries white text, so `--solid-*`, measured 5.48:1). */
+.duelTag {
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--on-solid);
+  background: var(--solid-green);
+}
+
+/* The deck's duel figure. Green INK (the body step) only when it clears the
+   strength gate; otherwise it is information and wears the ordinary ink. */
+.duelRate {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.duelRate[data-strong] {
+  color: var(--hue-green);
+}
+
 .figure {
   text-align: right;
   font-variant-numeric: tabular-nums;

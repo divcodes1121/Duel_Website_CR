@@ -24,7 +24,7 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **1,029 vitest** (40 files), **3,351 Python checks** across 58 suites (one known failure, `test_ml_21a`), route count **25** — counted 2026-09-27 night |
+| Tests | **1,032 vitest** (41 files), **3,366 Python checks** across 58 suites (one known failure, `test_ml_21a`), route count **25** — counted 2026-09-27 night |
 
 ## What the field plan answers
 
@@ -66,6 +66,7 @@ Backups on the VPS: `team_*.py.bak-20260925-152203-presquad`,
 | `9a8f2e9` | **the duel brain**: two of each seven held for decks proven in real duels | the **Opponent** tab reads Team Analysis, so its list carries duel picks |
 | `f54c864` | **every suggested deck fields all three special slots**; Deckkies picks only from lists that can | the field plan, the Today board, `#/my` and the Opponent tab |
 | `fdce37e` | **one matchup rate per threat LIST, ladder and duels together**, weights fitted on a duel holdout (0.6873 -> 0.6793 log loss) | the **Opponent** tab's rates; the field plan does NOT use it yet |
+| 2026-09-27 night | **Coach Assist reads real duels** (the fused rate on every pairing, one of three options held for a legal duel-proven deck) and **Deck vs Deck on the home Deck Counter** | none directly — Coach Assist is its own screen; the roster's Opponent tab already read Team Analysis |
 
 Backups on the VPS for the last three:
 `{app,team_analysis}.py.bak-20260927-035602-preduel`,
@@ -124,7 +125,10 @@ roster. The console control will happily set it.
 
 ## Genuinely next, in rough order of value
 
-### 0. The fused rate for the field plan (cheap) and Coach Assist
+### 0. The fused rate for the field plan (cheap)
+
+**Coach Assist's half is DONE (2026-09-27)** — `coach._Rates`, holdout 0.6853
+-> 0.6793. What is left is the field plan.
 
 `matchup_fusion` rates Team Analysis per threat LIST (0.6873 -> 0.6793 log
 loss on held-out duels). The field plan still rates by archetype, and its pool
@@ -132,8 +136,6 @@ loss on held-out duels). The field plan still rates by archetype, and its pool
 duel index's version cells already hold every pair it would ask about: it is a
 `rate_for_threat` away. Measure the board's distinctness before and after — the
 field plan fought for per-player difference just as the squad plan did.
-Coach Assist would read the family level from a player's own history, the way
-Team Analysis does for a teammate's own list.
 
 ### 1. Prove the "notes are hidden" property for real
 

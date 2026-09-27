@@ -1107,14 +1107,24 @@ export interface CoachDeck {
   fill?: boolean;
   /** Only on recommendations. */
   expected?: CoachExpected | null;
+  /** This deck's record in real DUEL games against what they bring — the duel
+   *  brain, Team Analysis's (2026-09-27). Null under ten effective duel games:
+   *  withheld, never sent as 50%. Only on recommendations. */
+  duel?: TeamDuelFigures | null;
+  /** Held for duel proof: 'own' = one of their duel decks, 'duel' = a deck duel
+   *  players win with against this opponent. Absent on ranked options. */
+  duelPick?: 'own' | 'duel';
+  /** Its duel record clears the strength gate — the two brains agree. */
+  duelProven?: boolean;
 }
 
 export interface CoachMatchup {
   winRate: number;
   games: number;
   /** Which rung of the evidence ladder answered — 'exact' | 'deck' |
-   *  'cluster7' | 'cluster6' | 'archetype'. Shown, never hidden: "62%" from
-   *  this exact list and "62%" from its archetype are different claims. */
+   *  'cluster7' | 'cluster6' | 'archetype', or 'version' for the fused rate's
+   *  list-level reading (2026-09-27). Shown, never hidden: "62%" from this
+   *  exact list and "62%" from its archetype are different claims. */
   source: string;
   tier?: string | null;
   decks?: number | null;
@@ -1239,6 +1249,12 @@ export interface CoachSuggestion {
    *  `DECK_TUNER.md`. Absent (not null) unless `swaps=1` was sent, because a
    *  null would read as "no swaps found" where the truth is "nobody asked". */
   tuner?: DeckTuner | null;
+  /** The engine that rated this answer: Team Analysis's fused ladder+duel rate
+   *  and how many pairings each level answered. Absent from an older server;
+   *  null when the fused rate was unavailable and `win_prob` answered. */
+  fusion?: { brain: string; sources: Record<string, number> } | null;
+  /** How much of the list the duel brain shaped. `picked` is 0 or 1. */
+  duelBrain?: { brain: string; weight: number; picked: number; catalogueSlotSkipped: number } | null;
 }
 
 /** A deck arranged into its slots with its evolution/hero art resolved —

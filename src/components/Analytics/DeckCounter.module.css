@@ -403,13 +403,20 @@
    head-to-head. */
 .facing {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* `minmax(0, 1fr)`, NOT `1fr` (= `minmax(auto, 1fr)`): the automatic minimum
+     is a pasted strip's eight cards at their 76px cap, ~722px a column, so on
+     every desktop width Deck B's box ran 300px past the panel (measured to
+     x=1747 in a 1440 window, 2026-09-27). The cards shrink on their own
+     (`flex: 1 1 0; min-width: 0`); only the track would not let them. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem;
 }
 
 @media (max-width: 1000px) {
   .facing {
-    grid-template-columns: 1fr;
+    /* The same trap stacked: a bare `1fr` kept each box ~722px wide on a
+       390px phone, clipped to four of its eight cards. */
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1148,4 +1155,33 @@
   text-align: center;
   font-size: 0.82rem;
   color: var(--text-muted);
+}
+
+/* THE HEAD-TO-HEAD'S DECKS ARE 4x2 BELOW 1150px, AND IT STACKS BELOW 700px
+   (2026-09-27). Side, middle, side kept three columns at every width, so each
+   side's eight cards and two buttons shared one line: 17px cards at 1024 and
+   dots at 390. 4x2 is the project's narrow strip, capped at 18rem so a wider
+   side keeps 4x2 rather than going ragged (7 + 1). After the base `.side`
+   rules on purpose — equal specificity, so source order decides. */
+@media (max-width: 1150px) {
+  .side .stripSm {
+    max-width: 18rem;
+  }
+  .side .stripSm img {
+    flex: 0 0 calc((100% - 12px) / 4);
+    width: auto;
+    max-width: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .versus {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .side[data-side='b'] {
+    text-align: left;
+  }
+  .side[data-side='b'] .stripSm {
+    justify-content: flex-start;
+  }
 }

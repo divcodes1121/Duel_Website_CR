@@ -63,7 +63,7 @@
 >   Opponent tab. A deck somebody PLAYED is still drawn as it was fielded.
 > * **STILL TRUE:** the RLS gap above. `coach_is_admin()` is unchanged and no
 >   migration has been written for it.
-> * Counts today: **6 tabs**, **1,029 vitest** (40 files), **204 Python
+> * Counts today: **6 tabs**, **1,032 vitest** (41 files), **204 Python
 >   checks** in `test_coach_daily` (unchanged: `score()`'s new
 >   `rate_for_threat` is optional and the field plan does not pass it), route
 >   count **25** (the admin tracking view took the 25th).

@@ -42,6 +42,18 @@
   padding: 1.1rem 1.3rem 1.5rem;
 }
 
+/* Find counters | Deck vs Deck. The TABS are the player Deck Counter's own
+   (`DeckCounter.module.css .tabs/.tab/.tabOn`); these only place them. Doubled
+   selectors so they win over `.tabs` whichever stylesheet loads last. */
+.modes.modes {
+  flex: none;
+}
+
+.modesCentred.modesCentred {
+  justify-content: center;
+  margin-bottom: 0.9rem;
+}
+
 /* --- Paste box ---------------------------------------------------------- */
 
 .paste {

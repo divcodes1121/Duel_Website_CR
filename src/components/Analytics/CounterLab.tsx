@@ -15,6 +15,11 @@ import { ShieldIcon } from '../Dashboard/icons';
 import { PasteIntro, PasteHeader } from './PasteIntro';
 import { ReadingState } from './ReadingState';
 import styles from './CounterLab.module.css';
+/* The player screen's tabs and glass panel, reused so the two Deck Counters
+   read as one feature — the Deck vs Deck panel was built inside that panel. */
+import dc from './DeckCounter.module.css';
+import { DeckVersus } from './DeckCounter';
+import { useVersusState } from './deckVersusState';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
 
 const pct = (v: number) => `${v.toFixed(1)}%`;
@@ -22,6 +27,16 @@ const num = (v: number) => v.toLocaleString();
 
 /** How many counters a free account sees. The rest are behind the gate. */
 const FREE_ROWS = 3;
+
+/* TWO QUESTIONS, AS ON THE PLAYER SCREEN (2026-09-27). The player-scoped Deck
+   Counter always had Deck vs Deck beside Find counters; this route — Deck
+   Counter with no player loaded — had only the second, although neither needs
+   a player. Same panel, same figures, same endpoint. */
+type Mode = 'find' | 'versus';
+const MODES: { id: Mode; label: string }[] = [
+  { id: 'find', label: 'Find counters' },
+  { id: 'versus', label: 'Deck vs Deck' },
+];
 
 const SOURCE_LABEL: Record<string, string> = {
   exact: 'these exact lists have met',
@@ -80,6 +95,9 @@ export function CounterLab() {
   const [loading, setLoading] = useState(false);
   const reading = useHeldLoading(loading);
   const [failed, setFailed] = useState(false);
+  const [mode, setMode] = useState<Mode>('find');
+  // Held here so the two decks survive a look at Find counters and back.
+  const versusState = useVersusState();
 
   /** Paste, press Find counters, THEN the results — and the box empties as they
    *  land. See the note in DeckLab for why it does not fire off a keystroke. */
@@ -154,6 +172,42 @@ export function CounterLab() {
     </>
   );
 
+  const switcher = (centred?: boolean) => (
+    <div
+      className={`${dc.tabs} ${centred ? styles.modesCentred : styles.modes}`}
+      role="tablist"
+      aria-label="Deck Counter"
+    >
+      {MODES.map((m) => (
+        <button
+          key={m.id}
+          type="button"
+          role="tab"
+          aria-selected={mode === m.id}
+          className={`${dc.tab} ${mode === m.id ? dc.tabOn : ''}`}
+          onClick={() => setMode(m.id)}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (mode === 'versus') {
+    return (
+      <section className={styles.page}>
+        <div className={styles.body}>
+          <PasteHeader hue="pink" icon={ShieldIcon} title="Deck Counter">
+            {switcher()}
+          </PasteHeader>
+          <section className={dc.panel}>
+            <DeckVersus state={versusState} />
+          </section>
+        </div>
+      </section>
+    );
+  }
+
   if (!cards) {
     return (
       <section className={styles.page}>
@@ -169,6 +223,7 @@ export function CounterLab() {
           blurb="Every row is that exact list's own record where the evidence exists, so swapping a single card moves the whole table. Each counter comes with the deck people are actually running."
           chips={['Ranked by evidence', 'Real decks, not labels', 'Card-sensitive']}
         >
+          {switcher(true)}
           {form}
         </PasteIntro>
       </section>
@@ -181,6 +236,7 @@ export function CounterLab() {
         <PasteHeader hue="pink" icon={ShieldIcon} title="Deck Counter">
           {form}
         </PasteHeader>
+        {switcher()}
 
       <div className={styles.target}>
           {(drawn?.cards ?? cards).map((c, i) => (
@@ -242,7 +298,6 @@ export function CounterLab() {
               perks={[
                 'Every counter, not the first three',
                 'The real deck behind each row',
-                'Head-to-head between any two lists',
               ]}
             >
               {/* The real rows, blurred. A locked feature drawn as an empty box

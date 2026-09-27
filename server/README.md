@@ -606,7 +606,7 @@ python server/test_card_art.py       # 131 checks, no database needed
 python server/test_duel_zone.py      # 88 checks, no database needed
 python server/test_player_cards.py   # 60 checks, no database needed
 python server/test_deck_counter.py   # 58 checks, no database needed
-python server/test_coach.py          # 84 checks, no database needed
+python server/test_coach.py          # 99 checks, no database needed
 ```
 
 ## The Duel Zone (`duel_zone.py`)
@@ -1833,6 +1833,31 @@ Without that bound the pair of queries took ~17 s; with it, 74 ms cold and
 under 10 ms warm.
 
 ## Coach Assist (`coach.py`)
+
+**THE FUSED RATE AND THE DUEL BRAIN, FROM TEAM ANALYSIS (2026-09-27).** `_Rates`
+wraps `team_analysis._FusionContext` over a `_DuelContext` (soft import; off =
+`win_prob` exactly as before, and `fusion: null` says so). `_expected(...,
+rates)`, `_rate_vs_archetype(..., rates)` and `_chips(..., rates=)` take it —
+one engine per request, never a mix. `_rec` scores and seats every option (the
+three-slot rule). `_duel_merge` holds `DUEL_SLOTS` (1) of the three for a legal
+duel-proven deck: projection = `duel_brain.duel_projection(their likely decks,
+their own duel win conditions)`; `own_answers` over
+`duel_index.player_decks(me)`, then `population_answers` over the catalogue,
+both filtered by `RECOMMEND_MAX_SHARED` against the cards already spent;
+`personal`, then `merge`. Payload: `recommendations[].duel/duelPick/duelProven`,
+`fusion {brain, sources}`, `duelBrain {brain, weight, picked,
+catalogueSlotSkipped}`. The one change in `team_analysis` is
+`_FusionContext.prepare(hubs_too=True)` — an opt-in family level for hub lists
+against threats the cells do not hold (one opponent's own decks rarely are
+hubs); Team Analysis never passes it. Holdout 0.6853 -> 0.6793 on 11,102 duel
+games; staged 24 answers, 0 illegal. Backups
+`{coach,team_analysis}.py.bak-20260927-140324-precoachduel`.
+
+**TEAM ANALYSIS'S CONTEXTS NOW HAVE A CONSUMER OUTSIDE IT.** Changing what
+`_DuelContext` exposes (`on`, `catalogue`, `status`, `slot_gaps`, `profile`,
+`records`, `figures`, `seat`) or `_FusionContext`'s `rater`/`prepare`/`stats`
+changes Coach Assist too, and `test_team_analysis.py` does not know Coach
+Assist exists — `test_coach.py` pins this module's side against fakes.
 
 **THE TUNER'S "OR BRING ONE OF THESE" IS PERSONAL (2026-09-25).** `tune()`
 takes a `profile` from `_playstyle(tag, since, until, hist)` — one

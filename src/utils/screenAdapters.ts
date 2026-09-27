@@ -16,6 +16,7 @@ import { CARDS_BY_KEY } from '../data/cards';
 import { frac, int, pct, type DeckLine, type ReportBlock, type ReportDoc } from './analyticsReport';
 import { DAY } from './reportAdapters';
 import { printableName } from './report/text';
+import { duelPickLabel, duelShort } from './duelFigures';
 
 /* Report models for the screens that had NO export before this module:
  * Recent Battles, Deck Counter, Coach Assist, 2v2 Decks and the global Cards
@@ -253,7 +254,8 @@ export function deckCounterDoc(
 function coachDeck(d: CoachDeck, value?: string, valueNote?: string): DeckLine {
   return {
     name: d.deckName || d.archetype,
-    meta: [d.avgElixir != null ? `${d.avgElixir.toFixed(1)} elixir` : '', d.count != null ? `seen ${int(d.count)}×` : '', d.fill ? 'Deckkies pick' : '']
+    meta: [d.avgElixir != null ? `${d.avgElixir.toFixed(1)} elixir` : '', d.count != null ? `seen ${int(d.count)}×` : '',
+      d.fill ? 'Deckkies pick' : '', duelPickLabel(d) ?? '', duelShort(d.duel) ?? '']
       .filter(Boolean).join(' · '),
     value,
     valueNote,

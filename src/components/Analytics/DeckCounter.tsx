@@ -14,13 +14,13 @@ import {
   type DrawnDeck,
   type WildForm,
   type CountersReport,
-  type MatchupReport,
   type MatchupSource,
   type PlayerCounterReport,
   type PlayerMatchup,
   type RepDeck,
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
+import { useVersusState, type VersusState } from './deckVersusState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DeckCounter.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
@@ -417,6 +417,225 @@ function DeckInput({
   );
 }
 
+/** Deck vs Deck — two pasted decks, head to head.
+ *
+ * ITS OWN COMPONENT SO BOTH DECK COUNTERS HAVE IT (2026-09-27). The player
+ * screen carried it as a tab; the home route's Deck Counter had only "find a
+ * counter". Nothing in it reads the player — the matchup is two lists against
+ * each other, so it answers the same with or without a tag loaded.
+ *
+ * THE HOST MAY OWN ITS STATE (`useVersusState`). The player screen does, so two
+ * pasted decks survive the screen swapping itself for a loading state when its
+ * window changes, and so its PDF can carry the reading. The home route lets
+ * the panel keep its own. `building` comes off the reading's own status — the
+ * same snapshot the player report's status describes.
+ */
+export function DeckVersus({ state }: { state?: VersusState }) {
+  const own = useVersusState();
+  const { deckA, setDeckA, deckB, setDeckB, wildA, setWildA, wildB, setWildB, versus, setVersus } =
+    state ?? own;
+  const [busy, setBusy] = useState(false);
+  const building = versus?.status?.building ?? false;
+
+  /* The three columns keep each side's ART, so a card that is only in deck A
+     and is A's evolution is drawn as that evolution. The shared column takes
+     A's reading — a card can legally be the evolution in one deck and plain in
+     the other, and picking a side is honest where merging them is not. */
+  const cardDiff = useMemo(() => {
+    const A = new Set(deckA);
+    const B = new Set(deckB);
+    return {
+      onlyA: deckA.filter((c) => !B.has(c)),
+      onlyB: deckB.filter((c) => !A.has(c)),
+      both: deckA.filter((c) => B.has(c)),
+    };
+  }, [deckA, deckB]);
+
+  return (
+    <>
+      {/* Face to face. These two are a comparison and belong beside each
+          other; the worst/best lists below are read one after the other
+          and use the stacked `.two`. */}
+      <div className={styles.facing}>
+        <DeckInput label="Deck A" cards={deckA} onCards={setDeckA} onWild={setWildA} />
+        <DeckInput label="Deck B" cards={deckB} onCards={setDeckB} onWild={setWildB} />
+      </div>
+
+      <button
+        type="button"
+        className={styles.action}
+        disabled={deckA.length === 0 || deckB.length === 0 || busy}
+        onClick={() => {
+          setBusy(true);
+          fetchMatchup(deckA, deckB, wildA, wildB)
+            .then(setVersus)
+            .catch(() => setVersus(null))
+            .finally(() => setBusy(false));
+        }}
+      >
+        {busy ? 'Comparing…' : 'Compare decks'}
+      </button>
+
+      {versus && (
+        <>
+          <div className={styles.versus}>
+            <div className={styles.side} data-side="a">
+              <span className={styles.sideName}>{versus.a.name}</span>
+              <span className={styles.sideBig}>
+                {versus.matchup ? pct(versus.matchup.winRate) : '—'}
+              </span>
+              <span className={styles.sideSub}>{versus.a.avgElixir} avg elixir</span>
+              <PastedDeck side={versus.a} size="sm" />
+            </div>
+            <div className={styles.mid}>
+              <span className={styles.midBig}>
+                {versus.matchup ? nf.format(versus.matchup.games) : '—'}
+              </span>
+              <span className={styles.midSub}>battles behind it</span>
+              {versus.matchup && <Tier tier={versus.matchup.tier} />}
+              {/* WHOSE record this is. A percentage from this exact list's
+                  own battles and the same percentage from the archetype
+                  average are different claims. */}
+              {versus.source && (
+                <span className={styles.source} data-source={versus.source}>
+                  {SOURCE_LABEL[versus.source]}
+                </span>
+              )}
+            </div>
+            <div className={styles.side} data-side="b">
+              <span className={styles.sideName}>{versus.b.name}</span>
+              <span className={styles.sideBig}>
+                {versus.matchup ? pct(100 - versus.matchup.winRate) : '—'}
+              </span>
+              <span className={styles.sideSub}>{versus.b.avgElixir} avg elixir</span>
+              <PastedDeck side={versus.b} size="sm" />
+            </div>
+          </div>
+
+          {!versus.matchup && (
+            <p className={styles.empty}>
+              {building
+                ? 'The matchup matrix is still building — it takes about a minute on first start.'
+                : 'Too few stored battles between these archetypes to report a matchup.'}
+            </p>
+          )}
+
+          {versus.matchup && (
+            <>
+              <div className={styles.tiles}>
+                <div className={styles.tile}>
+                  <span className={styles.tileLabel}>Crown difference</span>
+                  <span className={styles.tileBig}>{signed(versus.matchup.crownDiff)}</span>
+                  <span className={styles.tileSub}>
+                    {versus.matchup.avgCrownsFor} vs {versus.matchup.avgCrownsAgainst} per battle
+                  </span>
+                </div>
+                <div className={styles.tile}>
+                  <span className={styles.tileLabel}>Three-crown wins</span>
+                  <span className={styles.tileBig}>{pct(versus.matchup.threeCrownFor)}</span>
+                  <span className={styles.tileSub}>
+                    against {pct(versus.matchup.threeCrownAgainst)} the other way
+                  </span>
+                </div>
+                <div className={styles.tile}>
+                  <span className={styles.tileLabel}>Record</span>
+                  <span className={styles.tileBig}>
+                    {nf.format(versus.matchup.wins)}–{nf.format(versus.matchup.losses)}
+                  </span>
+                  <span className={styles.tileSub}>
+                    {versus.matchup.interval ? `95% CI ${versus.matchup.interval}` : 'wins–losses'}
+                  </span>
+                </div>
+                <div className={styles.tile}>
+                  <span className={styles.tileLabel}>Mirror?</span>
+                  <span className={styles.tileBig}>{versus.mirror ? 'Yes' : 'No'}</span>
+                  <span className={styles.tileSub}>
+                    {versus.mirror
+                      ? 'the same eight cards — 50% by construction'
+                      : versus.sameArchetype
+                        ? 'same archetype, different lists'
+                        : 'different archetypes'}
+                  </span>
+                </div>
+              </div>
+
+              {/* THE LADDER. The headline above is the narrowest
+                  reading; these are the wider ones. 104 battles from this
+                  exact list and 70,000 from lists one card different are
+                  both worth seeing, and so is the case where they
+                  disagree. */}
+              {versus.ladder && versus.ladder.length > 1 && (
+                <section className={styles.block}>
+                  <h2 className={styles.blockTitle}>
+                    How much evidence, and how close a match
+                  </h2>
+                  <p className={styles.blockNote}>
+                    The same matchup read from progressively wider sets of decks. The top
+                    row is {versus.a.name} exactly as pasted; each row below relaxes how
+                    many cards have to match.
+                  </p>
+                  <ol className={styles.rows}>
+                    <li className={`${styles.rowHead} ${styles.ladderRow}`} aria-hidden="true">
+                      <span>Measured on</span>
+                      <span>Decks pooled</span>
+                      <span>Win rate</span>
+                      <span />
+                      <span>Battles</span>
+                      <span>Evidence</span>
+                    </li>
+                    {versus.ladder.map((r) => (
+                      <li key={r.source} className={`${styles.row} ${styles.ladderRow}`}>
+                        <span className={styles.rowName}>{SOURCE_LABEL[r.source]}</span>
+                        <span className={styles.rowGames}>
+                          {r.decks == null ? 'every deck' : nf.format(r.decks)}
+                        </span>
+                        <span
+                          className={styles.rowFig}
+                          data-kind={r.winRate > 52 ? 'good' : r.winRate < 48 ? 'bad' : 'flat'}
+                        >
+                          {pct(r.winRate)}
+                        </span>
+                        <Meter
+                          value={r.winRate}
+                          kind={r.winRate > 52 ? 'good' : r.winRate < 48 ? 'bad' : 'flat'}
+                        />
+                        <span className={styles.rowGames}>{nf.format(r.games)}</span>
+                        <Tier tier={r.tier} />
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
+
+              <section className={styles.block}>
+                <h2 className={styles.blockTitle}>Card difference</h2>
+                <div className={styles.diffGrid}>
+                  <div>
+                    <span className={styles.diffLabel} data-side="a">
+                      Only in {versus.a.name}
+                    </span>
+                    <Strip cards={cardDiff.onlyA} art={versus.a.art} inferred={versus.a.inferredArt} />
+                  </div>
+                  <div>
+                    <span className={styles.diffLabel}>Shared ({cardDiff.both.length})</span>
+                    <Strip cards={cardDiff.both} art={versus.a.art} inferred={versus.a.inferredArt} />
+                  </div>
+                  <div>
+                    <span className={styles.diffLabel} data-side="b">
+                      Only in {versus.b.name}
+                    </span>
+                    <Strip cards={cardDiff.onlyB} art={versus.b.art} inferred={versus.b.inferredArt} />
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 /* ------------------------------------------------------------ the screen */
 
 export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; season?: Season }) {
@@ -427,17 +646,15 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
   const [loading, setLoading] = useState(true);
   const reading = useHeldLoading(loading);
 
-  const [deckA, setDeckA] = useState<string[]>([]);
-  const [deckB, setDeckB] = useState<string[]>([]);
-  const [versus, setVersus] = useState<MatchupReport | null>(null);
+  // Deck vs Deck's state lives here so it outlives a reload of the player report.
+  const versusState = useVersusState();
+  const versus = versusState.versus;
   const [target, setTarget] = useState<string[]>([]);
   const [counters, setCounters] = useState<CountersReport | null>(null);
   // Paged the same way as the player lists; reset whenever a new deck is
   // analysed so an expanded view does not carry over to a shorter result.
   const [counterShown, setCounterShown] = useState(PAGE);
-  // Slot-3 choices, held here because the RESULT requests need them too.
-  const [wildA, setWildA] = useState<WildForm | null>(null);
-  const [wildB, setWildB] = useState<WildForm | null>(null);
+  // The find tab's slot-3 choice, held here because its RESULT request needs it too.
   const [wildTarget, setWildTarget] = useState<WildForm | null>(null);
   useEffect(() => setCounterShown(PAGE), [counters]);
   const [busy, setBusy] = useState(false);
@@ -466,20 +683,6 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tag, preset, win.from, win.to]);
-
-  /* The three columns keep each side's ART, so a card that is only in deck A
-     and is A's evolution is drawn as that evolution. The shared column takes
-     A's reading — a card can legally be the evolution in one deck and plain in
-     the other, and picking a side is honest where merging them is not. */
-  const cardDiff = useMemo(() => {
-    const A = new Set(deckA);
-    const B = new Set(deckB);
-    return {
-      onlyA: deckA.filter((c) => !B.has(c)),
-      onlyB: deckB.filter((c) => !A.has(c)),
-      both: deckA.filter((c) => B.has(c)),
-    };
-  }, [deckA, deckB]);
 
   if (reading) {
     return (
@@ -632,189 +835,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
         )}
 
         {/* ---------------------------------------------------- deck vs deck */}
-        {tab === 'versus' && (
-          <>
-            {/* Face to face. These two are a comparison and belong beside each
-                other; the worst/best lists below are read one after the other
-                and use the stacked `.two`. */}
-            <div className={styles.facing}>
-              <DeckInput label="Deck A" cards={deckA} onCards={setDeckA} onWild={setWildA} />
-              <DeckInput label="Deck B" cards={deckB} onCards={setDeckB} onWild={setWildB} />
-            </div>
-
-            <button
-              type="button"
-              className={styles.action}
-              disabled={deckA.length === 0 || deckB.length === 0 || busy}
-              onClick={() => {
-                setBusy(true);
-                fetchMatchup(deckA, deckB, wildA, wildB)
-                  .then(setVersus)
-                  .catch(() => setVersus(null))
-                  .finally(() => setBusy(false));
-              }}
-            >
-              {busy ? 'Comparing…' : 'Compare decks'}
-            </button>
-
-            {versus && (
-              <>
-                <div className={styles.versus}>
-                  <div className={styles.side} data-side="a">
-                    <span className={styles.sideName}>{versus.a.name}</span>
-                    <span className={styles.sideBig}>
-                      {versus.matchup ? pct(versus.matchup.winRate) : '—'}
-                    </span>
-                    <span className={styles.sideSub}>{versus.a.avgElixir} avg elixir</span>
-                    <PastedDeck side={versus.a} size="sm" />
-                  </div>
-                  <div className={styles.mid}>
-                    <span className={styles.midBig}>
-                      {versus.matchup ? nf.format(versus.matchup.games) : '—'}
-                    </span>
-                    <span className={styles.midSub}>battles behind it</span>
-                    {versus.matchup && <Tier tier={versus.matchup.tier} />}
-                    {/* WHOSE record this is. A percentage from this exact list's
-                        own battles and the same percentage from the archetype
-                        average are different claims. */}
-                    {versus.source && (
-                      <span className={styles.source} data-source={versus.source}>
-                        {SOURCE_LABEL[versus.source]}
-                      </span>
-                    )}
-                  </div>
-                  <div className={styles.side} data-side="b">
-                    <span className={styles.sideName}>{versus.b.name}</span>
-                    <span className={styles.sideBig}>
-                      {versus.matchup ? pct(100 - versus.matchup.winRate) : '—'}
-                    </span>
-                    <span className={styles.sideSub}>{versus.b.avgElixir} avg elixir</span>
-                    <PastedDeck side={versus.b} size="sm" />
-                  </div>
-                </div>
-
-                {!versus.matchup && (
-                  <p className={styles.empty}>
-                    {building
-                      ? 'The matchup matrix is still building — it takes about a minute on first start.'
-                      : 'Too few stored battles between these archetypes to report a matchup.'}
-                  </p>
-                )}
-
-                {versus.matchup && (
-                  <>
-                    <div className={styles.tiles}>
-                      <div className={styles.tile}>
-                        <span className={styles.tileLabel}>Crown difference</span>
-                        <span className={styles.tileBig}>{signed(versus.matchup.crownDiff)}</span>
-                        <span className={styles.tileSub}>
-                          {versus.matchup.avgCrownsFor} vs {versus.matchup.avgCrownsAgainst} per battle
-                        </span>
-                      </div>
-                      <div className={styles.tile}>
-                        <span className={styles.tileLabel}>Three-crown wins</span>
-                        <span className={styles.tileBig}>{pct(versus.matchup.threeCrownFor)}</span>
-                        <span className={styles.tileSub}>
-                          against {pct(versus.matchup.threeCrownAgainst)} the other way
-                        </span>
-                      </div>
-                      <div className={styles.tile}>
-                        <span className={styles.tileLabel}>Record</span>
-                        <span className={styles.tileBig}>
-                          {nf.format(versus.matchup.wins)}–{nf.format(versus.matchup.losses)}
-                        </span>
-                        <span className={styles.tileSub}>
-                          {versus.matchup.interval ? `95% CI ${versus.matchup.interval}` : 'wins–losses'}
-                        </span>
-                      </div>
-                      <div className={styles.tile}>
-                        <span className={styles.tileLabel}>Mirror?</span>
-                        <span className={styles.tileBig}>{versus.mirror ? 'Yes' : 'No'}</span>
-                        <span className={styles.tileSub}>
-                          {versus.mirror
-                            ? 'the same eight cards — 50% by construction'
-                            : versus.sameArchetype
-                              ? 'same archetype, different lists'
-                              : 'different archetypes'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* THE LADDER. The headline above is the narrowest
-                        reading; these are the wider ones. 104 battles from this
-                        exact list and 70,000 from lists one card different are
-                        both worth seeing, and so is the case where they
-                        disagree. */}
-                    {versus.ladder && versus.ladder.length > 1 && (
-                      <section className={styles.block}>
-                        <h2 className={styles.blockTitle}>
-                          How much evidence, and how close a match
-                        </h2>
-                        <p className={styles.blockNote}>
-                          The same matchup read from progressively wider sets of decks. The top
-                          row is {versus.a.name} exactly as pasted; each row below relaxes how
-                          many cards have to match.
-                        </p>
-                        <ol className={styles.rows}>
-                          <li className={`${styles.rowHead} ${styles.ladderRow}`} aria-hidden="true">
-                            <span>Measured on</span>
-                            <span>Decks pooled</span>
-                            <span>Win rate</span>
-                            <span />
-                            <span>Battles</span>
-                            <span>Evidence</span>
-                          </li>
-                          {versus.ladder.map((r) => (
-                            <li key={r.source} className={`${styles.row} ${styles.ladderRow}`}>
-                              <span className={styles.rowName}>{SOURCE_LABEL[r.source]}</span>
-                              <span className={styles.rowGames}>
-                                {r.decks == null ? 'every deck' : nf.format(r.decks)}
-                              </span>
-                              <span
-                                className={styles.rowFig}
-                                data-kind={r.winRate > 52 ? 'good' : r.winRate < 48 ? 'bad' : 'flat'}
-                              >
-                                {pct(r.winRate)}
-                              </span>
-                              <Meter
-                                value={r.winRate}
-                                kind={r.winRate > 52 ? 'good' : r.winRate < 48 ? 'bad' : 'flat'}
-                              />
-                              <span className={styles.rowGames}>{nf.format(r.games)}</span>
-                              <Tier tier={r.tier} />
-                            </li>
-                          ))}
-                        </ol>
-                      </section>
-                    )}
-
-                    <section className={styles.block}>
-                      <h2 className={styles.blockTitle}>Card difference</h2>
-                      <div className={styles.diffGrid}>
-                        <div>
-                          <span className={styles.diffLabel} data-side="a">
-                            Only in {versus.a.name}
-                          </span>
-                          <Strip cards={cardDiff.onlyA} art={versus.a.art} inferred={versus.a.inferredArt} />
-                        </div>
-                        <div>
-                          <span className={styles.diffLabel}>Shared ({cardDiff.both.length})</span>
-                          <Strip cards={cardDiff.both} art={versus.a.art} inferred={versus.a.inferredArt} />
-                        </div>
-                        <div>
-                          <span className={styles.diffLabel} data-side="b">
-                            Only in {versus.b.name}
-                          </span>
-                          <Strip cards={cardDiff.onlyB} art={versus.b.art} inferred={versus.b.inferredArt} />
-                        </div>
-                      </div>
-                    </section>
-                  </>
-                )}
-              </>
-            )}
-          </>
-        )}
+        {tab === 'versus' && <DeckVersus state={versusState} />}
 
         {/* ----------------------------------------------------- find counters */}
         {tab === 'find' && (

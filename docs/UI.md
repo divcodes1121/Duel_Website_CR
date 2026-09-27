@@ -1280,6 +1280,57 @@ of that archetype's lists and their games together — the same arithmetic as th
 screen's per-archetype chips. The screen itself did not change: the chips were
 already weighted. `tests/teamReport.test.ts` pins it.
 
+## Coach Assist's duel marks (2026-09-27)
+
+Team Analysis's two marks, on Coach Assist's options and its "Play this"
+verdict, through the same formatters (`utils/duelFigures.ts`), so a figure
+prints identically on both screens and in both PDFs:
+
+- **`Duel pick`** — a green pill (`.duelTag`, `--solid-green` fill carrying
+  `--on-solid` text) on the one option held for duel proof.
+- **`Duel 57.8% · 217`** — the deck's duel rate and duel games (`.duelRate`),
+  under the deck's name, only when there are ten effective duel games. Green ink
+  (`--hue-green`) only when it clears the strength gate; plain ink otherwise.
+  `white-space: nowrap`, for the reason Team Analysis's does.
+- The verdict's evidence label gained `version` in `SOURCE_LABEL` — the fused
+  rate's list-level reading.
+
+Also in this file: `DuelLog`'s `useState` sat below an early return, so a duel
+log going from matched to unmatched between renders changed the hook count and
+React threw. It is above the return now; it was the one `npm run lint` error in
+the file. Verified signed out against production data through the pro gate's
+unconfigured fallback: three options, the pill on the held one, the duel figure
+green where strong — both themes.
+
+## Deck vs Deck on the home Deck Counter (2026-09-27)
+
+`CounterLab` gained a Find counters / Deck vs Deck switch in the intro (centred
+above the form) and under the header on its results page. It reuses the player
+screen's own tabs and panel — `DeckCounter.module.css` imported as `dc`, the
+tabs placed by `.modes` / `.modesCentred` with doubled selectors so they win
+over `.tabs` whichever stylesheet loads last — and mounts the same `DeckVersus`.
+
+Two shared-CSS faults it exposed, both live on the player screen before:
+
+- **`.facing` is `repeat(2, minmax(0, 1fr))`, and `minmax(0, 1fr)` stacked.** A
+  bare `1fr` took each column's eight 76px cards as its minimum (~722px), so
+  Deck B ran 300px off the panel at 1440 and a phone clipped each box to four
+  cards. The cards could always shrink (`flex: 1 1 0; min-width: 0`); only the
+  track would not let them.
+- **The head-to-head's decks are 4x2 below 1150px and the result stacks below
+  700px.** Three columns at every width drew 17px cards at 1024 and dots at
+  390. The block sits at the END of the file on purpose: it restates `.side`
+  rules at equal specificity, so source order decides.
+
+**Probe traps hit:** the landing filmstrip is a drag carousel — a click on an
+off-centre card only centres it, and the stage intercepts real clicks — so the
+home Deck Counter is opened from the rail on a tool route (`#/builder`); the
+rail is hidden on a phone, so the phone check opens at desktop width and
+resizes (the section is component state and survives); a whole-page "no
+sideways overflow" check passes while a panel clips, so the check measures
+every card against the panel; and counting `li` under the options section
+counts the chips too (18 = 3 x 6) — count `ul[class*=deckList] > li`.
+
 ## Working on this
 
 ```bash

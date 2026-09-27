@@ -70,12 +70,24 @@ import os
 import sys
 import threading
 import time
+import traceback
+from types import SimpleNamespace
 
 import clash_data as cd
 import deck_counter as counter
 import duel_combos as dx
 import duel_zone as dz
 import meta as meta_board
+
+#: THE FUSED RATE AND THE DUEL BRAIN (2026-09-27), Team Analysis's own — used
+#: here, not rebuilt, so the two screens cannot rate one pairing two ways.
+#: IMPORTED SOFTLY like every optional module in `server/`: without it (or
+#: without `matchup_fusion` beneath it) Coach Assist rates exactly as before.
+try:
+    import team_analysis as _ta
+except Exception:  # noqa: BLE001 - deployment shape
+    traceback.print_exc()
+    _ta = None
 
 # ── PORTED CONSTANTS ───────────────────────────────────────────────────────
 # Names match the bot's so the two can be diffed. Where a value is ours it says
@@ -99,6 +111,12 @@ TOP_DECKS = 3
 #: (bot.SUGGEST_OPP_TOP_DECKS / SUGGEST_MY_TOP_DECKS)
 OPP_TOP_DECKS = 3
 MY_TOP_DECKS = 3
+
+#: Options held for a DUEL-PROVEN deck (2026-09-27). Team Analysis holds two of
+#: seven; three options hold one, so the ranking by expected win rate still
+#: owns the other two. An option already on the list whose duel record is
+#: strong counts toward it, so nothing is inserted when the two agree.
+DUEL_SLOTS = 1
 
 #: When a player's own history is too thin to fill the candidate list, meta
 #: decks top it up — but their history keeps this much of the probability mass,
@@ -743,19 +761,108 @@ def _archetype(cards: list[str]) -> str:
     return hit
 
 
-def _expected(mine: list[str], opp_decks: list[dict], snap) -> dict | None:
+class _Rates:
+    """One request's matchup rates: Team Analysis's fused ladder+duel rate.
+
+    `team_analysis._FusionContext` over a `_DuelContext` — the matrix, this
+    list's one-card variants, its record against the archetype on the ladder
+    AND in pilot-adjusted duels, and the version levels: the list against the
+    threat's one-card family, and the list's family against the threat exactly
+    (the duel index's cells when both are hubs; the family from the list's own
+    ladder history when not, which `prepare` reads once per list).
+
+    WHY IT REPLACED `win_prob`, MEASURED: on 11,102 held-out real duel games
+    (duel aggregates before 13 Sep, scored from 20 Sep) `win_prob`'s
+    first-rung-wins scored 0.6853 log loss, the fused rate 0.6793 for a list
+    the cells hold and 0.6812 for a player's own list read from its history.
+    It is better on every rung `win_prob` would have stopped at and ties it
+    where an exact pair exists — the rung the fusion holdout found worth
+    almost no weight on its own (K 1000).
+
+    OFF when the import failed; `on` says which engine rated the request, and
+    `_expected` falls back to `win_prob` exactly as before.
+    """
+
+    def __init__(self, snap):
+        self.duel = self.fx = None
+        if _ta is not None and getattr(_ta, "_fusion", None) is not None:
+            try:
+                self.duel = _ta._DuelContext()
+                self.fx = _ta._FusionContext(self.duel, snap)
+            except Exception:  # noqa: BLE001 - the old engine still answers
+                traceback.print_exc()
+                self.duel = self.fx = None
+        self.on = self.fx is not None
+        self._cands: dict[str, SimpleNamespace] = {}
+
+    def _cand(self, cards) -> SimpleNamespace:
+        key = ",".join(sorted(set(cards)))
+        c = self._cands.get(key)
+        if c is None:
+            arch = _archetype(list(cards))
+            c = SimpleNamespace(cards=list(cards), key=key, archetype=arch,
+                                profile=self.duel.profile(list(cards), arch))
+            c.rate = self.fx.rater(c)
+            self._cands[key] = c
+        return c
+
+    def prepare(self, mine, theirs) -> None:
+        """The family level for each of my lists against each of their decks,
+        one history read per list. Their decks are one player's own, most of
+        them in no cell, so hub lists are prepared too (`hubs_too`)."""
+        if not self.on:
+            return
+        try:
+            cands = [self._cand(d) for d in mine if len(set(d or [])) == 8]
+            self.fx.prepare(cands, [{"cards": list(t)} for t in theirs if t],
+                            hubs_too=True)
+        except Exception:  # noqa: BLE001 - archetype levels still answer
+            traceback.print_exc()
+
+    def rate(self, mine, theirs=None, archetype: str | None = None) -> dict | None:
+        """`mine` against one deck — or, given `archetype`, against that
+        archetype — in `win_prob`'s shape plus the fused `interval`."""
+        if not self.on or len(set(mine or [])) != 8:
+            return None
+        try:
+            c = self._cand(mine)
+            t = ({"archetype": _archetype(list(theirs)), "cards": list(theirs)} if theirs
+                 else {"archetype": archetype or "other", "cards": []})
+            out = c.rate(t)
+        except Exception:  # noqa: BLE001 - one pairing, not the screen
+            traceback.print_exc()
+            return None
+        if not out:
+            return None
+        return {"winRate": out["winRate"], "games": int(round(out["games"])),
+                "source": out["source"], "tier": out.get("tier"),
+                "interval": out.get("interval"), "decks": None}
+
+    def summary(self) -> dict | None:
+        if not self.on:
+            return None
+        return {"brain": _ta._fusion.FUSION_VERSION,
+                "sources": {k: v for k, v in self.fx.stats.items() if v}}
+
+
+def _expected(mine: list[str], opp_decks: list[dict], snap,
+              rates: "_Rates | None" = None) -> dict | None:
     """Expected win rate against the whole predicted distribution.
 
     Weighted by each opponent deck's probability rather than averaged, and the
     weights of decks with no evidence are dropped instead of being scored at
     50% — an invented coin flip pulls a real edge toward the middle and makes
     two genuinely different candidates look alike.
+
+    Each pairing is `rates.rate` — the fused rate — when the request has one,
+    else `win_prob`. One engine per request, never a mix.
     """
+    fused = rates is not None and rates.on
     num = den = 0.0
     per = []
     for od in opp_decks:
         w = od.get("prob") or (1.0 / max(1, len(opp_decks)))
-        m = win_prob(mine, od["cards"], snap)
+        m = rates.rate(mine, od["cards"]) if fused else win_prob(mine, od["cards"], snap)
         per.append({"cards": od["cards"], "prob": round(w, 4), "matchup": m})
         if m:
             num += w * m["winRate"]
@@ -858,15 +965,24 @@ def _chip_archetypes(opp_decks: list[dict], opp_families: dict[str, int] | None,
     return out
 
 
-def _rate_vs_archetype(mine: list[str], archetype: str, snap) -> float | None:
+def _rate_vs_archetype(mine: list[str], archetype: str, snap,
+                       rates: "_Rates | None" = None) -> float | None:
     """My deck against an archetype they were NOT predicted to bring.
 
-    No opponent deck to pair with, so `win_prob`'s first rung does not apply.
-    The deck's own record against the archetype, then the archetype matrix —
-    and NOT the cluster rungs: those are the 11.6 s cold scan `win_prob`'s
-    docstring measures, and five chips on six decks would pay it thirty times
-    for a secondary figure.
+    With the fused rate, its archetype levels (matrix, variants, the list's
+    ladder and duel record against the archetype) — the same engine as the
+    headline, so a chip and the figure above it are one reading. The variants
+    come off the cluster INDEX now, not the 11.6 s scan described below.
+
+    Without it: no opponent deck to pair with, so `win_prob`'s first rung does
+    not apply. The deck's own record against the archetype, then the archetype
+    matrix — and NOT the cluster rungs: those are the 11.6 s cold scan
+    `win_prob`'s docstring measures, and five chips on six decks would pay it
+    thirty times for a secondary figure.
     """
+    if rates is not None and rates.on:
+        m = rates.rate(mine, archetype=archetype)
+        return float(m["winRate"]) if m else None
     try:
         m = counter.deck_profile(mine)["archetypes"].get(archetype)
     except Exception:  # noqa: BLE001 - a chip must never take the screen down
@@ -881,7 +997,7 @@ def _rate_vs_archetype(mine: list[str], archetype: str, snap) -> float | None:
 
 
 def _chips(mine: list[str], per: list[dict] | None, chips: list[dict], snap,
-           record: dict | None = None) -> list[dict]:
+           record: dict | None = None, rates: "_Rates | None" = None) -> list[dict]:
     """One deck's chips over `chips`, in that order; unmeasured ones absent.
 
     A `likely` archetype reads off `per` (what the headline was computed from,
@@ -899,13 +1015,133 @@ def _chips(mine: list[str], per: list[dict] | None, chips: list[dict], snap,
             m = record.get(a)
             rate = float(m["winRate"]) if m and m.get("winRate") is not None else None
         else:
-            rate = _rate_vs_archetype(mine, a, snap)
+            rate = _rate_vs_archetype(mine, a, snap, rates)
         if rate is None:
             continue
         row = _vs_row(a, rate, c.get("share"))
         row["kind"] = c["kind"]
         out.append(row)
     return out
+
+
+def _rec(md: dict, opp: dict, chips: list[dict], snap, rates: "_Rates | None",
+         extra: dict | None = None) -> dict:
+    """One option, scored and seated — every list of options uses this."""
+    exp = _expected(md["cards"], opp["decks"], snap, rates)
+    if exp:
+        exp["vs"] = _chips(md["cards"], exp["per"], chips, snap, rates=rates)
+    rec = {**md, **(extra or {}), "expected": exp}
+    # A SUGGESTION FIELDS EVERY SPECIAL SLOT ITS CARDS CAN FILL — the rule
+    # every "what to play" list on the site follows (`cd.complete_seating`).
+    # Their own decks and the meta fills both arrive seated as fielded, so a
+    # capable card nobody was seen fielding would otherwise stay plain.
+    cards, art, filled = cd.complete_seating(
+        rec["cards"], rec.get("art") or {},
+        slot_of=cd.seated_positions(rec["cards"], rec.get("art")))
+    rec["cards"], rec["art"] = cards, art
+    if filled:
+        rec["artFilled"] = filled
+    return rec
+
+
+def _duel_decks(rates: "_Rates", tag: str, since: str | None,
+                until: str | None) -> list[dict]:
+    """One player's own duel decks from the duel index, in their window."""
+    if not tag:
+        return []
+    idx = _ta._duel_index
+    try:
+        s = idx.iso_to_stamp(since) or (rates.duel.status or {}).get("windowFrom")
+        return idx.player_decks(tag, s, idx.iso_to_stamp(until, end=True))
+    except Exception:  # noqa: BLE001 - no duel decks is a smaller answer
+        traceback.print_exc()
+        return []
+
+
+def _duel_merge(recs: list[dict], opp: dict, chips: list[dict], snap,
+                rates: "_Rates", used: set, pool: list[dict], *,
+                my_tag: str, my_win: tuple, opp_tag: str, opp_win: tuple
+                ) -> tuple[list[dict], dict | None]:
+    """The options with duel figures on each, and `DUEL_SLOTS` held for proof.
+
+    Team Analysis's rule (`duel_brain.merge`), one list long: the opponent's
+    projection is their likely decks' win conditions blended with the win
+    conditions of their own real duel games; each option carries its duel
+    figures; an option whose duel record is already strong fills the slot;
+    otherwise the player's OWN duel decks proven against this projection come
+    first, then the decks duel players win with, leaning on cards they play.
+
+    EVERY PICK IS LEGAL. A duel cannot repeat a card, so a pick sharing any
+    card with what they have spent is never considered — the rule `_legal`
+    applies to their own pool. A population pick must also field all three
+    special slots (the catalogue is filtered once, in `_DuelContext`).
+    """
+    top = recs[:MY_TOP_DECKS]
+    duel = getattr(_ta, "_duel", None) if _ta is not None else None
+    if duel is None or rates.duel is None or not rates.duel.on:
+        return top, None
+    try:
+        threats = [{"archetype": _archetype(d["cards"]), "likelihood": d.get("prob") or 0.0}
+                   for d in opp["decks"] if d.get("cards")]
+        opp_wcs: dict[str, int] = {}
+        for d in _duel_decks(rates, opp_tag, *opp_win):
+            opp_wcs[d["archetype"]] = opp_wcs.get(d["archetype"], 0) + int(d["games"])
+        projection, weight = duel.duel_projection(threats, opp_wcs)
+        if not projection:
+            return top, None
+
+        for r in recs:
+            r["duel"] = rates.duel.figures(r["cards"], projection)
+
+        def legal(cards) -> bool:
+            return (len(set(cards or [])) == 8
+                    and len(set(cards) & used) <= RECOMMEND_MAX_SHARED)
+
+        held = [r["cards"] for r in top]
+        mine_duel = [d for d in _duel_decks(rates, my_tag, *my_win) if legal(d["cards"])]
+        known = {c for d in pool for c in d.get("cards") or []}
+        known |= {c for d in mine_duel if d["games"] >= duel.OWN_MIN_GAMES for c in d["cards"]}
+        own = duel.own_answers(projection, mine_duel,
+                               records_for=lambda d: rates.duel.records(d["cards"]))
+        own = [o for o in own
+               if not any(duel.same_deck(o["cards"], h) for h in held)][:DUEL_SLOTS]
+        answers = duel.population_answers(
+            projection, [d for d in rates.duel.catalogue if legal(d.get("cards"))])
+        pop = duel.personal(answers, known=known,
+                            exclude=held + [o["cards"] for o in own], slots=DUEL_SLOTS)
+
+        picks = own + pop
+        rates.prepare([p["cards"] for p in picks], [d["cards"] for d in opp["decks"]])
+        by_key = {",".join(sorted(r["cards"])): r for r in recs}
+        rows = []
+        for p in picks:
+            key = ",".join(sorted(p["cards"]))
+            is_own = p["pick"] == duel.PICK_OWN
+            if key in by_key:
+                row = dict(by_key[key])          # already scored, from their history
+            else:
+                arch = p.get("archetype") or _archetype(p["cards"])
+                seated, marks, _inferred = rates.duel.seat(p["cards"])
+                md = dz._arranged(seated, marks) | {
+                    "archetype": arch, "deckName": dz.deck_label(seated, arch)}
+                if is_own:
+                    md["count"] = int(p.get("games") or 0)
+                row = _rec(md, opp, chips, snap, rates)
+            if not row.get("expected"):
+                continue                          # no rate: dropped, never half a row
+            row["duel"] = duel.public(p["duel"])
+            row["duelPick"] = p["pick"]
+            rows.append(row)
+        merged, picked = duel.merge(top, rows, slots=DUEL_SLOTS, limit=MY_TOP_DECKS)
+        return merged, {
+            "brain": duel.DUEL_BRAIN_VERSION,
+            "weight": weight,
+            "picked": picked,
+            "catalogueSlotSkipped": rates.duel.slot_gaps,
+        }
+    except Exception:  # noqa: BLE001 - the ladder's list still stands
+        traceback.print_exc()
+        return top, None
 
 
 def _spread(opp_decks: list[dict]) -> tuple[list[str], dict[str, float]]:
@@ -1097,23 +1333,12 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
                     if opp_tag else {})
     chips = _chip_archetypes(opp["decks"], opp_families, _population_decks())
 
-    recs = []
-    for md in mine:
-        exp = _expected(md["cards"], opp["decks"], snap)
-        if exp:
-            exp["vs"] = _chips(md["cards"], exp["per"], chips, snap)
-        rec = {**md, "expected": exp}
-        # A SUGGESTION FIELDS EVERY SPECIAL SLOT ITS CARDS CAN FILL — the rule
-        # every "what to play" list on the site follows (`cd.complete_seating`).
-        # Their own decks and the meta fills both arrive seated as fielded, so a
-        # capable card nobody was seen fielding would otherwise stay plain.
-        cards, art, filled = cd.complete_seating(
-            rec["cards"], rec.get("art") or {},
-            slot_of=cd.seated_positions(rec["cards"], rec.get("art")))
-        rec["cards"], rec["art"] = cards, art
-        if filled:
-            rec["artFilled"] = filled
-        recs.append(rec)
+    # THE FUSED RATE (2026-09-27): every "my deck vs their deck" below is
+    # Team Analysis's ladder+duel rate at the level of the lists. See `_Rates`.
+    rates = _Rates(snap)
+    rates.prepare([md["cards"] for md in mine], [d["cards"] for d in opp["decks"]])
+
+    recs = [_rec(md, opp, chips, snap, rates) for md in mine]
 
     scored = [r for r in recs if r["expected"]]
     if scored:
@@ -1130,7 +1355,14 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         recs.sort(key=lambda r: (-(r.get("count") or 0), ",".join(sorted(r["cards"]))))
         basis = "how much you play it"
 
-    best = recs[0] if recs else None
+    # THE DUEL BRAIN (2026-09-27): duel figures on every option, and one of
+    # the three held for a legal deck proven in real duels against them.
+    top, duel_brain = _duel_merge(
+        recs, opp, chips, snap, rates, used_mine, mine_hist_pool(mine),
+        my_tag=my_tag, my_win=(my_since, my_until),
+        opp_tag=opp_tag, opp_win=(opp_since, opp_until))
+
+    best = top[0] if top else None
     observed = None
     if opp_tag and opp_played and opp_hist:
         seen = dz.observed_duel_loadout(opp_hist["seriesDecks"], opp_played[0])
@@ -1165,7 +1397,10 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         "myName": _player_name(my_tag) if my_tag else "",
         "oppName": _player_name(opp_tag) if opp_tag else "Opponent",
         "opponent": opp,
-        "recommendations": recs[:MY_TOP_DECKS],
+        "recommendations": top,
+        # Which engine rated this answer, and how much of it the duels shaped.
+        "fusion": rates.summary(),
+        "duelBrain": duel_brain,
         "best": best,
         "basis": basis,
         "observedLoadout": observed,
@@ -1192,6 +1427,12 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         # than folded into one flag the reader cannot interrogate.
         "caveats": _caveats(mine_hist, opp_hist, opp, basis),
     }
+
+
+def mine_hist_pool(mine: list[dict]) -> list[dict]:
+    """The options that came from the player's OWN history (not meta fills) —
+    the cards the duel brain may lean a population pick toward."""
+    return [m for m in mine if not m.get("fill")]
 
 
 def _decorate(decks: list[list[str]], hist: dict | None) -> list[dict]:

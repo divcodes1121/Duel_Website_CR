@@ -506,5 +506,166 @@ finally:
     coach.counter.deck_profile = real_prof
 
 
+# ── THE FUSED RATE AND THE DUEL BRAIN (2026-09-27) ──────────────────────────
+#
+# Team Analysis's two duel-aware pieces, used by Coach Assist. The engine is
+# tested where it lives (`test_matchup_fusion`, `test_duel_brain`,
+# `test_team_analysis`); what is pinned here is the WIRING: one engine per
+# request, an off-switch that restores the old answer exactly, and duel picks
+# that obey the duel's own rule — no card already spent, ever.
+print("\nthe fused rate and the duel brain")
+
+
+class FakeRates:
+    """`_Rates`' surface: a rate looked up by the opponent's first card (or
+    the archetype asked about), and a record of every call."""
+
+    def __init__(self, table, duel=None, on=True):
+        self.on = on
+        self.table = table
+        self.duel = duel
+        self.calls = []
+        self.prepared = []
+
+    def rate(self, mine, theirs=None, archetype=None):
+        self.calls.append((tuple(mine), tuple(theirs or ()), archetype))
+        r = self.table.get(theirs[0] if theirs else archetype)
+        return None if r is None else {"winRate": r, "games": 50, "source": "version",
+                                       "tier": "high", "interval": None, "decks": None}
+
+    def prepare(self, mine, theirs):
+        self.prepared.append((len(list(mine)), len(list(theirs))))
+
+    def summary(self):
+        return {"brain": "test", "sources": {}}
+
+
+real = coach.win_prob
+try:
+    def boom(*_a, **_k):
+        raise AssertionError("win_prob ran beside the fused rate")
+
+    coach.win_prob = boom
+    fr = FakeRates({"golem": 70.0, "x-bow": 50.0})
+    opp = [D(deck("golem"), prob=0.5), D(deck("x-bow"), prob=0.5)]
+    try:
+        exp = coach._expected(A, opp, FakeSnap(), fr)
+        one_engine = True
+    except AssertionError:
+        exp, one_engine = None, False
+    check("with the fused rate on, every pairing is the fused rate — win_prob never runs",
+          one_engine and abs(exp["winRate"] - 60.0) < 1e-6, str(exp))
+    check("each pairing carries the fused source, so the screen can name it",
+          one_engine and exp["per"][0]["matchup"]["source"] == "version")
+
+    coach.win_prob = fake_win_prob({"golem": 80.0, "x-bow": 40.0})
+    off = FakeRates({"golem": 1.0}, on=False)
+    exp = coach._expected(A, opp, FakeSnap(), off)
+    check("with it off, win_prob answers exactly as before",
+          abs(exp["winRate"] - 60.0) < 1e-6, str(exp["winRate"]))
+    check("and an off rater is never consulted — one engine per request", off.calls == [])
+
+    check("an archetype chip reads the fused archetype levels",
+          coach._rate_vs_archetype(A, "lava", FakeSnap(), FakeRates({"lava": 58.5})) == 58.5)
+    check("and is absent, not 50, when the fused rate has nothing",
+          coach._rate_vs_archetype(A, "lava", None, FakeRates({})) is None)
+finally:
+    coach.win_prob = real
+
+saved_ta = coach._ta
+try:
+    coach._ta = None
+    r = coach._Rates(None)
+    check("without team_analysis the rater is OFF and says so (summary None)",
+          not r.on and r.summary() is None)
+    check("and it answers None rather than raising", r.rate(A, deck("golem")) is None)
+finally:
+    coach._ta = saved_ta
+
+if coach._ta is None or getattr(coach._ta, "_duel", None) is None:
+    print("  --   duel merge skipped: team_analysis / duel_brain not importable here")
+else:
+    dbrain = coach._ta._duel
+
+    def key(cards):
+        return ",".join(sorted(cards))
+
+    class FakeDuel:
+        """`_DuelContext`'s surface, over literal records in the index's shape."""
+
+        def __init__(self, records, catalogue):
+            self.on = True
+            self.status = {"windowFrom": None}
+            self.slot_gaps = 0
+            self._records = records
+            self.catalogue = catalogue
+
+        def records(self, cards):
+            return self._records.get(key(cards))
+
+        def figures(self, cards, projection):
+            return dbrain.public(dbrain.value(projection, self.records(cards)))
+
+        def seat(self, cards):
+            return list(cards), {}, True
+
+    STRONG = {"exact": {"golem": [400, 300, 200]}}      # adjusted 75%, nEff 400
+    WEAK = {"exact": {"golem": [40, 18, 20]}}           # under 50% once adjusted
+    spent = deck("zap", "log")                            # game 1, already played
+    OPTS = [D(deck("hog", "fireball"), count=9), D(deck("xbow", "tesla"), count=5),
+            D(deck("lava", "balloon"), count=4)]
+    # Distinct lists (their own fillers) and the illegal one the STRONGER, so
+    # a missing legality filter would pick it and the check below goes red.
+    # (Proven: with the filter removed from `_duel_merge` it fails.)
+    ILLEGAL = deck("pekka", "zap")                        # stronger, shares Zap
+    STRONGER = {"exact": {"golem": [400, 330, 200]}}
+    LEGAL = deck("miner", "poison")                       # strong, legal
+    opp = {"decks": [D(deck("golem"), prob=1.0)]}
+
+    saved = (coach._archetype, coach._duel_decks, coach._rec)
+    try:
+        coach._archetype = lambda cards: list(cards)[0] if cards else "other"
+        coach._duel_decks = lambda rates, tag, since, until: []
+        coach._rec = lambda md, o, chips, snap, rates, extra=None: {
+            **md, **(extra or {}), "expected": {"winRate": 55.0, "per": [], "vs": []}}
+
+        def run(records, catalogue, recs=None):
+            rates = FakeRates({}, duel=FakeDuel(records, catalogue))
+            rows = [dict(o, expected={"winRate": 60.0 - i, "per": [], "vs": []})
+                    for i, o in enumerate(recs or OPTS)]
+            return coach._duel_merge(rows, opp, [], None, rates, set(spent), OPTS,
+                                     my_tag="", my_win=(None, None),
+                                     opp_tag="", opp_win=(None, None))
+
+        cat = [{"key": key(ILLEGAL), "cards": ILLEGAL, "archetype": "pekka",
+                "records": STRONGER},
+               {"key": key(LEGAL), "cards": LEGAL, "archetype": "miner",
+                "records": STRONG}]
+        top, brain = run({key(LEGAL): STRONG, key(ILLEGAL): STRONGER}, cat)
+        cards_on = [set(t["cards"]) for t in top]
+        check("a population pick sharing a card already spent is NEVER offered",
+              all(not (c & set(spent)) for c in cards_on), str([t["cards"][:2] for t in top]))
+        check("a legal duel-proven deck takes the held slot, directly under the #1",
+              len(top) == coach.MY_TOP_DECKS and set(top[1]["cards"]) == set(LEGAL)
+              and top[1].get("duelPick") == dbrain.PICK_POPULATION
+              and top[0]["cards"] == OPTS[0]["cards"], str([t["cards"][:2] for t in top]))
+        check("the list stays three long and the #1 is untouched",
+              len(top) == 3 and top[0]["cards"] == OPTS[0]["cards"])
+        check("the report says one pick was held", brain and brain["picked"] == 1, str(brain))
+
+        top, brain = run({key(OPTS[1]["cards"]): STRONG, key(LEGAL): STRONG}, cat)
+        check("an option already proven in duels fills the slot — nothing is inserted",
+              brain["picked"] == 0 and [t["cards"] for t in top] == [o["cards"] for o in OPTS]
+              and top[1].get("duelProven"), str(brain))
+
+        top, brain = run({key(LEGAL): WEAK}, [dict(cat[1], records=WEAK)])
+        check("a deck whose duel record is not strong is not picked",
+              brain["picked"] == 0 and [t["cards"] for t in top] == [o["cards"] for o in OPTS])
+        check("every option still carries its duel figures (None when too thin)",
+              all("duel" in t for t in top))
+    finally:
+        coach._archetype, coach._duel_decks, coach._rec = saved
+
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

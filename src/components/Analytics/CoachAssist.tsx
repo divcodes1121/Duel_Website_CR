@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CardArt } from './CardArt';
 import { drawnDeck } from '../../utils/deckSeating';
+import { duelChip, duelPickLabel, duelTitle } from '../../utils/duelFigures';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { CARDS_BY_KEY } from '../../data/cards';
 import { parseClashRoyaleDeckLink } from '../../utils/deckLink';
@@ -65,6 +66,9 @@ const WINDOWS = [
  *  hidden: "62%" from this exact list and "62%" from its archetype are
  *  different claims and the reader is entitled to know which. */
 const SOURCE_LABEL: Record<string, string> = {
+  // The fused rate's list-level reading (2026-09-27): this deck and its
+  // one-card variants against that exact list and its variants.
+  version: 'these lists and their variants — ladder and duels',
   exact: 'these two exact decks have met',
   deck: 'this exact deck vs that archetype',
   cluster7: 'decks one card different',
@@ -390,6 +394,7 @@ function DeckRow({
         <span className={styles.deckName}>
           {deck.deckName || deck.archetype}
           {deck.fill && <span className={styles.fillTag}>meta deck</span>}
+          {duelPickLabel(deck) && <span className={styles.duelTag}>{duelPickLabel(deck)}</span>}
         </span>
         <span className={styles.deckMeta}>
           {deck.avgElixir ? `${deck.avgElixir.toFixed(1)} elixir` : ''}
@@ -398,6 +403,17 @@ function DeckRow({
               list look mis-sorted against the usage figures. */}
           {deck.coRevealed ? ` · ${deck.coRevealed}× alongside the revealed deck` : ''}
         </span>
+        {/* The same deck in real DUELS against what they bring, when the duels
+            have enough games on it — green only when it clears the gate. */}
+        {deck.duel && (
+          <span
+            className={styles.duelRate}
+            data-strong={deck.duel.strong || undefined}
+            title={duelTitle(deck.duel)}
+          >
+            {duelChip(deck.duel)}
+          </span>
+        )}
       </div>
       <Strip
         cards={deck.cards}
@@ -475,6 +491,17 @@ function DuelLog({ history }: { history: CoachHistory }) {
   const loadouts = history.loadouts ?? [];
   const companions = history.nextDecks ?? [];
 
+  /* THE EVIDENCE IS COLLAPSED BY DEFAULT.
+     Every loadout below is one duel's worth of three eight-card decks. With a
+     handful of runs that is fifty-odd card tiles between the reader and the
+     answer, and the answer -- which decks travel with this one -- is the short
+     list ABOVE. The runs are what backs it up, so they are one tap away rather
+     than in the way.
+     ABOVE THE EARLY RETURN (2026-09-27): it sat below it, so a history that
+     went from matched to unmatched between renders changed the hook count and
+     React threw — the one error `npm run lint` reported in this file. */
+  const [showRuns, setShowRuns] = useState(false);
+
   if (!history.matched || !loadouts.length) {
     return (
       <section className={styles.block} data-hue="green">
@@ -493,14 +520,6 @@ function DuelLog({ history }: { history: CoachHistory }) {
   }
 
   const unordered = history.matched - history.ordered;
-
-  /* THE EVIDENCE IS COLLAPSED BY DEFAULT.
-     Every loadout below is one duel's worth of three eight-card decks. With a
-     handful of runs that is fifty-odd card tiles between the reader and the
-     answer, and the answer -- which decks travel with this one -- is the short
-     list ABOVE. The runs are what backs it up, so they are one tap away rather
-     than in the way. */
-  const [showRuns, setShowRuns] = useState(false);
 
   /* "Most-run first" is only true when the runs differ in count. On thin
      history every loadout is a single occurrence, the sort does nothing, and
@@ -1502,6 +1521,15 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
                 <span className={styles.verdictFigureLabel}>
                   expected · {SOURCE_LABEL[best.expected.per[0]?.matchup?.source ?? ''] ?? 'no matchup evidence'}
                 </span>
+              </span>
+            )}
+            {best.duel && (
+              <span
+                className={styles.duelRate}
+                data-strong={best.duel.strong || undefined}
+                title={duelTitle(best.duel)}
+              >
+                {duelChip(best.duel)}
               </span>
             )}
           </div>

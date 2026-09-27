@@ -284,8 +284,8 @@ first.
 | Duel combinations | `server/duel_combos.py` | the single duel reader; mode taxonomy |
 | Deck Counter | `server/deck_counter.py` | the matchup evidence ladder |
 | Team Analysis | `server/team_analysis.py` | squad-scale opponent-aware recommendation |
-| Duel index + duel brain | `server/duel_index.py`, `server/duel_brain.py` | **(2026-09-27)** every native duel GAME out of `battle_raw` rounds, in its own gitignored SQLite, 4-hourly; per-deck records vs win condition with pilot-adjusted expectations; Team Analysis's duel picks |
-| Fused matchup rate | `server/matchup_fusion.py` | **(2026-09-27)** Team Analysis's rate: ladder + duels as one number per threat LIST, every weight fitted on a temporal duel holdout |
+| Duel index + duel brain | `server/duel_index.py`, `server/duel_brain.py` | **(2026-09-27)** every native duel GAME out of `battle_raw` rounds, in its own gitignored SQLite, 4-hourly; per-deck records vs win condition with pilot-adjusted expectations; Team Analysis's duel picks, and one of Coach Assist's three |
+| Fused matchup rate | `server/matchup_fusion.py` | **(2026-09-27)** Team Analysis's and Coach Assist's rate (Coach Assist's `win_prob` scored 0.6853 on the same held-out duels, the fused rate 0.6793): ladder + duels as one number per threat LIST, every weight fitted on a temporal duel holdout |
 | 2v2 pairs | `server/duo_pairs.py` | the precedent for a separate derived SQLite store |
 | Tag tracking | `server/tracking.py` | enrolment queue, own SQLite |
 

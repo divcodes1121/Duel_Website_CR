@@ -1260,18 +1260,25 @@ class _FusionContext:
                 self._cells[tkey] = None
         return self._cells[tkey]
 
-    def prepare(self, cards, threats) -> None:
+    def prepare(self, cards, threats, *, hubs_too: bool = False) -> None:
         """The family level for every candidate OUTSIDE the cells, against
         every deck-level threat, in one pass over each list's own history.
         Histories are read on the shared pool; a list already prepared for a
-        threat is not prepared again."""
+        threat is not prepared again.
+
+        `hubs_too` prepares HUB lists as well, for threats the cells may not
+        hold. Team Analysis never asks — its threats are the seeds and the
+        board, which ARE the threat hubs, so the cells answer. Coach Assist
+        asks, because its threats are one opponent's own decks, most of which
+        are in no cell; `rate` reads a prepared family only when the cells had
+        nothing, so a hub against a threat hub still reads the cells."""
         if not self.on:
             return
         tkeys = {scout.deck_key(t.get("cards")) for t in threats
                  if len(set(t.get("cards") or [])) == 8}
         want: dict[str, set] = {}
         for c in cards:
-            if len(set(c.cards)) != 8 or self.is_hub(c.key):
+            if len(set(c.cards)) != 8 or (self.is_hub(c.key) and not hubs_too):
                 continue
             missing = tkeys - self._fam_done.get(c.key, set())
             if missing:
@@ -1336,7 +1343,11 @@ class _FusionContext:
                     if v:
                         fam_l, ver_l = (v[0], v[1]), (v[2], v[3])
                         fam_d, ver_d = (v[4], v[5]), (v[6], v[7])
-                else:
+                if fam_l is None:
+                    # A list outside the cells, or a hub against a threat the
+                    # cells do not hold. The second is prepared only when the
+                    # caller asked (`prepare(hubs_too=True)`), so on Team
+                    # Analysis this reads None for a hub, exactly as before.
                     fam_l = self.family(card.key, tkey)
             out = _fusion.fused(
                 self.matrix(card.archetype, arch_t),

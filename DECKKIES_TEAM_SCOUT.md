@@ -182,6 +182,15 @@ a new rung added upstream makes this cautious rather than breaking the request.
 
 ### `score()` HAS A SECOND CONSUMER NOW, AND A SIGNATURE CHANGE WOULD BREAK IT SILENTLY
 
+> **AND TEAM ANALYSIS'S DUEL AND FUSION CONTEXTS HAVE ONE TOO (2026-09-27).**
+> `coach._Rates` builds a `team_analysis._DuelContext` and `_FusionContext` for
+> every Coach Assist suggestion, and `coach._duel_merge` reads the duel
+> context's `catalogue`, `records`, `figures`, `seat`, `status` and
+> `slot_gaps`. Renaming or reshaping any of those changes Coach Assist, and
+> `test_team_analysis.py` cannot see it — `test_coach.py` pins Coach Assist's
+> side. `_FusionContext.prepare(hubs_too=...)` exists for it; Team Analysis
+> never passes `True`.
+
 **`server/coach_daily.py` — the Coach Roster's "Against the field" tab and the
 linked player's own `#/my` — calls `team_scout.score()` directly.** It was
 added on 2026-09-23 and is the only other caller.
@@ -890,10 +899,11 @@ columns at 390px.
   counter is now separated from the rest and the band shares it. Forcing
   distinct #1s would mean handing some teammates a measurably worse deck; the
   band was left as it is.
-- **Coach Assist and the field plan still rate by archetype.** The field plan's
-  pool and its threats are all version hubs, so giving it the fused rate is
-  cheap; Coach Assist's own-deck list would read the family level the way a
-  teammate's own list does here.
+- ~~**Coach Assist and the field plan still rate by archetype.**~~ **Coach
+  Assist moved on 2026-09-27** (`coach._Rates`, holdout 0.6853 -> 0.6793, see
+  the README's "Coach Assist reads real duels"). The field plan still rates by
+  archetype; its pool and its threats are all version hubs, so giving it the
+  fused rate is cheap.
 - **SETTLED 2026-09-21 (§4d): the badges are gone from the screen, and so is
   the sentence.** What follows is the record of why that was reasonable.
   **`type` and `confidence` are near-constant in production.** 140 ROBUST + 42

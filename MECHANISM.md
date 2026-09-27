@@ -22,10 +22,13 @@ end, at the level of individual functions and constants.
 >   `server/README.md` § "A plan against the field" is its record.
 > * **`server/duel_index.py` + `server/duel_brain.py`** (2026-09-27) — what
 >   wins in real DUEL games, read out of `battle_raw`'s round-by-round
->   payloads, holding two of each Team Analysis list for duel-proven decks.
-> * **`server/matchup_fusion.py`** (2026-09-27) — Team Analysis's matchup rate:
->   the ladder and the duels as ONE rate per threat list, every weight fitted on
->   a temporal duel holdout.
+>   payloads, holding two of each Team Analysis list and one of Coach Assist's
+>   three for duel-proven decks.
+> * **`server/matchup_fusion.py`** (2026-09-27) — Team Analysis's and Coach
+>   Assist's matchup rate: the ladder and the duels as ONE rate per threat
+>   list, every weight fitted on a temporal duel holdout. (Coach Assist's
+>   PREDICTION of what the opponent brings next is unchanged and is what this
+>   file documents; the rate is what its suggestions are ranked by.)
 >
 > None of them trains or calls a model — the duel brain's shrinkage and the
 > fused rate's five weights were fitted once, by grid search against held-out

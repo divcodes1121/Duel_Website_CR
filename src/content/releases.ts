@@ -82,6 +82,26 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-27-coach-duels',
+    date: '2026-09-27',
+    kind: 'improved',
+    title: 'Coach Assist now reads real duels when it tells you what to play next',
+    body: [
+      'Every expected win rate in the Suggestion window is now worked out the way Team Analysis does it: against the exact decks your opponent is likely to bring, from ladder games and real duels together. Tested against 11,102 later duel games, it predicts results better than the old rate did.',
+      'One of your three options can now be a deck proven in real duels against what they bring — marked Duel pick. It is always legal: a deck that repeats a card you have already played is never offered.',
+    ],
+  },
+  {
+    id: '2026-09-27-deck-vs-deck-home',
+    date: '2026-09-27',
+    kind: 'new',
+    title: 'Compare any two decks head to head on Deck Counter, without searching a player',
+    body: [
+      'Deck Counter now has a Deck vs Deck tab next to Find counters: paste two deck links and see how they do against each other, the record behind it and the cards that differ. It used to be available only after searching a player.',
+      'On both Deck Counters the two pasted decks now fit side by side on a desktop, and on a phone the result shows each deck in two rows of four instead of shrinking the cards to dots.',
+    ],
+  },
+  {
     id: '2026-09-27-version-matchups',
     date: '2026-09-27',
     kind: 'improved',
