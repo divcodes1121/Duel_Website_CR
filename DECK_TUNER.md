@@ -456,7 +456,7 @@ Three risks worth naming:
   `releases.ts`, and for the same reason: the rules most worth testing
   exhaustively must be importable without constructing anything.
 - **A small change to `deck_counter._build_reps()`** to keep top-N seeds.
-- **THE THREE-SLOT RULE COVERS THIS MODULE (2026-09-27).** A screenshot caught
+- **THE THREE-SLOT RULE COVERS THIS MODULE (2026-09-27, `c3309c6`).** A screenshot caught
   a composed Bridge Spam list with Battle Ram and P.E.K.K.A evolutions and a
   plain Bandit in slot 2 — no hero-capable card, no champion. Every deck the
   tuner OFFERS is `_offered(cards)`: `_view`, then `clash_data.complete_seating`,

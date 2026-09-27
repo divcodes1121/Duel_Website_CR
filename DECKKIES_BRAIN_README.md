@@ -297,7 +297,7 @@ first.
 | OIE opponent read | **DARK** | `CLASH_OIE=off` (default), plus `OIE_ALLOWLIST` on the Vercel proxy |
 | OIE shadow logging | **DARK** | `CLASH_OIE=shadow` |
 | Team Analysis | **LIVE**, trial and up | — |
-| Deck tuner (card swaps) | **LIVE**, admin-only at the route | cost: ~2.6 s full sibling scan |
+| Deck tuner (card swaps) | **LIVE**, Pro and admin (`isPaid`) since 2026-09-27 (`c3309c6`), admin-only before; every deck it offers fields its special slots | cost: 1.4–2.4 s on the first suggestion for a deck, nothing warm (measured live 2026-09-27; was quoted as ~2.6 s) |
 
 `CLASH_OIE` defaults to `"off"` — verified at `server/coach.py:1124`. Nothing in
 `server/ml/production/` runs against user traffic today.

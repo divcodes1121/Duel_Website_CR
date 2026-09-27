@@ -1866,7 +1866,10 @@ Assist exists — `test_coach.py` pins this module's side against fakes.
 takes a `profile` from `_playstyle(tag, since, until, hist)` — one
 `cd.player_report` read (all stored battles; duel decks added on top) — and
 passes compose's WHOLE ranked list through `deck_tuner.personalise`. Only when
-`swaps=1`, so the default Coach response pays nothing. Measured on 12 players
+`swaps=1`, so the default Coach response pays nothing — and the client sends it
+for Pro and admin sessions (`isPaid`) since 2026-09-27 (`c3309c6`); it was
+admin-only before. Every deck the tuner offers is `deck_tuner._offered` (the
+three-slot rule) and a list that cannot field three is skipped. Measured on 12 players
 vs one opponent: 1 -> 7 distinct lists (as sets), 6 -> 12 distinct decks, mean worst-
 matchup -1.0 point. `compose` rows gained `family` and `name`; the loadout is
 untouched. See `DECK_TUNER.md` §7.
