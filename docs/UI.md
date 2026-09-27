@@ -1232,15 +1232,19 @@ Two marks, both figures (the screen's no-prose rule), both printed through
   fill carrying white text, and the fill step is the one graded for that
   (measured 5.48:1 in a browser). In the PDF the badge is pink, because green
   is already the PDF's Squad pick.
-- **`Duel 61.5% · 1,571`** (duel rate · duel games) under the ladder figures,
-  on every row with 10+ effective duel games. **`--hue-green` INK only when it
+- **`Duel 61.5% · 1,571`** (duel rate · duel games) under the row's main
+  figure, on every row with 10+ effective duel games. **`--hue-green` INK only when it
   clears the strength gate**; otherwise plain ink, because a duel figure under
   50 on a ladder pick is information, not an alarm. `white-space: nowrap`: at
   390px it wrapped to "Duel 61.5% ·" over "1,571", which read as two facts.
 
-A Duel pick can sit ABOVE rows with a higher ladder figure. That is the two
-brains disagreeing and it is shown rather than averaged away; the pill is what
-keeps it from reading as a sorting bug.
+A Duel pick can sit ABOVE rows with a higher main figure. When this shipped
+that was the ladder brain and the duel brain disagreeing. Since 2026-09-27 the
+main figure is the fused rate (`matchup_fusion`), which already counts the duels
+at four ladder games each, so a Duel pick with a lower main figure is one whose
+duel record is outweighed by the ladder's far larger volume. Still shown rather
+than averaged away; the chip is the duels alone, and the pill is what keeps the
+row from reading as a sorting bug.
 
 **Traps hit verifying it** (73/73 on a real staged payload): the "PDF covers"
 dropdown's trigger is also named "…Export PDF for…", so a loose `/export pdf/i`
@@ -1262,7 +1266,9 @@ observed forms beside them read as observed. Wired on every strip that draws a
 suggestion: Team Analysis's rows and folder faces, the field plan board, the
 roster's Today board, `#/my`'s practice deck, the roster's Opponent tab and
 Coach Assist's options. An opponent's deck has no `artFilled` — it is drawn as
-fielded. `tests/deckSeating.test.ts` pins the per-card rule.
+fielded. `tests/deckSeating.test.ts` pins the per-card rule. Not yet reached:
+Coach Assist's admin-only tuner block (swaps, "bring this deck instead", the
+loadout) — `DECK_TUNER.md` §9.
 
 ## The PDF's per-archetype table averages the lists (2026-09-27)
 

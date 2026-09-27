@@ -284,6 +284,8 @@ first.
 | Duel combinations | `server/duel_combos.py` | the single duel reader; mode taxonomy |
 | Deck Counter | `server/deck_counter.py` | the matchup evidence ladder |
 | Team Analysis | `server/team_analysis.py` | squad-scale opponent-aware recommendation |
+| Duel index + duel brain | `server/duel_index.py`, `server/duel_brain.py` | **(2026-09-27)** every native duel GAME out of `battle_raw` rounds, in its own gitignored SQLite, 4-hourly; per-deck records vs win condition with pilot-adjusted expectations; Team Analysis's duel picks |
+| Fused matchup rate | `server/matchup_fusion.py` | **(2026-09-27)** Team Analysis's rate: ladder + duels as one number per threat LIST, every weight fitted on a temporal duel holdout |
 | 2v2 pairs | `server/duo_pairs.py` | the precedent for a separate derived SQLite store |
 | Tag tracking | `server/tracking.py` | enrolment queue, own SQLite |
 
@@ -600,6 +602,17 @@ Brain usage     *** THE STRATEGIC ASSET. See 6.3. ***
 ### 6.3 `battle_raw.raw_json` → real duels
 
 **This is the substrate the frozen engine has never read.**
+
+> **READ IN PRODUCTION SINCE 2026-09-27 — by Team Analysis, not by the OIE.**
+> `server/duel_index.py` ingests every native duel game into its own
+> gitignored SQLite (`server/.duel_index.db`, `royalweb-duel.timer`, every four
+> hours; **336,471 games** on 2026-09-27), deduped on the duel's own identity,
+> watermarked on `stored_at`, and holding a retryable `unknown_card` refusal
+> below the watermark. Its `games` table carries both decks, both tags and the
+> winner per game. **A Brain experiment should read that index rather than
+> re-parse `battle_raw`** — the reader, the dedupe and the mode allowlist
+> (`duel_combos.is_native_duel`) are already written and tested
+> (`test_duel_index.py`, 60 checks). The OIE itself still reads none of it.
 
 ```
 team[0].rounds -> [{cards: [8], crowns, elixirLeaked, towerHitPoints}, ...]
@@ -957,6 +970,27 @@ identical answer.
 - Matchup knowledge conditioned on **who is piloting**, not just which decks
   met. Does not exist and has never been measured.
 - Confidence intervals on matchup rates. `MIN_GAMES` is the only floor today.
+
+> **UPDATE 2026-09-27 — both of those were touched, for Team Analysis.**
+>
+> - **The pilot, in duels.** `duel_brain` rates each pilot on their duels with
+>   their OTHER decks (20-game prior), predicts each game by log5, and scores a
+>   deck on wins above that expectation. On a temporal holdout the adjustment
+>   was **neutral for prediction** (15.59 vs 15.71) and is kept on principle —
+>   so "conditioned on who is piloting" now exists for duels, and has been
+>   measured to add little to a deck's figure.
+> - **Uncertainty.** A duel figure carries a one-sided 95% bound from its
+>   effective games, and a deck is "strong" only when that bound clears 50%
+>   on at least 30 effective games. The figure itself is shrunk toward 50/50
+>   by a 30-game prior, a strength fitted on the same kind of holdout.
+> - **A version-level rate.** `matchup_fusion` rates a deck against the
+>   threat's own LIST — its one-card family, and the deck's family against the
+>   exact list — from the ladder and the duels together. Log loss on 10,839
+>   held-out duel games **0.6873 -> 0.6793**, and **0.6773 -> 0.6582** where the
+>   threat is a popular list. The exact pair on its own wanted K = 1000 (almost
+>   no weight), which agrees with this section: an exact pairing is too sparse.
+>   It is a matchup RATE, not a prediction of what anybody brings, so it does
+>   not touch the OIE.
 
 ---
 

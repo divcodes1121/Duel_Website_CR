@@ -9,6 +9,10 @@ carries the full reasoning; this is the short version plus what to do next.
 > into the field plan) is built. Its "needs a nightly
 > `coach_player_snapshot`" is **superseded**: progress over time ships by
 > RECOMPUTATION and that table was deliberately dropped. See below.
+>
+> **Updated 2026-09-27** with what shipped since that reaches these screens —
+> the dashboard shell, the duel brain, the three-slot rule and the fused
+> matchup rate — and the one new decision it leaves.
 
 ## Where things stand
 
@@ -20,7 +24,7 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **951 vitest** (32 files), **3,015 Python checks** across 53 suites (one known failure, `test_ml_21a`), route count **24** — counted 2026-09-25 evening |
+| Tests | **1,029 vitest** (40 files), **3,351 Python checks** across 58 suites (one known failure, `test_ml_21a`), route count **25** — counted 2026-09-27 night |
 
 ## What the field plan answers
 
@@ -51,6 +55,23 @@ Backups on the VPS: `team_*.py.bak-20260925-152203-presquad`,
 `{coach,deck_tuner}.py.bak-20260925-155229-prestyle`,
 `coach.py.bak-20260925-160905-prechips`, `coach.py.bak-20260925-162209-prefive`.
 
+## Shipped 2026-09-26 and 2026-09-27 (all live) — what reaches these screens
+
+| commit | what | on the coach screens |
+|---|---|---|
+| `2780326` | the dashboard kit is TailAdmin's, every chart answers hover, tap and keyboard | the roster overview, each player's Overview and `#/my` |
+| `61e6a14` + `32961a5` | every PDF rebuilt on one engine; a tab opened before a deploy is told to reload | the roster exports through the same button |
+| `fcbc8b1` | every tag asked about anywhere is queued for collection | an opponent scouted from the roster gets collected |
+| `ea79f1b` | **one dashboard shell with a sidebar** for the console, the roster and `#/my` (open / mini / closed, remembered; a drawer on phones) | the roster's player list IS the sidebar; `#/my` has URL sections |
+| `9a8f2e9` | **the duel brain**: two of each seven held for decks proven in real duels | the **Opponent** tab reads Team Analysis, so its list carries duel picks |
+| `f54c864` | **every suggested deck fields all three special slots**; Deckkies picks only from lists that can | the field plan, the Today board, `#/my` and the Opponent tab |
+| `fdce37e` | **one matchup rate per threat LIST, ladder and duels together**, weights fitted on a duel holdout (0.6873 -> 0.6793 log loss) | the **Opponent** tab's rates; the field plan does NOT use it yet |
+
+Backups on the VPS for the last three:
+`{app,team_analysis}.py.bak-20260927-035602-preduel`,
+`{clash_data,team_analysis,coach_daily,coach}.py.bak-20260927-082012-preslots`,
+`{duel_index,team_analysis,team_scout,deck_counter}.py.bak-20260927-085838-prefusion`.
+
 ## Decisions waiting on the account holder
 
 1. **The R3 prediction sampler STOPPED on 2026-09-19 21:05 UTC** (its own stop
@@ -65,6 +86,14 @@ Backups on the VPS: `team_*.py.bak-20260925-152203-presquad`,
    "Cards to expect" 62% shown vs 46% observed, "clear favourite" 45.5%). The
    product response — reword, withhold, or reserve mass for unlisted decks —
    is still open.
+4. **The squad plan's band against the fused rate (2026-09-27).** A match
+   plan gives teammates different #1s only among options the evidence cannot
+   separate (`PRIMARY_BAND`, 3 points). The fused rate separates a clear
+   counter more often, so every-#1-distinct went **8/14 -> 6/14** on real
+   folders (e.g. a Bait list at 84.4% over 201 games against that opponent's
+   own Miner list, pointed at all five teammates). The band was deliberately
+   NOT re-tuned; forcing distinct #1s would hand some teammates a measurably
+   worse deck.
 
 ## THE ONE BLOCKING GAP: `is_coach` grants the screen, not the rows
 
@@ -94,6 +123,17 @@ is the account holder's call and has NOT been written.
 roster. The console control will happily set it.
 
 ## Genuinely next, in rough order of value
+
+### 0. The fused rate for the field plan (cheap) and Coach Assist
+
+`matchup_fusion` rates Team Analysis per threat LIST (0.6873 -> 0.6793 log
+loss on held-out duels). The field plan still rates by archetype, and its pool
+(the scout seeds) and its threats (the meta board) are ALL version hubs, so the
+duel index's version cells already hold every pair it would ask about: it is a
+`rate_for_threat` away. Measure the board's distinctness before and after — the
+field plan fought for per-player difference just as the squad plan did.
+Coach Assist would read the family level from a player's own history, the way
+Team Analysis does for a teammate's own list.
 
 ### 1. Prove the "notes are hidden" property for real
 
@@ -153,6 +193,13 @@ real architectural decision rather than a feature.
 - **Do not key anything on a deck name.** `deckName` is generated and collides:
   measured on one real player, 20 of 49 names covered more than one distinct
   8-card list.
+- **A deck somebody is told to play is drawn by `clash_data.complete_seating`**
+  (every special slot its cards can fill); **a deck somebody PLAYED is drawn as
+  fielded.** Opponents and threats are records, not advice. One list is not
+  under it yet: Coach Assist's admin-only tuner rows (`DECK_TUNER.md` §9).
+- **`team_scout.score`'s `rate_for_threat` stays optional.** Team Analysis
+  passes the fused rate; `coach_daily` passes nothing, and that is what keeps
+  its 204 checks meaning what they meant.
 
 ## There is no snapshot table, and the three reasons will apply again
 
@@ -210,3 +257,16 @@ The engines move, so that cannot be recovered later — different table, if ever
   survives.
 - **A scratchpad file may shadow a stdlib module.** A `types.py` there made
   `import re` re-execute a patch script and double-apply it.
+- **A fresh Python process has no meta board**, so `deck_counter.seater()`
+  seats by capability and fills every slot — an audit run that way found no
+  seating fault that production (board marks) really had. Load
+  `meta._load_snapshot()` or audit the live API.
+- **A script's own directory leads `sys.path`.** A comparison script kept
+  beside staged modules imported them even with `PYTHONPATH` at production, so
+  the "before" run was the new code. Keep baselines in a directory holding only
+  the script, and print `module.__file__`.
+- **A staged `deck_counter.py` looks for `.counter_snapshot.json` beside
+  itself** — copy it in, or a staged build silently has no seeds.
+- **Source `/etc/royalweb.env` for VPS experiments.** Without it the cluster
+  index refuses to answer (it serves only the database it was built from) and a
+  cluster-based experiment measures nothing, identically at every setting.

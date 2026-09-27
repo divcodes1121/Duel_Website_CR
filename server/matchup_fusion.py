@@ -32,9 +32,10 @@ estimate from the level above it:
 and at every level a duel game counts ALPHA = 4 ladder games, with the duel
 result taken as pilot-adjusted wins (`duel_brain`: who flew it is taken out).
 
-All six constants were FITTED, not chosen, on a temporal holdout of real duel
-games (train before 2026-09-13; fitted on the week after, reported on the week
-after that, 10,839 held-out games). Log loss, lower is better:
+All five weights (ALPHA and the four K's) were FITTED, not chosen, on a
+temporal holdout of real duel games (train before 2026-09-13; fitted on the
+week after, reported on the week after that, 10,839 held-out games). Log loss,
+lower is better:
 
     ladder list vs archetype (the engine that shipped)     0.6873
     fused at the archetype level (p1)                       0.6838

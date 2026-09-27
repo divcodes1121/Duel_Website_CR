@@ -264,7 +264,7 @@ and deliberately carry nothing per-player: a counter keyed by route would carry
 the tag in the path, and a tally of who was looked up is not a metric, it is a
 log of people. `metrics_snapshot()` exists; nothing surfaces it yet.
 
-`server/test_api_security.py` (73 checks) drives all of this over real HTTP
+`server/test_api_security.py` (87 tests) drives all of this over real HTTP
 against a server on an ephemeral port, because these controls are header- and
 status-level and a unit test calling `check_auth` directly would pass just as
 happily against a server that never called it.
@@ -415,7 +415,7 @@ sentence about a completely broken run.
 The collection is `server/.duo_pairs.db`, gitignored, and this module is the
 only thing that writes to it. The bot's databases stay `mode=ro`.
 
-## Recruiting tags (`recruit.py`)## Recruiting tags (`recruit.py`)
+## Recruiting tags (`recruit.py`)
 
 Two ways a player gets collected without anyone searching for them: the top of
 the ranked ladder, and the opponents our tracked players are actually meeting.
@@ -424,7 +424,7 @@ the ranked ladder, and the opponents our tracked players are actually meeting.
 python server/recruit.py --dry-run          # reads everything, queues nothing
 python server/recruit.py --top 2000         # both sources, for real
 python server/recruit.py --no-opponents     # the leaderboard only
-python server/test_recruit.py               # 35 checks, no DB and no network
+python server/test_recruit.py               # 39 checks, no DB and no network
 ```
 
 **It adds no route and no write.** Both recruiters end at
@@ -602,11 +602,11 @@ the list *are* the span, with no second query.
 ```bash
 python server/test_duel_combos.py    # 55 checks, no database needed
 python server/test_meta.py           # 33 checks, no database needed
-python server/test_card_art.py       # 110 checks, no database needed
+python server/test_card_art.py       # 131 checks, no database needed
 python server/test_duel_zone.py      # 88 checks, no database needed
 python server/test_player_cards.py   # 60 checks, no database needed
 python server/test_deck_counter.py   # 58 checks, no database needed
-python server/test_coach.py          # 69 checks, no database needed
+python server/test_coach.py          # 84 checks, no database needed
 ```
 
 ## The Duel Zone (`duel_zone.py`)
@@ -922,7 +922,10 @@ to name.
 archetype, fit_games)` takes the threat space as an **injected parameter**. It
 reads `archetype`, `likelihood`, `key`, `name` and `evidence` off each entry
 and asks the caller's `rate_for` how a candidate does against it — it does not
-know or care where the projection came from. So a projection built from the
+know or care where the projection came from. (Since 2026-09-27 it also takes
+an optional `rate_for_threat`, which Team Analysis passes for the fused
+per-list rate; this module does not, so its arithmetic is exactly what it was —
+its 204 checks pin it.) So a projection built from the
 meta board gets the same tested arithmetic (the four separated signals, the
 coverage penalty, the evidence weighting, `diversify()`'s archetype-repeat
 rule) with **no second scorer and no model**. Nothing here trains or calls
@@ -1476,8 +1479,25 @@ unless the band holds nothing else. The tails are `diversify` on the personal
 score with `score_key` / `bonus` / `first` (defaults unchanged, pinned by the
 speed-up oracle). Live, 11 folders: every-#1-distinct 0/11 -> 8/11, distinct
 decks 117 -> 191 of 378, mean slot rate -0.36 pts. `squadCover` on the folder;
-`vs` / `known` / `squadPick` / `covers` on rows. **`score()` is untouched** —
-`coach_daily` is its second consumer. Record: `DECKKIES_TEAM_SCOUT.md` §4f.
+`vs` / `known` / `squadPick` / `covers` on rows. **`score()` changed only by
+an optional keyword** (`rate_for_threat`, 2026-09-27) — `coach_daily` is its
+second consumer and does not pass it. Record: `DECKKIES_TEAM_SCOUT.md` §4f.
+
+**EVERY MATCHUP IS RATED PER THREAT LIST, LADDER AND DUELS AS ONE NUMBER
+(2026-09-27).** `_score` hands `score()` a `rate_for_threat` from
+`_FusionContext` — `matchup_fusion.fused` over the archetype matrix, the list's
+one-card variants, its archetype record plus pilot-adjusted duels, and the two
+version levels from the duel index's version cells (see "The version cells,
+and one fused rate" below). Measured on 14 real folders against the code before
+it: coverage 83/83 both, every-#1-distinct 8/14 -> 6/14 because the fused rate
+separates a clear counter more often and the band then shares it (the band was
+NOT re-tuned). Record: `DECKKIES_TEAM_SCOUT.md` §4i.
+
+**EVERY ROW IS A SUGGESTION, SO IT FIELDS ALL THREE SPECIAL SLOTS
+(2026-09-27).** `_score` draws each row with `clash_data.complete_seating`, and
+the scout pool and the duel catalogue offer only lists that CAN fill three
+(`slots.poolSkipped` / `slots.duelSkipped` count what was skipped). Record:
+`DECKKIES_TEAM_SCOUT.md` §4h.
 
 **`matchups` (the per-threat table) is on each folder's TOP pick only**
 (`_evidence_on_top`, 2026-09-21). It was ~4 kB on every recommendation and 80%
@@ -1520,29 +1540,37 @@ switch rather than a flag. The two modes take the same inputs minus one, return
 the same shape plus one field (`overall`), and publish which they were in
 `mode`. So `/api/analytics/teams` simply stopped requiring `blue`: **no new
 route**, nothing extra to hand-copy to the VPS, and the route-count tripwire in
-`test_api_security.py` stayed at 21 (it is **23** today — `duo-pairs` took the 22nd, Coach Roster's admin intel the 23rd; `duo-pairs` took its
-own path on 2026-09-10; see the route table above). It also means the incoherent combination —
+`test_api_security.py` stayed at 21 (it is **25** today — `duo-pairs` took the
+22nd on 2026-09-10, Coach Roster's admin intel the 23rd, the field plan the
+24th and the admin tracking view the 25th; see the route table above). It also means the incoherent combination —
 a squad pasted *and* scout mode asked for — cannot be expressed.
 
-With no squad to recommend from, the pool is `deck_counter._representatives()`:
-the most-observed real deck of each archetype, **not** the meta board's top 50,
-for the reason `_build_reps` gives above — the board excludes duel and friendly
-modes, and every number scored here comes out of `pair_matchup_agg`, which does
-not. Those candidates carry `owner: None` and `comfort: None` (nobody owns an
-archetype representative, so there is no tiebreak and no games piloted) and
-quote `overallWinRate` instead: the deck's own record across the field, which
-is the only thing that separates *beats them* from *beats everybody*.
+With no squad to recommend from, the pool is `_scout_candidates()`: up to
+`SCOUT_SEEDS_PER_ARCHETYPE` (12) real seeds of each archetype off the counter
+snapshot (~200 lists, each with its own per-archetype records, so no database
+read per candidate), skipping any list whose cards cannot fill all three
+special slots and taking that archetype's next seed instead. It was
+`deck_counter._representatives()` — the most-observed deck of each archetype,
+seventeen in all — until 2026-09-21, and that is still the fallback for a
+snapshot that predates the seed pool. **Not** the meta board's top 50, for the
+reason `_build_reps` gives above — the board excludes duel and friendly modes,
+and every number scored here comes out of `pair_matchup_agg`, which does not.
+Those candidates carry `owner: None` and `comfort: None` (nobody owns a seed,
+so there is no tiebreak and no games piloted) and quote `overallWinRate`
+instead: the deck's own record across the field, which is the only thing that
+separates *beats them* from *beats everybody*.
 
 `_score` is shared between the two modes unchanged. A second scorer for the
 second tab would put the fault this module exists to avoid — two places
 disagreeing about the same two decks — *inside* one screen.
 
 **`_SCOUT_POOL` is cached on the counter snapshot's `computedAt`, and that is
-not only an optimisation.** `_CLUSTER_CACHE` above is 32 entries and clears
-itself whole on overflow; seventeen representatives at two cluster levels is
-thirty-four. One forward pass costs a single sibling scan per deck and never
-returns to one — anything that looped opponents on the outside would rescan
-every deck every pass. The key is the snapshot because `reps` lives in it.
+not only an optimisation.** The seeds and their records live in the snapshot,
+so a rebuild is exactly when the pool may differ and nothing else is. (When
+the pool was seventeen representatives read through `_DeckProfile`, the cache
+also kept `_CLUSTER_CACHE` — 32 entries, clearing whole on overflow — from
+thrashing; a seed needs no cluster read at all.) The cache also carries how
+many seeds the three-slot rule skipped (`scout_pool_slot_gaps()`).
 
 **It reuses `deck_counter.matchup_ladder` rather than reimplementing it.** Every
 figure a recommendation carries is a rung of that ladder — exact deck vs
@@ -1704,6 +1732,14 @@ holds player tags**:
 - **Modes come from `duel_combos.is_native_duel`** — the allowlist the site and
   the bot share. It fails safe: an unknown mode containing "duel" is not sliced
   into games on a guess about its payload.
+- **What keeps its input alive until it is read.** The bot's raw cap
+  (`clashdb.purge_non_duel_raw`) deletes only rows whose `game_mode` does NOT
+  contain "duel", and both allowlisted modes (`cw_duel_1v1`,
+  `duel_1v1_friendly`) do. Its age trim (`trim_local_raw`) acts only against
+  an archive cursor this host does not have. So every game the index wants
+  waits in `battle_raw` until a run reads it, and once read it lives in the
+  index's own file. Checked against the bot's source on 2026-09-27 — if that
+  predicate ever narrows, this is the assumption it breaks.
 - **Cards come from `duo_pairs.deck_and_reason`**, the one raw-payload reader
   (tower troop excluded, unknown ids refused and counted). An unknown card is
   retryable, so the watermark is held below the first one — `duo_pairs`'
@@ -1747,7 +1783,7 @@ shows as an age. No new route: the figures ride on `/api/analytics/teams`
 fam_duel, ver_ladder, ver_duel)` — one shrinkage chain from the archetype
 matrix through the list's variants (K 10), the list vs the archetype (K 100),
 the list vs the threat's one-card family (K 30) and the list's family vs the
-exact threat (K 30), a duel game worth four ladder games. Every constant fitted
+exact threat (K 30), a duel game worth four ladder games. Every weight fitted
 on a temporal duel holdout (log loss 0.6873 -> 0.6793); the case, and what was
 ruled out, is in the module docstring and the main README. Keyword-only: seven
 arguments of one shape are one transposition from a plausible wrong number.

@@ -11,7 +11,14 @@ in **1.84 s mean / 2.7 s max** across 30 opponents, and the served
 lists are chosen as a squad — different #1s inside a 3-point band, covering the
 opponent's archetypes, leaning on each teammate's own cards. See §4f.
 
-`server/team_scout.py` + `server/test_team_scout.py` (**155** checks, no
+**Three additions on 2026-09-27, all LIVE:** the duel brain holds two of each
+seven for decks proven in real duels (§4g, `9a8f2e9`); every suggestion fields
+all three special slots and Deckkies picks come only from lists that can
+(§4h, `f54c864`); and every matchup is ONE rate per threat LIST, from the
+ladder and the duels together, with every weight fitted on a temporal duel
+holdout (§4i, `fdce37e`).
+
+`server/team_scout.py` + `server/test_team_scout.py` (**160** checks, no
 database), wired through `server/team_analysis.py`. Brain version
 **`team-scout-2.1`** (was 2.0 until 2026-09-25), published on every report.
 
@@ -206,6 +213,11 @@ What that costs whoever edits this file:
   everybody. The coach groups by win condition instead, so the spread is
   structural rather than enforced by a penalty.
 - **No `ml` import, on either path.** A test asserts it.
+- **`rate_for_threat` is optional and keyword-only (2026-09-27), and must stay
+  that way.** Team Analysis passes it (the fused per-list rate, §4i);
+  `coach_daily` passes nothing, which is what keeps the field plan's arithmetic
+  exactly what it was. Making it required, or changing what `rate_for` answers,
+  is the signature change this section warns about.
 
 ## 4b. A short per-teammate board is topped up, the way Coach Assist does
 
@@ -517,7 +529,7 @@ one archetype score differently. Team Analysis passes
 list's variants, its archetype record plus pilot-adjusted duels, and the two
 version levels from the duel index's version cells); `coach_daily` passes
 nothing and is unchanged (204/204). `SOURCE_STRENGTH` gained `version` (0.9).
-Every constant is fitted on a temporal duel holdout (0.6873 -> 0.6793 log
+Every weight is fitted on a temporal duel holdout (0.6873 -> 0.6793 log
 loss). `PRIMARY_BAND` was NOT re-tuned, and the consequence is measured: every
 teammate's #1 distinct in 8/14 real folders before, 6/14 after, because the
 fused rate separates a clear counter more often — the case the band was
@@ -717,7 +729,14 @@ surrogate can support and a fabricated rate cannot.
   different systems.
 
 - **No migration and no index.** `brain` rides inside the existing `engine`
-  jsonb. Route count stays **23**.
+  jsonb. Route count stayed **23** (it is 25 today — the field plan and the
+  admin tracking view took the 24th and 25th).
+
+- **The fused rate (§4i) trains nothing either.** Its five weights (the duel
+  weight and four shrinkage strengths) were FITTED by grid search on a temporal
+  duel holdout — not a model — and nothing is learned at request time or on a
+  timer. The version
+  cells it reads are counts.
 
 ## 8. Deploying
 
@@ -774,6 +793,20 @@ loses the variant veto and nothing else.
 | `server/duel_brain.py` | **new (§4g).** The duel brain. No imports beyond the standard library |
 | `server/test_duel_brain.py`, `server/test_duel_index.py` | **new.** 83 and 41 checks |
 | `src/utils/duelFigures.ts` | **new.** How a duel figure prints, on the screen and in the PDF |
+| `server/clash_data.py` | **§4h.** `complete_seating`, `complete_marks`, `fillable_slots`, `slot_kind`, `seated_positions` |
+| `server/test_suggested_seating.py` | **new (§4h).** 49 checks on real card keys, every observation subset of the 95 fixture decks |
+| `server/matchup_fusion.py` | **new (§4i).** The fused rate. No imports; keyword-only `fused()` |
+| `server/test_matchup_fusion.py` | **new (§4i).** 34 checks against literals, the fitted constants pinned |
+| `server/duel_index.py` | **§4i.** The version-cell stage (`_build_vcells`, `vhub` / `vcell`), `is_version_hub`, `version_cells`, status fields |
+| `server/test_duel_index.py` | 41 → 60. Hand-computed cells on a synthetic ladder, both storage directions, a failed stage not costing the build |
+| `server/team_scout.py` | **§4i.** Optional `rate_for_threat`; `SOURCE_STRENGTH["version"]` 0.9 |
+| `server/test_team_scout.py` | 155 → 160 |
+| `server/team_analysis.py` | **§4h / §4i.** Rows drawn by `complete_seating`, the scout pool and catalogue filtered to full loadouts, `_FusionContext`, `fusion` and `slots` on the report |
+| `server/test_team_analysis.py` | 142 → 150 → 163 |
+| `src/utils/deckSeating.ts` | **§4h.** `drawnDeck(..., filled)` + `formInferred`: a filled form says so per card |
+| `src/utils/teamReport.ts` | **§4i.** The per-archetype evidence table prints the weighted mean of that archetype's lists |
+| `src/components/Analytics/TeamAnalysis/TeamAnalysis.tsx` | `run` lists `days` among its dependencies — a new window was sending the old one |
+| `tests/teamAnalysisRun.test.ts` | **new.** Pins that fix; proven by reinstating the bug |
 
 ### The duplicate-key fix, because it is a real bug and not a cosmetic one
 
@@ -849,8 +882,18 @@ columns at 390px.
 - **`PER_PLAYER_TOP_N` is 7 now (§4c)**, at the account holder's request. The
   rows are collapsed per teammate, so the height only shows when one is opened;
   verified on a 5v5 Match Plan in §4d's browser pass.
-- **A 5v5 or larger board is 150+ s warm** — see §4d. `_CLUSTER_CACHE` is
-  too small for ten players' deck profiles and clears whole on overflow.
+- ~~**A 5v5 or larger board is 150+ s warm**~~ — **resolved 2026-09-21 (§4e).**
+  The cluster index took a 5v5 to 6.6 s cold / 3.0 s warm; live on 2026-09-27
+  a warm 5v3 answers in about a second, the fused rate included.
+- **The squad plan's band against the fused rate (§4i) — the account holder's
+  call.** Every-#1-distinct went 8/14 -> 6/14 on real folders, because a clear
+  counter is now separated from the rest and the band shares it. Forcing
+  distinct #1s would mean handing some teammates a measurably worse deck; the
+  band was left as it is.
+- **Coach Assist and the field plan still rate by archetype.** The field plan's
+  pool and its threats are all version hubs, so giving it the fused rate is
+  cheap; Coach Assist's own-deck list would read the family level the way a
+  teammate's own list does here.
 - **SETTLED 2026-09-21 (§4d): the badges are gone from the screen, and so is
   the sentence.** What follows is the record of why that was reasonable.
   **`type` and `confidence` are near-constant in production.** 140 ROBUST + 42

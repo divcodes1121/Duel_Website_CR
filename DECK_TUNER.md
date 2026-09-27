@@ -454,6 +454,17 @@ Three risks worth naming:
   `releases.ts`, and for the same reason: the rules most worth testing
   exhaustively must be importable without constructing anything.
 - **A small change to `deck_counter._build_reps()`** to keep top-N seeds.
+- **THE THREE-SLOT RULE (2026-09-27) DOES NOT COVER THIS MODULE YET.** Every
+  public "what to play" list draws its decks with
+  `clash_data.complete_seating` (every special slot the cards can fill) and
+  offers only lists that CAN fill all three. Here `_view()` still draws a list
+  the way the meta board saw it fielded, and `compose`'s seed pool is not
+  filtered, so a swap candidate (`rank`), a composed deck or a loadout deck
+  can leave the evolution, hero or wild slot empty. It reaches only an admin
+  session, like everything in this file. Bringing it under the rule means
+  `complete_seating` for the decks OFFERED (`rank`'s candidates and
+  `compose`'s rows) — not for `rank`'s base deck, which is the player's own
+  list and is drawn as fielded — plus a `fillable_slots` filter on the pool.
 - **NO NEW ROUTE.** It rides on `/api/analytics/coach/suggest` behind an
   opt-in `swaps=1` parameter, returning a `tuner` field — the arrangement
   `ops_snapshot` uses on `/coverage`, for the same three reasons: the

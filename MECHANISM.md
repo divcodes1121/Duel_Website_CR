@@ -9,10 +9,10 @@ Companion to `README.md` (the narrative record) and `server/README.md` (the
 operational half). This file is the **mechanism**: the reasoning chain, end to
 end, at the level of individual functions and constants.
 
-> **SCOPE, as of 2026-09-25.** This file documents the **prediction** chain —
+> **SCOPE, as of 2026-09-27.** This file documents the **prediction** chain —
 > the OIE, the Coach's duel prediction and what they refuse to do. It does
-> **not** cover the two recommendation engines that shipped after it, and a
-> reader should not conclude from its silence that they do not exist:
+> **not** cover the recommendation engines that shipped after it, and a reader
+> should not conclude from its silence that they do not exist:
 >
 > * **`server/team_scout.py`** — what to play against a named opponent.
 >   `DECKKIES_TEAM_SCOUT.md` is its record.
@@ -20,10 +20,21 @@ end, at the level of individual functions and constants.
 >   opponent, plus the win-condition board, the decks closest to what a player
 >   runs, one archetype worth learning and whether a weakness is closing.
 >   `server/README.md` § "A plan against the field" is its record.
+> * **`server/duel_index.py` + `server/duel_brain.py`** (2026-09-27) — what
+>   wins in real DUEL games, read out of `battle_raw`'s round-by-round
+>   payloads, holding two of each Team Analysis list for duel-proven decks.
+> * **`server/matchup_fusion.py`** (2026-09-27) — Team Analysis's matchup rate:
+>   the ladder and the duels as ONE rate per threat list, every weight fitted on
+>   a temporal duel holdout.
 >
-> Neither trains or calls a model; both rest on `team_scout.score()` taking the
-> threat space as an injected parameter. Tests assert no `ml` import on either
-> path.
+> None of them trains or calls a model — the duel brain's shrinkage and the
+> fused rate's five weights were fitted once, by grid search against held-out
+> games, and are constants in the code. Every recommendation is still scored by
+> `team_scout.score()`, which takes the threat space as an injected parameter
+> (and, since 2026-09-27, an optional per-threat rate — the fused one); the
+> duel brain's picks are scored the same way and placed in the list around that
+> score, not instead of it. Tests assert no `ml` import on the Team Analysis
+> and field-plan paths.
 
 ---
 

@@ -410,7 +410,11 @@ export function TeamAnalysis() {
     } finally {
       setLoading(false);
     }
-  }, [blue.members, red.members, problem, revealResults, scout]);
+    /* `days` IS A DEPENDENCY, and it was missing: pick a new window without
+       touching either roster, press Analyse, and the memoised `run` sent the
+       OLD window — the board answered a question nobody asked. The linter had
+       flagged it since the window was added, as one warning among eighteen. */
+  }, [blue.members, red.members, problem, revealResults, scout, days]);
 
   /* Opening a folder starts at the folder's top. Without this you land
      mid-way down a board because the gallery you clicked from was scrolled. */

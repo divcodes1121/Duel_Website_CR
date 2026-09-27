@@ -43,8 +43,30 @@
 >   a flagged non-admin would open the roster and read nothing. Latent today
 >   (counted: 1 of 14 accounts is flagged, and that one is the owner), and it
 >   needs a migration. See `DECKKIES_NEXT_SESSION.md`.
-> * Counts today: **6 tabs**, **950 vitest**, **204 Python checks** in
+> * Counts on 2026-09-25: **6 tabs**, **950 vitest**, **204 Python checks** in
 >   `test_coach_daily`, route count **24**.
+>
+> **Further superseded, 2026-09-27 (`ea79f1b`, `9a8f2e9`, `f54c864`,
+> `fdce37e`):**
+>
+> * **The roster lives in one dashboard shell** with the admin console and
+>   `#/my` (`ea79f1b`): the player list IS the sidebar (open / mini / closed,
+>   remembered; a drawer on phones), and `#/my` has URL sections
+>   (`#/my/practise|arsenal|battles`).
+> * **The Opponent tab's suggestions changed without the tab changing.** It
+>   still ranks nothing itself — it reads Team Analysis — so its list now
+>   carries decks proven in real duels (`9a8f2e9`), and every matchup behind it
+>   is one rate per threat LIST from the ladder and the duels together
+>   (`fdce37e`). "Against the field" still rates by archetype.
+> * **Every deck a player is told to play fields every special slot its cards
+>   can fill** (`f54c864`): the field plan, the Today board, `#/my` and the
+>   Opponent tab. A deck somebody PLAYED is still drawn as it was fielded.
+> * **STILL TRUE:** the RLS gap above. `coach_is_admin()` is unchanged and no
+>   migration has been written for it.
+> * Counts today: **6 tabs**, **1,029 vitest** (40 files), **204 Python
+>   checks** in `test_coach_daily` (unchanged: `score()`'s new
+>   `rate_for_threat` is optional and the field plan does not pass it), route
+>   count **25** (the admin tracking view took the 25th).
 >
 > What is still accurate here: the data model, the RLS boundary, the evidence
 > floors and the "no score, no rating" contract.
