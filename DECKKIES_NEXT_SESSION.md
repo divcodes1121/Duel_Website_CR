@@ -66,7 +66,7 @@ Backups on the VPS: `team_*.py.bak-20260925-152203-presquad`,
 | `9a8f2e9` | **the duel brain**: two of each seven held for decks proven in real duels | the **Opponent** tab reads Team Analysis, so its list carries duel picks |
 | `f54c864` | **every suggested deck fields all three special slots**; Deckkies picks only from lists that can | the field plan, the Today board, `#/my` and the Opponent tab |
 | `fdce37e` | **one matchup rate per threat LIST, ladder and duels together**, weights fitted on a duel holdout (0.6873 -> 0.6793 log loss) | the **Opponent** tab's rates; the field plan does NOT use it yet |
-| 2026-09-27 night | **Coach Assist reads real duels** (the fused rate on every pairing, one of three options held for a legal duel-proven deck) and **Deck vs Deck on the home Deck Counter** | none directly — Coach Assist is its own screen; the roster's Opponent tab already read Team Analysis |
+| `93e45e2` | **Coach Assist reads real duels** (the fused rate on every pairing, one of three options held for a legal duel-proven deck) and **Deck vs Deck on the home Deck Counter** | none directly — Coach Assist is its own screen; the roster's Opponent tab already read Team Analysis |
 
 Backups on the VPS for the last three:
 `{app,team_analysis}.py.bak-20260927-035602-preduel`,

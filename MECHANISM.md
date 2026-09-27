@@ -111,14 +111,16 @@ additive, flagged, and structurally unable to change a prediction
 
 ```
 server/
-├── coach.py            1,130 lines — BOTH Coach Assist windows
+├── coach.py            1,694 lines — BOTH Coach Assist windows
 │   ├── _history()          one DB read per (tag, since, until), 120 s TTL
 │   ├── opening_decks()     what they open a duel with
 │   ├── next_decks()        what is still legal after n reveals
 │   ├── observed_sequences() the real loadouts they have run
 │   ├── opponent_next()     their likely next deck, as a distribution
-│   ├── win_prob()          P(mine beats theirs), lazily laddered
+│   ├── win_prob()          P(mine beats theirs), lazily laddered — the FALLBACK since 2026-09-27
+│   ├── _Rates              the fused ladder+duel rate (team_analysis's contexts) — what ranks now
 │   ├── _expected()         expected win rate over the distribution
+│   ├── _duel_merge()       one of the three options held for a legal duel-proven deck
 │   ├── suggest()           the recommendation
 │   └── _read()/_caveats()  the prose, narrating evidence only
 │
@@ -447,6 +449,12 @@ and Baby Dragon.
 
 ### `_expected` — the scorer, and its one structural weakness
 
+> **Since 2026-09-27 (`93e45e2`) each pairing is `rates.rate(mine, theirs)` —
+> Team Analysis's fused ladder+duel rate, via `coach._Rates` — and `win_prob`
+> only answers when that import is unavailable. One engine per request, never a
+> mix. The sketch below is the fallback path; the weighting, the dropping and
+> `weight` are identical on both.
+
 ```python
 num = den = 0.0
 per = []
@@ -525,8 +533,17 @@ no-data read sound like a partial one); no history for you either; and a
 
 ## 9. The evidence ladder, in full
 
-**Every win rate in the system comes from here.** `coach.win_prob(mine, theirs,
+**Every win rate in the system came from here.** `coach.win_prob(mine, theirs,
 snap)` walks it and stops at the first rung with evidence.
+
+> **No longer true of Coach Assist's suggestions (2026-09-27, `93e45e2`).**
+> They are ranked by `matchup_fusion`'s fused rate, which BLENDS these rungs
+> (matrix, one-card variants, the list against the archetype) with duel records
+> and the version levels instead of stopping at the first. On 11,102 held-out
+> duel games first-rung-wins scored 0.6853 log loss and the fused rate 0.6793;
+> it was level only where an exact pair existed. The Deck Counter screen still
+> shows this ladder in full, and `win_prob` is Coach Assist's fallback. Team
+> Analysis moved the same day (`fdce37e`).
 
 | # | rung | source constant | what it counts | availability |
 |---|---|---|---|---|

@@ -811,6 +811,9 @@ loses the variant veto and nothing else.
 | `server/team_scout.py` | **§4i.** Optional `rate_for_threat`; `SOURCE_STRENGTH["version"]` 0.9 |
 | `server/test_team_scout.py` | 155 → 160 |
 | `server/team_analysis.py` | **§4h / §4i.** Rows drawn by `complete_seating`, the scout pool and catalogue filtered to full loadouts, `_FusionContext`, `fusion` and `slots` on the report |
+| `server/team_analysis.py` | **`93e45e2`.** `_FusionContext.prepare(hubs_too=...)`, an opt-in family level for hub lists; Team Analysis never passes it |
+| `server/coach.py` | **`93e45e2`.** Coach Assist's `_Rates` and `_duel_merge` build and read `_FusionContext` / `_DuelContext` — the consumer the second-consumer note warns about |
+| `server/test_coach.py` | 84 → 99. Coach Assist's side of that contract, against fakes |
 | `server/test_team_analysis.py` | 142 → 150 → 163 |
 | `src/utils/deckSeating.ts` | **§4h.** `drawnDeck(..., filled)` + `formInferred`: a filled form says so per card |
 | `src/utils/teamReport.ts` | **§4i.** The per-archetype evidence table prints the weighted mean of that archetype's lists |

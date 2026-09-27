@@ -1834,7 +1834,7 @@ under 10 ms warm.
 
 ## Coach Assist (`coach.py`)
 
-**THE FUSED RATE AND THE DUEL BRAIN, FROM TEAM ANALYSIS (2026-09-27).** `_Rates`
+**THE FUSED RATE AND THE DUEL BRAIN, FROM TEAM ANALYSIS (2026-09-27, `93e45e2`).** `_Rates`
 wraps `team_analysis._FusionContext` over a `_DuelContext` (soft import; off =
 `win_prob` exactly as before, and `fusion: null` says so). `_expected(...,
 rates)`, `_rate_vs_archetype(..., rates)` and `_chips(..., rates=)` take it —
@@ -1900,7 +1900,9 @@ Things to keep:
   duel row is a loadout, and the bot records that its 8-card blocks are not
   proven chronological. Under `MIN_FIRST_SERIES` ordered series the answer falls
   back to overall play rate and the response says which via `basis`.
-* **Expected win rate walks `deck_counter`'s ladder LAZILY.** `matchup_ladder`
+* **The FALLBACK expected win rate walks `deck_counter`'s ladder LAZILY** —
+  since 2026-09-27 (`93e45e2`) `_Rates` (the fused rate, above) ranks, and this
+  walk runs only when that import is unavailable. `matchup_ladder`
   builds every rung for display; the ≥7 cluster scan is 11.6 s cold, and the
   Coach asks for a whole grid. Stopping at the first rung with evidence took
   `suggest` from 25.7 s to 2–3 s with an identical answer.
