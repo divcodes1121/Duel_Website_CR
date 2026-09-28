@@ -18,6 +18,8 @@
      keeps them in front of the panel they hang over. */
   position: relative;
   z-index: 2;
+  /* Held still during a route's cross-fade — see ::view-transition in index.css. */
+  view-transition-name: topbar;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -689,6 +691,13 @@
   content: '';
   position: absolute;
   inset: 0;
+  /* DEPTH (hooks/usePointerDepth): the painting drifts up to 6px AGAINST the
+     mouse while the king moves 12px WITH it, so the two read as near and far.
+     Scaled 2% so the drift never uncovers the panel's edge. `translate`/`scale`
+     are their own properties, so nothing else's transform is overwritten. */
+  translate: calc(var(--px, 0) * -6px) calc(var(--py, 0) * -4px);
+  scale: 1.02;
+  transition: translate 500ms var(--ease);
   background-image: url('/assets/background/light_background.webp');
   background-size: cover;
   background-position: center bottom;
@@ -816,6 +825,9 @@
   max-width: clamp(15rem, 27vw, 26rem);
   height: auto;
   animation: heroKingIn 620ms cubic-bezier(0.22, 0.68, 0.32, 1) both;
+  /* The near layer — see .hero::before. */
+  translate: calc(var(--px, 0) * 12px) calc(var(--py, 0) * 8px);
+  transition: translate 420ms var(--ease);
 }
 
 @keyframes heroKingIn {
@@ -1577,6 +1589,61 @@
 
 .toolPanelFlip .toolBanner {
   transform: scaleX(-1);
+}
+
+/* THE ART PUSHES IN AS THE PANEL CROSSES THE SCREEN (2026-09-28).
+ *
+ * A scroll-driven animation (`animation-timeline: view()`): no JavaScript, no
+ * loop, nothing running while the panel is off screen, and a browser without
+ * it simply shows the still banner.
+ *
+ * A SCALE, NOT A SLIDE, and the framing notes above are why. Sliding the
+ * picture 20-30px up or down changes how much of its top is cropped, and these
+ * banners are framed by their top edge — the knight's horns sit at 0% and
+ * reach the very top of his frame. So the picture grows by 7% about each
+ * banner's own framing line (the `transform-origin` below repeats its
+ * `object-position` y), which moves everything EXCEPT the line the framing was
+ * set on. Horizontally the origin stays at the centre, which is also what keeps
+ * the flipped panels' mirror in place. `scale` is its own property, so the
+ * flip's `transform` is untouched. */
+.toolPanel[data-banner='team-analysis'] .toolBanner {
+  transform-origin: 50% 12%;
+}
+.toolPanel[data-banner='royal-duels'] .toolBanner {
+  transform-origin: 50% 0%;
+}
+.toolPanel[data-banner='counter-palette'] .toolBanner {
+  transform-origin: 50% 16%;
+}
+.toolPanel[data-banner='decks-home'] .toolBanner {
+  transform-origin: 50% 42%;
+}
+
+/* THE TIMELINE IS NAMED ON THE PANEL, NOT `view()` ON THE PICTURE. `view()`
+   tracks the picture against its nearest scroll container, and
+   `.toolBannerLayer`'s `overflow: hidden` MAKES it one — a box that never
+   scrolls — so the first cut sat at exactly half-way, 1.035, at every scroll
+   position. The panel's own box is tracked against the page's scroller. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .toolPanel[data-banner] {
+      view-timeline: --banner block;
+    }
+    .toolBanner {
+      animation: bannerPushIn linear both;
+      animation-timeline: --banner;
+      animation-range: entry 0% exit 100%;
+    }
+  }
+}
+
+@keyframes bannerPushIn {
+  from {
+    scale: 1;
+  }
+  to {
+    scale: 1.07;
+  }
 }
 
 /* THE SCRIM, AND ITS DIRECTION FOLLOWS THE COPY. `.toolPanelFlip` sets its

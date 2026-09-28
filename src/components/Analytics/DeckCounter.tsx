@@ -20,6 +20,7 @@ import {
   type RepDeck,
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
+import { Tabs } from '../ui/tabs';
 import { useVersusState, type VersusState } from './deckVersusState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DeckCounter.module.css';
@@ -110,7 +111,7 @@ function Strip({
           keeps it off the three card-difference columns below — those are
           partial lists (only-in-A, shared, only-in-B), not decks you can open
           in the game. */}
-      <DeckActions cards={cards} name={name} />
+      <DeckActions cards={cards} name={name} className={styles.stripActions} />
     </span>
   );
 }
@@ -752,20 +753,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
           )}
         </header>
 
-        <div className={styles.tabs} role="tablist">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.id}
-              className={`${styles.tab} ${tab === t.id ? styles.tabOn : ''}`}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <Tabs label="Deck Counter" items={TABS.map((t) => ({ id: t.id, label: t.label, title: t.blurb }))} value={tab} onChange={setTab} />
 
         {/* ------------------------------------------------- player counter */}
         {tab === 'player' && (

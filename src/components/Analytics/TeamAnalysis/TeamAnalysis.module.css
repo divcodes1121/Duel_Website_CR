@@ -95,36 +95,6 @@
  * AND ruled.
  */
 
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-  border-bottom: 1px solid var(--border);
-}
-
-.tab {
-  padding: 0.5rem 0.75rem;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 0.83rem;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.tab:hover {
-  color: var(--text);
-}
-
-.tabOn,
-.tabOn:hover {
-  color: var(--text);
-  font-weight: 750;
-  border-bottom-color: var(--accent-select);
-}
-
 /* ── Squad entry ─────────────────────────────────────────────────────────── */
 
 /* `1fr auto 1fr` is the right SHAPE here, unlike the trap noted in the README:

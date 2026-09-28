@@ -544,48 +544,13 @@
 
 /* ── tabs ──────────────────────────────────────────────────────────────── */
 
-.bd-tabs {
-  display: inline-flex;
-  flex: none;
-  gap: 2px;
-  border-radius: 10px;
-  background: var(--dash-sunken);
-  padding: 3px;
-}
 
-.bd-tab {
-  position: relative;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  padding: 0.4rem 0.8rem;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 500;
-  line-height: 1.35;
-  white-space: nowrap;
-  cursor: pointer;
-}
 
-.bd-tab[aria-selected='true'] {
-  font-weight: 700;
-}
 
 /* The slab travels between tabs; `--surface` is white on light and the card's
    own grey on dark, so it lifts off the sunken track in both themes without a
    `[data-theme]` branch. */
-.bd-tabSlab {
-  position: absolute;
-  inset: 0;
-  border-radius: 7px;
-  background: var(--dash-card);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08), inset 0 0 0 1px var(--dash-line);
-}
 
-.bd-tabText {
-  position: relative;
-}
 
 /* ── chart cards ───────────────────────────────────────────────────────── */
 

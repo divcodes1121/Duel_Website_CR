@@ -29,6 +29,7 @@ import { readToken } from '../../../three/runtime';
 import { useScreenExport } from '../../Export/ExportButton';
 import { Dropdown, type DropdownOption } from '../../ui/dropdown-menu-14';
 import { ReadingState } from '../ReadingState';
+import { Tabs } from '../../ui/tabs';
 import { VsMark } from '../../VsMark/VsMark';
 import { FolderGallery, OpenFolder, RosterRead } from './TeamFolders';
 import { SavedAnalyses } from './TeamSaves';
@@ -532,20 +533,7 @@ export function TeamAnalysis() {
           underline rail where the coloured RULE is the indicator and the label
           carries the app's ink rather than the hue. Meaning does not rest on
           colour alone: the selected label is brighter AND heavier AND ruled. */}
-      <div className={styles.tabs} role="tablist" aria-label="Analysis type">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            role="tab"
-            aria-selected={mode === m.id}
-            className={`${styles.tab} ${mode === m.id ? styles.tabOn : ''}`}
-            onClick={() => setMode(m.id)}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+      <Tabs label="Analysis type" items={MODES.map((m) => ({ id: m.id, label: m.label, title: m.blurb }))} value={mode} onChange={setMode} />
 
       {/* ONE BOX OR TWO. The paste survives the switch, so scouting a roster
           and then planning the match against it is one paste rather than two —

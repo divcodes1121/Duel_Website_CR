@@ -14,6 +14,7 @@ import { isEntitled, useAccess } from '../../state/gate';
 import { ShieldIcon } from '../Dashboard/icons';
 import { PasteIntro, PasteHeader } from './PasteIntro';
 import { ReadingState } from './ReadingState';
+import { Tabs } from '../ui/tabs';
 import styles from './CounterLab.module.css';
 /* The player screen's tabs and glass panel, reused so the two Deck Counters
    read as one feature — the Deck vs Deck panel was built inside that panel. */
@@ -173,23 +174,8 @@ export function CounterLab() {
   );
 
   const switcher = (centred?: boolean) => (
-    <div
-      className={`${dc.tabs} ${centred ? styles.modesCentred : styles.modes}`}
-      role="tablist"
-      aria-label="Deck Counter"
-    >
-      {MODES.map((m) => (
-        <button
-          key={m.id}
-          type="button"
-          role="tab"
-          aria-selected={mode === m.id}
-          className={`${dc.tab} ${mode === m.id ? dc.tabOn : ''}`}
-          onClick={() => setMode(m.id)}
-        >
-          {m.label}
-        </button>
-      ))}
+    <div className={centred ? styles.modesCentred : styles.modes}>
+      <Tabs label="Deck Counter" items={MODES} value={mode} onChange={setMode} />
     </div>
   );
 

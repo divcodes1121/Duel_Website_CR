@@ -1501,6 +1501,59 @@ exist so far; departed decks are one full-contrast line under the table.
 
 ---
 
+## One tab strip, the card inspect sheet, and the motion rules (2026-09-28)
+
+The mechanics; the README's "One tab component, a card inspect sheet, and
+motion that stays out of the way" is the record.
+
+### Tabs
+
+- **Track**: `--surface-sunken`, a 1px `--border`, 12px radius, 3px padding.
+  **Slab**: `--solid-violet` with `--on-solid` type, 9px radius, sliding on a
+  280 ms tween (`layoutId`, scoped per instance). A hovered, unselected tab
+  gets `--neutral-wash-sunken`. Counts are a small pill that inverts on the
+  slab.
+- Two sizes: `md` (2.15rem tall, 0.82rem type) for a screen's own tabs, and
+  `sm` (1.9rem, 0.78rem) for the builder's toolbar, the dashboards' chart
+  cards and the inspect sheet's form switch. Both are 40px tall on a coarse
+  pointer.
+- **A strip that overflows scrolls inside itself**, with a 28px mask fade on
+  the side that has more. That is the one place text is allowed to fade: it is
+  the scroll affordance, and the tab under it is brought fully into view the
+  moment it is picked.
+- A tab with a `description` reads as a small card: text left, icon on the
+  first line, label at 0.9rem.
+
+### The inspect sheet
+
+- Portalled, opaque `--surface-strong` with `--shadow-float`, over a scrim of
+  `--bg-1` at 62%. On a desktop it is 760px wide with the card on the left.
+  Below 640px it is a bottom sheet: a grip, rounded top corners only,
+  safe-area padding at the foot, the card 176px wide and centred above the
+  text, and a 44px close button.
+- The card is `aspect-ratio 302/380` in a 900px perspective. The tilt eases
+  back in 420 ms when the pointer leaves and follows at 70 ms while it moves.
+  The glare is a soft-light radial gradient and the evolution/hero sheen a
+  colour-dodge sweep, both masked by the art. Under reduced motion there is
+  no tilt and neither overlay.
+- The record is a grid of cells on `--surface-nested`, the figure at 1.2rem
+  / 800, under an uppercase title that says whose figures they are.
+- A card that opens the sheet shows a `zoom-in` cursor. One inside a control
+  keeps the control's cursor, because clicking it does what the control does.
+
+### Motion
+
+- **Route cross-fade**: 180 ms, opacity, `--ease`. The top bar holds still.
+- **Hero depth**: the backdrop is `translate`d up to 6px x 4px against the
+  pointer and scaled 2% so the drift never shows an edge. The king moves up to
+  12px x 8px with it, easing over 420-500 ms.
+- **Banner push-in**: scale 1 -> 1.07 across the panel's pass through the
+  scroller, about each banner's own framing line.
+- All three are one-shot or scroll-bound, transform and opacity only, and
+  absent under reduced motion. None of them runs a loop.
+
+---
+
 ## Working on this
 
 ```bash

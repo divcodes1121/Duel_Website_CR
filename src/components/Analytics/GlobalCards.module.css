@@ -84,44 +84,6 @@
   flex-wrap: wrap;
 }
 
-.tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.15rem;
-  padding: 0.22rem;
-  border-radius: 12px;
-  background: var(--surface-sunken);
-  border: 1px solid var(--border);
-}
-
-.tab {
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: none;
-  color: var(--text-muted);
-  font-size: 0.73rem;
-  font-weight: 650;
-  padding: 0.26rem 0.6rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.tab:hover {
-  color: var(--text);
-  background: var(--neutral-wash-sunken);
-}
-
-/* A SELECTED PILL IS A FILL, so it takes the solid step and white text. Drawn
-   as a tint with hue-coloured LABEL it was the last of the "why is the text
-   light" set: a pastel label is legible, but next to a solid sidebar row and a
-   solid button it reads as the odd one out. */
-.tabActive,
-.tabActive:hover {
-  color: var(--on-solid);
-  background: var(--solid-violet);
-  border-color: transparent;
-}
-
 .sort {
   display: inline-flex;
   align-items: center;
@@ -177,6 +139,18 @@
 
 .tile[data-empty] {
   opacity: 0.5;
+}
+
+/* Opens the card inspect sheet; a button with no chrome of its own. */
+.tileArtButton {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: zoom-in;
 }
 
 .tileArt {

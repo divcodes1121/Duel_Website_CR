@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Dashboard, type DashboardView } from './components/Dashboard/Dashboard';
 import { AuthScreen } from './components/Auth/AuthScreen';
 import { Onboarding } from './components/Auth/Onboarding';
@@ -6,6 +7,8 @@ import { ResetPassword } from './components/Auth/ResetPassword';
 import { useAccountStore } from './state/accountStore';
 import { isSupabaseConfigured } from './state/supabase';
 import styles from './App.module.css';
+import { withViewTransition } from './utils/viewTransition';
+import { CardInspectHost } from './components/CardInspect/CardInspect';
 /* SPLIT OUT, the same treatment jsPDF and three.js get and for the same reason:
    it is a side route most visitors never open, and everything it needs — the
    book, the leaf machinery, the magnifier, eight plates of copy — would
@@ -61,14 +64,18 @@ function playerRoute(hash: string): { tag: string; section: string } {
 function useHashRoute(): string {
   const [route, setRoute] = useState(window.location.hash);
   useEffect(() => {
-    const onHashChange = () => setRoute(window.location.hash);
+    // A route change cross-fades where the browser can (utils/viewTransition).
+    const onHashChange = () => {
+      const next = window.location.hash;
+      withViewTransition(() => flushSync(() => setRoute(next)));
+    };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
   return route;
 }
 
-function App() {
+function AppRoutes() {
   const route = useHashRoute();
 
   /* ONE GATE. `accountStore` is the only account system — the twenty-account
@@ -229,6 +236,17 @@ function App() {
     <div className={styles.app}>
       <Dashboard view={viewFor(route)} playerTag={tag} playerSection={section} />
     </div>
+  );
+}
+
+/* The card inspect sheet sits beside every route, so card art opens it on any
+   screen that draws a card — the analytics shell, the coach roster and #/my. */
+function App() {
+  return (
+    <>
+      <AppRoutes />
+      <CardInspectHost />
+    </>
   );
 }
 

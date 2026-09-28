@@ -10,6 +10,8 @@ import {
   type CardMode,
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
+import { Tabs } from '../ui/tabs';
+import { openCardInspect } from '../../state/cardInspect';
 import { Dropdown } from '../ui/dropdown-menu-14';
 import { BarsIcon, CardsIcon, DropIcon, SwordsIcon } from '../Dashboard/icons';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
@@ -246,9 +248,34 @@ function CardTile({
           with the rank, the battle count and the confidence interval. The
           elixir FILTER and sort are untouched; it is the printed digit that was
           noise. */}
-      <span className={styles.artWrap}>
+      {/* The art opens the card inspect sheet with this tile's own figures —
+          the same numbers the tooltip prints, for the same form. */}
+      <button
+        type="button"
+        className={styles.artWrap}
+        aria-label={`Inspect ${card?.name ?? row.key}`}
+        onClick={() =>
+          openCardInspect({
+            key: row.key,
+            form: art ?? 'base',
+            record:
+              shown && !unplayed
+                ? {
+                    title: `Their record${art ? ` ${formWord}` : ''} in this window`,
+                    facts: [
+                      { label: 'Battles', value: nf.format(shown.battles) },
+                      { label: 'Won', value: nf.format(shown.wins) },
+                      { label: 'Win rate', value: pct(shown.winRate) },
+                      { label: 'Use rate', value: pct(shown.useRate) },
+                      ...(shown.interval ? [{ label: '95% range', value: shown.interval }] : []),
+                    ],
+                  }
+                : undefined,
+          })
+        }
+      >
         <CardArt card={row.key} variant={art} className={styles.art} />
-      </span>
+      </button>
 
       <span className={styles.name}>{card?.name ?? row.key}</span>
 
@@ -649,20 +676,7 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
           </button>
         </div>
 
-        <div className={styles.tabs} role="tablist">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.id}
-              className={`${styles.tab} ${tab === t.id ? styles.tabOn : ''}`}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <Tabs label="Card group" items={TABS} value={tab} onChange={setTab} />
 
         {/* Under the tabs, per the brief: type a card name when scanning the
             grid is slower than saying what you want. */}

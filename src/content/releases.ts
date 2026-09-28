@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-28-card-inspect-and-tabs',
+    date: '2026-09-28',
+    kind: 'improved',
+    title: 'Tap any card to see it up close, and every set of tabs now works the same way',
+    body: [
+      'Tap or click a card almost anywhere on the site and it opens large, tilting toward your pointer, with its evolution or hero form a tap away and its description underneath. From the Cards screens it also shows the figures that screen measured for it.',
+      'Every screen with tabs now uses one control that slides between them, scrolls sideways on a phone when there are too many to fit, and works with the arrow keys. Moving between screens fades instead of flashing, and on a phone the deck buttons on Duel Zone and Deck Counter moved under the cards so the cards have room.',
+    ],
+    href: '#/',
+    hrefLabel: 'Open Deckkies',
+  },
+  {
     id: '2026-09-28-deck-image-and-fill',
     date: '2026-09-28',
     kind: 'new',

@@ -62,6 +62,8 @@ export function CardArt({
       draggable={false}
       className={className ? `${styles.art} ${className}` : styles.art}
       data-variant={effective}
+      /* Read by the card inspect sheet's delegated click (state/cardInspect). */
+      data-card={card}
       data-inferred={effective && inferred ? '' : undefined}
       onError={() => !failed && setFailed(true)}
     />

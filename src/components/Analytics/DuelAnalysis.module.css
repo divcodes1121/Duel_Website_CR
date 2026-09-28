@@ -167,7 +167,7 @@
 }
 
 /* A TOP-LEVEL panel — it sits on the page, so it keeps the panel fill. Boxes
-   nested inside it take --surface-nested (see .tabs) and the wells inside
+   nested inside it take --surface-nested and the wells inside
    those take --surface-sunken (see .meter). Ladder documented in index.css. */
 .pane {
   border-radius: 18px;
@@ -396,85 +396,6 @@
 .rangeNote {
   margin: 0.7rem 0 0;
   font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-/* ------------------------------------------------------------------ tabs */
-
-.tabs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
-  padding: 0.35rem;
-  border-radius: 14px;
-  border: 1px solid var(--glass-stroke);
-  background: var(--surface-nested);
-}
-
-.tab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.7rem 0.6rem;
-  border-radius: 10px;
-  border: 1px solid transparent;
-  background: transparent;
-  /* NEUTRAL WHEN INACTIVE. An unselected tab is not a category to be colour-
-     coded — it is a thing you have not chosen. Tinting Spells orange and
-     Evolutions green made three tabs look like three simultaneous states when
-     only one can be live, and it spent the palette's meaning on decoration. */
-  color: var(--text);
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.tabIcon {
-  color: var(--text-secondary, var(--text-muted));
-}
-
-.tab:hover {
-  background: var(--surface-hover, var(--neutral-wash));
-}
-
-/* PURPLE IS "SELECTED", whichever tab it is. The active treatment is one
-   treatment, so the colour answers "which is chosen" rather than "which is
-   this" — the same reason violet means selection everywhere else in the app. */
-.tabOn,
-.tabOn:hover {
-  background: var(--pri-soft);
-  border-color: var(--pri-border);
-  color: var(--pri);
-  /* The glow belongs to the TAB. A page-wide aura would say the whole screen
-     is selected; this is a 1px ring and a 12px lift, and nothing else. */
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--pri) 12%, transparent),
-    0 3px 12px color-mix(in srgb, var(--pri) 8%, transparent);
-}
-
-.tabOn .tabIcon {
-  color: var(--pri);
-}
-
-.tabOn .tabCount {
-  border-color: var(--pri-border);
-  background: var(--surface);
-  color: var(--pri);
-}
-
-.tabIcon {
-  display: grid;
-  place-items: center;
-}
-
-.tabCount {
-  padding: 0.1rem 0.4rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  font-size: 0.72rem;
-  font-weight: 600;
   color: var(--text-muted);
 }
 

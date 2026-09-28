@@ -10,6 +10,7 @@ import { VsMark } from '../VsMark/VsMark';
 import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { PlusIcon } from './icons';
+import { Tabs } from '../ui/tabs';
 import styles from './DuelDeckBuilder.module.css';
 
 const MODES: { id: BuilderMode; label: string }[] = [
@@ -150,45 +151,21 @@ export function DuelDeckBuilder() {
 
   const toolbar = (
     <>
-      <div className={styles.modeTabs} role="tablist" aria-label="Builder mode">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            role="tab"
-            aria-selected={mode === m.id}
-            className={`${styles.modeTab} ${mode === m.id ? styles.modeTabActive : ''}`}
-            onClick={() => setMode(m.id)}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+      <Tabs label="Builder mode" size="sm" items={MODES} value={mode} onChange={setMode} />
 
       {/* A separate control from Solo/Versus, because they are different axes:
           the mode is WHICH collection, this is whether you are looking at the
           board or at the sets you have saved of it. */}
-      <div className={styles.viewTabs} role="tablist" aria-label="Builder view">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === 'build'}
-          className={`${styles.modeTab} ${view === 'build' ? styles.modeTabActive : ''}`}
-          onClick={() => setView('build')}
-        >
-          Build
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === 'saved'}
-          className={`${styles.modeTab} ${view === 'saved' ? styles.modeTabActive : ''}`}
-          onClick={() => setView('saved')}
-        >
-          Saved
-          <span className={styles.viewCount}>{savedCount}</span>
-        </button>
-      </div>
+      <Tabs
+        label="Builder view"
+        size="sm"
+        value={view}
+        onChange={setView}
+        items={[
+          { id: 'build', label: 'Build' },
+          { id: 'saved', label: 'Saved', count: savedCount },
+        ]}
+      />
 
       <div className={styles.filterSlot}>
         <WinConFilter selected={winFilter} onToggle={toggleWinCon} onClear={() => setWinFilter([])}>

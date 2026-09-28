@@ -55,12 +55,11 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
-import { LayoutGroup, MotionConfig, motion } from 'framer-motion';
+import { Tabs } from './tabs';
 
 import { cn } from './cn';
 import { clampTip, gaugeArc, shareOf, tipAbove } from './dashGeometry';
@@ -502,10 +501,9 @@ export interface DashTab {
 }
 
 /**
- * TailAdmin's segmented control. The slab TRAVELS to the picked tab
- * (`layoutId`), scoped per instance with `LayoutGroup` — a literal id is
- * global and two controls on one screen would share one slab, the fault the
- * pagination's `layoutId` had. Arrow keys move between tabs.
+ * The dashboards' tabs are the site's tabs (`ui/tabs.tsx`), so a chart card's
+ * segmented control and every other tab strip say "selected" the same way.
+ * Kept as its own export because the kit's callers pass `tabs`/`idBase`.
  */
 export function DashTabs({
   tabs,
@@ -520,49 +518,16 @@ export function DashTabs({
   label: string;
   idBase?: string;
 }) {
-  const own = useId();
-  const base = idBase ?? own;
-  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
-    e.preventDefault();
-    const i = tabs.findIndex((t) => t.id === value);
-    const next =
-      e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length;
-    onChange(tabs[next].id);
-    (e.currentTarget.querySelectorAll('button')[next] as HTMLButtonElement | undefined)?.focus();
-  };
   return (
-    <MotionConfig reducedMotion="user">
-      <LayoutGroup id={base}>
-        <div className="bd-tabs" role="tablist" aria-label={label} onKeyDown={onKey}>
-          {tabs.map((t) => {
-            const on = t.id === value;
-            return (
-              <button
-                key={t.id}
-                id={`${base}-tab-${t.id}`}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                aria-controls={`${base}-panel`}
-                tabIndex={on ? 0 : -1}
-                className="bd-tab"
-                onClick={() => onChange(t.id)}
-              >
-                {on && (
-                  <motion.span
-                    layoutId="slab"
-                    className="bd-tabSlab"
-                    transition={{ type: 'tween', duration: 0.32, ease: [0.22, 0.68, 0.32, 1] }}
-                  />
-                )}
-                <span className="bd-tabText">{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </LayoutGroup>
-    </MotionConfig>
+    <Tabs
+      size="sm"
+      items={tabs}
+      value={value}
+      onChange={onChange}
+      label={label}
+      idBase={idBase}
+      panelId={idBase ? `${idBase}-panel` : undefined}
+    />
   );
 }
 

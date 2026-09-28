@@ -1,0 +1,179 @@
+/* The one tab strip — see tabs.tsx. A sunken track and a violet slab: the
+ * selection hue, carried by a FILL with white type on it, so the selected tab
+ * is told apart by more than a colour. */
+
+.track {
+  display: flex;
+  gap: 2px;
+  width: max-content;
+  max-width: 100%;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  flex: none;
+}
+
+.track::-webkit-scrollbar {
+  display: none;
+}
+
+/* The edge with more to show fades, so a strip that runs off a phone screen
+ * says it scrolls. A mask paints nothing: the fade is the track's own pixels
+ * going transparent, whatever sits behind it. */
+.track[data-fade-end] {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+}
+.track[data-fade-start] {
+  mask-image: linear-gradient(90deg, transparent, #000 28px);
+}
+.track[data-fade-start][data-fade-end] {
+  mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+.track[data-stretch] {
+  width: 100%;
+}
+
+.track[data-stacked] {
+  flex-direction: column;
+  overflow-x: visible;
+}
+
+.tab {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.15rem;
+  padding: 0.38rem 0.9rem;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.track[data-size='sm'] .tab {
+  min-height: 1.9rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+.track[data-stretch] .tab {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+}
+
+.track[data-stacked] .tab {
+  flex: none;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.tab:hover:not([aria-selected='true']):not(:disabled) {
+  background: var(--neutral-wash-sunken);
+}
+
+.tab[aria-selected='true'] {
+  color: var(--on-solid);
+}
+
+.tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.slab {
+  position: absolute;
+  inset: 0;
+  border-radius: 9px;
+  background: var(--solid-violet);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.icon,
+.text,
+.label {
+  position: relative;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: inherit;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.count {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text);
+  font-size: 0.7rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.tab[aria-selected='true'] .count {
+  border-color: color-mix(in srgb, var(--on-solid) 45%, transparent);
+  background: color-mix(in srgb, var(--on-solid) 16%, transparent);
+  color: var(--on-solid);
+}
+
+/* A tab with a second line reads as a card: text left, icon on the first line. */
+.tab[data-described] {
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  white-space: normal;
+}
+
+.tab[data-described] .label {
+  justify-content: flex-start;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.description {
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+@media (pointer: coarse) {
+  .tab,
+  .track[data-size='sm'] .tab {
+    min-height: 40px;
+  }
+}

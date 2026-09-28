@@ -11,6 +11,7 @@ import {
   type TabId,
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
+import { Tabs } from '../ui/tabs';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DuelAnalysis.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
@@ -390,39 +391,30 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
           </div>
         </header>
 
-        <div className={styles.tabs} role="tablist">
-          {TAB_ORDER.map((id) => {
+        <Tabs
+          label="Duel combinations"
+          stretch
+          stackBelow={560}
+          value={tab}
+          onChange={setTab}
+          items={TAB_ORDER.map((id) => {
             const meta = report.tabs[id];
-            const on = tab === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                className={`${styles.tab} ${on ? styles.tabOn : ''}`}
-                onClick={() => setTab(id)}
-              >
-                <span className={styles.tabIcon}>{TAB_ICONS[id]}</span>
-                {meta.label} (Combo)
-                {/* An em dash, not a 0, when the slot was never recorded. A "0"
-                    beside Evolutions reads as "this player runs none", which is
-                    a measurement; "—" reads as "not measured", which is what it
-                    is. Hovering says which. */}
-                <span
-                  className={styles.tabCount}
-                  title={
-                    id === 'evolutions' && evoUnmeasured
-                      ? 'No evolution slots recorded for these duels — not measured, rather than zero'
-                      : `${meta.eligible} pairings clear the evidence floor`
-                  }
-                >
-                  {id === 'evolutions' && evoUnmeasured ? '—' : meta.eligible}
-                </span>
-              </button>
-            );
+            const unmeasured = id === 'evolutions' && evoUnmeasured;
+            return {
+              id,
+              label: `${meta.label} (Combo)`,
+              icon: TAB_ICONS[id],
+              /* An em dash, not a 0, when the slot was never recorded. A "0"
+                 beside Evolutions reads as "this player runs none", which is a
+                 measurement; "—" reads as "not measured", which is what it is.
+                 Hovering says which. */
+              count: unmeasured ? '—' : meta.eligible,
+              countTitle: unmeasured
+                ? 'No evolution slots recorded for these duels — not measured, rather than zero'
+                : `${meta.eligible} pairings clear the evidence floor`,
+            };
           })}
-        </div>
+        />
 
         {/* ONE BLOCK PER TAB. On screen this loops once over the open tab;
             on paper it loops over all three, because `report.tabs` already
@@ -586,6 +578,7 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
                       <tr
                         key={key}
                         className={`${styles.row} ${open ? styles.rowOpen : ''}`}
+                        data-no-inspect
                         onClick={() => setExpanded(open ? null : key)}
                       >
                         <td>

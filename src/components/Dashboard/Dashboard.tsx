@@ -63,6 +63,7 @@ import { SEASONS, type Season } from '../Analytics/playerData';
 import { SeasonMenu } from '../Analytics/SeasonMenu';
 import { fetchSuggestedTags } from '../../state/analyticsClient';
 import { useReveal } from '../../hooks/useReveal';
+import { usePointerDepth } from '../../hooks/usePointerDepth';
 import { ClosingBand } from './ClosingBand';
 import { SiteFooter } from './SiteFooter';
 import { RecentBattles } from '../Analytics/RecentBattles';
@@ -528,6 +529,9 @@ export function Dashboard({
    * gets the full width and no rail. Opening an area, or loading a tag, is
    * leaving it. */
   const landing = view === 'home' && section === 'Search Player';
+  /* The hero's two painted layers shift with the mouse (hooks/usePointerDepth). */
+  const heroRef = useRef<HTMLElement | null>(null);
+  usePointerDepth(heroRef, landing);
 
   /* WHICH FACE THE HEADINGS ARE SET IN, and it is a document-level fact rather
      than a component one.
@@ -1265,7 +1269,7 @@ export function Dashboard({
           ) : section === 'Search Player' ? (
             /* The scroll target for the top bar's Analytics item — the field
                and the Analyze button are what it is pressed to get back to. */
-            <section className={styles.hero} id="player-search">
+            <section ref={heroRef} className={styles.hero} id="player-search">
               <div className={styles.heroBody}>
                 <div className={styles.heroScroll}>
                   {/* Copy left, character right. The four corner cards that used

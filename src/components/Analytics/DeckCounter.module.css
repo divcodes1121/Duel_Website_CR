@@ -315,43 +315,6 @@
   cursor: default;
 }
 
-/* ------------------------------------------------------------------ tabs */
-
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-  border-bottom: 1px solid var(--border);
-}
-
-.tab {
-  padding: 0.5rem 0.75rem;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 0.83rem;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.tab:hover {
-  color: var(--text);
-}
-
-/* The label takes the app's ink, not the hue. On an underline tab the coloured
-   RULE is the indicator — the text does not also need to be violet, and a
-   pastel label beside a solid sidebar row is what read as washed. Meaning still
-   does not rest on hue alone: the label is brighter AND heavier AND ruled. */
-.tabOn,
-.tabOn:hover {
-  color: var(--text);
-  font-weight: 750;
-  border-bottom-color: var(--accent-select);
-}
-
-
 /* ------------------------------------------------------------- stat tiles */
 
 .tiles {
@@ -930,6 +893,23 @@
 .stripSm img {
   max-width: 52px;
   border-radius: 3px;
+}
+
+/* ON A PHONE THE DECK'S ACTIONS TAKE THEIR OWN LINE under its cards. Beside
+   them, three 44px touch targets left the eight cards 20px wide in a 350px
+   row. `flex-basis: 100%` is what wraps it: the cards are `flex: 1 1 0`, so on
+   their own they never force a wrap. */
+@media (max-width: 560px) {
+  .strip,
+  .stripSm {
+    flex-wrap: wrap;
+  }
+
+  .strip > .stripActions.stripActions,
+  .stripSm > .stripActions.stripActions {
+    flex-basis: 100%;
+    margin-top: 0.3rem;
+  }
 }
 
 /* CENTRED. It sits under two side-by-side paste boxes and acts on both, so

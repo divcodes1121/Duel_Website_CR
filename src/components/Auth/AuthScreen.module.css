@@ -14,45 +14,11 @@
  * arriving cold is as likely to want one as the other, and a link buried under
  * the form makes creating an account feel like the exception. */
 
+/* The control itself is ui/tabs.tsx; this only places it on the card. */
 .tabs {
   position: relative;
   z-index: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.25rem;
-  width: 100%;
   margin: 0.9rem 0 1.1rem;
-  padding: 0.25rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-sunken);
-}
-
-.tab {
-  padding: 0.5rem 0.4rem;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  font: inherit;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    background var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease);
-}
-
-.tab:hover {
-  color: var(--text);
-}
-
-.tabOn {
-  /* `--solid-*` because this fill carries `--on-solid` text and has to hold it
-     at 5.48:1. `--hue-*` here would be the recurring mistake of this project:
-     it is graded for 14px ink, not for a fill. */
-  background: var(--solid-blue);
-  color: var(--on-solid);
 }
 
 /* --- the other way in ----------------------------------------------------- */

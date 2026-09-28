@@ -4,6 +4,7 @@ import { Fireflies } from '../../three/Fireflies';
 import { supabase } from '../../state/supabase';
 import { deviceKind, useAccountStore } from '../../state/accountStore';
 import { PasswordInput } from './PasswordInput';
+import { Tabs } from '../ui/tabs';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import loginStyles from '../Login/Login.module.css';
 import styles from './AuthScreen.module.css';
@@ -166,20 +167,18 @@ export function AuthScreen() {
           </p>
 
           {mode !== 'reset' && (
-            <div className={styles.tabs} role="tablist" aria-label="Sign in or create an account">
-              {(['signin', 'signup'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  role="tab"
-                  aria-selected={mode === m}
-                  className={`${styles.tab} ${mode === m ? styles.tabOn : ''}`}
-                  onClick={() => switchTo(m)}
-                >
-                  {m === 'signin' ? 'Sign in' : 'Create account'}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              label="Sign in or create an account"
+              stretch
+              stackBelow={0}
+              className={styles.tabs}
+              value={mode === 'signup' ? 'signup' : 'signin'}
+              onChange={switchTo}
+              items={[
+                { id: 'signin', label: 'Sign in' },
+                { id: 'signup', label: 'Create account' },
+              ]}
+            />
           )}
 
           <form className={loginStyles.form} onSubmit={onSubmit}>

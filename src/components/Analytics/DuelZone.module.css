@@ -242,103 +242,6 @@
   color: var(--text-muted);
 }
 
-/* ------------------------------------------------------- the two windows */
-
-.panes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.7rem;
-}
-
-@media (max-width: 720px) {
-  .panes {
-    grid-template-columns: 1fr;
-  }
-}
-
-.pane {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.7rem;
-  padding: 0.85rem 0.95rem;
-  border-radius: 14px;
-  /* A 2px leading edge, a border AND a text change carry the selected state
-     together, so it never rests on hue alone. */
-  border: 1px solid var(--border);
-  border-left: 2px solid transparent;
-  background: var(--surface-sunken);
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.pane:hover {
-  background: var(--neutral-wash-sunken);
-}
-
-/* The -sunken tints, because `.pane` rests on `--surface-sunken`. Mixed against
-   the card instead, this selected state measured 13.9 dE in dark against 5.7 in
-   light — the same control reading twice as loud on one theme. */
-.paneOn,
-.paneOn:hover {
-  background: var(--accent-select-fill-sunken);
-  border-color: var(--accent-select-edge);
-  border-left-color: var(--accent-select);
-}
-
-.paneIcon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex: none;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--surface-nested);
-  color: var(--text-muted);
-}
-
-.paneOn .paneIcon {
-  color: var(--accent-select);
-  border-color: var(--accent-select-edge);
-}
-
-.paneText {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-}
-
-.paneLabel {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.paneOn .paneLabel {
-  color: var(--accent-select);
-}
-
-.paneCount {
-  padding: 0.1rem 0.4rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-nested);
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  font-weight: 650;
-}
-
-.paneBlurb {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
 /* ------------------------------------------------------------- the body */
 
 .body {
@@ -553,6 +456,24 @@
 .gameRow > button {
   flex: 1;
   min-width: 0;
+}
+
+/* ON A PHONE THE ACTIONS TAKE THEIR OWN LINE, under the strip, right-aligned.
+   Beside the row they cost three 44px touch targets out of a 350px line, which
+   left the eight cards at ~30px and cut the deck name to "Bridge Sp…". */
+@media (max-width: 560px) {
+  .gameRow {
+    flex-wrap: wrap;
+    padding-right: 0;
+  }
+
+  .gameRow > button {
+    flex-basis: 100%;
+  }
+
+  .gameActions.gameActions {
+    margin: -0.2rem 0.85rem 0.5rem auto;
+  }
 }
 
 .game + .game {

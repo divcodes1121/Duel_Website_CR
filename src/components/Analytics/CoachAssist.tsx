@@ -21,6 +21,7 @@ import {
   type OpponentReadOutcome,
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
+import { Tabs } from '../ui/tabs';
 import { supabase } from '../../state/supabase';
 import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
@@ -1722,20 +1723,7 @@ export function CoachAssist({ tag }: { tag: string }) {
         </div>
       </header>
 
-      <div className={styles.tabs} role="tablist">
-        {WINDOWS.map((w) => (
-          <button
-            key={w.id}
-            type="button"
-            role="tab"
-            aria-selected={win === w.id}
-            className={`${styles.tab} ${win === w.id ? styles.tabOn : ''}`}
-            onClick={() => setWin(w.id)}
-          >
-            {w.label}
-          </button>
-        ))}
-      </div>
+      <Tabs label="Coach Assist" items={WINDOWS.map((w) => ({ id: w.id, label: w.label, title: w.blurb }))} value={win} onChange={setWin} />
 
       {/* Keyed on the window so switching tabs starts a clean interview rather
           than resuming the other one's half-answered questions. */}

@@ -288,42 +288,6 @@
   cursor: default;
 }
 
-/* ------------------------------------------------------------------ tabs */
-
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-  border-bottom: 1px solid var(--border);
-}
-
-.tab {
-  padding: 0.5rem 0.75rem;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 0.83rem;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.tab:hover {
-  color: var(--text);
-}
-
-/* The label takes the app's ink, not the hue. On an underline tab the coloured
-   RULE is the indicator — the text does not also need to be violet, and a
-   pastel label beside a solid sidebar row is what read as washed. Meaning still
-   does not rest on hue alone: the label is brighter AND heavier AND ruled. */
-.tabOn,
-.tabOn:hover {
-  color: var(--text);
-  font-weight: 750;
-  border-bottom-color: var(--accent-select);
-}
-
 /* ---------------------------------------------------------------- search */
 
 .searchRow {
@@ -438,6 +402,12 @@
   width: 58px;
   height: 70px;
   flex: none;
+  /* A button now (it opens the card inspect sheet), so no button chrome. */
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: zoom-in;
 }
 
 .art {
@@ -488,9 +458,6 @@
   width: 100%;
   margin-top: auto;
 }
-
-
-
 
 .rate {
   display: inline-flex;

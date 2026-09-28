@@ -15,6 +15,7 @@ import {
   type SequenceEntry,
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
+import { Tabs } from '../ui/tabs';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
 import styles from './DuelZone.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
@@ -230,7 +231,7 @@ function GameRow({ game, scoreKnown }: { game: DuelGame; scoreKnown: boolean }) 
         )}
       </button>
 
-        <DeckActions cards={game.cards} name={game.deckName} />
+        <DeckActions cards={game.cards} name={game.deckName} className={styles.gameActions} />
       </div>
 
       {canOpen && open && opp && (
@@ -649,30 +650,20 @@ export function DuelZone({ tag, season = 'Current Season' }: { tag: string; seas
         {/* The two windows. Selection is violet, which is what selection means
             everywhere in this app — the panes carry no identity hue of their
             own so the chosen one is unambiguous. */}
-        <div className={styles.panes} role="tablist" aria-label="Duel Zone view">
-          {WINDOWS.map((w) => {
-            const on = pane === w.id;
-            return (
-              <button
-                key={w.id}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                className={`${styles.pane} ${on ? styles.paneOn : ''}`}
-                onClick={() => setPane(w.id)}
-              >
-                <span className={styles.paneIcon}>{w.id === 'series' ? ICONS.log : ICONS.crystal}</span>
-                <span className={styles.paneText}>
-                  <span className={styles.paneLabel}>
-                    {w.label}
-                    <span className={styles.paneCount}>{counts[w.id]}</span>
-                  </span>
-                  <span className={styles.paneBlurb}>{w.blurb}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <Tabs
+          label="Duel Zone view"
+          stretch
+          stackBelow={520}
+          value={pane}
+          onChange={setPane}
+          items={WINDOWS.map((w) => ({
+            id: w.id,
+            label: w.label,
+            icon: w.id === 'series' ? ICONS.log : ICONS.crystal,
+            count: counts[w.id],
+            description: w.blurb,
+          }))}
+        />
 
         {pane === 'series' ? (
           <section className={styles.body}>

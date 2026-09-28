@@ -945,6 +945,21 @@ body {
   }
 }
 
+/* ROUTE CHANGES CROSS-FADE (utils/viewTransition.ts). Opacity only, 180 ms,
+   one-shot. The top bar is snapshotted on its own, so it holds still while the
+   screen under it changes instead of fading out and back in with it — a
+   persistent piece of chrome that blinks on navigation reads as a reload. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: var(--ease);
+}
+
+::view-transition-old(topbar),
+::view-transition-new(topbar) {
+  animation: none;
+}
+
 button {
   font-family: inherit;
 }

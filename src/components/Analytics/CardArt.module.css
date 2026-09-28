@@ -13,3 +13,13 @@
   aspect-ratio: 302 / 363;
   object-fit: contain;
 }
+
+/* A card on its own opens the inspect sheet (state/cardInspect.ts); one inside
+   a control does what the control does, so it keeps that control's cursor. */
+.art {
+  cursor: zoom-in;
+}
+
+:global(:is(button, a, label, [role='button'], [role='tab'], [role='option'], [data-no-inspect])) .art {
+  cursor: inherit;
+}

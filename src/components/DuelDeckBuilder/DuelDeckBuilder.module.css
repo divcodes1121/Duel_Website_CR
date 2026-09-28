@@ -4,70 +4,8 @@
    The two-column shell — decks beside the card library, each scrolling on its
    own — lives in DeckWorkspace, because Deck's Home and the Counter Palette
    use the same one. What is left here is what only a DUEL collection has: the
-   Solo/Versus switch, the two player columns, and the add-a-deck-slot tile. */
-
-/* --- Toolbar contents --------------------------------------------------- */
-
-.modeTabs {
-  display: flex;
-  gap: 0.15rem;
-  padding: 0.22rem;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--surface-sunken);
-  flex-shrink: 0;
-}
-
-.modeTab {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 0.35rem 1.1rem;
-  cursor: pointer;
-}
-
-.modeTab:hover {
-  color: var(--text);
-  background: var(--neutral-wash-sunken);
-}
-
-/* A SELECTED PILL IS A FILL, so it takes the solid step and white text. Drawn
-   as a tint with hue-coloured LABEL it was the last of the "why is the text
-   light" set: a pastel label is legible, but next to a solid sidebar row and a
-   solid button it reads as the odd one out. */
-.modeTabActive,
-.modeTabActive:hover {
-  color: var(--on-solid);
-  background: var(--solid-violet);
-  border-color: transparent;
-}
-
-/* Same pill strip as the mode tabs — they are two controls of the same kind on
-   two different axes, so they should look alike and sit apart. */
-.viewTabs {
-  display: flex;
-  gap: 0.15rem;
-  padding: 0.22rem;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--surface-sunken);
-  flex-shrink: 0;
-}
-
-.viewCount {
-  margin-left: 0.4rem;
-  padding: 0.02rem 0.4rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 16%, transparent);
-  font-size: 0.68rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
+   Solo/Versus switch, the two player columns, and the add-a-deck-slot tile.
+   The Solo/Versus and Build/Saved switches are ui/tabs.tsx now. */
 .filterSlot {
   flex: 1;
   min-width: 0;
@@ -304,20 +242,3 @@
   }
 }
 
-/* ── TOUCH TARGETS ───────────────────────────────────────────────────────
- *
- * WCAG 2.2 puts the floor at 24x24 CSS px (2.5.8, AA) and the comfortable
- * target at 44x44 (2.5.5, AAA); Apple's HIG says 44pt and Material says 48dp.
- * Measured on a 390px phone these controls came in between 12px and 30px tall,
- * so some of them failed the floor outright and the rest were merely hard.
- *
- * `(pointer: coarse)` and not a width breakpoint, because the question is what
- * is POINTING at the control, not how wide the window is — a touch laptop at
- * 1400px needs the bigger target and a 500px desktop window does not. Nothing
- * about the density on a mouse-driven screen changes. */
-
-@media (pointer: coarse) {
-  .modeTab {
-    min-height: 40px;
-  }
-}

@@ -8,6 +8,8 @@ import {
   type GlobalCardBoard,
 } from '../../state/analyticsClient';
 import { CardArt } from './CardArt';
+import { Tabs } from '../ui/tabs';
+import { openCardInspect } from '../../state/cardInspect';
 import { Dropdown } from '../ui/dropdown-menu-14';
 import { BarsIcon } from '../Dashboard/icons';
 import styles from './GlobalCards.module.css';
@@ -168,20 +170,7 @@ export function GlobalCards() {
       </header>
 
       <div className={styles.controls}>
-        <div className={styles.tabs} role="tablist" aria-label="Card group">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.id}
-              className={`${styles.tab} ${tab === t.id ? styles.tabActive : ''}`}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <Tabs label="Card group" items={TABS} value={tab} onChange={setTab} />
 
         <div className={styles.sort}>
           <Dropdown<'use' | 'win'>
@@ -230,7 +219,7 @@ export function GlobalCards() {
 
       <div className={styles.grid}>
         {rows.map((r) => (
-          <Tile key={r.card.key} row={r} form={form} />
+          <Tile key={r.card.key} row={r} form={form} scope={board ? `All players · last ${board.window.days} days` : "All players"} />
         ))}
       </div>
 
@@ -243,7 +232,7 @@ export function GlobalCards() {
   );
 }
 
-function Tile({ row, form }: { row: Row; form?: 'evolution' | 'hero' }) {
+function Tile({ row, form, scope }: { row: Row; form?: 'evolution' | 'hero'; scope: string }) {
   const { card } = row;
   const has = row.battles > 0;
   const title = has
@@ -258,7 +247,30 @@ function Tile({ row, form }: { row: Row; form?: 'evolution' | 'hero' }) {
 
   return (
     <div className={styles.tile} data-empty={!has || undefined} title={title}>
-      <CardArt card={card.key} variant={form} className={styles.tileArt} />
+      <button
+        type="button"
+        className={styles.tileArtButton}
+        aria-label={`Inspect ${card.name}`}
+        onClick={() =>
+          openCardInspect({
+            key: card.key,
+            form: form ?? 'base',
+            record: has
+              ? {
+                  title: scope,
+                  facts: [
+                    { label: 'Use rate', value: pct(row.useRate) },
+                    { label: 'Win rate', value: row.winRate == null ? '–' : pct(row.winRate) },
+                    { label: 'Battles', value: num(row.battles) },
+                    ...(form && row.baseWinRate != null ? [{ label: 'Plain win rate', value: pct(row.baseWinRate) }] : []),
+                  ],
+                }
+              : undefined,
+          })
+        }
+      >
+        <CardArt card={card.key} variant={form} className={styles.tileArt} />
+      </button>
       <span className={styles.tileName}>{card.name}</span>
       {has ? (
         <>
