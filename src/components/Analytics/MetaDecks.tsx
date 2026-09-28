@@ -1,3 +1,4 @@
+import { badgeOf, byDeck, leftTheBoard, movementNote, type Movement } from '../../utils/metaMovement';
 import { useEffect, useRef, useState } from 'react';
 import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { CardArt } from './CardArt';
@@ -7,6 +8,7 @@ import { ReadingState } from './ReadingState';
 import {
   AnalyticsError,
   fetchMetaBoard,
+  fetchMetaMovement,
   type MetaBoard,
 } from '../../state/analyticsClient';
 import styles from './MetaDecks.module.css';
@@ -61,6 +63,19 @@ export function MetaDecks() {
   const [loading, setLoading] = useState(true);
   /* Cards the board is filtered to. Empty means the whole top 50. */
   const [cardFilter, setCardFilter] = useState<string[]>([]);
+  /* How each deck moved in the last week. A separate read, and optional: if
+     it fails or the history is not a week old, the board is exactly the board
+     it was, with one line saying why there are no badges. */
+  const [movement, setMovement] = useState<Movement | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchMetaMovement(7)
+      .then((m) => live && setMovement(m))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
   /* THE WHOLE CONDITION, not the flag: `!board` flips at the same instant
      the data lands, so holding a bare `loading` would let this guard fall
      through anyway. See the hook. */
@@ -180,6 +195,9 @@ export function MetaDecks() {
      would then disagree with the bar. */
   const topUse = Math.max(...allDecks.map((d) => d.useRate), 0.01);
 
+  const moves = byDeck(movement);
+  const departed = leftTheBoard(movement);
+
   return (
     <section className={styles.panel}>
       <header className={styles.head}>
@@ -191,6 +209,7 @@ export function MetaDecks() {
               What the whole player base is running, ranked by use rate — last {win.days} days
               {win.from ? `, ${shortDay(win.from)} – ${shortDay(win.to)}` : ''}.
             </p>
+            {movementNote(movement) && <p className={styles.moveNote}>{movementNote(movement)}</p>}
           </div>
         </div>
 
@@ -255,8 +274,18 @@ export function MetaDecks() {
             {decks.map((d) => (
               <tr key={d.deckHash} className={styles.row}>
                 <td>
-                  <span className={styles.rank} data-medal={d.rank <= 3 ? d.rank : undefined}>
-                    {d.rank}
+                  <span className={styles.rankCell}>
+                    <span className={styles.rank} data-medal={d.rank <= 3 ? d.rank : undefined}>
+                      {d.rank}
+                    </span>
+                    {(() => {
+                      const b = badgeOf(moves.get(d.deckHash), movement);
+                      return b ? (
+                        <span className={styles.move} data-kind={b.kind} title={b.title}>
+                          {b.text}
+                        </span>
+                      ) : null;
+                    })()}
                   </span>
                 </td>
                 <td className={styles.deckName} title={d.deckHash}>
@@ -327,6 +356,21 @@ export function MetaDecks() {
           </tbody>
         </table>
       </div>
+
+      {/* Decks that dropped out of the top 50 did not fall to zero use; they
+          left the board, and that is what this line says. */}
+      {departed.length > 0 && (
+        <p className={styles.departed}>
+          Left the board since {movement?.comparedWith}:{' '}
+          {departed.map((r, k) => (
+            <span key={r.deckHash}>
+              {k > 0 ? ', ' : ''}
+              {r.name} (was #{r.previousRank})
+            </span>
+          ))}
+          .
+        </p>
+      )}
 
     </section>
   );

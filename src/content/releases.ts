@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-28-deck-image-and-fill',
+    date: '2026-09-28',
+    kind: 'new',
+    title: 'Save any deck as a picture, let the builder finish a deck for you, and see how the meta moved',
+    body: [
+      'Every deck on the site now has a picture button next to Copy link: it saves the deck as an image with its cards, average elixir and curve, ready for Discord or a group chat. On a phone it opens the share sheet.',
+      'The wand on a deck in Royal Duels, Deck’s Home or Counter Palette fills the empty slots with a legal deck: an evolution, a hero, a win condition and a spell, at a sensible average cost, and never a card another duel deck already holds. On an empty deck it builds one from scratch, and Undo takes it back. Each deck’s footer now draws its elixir curve. Top Meta Decks will mark each deck’s climb or fall once a week of daily history is stored; until then it says how many days it has.',
+    ],
+    href: '#/builder',
+    hrefLabel: 'Open Royal Duels',
+  },
+  {
     id: '2026-09-28-palette-and-undo',
     date: '2026-09-28',
     kind: 'new',

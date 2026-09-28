@@ -674,3 +674,29 @@
     min-height: 40px;
   }
 }
+
+/* The elixir curve beside average and cycle: seven bars, 1 to 7+. Sized to
+   the figures' line so the footer keeps its height. The bars are the
+   selection-free ink hue — a bare graphic mark, so `--hue-*`, never
+   `--solid-*`, which is graded to carry white text and sinks into the panel. */
+.curve {
+  display: inline-grid;
+  grid-template-columns: repeat(7, 5px);
+  gap: 2px;
+  align-items: end;
+  height: 1.05rem;
+  padding: 0 0.1rem;
+}
+
+.curveBar {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  border-radius: 2px 2px 1px 1px;
+  background: var(--hue-violet);
+}
+
+.curveBar[data-empty] {
+  height: 2px;
+  background: var(--border-strong);
+}

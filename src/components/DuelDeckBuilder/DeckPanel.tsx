@@ -6,7 +6,11 @@ import { fireDeckFx } from '../../state/deckFx';
 import { getClashRoyaleDeckLink, parseClashRoyaleDeckLink } from '../../utils/deckLink';
 import { DeckSlotGrid } from './DeckSlotGrid';
 import { DeckStats } from './DeckStats';
+import { CARDS_BY_KEY } from '../../data/cards';
+import { getSlotVisualVariant } from '../../state/deckUtils';
 import {
+  ImageIcon,
+  WandIcon,
   LaunchIcon,
   LinkIcon,
   ImportIcon,
@@ -43,6 +47,10 @@ interface DeckPanelProps {
 export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: DeckPanelProps) {
   const renameDeck = useBuilderStore((s) => s.renameDeck);
   const clearDeck = useBuilderStore((s) => s.clearDeck);
+  const fillDeck = useBuilderStore((s) => s.fillDeck);
+  /* The image button's state: the renderer and the art arrive on the first
+     press, so there is a visible "working" moment, then a "saved" flash. */
+  const [imageState, setImageState] = useState<'idle' | 'busy' | 'done'>('idle');
   const importDeck = useBuilderStore((s) => s.importDeck);
   const [isEditing, setIsEditing] = useState(false);
   const [draftName, setDraftName] = useState(deck.name);
@@ -86,6 +94,23 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
     const trimmed = draftName.trim();
     renameDeck(owner, deckIndex, trimmed || deck.name);
     setIsEditing(false);
+  }
+
+  async function saveImage() {
+    if (filledCount !== DECK_SIZE || imageState === 'busy') return;
+    setImageState('busy');
+    const cards = deck.slots.filter((k): k is string => k !== null);
+    // The forms the slots are showing, so the picture matches the panel.
+    const art: Record<string, 'evolution' | 'hero'> = {};
+    deck.slots.slice(0, 3).forEach((k, i) => {
+      if (!k) return;
+      const v = getSlotVisualVariant(deck, i, CARDS_BY_KEY);
+      if (v === 'evolution' || v === 'hero') art[k] = v;
+    });
+    const { shareDeckImage } = await import('../../utils/deckImage');
+    const outcome = await shareDeckImage({ cards, name: deck.name, art });
+    setImageState(outcome === 'shared' || outcome === 'downloaded' ? 'done' : 'idle');
+    window.setTimeout(() => setImageState('idle'), 1800);
   }
 
   function openInClashRoyale() {
@@ -199,6 +224,23 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
           <button
             type="button"
             className={styles.iconButton} data-metal
+            title={
+              filledCount === DECK_SIZE
+                ? 'Save this deck as an image to share'
+                : 'Fill all 8 slots to save the deck as an image'
+            }
+            aria-label="Save this deck as an image"
+            aria-disabled={filledCount !== DECK_SIZE}
+            aria-busy={imageState === 'busy' || undefined}
+            data-flash={imageState === 'done' || undefined}
+            onClick={saveImage}
+          >
+            {imageState === 'done' ? <CheckIcon /> : <ImageIcon />}
+          </button>
+
+          <button
+            type="button"
+            className={styles.iconButton} data-metal
             title="Paste a Clash Royale deck link to build this deck"
             aria-label="Import a deck link"
             aria-expanded={importOpen}
@@ -216,6 +258,26 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
             onClick={startRename}
           >
             <RenameIcon />
+          </button>
+
+          {/* Completes the deck with legal cards, keeping every card already
+              placed; on an empty deck it builds one from nothing. Undoable,
+              like every other edit here. */}
+          <button
+            type="button"
+            className={styles.iconButton} data-metal
+            title={
+              filledCount === DECK_SIZE
+                ? 'This deck is full'
+                : filledCount === 0
+                  ? 'Surprise me — build a legal deck'
+                  : 'Fill the empty slots with legal cards'
+            }
+            aria-label={filledCount === 0 ? 'Build a random legal deck' : 'Fill the empty slots'}
+            aria-disabled={filledCount === DECK_SIZE}
+            onClick={() => filledCount < DECK_SIZE && fillDeck(owner, deckIndex)}
+          >
+            <WandIcon />
           </button>
 
           <button

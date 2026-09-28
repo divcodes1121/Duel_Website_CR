@@ -1458,6 +1458,49 @@ in a polite live region.
 
 ---
 
+## Deck pictures, the wand, the curve and the movement badges (2026-09-28)
+
+The mechanics; the README's "Save a deck as a picture, fill a deck legally, and
+the meta's weekly movement" is the record.
+
+### Two new deck actions
+
+- **The picture button** sits after Copy link in `DeckActions` and in the deck
+  panel's rail, same chip, same size; it shows a working state while the image
+  draws and a check when it is saved or shared.
+- **The wand** sits before Clear in the deck panel's rail. Its name says what
+  it will do (build a whole deck, or fill the gaps); it is disabled on a full
+  deck, where there is nothing for it to do.
+- The panel's rail was already allowed to scroll sideways on a phone, and it
+  still fits a 390px screen without doing so.
+
+### The picture
+
+Dark brand ground in both themes; Bebas for the wordmark, the deck name and
+the figures; the evolution edge violet and the hero edge amber with an EVO /
+HERO label under each, matching the PDF. The curve is drawn in violet with a
+flat stub for an empty bucket, so the seven columns read as a scale.
+
+### The curve in the footer
+
+Seven thin bars, violet (`--hue-violet`, a bare graphic mark, so the ink step),
+heights scaled to the deck's tallest bucket (never less than 3, so a deck
+with two cards at every cost does not draw seven full bars), and an empty
+bucket a 2px stub in `--border-strong`.
+They are one `role="img"` with the counts and the card mix in its label and
+`title`, so hovering shows the numbers.
+
+### The movement badges
+
+Under the rank number, not beside it, so the rank column keeps its width.
+▲ green and ▼ red in the ink step, NEW as a violet outlined pill; each has a
+`title` naming the old rank and the date compared with. A glyph and a number
+as well as the hue, so they read in greyscale. The note under the board's
+title says either which two days were compared or how many days of history
+exist so far; departed decks are one full-contrast line under the table.
+
+---
+
 ## Working on this
 
 ```bash

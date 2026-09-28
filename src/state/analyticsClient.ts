@@ -288,6 +288,12 @@ export function fetchMetaBoard(): Promise<MetaBoard> {
   return get<MetaBoard>('/api/analytics/meta');
 }
 
+/** How the board moved over `days`, from the stored daily snapshots
+ *  (`server/meta_history.py`). See `utils/metaMovement.ts`. */
+export function fetchMetaMovement(days = 7): Promise<import('../utils/metaMovement').Movement> {
+  return get(`/api/analytics/meta?movement=${days}`);
+}
+
 /* ------------------------------------------------------- duel combinations */
 
 export type TabId = 'win-conditions' | 'spells' | 'evolutions';

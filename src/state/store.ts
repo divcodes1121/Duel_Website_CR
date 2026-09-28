@@ -28,7 +28,8 @@ import {
   type SlotRef,
   type UniquenessScope,
 } from './deckUtils';
-import { CARDS_BY_KEY } from '../data/cards';
+import { CARDS, CARDS_BY_KEY } from '../data/cards';
+import { fillDeck as fillDeckUtil } from './deckFill';
 import { buildDuelImport, type DuelSaveOutcome, type PlayedGame } from './duelImport';
 import { pushRemoteDecks, readRemoteDecks, type SyncPayload } from './syncClient';
 import { decideSync } from './syncPolicy';
@@ -126,6 +127,12 @@ interface BuilderState extends PersistedSlice {
   moveCard: (owner: DeckOwner, from: SlotRef, to: SlotRef) => void;
   clearSlot: (owner: DeckOwner, deckIndex: number, slotIndex: number) => void;
   clearDeck: (owner: DeckOwner, deckIndex: number) => void;
+  /**
+   * Complete a deck with legal cards (`state/deckFill.ts`), keeping every card
+   * already placed. Returns how many were added — 0 when it was full or no
+   * legal card fits. Undoable like any other edit.
+   */
+  fillDeck: (owner: DeckOwner, deckIndex: number) => number;
   /**
    * Replace a deck with 8 imported card keys (from a pasted CR deck link).
    * Duplicates across the collection are allowed (shown desaturated in the UI).
@@ -561,6 +568,33 @@ export const useBuilderStore = create<BuilderState>()(
             ...remember(state, scopeOfOwner(owner), `Clear ${deck.name}`),
           };
         }),
+
+      fillDeck: (owner, deckIndex) => {
+        const state = get();
+        const current = state.sets[owner];
+        const deck = current.decks[deckIndex];
+        if (!deck) return 0;
+        const before = deck.slots.filter((k) => k !== null).length;
+        const slots = fillDeckUtil(current, deckIndex, CARDS, CARDS_BY_KEY, scopeFor(owner));
+        if (!slots) return 0;
+        const added = slots.filter((k) => k !== null).length - before;
+        if (added <= 0) return 0;
+        set({
+          ...remember(state, scopeOfOwner(owner), before === 0 ? `Surprise me on ${deck.name}` : `Fill ${deck.name}`),
+          ...commitSet(state, owner, {
+            ...current,
+            decks: current.decks.map((d, i) =>
+              // The Wild slot may have changed, so any form choice it carried
+              // goes, the same as a paste.
+              i === deckIndex ? { ...d, slots, wildVariant: d.slots[2] === slots[2] ? d.wildVariant : undefined } : d,
+            ),
+            updatedAt: new Date().toISOString(),
+          }),
+          selectedSlot: null,
+          selectionPinned: false,
+        });
+        return added;
+      },
 
       importDeck: (owner, deckIndex, keys) => {
         const state = get();

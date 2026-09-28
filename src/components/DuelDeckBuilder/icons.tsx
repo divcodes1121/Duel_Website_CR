@@ -48,6 +48,28 @@ export function LaunchIcon({ size }: P = {}) {
 }
 
 /** Copy the share link — two chain segments. */
+/* A picture frame with a hill and a sun — "save this deck as an image". */
+export function ImageIcon({ size }: P = {}) {
+  return (
+    <Svg size={size}>
+      <rect x="3.5" y="5" width="17" height="14" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M20.5 16l-5-5-8.5 8" />
+    </Svg>
+  );
+}
+
+/* A wand with a spark — "fill the rest of this deck". */
+export function WandIcon({ size }: P = {}) {
+  return (
+    <Svg size={size}>
+      <path d="M4 20 15 9" />
+      <path d="m14 5 1-2 1 2 2 1-2 1-1 2-1-2-2-1z" />
+      <path d="M19 12v2M18 13h2" />
+    </Svg>
+  );
+}
+
 export function LinkIcon({ size }: P = {}) {
   return (
     <Svg size={size}>

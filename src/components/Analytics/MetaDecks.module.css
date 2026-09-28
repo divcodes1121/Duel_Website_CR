@@ -649,3 +649,69 @@
     min-height: auto;
   }
 }
+
+/* ── MOVEMENT (2026-09-28) ──────────────────────────────────────────────
+ * The rank and how far it moved in a week, side by side. The badge carries a
+ * glyph and a number as well as a hue, so it reads in greyscale. Ink step
+ * (`--hue-*`), because it is small type on the panel. */
+.rankCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.move {
+  font-size: 0.64rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.move[data-kind='up'] {
+  color: var(--hue-green);
+}
+
+.move[data-kind='down'] {
+  color: var(--hue-red);
+}
+
+.move[data-kind='new'] {
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  color: var(--hue-violet);
+}
+
+.moveNote {
+  margin: 0.2rem 0 0;
+  font-size: 0.74rem;
+  color: var(--text);
+}
+
+.departed {
+  margin: 0;
+  padding: 0.7rem 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+/* In the two-line rows and on a phone the rank sits in a 2.4rem column (or
+   beside the name), so the badge goes UNDER the rank rather than beside it,
+   where it would run into the deck name. */
+@media (min-width: 62.0625rem) {
+  @container (max-width: 75rem) {
+    .rankCell {
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+  }
+}
+
+@media (max-width: 62rem) {
+  .rankCell {
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+}

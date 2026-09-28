@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getDeckLinkFromKeys } from '../../utils/deckLink';
-import { CheckIcon, LaunchIcon, LinkIcon } from '../DuelDeckBuilder/icons';
+import { CheckIcon, ImageIcon, LaunchIcon, LinkIcon } from '../DuelDeckBuilder/icons';
+import { positionalArt } from '../../utils/deckSeating';
 import styles from './DeckActions.module.css';
 
 /**
@@ -32,12 +33,19 @@ interface DeckActionsProps {
   name?: string;
   /** `sm` for dense table rows, `md` beside a full deck panel. */
   size?: 'sm' | 'md';
+  /** Forms for the special slots, when the screen knows them; otherwise the
+   *  seated order decides, as it does everywhere a deck is drawn. */
+  art?: Record<string, 'evolution' | 'hero' | 'champion' | undefined>;
   className?: string;
 }
 
-export function DeckActions({ cards, name, size = 'sm', className }: DeckActionsProps) {
+export function DeckActions({ cards, name, size = 'sm', className, art }: DeckActionsProps) {
   const link = getDeckLinkFromKeys(cards);
   const [copied, setCopied] = useState(false);
+  /* The image button's own state: drawing takes a moment on the first press
+     (the renderer and the art are fetched then), and "saved" is worth a flash
+     because a download lands somewhere the reader is not looking. */
+  const [imageState, setImageState] = useState<'idle' | 'busy' | 'done'>('idle');
   const timer = useRef<number | undefined>(undefined);
 
   // The flash is a timeout, and a row can unmount while it is pending — a
@@ -62,6 +70,18 @@ export function DeckActions({ cards, name, size = 'sm', className }: DeckActions
     e.preventDefault();
     navigator.clipboard?.writeText(link!).catch(() => {});
     flash();
+  }
+
+  async function image(e: React.MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (imageState === 'busy') return;
+    setImageState('busy');
+    const { shareDeckImage } = await import('../../utils/deckImage');
+    const outcome = await shareDeckImage({ cards, name: name ?? 'Deck', art: art ?? positionalArt(cards) });
+    setImageState(outcome === 'shared' || outcome === 'downloaded' ? 'done' : 'idle');
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setImageState('idle'), 1600);
   }
 
   function open(e: React.MouseEvent) {
@@ -89,6 +109,18 @@ export function DeckActions({ cards, name, size = 'sm', className }: DeckActions
         onClick={copy}
       >
         {copied ? <CheckIcon size={size === 'sm' ? 12 : 14} /> : <LinkIcon size={size === 'sm' ? 12 : 14} />}
+      </button>
+
+      <button
+        type="button"
+        className={styles.button}
+        title={imageState === 'done' ? 'Saved' : `Save the ${name ? `${name} ` : ''}deck as an image to share`}
+        aria-label="Save this deck as an image"
+        aria-busy={imageState === 'busy' || undefined}
+        data-flash={imageState === 'done' || undefined}
+        onClick={image}
+      >
+        {imageState === 'done' ? <CheckIcon size={size === 'sm' ? 12 : 14} /> : <ImageIcon size={size === 'sm' ? 12 : 14} />}
       </button>
 
       <button
