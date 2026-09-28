@@ -257,10 +257,42 @@
 }
 
 .battle {
+  position: relative;
   border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--surface-sunken);
   overflow: hidden;
+}
+
+/* THE ROW A FORM PIP ASKED FOR, marked once. A ring in the selection hue that
+   fades out — opacity only, one-shot, on a pseudo-element so the row's own
+   edge (the 3px result colour) is untouched. Scrolling alone was not enough:
+   ten battle rows look alike and the eye does not know which one it landed on. */
+.battle[data-flash]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--accent-select);
+  pointer-events: none;
+  animation: battleFlash 1.6s var(--ease) forwards;
+}
+
+@keyframes battleFlash {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No fade, but still say which row: the ring holds until it is removed. */
+  .battle[data-flash]::after {
+    animation: none;
+  }
 }
 
 /* The outcome lives on a 3px leading edge, not on the card's fill. A battle

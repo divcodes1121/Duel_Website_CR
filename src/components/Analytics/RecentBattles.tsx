@@ -16,6 +16,9 @@ import {
 } from '../../state/analyticsClient';
 import styles from './RecentBattles.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
+import { rememberPlayer } from '../../state/recentPlayers';
+import { FormStrip } from './FormStrip';
+import { FORM_SIZE, pageOf } from '../../utils/formStrip';
 
 /* Recent Battles — the raw log, newest first.
  *
@@ -142,7 +145,7 @@ function BattleRow({ battle, you, youTag }: { battle: RecentBattle; you: string;
   const won = battle.result === 'win';
   const lost = battle.result === 'loss';
   return (
-    <article className={styles.battle} data-outcome={battle.result}>
+    <article className={styles.battle} data-outcome={battle.result} data-battle-id={battle.id}>
       <header className={styles.head}>
         <span className={styles.mode}>{battle.modeLabel}</span>
 
@@ -191,6 +194,13 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
   const [page, setPage] = useState(1);
   const [pickerOpen, setPickerOpen] = useState(false);
   const listRef = useRef<HTMLElement>(null);
+  /* The form strip's own read: the newest FORM_SIZE battles in the window,
+     whatever page the log is on. A second, small request rather than two
+     pages of the log, because it must not move when the pager does. */
+  const [form, setForm] = useState<RecentBattle[]>([]);
+  /* A battle a pip asked to see. Held until the page holding it has loaded,
+     then scrolled to and marked once. */
+  const [jump, setJump] = useState<string | null>(null);
 
   /* The pager sits under the list, so the reader asks for the next page from
      the bottom of this one. Bring the top of the list back into view, or the
@@ -232,6 +242,8 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
         if (!live) return;
         setReport(r);
         setError(null);
+        // Only with battles to show for it — an empty log proves no player.
+        if (r.total > 0) rememberPlayer(tag, r.player?.name ?? null);
         // The server CLAMPS a page past the end rather than erroring, so the
         // page it answered with is the truth — adopt it, or the pager would
         // keep highlighting a page that does not exist.
@@ -255,6 +267,37 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tag, preset, win.from, win.to]);
+
+  useEffect(() => {
+    let live = true;
+    fetchRecentBattles(tag, win, 1, FORM_SIZE)
+      .then((r) => live && setForm(r.battles))
+      // The strip is extra: if its read fails the log still stands, so it
+      // simply does not draw.
+      .catch(() => live && setForm([]));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tag, preset, win.from, win.to]);
+
+  /* Scroll to the battle a pip named once it is on screen, and ring it once so
+     the eye lands on the right row among ten similar ones. The ring is reset
+     before it is set, or pressing the same pip twice would not replay it. */
+  useEffect(() => {
+    if (!jump || !report) return;
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-battle-id="${CSS.escape(jump)}"]`);
+    if (!row) return;
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    row.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' });
+    row.removeAttribute('data-flash');
+    void row.offsetWidth;
+    row.setAttribute('data-flash', '');
+    // Not cleared on re-render: clearing `jump` re-runs this effect at once,
+    // and a detached row losing an attribute is harmless.
+    window.setTimeout(() => row.removeAttribute('data-flash'), 1800);
+    setJump(null);
+  }, [jump, report]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -388,6 +431,17 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
             </span>
           </div>
         </header>
+
+        {/* The last results at a glance, above the log they come from. */}
+        <FormStrip
+          battles={form}
+          when={stamp}
+          onPick={(b, i) => {
+            const target = pageOf(i, report.perPage);
+            if (target !== page) setPage(target);
+            setJump(b.id);
+          }}
+        />
 
         <section ref={listRef} className={styles.body} data-busy={loading || undefined}>
           {report.battles.length === 0 ? (

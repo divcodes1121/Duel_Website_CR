@@ -6,9 +6,9 @@ to be measured in a browser rather than reasoned about.
 Everything else about the interface — colour, motion tokens, the display face,
 the surface ladder — lives in the main `README.md`. This file covers the three.js
 work and the two canvases that are not three.js (`LiquidMetal` and the tier
-badge are raw WebGL; the electric border is 2D), plus two layout behaviours that
-have nowhere better to live: how a filtered deck list closes, and how a route
-owns its own scroll.
+badge are raw WebGL; the electric border is 2D), plus the layout behaviours that
+have nowhere better to live: how a filtered deck list closes, how a route
+owns its own scroll, and how a ranked table fits the width it has.
 
 ---
 
@@ -1331,6 +1331,98 @@ resizes (the section is component state and survives); a whole-page "no
 sideways overflow" check passes while a panel clips, so the check measures
 every card against the panel; and counting `li` under the options section
 counts the chips too (18 = 3 x 6) — count `ul[class*=deckList] > li`.
+
+## A table that fits the width it has, a chart read one line at a time, and a gate that shows its screen (2026-09-28)
+
+The mechanics behind the first batch of the interface review. The README's
+"Trends that count games, and tables that fit a laptop" is the record of what
+was measured and why; this is how the layout does it.
+
+### A container query inside a media query
+
+The Top 10 and Top Meta Decks tables were sized for a wide window with the rail
+folded, and hid 17 to 508px of columns at every laptop width with the rail
+open. What decides whether they fit is the width the TABLE has, and the rail
+changes that by 226px at one window width — so the rule is a container query
+on each table's scroll wrapper (`.tableScroll`, `.tableWrap`, both
+`container-type: inline-size`).
+
+```css
+@media (min-width: 62.0625rem) {
+  @container (max-width: 75rem) {
+    /* thead hidden; each <tr> a grid: rank name cards... / . . figures... */
+  }
+}
+```
+
+**The nesting is the point.** Below 62rem of viewport the existing phone card
+takes over, and both layouts restyle the same `<tr>` and `<td>`. Written as two
+independent rules, the later one would have to undo every declaration of the
+earlier one at phone widths, and any it missed would leak. Nested, they are
+mutually exclusive by construction.
+
+Three things the mid layout needs that are easy to miss:
+
+- **the hover wash moves to the row.** On cells it paints the cell boxes and
+  leaves the grid's gaps unlit;
+- **figure cells are `align-self: start`**, or a cell carrying a meter sits
+  lower than one that does not and the labels no longer share a line;
+- **the Meta board's `min-width: 1020px` is released inside it**, or the grid
+  is laid out inside a table wider than its box and the overflow comes back.
+
+The card strip is `repeat(8, minmax(0, 52px))` as a `flex: 0 1 auto` item, so
+it gives a little back when the row is tight and the deck actions sit right
+after it rather than at the far edge.
+
+### Eight lines, one at a time
+
+The player screen's trend charts dim every series but the focused one to 14%
+opacity. The rules:
+
+- **Opacity on the series GROUP**, so the line and its dots fade together, and
+  it is the only property that moves.
+- **The lines dim, the legend's text does not.** Fading type is what the
+  full-contrast sweep removed everywhere; the focused legend entry gets a fill
+  instead, and a held one the selection edge.
+- **A 2px line cannot be pointed at**, so each carries an invisible 14px stroke
+  with `pointer-events: stroke` — `stroke`, so the space between lines still
+  reaches the crosshair underneath.
+- **A `null` point lifts the pen.** The path is built segment by segment and no
+  dot is drawn at a gap; the read-out says "not played".
+- **The legend is under the chart, not beside it.** In an `auto` column beside
+  the chart it took whatever it asked for, and with longer names nine entries
+  wrapped into a second column and squeezed the chart to a sliver.
+
+### A gate that shows its screen
+
+`GateCard` draws a blurred screenshot of the locked screen behind its copy
+(`public/assets/gate/<slug>-<theme>.webp`, chosen in CSS so a theme switch
+needs no re-render). The picture is masked so it is clear where the copy is and
+has faded again before the card's edge:
+
+```css
+mask-image: radial-gradient(ellipse closest-side at 50% 50%,
+  transparent 50%, #000 70%, #000 84%, transparent 100%);
+```
+
+**`closest-side` is what makes the outer fade reach zero.** Sized in percent of
+its own ellipse, the first mask was still opaque where the card clipped it, so
+every preview ended in a hard line along the bottom. `closest-side` puts 100%
+of the gradient on the box edge. The first version also framed the card as a
+bordered panel, which on Team Analysis and 2v2 drew a second box inside the
+tool panel that stopped short of the first; faded edges belong to either
+ground, so the border went.
+
+### The one-shot ring
+
+Pressing a pip on the form strip scrolls the log to that battle and rings the
+row once: a `::after` with an inset `box-shadow` in the selection hue, fading
+by opacity over 1.6s. The attribute is removed, a reflow forced and the
+attribute set again before each ring, or pressing the same pip twice would not
+replay it. Under reduced motion there is no fade — the ring simply holds until
+it is removed, so the reader is still told which row they landed on.
+
+---
 
 ## Working on this
 

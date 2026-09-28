@@ -1043,6 +1043,33 @@
   margin-top: 1.2rem;
 }
 
+/* Two rows of chips stacked: the second sits closer to the first than the
+   first does to the search, so they read as one block of shortcuts. */
+.popular + .popular {
+  margin-top: 1.4rem;
+}
+
+/* "Clear", on the recent row's label line and before its rule. Full ink and
+   the label's own size, so it reads as part of the heading rather than as a
+   control shouting beside it; underlined because it is a real button. */
+.recentClear {
+  order: 1;
+  padding: 0.1rem 0.2rem;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.recentClear:hover {
+  color: var(--accent-select);
+}
+
 .tagChip {
   display: inline-flex;
   align-items: center;

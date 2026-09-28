@@ -10,14 +10,6 @@ import styles from './AuthScreen.module.css';
 
 type Mode = 'signin' | 'signup' | 'reset';
 
-function CrownIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
-      <path d="M3 8l4 4 5-7 5 7 4-4v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z" />
-    </svg>
-  );
-}
-
 function GoogleMark() {
   return (
     <svg viewBox="0 0 18 18" width="17" height="17" aria-hidden="true">
@@ -155,8 +147,13 @@ export function AuthScreen() {
         <div className={`${loginStyles.card} ${loginStyles.cardEnter} ${styles.card}`}>
           <span className={loginStyles.cardBorder} aria-hidden="true" />
 
-          <span className={loginStyles.logoMark} aria-hidden="true">
-            <CrownIcon />
+          {/* THE SITE'S MARK, on the favicon's own dark tile — the same object
+              the top bar, the tab and the footer carry. It was a violet tile
+              with a generic crown, which the top bar replaced long ago; this
+              was the one screen still wearing it, and it is the screen where
+              somebody decides whether to make an account. */}
+          <span className={styles.brandTile} aria-hidden="true">
+            <img src={`${import.meta.env.BASE_URL}assets/brand/logo-dark.png`} alt="" draggable={false} />
           </span>
 
           <h1 className={loginStyles.title}>Deckkies</h1>

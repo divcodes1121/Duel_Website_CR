@@ -230,10 +230,14 @@
   color: var(--accent-select);
 }
 
+/* A CONTAINER, because what decides this table's layout is the width it has,
+   not the window's. The rail takes 226px when it is open, so one viewport
+   width gives two very different tables — see the mid-width layout below. */
 .tableScroll {
   overflow-x: auto;
   margin: 0 -0.35rem;
   padding: 0 0.35rem;
+  container-type: inline-size;
 }
 
 .table {
@@ -405,6 +409,14 @@
   color: var(--hue-red);
 }
 
+/* A trend withheld for want of play at one end of the window. Full ink: it is
+   an answer ("not enough to compare"), and the title says so. */
+.trendNone {
+  font-weight: 700;
+  color: var(--text);
+  cursor: help;
+}
+
 /* ------------------------------------------------------------------- charts */
 
 .charts {
@@ -457,11 +469,16 @@
   cursor: pointer;
 }
 
+/* THE LEGEND GOES UNDER THE CHART, not beside it (2026-09-28). Beside it, an
+   `auto` column took whatever the legend asked for — and once the entries
+   became buttons and same-named decks were told apart ("Royal Hogs + Archer
+   Queen"), nine of them wrapped into a second column and squeezed the chart
+   to a sliver. Under it, the chart always has the panel's full width and the
+   legend wraps as a row of chips. */
 .chartBody {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.9rem;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
 }
 
 .chartWrap {
@@ -508,15 +525,39 @@
   stroke-width: 1.5;
 }
 
+/* ONE LINE AT A TIME. Eight series cross each other so often that the chart
+   is read by isolating one, so the rest drop to a trace. Opacity on the GROUP,
+   so line and dots fade together, and it is the only property that moves. The
+   LINES dim and the legend's TEXT does not: fading type is what the
+   full-contrast sweep removed everywhere, so the legend marks the focused
+   entry with a fill instead. */
+.series {
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.seriesDim {
+  opacity: 0.14;
+}
+
+/* A 2px line is too thin to point at, so each carries an invisible 14px
+   stroke that takes the hover and the click. `stroke` pointer events, so the
+   empty space between lines still reaches the crosshair underneath. */
+.lineHit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  stroke-linejoin: round;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
 .legend {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  max-height: 200px;
   flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
 }
 
 .legendItem {
@@ -534,6 +575,36 @@
   height: 9px;
   border-radius: 999px;
   flex-shrink: 0;
+}
+
+/* The interactive legend: the same row as `.legendItem`, as a button. Hover
+   and focus isolate the line; pressed holds it. The held entry gets the
+   selection edge, because violet is what "selected" means on this site. */
+.legendButton {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.legendButton:hover,
+.legendButton[data-focus] {
+  background: var(--neutral-wash);
+}
+
+.legendButton[aria-pressed='true'] {
+  background: var(--accent-select-fill-sunken);
+  border-color: var(--accent-select-edge);
 }
 
 /* Hover read-out. A line chart with eight series cannot be read from the marks
@@ -570,6 +641,7 @@
   align-items: center;
   gap: 0.45rem;
   font-size: 0.72rem;
+  white-space: nowrap;
 }
 
 .readoutSwatch {
@@ -588,6 +660,16 @@
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   color: var(--text);
+}
+
+/* "not played" is a statement, not a figure — body weight, same ink. */
+.readoutValue[data-gap] {
+  font-weight: 500;
+}
+
+.readoutRow[data-focus] .readoutLabel {
+  color: var(--text);
+  font-weight: 750;
 }
 
 .foldNote {
@@ -622,10 +704,6 @@
 }
 
 @media (max-width: 900px) {
-  .chartBody {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .identity {
     border-right: none;
     padding-right: 0;
@@ -829,6 +907,127 @@
    read as a broken image rather than as a caveat — it drew more attention than
    the distinction deserves, on cards that are very likely right. The caveat
    lives in the card's tooltip and in the footnote under the table instead. */
+
+/* ── BETWEEN A PHONE AND A WIDE SCREEN, A ROW IS TWO LINES (2026-09-28) ──
+ *
+ * Measured with the rail open, the table is 1,188px of content and its box is
+ * 704px at a 1024 window, 960 at 1280, 1,046 at 1366 and 1,120 at 1440. So
+ * 68 to 508px of it sat behind a sideways scroll whose scrollbar is hidden —
+ * at 1440 that was the Trend column, at 1280 it was Wins, Losses and Trend —
+ * with nothing on screen saying they existed. Only a wide window with the rail
+ * folded ever saw the whole table.
+ *
+ * Nothing shrinks far enough to fix it: eight cards and eight other columns do
+ * not share 704px at any size a card can still be recognised at. So below 75rem
+ * of TABLE width a row becomes two lines — rank, name and the full eight-card
+ * strip, then the six figures under the strip, labelled the way the phone card
+ * already labels them. Above 75rem the table is exactly what it was.
+ *
+ * NESTED INSIDE THE VIEWPORT QUERY on purpose: below 62rem the phone card
+ * below takes over, and nesting means the two layouts never both apply, so
+ * neither has to undo the other's declarations. The container is
+ * `.tableScroll`, which is why the rail folding changes the layout — it
+ * changes the width the table actually has. */
+@media (min-width: 62.0625rem) {
+  @container (max-width: 75rem) {
+    .table thead {
+      display: none;
+    }
+
+    .table tbody tr {
+      display: grid;
+      grid-template-columns: 2.2rem minmax(7rem, 11rem) repeat(6, minmax(0, 1fr));
+      grid-template-areas:
+        'rank name cards cards cards cards cards cards'
+        '.    .    use   win   matches wins losses trend';
+      gap: 0.55rem 0.9rem;
+      align-items: center;
+      padding: 0.8rem 0.35rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .table tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    /* The hover wash goes on the ROW: on cells it would paint the cell boxes
+       and leave the grid's gaps unlit. */
+    .table tbody tr:hover {
+      background: var(--neutral-wash);
+    }
+
+    .table tbody tr:hover td {
+      background: none;
+    }
+
+    .table tbody td {
+      display: block;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .table tbody td:nth-child(1) { grid-area: rank; }
+    .table tbody td:nth-child(2) {
+      grid-area: name;
+      /* Two lines of name beat one clipped one; the column is capped. */
+      white-space: normal;
+    }
+    .table tbody td:nth-child(3) { grid-area: cards; }
+    .table tbody td:nth-child(4) { grid-area: use; }
+    .table tbody td:nth-child(5) { grid-area: win; }
+    .table tbody td:nth-child(6) { grid-area: matches; }
+    .table tbody td:nth-child(7) { grid-area: wins; }
+    .table tbody td:nth-child(8) { grid-area: losses; }
+    .table tbody td:nth-child(9) { grid-area: trend; }
+
+    /* The figures share a top edge, so every label sits on one line whether
+       or not its cell carries a meter. */
+    .table tbody td[data-label] {
+      align-self: start;
+    }
+
+    .table tbody td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 0.15rem;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .table tbody td.num {
+      text-align: left;
+    }
+
+    /* Eight across, never wider than the desktop's 52px and allowed to give a
+       little back when the row is tight. The strip is sized to its content so
+       the two deck actions sit right after it rather than at the far edge. */
+    .cardsCell {
+      display: flex;
+      width: 100%;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 52px));
+      gap: 3px;
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+
+    .cardIcon {
+      width: 100%;
+    }
+
+    .meter {
+      width: 100%;
+      max-width: 92px;
+    }
+  }
+}
 
 /* ── NINE COLUMNS BECOME A CARD ─────────────────────────────────────────
  *

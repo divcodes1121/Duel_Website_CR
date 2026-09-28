@@ -67,6 +67,7 @@ import { ClosingBand } from './ClosingBand';
 import { SiteFooter } from './SiteFooter';
 import { RecentBattles } from '../Analytics/RecentBattles';
 import {
+  ClockIcon,
   AnalyticsIcon,
   ArrowRightIcon,
   BadgeIcon,
@@ -101,6 +102,7 @@ import { sectionAllowed, useAccess } from '../../state/gate';
 import { useMyCoach } from '../../state/myCoach';
 import { useAccountStore } from '../../state/accountStore';
 import { trialDaysLeft } from '../../state/supabase';
+import { clearRecent, useRecentPlayers } from '../../state/recentPlayers';
 
 /* The post-login shell: top bar, a sidebar of analytics sections, and a panel
  * that swaps with whatever is open.
@@ -481,6 +483,7 @@ export function Dashboard({
   // Real tags with the most stored battles, so a chip always resolves. Falls
   // back to a known-good handful if the service is not running.
   const [popular, setPopular] = useState<string[]>(FALLBACK_TAGS);
+  const recent = useRecentPlayers();
   useEffect(() => {
     let live = true;
     fetchSuggestedTags()
@@ -837,8 +840,16 @@ export function Dashboard({
           <nav className={styles.sideNav}>
             {sideNav.map((item) => {
               const Icon = item.icon;
+              /* NOTHING IS HIGHLIGHTED ON A TOOL ROUTE (2026-09-28). The builder,
+                 Deck's Home, the palette, Team Analysis and 2v2 are not rows in
+                 this rail, but `section` keeps its default of Search Player
+                 there, so the rail announced "you are in Search Player" on all
+                 five. A highlight is the rail saying where you are; on a screen
+                 it does not list, the true answer is none of them. */
               const active =
-                view === 'player' ? item.slug === playerSection : section === item.label;
+                view === 'player'
+                  ? item.slug === playerSection
+                  : view === 'home' && section === item.label;
               return (
                 <button
                   key={item.label}
@@ -1181,6 +1192,41 @@ export function Dashboard({
                           <ArrowRightIcon />
                         </button>
                       </form>
+
+                      {/* THIS BROWSER'S OWN RECENT PLAYERS, above the popular
+                          ones — the person most likely to be looked up again is
+                          one this reader already looked up. Recorded only when a
+                          player's screen actually loaded (state/recentPlayers.ts),
+                          kept in this browser alone, and clearable right here. */}
+                      {recent.length > 0 && (
+                        <div className={styles.popular}>
+                          <span className={styles.popularLabel}>
+                            Your recent players
+                            <button
+                              type="button"
+                              className={styles.recentClear}
+                              onClick={clearRecent}
+                              title="Forget the players this browser has opened"
+                            >
+                              Clear
+                            </button>
+                          </span>
+                          <div className={styles.popularTags}>
+                            {recent.map((p) => (
+                              <button
+                                key={p.tag}
+                                type="button"
+                                className={styles.tagChip}
+                                title={p.name ? `${p.name} · ${p.tag}` : p.tag}
+                                onClick={() => go(`#/player/${encodeURIComponent(p.tag)}`)}
+                              >
+                                <ClockIcon />
+                                {p.name ?? p.tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className={styles.popular}>
                         <span className={styles.popularLabel}>Popular players</span>

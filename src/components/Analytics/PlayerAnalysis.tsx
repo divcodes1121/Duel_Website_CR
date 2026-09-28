@@ -23,6 +23,9 @@ import {
 } from './playerData';
 import styles from './PlayerAnalysis.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
+import { CARDS_BY_KEY } from '../../data/cards';
+import { distinctDeckLabels, foldMean, gapUnplayed, trendOf } from '../../utils/trendSeries';
+import { rememberPlayer } from '../../state/recentPlayers';
 
 /* Player analysis — the screen the Analyze button lands on.
  *
@@ -100,9 +103,8 @@ function foldSeries(data: TrendData): { plotted: Series[]; folded: number } {
   if (data.series.length <= MAX_SERIES) return { plotted: data.series, folded: 0 };
   const head = data.series.slice(0, MAX_SERIES);
   const tail = data.series.slice(MAX_SERIES);
-  const points = tail[0].points.map((_, i) =>
-    Number((tail.reduce((s, t) => s + t.points[i], 0) / tail.length).toFixed(2)),
-  );
+  // Gaps stay gaps: a day none of the folded decks was played is not a 0.
+  const points = foldMean(tail.map((t) => t.points));
   return { plotted: [...head, { label: `Other (${tail.length})`, points }], folded: tail.length };
 }
 
@@ -111,13 +113,24 @@ function TrendPanel({
   data,
   yTicks,
   rangeLabel,
+  labels,
+  gapLabel,
 }: {
   title: string;
   data: TrendData;
   yTicks: number[];
   rangeLabel: string;
+  labels: string[];
+  gapLabel?: string;
 }) {
   const { plotted, folded } = foldSeries(data);
+  /* Hover (the legend or the line itself) isolates a series while it lasts;
+     a press holds it. Each chart keeps its own, because the two answer
+     different questions and one reader may want a different deck in each. */
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [pinned, setPinned] = useState<number | null>(null);
+  const focus = pinned ?? hovered;
+  const pin = (i: number) => setPinned((p) => (p === i ? null : i));
 
   return (
     <section className={styles.chartPanel}>
@@ -131,8 +144,24 @@ function TrendPanel({
       </header>
 
       <div className={styles.chartBody}>
-        <TrendChart series={plotted} ticks={data.ticks} yTicks={yTicks} format={pct} />
-        <ChartLegend series={plotted} />
+        <TrendChart
+          series={plotted}
+          ticks={data.ticks}
+          yTicks={yTicks}
+          format={pct}
+          labels={labels}
+          gapLabel={gapLabel}
+          focus={focus}
+          onSeriesHover={setHovered}
+          onSeriesPick={pin}
+        />
+        <ChartLegend
+          series={plotted}
+          focus={focus}
+          pinned={pinned}
+          onHover={setHovered}
+          onPin={pin}
+        />
       </div>
 
       {folded > 0 && (
@@ -145,14 +174,6 @@ function TrendPanel({
   );
 }
 
-
-/** Percentage-point change across the window, for the Trend column. */
-function trendOf(points: number[]): number {
-  if (points.length < 2) return 0;
-  const third = Math.max(1, Math.ceil(points.length / 3));
-  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-  return Number((avg(points.slice(-third)) - avg(points.slice(0, third))).toFixed(1));
-}
 
 /** '2026-08-10' -> '10 Aug'. */
 function shortDay(iso: string): string {
@@ -196,6 +217,13 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
         if (!live) return;
         setReport(r);
         setError(null);
+        // Remembered only when the answer shows a real player. A SUCCESSFUL
+        // RESPONSE IS NOT THAT: for a tag nobody holds, the server answers with
+        // a live report of zero battles and no profile (measured on
+        // #QQQQQQQQ), and a typo would otherwise sit in the list for good.
+        const known = !isLiveReport(r) || r.profile != null || r.logSize > 0;
+        const name = isLiveReport(r) ? r.profile?.name ?? null : r.player.name;
+        if (known) rememberPlayer(tag, name && name !== tag ? name : null);
       })
       .catch((e) => {
         if (!live) return;
@@ -254,9 +282,17 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
   // Series are keyed by deck hash, so re-sorting the table never repaints the
   // charts — colour follows the deck, not its row position.
   const byHash = new Map(trends.series.map((s) => [s.deckHash, s]));
+  /* The win series with its unplayed days as gaps. The server sends 0.0 for a
+     day a deck had no games; that is not a 0% win rate, and averaging it in
+     made the Trend column read a deck played less often lately as a deck
+     getting worse. See utils/trendSeries.ts. */
+  const winOf = (hash: string): (number | null)[] => {
+    const row = byHash.get(hash);
+    return row ? gapUnplayed(row.win, row.use, row.games) : trends.days.map(() => null);
+  };
   const withTrend = apiDecks.map((d) => ({
     ...d,
-    trend: trendOf(byHash.get(d.deckHash)?.win ?? []),
+    trend: trendOf(winOf(d.deckHash), byHash.get(d.deckHash)?.games),
   }));
 
   const decks = [...withTrend].sort((a, b) =>
@@ -274,16 +310,22 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
         .map((at) => ({ at, label: shortDay(trends.days[at]) }))
     : [];
 
+  /* Two decks routinely share an archetype name ("Mortar", "Piggies"), so
+     identity is the hash, and the label a reader sees names the first card
+     that tells same-named decks apart. */
+  const labels = distinctDeckLabels(apiDecks, (k) => CARDS_BY_KEY.get(k)?.name ?? k);
   const toTrendData = (pick: 'use' | 'win'): TrendData => ({
     ticks,
-    series: apiDecks.map((d) => ({
-      // Two decks routinely share an archetype name ("Mortar", "Piggies"), so
-      // identity is the hash — the label is only what the reader sees.
+    series: apiDecks.map((d, i) => ({
       id: d.deckHash,
-      label: d.name,
-      points: byHash.get(d.deckHash)?.[pick] ?? trends.days.map(() => 0),
+      label: labels[i],
+      points:
+        pick === 'win'
+          ? winOf(d.deckHash)
+          : byHash.get(d.deckHash)?.use ?? trends.days.map(() => 0),
     })),
   });
+  const dayLabels = trends.days.map(shortDay);
 
   const winRate = player.battles ? (player.wins / player.battles) * 100 : 0;
   const rangeLabel = trends.days.length
@@ -516,7 +558,10 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
                 <th className={styles.thNum}>Matches</th>
                 <th className={styles.thNum}>Wins</th>
                 <th className={styles.thNum}>Losses</th>
-                <th className={styles.thNum}>
+                <th
+                  className={styles.thNum}
+                  title="Win rate over the later half of the days each deck was played, against the earlier half"
+                >
                   Trend ({trends.days.length}d) <span className={styles.thInfo}>{ICONS.info}</span>
                 </th>
               </tr>
@@ -582,9 +627,20 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
                   <td className={styles.num} data-label="Wins">{nf.format(d.wins)}</td>
                   <td className={styles.num} data-label="Losses">{nf.format(d.losses)}</td>
                   <td className={styles.num} data-label="Trend">
-                    <span className={styles.trend} data-dir={d.trend >= 0 ? 'up' : 'down'}>
-                      {d.trend >= 0 ? '▲' : '▼'} {Math.abs(d.trend).toFixed(1)}%
-                    </span>
+                    {/* Withheld rather than guessed when the deck was played on
+                        fewer than four days in the window. See trendOf. */}
+                    {d.trend === null ? (
+                      <span
+                        className={styles.trendNone}
+                        title="Too few games at one end of this window to compare"
+                      >
+                        —
+                      </span>
+                    ) : (
+                      <span className={styles.trend} data-dir={d.trend >= 0 ? 'up' : 'down'}>
+                        {d.trend >= 0 ? '▲' : '▼'} {Math.abs(d.trend).toFixed(1)}%
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -595,8 +651,8 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
 
       {/* Two charts, not one with two y-scales. */}
       <div className={styles.charts}>
-        <TrendPanel title="Use Rate Trend" data={toTrendData('use')} yTicks={[0, 25, 50, 75, 100]} rangeLabel={rangeLabel} />
-        <TrendPanel title="Win Rate Trend" data={toTrendData('win')} yTicks={[0, 25, 50, 75, 100]} rangeLabel={rangeLabel} />
+        <TrendPanel title="Use Rate Trend" data={toTrendData('use')} yTicks={[0, 25, 50, 75, 100]} rangeLabel={rangeLabel} labels={dayLabels} />
+        <TrendPanel title="Win Rate Trend" data={toTrendData('win')} yTicks={[0, 25, 50, 75, 100]} rangeLabel={rangeLabel} labels={dayLabels} gapLabel="not played" />
       </div>
 
       <footer className={styles.foot}>

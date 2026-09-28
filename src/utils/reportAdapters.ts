@@ -8,6 +8,7 @@ import type {
   StoredPlayerReport,
 } from '../state/analyticsClient';
 import { frac, int, pct, type ReportDoc } from './analyticsReport';
+import { distinctDeckLabels, gapUnplayed } from './trendSeries';
 
 /**
  * One adapter per analytics screen: screen data in, `ReportDoc` out.
@@ -87,16 +88,19 @@ export function playerReportDoc(r: StoredPlayerReport, tag: string): ReportDoc {
   // A win rate on a day the deck was not played is NOT 0% — the server sends 0
   // there, and plotted as a value every line dives to the axis and back. It
   // is a gap. Six lines, not ten: past that a line chart is a tangle.
-  const trend = (pick: 'use' | 'win') => decks.slice(0, 6)
-    .filter((d) => byHash.has(d.deckHash))
-    .map((d) => {
-      const row = byHash.get(d.deckHash);
-      const use = row?.use ?? [];
-      return {
-        label: d.name,
-        points: (row?.[pick] ?? []).map((v, i) => (!Number.isFinite(v) || (pick === 'win' && !use[i]) ? null : v)),
-      };
-    });
+  // The rule and the labels are the screen's own (`utils/trendSeries.ts`), so
+  // the export cannot drift from the page again.
+  const plotted = decks.slice(0, 6).filter((d) => byHash.has(d.deckHash));
+  const labels = distinctDeckLabels(plotted, (k) => CARDS_BY_KEY.get(k)?.name ?? k);
+  const trend = (pick: 'use' | 'win') => plotted.map((d, i) => {
+    const row = byHash.get(d.deckHash);
+    return {
+      label: labels[i],
+      points: pick === 'win'
+        ? gapUnplayed(row?.win ?? [], row?.use ?? [], row?.games)
+        : (row?.use ?? []).map((v) => (Number.isFinite(v) ? v : null)),
+    };
+  });
 
   const last = decks.map((d) => d.lastSeen).filter(Boolean).sort().slice(-1)[0] ?? null;
 

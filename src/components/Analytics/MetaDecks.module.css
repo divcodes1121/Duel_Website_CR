@@ -121,6 +121,9 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* A container: the mid-width layout below keys on the width the TABLE has,
+     which the rail changes by 226px at one window width. */
+  container-type: inline-size;
 }
 
 .table {
@@ -385,6 +388,115 @@
  *
  * `.main` is the only scroll region below this width. Matching the 62rem the
  * panel itself switches at, so the two cannot disagree. */
+/* ── BETWEEN A PHONE AND A WIDE SCREEN, A ROW IS TWO LINES (2026-09-28) ──
+ *
+ * The same fault and the same fix as the Top 10 table in
+ * PlayerAnalysis.module.css — read the note there. Measured with the rail
+ * open, this board is 1,171px of content in a 738px box at a 1024 window, 994
+ * at 1280, 1,080 at 1366 and 1,154 at 1440, so the Elixir column (and at 1280
+ * Battles too) sat behind a sideways scroll with a hidden scrollbar. On the
+ * free board, which is the first thing most visitors open.
+ *
+ * Below 75rem of table width a row becomes rank, name and cards, then the
+ * four figures under the cards. `min-width: 1020px` has to go for it, or the
+ * table keeps its width and the grid is laid out inside a box it overflows. */
+@media (min-width: 62.0625rem) {
+  @container (max-width: 75rem) {
+    .table {
+      min-width: 0;
+    }
+
+    .table thead {
+      display: none;
+    }
+
+    .table tbody tr {
+      display: grid;
+      grid-template-columns: 2.4rem minmax(8rem, 13rem) repeat(4, minmax(0, 1fr));
+      grid-template-areas:
+        'rank name cards cards cards  cards'
+        '.    .    use   win   battles elixir';
+      gap: 0.55rem 0.9rem;
+      align-items: center;
+      padding: 0.8rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .row:hover {
+      background: var(--neutral-wash);
+    }
+
+    .row:hover td {
+      background: none;
+    }
+
+    .table tbody td {
+      display: block;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .table tbody td:nth-child(1) { grid-area: rank; }
+    .table tbody td:nth-child(2) {
+      grid-area: name;
+      white-space: normal;
+    }
+    .table tbody td:nth-child(3) { grid-area: cards; }
+    .table tbody td:nth-child(4) { grid-area: use; }
+    .table tbody td:nth-child(5) { grid-area: win; }
+    .table tbody td:nth-child(6) { grid-area: battles; }
+    .table tbody td:nth-child(7) { grid-area: elixir; }
+
+    .table tbody td[data-label] {
+      align-self: start;
+    }
+
+    .table tbody td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 0.15rem;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .table tbody td.num {
+      text-align: left;
+    }
+
+    /* The empty-state row keeps its one cell, not a grid of areas. */
+    .table tbody tr:has(> td[colspan]) {
+      display: block;
+      padding: 0;
+    }
+
+    .cardsCell {
+      display: flex;
+      width: 100%;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 54px));
+      gap: 3px;
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+
+    .cardIcon {
+      width: 100%;
+    }
+
+    .meter {
+      width: 100%;
+      max-width: 130px;
+    }
+  }
+}
+
 /* ── SEVEN COLUMNS DO NOT FIT A PHONE, SO THE ROW BECOMES A CARD ────────
  *
  * `.table` is `min-width: 1020px`. At 390px that showed the rank and the deck

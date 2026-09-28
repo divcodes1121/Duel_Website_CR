@@ -82,6 +82,28 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-28-recent-and-form',
+    date: '2026-09-28',
+    kind: 'new',
+    title: 'Your recent players on the home screen, and a form strip on Recent Battles',
+    body: [
+      'The players you have looked up now wait under the search box, so you do not have to type your own tag again. The list lives in this browser only, and Clear empties it.',
+      'Recent Battles opens with your last 20 results as a row of wins and losses, with your current streak named. Tap any of them to jump to that battle in the log. Locked areas now show a blurred look at what is inside.',
+    ],
+    href: '#/',
+    hrefLabel: 'Go to the home screen',
+  },
+  {
+    id: '2026-09-28-trends-and-tables',
+    date: '2026-09-28',
+    kind: 'fixed',
+    title: 'The win rate charts no longer treat a day you did not play as a day you lost',
+    body: [
+      'A day a deck was not played used to be drawn as a 0% win rate, and the Trend column in your Top 10 averaged those days in — so a deck you simply played less often lately looked like it was collapsing. Those days are now gaps, the trend compares your games in the earlier and later half of the days you played the deck, and hovering a deck in the legend picks its line out of the others.',
+      'The Top 10 and Top Meta Decks tables no longer hide columns off the edge of a laptop screen, and the password field on the sign-in page is the full width again.',
+    ],
+  },
+  {
     id: '2026-09-27-coach-tuner-pro',
     date: '2026-09-27',
     kind: 'new',

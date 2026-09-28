@@ -45,7 +45,15 @@ export interface ApiDeck {
 
 export interface ApiTrends {
   days: string[];
-  series: { deckHash: string; use: number[]; win: number[] }[];
+  series: {
+    deckHash: string;
+    use: number[];
+    win: number[];
+    /** Games that deck played each day (2026-09-28). Optional: an analytics
+     *  API that has not been redeployed does not send it, and the two halves
+     *  ship separately. With it the Trend column is weighted by games. */
+    games?: number[];
+  }[];
   archiveUsed: boolean;
 }
 

@@ -201,3 +201,31 @@
     margin-top: 1.25rem;
   }
 }
+
+/* The logo tile — the top bar's `.brandMark`, sized for a card. The fill is
+   the favicon's `#0c1222` and must not follow the theme: the mark is a light
+   D drawn to sit on dark. On the dark theme the tile is five points off the
+   card, so it carries the same 1px ring the top bar's needs. */
+.brandTile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.1rem;
+  height: 3.1rem;
+  padding: 0.3rem;
+  margin-bottom: 1rem;
+  border-radius: 15px;
+  background: #0c1222;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--solid-violet) var(--glow-core), transparent);
+}
+
+:global([data-theme='dark']) .brandTile {
+  border: 1px solid var(--border);
+}
+
+.brandTile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}

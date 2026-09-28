@@ -131,6 +131,18 @@ export function SearchIcon({ size = 17 }: P) {
   );
 }
 
+/* A clock face — something this browser opened before. Used for the recent
+   players row, so it reads as "yours, from earlier" beside the popular row's
+   search glyph. */
+export function ClockIcon({ size = 13 }: P) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4l2.6 1.6" />
+    </svg>
+  );
+}
+
 /* A log with a time marker — a list of things that happened, in order.
    Deliberately not the bars (that is the meta ranking) and not the swords
    (Duel Analysis): this row lists battles rather than measuring them. */

@@ -1,0 +1,116 @@
+/* The form strip at the head of Recent Battles.
+ *
+ * NO COLOUR IS DEFINED HERE. The result hues are the log's own: the same
+ * `--hue-green` / `--hue-red` its 3px leading edges use, so a W pip and a
+ * victory row are visibly one fact. Every pip carries its letter as well as
+ * its hue, so the strip survives greyscale and colour-blindness. */
+
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-sunken);
+}
+
+.label {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.pips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pip {
+  display: grid;
+  place-items: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  border-radius: 7px;
+  border: 1.5px solid currentColor;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease);
+}
+
+.pip:hover,
+.pip:focus-visible {
+  transform: translateY(-2px);
+}
+
+/* The ink step on a 14% wash of itself — the project's level-2 fill, which
+   was measured to hold the hue's text contrast in both themes. */
+.pip[data-result='win'] {
+  color: var(--hue-green);
+  background: color-mix(in srgb, var(--hue-green) 14%, var(--surface-sunken));
+}
+
+.pip[data-result='loss'] {
+  color: var(--hue-red);
+  background: color-mix(in srgb, var(--hue-red) 14%, var(--surface-sunken));
+}
+
+.pip[data-result='draw'] {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-nested);
+}
+
+/* The newest result, ringed, because "which end is now" is the one thing a
+   row of letters cannot say on its own. */
+.pip[data-newest] {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.streak {
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.streak[data-result='win'] {
+  color: var(--hue-green);
+  background: color-mix(in srgb, var(--hue-green) 12%, transparent);
+}
+
+.streak[data-result='loss'] {
+  color: var(--hue-red);
+  background: color-mix(in srgb, var(--hue-red) 12%, transparent);
+}
+
+.streak[data-result='draw'] {
+  color: var(--text);
+}
+
+.readout {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pip:hover,
+  .pip:focus-visible {
+    transform: none;
+  }
+}

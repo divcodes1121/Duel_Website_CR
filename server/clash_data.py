@@ -858,13 +858,20 @@ def player_report(tag: str, since: str | None = None, until: str | None = None) 
     series = []
     for d in decks[:10]:
         h = d["deckHash"]
-        use, win = [], []
+        use, win, games = [], [], []
         for day in days:
             n, w = per_day.get((h, day), [0, 0])
             dt = day_totals.get(day, 0)
             use.append(round(n / dt * 100, 2) if dt else 0.0)
+            # 0.0 on a day with no games is a placeholder, NOT a 0% win rate.
+            # `games` is what says which it is, and it is what lets the client
+            # weight a day by its games instead of counting a one-game day the
+            # same as a ten-game one (2026-09-28: without it the Trend column
+            # could only average daily rates, and swung by 40+ points on decks
+            # played a few games a day). Additive; older clients ignore it.
             win.append(round(w / n * 100, 2) if n else 0.0)
-        series.append({"deckHash": h, "use": use, "win": win})
+            games.append(n)
+        series.append({"deckHash": h, "use": use, "win": win, "games": games})
 
     return {
         "player": {

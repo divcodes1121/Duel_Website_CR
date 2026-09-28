@@ -3,6 +3,7 @@ import { type Access, PRO_ONLY_SECTIONS, gateReason } from '../../state/gate';
 import { useAccountStore } from '../../state/accountStore';
 import { trialDaysLeft } from '../../state/supabase';
 import { ProContact } from '../Analytics/ProContact';
+import { GATE_PREVIEW } from './gatePreview';
 import styles from './GateCard.module.css';
 
 function LockIcon() {
@@ -33,8 +34,24 @@ export function GateCard({ access, section }: { access: Access; section: string 
      days" is a promise the product breaks the moment they take it. */
   const needsPaid = (PRO_ONLY_SECTIONS as readonly string[]).includes(section);
 
+  /* SHOW WHAT IS BEHIND IT (2026-09-28). The gate used to be a lock and two
+     lines of copy, so a visitor was asked to sign up for a screen they had
+     never seen. The real screen now sits behind the copy, blurred past reading
+     — it says "there is a full board here" without giving the board away, the
+     way the Royal Pro gate already sits behind glass. Two files, one per
+     theme, chosen in CSS so a theme switch needs no re-render. */
+  const slug = GATE_PREVIEW[section];
+  const base = import.meta.env.BASE_URL;
+  const preview = slug
+    ? ({
+        '--gate-dark': `url(${base}assets/gate/${slug}-dark.webp)`,
+        '--gate-light': `url(${base}assets/gate/${slug}-light.webp)`,
+      } as React.CSSProperties)
+    : undefined;
+
   return (
-    <section className={styles.card}>
+    <section className={styles.card} data-preview={slug ? '' : undefined} style={preview}>
+      {slug && <span className={styles.preview} aria-hidden="true" />}
       <span className={styles.mark} aria-hidden="true">
         <LockIcon />
       </span>

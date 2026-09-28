@@ -44,7 +44,8 @@ export interface Series {
    *  keying on the label silently drops one of them from the legend. */
   id?: string;
   label: string;
-  points: number[];
+  /** `null` is a gap — a day with nothing to plot, which is not a zero. */
+  points: (number | null)[];
 }
 
 export interface TrendData {

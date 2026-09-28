@@ -14,6 +14,46 @@
   text-align: center;
 }
 
+/* ── THE SCREEN BEHIND THE GATE ─────────────────────────────────────────
+ *
+ * The picture is masked CLEAR in the middle, where the copy is, and fades out
+ * again before its own edges — a ring of the real screen around the words.
+ * Contrast was the constraint: the copy stays on the plain ground at full
+ * strength. Nothing on this card fades its TEXT; the full-contrast sweep
+ * removed that everywhere.
+ *
+ * NO BORDER. The first version framed it as a panel, and on Team Analysis and
+ * 2v2 — where the gate already sits inside a tool panel — that drew a second
+ * box that stopped short of the first. Faded edges belong to either ground.
+ * `isolation` so the preview's negative z-index stays inside the card. */
+.card[data-preview] {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.preview {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--gate-light);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  opacity: 0.85;
+  /* `closest-side`, so 100% of the gradient IS the card's edge and the ring
+     has faded out before the box clips it. Sized in percent of the ellipse it
+     draws a hard line at the bottom wherever the card is wider than tall. The
+     clear middle reaches past the copy (about 48% of the half-width). */
+  -webkit-mask-image: radial-gradient(ellipse closest-side at 50% 50%, transparent 50%, #000 70%, #000 84%, transparent 100%);
+  mask-image: radial-gradient(ellipse closest-side at 50% 50%, transparent 50%, #000 70%, #000 84%, transparent 100%);
+}
+
+:global([data-theme='dark']) .preview {
+  background-image: var(--gate-dark);
+  opacity: 1;
+}
+
 .mark {
   display: grid;
   place-items: center;
