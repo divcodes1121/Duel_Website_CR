@@ -9,6 +9,7 @@ import { ExportDialog } from '../Export/ExportDialog';
 import { ProfileMenu } from '../Profile/ProfileMenu';
 import { canExportDecks } from '../../utils/deckExport';
 import styles from './Header.module.css';
+import { UndoControls } from '../Undo/UndoControls';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 
 /**
@@ -112,11 +113,16 @@ export function Header({ embedded = false }: { embedded?: boolean } = {}) {
             type="button"
             className={styles.glassButton}
             title={`Download a PDF report of your ${mode === 'solo' ? 'Solo decks' : 'Blue vs Red duels'}`}
+            data-export=""
             onClick={() => setExportOpen(true)}
           >
             Export PDF
           </button>
         )}
+
+        {/* Undo sits beside Reset on purpose: Reset is the one press here that
+            used to be final, and the way back is now next to it. */}
+        <UndoControls scope="duels" />
 
         <button
           type="button"

@@ -1424,6 +1424,40 @@ it is removed, so the reader is still told which row they landed on.
 
 ---
 
+## The command palette and the undo pair (2026-09-28)
+
+The mechanics; the README's "A command palette, keyboard shortcuts, and undo in
+the deck tools" is the record.
+
+### The palette
+
+- **Portalled, opaque, `--surface-strong`** with `--shadow-float`, like every
+  floating panel here, over a scrim of `--bg-1` at 55%.
+- **Focus stays in the field.** The highlighted row is `aria-activedescendant`,
+  the list cancels its own `mousedown` so a click does not steal focus, and Tab
+  is held inside. The field's own focus ring is replaced by a 2px underline
+  across the input row in the selection hue — moved and recoloured, not
+  removed, because a ring inside a field that always has focus would sit there
+  permanently.
+- **It focuses in a layout effect.** A frame later let the first keystrokes
+  after Ctrl K land on the page, where they ran single-key shortcuts.
+- The highlighted row is `--accent-select-wash` with an inset
+  `--accent-select-edge`; matched letters are `--accent-select`, bold and
+  underlined, so a match reads in greyscale too.
+- **Key hints hide below 560px** (there is rarely a keyboard there); the sheet
+  keeps them, since listing keys is its whole job.
+
+### The undo pair
+
+Two 2.1rem buttons in one bordered group on `--surface-sunken`, sized to sit in
+three different toolbars without borrowing any one toolbar's button class. A
+disabled button dims its glyph — the contrast sweep's own exception for
+disabled controls. What was undone appears for 2.4 seconds in an absolutely
+placed chip under the pair, so it never moves the toolbar, with the same words
+in a polite live region.
+
+---
+
 ## Working on this
 
 ```bash

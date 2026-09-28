@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-28-palette-and-undo',
+    date: '2026-09-28',
+    kind: 'new',
+    title: 'Press Ctrl K to jump anywhere, and undo any change to your decks',
+    body: [
+      'Ctrl K (⌘K on a Mac) or / opens a search box that reaches every screen, every deck tool, your recent players and any player tag you type. Press ? to see every keyboard shortcut — G then B opens Royal Duels, T switches the theme, E exports the screen you are on.',
+      'Royal Duels, Deck’s Home and Counter Palette now have Undo and Redo, with Ctrl Z and Ctrl Shift Z. Each tool keeps its own history, so a card you removed, a cleared deck, a Reset or a deleted folder can all be brought back.',
+    ],
+    href: '#/builder',
+    hrefLabel: 'Open Royal Duels',
+  },
+  {
     id: '2026-09-28-recent-and-form',
     date: '2026-09-28',
     kind: 'new',

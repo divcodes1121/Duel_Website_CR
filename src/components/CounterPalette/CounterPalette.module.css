@@ -234,3 +234,12 @@
     overflow-y: visible;
   }
 }
+
+/* The gallery's title with the palette's undo beside it. */
+.galleryHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}

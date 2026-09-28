@@ -1,0 +1,321 @@
+/* The command palette and the shortcut sheet.
+ *
+ * NO COLOUR IS DEFINED HERE. Opaque `--surface-strong` like every portalled
+ * panel on the site (a translucent panel over a busy board is unreadable),
+ * the float shadow the dropdowns use, and violet for the highlighted row,
+ * because violet is what "selected" means here. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: max(9vh, 1rem) 1rem 1rem;
+  background: color-mix(in srgb, var(--bg-1) 55%, transparent);
+}
+
+.dialog {
+  width: min(40rem, 100%);
+  max-height: min(34rem, 82vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--surface-strong);
+  color: var(--text);
+  box-shadow: var(--shadow-float);
+  animation: paletteIn var(--dur-2) var(--ease) both;
+}
+
+@keyframes paletteIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.inputRow > svg {
+  flex: none;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 550;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+/* FOCUS IS SHOWN ON THE ROW, NOT AROUND THE FIELD. Focus never leaves the
+   input, so a ring inside the row would sit there permanently; the row's own
+   underline in the selection hue is the same statement, drawn where it
+   belongs. Recoloured and moved, never removed — the project's rule. */
+.input:focus-visible {
+  outline: none !important;
+}
+
+.inputRow:focus-within {
+  box-shadow: inset 0 -2px 0 var(--accent-select);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.group {
+  margin: 0;
+  padding: 0.65rem 0.65rem 0.3rem;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.option {
+  display: grid;
+  grid-template-columns: 1.9rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.option[aria-selected='true'] {
+  background: var(--accent-select-wash);
+  box-shadow: inset 0 0 0 1px var(--accent-select-edge);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.icon[data-hue='violet'] { color: var(--hue-violet); }
+.icon[data-hue='blue'] { color: var(--hue-blue); }
+.icon[data-hue='pink'] { color: var(--hue-pink); }
+.icon[data-hue='green'] { color: var(--hue-green); }
+.icon[data-hue='red'] { color: var(--hue-red); }
+
+.text {
+  display: grid;
+  min-width: 0;
+}
+
+.label,
+.sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label {
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.sub {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+/* The matched letters. Underlined as well as coloured, so the match reads in
+   greyscale too. */
+.label mark,
+.sub mark {
+  background: none;
+  color: var(--accent-select);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.keys {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.4rem;
+  padding: 0.12rem 0.35rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.empty {
+  padding: 1.2rem 0.8rem;
+  font-size: 0.88rem;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+  font-size: 0.72rem;
+  color: var(--text);
+}
+
+.foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* ---------------------------------------------------------- shortcut sheet */
+
+.sheet {
+  width: min(34rem, 100%);
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem 0.5rem;
+}
+
+.sheetTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.sheetClose {
+  padding: 0.35rem 0.8rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.sheetClose:hover {
+  border-color: var(--accent-select-edge);
+}
+
+.sheetBody {
+  overflow-y: auto;
+  padding: 0 0.5rem 0.8rem;
+}
+
+.sheetGroup + .sheetGroup {
+  margin-top: 0.3rem;
+}
+
+.sheetList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sheetRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.42rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.86rem;
+}
+
+.sheetRow:last-child {
+  border-bottom: none;
+}
+
+.sheetNote {
+  margin: 0.8rem 0.65rem 0;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ notice */
+
+/* A one-line confirmation for actions that change nothing on screen ("Link
+   copied"). Opaque, full ink, out of the way at the foot of the screen. */
+.notice {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1.4rem + env(safe-area-inset-bottom, 0px));
+  z-index: 1300;
+  max-width: calc(100vw - 2rem);
+  padding: 0.55rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 650;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition:
+    opacity var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
+}
+
+.notice[data-shown] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.notice:empty {
+  visibility: hidden;
+}
+
+@media (max-width: 560px) {
+  .keys {
+    display: none;
+  }
+
+  .sheetRow .keys {
+    display: inline-flex;
+  }
+}

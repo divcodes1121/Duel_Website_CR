@@ -228,6 +228,25 @@ export function TrendIcon({ size = 17 }: P) {
   );
 }
 
+/* An arrow into a tray — a file coming down. The command palette's export row. */
+export function DownloadIcon({ size = 16 }: P) {
+  return (
+    <svg {...base(size)}>
+      <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+    </svg>
+  );
+}
+
+/* Two chain links — copying the address of this screen. */
+export function LinkIcon({ size = 16 }: P) {
+  return (
+    <svg {...base(size)}>
+      <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+      <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+    </svg>
+  );
+}
+
 export function SunIcon({ size = 16 }: P) {
   return (
     <svg {...base(size)}>

@@ -66,8 +66,21 @@ import { useReveal } from '../../hooks/useReveal';
 import { ClosingBand } from './ClosingBand';
 import { SiteFooter } from './SiteFooter';
 import { RecentBattles } from '../Analytics/RecentBattles';
+import { CommandPalette, type PaletteCommand } from '../CommandPalette/CommandPalette';
+import { ShortcutSheet } from '../CommandPalette/ShortcutSheet';
+import { useGlobalShortcuts } from '../CommandPalette/useGlobalShortcuts';
+import paletteStyles from '../CommandPalette/CommandPalette.module.css';
+import { keysFor, type GoTarget, type ShortcutAction } from '../../utils/shortcuts';
+import { ago } from '../../utils/format';
+import { useThemeStore } from '../../state/themeStore';
+import { PRO_ONLY_SECTIONS } from '../../state/tiers';
 import {
   ClockIcon,
+  DownloadIcon,
+  InfoIcon,
+  LinkIcon,
+  MoonIcon,
+  SunIcon,
   AnalyticsIcon,
   ArrowRightIcon,
   BadgeIcon,
@@ -441,31 +454,25 @@ export function Dashboard({
   // The analysis screen carries the query in the top bar, seeded from the URL.
   const [topTag, setTopTag] = useState(playerTag);
   const [season, setSeason] = useState<string>(SEASONS[0]);
-  /* ⌘K / Ctrl-K focuses the tag search from anywhere. Registered here rather
-     than on the input because the point is to reach it without finding it. */
-  /* Null until the search pill is expanded — GooeySearch does not render an
-     input at all in its collapsed state, so ⌘K has to open it first. */
-  const findRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        if (findRef.current) {
-          findRef.current.focus();
-          findRef.current.select();
-          return;
-        }
-        /* Collapsed: click the pill to expand it, then focus once the input
-           has mounted. The component focuses it itself on expand, so this only
-           has to open it. */
-        document
-          .querySelector<HTMLElement>('[aria-label="Open search"]')
-          ?.click();
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  /* ⌘K / Ctrl-K OPENS THE COMMAND PALETTE (2026-09-28). It used to expand
+     the top bar's tag pill and focus it, which reached one thing — a tag. The
+     palette reaches every screen, tool and action as well as any tag, and the
+     pill stays as the visible, clickable way in. The keys are bound in
+     `useGlobalShortcuts` below, from the one table in `utils/shortcuts.ts`. */
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  /* One line of confirmation for actions that change nothing visible ("Link
+     copied"), or that could not happen ("Nothing to export here"). */
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef(0);
+  const say = (text: string) => {
+    setNotice(text);
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2400);
+  };
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
+  const theme = useThemeStore((st) => st.theme);
+  const toggleTheme = useThemeStore((st) => st.toggleTheme);
   /* The sidebar's Upgrade Now and the gate's Subscribe are the same intent, so
      they open the same thing. This one had no handler at all — a button that
      does nothing is worse than no button. */
@@ -646,6 +653,124 @@ export function Dashboard({
     });
   };
 
+  /* ── THE COMMAND PALETTE'S CONTENTS ────────────────────────────────────
+   *
+   * Built from the navigation this shell already has — SIDE_NAV, TOP_NAV,
+   * `openArea`, `goHome` — so a palette row does exactly what the rail or the
+   * dock does for the same destination, and cannot drift from it. */
+  const goTo = (to: GoTarget) => {
+    const area = (label: string) => SIDE_NAV.find((n) => n.label === label);
+    if (to === 'home') return goHome();
+    if (to === 'meta') {
+      setSection('Top Meta Decks');
+      return go(HOME);
+    }
+    if (to === 'battles') return openArea(area('Recent Battles')!);
+    if (to === 'counter') return openArea(area('Deck Counter')!);
+    if (to === 'guide') return go('#/guide');
+    const hash = { builder: '#/builder', decks: '#/decks', palette: '#/palette', teams: '#/teams', duo: '#/duo' }[to];
+    go(hash);
+  };
+
+  /* Presses the export this screen shows, whichever kind it is — the shell's
+     report button, a board's own, or a deck tool's PDF dialog. They all carry
+     `data-export`, so this needs to know nothing about any of them. */
+  const exportScreen = () => {
+    const button = [...document.querySelectorAll<HTMLButtonElement>('[data-export]')].find(
+      (b) => !b.disabled && b.offsetParent !== null,
+    );
+    if (button) button.click();
+    else say('Nothing on this screen to export');
+  };
+
+  const copyLink = () => {
+    const done = () => say('Link to this screen copied');
+    navigator.clipboard?.writeText(window.location.href).then(done, () => say('The browser blocked copying'));
+  };
+
+  const onShortcut = (a: ShortcutAction) => {
+    if (a.kind === 'palette') {
+      setSheetOpen(false);
+      setPaletteOpen((o) => !o);
+    } else if (a.kind === 'sheet') {
+      setPaletteOpen(false);
+      setSheetOpen(true);
+    } else if (a.kind === 'theme') toggleTheme();
+    else if (a.kind === 'export') exportScreen();
+    else if (a.kind === 'rail') {
+      if (landing) say('This screen has no sidebar');
+      else setRailOpen((o) => !o);
+    } else goTo(a.to);
+  };
+
+  useGlobalShortcuts({ onAction: onShortcut, paused: paletteOpen || sheetOpen });
+
+  const lockOf = (label: string): string | undefined => {
+    if (sectionAllowed(access, label)) return undefined;
+    return (PRO_ONLY_SECTIONS as readonly string[]).includes(label) ? 'Needs Pro' : 'Needs a free account';
+  };
+
+  const commands: PaletteCommand[] = [
+    ...recent.slice(0, 6).map((p) => ({
+      id: `recent-${p.tag}`,
+      group: 'Recent players',
+      label: p.name ?? p.tag,
+      sub: `${p.name ? `${p.tag} · ` : ''}opened ${ago(new Date(p.at).toISOString())}`,
+      keywords: p.tag,
+      icon: <ClockIcon size={15} />,
+      hue: 'violet',
+      run: () => go(`#/player/${encodeURIComponent(p.tag)}`),
+    })),
+    ...SIDE_NAV.map((item) => {
+      const Icon = item.icon;
+      const goKey = item.label === 'Recent Battles' ? 'battles' : item.label === 'Deck Counter' ? 'counter' : item.label === 'Top Meta Decks' ? 'meta' : null;
+      return {
+        id: `area-${item.label}`,
+        group: 'Analytics',
+        label: item.label,
+        sub:
+          lockOf(item.label) ??
+          (item.label === 'Top Meta Decks'
+            ? 'The whole player base'
+            : view === 'player' && playerTag
+              ? `For ${playerTag}`
+              : SECTION_BLURB[item.label]),
+        icon: <Icon size={15} />,
+        hue: item.hue,
+        keys: goKey ? keysFor(goKey) : undefined,
+        run: () => {
+          if (item.label === 'Search Player') goAnalytics();
+          else if (item.label === 'Top Meta Decks') goTo('meta');
+          else openArea(item);
+        },
+      };
+    }),
+    { id: 'tool-home', group: 'Tools', label: 'Home', sub: 'The landing screen and the tag search', icon: <HomeIcon size={15} />, keys: keysFor('home'), run: goHome },
+    { id: 'tool-builder', group: 'Tools', label: 'Royal Duels', sub: 'The five-deck duel builder', icon: <SwordsIcon size={15} />, hue: 'violet', keys: keysFor('builder'), run: () => goTo('builder') },
+    { id: 'tool-decks', group: 'Tools', label: "Deck's Home", sub: 'Single decks that save themselves', icon: <DeckIcon size={15} />, hue: 'green', keys: keysFor('decks'), run: () => goTo('decks') },
+    { id: 'tool-palette', group: 'Tools', label: 'Counter Palette', sub: 'Counter decks in folders by archetype', icon: <PaletteIcon size={15} />, hue: 'blue', keys: keysFor('palette'), run: () => goTo('palette') },
+    { id: 'tool-teams', group: 'Tools', label: 'Team Analysis', sub: lockOf('Team Analysis') ?? 'Scout a whole roster', icon: <TeamIcon size={15} />, hue: 'pink', keys: keysFor('teams'), run: () => goTo('teams') },
+    { id: 'tool-duo', group: 'Tools', label: '2v2 Decks', sub: lockOf('2v2 Decks') ?? 'Teammate deck pairs', icon: <DuoIcon size={15} />, hue: 'green', keys: keysFor('duo'), run: () => goTo('duo') },
+    { id: 'tool-coach', group: 'Tools', label: 'Coach Roster', sub: 'A coaching workspace', icon: <CoachIcon size={15} />, run: () => go('#/admin/coach') },
+    ...(isLinkedPlayer
+      ? [{ id: 'tool-my', group: 'Tools', label: 'My coaching', sub: 'Your own dashboard from your coach', icon: <BadgeIcon size={15} />, run: () => go('#/my') }]
+      : []),
+    { id: 'tool-guide', group: 'Tools', label: 'The field book', sub: 'What the site is, and what each account gets', icon: <InfoIcon size={15} />, keys: keysFor('guide'), run: () => goTo('guide') },
+    ...(access === 'admin'
+      ? [{ id: 'tool-admin', group: 'Tools', label: 'Admin console', sub: 'Accounts, storage, collection', icon: <ShieldIcon size={15} />, run: () => go('#/admin') }]
+      : []),
+    { id: 'act-theme', group: 'Actions', label: theme === 'dark' ? 'Switch to the light theme' : 'Switch to the dark theme', icon: theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />, keys: ['T'], keywords: 'theme dark light mode', run: toggleTheme },
+    ...(!landing
+      ? [{ id: 'act-rail', group: 'Actions', label: railOpen ? 'Fold the sidebar' : 'Open the sidebar', icon: <ChevronLeftIcon size={15} />, keys: ['['], keywords: 'sidebar rail', run: () => setRailOpen((o) => !o) }]
+      : []),
+    { id: 'act-export', group: 'Actions', label: 'Export this screen as a PDF', icon: <DownloadIcon size={15} />, keys: ['E'], keywords: 'pdf download report', run: exportScreen },
+    { id: 'act-link', group: 'Actions', label: 'Copy a link to this screen', icon: <LinkIcon size={15} />, keywords: 'share url', run: copyLink },
+    { id: 'act-keys', group: 'Actions', label: 'Keyboard shortcuts', sub: 'Every key this site answers to', icon: <InfoIcon size={15} />, keys: ['?'], keywords: 'keys help', run: () => setSheetOpen(true) },
+    ...(access === 'anon'
+      ? [{ id: 'act-signin', group: 'Actions', label: 'Sign in or create an account', icon: <CrownIcon size={15} />, run: () => go('#/signin') }]
+      : []),
+  ];
+
   // The open tool decides which top-bar item is lit; on the home view that is
   // Home when the landing search is showing and Analytics once an area is.
   const topNav =
@@ -744,15 +869,13 @@ export function Dashboard({
               section. It was reachable from two places — the hero, and a row
               that replaced the whole nav once a player was open — so from a
               deck screen there was no way to look someone up without going
-              home first. Here it is on every screen, and ⌘K focuses it.
+              home first. Here it is on every screen; ⌘K opens the command
+              palette, which takes a tag as well.
 
               It is vengenceui's GooeySearch now rather than a form. The one
               thing that component cannot do is submit what you typed, which is
               the only thing this field is for — see `TopSearch`. */}
-          <TopSearch
-            inputRef={findRef}
-            onGo={(t) => go(`#/player/${encodeURIComponent(t.trim())}`)}
-          />
+          <TopSearch onGo={(t) => go(`#/player/${encodeURIComponent(t.trim())}`)} />
 
           {/* Was a 2.15rem circular icon button. It kept `data-metal` while it
               was a circle; as a 3:1 track that no longer applies, so the
@@ -1472,6 +1595,17 @@ export function Dashboard({
       </div>
 
       {proContact && <ProContact onClose={() => setProContact(false)} />}
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+        onTag={(t) => go(`#/player/${encodeURIComponent(t)}`)}
+      />
+      <ShortcutSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+      <div className={paletteStyles.notice} role="status" aria-live="polite" data-shown={notice ? '' : undefined}>
+        {notice}
+      </div>
     </div>
   );
 }

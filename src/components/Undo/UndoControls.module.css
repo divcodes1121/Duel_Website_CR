@@ -1,0 +1,81 @@
+/* Undo / Redo for the deck tools.
+ *
+ * NO COLOUR IS DEFINED HERE: every value is a token from `index.css`. The
+ * pair sits in three different toolbars (the builder header, Deck's Home,
+ * Counter Palette), so it carries its own compact look rather than borrowing
+ * one toolbar's button class and looking foreign in the other two. */
+
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pair {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.button {
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.button + .button {
+  border-left: 1px solid var(--border);
+}
+
+.button:hover:not(:disabled) {
+  background: var(--neutral-wash);
+}
+
+/* The dimmed glyph IS the affordance here — the contrast sweep's own
+   exception for disabled controls. */
+.button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+/* What was undone, for a moment, under the pair. Absolutely placed so it
+   never pushes the toolbar around; full ink on an opaque chip so it reads over
+   whatever is below. */
+.said {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 30;
+  padding: 0.25rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-strong);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 650;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition:
+    opacity var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
+}
+
+.said[data-shown] {
+  opacity: 1;
+  transform: none;
+}
+
+.said:empty {
+  visibility: hidden;
+}

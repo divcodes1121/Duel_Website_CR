@@ -10,6 +10,7 @@ import { DeckOrbit } from '../../three/DeckOrbit';
 import libStyles from '../Library/Library.module.css';
 import homeStyles from '../DecksHome/DecksHome.module.css';
 import styles from './CounterPalette.module.css';
+import { UndoControls } from '../Undo/UndoControls';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import { Filmstrip } from '../Filmstrip/Filmstrip';
 import { previewIconFor } from '../../utils/deckPreview';
@@ -62,10 +63,15 @@ function FolderGallery() {
 
   return (
     <section className={styles.galleryList}>
-      <h2 className={homeStyles.galleryTitle}>
-        Archetype Folders
-        <span className={homeStyles.galleryCount}>{folders.length}</span>
-      </h2>
+      {/* The palette's undo lives on the gallery too: deleting a folder happens
+          here, and it takes every deck inside it. */}
+      <div className={styles.galleryHead}>
+        <h2 className={homeStyles.galleryTitle}>
+          Archetype Folders
+          <span className={homeStyles.galleryCount}>{folders.length}</span>
+        </h2>
+        <UndoControls scope="palette" />
+      </div>
 
       {folders.length === 0 && (
         /* The one genuinely blank screen in the app: no folders, one paragraph,
@@ -237,6 +243,8 @@ function FolderView({ folder }: { folder: DuelDeckSet }) {
       <div className={homeStyles.filterSlot}>
         <WinConFilter selected={winFilter} onToggle={toggleWinCon} onClear={() => setWinFilter([])} />
       </div>
+
+      <UndoControls scope="palette" />
     </>
   );
 

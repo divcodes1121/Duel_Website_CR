@@ -10,6 +10,7 @@ import { FilterSlot } from '../WinConFilter/FilterSlot';
 import { canExportDecks } from '../../utils/deckExport';
 import libStyles from '../Library/Library.module.css';
 import styles from './DecksHome.module.css';
+import { UndoControls } from '../Undo/UndoControls';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 
 function CrownIcon() {
@@ -96,6 +97,7 @@ export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
               type="button"
               className={libStyles.ghostButton}
               title="Download a PDF report of every deck here"
+              data-export=""
               onClick={() => setExportOpen(true)}
             >
               Export PDF
@@ -147,6 +149,8 @@ export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
 
             <span className={styles.autoSaveHint}>Decks save automatically</span>
 
+            <UndoControls scope="home" />
+
             {/* Hiding the page nav in the dashboard would otherwise take Export
                 PDF with it — the one action in there the top bar does not
                 already carry. */}
@@ -155,6 +159,7 @@ export function DecksHome({ embedded = false }: { embedded?: boolean } = {}) {
                 type="button"
                 className={libStyles.ghostButton}
                 title="Download a PDF report of every deck here"
+                data-export=""
                 onClick={() => setExportOpen(true)}
               >
                 Export PDF

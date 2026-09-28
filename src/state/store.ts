@@ -33,6 +33,15 @@ import { buildDuelImport, type DuelSaveOutcome, type PlayedGame } from './duelIm
 import { pushRemoteDecks, readRemoteDecks, type SyncPayload } from './syncClient';
 import { decideSync } from './syncPolicy';
 import { useAccountStore } from './accountStore';
+import {
+  emptyStack,
+  record,
+  redoStep,
+  scopeOfOwner,
+  undoStep,
+  type HistoryScope,
+  type Stack,
+} from './deckHistory';
 
 /** Duel collections (Deck's Home excluded — it manages its own deck list). */
 export type DuelOwner = 'solo' | 'blue' | 'red';
@@ -96,6 +105,16 @@ interface BuilderState extends PersistedSlice {
    * reload starts a fresh, unattached session.
    */
   activeSavedId: string | null;
+  /**
+   * Undo and redo, one history per deck tool (`state/deckHistory.ts`).
+   * Runtime-only like `activeSavedId`: not in `partialize`, cleared by a sync
+   * pull that replaces the decks, and gone on reload.
+   */
+  history: DeckHistory;
+  /** Step one tool's history back; returns what was undone, or null. */
+  undo: (scope: HistoryScope) => string | null;
+  /** And forward again. */
+  redo: (scope: HistoryScope) => string | null;
 
   setMode: (mode: BuilderMode) => void;
   selectSlot: (owner: DeckOwner, deckIndex: number, slotIndex: number) => void;
@@ -212,6 +231,120 @@ function commitSet(
   };
 }
 
+/* ---------------------------------------------------------------- history
+ * What each deck tool's undo restores. A snapshot is the scope's state BEFORE
+ * an action; see `state/deckHistory.ts` for why it is snapshots and not diffs,
+ * and why there are three scopes. */
+
+interface DuelsSnap {
+  solo: DuelDeckSet;
+  blue: DuelDeckSet;
+  red: DuelDeckSet;
+  deckSlotCount: Record<DuelOwner, number>;
+  /* Mode and the loaded group are part of it because Load and Reset are
+     undoable: undoing a Load has to put back the tab and the attachment the
+     unsaved work had, not only its cards. */
+  mode: BuilderMode;
+  activeSavedId: string | null;
+}
+interface HomeSnap {
+  home: DuelDeckSet;
+}
+interface PaletteSnap {
+  palette: DuelDeckSet;
+  paletteFolders: DuelDeckSet[];
+  /* The open folder too, so undoing an edit made in a folder since closed
+     reopens it: the change is shown where it happened. */
+  activePaletteFolderId: string | null;
+}
+export interface DeckHistory {
+  duels: Stack<DuelsSnap>;
+  home: Stack<HomeSnap>;
+  palette: Stack<PaletteSnap>;
+}
+
+function emptyHistory(): DeckHistory {
+  return { duels: emptyStack(), home: emptyStack(), palette: emptyStack() };
+}
+
+type HistorySource = Pick<
+  BuilderState,
+  'sets' | 'deckSlotCount' | 'mode' | 'activeSavedId' | 'paletteFolders' | 'activePaletteFolderId' | 'history'
+>;
+
+const duelsSnap = (s: HistorySource): DuelsSnap => ({
+  solo: s.sets.solo,
+  blue: s.sets.blue,
+  red: s.sets.red,
+  deckSlotCount: s.deckSlotCount,
+  mode: s.mode,
+  activeSavedId: s.activeSavedId,
+});
+const homeSnap = (s: HistorySource): HomeSnap => ({ home: s.sets.home });
+const paletteSnap = (s: HistorySource): PaletteSnap => ({
+  palette: s.sets.palette,
+  paletteFolders: s.paletteFolders,
+  activePaletteFolderId: s.activePaletteFolderId,
+});
+
+/** The history patch that records `label` as the next step of `scope`. */
+function remember(state: HistorySource, scope: HistoryScope, label: string): { history: DeckHistory } {
+  const h = state.history;
+  if (scope === 'duels') return { history: { ...h, duels: record(h.duels, { label, snapshot: duelsSnap(state) }) } };
+  if (scope === 'home') return { history: { ...h, home: record(h.home, { label, snapshot: homeSnap(state) }) } };
+  return { history: { ...h, palette: record(h.palette, { label, snapshot: paletteSnap(state) }) } };
+}
+
+/** Undo or redo one step of `scope`: the state patch and what it was. */
+function travel(
+  state: BuilderState,
+  scope: HistoryScope,
+  dir: 'undo' | 'redo',
+): { patch: Partial<BuilderState>; label: string } | null {
+  const step = dir === 'undo' ? undoStep : redoStep;
+  /* Selection is dropped either way: the restored decks may not have the slot
+     it pointed at, or it may point at a card the step just removed. */
+  const clear = { selectedSlot: null, selectionPinned: false };
+  if (scope === 'duels') {
+    const r = step(state.history.duels, duelsSnap(state));
+    if (!r) return null;
+    const { solo, blue, red, deckSlotCount, mode, activeSavedId } = r.restore;
+    return {
+      label: r.label,
+      patch: {
+        sets: { ...state.sets, solo, blue, red },
+        deckSlotCount,
+        mode,
+        activeSavedId,
+        history: { ...state.history, duels: r.stack },
+        ...clear,
+      },
+    };
+  }
+  if (scope === 'home') {
+    const r = step(state.history.home, homeSnap(state));
+    if (!r) return null;
+    return {
+      label: r.label,
+      patch: { sets: { ...state.sets, home: r.restore.home }, history: { ...state.history, home: r.stack }, ...clear },
+    };
+  }
+  const r = step(state.history.palette, paletteSnap(state));
+  if (!r) return null;
+  return {
+    label: r.label,
+    patch: {
+      sets: { ...state.sets, palette: r.restore.palette },
+      paletteFolders: r.restore.paletteFolders,
+      activePaletteFolderId: r.restore.activePaletteFolderId,
+      history: { ...state.history, palette: r.stack },
+      ...clear,
+    },
+  };
+}
+
+const cardName = (key: string | null | undefined) => (key ? CARDS_BY_KEY.get(key)?.name ?? key : 'a card');
+
 /** Older versions stored 4-deck duel collections; pad them to the new count. */
 function padDuelSet<T extends DuelDeckSet | undefined>(set: T): T {
   if (!set || set.decks.length >= DUEL_DECK_COUNT) return set;
@@ -298,6 +431,21 @@ export const useBuilderStore = create<BuilderState>()(
       elixirFilter: 'all',
       rarityFilter: 'all',
       activeSavedId: null,
+      history: emptyHistory(),
+
+      undo: (scope) => {
+        const t = travel(get(), scope, 'undo');
+        if (!t) return null;
+        set(t.patch);
+        return t.label;
+      },
+
+      redo: (scope) => {
+        const t = travel(get(), scope, 'redo');
+        if (!t) return null;
+        set(t.patch);
+        return t.label;
+      },
 
       // Switching tabs detaches from the loaded set (it belongs to the other mode).
       setMode: (mode) => set({ mode, selectedSlot: null, selectionPinned: false, activeSavedId: null }),
@@ -340,8 +488,14 @@ export const useBuilderStore = create<BuilderState>()(
             nextSlotIndex === null ? null : { owner, deckIndex, slotIndex: nextSlotIndex };
         }
 
+        const previous = current.decks[deckIndex].slots[slotIndex];
         set({
           ...commitSet(state, owner, updated),
+          ...remember(
+            state,
+            scopeOfOwner(owner),
+            previous ? `Swap ${cardName(previous)} for ${card.name}` : `Add ${card.name}`,
+          ),
           selectedSlot: nextSelected,
           selectionPinned: false,
         });
@@ -355,20 +509,43 @@ export const useBuilderStore = create<BuilderState>()(
           if (!card || !canAssignCardToSlot(current, deckIndex, slotIndex, card, CARDS_BY_KEY, scope)) {
             return state;
           }
-          return commitSet(state, owner, assignCardUtil(current, deckIndex, slotIndex, cardKey, scope));
+          const updated = assignCardUtil(current, deckIndex, slotIndex, cardKey, scope);
+          if (updated === current) return state;
+          const previous = current.decks[deckIndex].slots[slotIndex];
+          return {
+            ...commitSet(state, owner, updated),
+            ...remember(
+              state,
+              scopeOfOwner(owner),
+              previous ? `Swap ${cardName(previous)} for ${card.name}` : `Add ${card.name}`,
+            ),
+          };
         }),
 
       moveCard: (owner, from, to) =>
-        set((state) => commitSet(state, owner, moveCardUtil(state.sets[owner], from, to, CARDS_BY_KEY))),
+        set((state) => {
+          const current = state.sets[owner];
+          const updated = moveCardUtil(current, from, to, CARDS_BY_KEY);
+          if (updated === current) return state;
+          const moved = current.decks[from.deckIndex]?.slots[from.slotIndex];
+          return {
+            ...commitSet(state, owner, updated),
+            ...remember(state, scopeOfOwner(owner), `Move ${cardName(moved)}`),
+          };
+        }),
 
       clearSlot: (owner, deckIndex, slotIndex) =>
         set((state) => {
+          const removed = state.sets[owner].decks[deckIndex]?.slots[slotIndex];
+          // Nothing there: no change, and no step for undo to walk through.
+          if (!removed) return state;
           const isSelectedSlot =
             state.selectedSlot?.owner === owner &&
             state.selectedSlot?.deckIndex === deckIndex &&
             state.selectedSlot?.slotIndex === slotIndex;
           return {
             ...commitSet(state, owner, clearSlotUtil(state.sets[owner], deckIndex, slotIndex)),
+            ...remember(state, scopeOfOwner(owner), `Remove ${cardName(removed)}`),
             // Removing the selected slot's card pins the selection there so the
             // next pick refills it instead of advancing.
             selectionPinned: isSelectedSlot ? true : state.selectionPinned,
@@ -376,7 +553,14 @@ export const useBuilderStore = create<BuilderState>()(
         }),
 
       clearDeck: (owner, deckIndex) =>
-        set((state) => commitSet(state, owner, clearDeckUtil(state.sets[owner], deckIndex))),
+        set((state) => {
+          const deck = state.sets[owner].decks[deckIndex];
+          if (!deck || deck.slots.every((k) => k === null)) return state;
+          return {
+            ...commitSet(state, owner, clearDeckUtil(state.sets[owner], deckIndex)),
+            ...remember(state, scopeOfOwner(owner), `Clear ${deck.name}`),
+          };
+        }),
 
       importDeck: (owner, deckIndex, keys) => {
         const state = get();
@@ -406,6 +590,7 @@ export const useBuilderStore = create<BuilderState>()(
         const importedDuplicates =
           independentDecks ? [] : result.slots.filter((k) => usedElsewhere.has(k));
         set({
+          ...remember(state, scopeOfOwner(owner), `Paste into ${current.decks[deckIndex]?.name ?? 'a deck'}`),
           ...commitSet(state, owner, {
             ...current,
             decks: current.decks.map((d, i) =>
@@ -424,26 +609,45 @@ export const useBuilderStore = create<BuilderState>()(
       },
 
       renameDeck: (owner, deckIndex, name) =>
-        set((state) => commitSet(state, owner, renameDeckUtil(state.sets[owner], deckIndex, name))),
+        set((state) => {
+          const before = state.sets[owner].decks[deckIndex]?.name;
+          if (before === undefined || before === name) return state;
+          return {
+            ...commitSet(state, owner, renameDeckUtil(state.sets[owner], deckIndex, name)),
+            ...remember(state, scopeOfOwner(owner), `Rename ${before}`),
+          };
+        }),
 
       setWildVariant: (owner, deckIndex, variant) =>
-        set((state) =>
-          commitSet(
-            state,
-            owner,
-            setWildVariantUtil(state.sets[owner], deckIndex, variant, CARDS_BY_KEY),
-          ),
-        ),
+        set((state) => {
+          const current = state.sets[owner];
+          const updated = setWildVariantUtil(current, deckIndex, variant, CARDS_BY_KEY);
+          if (updated === current) return state;
+          const wild = current.decks[deckIndex]?.slots[2];
+          return {
+            ...commitSet(state, owner, updated),
+            ...remember(
+              state,
+              scopeOfOwner(owner),
+              `Field ${cardName(wild)} as ${variant === 'hero' ? 'Hero' : 'Evolution'}`,
+            ),
+          };
+        }),
 
       setDeckCrowns: (owner, deckIndex, crowns) =>
         set((state) => {
           const clamped = Math.max(0, Math.min(MAX_CROWNS, Math.round(crowns)));
           const current = state.sets[owner];
-          return commitSet(state, owner, {
-            ...current,
-            decks: current.decks.map((d, i) => (i === deckIndex ? { ...d, crowns: clamped } : d)),
-            updatedAt: new Date().toISOString(),
-          });
+          const deck = current.decks[deckIndex];
+          if (!deck || (deck.crowns ?? 0) === clamped) return state;
+          return {
+            ...remember(state, scopeOfOwner(owner), `Crowns on ${deck.name}`),
+            ...commitSet(state, owner, {
+              ...current,
+              decks: current.decks.map((d, i) => (i === deckIndex ? { ...d, crowns: clamped } : d)),
+              updatedAt: new Date().toISOString(),
+            }),
+          };
         }),
 
       setFilterType: (filter) => set({ filterType: filter }),
@@ -469,6 +673,7 @@ export const useBuilderStore = create<BuilderState>()(
       // Resets only the collections visible in the current mode.
       resetAll: () =>
         set((state) => ({
+          ...remember(state, 'duels', 'Reset'),
           sets:
             state.mode === 'solo'
               ? { ...state.sets, solo: createEmptyDuelDeckSet('My Duel Deck') }
@@ -542,6 +747,8 @@ export const useBuilderStore = create<BuilderState>()(
             return state; // malformed entry — don't touch anything
           }
           return {
+            // Undoable: loading a group over unsaved work used to lose it.
+            ...remember(state, 'duels', `Load ${entry.name}`),
             sets,
             deckSlotCount,
             mode: entry.mode,
@@ -576,6 +783,7 @@ export const useBuilderStore = create<BuilderState>()(
 
       addDeckSlot: (owner) =>
         set((state) => ({
+          ...remember(state, 'duels', 'Add a deck slot'),
           deckSlotCount: {
             ...state.deckSlotCount,
             [owner]: Math.min(DUEL_DECK_COUNT, state.deckSlotCount[owner] + 1),
@@ -588,6 +796,7 @@ export const useBuilderStore = create<BuilderState>()(
           if (count <= MIN_DECK_SLOTS) return state;
           const lastIndex = count - 1;
           return {
+            ...remember(state, 'duels', `Remove ${state.sets[owner].decks[lastIndex]?.name ?? 'a deck slot'}`),
             // The hidden deck must not keep holding cards (they'd still block
             // uniqueness invisibly) — clear it on the way out.
             sets: {
@@ -607,6 +816,7 @@ export const useBuilderStore = create<BuilderState>()(
           const home = state.sets.home;
           const decks = [...home.decks, createEmptyDeck(`Deck ${home.decks.length + 1}`)];
           return {
+            ...remember(state, 'home', 'Add a deck'),
             sets: {
               ...state.sets,
               home: { ...home, decks, updatedAt: new Date().toISOString() },
@@ -619,6 +829,7 @@ export const useBuilderStore = create<BuilderState>()(
           const home = state.sets.home;
           const decks = home.decks.filter((_, i) => i !== deckIndex);
           return {
+            ...remember(state, 'home', `Remove ${home.decks[deckIndex]?.name ?? 'a deck'}`),
             sets: {
               ...state.sets,
               home: { ...home, decks, updatedAt: new Date().toISOString() },
@@ -637,6 +848,7 @@ export const useBuilderStore = create<BuilderState>()(
           };
           // The new folder opens immediately so it can be named and filled.
           return {
+            ...remember(state, 'palette', 'New folder'),
             paletteFolders: [...state.paletteFolders, folder],
             activePaletteFolderId: folder.id,
             sets: { ...state.sets, palette: folder },
@@ -648,11 +860,13 @@ export const useBuilderStore = create<BuilderState>()(
       renamePaletteFolder: (id, name) =>
         set((state) => {
           const trimmed = name.trim();
-          if (!trimmed) return state;
+          const before = state.paletteFolders.find((f) => f.id === id)?.name;
+          if (!trimmed || before === undefined || before === trimmed) return state;
           const paletteFolders = state.paletteFolders.map((f) =>
             f.id === id ? { ...f, name: trimmed, updatedAt: new Date().toISOString() } : f,
           );
           return {
+            ...remember(state, 'palette', `Rename ${before}`),
             paletteFolders,
             // Keep the open workshop's copy in sync with its folder.
             sets:
@@ -665,7 +879,12 @@ export const useBuilderStore = create<BuilderState>()(
       deletePaletteFolder: (id) =>
         set((state) => {
           const closing = state.activePaletteFolderId === id;
+          const doomed = state.paletteFolders.find((f) => f.id === id);
+          if (!doomed) return state;
           return {
+            // THE MOST EXPENSIVE THING TO LOSE HERE — a folder takes every deck
+            // in it — and it was permanent until this line.
+            ...remember(state, 'palette', `Delete ${doomed.name}`),
             paletteFolders: state.paletteFolders.filter((f) => f.id !== id),
             activePaletteFolderId: closing ? null : state.activePaletteFolderId,
             sets: closing ? { ...state.sets, palette: createPaletteWorkshop() } : state.sets,
@@ -698,11 +917,14 @@ export const useBuilderStore = create<BuilderState>()(
         set((state) => {
           if (!state.activePaletteFolderId) return state;
           const palette = state.sets.palette;
-          return commitSet(state, 'palette', {
-            ...palette,
-            decks: [...palette.decks, createEmptyDeck(`Deck ${palette.decks.length + 1}`)],
-            updatedAt: new Date().toISOString(),
-          });
+          return {
+            ...remember(state, 'palette', 'Add a deck'),
+            ...commitSet(state, 'palette', {
+              ...palette,
+              decks: [...palette.decks, createEmptyDeck(`Deck ${palette.decks.length + 1}`)],
+              updatedAt: new Date().toISOString(),
+            }),
+          };
         }),
 
       removePaletteDeck: (deckIndex) =>
@@ -710,6 +932,7 @@ export const useBuilderStore = create<BuilderState>()(
           if (!state.activePaletteFolderId) return state;
           const palette = state.sets.palette;
           return {
+            ...remember(state, 'palette', `Remove ${palette.decks[deckIndex]?.name ?? 'a deck'}`),
             ...commitSet(state, 'palette', {
               ...palette,
               decks: palette.decks.filter((_, i) => i !== deckIndex),
@@ -1000,6 +1223,8 @@ function resetLocalDecks() {
     activePaletteFolderId: null,
     activeSavedId: null,
     selectedSlot: null,
+    // Another account's steps are not this one's to undo.
+    history: emptyHistory(),
   });
 }
 
@@ -1067,6 +1292,10 @@ async function hydrateFromRemote(userId: string) {
       deckSlotCount: remote.deckSlotCount ?? deriveDeckSlotCounts(remote.sets),
       paletteFolders,
       activePaletteFolderId: activeFolder ? activeId : null,
+      /* The decks were just replaced from the cloud, so every step on record
+         describes decks that are gone; undoing one would write stale decks
+         over the pull and push them back up. */
+      history: emptyHistory(),
     });
   } else {
     /* First sync ever for this account. Safe to seed from local state ONLY

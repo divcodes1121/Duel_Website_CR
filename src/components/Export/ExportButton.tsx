@@ -155,6 +155,9 @@ export function ExportButton({
       <button
         type="button"
         className={styles.button}
+        /* How the command palette and the E key find "this screen's export"
+           without knowing which screen it is. */
+        data-export=""
         data-state={busy ? 'busy' : done ? 'done' : undefined}
         onClick={onMain}
         disabled={Boolean(busy) || nothing}

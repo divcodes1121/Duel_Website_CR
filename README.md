@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **A command palette, keyboard shortcuts, and undo in the deck tools** | **2026-09-28, client only.** Ctrl K / ⌘K or `/` opens a palette over every area, tool, recent player, action and any typed tag, built from the shell's own navigation; `?` opens a sheet generated from the one shortcut table (`utils/shortcuts.ts`), and G pairs, T, [ and E work anywhere outside a text field. Royal Duels, Deck's Home and Counter Palette each keep their own undo history (50 steps, snapshots, runtime only, cleared by a sync pull) — Clear, Reset, Load, a removed deck and a deleted folder can all be brought back. 32/32 in a browser; `deckUndo.test.ts` drives the real store. See [A command palette, keyboard shortcuts, and undo](#a-command-palette-keyboard-shortcuts-and-undo-in-the-deck-tools-2026-09-28) |
 | **Trends count games, tables fit a laptop, and four small additions** | **2026-09-28, server deployed first (backup `clash_data.py.bak-20260928-071329-pretrendgames`).** From an interface review. The Trend column averaged unplayed days in as 0% and printed ▼ 83.2 and ▼ 68.2 for two decks one player was winning 88% with; the server now sends `games` per day and the column pools each half of a deck's played days by games, withheld under five (▼ 10.4 and ▼ 6.0 for the same decks). The Top 10 and Top Meta Decks tables hid 17 to 508px of columns on every laptop with the rail open; between the phone layout and a 75rem table a row is two lines now (container query), 0px hidden at every width. Sign-in's password field is full width and wears the real logo; the rail stopped highlighting Search Player on tool routes. New: recent players on the landing hero, a form strip on Recent Battles, and a blurred look at the real screen behind every sign-up gate. 39/39 signed out. See [Trends that count games, and tables that fit a laptop](#trends-that-count-games-and-tables-that-fit-a-laptop-2026-09-28) |
 | **Coach Assist's deck tuner opens to Pro, and fields every special slot** | **LIVE 2026-09-27 (`c3309c6`), server deployed first.** Reported with a screenshot: an "Or bring one of these" Bridge Spam list with Battle Ram and P.E.K.K.A evolutions and a PLAIN Bandit in slot 2 — none of its cards can be a hero and it has no champion, so slot 2 could never be special. The tuner (Switch a card / Or bring one of these / A full loadout) was the one list outside the three-slot rule; now every deck it offers is seated by `complete_seating` and a list that cannot field three is skipped for the next one. Live: **85 tuner decks over 5 real pairs, 0 short** (staged: 7 of 170 were short before). Then asked: *"make it available for Pro, just not for Members"* — the block was admin-only; it is gated on `isPaid` now, the same line Coach Assist itself sits behind. It adds 1.4–2.4 s to the first suggestion for a deck and nothing warm. See [The deck tuner is Pro now, and fields every slot](#the-deck-tuner-is-pro-now-and-fields-every-slot-2026-09-27) |
 | **Coach Assist reads real duels — the fused rate and the duel brain** | **LIVE 2026-09-27 (`93e45e2`), server deployed first.** Asked for directly: *"I hope the prediction mechanism for Coach Assist's suggestion is also enhanced according to the duels, as we did for Team Scout — check on that too"*. It was not: `win_prob` took the first ladder rung with any evidence and never read a duel. Every "my deck vs their deck" is now Team Analysis's fused ladder+duel rate at the level of the lists, and one of the three options is held for a deck proven in real duels against them — always legal, never a card already spent. On **11,102 held-out duel games** Coach Assist's rate went **0.6853 -> 0.6793** log loss (0.6812 for a player's own list). Staged on production data, 24 answers: **0 illegal options**, a duel-proven deck held in 15, the same #1 in 20, median 0.30 -> 0.79 s. A Coach Assist-only lint error (a conditional hook that could crash the duel log) went with it. See [Coach Assist reads real duels](#coach-assist-reads-real-duels-2026-09-27) |
@@ -114,7 +115,7 @@ bot's SQLite files read-only.
 | Coach Assist — Suggestion | **reads real duels (2026-09-27, live)** — the fused ladder+duel rate on every pairing and one option held for duel proof; see the row at the top. Before that, **personal and archetype-by-archetype (2026-09-25, live).** "Or bring one of these" is chosen per player from their playstyle (12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition), and every deck shows its rate against **five** archetypes — their likely ones, their other win conditions, then the meta — on one line |
 | R3 prediction sampler | **STOPPED 2026-09-19 21:05 UTC** by its own stop condition (a royalweb restart during a deploy), ~8 h into 7 days; found 2026-09-25, not restarted per protocol. Re-running needs a deploy freeze or an amendment — the account holder's call. See `server/README.md` |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **3,384 Python checks** across **59 suites** and **1,079 vitest** across 46 files as of 2026-09-28 — the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **3,384 Python checks** across **59 suites** and **1,111 vitest** across 48 files as of 2026-09-28 — the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -175,6 +176,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 17. [Colour: how it was chosen](#colour-how-it-was-chosen)
 18. [The UI pass — surfaces, selection and navigation](#the-ui-pass--surfaces-selection-and-navigation)
 18a. [Trends that count games, and tables that fit a laptop](#trends-that-count-games-and-tables-that-fit-a-laptop-2026-09-28)
+18b. [A command palette, keyboard shortcuts, and undo in the deck tools](#a-command-palette-keyboard-shortcuts-and-undo-in-the-deck-tools-2026-09-28)
 19. [The display face, and the one property that decides it](#the-display-face-and-the-one-property-that-decides-it)
 19a. [The display face, and the dark ground](#the-display-face-and-the-dark-ground)
 20. ["Why is Evolutions 0?" — two emptinesses that shared a sentence](#why-is-evolutions-0--two-emptinesses-that-shared-a-sentence)
@@ -240,7 +242,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 1,079 tests in 46 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
+npm run test                      # 1,111 tests in 48 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
 python server/test_team_analysis.py # 163 checks over both tabs of the squad board, incl. the fused rate's wiring
 python server/test_team_scout.py  # 160 checks over the coaching brain: projection, scoring, squad plan
 python server/test_matchup_fusion.py # 34 checks over the fused ladder+duel rate, against literals
@@ -386,8 +388,9 @@ Opening an area or loading a tag brings it back. See
 The brand and the top bar's **Home** both return to the landing screen, from any
 screen including a hosted tool and the player view. The top bar also carries a
 tag field — vengenceui's GooeySearch, a pill that expands and drops suggestions
-out of itself; Enter opens the analysis for whatever is typed, and ⌘K / Ctrl-K
-reaches it from anywhere, opening the pill first if it is collapsed. Where the rail does appear it
+out of itself; Enter opens the analysis for whatever is typed. ⌘K / Ctrl-K
+opens the command palette, which takes a tag as well as every screen and
+action (see [A command palette, keyboard shortcuts, and undo](#a-command-palette-keyboard-shortcuts-and-undo-in-the-deck-tools-2026-09-28)). Where the rail does appear it
 **collapses** via a chevron on its right edge, which reclaims 226px and spends
 it on larger elements rather than more of them; the choice persists, and is
 tracked separately from the landing screen's rail-less state so returning from a
@@ -4169,6 +4172,118 @@ verification slept 3.5 seconds past a 1.8-second ring and reported the jump
 broken; and the first trend rule looked right on one player and withheld most
 decks on another. Measure a rule on several real players before shipping it.
 
+## A command palette, keyboard shortcuts, and undo in the deck tools (2026-09-28)
+
+The second batch of the interface review (*"next"*): B1, B2 and B3. Every
+screen, tool and action is one keystroke away, and a change to a deck can be
+taken back.
+
+### The command palette
+
+**Ctrl K / ⌘K, or `/`, from anywhere in the shell.** It used to expand the
+top bar's tag pill and reach one thing, a tag; it opens a palette now
+(`components/CommandPalette/`) with every analytics area, every tool, the
+reader's recent players, the actions (theme, fold the sidebar, export this
+screen, copy a link, the shortcut sheet, sign in) and any typed tag. The pill
+stays, as the visible and clickable way in.
+
+- **Built from the shell's own navigation.** Rows call `openArea`, `goHome`
+  and `go` — the functions the rail and the dock call — so a row does exactly
+  what the rail does for the same place and cannot drift from it. Locked areas
+  stay listed and say "Needs a free account" or "Needs Pro", the same rule as
+  the dock: an area you could open by paying has to be visible.
+- **Focus never leaves the field.** Arrow keys move a highlighted row
+  (`aria-activedescendant`), Enter runs it, Esc closes and hands focus back.
+  Groups keep a fixed order while rows re-rank inside them, the matched
+  letters are marked, and anything tag-shaped adds a first row that opens it
+  — the tag being looked up is usually one this site has never seen.
+- **Descriptions match as a run, titles match fuzzily.** The first version let
+  letters scatter through a whole sentence, so "the" found Deck Counter
+  through "whaT beats tHis playEr" and marked three random letters. A title
+  keeps its fuzzy match ("dz" finds Duel Zone); a description or a hidden
+  keyword needs the typed text as a run.
+- **Export this screen presses whatever export the screen shows.** Every
+  export button carries `data-export` (the shell's report button, a board's
+  own, the deck tools' PDF dialog), so the palette and the E key need to know
+  nothing about any of them, and say so when a screen has none.
+- **Focus moves before the next keystroke can.** The field first took focus
+  one animation frame after opening, and a script typing straight after
+  Ctrl K put its first letters on the page instead — where "t" switched the
+  theme and "e" asked for an export. It focuses in a layout effect now.
+
+### Keyboard shortcuts
+
+One table, `utils/shortcuts.ts`, read by the key handler
+(`useGlobalShortcuts`), by the sheet that `?` opens, and by the palette's key
+hints — the sheet is generated from what it documents. `T` theme, `[` sidebar,
+`E` export, and `G` then H / M / R / C / B / D / P / T / 2 / F for Home, Meta,
+Recent Battles, Deck Counter, the three deck tools, Team Analysis, 2v2 and the
+field book. Single keys stand aside while the reader is typing in a field,
+while a modifier is held, and while any modal dialog is open; Ctrl K works from
+inside a field, because reaching the palette from where you are is its point.
+
+### Undo and redo in the three deck tools
+
+Clear, Reset, removing a deck and deleting a Counter Palette folder were all
+permanent, and deck edits sync to every device an account uses — so one wrong
+press was lost everywhere at once. Royal Duels, Deck's Home and Counter
+Palette each have Undo and Redo now, as a pair of buttons and as Ctrl Z /
+Ctrl Shift Z (Ctrl Y too).
+
+- **Three histories, not one** (`state/deckHistory.ts`). With one shared stack,
+  Ctrl Z on the duel builder would undo an edit made on Deck's Home ten minutes
+  earlier, on a screen the reader is not looking at. The listener lives in the
+  Undo buttons, so a screen has the keys exactly while it shows them.
+- **A step is a snapshot, not a diff.** The scope's state before the action and
+  a label for it ("Remove Hog Rider", "Clear Deck 2", "Delete Bait"). The store
+  never mutates, so unchanged decks are shared references and a snapshot costs
+  almost nothing; and a snapshot cannot be replayed wrongly the way an inverse
+  can for the conditional actions (a swap, a refused champion, a paste). Fifty
+  a tool.
+- **Load and Reset are undoable**, because loading a saved group over unsaved
+  work used to lose it; the duels snapshot carries the tab and the loaded
+  group as well as the cards. **Deleting a folder is undoable**, because it
+  takes every deck inside it.
+- **Nothing is recorded for an action that changed nothing** — removing from
+  an empty slot, renaming to the same name — so Undo never walks through dead
+  steps.
+- **Runtime only, and cleared by a sync pull.** Not in `partialize`, so the
+  persist version does not move and a reload starts clean. When a pull replaces
+  the decks from the cloud, every step on record describes decks that are
+  gone, and undoing one would write them back over the pull and push them up.
+- Undo propagates to other devices like any other edit, because it changes the
+  same fields the push already watches; a history-only change pushes nothing.
+- **Inside a text field Ctrl Z is the browser's own**, which is the one the
+  reader means while typing.
+
+### How it was verified
+
+`tests/deckUndo.test.ts` drives the REAL store (the account and sync modules
+mocked, since neither loads in plain node): undo and redo with labels, the
+three scopes kept apart, no-ops recorded as nothing, Clear and Reset brought
+back, a deleted palette folder returning with its decks, a removed Deck's Home
+deck returning, the selection dropped on a step, and history absent from
+`partialize`. `tests/commandPalette.test.ts` covers the matcher, the tag
+reader, the shortcut table (no key doing two things) and the key helpers.
+
+**32 of 32 in a browser**, signed out: Ctrl K and `/` open and toggle, focus in
+the field, groups in order, "dz" finds Duel Zone with D and Z marked, a typed
+tag opens that player, a tool runs from Enter, G pairs navigate, T and [ work,
+letters typed in a field stay letters, `?` lists all 18 shortcuts, E says when
+there is nothing to export and presses the export on a player screen, a placed
+card arms Undo with its name, Ctrl Z takes it back and says so, Ctrl Shift Z
+puts it back, Deck's Home's history is its own, Reset can be undone, Copy link
+lands on the clipboard, the palette lists a player just opened under Recent
+players, and it fits a 390px screen. No page errors.
+
+1,111 vitest across 48 files. Main bundle **350.22 to 357.91 kB gzip**, CSS
+**51.94 to 53.02**. The palette is deliberately NOT lazy: a first Ctrl K that
+waited on a chunk would reopen the keystroke race above.
+
+**Traps**: a "Reset" locator matched the card library's filter reset as well
+as the header's; and the probe for the notice read the Undo line's status
+first, since both are `role="status"`.
+
 ---
 
 ## The UI pass — surfaces, selection and navigation
@@ -7804,7 +7919,7 @@ push.
 
 ## Testing and verification
 
-**3,384 Python checks across 59 suites** and **1,079 vitest tests across 46
+**3,384 Python checks across 59 suites** and **1,111 vitest tests across 48
 files**, counted on 2026-09-28 (the new suite and the four new vitest files on
 top of a full run on 2026-09-27); the only failure
 is the known, accepted `test_ml_21a` `123 != 122`. (It was 1,386 across 38 and
@@ -7852,7 +7967,7 @@ weeks as one line among eighteen.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 1,079 tests in 46 files (2026-09-28)
+npm run test                      # 1,111 tests in 48 files (2026-09-28)
 python server/test_matchup_fusion.py # 34 checks — the fused rate's arithmetic and fitted constants
 python server/test_duel_index.py  # 60 checks — duel games, records, version cells; synthetic db
 python server/test_team_analysis.py # 163 checks — both tabs, the duel brain and fused-rate wiring
@@ -8190,9 +8305,9 @@ never on a keystroke** — the endpoint takes no query, so a per-keystroke reque
 would learn nothing, and this field is chrome on every screen. A failure is
 silent; the typed tag works without it.
 
-`⌘K` still focuses it, with one extra step: the collapsed pill has no input to
-focus, so the shortcut clicks the pill open and the component's own auto-focus
-takes it from there.
+`⌘K` used to focus it, clicking the collapsed pill open first. Since
+2026-09-28 it opens the command palette instead, which accepts a tag too; the
+pill is the visible, clickable way in.
 
 **It wears the page, not the inverse of it.** shadcn's convention paints a
 control in the page's *text* colour with the ground showing through the letters,
@@ -14165,6 +14280,17 @@ src/
   state/recentPlayers.ts      the last eight players this browser opened.
                               localStorage, never synced; recorded only when a
                               screen shows the player is real
+  components/CommandPalette/  Ctrl K / ⌘K: the palette, the shortcut sheet on
+                              "?", and the shell's key handler. The shortcuts
+                              are one table in utils/shortcuts.ts; matching is
+                              utils/commandSearch.ts. Both NO IMPORTS
+  components/Undo/UndoControls.tsx
+                              Undo / Redo buttons and Ctrl Z for one deck tool;
+                              the listener lives here, so a screen has the keys
+                              exactly while it shows them
+  state/deckHistory.ts        the undo stacks: three scopes, snapshots, 50 a
+                              tool, runtime only. NO IMPORTS
+  utils/keys.ts               Ctrl vs ⌘, "is the reader typing", undo keys
   components/Auth/gatePreview.ts
                               which blurred screen each sign-up gate shows. Its
                               own module so GateCard.tsx keeps fast refresh

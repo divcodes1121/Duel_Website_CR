@@ -49,7 +49,8 @@ export function TopSearch({
   inputRef,
 }: {
   onGo: (tag: string) => void;
-  /** So ⌘K can still reach the field. It only exists once expanded. */
+  /** A handle on the field, which only exists once expanded. The shell no
+   *  longer passes one: ⌘K opens the command palette now (2026-09-28). */
   inputRef?: React.MutableRefObject<HTMLInputElement | null>;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
