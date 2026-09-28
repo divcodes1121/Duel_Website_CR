@@ -5606,6 +5606,12 @@ indicator — so the label went to full-contrast `--text` and the hue stayed on 
 rule. Meaning still never rests on hue alone: the selected label is brighter,
 heavier *and* ruled.
 
+(2026-09-28: there are no underline tabs left. Every tab strip on the site is
+`components/ui/tabs.tsx`, a pill track with a `--solid-violet` slab and white
+type, so all of them follow the pill rule above. See [One tab component, a
+card inspect sheet](#one-tab-component-a-card-inspect-sheet-and-motion-that-stays-out-of-the-way-2026-09-28).
+The top bar's dock keeps its rule, as described below.)
+
 The home screen's green **Analyze** button was the same bug in a different hue:
 `#34D399` fill with near-black text. It is `--solid-green` with white now, 5.48:1.
 

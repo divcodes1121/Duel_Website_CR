@@ -68,6 +68,24 @@
 >   `rate_for_threat` is optional and the field plan does not pass it), route
 >   count **25** (the admin tracking view took the 25th).
 >
+> **Further superseded, 2026-09-28 (`db1767f`, `1ee2be7`, `68e5b7f`), all
+> client-side and none of it changing a figure these screens print:**
+>
+> * **The chart cards' tabs are the site's tab strip now.** `DashTabs` wraps
+>   `components/ui/tabs.tsx`, so the roster, each player's Overview, `#/my`
+>   and the console show "selected" as a violet slab like every other screen,
+>   not TailAdmin's white one.
+> * **Any card on these screens opens the card inspect sheet** when tapped or
+>   clicked (it is mounted beside every route in `App.tsx`), unless the card
+>   sits inside a button or a link. From here it carries no record, only the
+>   catalogue's facts; the roster's own figures stay where they are.
+> * **Deck actions gained "Save as an image"** (`1ee2be7`), so every deck the
+>   roster draws with Copy link can also be saved or shared as a 1200x630
+>   picture.
+> * **STILL TRUE:** the RLS gap above.
+> * Counts today: **6 tabs**, **1,141 vitest** (51 files), **204 Python
+>   checks** in `test_coach_daily`, route count **25**.
+>
 > What is still accurate here: the data model, the RLS boundary, the evidence
 > floors and the "no score, no rating" contract.
 

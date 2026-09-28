@@ -277,7 +277,7 @@ happily against a server that never called it.
 | `GET /api/analytics/status` | which tiers are readable and their sizes, plus `cardData {loaded, count, error}` — **the only unauthenticated route, and the one place that says whether the service can actually answer.** Check it after every deploy |
 | `GET /api/analytics/suggest` | a few real tags with the most stored battles |
 | `GET /api/analytics/coverage?tag=` | earliest/latest stored day, globally and per player |
-| `GET /api/analytics/player/<tag>` | summary, top decks, per-day trends |
+| `GET /api/analytics/player/<tag>` | summary, top decks, per-day trends. Since 2026-09-28 each deck's day carries `games` beside its rates, so the client can pool a trend by games played instead of averaging an unplayed day in as 0% (`test_player_trends.py`) |
 | `GET /api/analytics/duels/<tag>` | card combinations in duel play, three tabs |
 | `GET /api/analytics/duelzone/<tag>` | duel series log (Bo3/Bo5) + deck sequence |
 | `GET /api/analytics/cards/<tag>` | per-card use/win rate + movement (`?mode=`) |

@@ -13,6 +13,10 @@ carries the full reasoning; this is the short version plus what to do next.
 > **Updated 2026-09-27** with what shipped since that reaches these screens —
 > the dashboard shell, the duel brain, the three-slot rule and the fused
 > matchup rate — and the one new decision it leaves.
+>
+> **Updated 2026-09-28** with the interface pass (four commits, client-side
+> except one additive server field). Nothing in it changes a coaching figure;
+> the list of what reaches these screens is in the table below.
 
 ## Where things stand
 
@@ -24,7 +28,7 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **1,036 vitest** (42 files), **3,374 Python checks** across 58 suites (one known failure, `test_ml_21a`), route count **25** — counted 2026-09-27 night |
+| Tests | **1,141 vitest** (51 files), **3,384 Python checks** across 59 suites (one known failure, `test_ml_21a`), route count **25** — counted 2026-09-28 |
 
 ## What the field plan answers
 
@@ -68,6 +72,10 @@ Backups on the VPS: `team_*.py.bak-20260925-152203-presquad`,
 | `fdce37e` | **one matchup rate per threat LIST, ladder and duels together**, weights fitted on a duel holdout (0.6873 -> 0.6793 log loss) | the **Opponent** tab's rates; the field plan does NOT use it yet |
 | `c3309c6` | **Coach Assist's tuner fields every special slot and opens to Pro** (`isPaid`, never Members) — a screenshot caught a plain Bandit in slot 2 | none directly |
 | `93e45e2` | **Coach Assist reads real duels** (the fused rate on every pairing, one of three options held for a legal duel-proven deck) and **Deck vs Deck on the home Deck Counter** | none directly — Coach Assist is its own screen; the roster's Opponent tab already read Team Analysis |
+| `44e8b28` | **the interface pass, part 1**: Player Analysis trends pool by games (server adds `games` per day), tables fit a laptop, recent players, a form strip on Recent Battles, blurred previews behind sign-up gates | none directly |
+| `db1767f` | **a command palette (Ctrl K), keyboard shortcuts, undo/redo** in the three deck tools | the palette reaches every screen, including these |
+| `1ee2be7` | **save a deck as a picture**, fill a deck legally, an elixir curve per deck, meta movement badges (live from 2026-09-30) | every deck drawn with Copy link here can be saved as an image |
+| `68e5b7f` | **one tab component**, the card inspect sheet, route cross-fades, landing depth; the phone pass moved Deck Counter's and Duel Zone's deck buttons under the cards | the chart cards' tabs are the violet slab; a tapped card opens the inspect sheet |
 
 Backups on the VPS for the last three:
 `{app,team_analysis}.py.bak-20260927-035602-preduel`,
