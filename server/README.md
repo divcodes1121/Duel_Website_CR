@@ -178,6 +178,12 @@ one verified copy a day in `/var/backups/deckkies/` and keeps only the newest:
    sampler state. The cluster/duel indexes are left out — they rebuild;
 4. it REFUSES when the disk cannot hold the output plus 20 GB.
 
+**First run, 2026-09-29** (copy mode, `--full`): 57.16 GB snapshot in ~5 min
+with the bot writing; `integrity_check` **ok** (~45 min on the shared spinning
+disk); compressed to **7.12 GB (8:1)**; extras 276 MB; battles 21,366,792,
+battle_raw 1,894,365, duel_timeline 1,869,851, tracked 5,446. Duel raw in the
+live file: 156,033 rows, 2026-06-01 -> today.
+
 **Off the box**: `deploy/pull-backup.ps1` runs as a daily Windows scheduled task
 on the owner's PC, downloads the newest copy to `C:\DeckkiesBackups`, re-hashes
 it, runs `zstd -t`, keeps two, and only then calls `db_backup.py --mark-pulled`,

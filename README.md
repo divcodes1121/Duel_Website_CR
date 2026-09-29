@@ -1291,11 +1291,20 @@ tracked players, so the console recomputes this daily.
 now streams a consistent snapshot (one read transaction: `quick_check`, then
 every page into zstd), verifies the archive and its SHA-256, adds the bot's code
 and `.env`, the env files, the units and the service's irreplaceable state,
-and keeps one on the box. **A Windows scheduled task on the owner's PC**
+and keeps one on the box (the first: 57.2 GB -> **7.1 GB**, full `integrity_check` ok). **A Windows scheduled task on the owner's PC**
 (`deploy/pull-backup.ps1`, 10:30 IST) downloads it, re-hashes it, keeps two, and
 confirms it to the VPS; the console says how long ago that last happened.
 The bot's own code was also only on the VPS (the 2v2 guard and raw-cap
 interlock were never committed) — both are in its private repo now.
+
+**The 152 GB was deleted only after five checks** (2026-09-29 12:07 UTC): the
+new backup passed a full `integrity_check`; the live file holds at least as many
+battles as either old copy in every month; duel raw is intact (156,033 rows,
+2026-06-01 -> today, up from 115,402 on 09-17); the bot's code and config are
+in the backup's extras; and the owner's PC downloaded both files, matched the
+SHA-256 and ran `zstd -t`, which the VPS accepted. Disk: **221 GB -> 70 GB
+used, 318 GB free**. What the old copies held beyond the live file was raw
+payloads the purge valves had already removed on purpose.
 
 **The Data lifecycle view** (`#/admin/lifecycle`) reads only
 `server/.data_ledger.db`: data in and out per day, players who lost a day (and
