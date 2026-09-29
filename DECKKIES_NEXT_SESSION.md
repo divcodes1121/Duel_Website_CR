@@ -28,7 +28,7 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **1,159 vitest** (52 files), **3,448 Python checks** across 61 suites (one known failure, `test_ml_21a`), route count **26** — counted 2026-09-29 |
+| Tests | **1,159 vitest** (52 files), **3,457 Python checks** across 61 suites (one known failure, `test_ml_21a`), route count **26** — counted 2026-09-29 |
 | Storage jobs | daily timers on the VPS: retention (one battle-day a run, nothing due until 2027-04-02), ladder raw 72 h, 2v2 raw 24 h, verified backup pulled to the owner's PC — the console's Data lifecycle view shows all four |
 
 ## What the field plan answers

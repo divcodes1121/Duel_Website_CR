@@ -1981,7 +1981,8 @@ games_left=)` passes the spent cards to `rank`, `compose` AND `loadout` — the
 loadout was missed and offered game-1 cards back after "narrow it down".
 `suggest` passes `games_left = DUEL_GAMES - stage`; the loadout is that many
 decks, `None` with one game left, and carries `size`. `test_coach.py` pins the
-caller with a fake `deck_tuner` in `sys.modules`.
+caller with a fake `deck_tuner` in `sys.modules`. Live as `be6d8b8`; the live
+re-check at games 2 and 3 found 0 spent cards in any list.
 
 **`expected.vs` AND `vs` ON COMPOSED/LOADOUT DECKS (2026-09-25).** Per-archetype
 chips for the Suggestion screen: `_vs_from_per` (grouped by `_archetype`,

@@ -366,7 +366,8 @@ seed its no-shared-cards set, `size` is `3 - stage`, and with one game left
 there is no loadout (a one-deck loadout is the composer's list again). The
 payload carries `size`; the screen titles a two-deck one "The rest of your
 duel". `test_coach.py` pins the caller with a fake tuner, `test_deck_tuner.py`
-the function; both fail on the old code.
+the function; both fail on the old code. Live as `be6d8b8`, re-checked on
+the live API at games 2 and 3: 0 spent cards in any list.
 
 ### Choosing six FOR THIS PLAYER — `personalise` (2026-09-25)
 
