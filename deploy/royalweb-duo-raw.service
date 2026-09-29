@@ -15,8 +15,8 @@
 # than the window. It counts duel raw before and after and raises if the number
 # moved. An unreadable or empty cursor means delete nothing.
 #
-# THIS IS THE ONLY UNIT IN THIS PROJECT THAT WRITES TO THE BOT'S DATABASE. Every
-# other path opens it mode=ro, which is why the gate lives on this unit and not
+# ONE OF THE TWO UNITS IN THIS PROJECT THAT WRITE TO THE BOT'S DATABASE (the
+# other is royalweb-retention). Every other path opens it mode=ro, which is why the gate lives on this unit and not
 # in /etc/royalweb.env: `royalweb` itself must never be able to delete.
 Description=Deckkies 2v2 raw payload window (24h)
 After=network-online.target

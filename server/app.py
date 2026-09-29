@@ -31,6 +31,8 @@ Endpoints
     GET /api/analytics/track/pending       tags queued but not yet enrolled
     GET /api/analytics/admin/tracking      who was queued, from where, and
                                            whether the bot has them (admin)
+    GET /api/analytics/admin/retention     what the retention and backup jobs
+                                           did, day by day (admin)
 
 Every handler answers 200 with a useful body or a JSON error; the drive being
 unplugged is a normal state, not a failure.
@@ -64,6 +66,8 @@ import recruit  # noqa: E402
 import team_analysis as teams  # noqa: E402
 import admin_auth  # noqa: E402
 import coach_intel  # noqa: E402
+import data_ledger  # noqa: E402
+import retention  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
@@ -1019,6 +1023,32 @@ class Handler(BaseHTTPRequestHandler):
                 out = tracking.activity(days=days)
                 out["drainBatch"] = recruit.DRAIN_BATCH
                 out["bulkQueueCap"] = recruit.BULK_QUEUE_CAP
+                return self._send(out)
+
+            # THE CONSOLE'S DATA LIFECYCLE VIEW: what `retention.py` deleted
+            # (one battle-day at a time), the daily snapshots of the database,
+            # and every backup with when an off-box copy was confirmed. Drawn
+            # entirely from `server/.data_ledger.db` — this route never reads
+            # the bot's database. Admin-gated like tracking: it is operational
+            # detail about the box, not something the injected key should hand
+            # to anyone.
+            if path == "/api/analytics/admin/retention":
+                verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
+                if verdict != "ok":
+                    self._outcome = "auth_failed"
+                    return self._send({"error": verdict}, admin_auth.STATUS[verdict])
+                q = parse_qs(parsed.query)
+                try:
+                    days = int((q.get("days") or ["120"])[0])
+                except ValueError:
+                    days = 120
+                out = data_ledger.report(days=days)
+                out["settings"] = {
+                    "retentionDays": retention.RETENTION_DAYS,
+                    "minRetentionDays": retention.MIN_RETENTION_DAYS,
+                    "maxDaysPerRun": retention.MAX_DAYS_PER_RUN,
+                    "bot": retention.bot_settings(),
+                }
                 return self._send(out)
 
             if path.startswith("/api/analytics/admin/coach/intel/"):

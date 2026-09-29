@@ -5,22 +5,27 @@ import { useAccountStore } from '../../state/accountStore';
 import { useAccess } from '../../state/gate';
 import { isSupabaseConfigured } from '../../state/supabase';
 import {
+  backupVerdict,
   battleVerdict,
+  botAgreementVerdict,
   consoleSection,
   coverageVerdict,
   diskVerdict,
   rebuildVerdict,
+  retentionRunVerdict,
   retentionVerdict,
   siteVerdict,
   worst,
   type ConsoleSection,
 } from '../../state/consoleHealth';
 import { DashShell, ShellButton, type ShellGroup, type ShellItem } from '../ui/dash-shell';
-import { DatabaseIcon, DiskIcon, GridIcon, LayersIcon, RadarIcon, RefreshIcon, UsersIcon } from '../ui/dash-icons';
+import { ArchiveIcon, DatabaseIcon, DiskIcon, GridIcon, LayersIcon, RadarIcon, RefreshIcon, UsersIcon } from '../ui/dash-icons';
+import { lastRun, latestPulled, latestVerified } from '../../state/dataLifecycle';
 import { CoachIcon, GlobeIcon, HomeIcon } from '../Dashboard/icons';
 import { AccountsView } from './AccountsView';
 import { CollectionView, RollupView, SiteView, StorageView, VPS_DISK_BYTES } from './ConsoleSections';
 import { ConsoleSummary } from './ConsoleSummary';
+import { LifecycleView } from './LifecycleView';
 import { TrackingView } from './TrackingView';
 import styles from './AdminConsole.module.css';
 
@@ -42,9 +47,15 @@ import styles from './AdminConsole.module.css';
  * thresholds its cards use (`consoleHealth.ts`), so the two cannot disagree.
  * Only warnings and faults get a dot.
  *
- * TRACKING IS NEW: who was queued for collection, from which screen, and
- * whether the bot has picked them up (`TrackingView.tsx`, from the admin-gated
+ * TRACKING: who was queued for collection, from which screen, and whether the
+ * bot has picked them up (`TrackingView.tsx`, from the admin-gated
  * `/api/analytics/admin/tracking`).
+ *
+ * DATA LIFECYCLE (2026-09-29): what comes in, what the rolling retention job
+ * removes one battle-day at a time, and whether a verified backup exists off
+ * the box (`LifecycleView.tsx`, from `/api/analytics/admin/retention`). Its dot
+ * is the worst of the backup, the last retention run and whether the bot has
+ * handed deletion over.
  *
  * The console refuses non-admins itself, and the database refuses them again
  * underneath — hiding it is a courtesy, not the boundary.
@@ -65,6 +76,7 @@ const HEAD: Record<ConsoleSection, { title: string; subtitle: string }> = {
   tracking: { title: 'Tracking', subtitle: 'Who was queued for collection, from where, and whether the bot has them' },
   collection: { title: 'Collection', subtitle: 'Whether battles are still arriving, and how the last poll went' },
   storage: { title: 'Storage', subtitle: 'The database file, its free pages and the volume it sits on' },
+  lifecycle: { title: 'Data lifecycle', subtitle: 'What comes in, what retention removes day by day, and the backups' },
   rollup: { title: 'Rollup', subtitle: 'How far the aggregates have drifted behind the live table' },
   site: { title: 'Site & domain', subtitle: 'The deployment, the analytics API and what they can reach' },
   accounts: { title: 'Accounts', subtitle: 'Every account, its tier and the controls that change it' },
@@ -83,7 +95,7 @@ export function AdminConsole() {
   const profile = useAccountStore((s) => s.profile);
   const resolved = !isSupabaseConfigured || (accountReady && (!userId || profile !== null));
 
-  const { users, health, analytics, analyticsMs, collection, tracking, loading, error, load } = useAdminStore();
+  const { users, health, analytics, analyticsMs, collection, tracking, lifecycle, loading, error, load } = useAdminStore();
   const section = consoleSection(useHash());
 
   useEffect(() => {
@@ -134,6 +146,13 @@ export function AdminConsole() {
     ),
     rollup: ops?.aggregates ? worst(coverageVerdict(ops.aggregates.coveragePct), rebuildVerdict(ops.aggregates.lastRebuild)) : null,
     site: worst(siteVerdict(health, analytics)),
+    lifecycle: lifecycle
+      ? worst(
+          backupVerdict(latestVerified(lifecycle.backups)?.finished_at, latestPulled(lifecycle.backups)?.pulled_at),
+          retentionRunVerdict(lastRun(lifecycle.runs, 'retention')),
+          botAgreementVerdict(lifecycle.settings),
+        )
+      : null,
   };
 
   const item = (id: ConsoleSection, icon: JSX.Element, extra: Partial<ShellItem> = {}): ShellItem => ({
@@ -156,6 +175,7 @@ export function AdminConsole() {
         }),
         item('collection', <DatabaseIcon />, { status: dots.collection ?? undefined }),
         item('storage', <DiskIcon />, { status: dots.storage ?? undefined }),
+        item('lifecycle', <ArchiveIcon />, { status: dots.lifecycle ?? undefined }),
         item('rollup', <LayersIcon />, { status: dots.rollup ?? undefined }),
         item('site', <GlobeIcon size={18} />, { status: dots.site ?? undefined }),
         item('accounts', <UsersIcon />, { badge: users.length || undefined }),
@@ -201,6 +221,7 @@ export function AdminConsole() {
       {section === 'tracking' && <TrackingView />}
       {section === 'collection' && <CollectionView collection={collection} />}
       {section === 'storage' && <StorageView collection={collection} analytics={analytics} />}
+      {section === 'lifecycle' && <LifecycleView />}
       {section === 'rollup' && <RollupView collection={collection} />}
       {section === 'site' && <SiteView health={health} analytics={analytics} analyticsMs={analyticsMs} />}
       {section === 'accounts' && <AccountsView />}

@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Deckkies database backup daily
+
+[Timer]
+# 02:30 UTC, after the retention run, so the copy is of the database as it will
+# stand for the day, and ahead of the PC's pull later in the (IST) morning.
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=900
+Persistent=true
+Unit=royalweb-backup.service
+
+[Install]
+WantedBy=timers.target

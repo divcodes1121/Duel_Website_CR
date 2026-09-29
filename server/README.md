@@ -80,7 +80,7 @@ Mirrors the bot's own model (`Clash_Bot/clashdb.py`, `Clash_Bot/archive.py`):
 
 | Tier | Path | Role |
 |------|------|------|
-| Hot (production) | `/var/clashbot/battles.db` | what the VPS reads. ~18 GB, **304-day (10-month) window** set 2026-08-26 |
+| Hot (production) | `/var/clashbot/battles.db` | what the VPS reads. **57 GB / 21.4M battles on 2026-09-29**, **304-day (10-month) window**, deleted one battle-day at a time by `retention.py` |
 | Hot (local default) | `H:\ClashBot\data\battles.db` | rolling window (150 days), ~11.5 GB |
 | Archive (local only) | `H:\ClashArchive\archive.db` | every battle ever, ~46 GB |
 
@@ -124,6 +124,85 @@ because each 4 KB page costs a seek. The bot repaged its database to 32 KB
 pages to close most of the gap. Warm queries match or beat the old SSD; cold
 ones do not, so the two background snapshots (meta, counter) matter more than
 they used to — they are what keeps a request off the disk.
+
+### Retention: one battle-day at a time (`retention.py`, 2026-09-29)
+
+**A battle is kept for `CLASH_RETENTION_DAYS` (304 = 10 months) whole days
+after the day it was PLAYED, and removed the next day.** Each daily run
+(`royalweb-retention.timer`, ~01:30 UTC) removes the oldest battle-day that has
+passed that line — and at most `CLASH_RETENTION_MAX_DAYS` (3) of them. So every
+player keeps their own last ten months, and nothing is ever cut as a range.
+
+- **It replaced the bot's own delete.** `clashdb.apply_age_retention` removed
+  every battle past the boundary in ONE statement, and only at bot startup — a
+  bot that ran three weeks would have dropped three weeks at once on its next
+  restart, holding the write lock on the whole file. The bot now has
+  `CLASH_RETENTION_EXTERNAL = on` in `/opt/clashbot/.env` and skips that step
+  (commit `02a9816` in the bot's repo). **Both env files must carry the same
+  `CLASH_RETENTION_DAYS`**: the bot still uses it to cap its own read windows,
+  and the console flags a mismatch.
+- **Guards**: a day must be wholly behind the bot's aggregation watermark
+  (`retention_meta.cutoff`), or its rows would vanish from every per-player
+  figure too; a window under 90 days is refused outright; 2v2 raw goes only
+  behind the fold cursor; deletes are batched 5,000 rows a transaction.
+- **What a day takes**: its `battles`, `duel_timeline` and `battle_raw` rows.
+  Aggregates (`player_stats_agg` …) are NOT unfolded — they already counted it.
+- **Changing the window**: lengthening (10 -> 12 months) deletes nothing for the
+  extra months; shortening (12 -> 10) makes ~61 days due, drained at two extra
+  days a run over about a month rather than in one delete.
+- **Nothing is due until 2027-04-02** (oldest battle 2026-06-01). Until then
+  every run reports `nothing_due` and still takes the day's snapshot.
+- Deleting needs `CLASH_RETENTION_PURGE=on`, which is on the UNIT, not in
+  `/etc/royalweb.env` — `royalweb` itself can never delete. It is one of the two
+  units that write to the bot's database (with `royalweb-duo-raw`).
+
+### Backups (`db_backup.py`, `tools/dbstream`, 2026-09-29)
+
+Until 2026-09-29 there was **no backup** — three one-off pre-cleanup copies
+(152 GB) sat on the same disk. `royalweb-backup.timer` (~02:30 UTC) now makes
+one verified copy a day in `/var/backups/deckkies/` and keeps only the newest:
+
+1. **stream mode** (default): `tools/dbstream` opens ONE read transaction, runs
+   `quick_check` on it, then writes every page of that same snapshot to stdout
+   into `zstd -3`. No uncompressed copy is ever written, so it needs room for
+   ~1/6 of the database — the only way backups keep working at a full window
+   (~260 GB projected on a 387 GB disk). `dbstream` is built from the official
+   SQLite amalgamation by `tools/build-dbstream.sh`, which checks SQLite's
+   published SHA3-256 (Ubuntu's libsqlite3 lacks `sqlite_dbpage`).
+   **copy mode** (`--copy`, or if `dbstream` is missing) uses the backup API
+   into a temp file and needs the database's size free;
+2. `zstd -t` re-reads the archive; SHA-256 recorded; a manifest JSON beside it;
+3. `extras-*.tar.zst` (mode 600): the bot's code and `.env`, `/etc/royalweb.env`,
+   the Caddyfile, every royalweb/clashbot unit, `.tracking.db`,
+   `.meta_history.db`, `.duo_pairs.db`, `.data_ledger.db`, `ml/results/`, the
+   sampler state. The cluster/duel indexes are left out — they rebuild;
+4. it REFUSES when the disk cannot hold the output plus 20 GB.
+
+**Off the box**: `deploy/pull-backup.ps1` runs as a daily Windows scheduled task
+on the owner's PC, downloads the newest copy to `C:\DeckkiesBackups`, re-hashes
+it, runs `zstd -t`, keeps two, and only then calls `db_backup.py --mark-pulled`,
+which the VPS accepts only when the hash matches. The console shows when an
+off-box copy was last confirmed. **A copy that only exists on the VPS is a
+rollback, not a backup.** Restore = `zstd -d battles-*.db.zst -o battles.db`.
+
+### The data ledger and the console (`data_ledger.py`)
+
+`server/.data_ledger.db` (gitignored) holds one row per battle-day deleted, one
+snapshot of the database a day (size, freelist, intake since the previous
+reading, oldest battle, battles by month, the next 30 days due to expire, raw
+payload rows and an estimated size), every job run and every backup.
+`/api/analytics/admin/retention` (admin-gated; route count **26**) serves it to
+the console's **Data lifecycle** view, so no request ever scans the bot's file.
+
+### Raw payloads are the part that is not bounded by a timer
+
+`battle_raw` is ~13 GB (1.89M rows, ~6.9 KB each) and grows ~4 GB a day,
+almost all ladder payloads. 2v2 raw has a daily window (`royalweb-duo-raw`),
+but **ladder raw is only purged at bot startup** (`enforce_raw_cap` fires
+whenever the whole file is over 25 GiB, which it always is). A bot left running
+for a month would add ~120 GB. A daily timer for non-duel raw — the same
+deletion the bot already performs at every restart — is the obvious fix and has
+NOT been built; it is the account holder's call.
 
 ## Configuration
 

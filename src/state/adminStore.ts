@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { coachToken } from './coachToken';
+import type { LifecycleReport } from './dataLifecycle';
 import { supabase } from './supabase';
 
 /**
@@ -186,8 +187,8 @@ export interface TrackingActivity {
 
 /** A refusal from the admin route, worded — the same four the roster's
  *  intel route words, because it is the same gate. */
-function trackingProblem(status: number, code: unknown): string {
-  if (status === 404) return 'The analytics server does not have the tracking route yet — its server half has not been deployed.';
+function trackingProblem(status: number, code: unknown, route = 'tracking'): string {
+  if (status === 404) return `The analytics server does not have the ${route} route yet — its server half has not been deployed.`;
   switch (code) {
     case 'unauthorized':
       return 'The analytics server could not verify your session. Sign out and in again.';
@@ -198,7 +199,7 @@ function trackingProblem(status: number, code: unknown): string {
     case 'unavailable':
       return 'The analytics server could not reach Supabase to check admin access. Try again in a moment.';
     default:
-      return `The tracking read failed (${status}).`;
+      return `The ${route} read failed (${status}).`;
   }
 }
 
@@ -214,9 +215,15 @@ interface AdminState {
   trackingDays: number;
   trackingLoading: boolean;
   trackingError: string | null;
+  /** The Data lifecycle view: what retention deleted and every backup. */
+  lifecycle: LifecycleReport | null;
+  lifecycleDays: number;
+  lifecycleLoading: boolean;
+  lifecycleError: string | null;
 
   load: () => Promise<void>;
   loadTracking: (days?: number) => Promise<void>;
+  loadLifecycle: (days?: number) => Promise<void>;
   setRole: (id: string, role: AdminUser['role']) => Promise<string | null>;
   setCoach: (id: string, value: boolean) => Promise<string | null>;
   endTrial: (id: string) => Promise<string | null>;
@@ -234,6 +241,10 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
   trackingDays: 30,
   trackingLoading: false,
   trackingError: null,
+  lifecycle: null,
+  lifecycleDays: 90,
+  lifecycleLoading: false,
+  lifecycleError: null,
 
   async load() {
     set({ loading: true, error: null });
@@ -241,6 +252,9 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
        rest: the overview's queue figures come from it, and a refusal there
        (an older server, a missing Supabase key) must not hold up the four. */
     void get().loadTracking();
+    /* A SIXTH, for the same reason: the sidebar's backup dot reads it, and a
+       server without the route must not hold up the rest. */
+    void get().loadLifecycle();
 
     /* All three in parallel and none allowed to sink the others: the users
        table, the deployment's config and the VPS's storage are three
@@ -311,6 +325,28 @@ export const useAdminStore = create<AdminState>()((set, get) => ({
     } catch (e) {
       if (get().trackingDays === d) {
         set({ trackingError: e instanceof Error ? e.message : 'The tracking read failed.', trackingLoading: false });
+      }
+    }
+  },
+
+  async loadLifecycle(days) {
+    const d = days ?? get().lifecycleDays;
+    set({ lifecycleLoading: true, lifecycleError: null, lifecycleDays: d });
+    try {
+      const base = import.meta.env.VITE_ANALYTICS_BASE ?? '';
+      const token = await coachToken();
+      const res = await fetch(`${base}/api/analytics/admin/retention?days=${d}`, {
+        headers: token ? { 'X-Coach-Token': token } : {},
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+        throw new Error(trackingProblem(res.status, body.error, 'retention'));
+      }
+      const data = (await res.json()) as LifecycleReport;
+      if (get().lifecycleDays === d) set({ lifecycle: data, lifecycleLoading: false });
+    } catch (e) {
+      if (get().lifecycleDays === d) {
+        set({ lifecycleError: e instanceof Error ? e.message : 'The retention read failed.', lifecycleLoading: false });
       }
     }
   },

@@ -108,6 +108,67 @@ export function siteVerdict(health: Health | null, analytics: AnalyticsStatus | 
   return { tone: 'good', label: 'Healthy' };
 }
 
+/* ── the data lifecycle: retention and backups ─────────────────────────── */
+
+/**
+ * THE BACKUP'S VERDICT, and the question is whether a copy exists OFF the box.
+ * The VPS makes one daily (~02:30 UTC) and the owner's PC pulls it later that
+ * morning, so a day and a half without a new copy means a run was missed, and
+ * three days without an off-box confirmation means the PC has not collected
+ * one. A copy that only exists on the VPS is a rollback, not a backup — that
+ * is a warning on its own.
+ */
+export function backupVerdict(
+  madeAt: string | null | undefined,
+  pulledAt: string | null | undefined,
+  now = Date.now(),
+): Verdict {
+  const made = hoursSince(madeAt, now);
+  if (made === null) return { tone: 'bad', label: 'No backup' };
+  const pulled = hoursSince(pulledAt, now);
+  if (pulled === null) return { tone: 'warn', label: 'Not off the box yet' };
+  if (pulled > 24 * 7) return { tone: 'bad', label: 'Off-box copy is old' };
+  if (pulled > 72) return { tone: 'warn', label: 'Off-box copy is stale' };
+  if (made > 36) return { tone: 'warn', label: 'Backup late' };
+  return { tone: 'good', label: 'Backed up' };
+}
+
+/**
+ * THE RETENTION JOB'S LAST RUN. A refusal or an error means battles past the
+ * window are not being removed (the disk grows) and needs a look; a dry run
+ * means the unit's gate is off. `nothing_due` is healthy — it is what every
+ * run says until the first battle-day expires.
+ */
+export function retentionRunVerdict(
+  run: { status: string; finished_at: string } | null | undefined,
+  now = Date.now(),
+): Verdict | null {
+  if (!run) return null;
+  if (run.status === 'error') return { tone: 'bad', label: 'Retention failed' };
+  if (run.status === 'refused') return { tone: 'bad', label: 'Retention refused' };
+  const h = hoursSince(run.finished_at, now);
+  if (h !== null && h > 36) return { tone: 'warn', label: 'Retention late' };
+  if (run.status === 'dry_run') return { tone: 'warn', label: 'Dry run only' };
+  return { tone: 'good', label: 'On schedule' };
+}
+
+/**
+ * THE BOT AND THIS JOB MUST AGREE. The bot's own delete runs at its startup
+ * unless it has handed retention over (`CLASH_RETENTION_EXTERNAL`), and it
+ * caps its own read windows at its own `CLASH_RETENTION_DAYS` — so a
+ * different number on each side is two policies on one table.
+ */
+export function botAgreementVerdict(
+  settings: { retentionDays: number; bot: { retentionDays: number | null; external: boolean | null } } | null | undefined,
+): Verdict | null {
+  if (!settings) return null;
+  if (settings.bot.external === false || settings.bot.external === null) {
+    return { tone: 'warn', label: 'Bot still deletes at startup' };
+  }
+  if (settings.bot.retentionDays !== settings.retentionDays) return { tone: 'warn', label: 'Windows disagree' };
+  return { tone: 'good', label: 'Handed over' };
+}
+
 /* ── accounts ───────────────────────────────────────────────────────────── */
 
 /**
@@ -166,7 +227,7 @@ export function signInBuckets(users: readonly Pick<AdminUser, 'last_sign_in_at'>
 /* ── the console's sections ─────────────────────────────────────────────── */
 
 /** The views in the console's sidebar, in their order there. */
-export const CONSOLE_SECTIONS = ['overview', 'tracking', 'collection', 'storage', 'rollup', 'site', 'accounts'] as const;
+export const CONSOLE_SECTIONS = ['overview', 'tracking', 'collection', 'storage', 'lifecycle', 'rollup', 'site', 'accounts'] as const;
 export type ConsoleSection = (typeof CONSOLE_SECTIONS)[number];
 
 /**

@@ -739,7 +739,11 @@ class RoutingUnchanged(unittest.TestCase):
         # Tracking view — who was queued, from which screen, and whether the
         # bot has them). Admin-gated like the intel route, because it lists
         # the tags people looked up; `TrackingAdminGate` below pins that.
-        self.assertEqual(len(routes), 25)
+        #
+        # 26 on 29 Sep 2026: `/api/analytics/admin/retention` (the console's
+        # Data lifecycle view — what the rolling retention job deleted, day by
+        # day, and every backup). Admin-gated; `RetentionAdminGate` pins it.
+        self.assertEqual(len(routes), 26)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]
@@ -878,6 +882,18 @@ class TrackingAdminGate(CoachRosterAdminGate):
 
     def _serve(self, mod):
         mod.tracking.activity = lambda days=30, limit=300: {"days": days, "requests": [], "probe": "#Y022GRCJQ"}
+        return serving(mod)
+
+
+
+class RetentionAdminGate(CoachRosterAdminGate):
+    """The console's data lifecycle view sits behind the same admin check."""
+
+    PATH = "/api/analytics/admin/retention"
+
+    def _serve(self, mod):
+        mod.data_ledger.report = lambda days=120: {"purges": [], "probe": "#Y022GRCJQ"}
+        mod.retention.bot_settings = lambda path=None: {"retentionDays": 304, "external": True}
         return serving(mod)
 
 

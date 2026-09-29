@@ -1,0 +1,40 @@
+[Unit]
+# Deletes battles once they are older than the retention window — ONE
+# BATTLE-DAY AT A TIME, oldest first, at most CLASH_RETENTION_MAX_DAYS (3) a run.
+#
+# WHY THIS UNIT AND NOT THE BOT. `clashdb.apply_age_retention` deletes every
+# battle past the boundary in one statement and runs only at bot startup, so a
+# bot that ran three weeks would drop three weeks at once on its next restart.
+# The bot has CLASH_RETENTION_EXTERNAL = on and skips that step.
+#
+# WHAT IT MAY DELETE: `battles`, `duel_timeline` and that day's `battle_raw`
+# for battle-days strictly older than today - CLASH_RETENTION_DAYS, and only
+# when the whole day is behind the bot's aggregation watermark (so every
+# per-player figure has already counted it). 2v2 raw only behind the fold
+# cursor. It refuses any window under 90 days. Every day it removes is recorded
+# in server/.data_ledger.db, which the admin console's Data lifecycle view draws.
+#
+# ONE OF THE TWO UNITS THAT WRITE TO THE BOT'S DATABASE (with
+# royalweb-duo-raw). The gate is on the UNIT, not in /etc/royalweb.env, so
+# `royalweb` itself can never delete. Without it a run is a dry run that still
+# takes the daily snapshot.
+Description=Deckkies rolling retention (one battle-day at a time)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+Environment=CLASH_RETENTION_PURGE=on
+ExecStart=/usr/bin/python3 -u retention.py --run
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+SuccessExitStatus=0
+TimeoutStartSec=7200
+StandardOutput=append:/var/log/clashbot/retention.log
+StandardError=append:/var/log/clashbot/retention.log
+
+[Install]
+WantedBy=multi-user.target

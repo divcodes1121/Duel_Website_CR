@@ -1554,6 +1554,28 @@ motion that stays out of the way" is the record.
 
 ---
 
+## The console's Data lifecycle view (2026-09-29)
+
+`#/admin/lifecycle`, `components/Admin/LifecycleView.tsx`, arithmetic in
+`state/dataLifecycle.ts` (no imports), verdicts in `state/consoleHealth.ts`.
+
+- **It draws only the ledger** (`/api/analytics/admin/retention`), so a
+  refresh never touches the bot's 57 GB file.
+- **A missing reading is a gap, never a zero.** "Written" on a day is the
+  battles since the previous daily reading; the first reading has none, and
+  with nothing measured and nothing deleted the chart is replaced by a sentence
+  rather than drawn as a flat line at zero.
+- **The capacity rows are an estimate and say so**: intake from the readings
+  (or this month so far), bytes per battle with raw payloads excluded (raw
+  churns and is shown on its own line), at the current window and the other of
+  10/12 months; >70% of the disk warns, >85% is a fault.
+- **The sidebar dot** is the worst of the off-box backup (none = fault; only on
+  the VPS = warning; confirmed >3 days ago = warning, >7 = fault), the last
+  retention run (refused/failed = fault, dry run = warning, `nothing_due` is
+  healthy) and whether the bot has handed deletion over at the same window.
+- Tables scroll inside their own frame on a phone; nothing else moves sideways
+  (verified at 390, both themes, on a real and a synthetic ledger).
+
 ## Working on this
 
 ```bash

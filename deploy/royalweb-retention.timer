@@ -1,0 +1,16 @@
+[Unit]
+Description=Run Deckkies rolling retention daily
+
+[Timer]
+# DAILY: one battle-day expires per calendar day, so one run a day keeps pace,
+# and MAX_DAYS_PER_RUN (3) lets it catch up after a missed day or a shortened
+# window at two extra days a run instead of in one delete.
+OnCalendar=*-*-* 01:30:00
+RandomizedDelaySec=1800
+# A missed run is caught up after a reboot; a late run is identical to an
+# on-time one because the boundary is a date.
+Persistent=true
+Unit=royalweb-retention.service
+
+[Install]
+WantedBy=timers.target

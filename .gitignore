@@ -138,3 +138,7 @@ shot-*.png
 server/.meta_history.db
 server/.meta_history.db-wal
 server/.meta_history.db-shm
+
+# Storage jobs ledger (retention.py / db_backup.py) — server state, never committed.
+server/.data_ledger.db
+server/.data_ledger.db-*
