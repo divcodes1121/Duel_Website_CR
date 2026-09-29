@@ -3515,8 +3515,9 @@ spanning both must land the server side first or the UI 404s.
 
 Do not move the database (33 GB, no native SQLite replication). An OIE-only
 extract measured at **~1.01 GB** (six columns over 60 days = 6,806,514 rows ×
-160 bytes). There is still **no backup of the VPS database**;
-`deploy/backup_db.py` exists and is unscheduled.
+160 bytes). There was no backup of the VPS database when this was written;
+since 2026-09-29 `royalweb-backup.timer` makes a verified daily one (see
+`server/README.md`, "Backups").
 
 ---
 
@@ -4422,11 +4423,13 @@ to its own `.tracking.db`, never to the bot's. **The Brain must not break this.*
 
 | store | engine | writer | notes |
 |---|---|---|---|
-| `battles.db` | SQLite ~33 GB | the bot only | mode=ro from here |
-| `battle_raw` | in the same file, ~44.7 GB | the bot only | `game_mode` has **no index** |
+| `battles.db` | SQLite, **57 GB / 21.4M battles on 2026-09-29** | the bot writes; three `server/` timers DELETE (below) | mode=ro from every request path |
+| `battle_raw` | in the same file; ~13 GB on 2026-09-29, bounded since then | the bot writes; ladder raw kept 72 h (`ladder_raw_purge.py`), 2v2 raw 24 h behind the fold cursor (`duo_raw_purge.py`), duel raw never deleted | `game_mode` has **no index** |
 | `archive.db` | SQLite, H: (unplugged) | the bot | 2026-05-01 → 2026-08-25, the only copy of that month |
 | `.duo_pairs.db` | SQLite | `duo_pairs.py` | the pattern to copy |
 | `.tracking.db` | SQLite | `tracking.py` | enrolment queue |
+| `.data_ledger.db` | SQLite | `retention.py`, `ladder_raw_purge.py`, `db_backup.py` | what the storage jobs deleted, daily DB snapshots, every backup; read by the console's Data lifecycle view |
+| backups | `/var/backups/deckkies/*.zst` + the owner's PC (`C:\DeckkiesBackups`) | `db_backup.py` daily, `deploy/pull-backup.ps1` | one verified copy on the VPS, two on the PC, hash-confirmed |
 | `shadow-log.jsonl` | JSONL, locked, rotated | `shadow.py` | 2,620 entries |
 | `brain-evidence/phase8/` | 34 files, 132 MB, gitignored | Brain Phase 12 (copied, never written to) | the Phase 8b/8c extract — **real player tags**, the only copy, hashes in its tracked `MANIFEST.md` |
 
@@ -4448,8 +4451,10 @@ a safer storage target than the census itself.
 5. Dedupe on a **battle identity built from the battle's own contents**,
    enforced by a primary key, not by hoping.
 6. Deploys by hand with `scp`, like the rest of `server/`.
-7. **No backup exists for anything on the VPS.** Anything the Brain cannot
-   recompute must be treated as at risk.
+7. **Since 2026-09-29 the bot's database and the service's irreplaceable state
+   are backed up daily** (verified, compressed, pulled to the owner's PC). A day
+   of loss is still possible, and the ML research evidence under
+   `brain-evidence/` is NOT in that backup — treat it as at risk.
 
 ---
 
@@ -4514,7 +4519,7 @@ a safer storage target than the census itself.
 
 | tripwire | file | current value |
 |---|---|---|
-| API route count | `server/test_api_security.py` | **22** |
+| API route count | `server/test_api_security.py` | **26** (2026-09-29) |
 | free sections matrix | `tests/entitlement.test.ts` | — |
 | release-note routes allowlist | `tests/releases.test.ts` | — |
 

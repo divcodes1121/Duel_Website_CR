@@ -28,7 +28,8 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **1,141 vitest** (51 files), **3,384 Python checks** across 59 suites (one known failure, `test_ml_21a`), route count **25** — counted 2026-09-28 |
+| Tests | **1,159 vitest** (52 files), **3,448 Python checks** across 61 suites (one known failure, `test_ml_21a`), route count **26** — counted 2026-09-29 |
+| Storage jobs | daily timers on the VPS: retention (one battle-day a run, nothing due until 2027-04-02), ladder raw 72 h, 2v2 raw 24 h, verified backup pulled to the owner's PC — the console's Data lifecycle view shows all four |
 
 ## What the field plan answers
 
@@ -220,7 +221,7 @@ was **dropped**. `progress()` recomputes instead.
 1. **Nothing would have written it.** The analytics service holds the Supabase
    **anon** key. Writing coach-owned rows needs the **service-role** key,
    which bypasses RLS on every table — on the same box as the bot and a 33 GB
-   database that still has no backup. A daily figure is not worth that blast
+   database that had no backup then (a daily one exists since 2026-09-29). A daily figure is not worth that blast
    radius.
 2. **A snapshot only holds the days somebody looked.** Recomputation holds
    every day the battles do, and answers for history that **predates the
