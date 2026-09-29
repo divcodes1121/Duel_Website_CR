@@ -277,6 +277,55 @@ def _archetype_title(archetype: str | None) -> str:
     return " ".join(w.capitalize() for w in key.replace("_", "-").split("-"))
 
 
+# `other` is not a family of decks, it is where the bot files a deck whose win
+# condition is not in its seventeen: Minion Giant, Goblin Giant, Elixir Golem,
+# Skeleton Barrel, Suspicious Bush. A deck NAME built on it read "Mixed Rune
+# Giant" — six of the meta board's fifty — when the deck plainly says what it
+# wins with. So a single deck in that bucket is named by the win-condition card
+# it holds (the priciest, if two), and a deck holding none by its priciest troop
+# or building, which is how players name those lists anyway ("Sparky").
+#
+# ONLY A DECK. The bucket itself stays "Mixed" wherever it is a row standing for
+# every such deck at once (a matchup against `other`, a share of the field) —
+# that row has no single card to be named after.
+_UNNAMED_ARCHETYPES = {"", "none", "other"}
+
+
+def _card_meta_for(cards: list[str]) -> dict:
+    # Deferred: duel_combos imports this module.
+    import duel_combos as dx
+    return {c: dx.card_info(c) for c in cards}
+
+
+def _named_card(archetype: str | None, cards: list[str],
+                card_meta: dict) -> str | None:
+    """The card an `other` deck is named after, or None when the archetype
+    already names it (or there are no cards to read)."""
+    if (archetype or "").strip().lower() not in _UNNAMED_ARCHETYPES or not cards:
+        return None
+
+    def rank(c):
+        return ((card_meta.get(c) or {}).get("elixir") or 0, c)
+
+    wins = [c for c in cards if (card_meta.get(c) or {}).get("is_win_condition")]
+    # No win condition: the priciest troop or building. A spell is what a deck
+    # is PLAYED with, not what it is — "Rocket" named nothing a reader knew.
+    bodies = [c for c in cards if not (card_meta.get(c) or {}).get("is_spell")]
+    return max(wins or bodies or cards, key=rank)
+
+
+def deck_title(archetype: str | None, cards: list[str] | None = None,
+               card_meta: dict | None = None) -> str:
+    """What ONE deck is called before any qualifier: its archetype, or — for a
+    deck the bot filed under `other` — the win-condition card it plays."""
+    cards = list(cards or [])
+    meta = card_meta if card_meta is not None else _card_meta_for(cards)
+    card = _named_card(archetype, cards, meta)
+    if card is None:
+        return _archetype_title(archetype)
+    return (meta.get(card) or {}).get("name") or card.replace("-", " ").title()
+
+
 def deck_name(archetype: str | None, cards: list[str], card_meta: dict) -> str:
     """A name that is actually unique in a list of decks.
 
@@ -292,11 +341,12 @@ def deck_name(archetype: str | None, cards: list[str], card_meta: dict) -> str:
 
     `card_meta` maps a card key to at least {name, elixir, is_win_condition}.
     """
-    base = _archetype_title(archetype)
+    base = deck_title(archetype, cards, card_meta)
+    named = _named_card(archetype, cards, card_meta)
     arch_key = (archetype or "").lower().replace("_", "-")
     best = None
     for c in cards:
-        if c == arch_key:
+        if c == arch_key or c == named:
             continue
         info = card_meta.get(c) or {}
         if info.get("is_win_condition"):
@@ -821,7 +871,7 @@ def player_report(tag: str, since: str | None = None, until: str | None = None) 
         decks.append(
             {
                 "rank": i + 1,
-                "name": _archetype_title(m["archetype"] if m else None),
+                "name": deck_title(m["archetype"] if m else None, h.split(",")),
                 "deckHash": h,
                 # PAYLOAD ORDER, not the hash. The hash is alphabetical, so
                 # splitting it scatters the three special slots (evolution /

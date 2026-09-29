@@ -1154,7 +1154,8 @@ def worth_learning(scored: list[dict], hist: dict[str, int], total: int,
     arch_of = {}
     for t in (threats or []):
         a = (t.get("archetype") or "").strip()
-        arch_of[t["key"]] = (dcx._label(a) if a else "") or t.get("name") or t["key"]
+        arch_of[t["key"]] = (cd.deck_title(a, t.get("cards")) if a else "") \
+            or t.get("name") or t["key"]
 
     ranked = []
     for g in fams:

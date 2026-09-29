@@ -2890,6 +2890,18 @@ bot's `ARCHETYPE_DISPLAY` map, so "xbow" reads as X-Bow and "bait" as Log Bait
 instead of being title-cased. **This renamed rows on the meta board too** —
 "Hog Musketeer" is now "Hog Rider Musketeer".
 
+**A deck the bot files under `other` is named by the win condition it holds**
+(2026-09-29). `other` is where Minion Giant, Goblin Giant, Elixir Golem, Skeleton
+Barrel and Suspicious Bush land, since none is in the bot's seventeen, and every
+such deck used to read "Mixed" — six of the live board's fifty ("Mixed Rune Giant"
+is now "Minion Giant Rune Giant") and the plain "Mixed" rows of Player Analysis
+(now "Minion Giant"). `clash_data.deck_title` owns it: the priciest win-condition
+card, or with none the priciest troop or building (never a spell — "Rocket" named
+nothing). It covers `deck_name` and every single-deck label in Team Analysis, the
+deck tuner and the field plan. **A row standing for the whole bucket still says
+Mixed** — a matchup against `other` or a share of the field has no one card to be
+named after. `test_meta.py` pins it.
+
 ---
 
 ## Cards — one player's whole card pool

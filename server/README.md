@@ -867,6 +867,12 @@ what the first version actually produced:
   six times on a fifty-row board. `_deck_name` appends the priciest
   non-win-condition card ("Hog Musketeer", "Hog Earthquake") — which is how
   players name these decks anyway.
+* **An `other` deck is named by its win condition, not "Mixed".**
+  `clash_data.deck_title`: the priciest win-condition card it holds (Minion
+  Giant, Goblin Giant, Elixir Golem, Skeleton Barrel, Suspicious Bush are the
+  ones outside the bot's map), else its priciest troop or building. Used by
+  `deck_name` and every place that labels ONE deck; a row for the whole `other`
+  bucket (matchups, shares) keeps "Mixed".
 
 Use rate is a share of **every** competitive battle in the window, including
 those on decks the floor rejects — it is a share of all play, not of the board.

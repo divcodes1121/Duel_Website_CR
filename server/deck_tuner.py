@@ -650,7 +650,8 @@ def compose(archetypes: list[str],
                 # THE DISPLAY NAME. The screen printed `archetype` raw —
                 # "xbow", "royal-giant", "bridge-spam" — beside screens that
                 # all say "X-Bow". Same fault a Team Scout screenshot caught.
-                "name": counter._label(_arch or counter._archetype_of_hash(d["hash"])),
+                "name": cd.deck_title(_arch or counter._archetype_of_hash(d["hash"]),
+                                      view["cards"]),
                 "floor": f,
                 "floorGames": fg,
                 "floorArchetype": fw,

@@ -462,7 +462,7 @@ def _archetypes_for(decks: list[dict]) -> None:
                 wc = "other"
             d["winCondition"] = wc
         if not d.get("name"):
-            d["name"] = dcx._label(wc)
+            d["name"] = cd.deck_title(wc, d.get("cards"))
 
 
 def _spread(decks: list[dict]) -> list[dict]:
@@ -534,7 +534,7 @@ def _threats(decks: list[dict], seeds: dict | None) -> dict:
     # the decks on the left of the folder.
     for th in out.get("threats") or []:
         if not th.get("name"):
-            th["name"] = dcx._label(th.get("archetype") or "other")
+            th["name"] = cd.deck_title(th.get("archetype") or "other", th.get("cards"))
         if th.get("basis") and not th.get("basisName"):
             th["basisName"] = dcx._label(th.get("archetype") or "other")
     return out
@@ -714,7 +714,7 @@ class _Candidate:
         self.cards = list(deck.get("cards") or [])
         self.key = ",".join(sorted(set(self.cards)))
         self.archetype = deck.get("winCondition") or "other"
-        self.name = deck.get("name") or dcx._label(self.archetype)
+        self.name = deck.get("name") or cd.deck_title(self.archetype, self.cards)
         self.art = deck.get("art") or {}
         # Both spellings exist upstream: `player_report` says `artInferred`,
         # the live log and the representatives say `inferredArt`.
@@ -888,7 +888,7 @@ def _scout_candidates() -> list["_Candidate"]:
                     "art": art,
                     "inferredArt": inferred,
                     "winCondition": arch,
-                    "name": dcx._label(arch),
+                    "name": cd.deck_title(arch, cards),
                     # No owner means no games piloted and no win rate of
                     # anyone's own. Left at zero rather than invented; `_score`
                     # never reads them for an ownerless candidate.
@@ -929,7 +929,7 @@ def _scout_candidates() -> list["_Candidate"]:
                     "cards": cards, "art": rep.get("art") or {},
                     "inferredArt": rep.get("inferredArt", False),
                     "winCondition": arch,
-                    "name": rep.get("name") or dcx._label(arch),
+                    "name": rep.get("name") or cd.deck_title(arch, cards),
                     "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
                 },
                 None,
@@ -1388,7 +1388,7 @@ def _duel_row(pick: dict, owner: dict | None, threats: list[dict], snap: dict | 
     wins = int(pick.get("wins") or 0) if owner else 0
     deck = {
         "cards": cards, "art": art, "inferredArt": inferred,
-        "winCondition": arch, "name": dcx._label(arch),
+        "winCondition": arch, "name": cd.deck_title(arch, cards),
         # AN OWN DUEL DECK'S PRACTICE IS THEIR DUEL GAMES WITH IT — the one
         # count of how often they have actually flown it.
         "matches": games, "wins": wins,

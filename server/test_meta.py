@@ -13,6 +13,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import clash_data as cd  # noqa: E402
 import meta  # noqa: E402
 
 PASS = 0
@@ -131,6 +132,40 @@ check(
     meta._deck_name("hog", ["hog-rider"], META) == "Hog Rider",
 )
 check("an unknown archetype does not crash", meta._deck_name(None, [], META) == "Unknown Deck")
+
+# `other` is the bot's bucket for win conditions outside its seventeen. A DECK
+# in it is named by the win condition it holds; "Mixed" named nothing. Six of
+# the live board's fifty read "Mixed <card>" on 2026-09-29.
+_OTHER = {
+    "minion-giant": {"name": "Minion Giant", "elixir": 4, "is_win_condition": True},
+    "skeleton-barrel": {"name": "Skeleton Barrel", "elixir": 3, "is_win_condition": True},
+    "suspicious-bush": {"name": "Suspicious Bush", "elixir": 2, "is_win_condition": True},
+    "rune-giant": {"name": "Rune Giant", "elixir": 4, "is_win_condition": False},
+    "rascals": {"name": "Rascals", "elixir": 5, "is_win_condition": False},
+    "skeletons": {"name": "Skeletons", "elixir": 1, "is_win_condition": False},
+    "sparky": {"name": "Sparky", "elixir": 6, "is_win_condition": False},
+    "cannon": {"name": "Cannon", "elixir": 3, "is_win_condition": False, "is_building": True},
+    "rocket": {"name": "Rocket", "elixir": 6, "is_win_condition": False, "is_spell": True},
+}
+_mg = ["minion-giant", "rune-giant", "skeletons"]
+check("an `other` deck is named by its win condition",
+      meta._deck_name("other", _mg, _OTHER) == "Minion Giant Rune Giant",
+      meta._deck_name("other", _mg, _OTHER))
+check("...and never prints Mixed",
+      "Mixed" not in meta._deck_name("other", _mg, _OTHER))
+check("two win conditions: the priciest names it, the other is not the qualifier",
+      meta._deck_name("other", ["suspicious-bush", "skeleton-barrel", "rascals"], _OTHER)
+      == "Skeleton Barrel Rascals")
+check("no win condition: the priciest troop or building, never a spell",
+      cd.deck_title("other", ["rocket", "cannon", "skeletons"], _OTHER) == "Cannon")
+check("no win condition: the named card is not repeated as the qualifier",
+      meta._deck_name("other", ["sparky", "rascals"], _OTHER) == "Sparky Rascals")
+check("the player table's plain title names the win condition too",
+      cd.deck_title("other", _mg, _OTHER) == "Minion Giant")
+check("a named archetype is untouched by the cards",
+      cd.deck_title("hog", ["hog-rider", "minion-giant"], _OTHER) == "Hog Rider")
+check("with no cards the bucket label stands (a row for every such deck)",
+      cd.deck_title("other", [], _OTHER) == "Mixed")
 
 
 _DD_META = {
