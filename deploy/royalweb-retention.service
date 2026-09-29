@@ -14,8 +14,8 @@
 # cursor. It refuses any window under 90 days. Every day it removes is recorded
 # in server/.data_ledger.db, which the admin console's Data lifecycle view draws.
 #
-# ONE OF THE TWO UNITS THAT WRITE TO THE BOT'S DATABASE (with
-# royalweb-duo-raw). The gate is on the UNIT, not in /etc/royalweb.env, so
+# ONE OF THE THREE UNITS THAT WRITE TO THE BOT'S DATABASE (with
+# royalweb-duo-raw and royalweb-ladder-raw). The gate is on the UNIT, not in /etc/royalweb.env, so
 # `royalweb` itself can never delete. Without it a run is a dry run that still
 # takes the daily snapshot.
 Description=Deckkies rolling retention (one battle-day at a time)

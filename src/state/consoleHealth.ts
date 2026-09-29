@@ -142,12 +142,13 @@ export function backupVerdict(
 export function retentionRunVerdict(
   run: { status: string; finished_at: string } | null | undefined,
   now = Date.now(),
+  what = 'Retention',
 ): Verdict | null {
   if (!run) return null;
-  if (run.status === 'error') return { tone: 'bad', label: 'Retention failed' };
-  if (run.status === 'refused') return { tone: 'bad', label: 'Retention refused' };
+  if (run.status === 'error') return { tone: 'bad', label: `${what} failed` };
+  if (run.status === 'refused') return { tone: 'bad', label: `${what} refused` };
   const h = hoursSince(run.finished_at, now);
-  if (h !== null && h > 36) return { tone: 'warn', label: 'Retention late' };
+  if (h !== null && h > 36) return { tone: 'warn', label: `${what} late` };
   if (run.status === 'dry_run') return { tone: 'warn', label: 'Dry run only' };
   return { tone: 'good', label: 'On schedule' };
 }

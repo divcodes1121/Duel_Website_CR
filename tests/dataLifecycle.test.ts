@@ -159,6 +159,7 @@ describe('the verdicts behind the sidebar dot', () => {
     expect(retentionRunVerdict({ status: 'dry_run', finished_at: at }, now)?.tone).toBe('warn');
     expect(retentionRunVerdict({ status: 'ok', finished_at: '2026-09-27T02:00:00Z' }, now)?.label).toBe('Retention late');
     expect(retentionRunVerdict(null, now)).toBeNull();
+    expect(retentionRunVerdict({ status: 'error', finished_at: at }, now, 'Raw window')?.label).toBe('Raw window failed');
   });
 
   it('the bot must have handed deletion over, at the same window', () => {

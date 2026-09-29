@@ -145,7 +145,8 @@ player keeps their own last ten months, and nothing is ever cut as a range.
   (`retention_meta.cutoff`), or its rows would vanish from every per-player
   figure too; a window under 90 days is refused outright; 2v2 raw goes only
   behind the fold cursor; deletes are batched 5,000 rows a transaction.
-- **What a day takes**: its `battles`, `duel_timeline` and `battle_raw` rows.
+- **What a day takes**: its `battles`, `duel_timeline` and any `battle_raw` rows
+  still left for it (ladder raw is gone after 72 hours anyway — see below).
   Aggregates (`player_stats_agg` …) are NOT unfolded — they already counted it.
 - **Changing the window**: lengthening (10 -> 12 months) deletes nothing for the
   extra months; shortening (12 -> 10) makes ~61 days due, drained at two extra
@@ -200,15 +201,29 @@ payload rows and an estimated size), every job run and every backup.
 `/api/analytics/admin/retention` (admin-gated; route count **26**) serves it to
 the console's **Data lifecycle** view, so no request ever scans the bot's file.
 
-### Raw payloads are the part that is not bounded by a timer
+### Ladder raw payloads: a 72-hour window (`ladder_raw_purge.py`, 2026-09-29)
 
-`battle_raw` is ~13 GB (1.89M rows, ~6.9 KB each) and grows ~4 GB a day,
-almost all ladder payloads. 2v2 raw has a daily window (`royalweb-duo-raw`),
-but **ladder raw is only purged at bot startup** (`enforce_raw_cap` fires
-whenever the whole file is over 25 GiB, which it always is). A bot left running
-for a month would add ~120 GB. A daily timer for non-duel raw — the same
-deletion the bot already performs at every restart — is the obvious fix and has
-NOT been built; it is the account holder's call.
+`battle_raw` holds the full API JSON of every battle. For a LADDER battle that
+is a second, heavier copy (~7 KB against ~2 KB) of a row already in `battles`,
+and nothing reads it again: this service reads raw only for 2v2 (`duo_pairs`)
+and duels (`duel_index`); the bot reads it only for duels and as a last-resort
+name lookup (checked in both codebases). It grew ~4 GB a day and was cleared
+only at bot restart (`enforce_raw_cap`, which fires whenever the whole file is
+over 25 GiB — always). The owner approved a daily window:
+
+- `royalweb-ladder-raw.timer` (03:30 UTC, after the backup) deletes raw stored
+  more than 72 hours ago that is NOT a duel, NOT a NULL mode (the bot's duel
+  reader treats NULL as a possible duel) and NOT 2v2 (the 2v2 job's, behind its
+  fold cursor);
+- it REFUSES if fewer than 95% of 500 sampled rows have their battle in
+  `battles`, and it counts duel raw in the range before and after and fails the
+  unit if that moved;
+- gate `CLASH_LADDER_RAW_PURGE=on` on the unit. Third writer to the bot's file
+  (with `royalweb-retention` and `royalweb-duo-raw`).
+
+**First run, 2026-09-29**: 582,882 rows deleted in 70 s, all 500 sampled rows
+had their battle, duel raw 145,921 before and after; ~4.1 GB of free pages in
+the file, which new battles fill before it grows again.
 
 ## Configuration
 

@@ -1,0 +1,34 @@
+[Unit]
+# Keeps only the last 72 hours of LADDER raw payloads in the bot's battle_raw
+# (server/ladder_raw_purge.py). A ladder raw payload is a second, heavier copy
+# of a battle already stored in `battles`; nothing reads it afterwards. Without
+# this it grew ~4 GB a day and was cleared only when the bot restarted.
+#
+# It can never touch duel raw (or a NULL mode, which the bot's duel reader
+# treats as a possible duel) or 2v2 raw (royalweb-duo-raw's, behind the 2v2 fold
+# cursor). It refuses if a sample of the rows it would delete lacks its battle
+# in `battles`, and it counts duel raw before and after and fails if that moved.
+#
+# ONE OF THE THREE UNITS THAT WRITE TO THE BOT'S DATABASE (with
+# royalweb-duo-raw and royalweb-retention). The gate is on the unit, so
+# `royalweb` itself can never delete.
+Description=Deckkies ladder raw payload window (72h)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+Environment=CLASH_LADDER_RAW_PURGE=on
+ExecStart=/usr/bin/python3 -u ladder_raw_purge.py --purge
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+SuccessExitStatus=0
+TimeoutStartSec=7200
+StandardOutput=append:/var/log/clashbot/ladder-raw.log
+StandardError=append:/var/log/clashbot/ladder-raw.log
+
+[Install]
+WantedBy=multi-user.target

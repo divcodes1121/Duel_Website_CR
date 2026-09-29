@@ -1,7 +1,8 @@
 """duo_raw_purge.py — keep only a rolling window of 2v2 raw payloads.
 
-**ONE OF THE TWO THINGS IN THIS REPOSITORY THAT WRITE TO THE BOT'S DATABASE
-(the other is `retention.py`), and it deletes exactly one kind of row.** Every other module here opens
+**ONE OF THE THREE THINGS IN THIS REPOSITORY THAT WRITE TO THE BOT'S DATABASE
+(with `retention.py` and `ladder_raw_purge.py`), and it deletes exactly one
+kind of row.** Every other module here opens
 `/var/clashbot/battles.db` with `mode=ro`, and that guarantee is why
 `tracking.py` exists. This file is the deliberate, narrow exception: 2v2 raw
 payloads, once they have been folded into the retention system and are older

@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Deckkies ladder raw payload window daily
+
+[Timer]
+# 03:30 UTC: after the nightly backup (02:30) has copied the day's raw, and off
+# the retention (01:30) and 2v2 raw (~00:00) runs on the same spinning volume.
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=900
+Persistent=true
+Unit=royalweb-ladder-raw.service
+
+[Install]
+WantedBy=timers.target

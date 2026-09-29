@@ -1,9 +1,11 @@
 """data_ledger.py — the one record of what the storage jobs did to the data.
 
-Two jobs change what is stored, and both write here:
+Three jobs change what is stored, and all write here:
 
   * `retention.py` — deletes battles once they are older than the retention
     window, ONE BATTLE-DAY AT A TIME, and records every day it removes;
+  * `ladder_raw_purge.py` — keeps only the last 72 hours of LADDER raw
+    payloads (a heavier second copy of stored battles), one run row a day;
   * `db_backup.py` — takes a verified, compressed copy of the bot's database
     and records it, including when a machine off the VPS confirmed it has it.
 

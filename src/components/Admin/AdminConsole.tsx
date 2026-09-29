@@ -150,6 +150,7 @@ export function AdminConsole() {
       ? worst(
           backupVerdict(latestVerified(lifecycle.backups)?.finished_at, latestPulled(lifecycle.backups)?.pulled_at),
           retentionRunVerdict(lastRun(lifecycle.runs, 'retention')),
+          retentionRunVerdict(lastRun(lifecycle.runs, 'ladder_raw'), Date.now(), 'Raw window'),
           botAgreementVerdict(lifecycle.settings),
         )
       : null,

@@ -319,16 +319,16 @@ export function LifecycleView() {
               </p>
             </ChartCard>
 
-            <ChartCard title="Recent jobs" note="The retention and backup runs, newest first">
+            <ChartCard title="Recent jobs" note="Retention, the ladder raw window and backups, newest first">
               <DashTable
-                caption="Recent runs of the retention and backup jobs"
+                caption="Recent runs of the storage jobs"
                 columns={[
                   { key: 'job', label: 'Job' },
                   { key: 'when', label: 'Finished' },
                   { key: 'status', label: 'Result' },
                 ]}
                 rows={report.runs.slice(0, 8).map((r) => ({
-                  job: r.job === 'retention' ? 'Retention' : 'Backup',
+                  job: JOB_LABEL[r.job] ?? r.job,
                   when: <span title={r.finished_at}>{ago(r.finished_at)}</span>,
                   status: <StatusPill tone={runTone(r.status)}>{RUN_LABEL[r.status] ?? r.status}</StatusPill>,
                 }))}
@@ -412,6 +412,12 @@ function sizeOf(b: BackupRecord): string {
   if (!b.zst_bytes) return b.db_bytes ? bytes(b.db_bytes) : '—';
   return `${bytes(b.zst_bytes)}${b.db_bytes ? ` of ${bytes(b.db_bytes)}` : ''}`;
 }
+
+const JOB_LABEL: Record<string, string> = {
+  retention: 'Retention',
+  backup: 'Backup',
+  ladder_raw: 'Ladder raw window',
+};
 
 const RUN_LABEL: Record<string, string> = {
   ok: 'Done',
