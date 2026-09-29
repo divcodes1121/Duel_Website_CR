@@ -355,6 +355,19 @@ triple maximising `loadout_floor`. With that pool size the search is small
 enough to be exhaustive with pruning, and
 `dz.pick_duel_legal_sequence()` remains the fallback.
 
+**Mid-duel, the loadout is the rest of the duel (fixed 2026-09-29).**
+`loadout(..., used=, size=)` takes the cards already spent this duel and the
+games left. The caller (`coach.tune`) passed `used` to the swaps and the
+composer and NOT to the loadout, which started from an empty set — so after
+game 1 it offered decks built from game 1's cards (reported: a Giant Skeleton
+drill deck in game 1, then a Giant Skeleton graveyard deck in the loadout;
+reproduced live on 3 of 3 pairs). Now: spent cards are out of its pool and
+seed its no-shared-cards set, `size` is `3 - stage`, and with one game left
+there is no loadout (a one-deck loadout is the composer's list again). The
+payload carries `size`; the screen titles a two-deck one "The rest of your
+duel". `test_coach.py` pins the caller with a fake tuner, `test_deck_tuner.py`
+the function; both fail on the old code.
+
 ### Choosing six FOR THIS PLAYER — `personalise` (2026-09-25)
 
 **Reported: "Or bring one of these" looked the same for every player.** Measured

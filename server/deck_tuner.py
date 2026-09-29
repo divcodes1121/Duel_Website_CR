@@ -827,7 +827,8 @@ def loadout(archetypes: list[str],
             comfort: set[str] | None = None,
             veto=None,
             pool: dict | None = None,
-            size: int = 3) -> dict:
+            size: int = 3,
+            used: set[str] | None = None) -> dict:
     """Three decks that share no cards, chosen to cover the field BETWEEN them.
 
         loadout_floor = min over archetype a of ( max over deck d of rate(d, a) )
@@ -842,12 +843,20 @@ def loadout(archetypes: list[str],
     absolute: 21,432 pairs, zero overlap. So this is a set-packing problem, and
     it is solved greedily over a bounded pool with the FLOOR as the objective
     rather than each deck's own quality.
+
+    `used` -- cards already spent earlier in THIS duel. Mid-duel the loadout is
+    the REST of it: `size` is the games left, and no deck may hold a card the
+    player has already played, since they physically cannot play it again. It
+    was once omitted by the caller and this started from an empty set, so after
+    game 1 the block offered decks built from game 1's cards (reported: a Giant
+    Skeleton drill deck in game 1, then a Giant Skeleton graveyard deck here).
     """
-    first = compose(archetypes, weights, comfort=comfort, veto=veto,
+    spent = set(used or ())
+    first = compose(archetypes, weights, used=spent, comfort=comfort, veto=veto,
                     limit=LOADOUT_POOL, pool=pool)
     cands = first["decks"]
     chosen: list[dict] = []
-    used: set[str] = set()
+    used = set(spent)
 
     for _ in range(size):
         best, best_floor = None, None
@@ -898,6 +907,7 @@ def loadout(archetypes: list[str],
     measured = [c["best"] for c in cover if c["best"] is not None]
     return {
         "archetypes": list(archetypes),
+        "size": size,
         "decks": chosen,
         "coverage": cover,
         "loadoutFloor": min(measured) if measured else None,

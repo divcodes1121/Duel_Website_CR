@@ -3519,6 +3519,29 @@ theirs" becomes "you against them") and cannot change which deck ranks first
 rows are under the three-slot rule since the next fix; they still rank on their
 own evidence — `DECK_TUNER.md`.)
 
+### The tuner's loadout no longer offers cards you already played (2026-09-29)
+
+**Reported**: game 1 with a Giant Skeleton drill deck, "Game 1 finished —
+narrow it down", and the next answer showed a deck with Giant Skeleton and
+Graveyard. A duel cannot repeat a card.
+
+**Checked every list on the screen against the live API** with a Giant
+Skeleton drill deck as game 1, on three real player pairs, walking every
+8-card deck in the response. The three options, "Switch a card" and "Or bring
+one of these" were clean on all three — each already filters on the spent
+cards (`_legal`, `_duel_merge`'s `legal`, `rank`'s `used`, `compose`'s `used`).
+**The tuner's loadout was not**: `coach.tune` never passed `used` to
+`deck_tuner.loadout`, which started from an empty set, and on all three pairs
+it offered game-1 cards (one deck carried Giant Skeleton). The opponent's own
+decks in each option's breakdown share cards with yours legitimately and are
+not a leak.
+
+Fixed: the loadout takes the spent cards and is sized to the games left — three
+at the opening, two after game 1 ("The rest of your duel"), none after game 2,
+where one deck would only repeat "Or bring one of these". Pinned in
+`test_coach.py` (the caller, with a fake tuner) and `test_deck_tuner.py` (the
+function); both fail on the old code.
+
 ### The deck tuner is Pro now, and fields every slot (2026-09-27)
 
 **Reported with a screenshot**: an "Or bring one of these" Bridge Spam list —

@@ -139,6 +139,10 @@ MIN_OVERLAP = dz.COUNTER_MIN_OVERLAP
 #: repeated Lightning and Baby Dragon. (bot._duel_legal_decks)
 RECOMMEND_MAX_SHARED = 0
 
+#: A duel is three games. `stage` games have been played, so the rest of the
+#: duel is `DUEL_GAMES - stage` decks, none sharing a card with what is spent.
+DUEL_GAMES = 3
+
 
 # ── READING ONE PLAYER'S DUEL HISTORY ──────────────────────────────────────
 
@@ -1201,8 +1205,14 @@ def _playstyle(tag: str, since: str | None, until: str | None,
 def tune(my_deck: list[str], opp_decks: list[dict],
          used: set | None = None, hist: dict | None = None,
          profile: dict | None = None,
-         chips: list[dict] | None = None) -> dict | None:
+         chips: list[dict] | None = None,
+         games_left: int = DUEL_GAMES) -> dict | None:
     """Card-level swaps for one deck. See `DECK_TUNER.md`.
+
+    `used` is every card the player has spent this duel, and EVERY list this
+    returns honours it: the swaps, "Or bring one of these", and the loadout.
+    `games_left` sizes the loadout to the rest of the duel; with one game left
+    a one-deck "loadout" is just the composer's list again, so there is none.
 
     OPT-IN AND ADMIN-ONLY at the route, because it costs a full sibling scan --
     the estimate is ~2.6 s and it has not been measured on the live database
@@ -1272,8 +1282,10 @@ def tune(my_deck: list[str], opp_decks: list[dict],
         composed["playstyle"] = sorted(
             tuner.playstyle_families((profile or {}).get("families")))
         out["compose"] = composed
-        out["loadout"] = tuner.loadout(
-            archetypes, weights=weights, comfort=comfort, veto=harmony.veto)
+        out["loadout"] = (tuner.loadout(
+            archetypes, weights=weights, comfort=comfort, veto=harmony.veto,
+            used=used or set(), size=games_left)
+            if games_left >= 2 else None)
         for d in (out["loadout"] or {}).get("decks") or []:
             d["vs"] = (_chips(d["deck"], None, chips, None, record=d.get("archetypes") or {})
                        if chips else _vs_from_record(d.get("archetypes"), archetypes, weights))
@@ -1418,7 +1430,7 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         # admin sessions (`isPaid`). See `DECK_TUNER.md`.
         **({"tuner": tune(best["cards"], opp["decks"], used_mine, mine_hist,
                           _playstyle(my_tag, my_since, my_until, mine_hist),
-                          chips)}
+                          chips, games_left=DUEL_GAMES - stage)}
            if swaps and best else {}),
         "notes": _read(stage, best, opp, my_played, opp_played, observed),
         # What the chips under every deck are rated against, in their order.

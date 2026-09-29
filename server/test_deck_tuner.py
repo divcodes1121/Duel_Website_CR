@@ -539,6 +539,21 @@ def main() -> int:
     check("an unmeasured archetype is NAMED, not scored 50%",
           isinstance(lo["uncovered"], list))
 
+    print("\nmid-duel the loadout is the REST of the duel, and never a spent card")
+    # Reported: game 1 was a Giant Skeleton drill deck, and after it the
+    # loadout offered a Giant Skeleton graveyard deck. The caller did not pass
+    # the spent cards and this started from an empty set.
+    spent = set(lo["decks"][0]["deck"])
+    lo_mid = tuner.loadout(archs, pool=pool, veto=harmony.veto, used=spent, size=2)
+    mid_cards = [c for d in lo_mid["decks"] for c in d["deck"]]
+    check("no deck in a mid-duel loadout holds a card already played",
+          not (set(mid_cards) & spent), str(sorted(set(mid_cards) & spent)))
+    check("it asks for the games left, and says how many",
+          lo_mid["size"] == 2 and len(lo_mid["decks"]) <= 2, str(len(lo_mid["decks"])))
+    check("...and its decks still share no card with each other",
+          len(mid_cards) == len(set(mid_cards)))
+    check("the opening loadout reports size 3", lo["size"] == 3)
+
     print("\nMODE B, FOR THIS PLAYER — personalise (2026-09-25)")
     # Twelve production players against one opponent were handed ONE list.
     # Rows are compose's own shape: hash, deck, floor, family, archetype.

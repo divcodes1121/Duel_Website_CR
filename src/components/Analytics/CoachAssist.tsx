@@ -1227,10 +1227,15 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
         </>
       )}
 
-      {tuner.loadout && tuner.loadout.decks.length === 3 && (
+      {/* THE REST OF THE DUEL, not always three decks: the server sizes it to
+          the games left and keeps every card already spent out of it (it once
+          did not, and offered game 1's cards back). Drawn only when complete —
+          a loadout one deck short does not cover what it claims to. */}
+      {tuner.loadout && tuner.loadout.decks.length >= 2
+        && tuner.loadout.decks.length === (tuner.loadout.size ?? 3) && (
         <>
           <h4 className={styles.blockTitle}>
-            A full loadout
+            {tuner.loadout.decks.length === 3 ? 'A full loadout' : 'The rest of your duel'}
             {tuner.loadout.loadoutFloor !== null && (
               <>
                 {' '}
@@ -1240,7 +1245,9 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
               </>
             )}{' '}
             <span className={styles.blockNote}>
-              three decks, no shared cards — nothing they bring is unanswered
+              {tuner.loadout.decks.length === 3
+                ? 'three decks, no shared cards — nothing they bring is unanswered'
+                : `${tuner.loadout.decks.length} decks, no card you have already played`}
             </span>
           </h4>
           {tuner.loadout.decks.map((d) => (

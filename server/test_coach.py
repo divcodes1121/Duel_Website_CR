@@ -667,5 +667,53 @@ else:
         coach._archetype, coach._duel_decks, coach._rec = saved
 
 
+# ── the tuner honours the duel too ───────────────────────────────────────────
+# Reported: game 1 was a Giant Skeleton drill deck, and after it the tuner's
+# loadout offered a Giant Skeleton graveyard deck — `tune` handed the swaps and
+# the composer the spent cards and forgot the loadout. A fake tuner records
+# what each call was given, so the CALLER's side is pinned here.
+print(chr(10) + "every list the tuner returns is told what has been spent")
+import types  # noqa: E402
+
+calls: dict = {}
+fake_tuner = types.ModuleType("deck_tuner")
+fake_tuner.rank = lambda cards, archs, **kw: calls.setdefault("rank", kw) and {}
+fake_tuner.compose = lambda archs, **kw: calls.setdefault("compose", kw) and {"decks": []}
+fake_tuner.personalise = lambda rows, profile: rows
+fake_tuner.playstyle_families = lambda fams: set()
+fake_tuner.loadout = lambda archs, **kw: calls.setdefault("loadout", kw) and {"decks": []}
+fake_harmony = types.ModuleType("deck_harmony")
+fake_harmony.veto = lambda cards: None
+fake_harmony.check = lambda cards: {}
+saved_mods = {k: sys.modules.get(k) for k in ("deck_tuner", "deck_harmony")}
+saved_spread = coach._spread
+sys.modules["deck_tuner"], sys.modules["deck_harmony"] = fake_tuner, fake_harmony
+coach._spread = lambda decks: (["hogcycle"], {"hogcycle": 1.0})
+try:
+    SPENT = {"giant-skeleton", "goblin-drill", "bomber", "arrows",
+             "fireball", "tesla", "knight", "skeletons"}
+    BEST = ["hog-rider", "musketeer", "ice-spirit", "cannon",
+            "the-log", "ice-golem", "earthquake", "firecracker"]
+    out = coach.tune(BEST, [{"cards": BEST}], used=SPENT, games_left=2)
+    check("the swaps are told the spent cards", calls["rank"].get("used") == SPENT)
+    check("the composer is told the spent cards", calls["compose"].get("used") == SPENT)
+    check("THE LOADOUT is told the spent cards", calls["loadout"].get("used") == SPENT,
+          str(calls["loadout"]))
+    check("and is sized to the games left, not always three",
+          calls["loadout"].get("size") == 2, str(calls["loadout"].get("size")))
+
+    calls.clear()
+    out = coach.tune(BEST, [{"cards": BEST}], used=SPENT, games_left=1)
+    check("with one game left there is no loadout (it would repeat the composer)",
+          "loadout" not in calls and out["loadout"] is None)
+finally:
+    coach._spread = saved_spread
+    for k, v in saved_mods.items():
+        if v is None:
+            sys.modules.pop(k, None)
+        else:
+            sys.modules[k] = v
+
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

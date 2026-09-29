@@ -1976,6 +1976,13 @@ vs one opponent: 1 -> 7 distinct lists (as sets), 6 -> 12 distinct decks, mean w
 matchup -1.0 point. `compose` rows gained `family` and `name`; the loadout is
 untouched. See `DECK_TUNER.md` §7.
 
+**EVERY TUNER LIST HONOURS THE DUEL (2026-09-29).** `tune(..., used,
+games_left=)` passes the spent cards to `rank`, `compose` AND `loadout` — the
+loadout was missed and offered game-1 cards back after "narrow it down".
+`suggest` passes `games_left = DUEL_GAMES - stage`; the loadout is that many
+decks, `None` with one game left, and carries `size`. `test_coach.py` pins the
+caller with a fake `deck_tuner` in `sys.modules`.
+
 **`expected.vs` AND `vs` ON COMPOSED/LOADOUT DECKS (2026-09-25).** Per-archetype
 chips for the Suggestion screen: `_vs_from_per` (grouped by `_archetype`,
 likelihood-weighted, unrecorded archetypes absent) and `_vs_from_record` (a

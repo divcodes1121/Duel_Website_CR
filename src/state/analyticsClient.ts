@@ -1415,6 +1415,9 @@ export interface Loadout {
     by: string | null;
     measured: boolean;
   }[];
+  /** How many decks were asked for: the games left in the duel (3 at the
+   *  opening, 2 after game 1). Absent from an older server, which means 3. */
+  size?: number;
   /** min over archetype of (max over the three decks). Null when nothing was
    *  measured — never 50%. */
   loadoutFloor: number | null;
