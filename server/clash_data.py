@@ -191,10 +191,44 @@ def archive_available(force: bool = False) -> bool:
         return ok
 
 
+#: One idle connection per database file, held for the life of the process.
+#:
+#: MEASURED ON PRODUCTION (2026-09-30): the bot's WAL file had grown to 2.9 GB,
+#: and while NO other connection to the file was open in this process, the
+#: first query on a fresh connection cost 0.7-0.9 s — every time, because the
+#: callers open, query once and close. Coach Assist opens hundreds a request
+#: (an archetype lookup alone was 46 x 0.73 s = 34 s of a 76 s cold answer).
+#: With one connection kept open that has read the schema once, the same
+#: fresh connection's first query took 0.001-0.003 s.
+#:
+#: It runs one statement and then sits idle in autocommit, so it holds no read
+#: transaction: it never pins a WAL snapshot, never blocks the bot's
+#: checkpoint, and every real query still opens its own connection and sees
+#: the latest data. The server is threads only (no fork), which is what makes a
+#: process-lifetime connection safe here.
+_KEEPERS: dict[str, sqlite3.Connection] = {}
+_keeper_lock = threading.Lock()
+
+
+def _keep_open(uri: str) -> None:
+    if uri in _KEEPERS:
+        return
+    with _keeper_lock:
+        if uri in _KEEPERS:
+            return
+        try:
+            k = sqlite3.connect(uri, uri=True, timeout=5.0, check_same_thread=False)
+            k.execute("SELECT count(*) FROM sqlite_master").fetchall()
+        except sqlite3.Error:
+            return          # a missing or unreadable file: the caller will say so
+        _KEEPERS[uri] = k
+
+
 def connect(path: str) -> sqlite3.Connection:
     """Read-only connection. `mode=ro` is not advisory — SQLite refuses writes,
     so a bug here can never corrupt the bot's data."""
     uri = "file:" + path.replace("\\", "/") + "?mode=ro"
+    _keep_open(uri)
     con = sqlite3.connect(uri, uri=True, timeout=5.0, check_same_thread=False)
     con.row_factory = sqlite3.Row
     return con

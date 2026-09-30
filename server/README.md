@@ -1471,6 +1471,20 @@ of the seed's; the loadout pool is the options + `LOADOUT_EXTRA` 10 other seeds
 by the fast model + the built decks. Payload `built`, only with `swaps=1`.
 Backups `coach.py.bak-*-prebuilder`, `*-prepool`.
 
+## One idle connection per database file (`clash_data.connect`, 2026-09-30)
+
+`connect` calls `_keep_open(uri)` first: one read-only connection per URI,
+opened once, `SELECT count(*) FROM sqlite_master` run on it, then kept idle in
+`_KEEPERS` for the process's life. With the bot's WAL at 2.9 GB a fresh
+connection's first query cost 0.7-0.9 s whenever no other connection to the
+file was open in the process; with the keeper it is ~1 ms. It holds no
+transaction (so the bot's checkpoint is unaffected — `test_db_keeper.py`), and
+callers still get a fresh connection per call. Coach Assist cold 57-107 s ->
+7.5 s, same answer. **Do not fork the server with a keeper open** (SQLite
+connections must not cross a fork); it is threads only today. Connections
+opened with raw `sqlite3.connect` to the same file benefit too, since the
+effect is per process.
+
 ## The duel-pairing gate (`deck_synergy.py`, 2026-09-30)
 
 `deck_synergy.build` (after every poll, ~10 s; `.deck_synergy.json`,
