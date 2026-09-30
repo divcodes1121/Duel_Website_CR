@@ -1666,7 +1666,10 @@ def _read(stage, best, opp, my_played, opp_played, observed) -> list[str]:
             out.append(f"{name} at {round(p * 100)}% of {len(decks)} decks they can "
                        f"still bring — {spread}.")
     if best:
-        exp = best.get("expected")
+        # THE FIGURE THE LIST WAS RANKED ON. With the duel win model ranking,
+        # quoting the older ladder+duel rate here put two different numbers
+        # for one pick on one screen (65.5% headline, "Go with ... 61.9%").
+        exp = best.get("brain") or best.get("expected")
         name = best.get("deckName") or counter._label(best.get("archetype") or "")
         if not exp:
             out.append(f"Go with {name} — ranked on how much you play it, since there "
