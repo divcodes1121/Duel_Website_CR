@@ -78,7 +78,7 @@ export function FreshnessLine({ plan }: { plan: FieldPlan | null }) {
         age,
         // NOT A CLAIM THAT IT IS ON. `applied` is false until enough days of
         // meta history are stored.
-        t?.applied ? `trend ${t.days}d · ${t.moved} moved` : t ? 'trend off' : null,
+        t?.applied ? `trend ${t.daysApart ?? '?'}d · ${t.moved} moved` : t ? 'trend off' : null,
       ]
         .filter(Boolean)
         .join(' · ')}

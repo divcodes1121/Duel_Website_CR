@@ -810,8 +810,12 @@ class Handler(BaseHTTPRequestHandler):
                 # not pay per player.
                 compare = (q.get("compare") or [""])[0] in ("1", "true", "yes")
                 import coach_daily
+                # `day=YYYY-MM-DD` pins the day today's session is for (a
+                # coach reviewing a past day, and the drift measurement).
+                # Absent means today, UTC.
+                day = (q.get("day") or [""])[0] or None
                 return self._send(coach_daily.plan(tag, since, until, brief=brief,
-                                                   compare=compare))
+                                                   compare=compare, day=day))
 
             if path.startswith("/api/analytics/coach/predict/"):
                 raw = unquote(path[len("/api/analytics/coach/predict/"):])

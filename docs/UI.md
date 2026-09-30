@@ -1576,6 +1576,32 @@ motion that stays out of the way" is the record.
 - Tables scroll inside their own frame on a phone; nothing else moves sideways
   (verified at 390, both themes, on a real and a synthetic ledger).
 
+## Today's session card (2026-09-30)
+
+`CoachRoster/SessionCard.tsx`, the first card on *Against the field* (coach)
+and on `#/my`'s practise tab (the same `TodayTab`). A `ChartCard` titled
+`Today · 30 Sep`, badge `vs <matchup>`, note = games and W–L since yesterday
+plus duel games this week.
+
+- **One `InsightRow`** — `Drill <matchup>`, tone `bad` when yesterday's games
+  chose it and `warn` for a rotation. The description is figures: either
+  `0–5 since 29 Sep · 2.6 more losses than usual` (evidence) or
+  `Rotation day 2 of 3 · next Mortar` (a schedule), then the standing record.
+  The two are never worded alike.
+- **Three deck rows** in the existing `deckList` / `deckItem` shape, each with a
+  leading `oppTag` label: *Practise with* (rate vs the matchup, rate vs the
+  field, overlap with their deck), *Practise against* (share of the meta, its
+  win rate, ▲/▼ this week), *Proven in duels* (duel rate vs the matchup, games,
+  their own deck or how many of its cards they play). Every strip goes through
+  `drawnDeck` and carries `DeckActions`.
+- **Rising this week** — up to three rows, `▲n to #rank`, old → new use,
+  `they lose to this` when it is one of their archetypes.
+
+The roster **Today** board row leads with `Drill <matchup> · <line>` and draws
+the session's deck with `x% vs <matchup> · y% vs field`. Strings live in
+`state/coachToday.ts` (`focusLine`, `formatDay` — a calendar split, never the
+local clock, so a reader west of UTC is not shown the day before).
+
 ## Working on this
 
 ```bash

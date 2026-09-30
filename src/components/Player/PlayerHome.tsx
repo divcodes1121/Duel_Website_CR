@@ -352,7 +352,14 @@ function Overview({
   const total = plan.threats.length;
   const work = plan.weighted.slice(0, 3);
   const p = report && 'profile' in report ? report.profile : null;
-  const best = plan.recommendations[0];
+  /* TODAY'S PRACTICE DECK, not `recommendations[0]`. That is the diversified
+     top pick -- the best deck of the strongest archetype, the SAME deck for
+     every player -- and it is a thirty-day answer, so it sat unchanged day
+     after day. The session's deck is picked from their own cards for today's
+     matchup (`server/coach_session.py`). */
+  const today = plan.session?.practise ?? null;
+  const focus = plan.session?.focus ?? null;
+  const best = today ?? plan.closest?.[0] ?? plan.recommendations[0];
 
   /* THIS WINDOW AGAINST THE ONE BEFORE IT, from the same `progress` block the
      card further down draws — so a pill here can never disagree with it. The
@@ -496,7 +503,10 @@ function Overview({
           />
         </ChartCard>
 
-        <ChartCard title="Your next practice deck" note="Ranked against that field, weighted to what you lose to">
+        <ChartCard
+          title="Your practice deck today"
+          note={focus ? `For today's matchup: ${focus.name}` : 'Ranked against that field, weighted to what you lose to'}
+        >
           {!best ? (
             <p className={styles.muted}>No deck could be ranked yet.</p>
           ) : (
@@ -518,12 +528,14 @@ function Overview({
               </div>
               <p className={styles.deckName}>{best.name}</p>
               <p className={styles.muted}>
-                {best.expectedWinRate.toFixed(1)}% expected against what the field is playing.
+                {today && focus
+                  ? `${today.vsFocus.winRate.toFixed(1)}% vs ${focus.name} · ${today.expectedWinRate.toFixed(1)}% vs the field`
+                  : `${best.expectedWinRate.toFixed(1)}% expected against what the field is playing.`}
               </p>
               <div className={styles.controlRow}>
                 <DeckActions cards={best.cards ?? []} name={best.name} />
                 <button type="button" className={styles.ghostButton} onClick={onPractise}>
-                  See all {plan.recommendations.length} →
+                  Today's session →
                 </button>
               </div>
             </>

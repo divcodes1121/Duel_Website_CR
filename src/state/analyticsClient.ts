@@ -2527,11 +2527,21 @@ export interface FieldPlan {
   trend?: {
     applied: boolean;
     reason: string | null;
-    days: number | null;
+    /** THE SERVER SENDS `daysApart`, and this type said `days`. Nothing
+     *  noticed while the trend was off; the day it first switched on
+     *  (2026-09-30, seven days of history) every freshness line printed
+     *  "trend undefinedd". `basis` is the movement's own answer. */
+    daysApart: number | null;
+    basis?: string;
     moved: number;
   };
   /** Present only when the call asked to `compare`. */
   progress?: FieldProgress;
+  /** TODAY'S SESSION — the part of the plan meant to change daily
+   *  (`server/coach_session.py`). Everything else above answers "what beats
+   *  the field over this window", which barely moves in a day. Absent from an
+   *  older server; null only if it failed. */
+  session?: DailySession | null;
   pool: number;
   /** WHEN AND OVER WHAT this answer was computed. The board is a rolling
    *  window of real battles recomputed on a timer, so the decks move as the
@@ -2542,6 +2552,77 @@ export interface FieldPlan {
     window: { from: string | null; to: string | null; days: number } | null;
     computedAt: number | null;
   };
+}
+
+/** A deck drawn by today's session. `cards` is absent in `brief` for every
+ *  deck except the practice deck, which is the one a roster row draws. */
+export interface SessionDeck {
+  name: string;
+  cards?: string[];
+  art?: Record<string, 'evolution' | 'hero'>;
+  artInferred?: boolean;
+  artFilled?: string[];
+}
+
+/** Why today's focus is today's. Each is said differently on screen:
+ *  `lost_recently` is evidence, the two rotations are a SCHEDULE. */
+export type SessionWhy = 'lost_recently' | 'rotation' | 'field_rotation';
+
+export interface DailySession {
+  brain: string;
+  /** The day this session is for, and the first day "since yesterday" counts. */
+  day: string;
+  since: string;
+  lastDays: { battles: number; wins: number; losses: number };
+  focus: {
+    archetype: string;
+    name: string;
+    why: SessionWhy;
+    /** Their record against it over the plan's window, past the floor. */
+    record: { battles: number; winRate: number; deficit: number } | null;
+    /** Since yesterday. */
+    recent: { battles: number; wins: number; losses: number } | null;
+    /** Losses beyond their own usual rate — only on `lost_recently`. */
+    excessLosses?: number;
+    rotation: { index: number; of: number; names: string[]; next: string } | null;
+    /** This archetype is among the meta's risers this week. */
+    rising?: boolean;
+  } | null;
+  practise: (SessionDeck & {
+    key: string;
+    archetype: string;
+    expectedWinRate: number;
+    vsFocus: { winRate: number; games: number; basis: string | null };
+    source: 'their-cards' | 'field';
+    shared?: number | null;
+    deckBattles?: number | null;
+  }) | null;
+  against: (SessionDeck & {
+    useRate: number | null;
+    winRate: number | null;
+    rankDelta: number | null;
+    entered: boolean;
+  }) | null;
+  duel: (SessionDeck & {
+    key: string;
+    archetype: string;
+    pick: 'own' | 'duel';
+    duel: { winRate: number; games: number; low: number; nEff: number; strong: boolean } | null;
+    theirGames?: number;
+    players?: number;
+    known: number;
+  }) | null;
+  duelWeek: { games: number; wins: number; days: number } | null;
+  rising: (SessionDeck & {
+    deckHash: string;
+    archetype: string;
+    rank: number | null;
+    rankDelta: number;
+    useRate: number | null;
+    previousUseRate: number;
+    winRate: number | null;
+    threatensYou: boolean;
+  })[];
 }
 
 /** What this player should practise against the field. No opponent.

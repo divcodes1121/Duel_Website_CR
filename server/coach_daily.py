@@ -365,7 +365,7 @@ def _overall(summary: dict) -> float:
 
 def plan(tag: str, since: str | None = None, until: str | None = None,
          limit: int = MAX_PICKS, brief: bool = False,
-         compare: bool = False) -> dict:
+         compare: bool = False, day: str | None = None) -> dict:
     """One player's plan against the field.
 
     `brief` trims the payload for a ROSTER-WIDE read, where one row per player
@@ -566,6 +566,24 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         traceback.print_exc()
         fams, near, learn = [], [], None
 
+    # TODAY'S SESSION -- the part that is MEANT to change daily. Everything
+    # above answers "what beats the field over this window", which by design
+    # barely moves in a day (measured: the same deck five days running for
+    # seven of eight roster players). `coach_session` answers "what do we
+    # work on today" from yesterday's games, a daily rotation through their
+    # weakest matchups, this week's meta movement and the duel index. In
+    # `brief` too: the roster's Today board draws it.
+    try:
+        import coach_session
+        session = coach_session.build(
+            tag, coach_session.reference_day(day),
+            defs=defs, threats=threats, scored=scored, pool=pool, snap=snap,
+            board=board, move=move, own_cards=card_pool(own),
+            seat_pick=seat_pick, deck_key=ts.deck_key, overall=overall, brief=brief)
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        session = None
+
     if brief:
         # ONE PERSONAL DECK SURVIVES THE TRIM, because it is the only thing on
         # a roster row that differs between players. The families board and the
@@ -613,6 +631,8 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
             key=lambda d: -d["deficit"],
         ),
         "recommendations": picks,
+        # WHAT TO WORK ON TODAY. See `coach_session`; None only if it failed.
+        "session": session,
         # How many picks the weighting put there. 0 is a real answer and the
         # screen says it plainly rather than implying a tailoring that did not
         # happen.

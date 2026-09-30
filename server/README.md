@@ -1364,6 +1364,49 @@ is defensive depth, reachable only if `TREND_DAYS` is lowered under it.
 The 7-day directional weighting (`trend`) reports itself **off** until
 `meta_history` holds `TREND_MIN_DAYS`; it began 2026-09-23.
 
+**It switched on 2026-09-30** (seven days stored), and the same day exposed a
+client fault: the freshness line read `trend.days`, the server sends
+`trend.daysApart`, so every board printed "trend undefinedd". Fixed;
+`tests/fieldTrendContract.test.ts` reads both files.
+
+### Today's session (`coach_session.py`, 2026-09-30)
+
+The table above is the reason this exists. The player half of the plan barely
+moves in a day, correctly, and a coach reading it every morning sees the same
+deck — measured on eight real roster players over five consecutive days, the
+deck was identical all five days for seven of them. `plan()` now also returns
+`session`: **what to work on today**, built from inputs that really do change
+daily. It is computed after the three lists (so every row already carries its
+affinity) and degrades to `null` rather than taking the plan down. It is in
+`brief` too, because the roster's Today board draws it.
+
+| part | from | rule |
+| --- | --- | --- |
+| `focus` | `coach_intel.report(tag, day-1, day)` + the window's deficits | lost to it since yesterday by `FRESH_EXCESS` (2) losses beyond their own rate — `FRESH_ALONE` (3) if it is not a known weakness — else the `ROTATION` (3) weakest take turns by `day.toordinal()`, else the field's three most-played. Never `other`. |
+| `practise` | the scored pool + `profile.against(focus)` | best against the focus among decks from their cards (`affinity.familiar`) that stay within `FIELD_SLACK` (3) of their best field answer; the whole pool, labelled `field`, only when nothing is familiar |
+| `against` | the meta board | the archetype's most-used list, with `rankDelta` from the movement |
+| `duel`, `duelWeek` | `duel_index` + `duel_brain` | own proven duel deck (`own_answers`), else `population_answers` → `personal(known=their cards)`; only `strong()`; 3-slot catalogue filter as Team Analysis |
+| `rising` | `meta_history.movement(7)` | on both boards, `rankDelta > 0`, use up ≥ `RISING_FLOOR` (15%, = `TREND_FLOOR`); `threatensYou` when they lose to that archetype |
+
+**`why` separates evidence from a schedule** (`lost_recently` vs `rotation` /
+`field_rotation`), and the rotation publishes `index`/`of`/`next`. The
+rotation set is sorted by KEY so a deficit wobble cannot repeat a day.
+
+**`?day=YYYY-MM-DD`** pins the day (default today UTC; a malformed value falls
+back rather than erroring). It is how the drift was measured, and how a coach
+can look at a past day.
+
+**The first cut was wrong and the staging run is what showed it**: "lost ≥2
+and more than won" fires every day for anyone playing 50–300 games in two
+days, and "Mixed" took 9 of 40 days. Excess losses against their own rate
+replaced it. Staged (eight players × five days): the (focus, deck) pair
+changed on **25 of 32** day-to-day steps, against **1 of 32** before.
+
+`test_coach_session.py` — 48 checks, literals only; two planted faults (a
+deficit-ordered rotation, no excess rule) each turned it red. Deployed
+2026-09-30, backups `{app,coach_daily}.py.bak-20260930-085052-presession`.
+
+
 ### The copy is figures
 
 No sentence explains a number that is already on screen — the rule already

@@ -21,6 +21,7 @@ import {
 import { CardsIcon, ShieldIcon, SwordsIcon, TrendIcon } from '../../Dashboard/icons';
 import { ClosestCard, FamiliesCard, LearnCard } from './FieldAnswers';
 import { ProgressCard } from './ProgressCard';
+import { SessionCard } from './SessionCard';
 import styles from './CoachRoster.module.css';
 
 const nf = new Intl.NumberFormat('en-US');
@@ -139,6 +140,11 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
             ? `${nf.format(plan.battles)} games · no archetype past the evidence floor`
             : 'Nothing stored for this player yet'}
       </DashHero>
+
+      {/* TODAY FIRST. Everything below answers "what beats the field over
+          this window" and is right to be stable; this is the part that is
+          meant to change every day. */}
+      <SessionCard session={plan.session} />
 
       <MetricGrid>
         <KeyMetricCard

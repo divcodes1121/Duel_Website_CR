@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { todayRow, todaySummary, type TodayPlanInput } from '../src/state/coachToday';
+import { focusLine, formatDay, todayRow, todaySummary, type TodayPlanInput } from '../src/state/coachToday';
 
 const rec = (name: string, rate = 60, fromWeighting = false) => ({
   key: name.toLowerCase(),
@@ -187,5 +187,98 @@ describe('the roster line', () => {
 
   it('an empty roster says so', () => {
     expect(todaySummary([]).line).toContain('No active players');
+  });
+});
+
+/**
+ * TODAY'S SESSION DRIVES THE ROW NOW.
+ *
+ * Reported: "the daily practice for everyone on the roster does not change".
+ * Measured: the row's deck (`closest[0]`, a thirty-day answer) was identical
+ * five days running for seven of eight real roster players. The session's
+ * deck is picked for TODAY'S matchup, so it moves when the focus moves.
+ */
+describe("today's session", () => {
+  const eight = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const session = (over: Partial<NonNullable<TodayPlanInput['session']>> = {}): TodayPlanInput['session'] => ({
+    day: '2026-09-30',
+    since: '2026-09-29',
+    focus: { name: 'Golem', why: 'rotation', recent: null, rotation: { index: 2, of: 3, next: 'Mortar' } },
+    practise: {
+      key: 'today', name: 'Mortar', expectedWinRate: 57.1, cards: eight,
+      vsFocus: { winRate: 64.8 }, source: 'their-cards', shared: 7, deckBattles: 41,
+    },
+    ...over,
+  });
+  const closest = [{ key: 'thirty-day', name: 'Bridge Spam', expectedWinRate: 60.4, cards: eight,
+                     affinity: { shared: 8, of: 8, deckBattles: 300, familiar: true } }];
+
+  it("draws the session's deck, not the thirty-day closest", () => {
+    const r = todayRow('#A', 'A', plan({ closest, session: session() }));
+    expect(r.pick?.key).toBe('today');
+    expect(r.pick?.vsFocus).toBe(64.8);
+    expect(r.source).toBe('their-deck');
+    expect(r.note).toContain('7 of 8 cards');
+  });
+
+  it('two days with different foci draw different decks', () => {
+    const mon = todayRow('#A', 'A', plan({ closest, session: session() }));
+    const tue = todayRow('#A', 'A', plan({
+      closest,
+      session: session({
+        focus: { name: 'Mortar', why: 'rotation', recent: null, rotation: { index: 3, of: 3, next: 'Hog Rider' } },
+        practise: { key: 'tuesday', name: 'Graveyard', expectedWinRate: 56.0, cards: eight,
+                    vsFocus: { winRate: 62.0 }, source: 'their-cards', shared: 6, deckBattles: 20 },
+      }),
+    }));
+    expect(mon.pick?.key).not.toBe(tue.pick?.key);
+    expect(mon.focus?.name).not.toBe(tue.focus?.name);
+  });
+
+  it('a rotation is printed as a schedule, never as a finding', () => {
+    const f = focusLine(session());
+    expect(f?.line).toBe('rotation day 2 of 3 · next Mortar');
+    expect(f?.line).not.toMatch(/lost|since/);
+  });
+
+  it("yesterday's losses are printed as counts", () => {
+    const f = focusLine(session({
+      focus: { name: 'Hog Rider', why: 'lost_recently', recent: { battles: 7, wins: 1, losses: 6 },
+               excessLosses: 3.2, rotation: null },
+    }));
+    expect(f?.line).toBe('1–6 since 29 Sep · 3.2 more losses than usual');
+  });
+
+  it("the field's rotation says it is the field's", () => {
+    const f = focusLine(session({
+      focus: { name: 'Hog Rider', why: 'field_rotation', recent: null, rotation: { index: 1, of: 3, next: 'Golem' } },
+    }));
+    expect(f?.line).toContain('field rotation');
+  });
+
+  it("a field deck from the session is labelled the field's", () => {
+    const r = todayRow('#A', 'A', plan({ session: session({
+      practise: { key: 'f', name: 'Balloon', expectedWinRate: 61, cards: eight,
+                  vsFocus: { winRate: 60 }, source: 'field' },
+    }) }));
+    expect(r.source).toBe('field');
+    expect(r.pick?.shared).toBeUndefined();
+  });
+
+  it('an older server with no session keeps the old behaviour', () => {
+    const r = todayRow('#A', 'A', plan({ closest }));
+    expect(r.pick?.key).toBe('thirty-day');
+    expect(r.focus).toBeNull();
+  });
+
+  it('a failed read carries no focus', () => {
+    expect(todayRow('#A', 'A', null).focus).toBeNull();
+  });
+
+  it('formats a day without the local clock', () => {
+    expect(formatDay('2026-09-30')).toBe('30 Sep');
+    expect(formatDay('2026-01-01')).toBe('1 Jan');
+    expect(formatDay(null)).toBe('—');
+    expect(formatDay('garbage')).toBe('garbage');
   });
 });

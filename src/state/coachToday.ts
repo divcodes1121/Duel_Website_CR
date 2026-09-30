@@ -64,6 +64,33 @@ export interface TodayPlanInput {
     artFilled?: string[];
     affinity?: { shared: number; of: number; deckBattles: number; familiar: boolean };
   }[];
+  /** TODAY'S SESSION (`server/coach_session.py`) — the part that changes
+   *  daily. Structural copy of `analyticsClient.DailySession`, only the
+   *  fields a row reads, because this file takes no imports. */
+  session?: {
+    day: string;
+    since: string;
+    focus: {
+      name: string;
+      why: 'lost_recently' | 'rotation' | 'field_rotation';
+      recent: { battles: number; wins: number; losses: number } | null;
+      excessLosses?: number;
+      rotation: { index: number; of: number; next: string } | null;
+    } | null;
+    practise: {
+      key: string;
+      name: string;
+      expectedWinRate: number;
+      cards?: string[];
+      art?: Record<string, 'evolution' | 'hero'>;
+      artInferred?: boolean;
+      artFilled?: string[];
+      vsFocus: { winRate: number };
+      source: 'their-cards' | 'field';
+      shared?: number | null;
+      deckBattles?: number | null;
+    } | null;
+  } | null;
 }
 
 export interface TodayRow {
@@ -87,7 +114,12 @@ export interface TodayRow {
      *  Present only when the pick IS one of theirs. */
     shared?: number;
     deckBattles?: number;
+    /** The pick's rate against today's focus, when it came from the session. */
+    vsFocus?: number;
   } | null;
+  /** Today's one matchup and why — the line that changes day to day. Null on
+   *  an older server or when there is nothing to drill. */
+  focus: { name: string; line: string } | null;
   /** What the weighting moved toward, worst first. Empty is a real answer. */
   workOn: string[];
   /** One short sentence. Never an adjective the plan cannot carry. */
@@ -107,7 +139,7 @@ export function todayRow(
 ): TodayRow {
   if (!plan || plan.basis === 'none') {
     return {
-      tag, label, kind: 'failed', pick: null, workOn: [], tailoredPicks: 0, source: 'field',
+      tag, label, kind: 'failed', pick: null, workOn: [], tailoredPicks: 0, source: 'field', focus: null,
       note: 'Their plan could not be worked out just now.',
     };
   }
@@ -119,37 +151,60 @@ export function todayRow(
      `closest[0]` is the best answer built from cards this player actually
      runs, so it differs by construction; the field's pick is the fallback
      when they have nothing close, which is a real state and is labelled. */
+  /* TODAY'S PRACTICE DECK FIRST. `closest[0]` is the best deck from their
+     cards against the field over thirty days, and a thirty-day answer barely
+     moves: measured, the same deck five days running for seven of eight real
+     roster players, which is what "the daily practice does not change" was.
+     The session's deck is chosen against TODAY'S matchup, so it moves when
+     the focus does. */
+  const s = plan.session?.practise;
+  const focus = focusLine(plan.session);
   const mine = plan.closest?.[0];
   const top = mine ?? plan.recommendations[0];
-  const source: TodayRow['source'] = mine ? 'their-deck' : 'field';
-  const pick = top
+  const pick = s
     ? {
-        key: top.key,
-        name: top.name,
-        expectedWinRate: top.expectedWinRate,
-        cards: top.cards ?? [],
-        art: top.art,
-        artInferred: top.artInferred,
-        artFilled: top.artFilled,
-        shared: mine?.affinity?.shared,
-        deckBattles: mine?.affinity?.deckBattles,
+        key: s.key,
+        name: s.name,
+        expectedWinRate: s.expectedWinRate,
+        cards: s.cards ?? [],
+        art: s.art,
+        artInferred: s.artInferred,
+        artFilled: s.artFilled,
+        shared: s.source === 'their-cards' ? (s.shared ?? undefined) : undefined,
+        deckBattles: s.source === 'their-cards' ? (s.deckBattles ?? undefined) : undefined,
+        vsFocus: s.vsFocus.winRate,
       }
-    : null;
+    : top
+      ? {
+          key: top.key,
+          name: top.name,
+          expectedWinRate: top.expectedWinRate,
+          cards: top.cards ?? [],
+          art: top.art,
+          artInferred: top.artInferred,
+          artFilled: top.artFilled,
+          shared: mine?.affinity?.shared,
+          deckBattles: mine?.affinity?.deckBattles,
+        }
+      : null;
+  const source: TodayRow['source'] = s
+    ? s.source === 'their-cards' ? 'their-deck' : 'field'
+    : mine ? 'their-deck' : 'field';
   const workOn = plan.weighted.slice(0, 3).map((w) => w.name);
 
   if (!pick) {
     return {
-      tag, label, kind: 'failed', pick: null, workOn, tailoredPicks: 0, source: 'field',
+      tag, label, kind: 'failed', pick: null, workOn, tailoredPicks: 0, source: 'field', focus,
       note: 'Nothing in the pool could be ranked against the field today.',
     };
   }
 
   if (plan.basis === 'no_history') {
-    return { tag, label, kind: 'new', pick, workOn: [], tailoredPicks: 0, source,
+    return { tag, label, kind: 'new', pick, workOn: [], tailoredPicks: 0, source, focus,
       note: 'Nothing stored for them yet — this is the field’s answer, not theirs.' };
   }
   if (plan.basis === 'unweighted') {
-    return { tag, label, kind: 'field', pick, workOn: [], tailoredPicks: 0, source,
+    return { tag, label, kind: 'field', pick, workOn: [], tailoredPicks: 0, source, focus,
       note: `None of their ${plan.battles.toLocaleString('en-US')} battles gives an archetype enough evidence to weight yet.` };
   }
   /* THE PICK IS ONE OF THEIRS, so the row says why it is theirs rather than
@@ -158,18 +213,45 @@ export function todayRow(
   if (source === 'their-deck' && pick) {
     return {
       tag, label, kind: 'tailored', pick, workOn,
-      tailoredPicks: plan.tailoredPicks, source,
+      tailoredPicks: plan.tailoredPicks, source, focus,
       note: pick.shared != null && pick.deckBattles != null
         ? `${pick.shared} of 8 cards are in a deck they have played ${pick.deckBattles} times.`
         : 'Built from cards they already play.',
     };
   }
   if (plan.tailoredPicks > 0) {
-    return { tag, label, kind: 'tailored', pick, workOn, tailoredPicks: plan.tailoredPicks, source,
+    return { tag, label, kind: 'tailored', pick, workOn, tailoredPicks: plan.tailoredPicks, source, focus,
       note: `${plan.tailoredPicks} of ${plan.recommendations.length} picks ${plan.tailoredPicks === 1 ? 'is' : 'are'} here because of their own record.` };
   }
-  return { tag, label, kind: 'ordered', pick, workOn, tailoredPicks: 0, source,
+  return { tag, label, kind: 'ordered', pick, workOn, tailoredPicks: 0, source, focus,
     note: 'Nothing they play is close to the field’s answers — this is the field’s deck.' };
+}
+
+/** `2026-09-30` -> `30 Sep`. Split, never parsed through the local clock, so
+ *  a reader west of UTC is not shown the day before. */
+export function formatDay(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d || m > 12) return iso;
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${d} ${MONTHS[m - 1]}`;
+}
+
+/** Today's focus as one line of figures. A focus from yesterday's games prints
+ *  the counts (evidence); a rotation prints its place in the schedule (a
+ *  schedule) — never the one dressed as the other. */
+export function focusLine(session: TodayPlanInput['session']): TodayRow['focus'] {
+  const f = session?.focus;
+  if (!session || !f) return null;
+  if (f.why === 'lost_recently' && f.recent) {
+    const extra = f.excessLosses != null ? ` · ${f.excessLosses.toFixed(1)} more losses than usual` : '';
+    return { name: f.name, line: `${f.recent.wins}–${f.recent.losses} since ${formatDay(session.since)}${extra}` };
+  }
+  if (f.rotation) {
+    const kind = f.why === 'field_rotation' ? 'field rotation' : 'rotation';
+    return { name: f.name, line: `${kind} day ${f.rotation.index} of ${f.rotation.of} · next ${f.rotation.next}` };
+  }
+  return { name: f.name, line: '' };
 }
 
 export interface TodaySummary {

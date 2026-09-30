@@ -124,10 +124,23 @@ export function TodayBoard({ players }: { players: RosterPlayer[] }) {
                       </a>{' '}
                       <DashBadge>{KIND_LABEL[r.kind]}</DashBadge>
                     </span>
+                    {/* TODAY'S MATCHUP LEADS -- the line that changes day to
+                        day. The deck under it was picked for this matchup. */}
+                    {r.focus && (
+                      <span>
+                        <strong>Drill {r.focus.name}</strong>
+                        {r.focus.line && <span className={styles.muted}> · {r.focus.line}</span>}
+                      </span>
+                    )}
                     <span>
                       {r.pick ? (
                         <>
-                          <strong>{r.pick.name}</strong> · {r.pick.expectedWinRate.toFixed(1)}% expected
+                          <strong>{r.pick.name}</strong>
+                          {r.pick.vsFocus != null && r.focus
+                            ? ` · ${r.pick.vsFocus.toFixed(1)}% vs ${r.focus.name}`
+                            : ''}
+                          {' · '}
+                          {r.pick.expectedWinRate.toFixed(1)}% vs field
                         </>
                       ) : (
                         'No plan today'
@@ -149,9 +162,11 @@ export function TodayBoard({ players }: { players: RosterPlayer[] }) {
               of 50 and 3 leaving. The PLAYER half is slower -- over a week,
               holding the board fixed, the top pick did not move for any of
               five real accounts while the order moved for three and the
-              worth-learning suggestion for one. So this line is the only
-              honest way to say "today's plan": name the window and the hour
-              it was built, and let the reader see it change. */}
+              worth-learning suggestion for one. That stability is why each
+              row now leads with TODAY'S SESSION (`server/coach_session.py`):
+              one matchup to drill, chosen from yesterday's games or a daily
+              rotation through their weakest, and the deck for it. This line
+              still dates the board it was all computed against. */}
           <FreshnessLine plan={dated} />
           <div className={styles.controlRow}>
             <button type="button" className={styles.ghostButton} disabled={busy} onClick={() => void load()}>

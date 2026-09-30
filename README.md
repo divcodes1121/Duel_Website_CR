@@ -118,7 +118,7 @@ bot's SQLite files read-only.
 | Coach Assist — Suggestion | **reads real duels (2026-09-27, live)** — the fused ladder+duel rate on every pairing and one option held for duel proof; see the row at the top. Before that, **personal and archetype-by-archetype (2026-09-25, live).** "Or bring one of these" is chosen per player from their playstyle (12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition), and every deck shows its rate against **five** archetypes — their likely ones, their other win conditions, then the meta — on one line |
 | R3 prediction sampler | **STOPPED 2026-09-19 21:05 UTC** by its own stop condition (a royalweb restart during a deploy), ~8 h into 7 days; found 2026-09-25, not restarted per protocol. Re-running needs a deploy freeze or an amendment — the account holder's call. See `server/README.md` |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **3,457 Python checks** across **61 suites** and **1,159 vitest** across 52 files as of 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **3,513 Python checks** across **62 suites** and **1,170 vitest** across 53 files as of 2026-09-30 — today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -280,7 +280,7 @@ npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
 ```
 
-That is 27 of the **61** Python suites; all of them total **3,457** checks, and
+That is 27 of the **62** Python suites; all of them total **3,513** checks, and
 the only failure is `test_ml_21a`'s `123 != 122` (the card count moved when
 Minion Giant shipped; accepted). A script totalling them has to read BOTH
 result lines — the homegrown `check()` suites print `N passed, M failed`, the
@@ -8284,8 +8284,8 @@ push.
 
 ## Testing and verification
 
-**3,457 Python checks across 61 suites** and **1,159 vitest tests across 52
-files**, counted by a full run on 2026-09-29; the only failure
+**3,513 Python checks across 62 suites** and **1,170 vitest tests across 53
+files**, counted by a full run on 2026-09-30; the only failure
 is the known, accepted `test_ml_21a` `123 != 122`. (It was 1,386 across 38 and
 378 vitest on 2026-08-30; the status table's `tests` row carries the history.)
 None needs the bot's database to pass. Sixteen write temp files of their own,
@@ -13776,6 +13776,79 @@ movement only: on the real account all eleven matchups came back "too close to
 call", correctly, and eleven repetitions of one sentence is a wall — the rest
 is one counted line that names what it withheld.
 
+### Today's session: the part of the plan that changes daily (2026-09-30)
+
+Reported: *"the daily practice for everyone on the roster does not change — it
+should change daily according to how they play, and they should improve by
+seeing the meta decks, the duels…"*. **Measured before changing anything**:
+eight real roster players, a 30-day window ending on each of five consecutive
+days. The deck put in front of them was **identical on all five days for seven
+of eight**, and "Bridge Spam" was that deck for four of the eight.
+
+That was not a bug in the plan. Everything on the tab answers "what beats the
+field over the last thirty days", and a thirty-day average moves by a
+thirtieth a day. That board stays exactly as it was. What was missing is the
+question a coach asks each morning — **what do we work on today?** —
+answered by `server/coach_session.py` as `session` on the same field route
+(no new route; count stays 26):
+
+* **Focus: one matchup to drill.** What beat them since yesterday, when they
+  lost to it *more than their own win rate predicts* (`FRESH_EXCESS` 2 losses
+  over expectation for a known weakness, `FRESH_ALONE` 3 otherwise). Failing
+  that, their three weakest matchups **take turns**, one a day. With no
+  measured weakness, the field's three most-played archetypes take turns
+  instead, and it says it is the field's. `other` ("Mixed") is never a focus —
+  it is a bucket, not a matchup.
+* **Practise with**: the best deck *against that matchup* built from their own
+  cards, provided it stays within `FIELD_SLACK` (3 points) of their best
+  all-round answer — a deck that wins today's matchup by giving away the rest
+  of the field teaches the wrong thing.
+* **Practise against**: the meta's most-played list of that archetype, with
+  its weekly movement.
+* **Proven in duels**: from the duel index — their own duel deck when it is
+  proven against that win condition, otherwise the population's strongest,
+  leaning to one built from their cards. Only decks that clear
+  `duel_brain.strong`. Their own duel games this week ride along.
+* **Rising this week**: meta decks climbing by rank and ≥15% use
+  (`meta_history.movement`, which went live today with seven days stored),
+  marked when it is an archetype they already lose to.
+
+**The rotation is a schedule, and it is printed as one** ("rotation day 2 of 3
+· next Mortar"); a focus that came from yesterday's games prints the counts
+("0–5 since 29 Sep · 2.6 more losses than usual"). A calendar is never dressed
+as a finding. The rotation set is ordered by archetype KEY, not by deficit, so
+a wobble in the deficits cannot serve the same matchup two days running.
+
+**The first cut fired every day.** "Lost at least twice and more than won"
+is true of *something* every day for anybody who plays 50–300 games in two
+days. The excess-losses test replaced it; staged on the same eight players:
+
+| | before | first cut | shipped |
+| --- | --- | --- | --- |
+| (focus, deck) changed day to day | 1 of 32 | 21 of 32 | **25 of 32** |
+| "Mixed" as the focus | — | 9 days | **0** |
+
+A focus repeats only when the problem does: one player went 0–4 and then 0–5
+against Balloon, and Balloon stayed the focus.
+
+**Where it shows.** First card on the coach's *Against the field* tab
+(`SessionCard.tsx`). The roster's **Today** board now leads each row with
+"Drill <matchup>" and draws the session's deck (`coachToday.focusLine`). The
+player's own `#/my` "Your practice deck today" draws it too — it had been
+drawing `recommendations[0]`, the field's top deck, the same for everybody.
+
+**A live bug found on the way: "trend undefinedd".** The meta trend switched
+on for the first time today, and the freshness line read `trend.days` while
+the server sends `trend.daysApart`. Nothing could notice while the trend was
+off. Fixed, with `tests/fieldTrendContract.test.ts` reading both the Python
+and the TypeScript (red on the old code).
+
+Cost: one short `coach_intel` read (since yesterday) and the cached duel
+catalogue; ~1.3 s warm per plan live, the brief session is ~2.2 kB. Tests:
+`server/test_coach_session.py` 48 (two planted faults each turned it red),
+`tests/coachToday.test.ts` +9, 60/60 in a browser on real staged payloads
+(both themes, 1440 and 390).
+
 ### Where the data lives, and what enforces access
 
 The coaching state is in Supabase — `supabase/004_coach_roster.sql` — and
@@ -14905,7 +14978,7 @@ server/
   live_player.py              the live CR battlelog, analysed for a new tag
   recruit.py                  how a tag gets collected without anyone searching for it
   tracking.py                 the tag-enrolment queue — ours, not the bot's
-  test_*.py                   61 suites, 3,457 checks (2026-09-29); none needs the
+  test_*.py                   62 suites, 3,513 checks (2026-09-30); none needs the
                               bot's database. See Running it for the counts
   README.md                   API and storage detail
 
