@@ -1602,6 +1602,21 @@ the session's deck with `x% vs <matchup> · y% vs field`. Strings live in
 `state/coachToday.ts` (`focusLine`, `formatDay` — a calendar split, never the
 local clock, so a reader west of UTC is not shown the day before).
 
+## Coach Assist: "Or bring one of these" and its duel figures (2026-09-30)
+
+Each row after the name and its labels carries ONE duel figure, never both:
+
+- **`· 123 duels, 61% won`** when duel players fielded that exact list 30+
+  times in the window (`duelRecord`). That record is the evidence; a pairing
+  percentile would misread a staple-heavy list they bring constantly.
+- **`· pairs better than 38% of duel decks`** otherwise (`synergy`), with a
+  `title` saying what it counts. A position, never a score.
+
+The heading note gains `· only decks whose cards duel players pair` only when
+the server ran the gate (`compose.synergyGate`). **"Planned for the whole duel"
+is removed** (on request); "Deckkies built for this duel" stays, and the
+tuner's own "A full loadout" is unchanged.
+
 ## Working on this
 
 ```bash

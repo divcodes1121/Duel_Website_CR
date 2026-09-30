@@ -1241,10 +1241,10 @@ function BuiltVs({ vs }: { vs: CoachBuiltDeck['vs'] }) {
 
 const SEED_LABEL = { option: 'your option', bring: 'from your list', yours: 'your deck' } as const;
 
-/** Decks Deckkies BUILT for this duel, and the loadout for the whole of it
- *  (`deck_builder.py`). Every built deck is a real deck plus one or two swaps
- *  real players make; the number beside each swap is how many real deck pairs
- *  made it. The loadout is chosen on its best-of-3 win chance. */
+/** Decks Deckkies BUILT for this duel (`deck_builder.py`). Every built deck
+ *  is a real deck plus one or two swaps real players make; the number beside
+ *  each swap is how many real deck pairs made it. The whole-duel plan that
+ *  used to sit under it was removed on request (2026-09-30). */
 function BuiltPanel({ built }: { built: CoachBuilt }) {
   return (
     <>
@@ -1275,27 +1275,6 @@ function BuiltPanel({ built }: { built: CoachBuilt }) {
                   </li>
                 ))}
               </ul>
-              <Strip cards={d.cards} art={d.art} inferred={d.inferredArt} name={d.name} size="sm" />
-              <BuiltVs vs={d.vs} />{' '}
-              <DeckActions cards={d.cards} name={d.name} size="sm" />
-            </div>
-          ))}
-        </section>
-      )}
-      {built.loadout && (
-        <section className={styles.block} data-hue="green">
-          <h4 className={styles.blockTitle}>
-            Planned for the whole duel{' '}
-            <span className={styles.blockNote}>
-              {built.loadout.win.toFixed(1)}% to win the best-of-3 · three decks, no shared cards
-            </span>
-          </h4>
-          {built.loadout.decks.map((d, i) => (
-            <div key={d.cards.join(',')} style={{ marginBottom: '.5rem' }}>
-              <strong>Game {i + 1}</strong> {d.name}{' '}
-              <span className={styles.blockNote}>
-                {d.win.toFixed(1)}%{d.built ? ' · built by Deckkies' : ''}
-              </span>
               <Strip cards={d.cards} art={d.art} inferred={d.inferredArt} name={d.name} size="sm" />
               <BuiltVs vs={d.vs} />{' '}
               <DeckActions cards={d.cards} name={d.name} size="sm" />
@@ -1360,6 +1339,7 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
             Or bring one of these{' '}
             <span className={styles.blockNote}>
               win rate against their BEST matchup for you
+              {tuner.compose?.synergyGate ? ' · only decks whose cards duel players pair' : ''}
             </span>
           </h4>
           {others.map((d) => (
@@ -1376,6 +1356,24 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
               {d.newToYou && <span className={styles.blockNote}> · new to you</span>}
               {d.familiar > 0 && (
                 <span className={styles.blockNote}> · {d.familiar}/8 cards you play</span>
+              )}
+              {/* PROVEN IN DUELS: fielded 30+ times in the window, so its own
+                  duel record is the evidence. Otherwise HOW WELL ITS CARDS GO
+                  TOGETHER, as duel players pair them (`deck_synergy`): the share
+                  of decks they repeatedly field that this one out-pairs. A
+                  position, never a score. */}
+              {d.duelRecord ? (
+                <span className={styles.blockNote}>
+                  {' '}· {d.duelRecord[0].toLocaleString('en-US')} duels
+                  {d.duelRecord[1] != null
+                    ? `, ${((100 * d.duelRecord[1]) / d.duelRecord[0]).toFixed(0)}% won`
+                    : ''}
+                </span>
+              ) : d.synergy != null && (
+                <span className={styles.blockNote}
+                      title="Share of the decks duel players repeatedly field whose cards go together less often than this deck's">
+                  {' '}· pairs better than {d.synergy}% of duel decks
+                </span>
               )}
               <Strip cards={d.view.cards} art={d.view.art}
                      inferred={d.view.inferredArt} filled={d.view.artFilled} size="sm" />
@@ -1724,7 +1722,7 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
 
       {data.brainModel && <BrainLine model={data.brainModel} />}
       {!!data.brainSwaps?.length && best && <BrainSwaps swaps={data.brainSwaps} base={best} />}
-      {data.built && (data.built.decks.length > 0 || data.built.loadout) && <BuiltPanel built={data.built} />}
+      {data.built && data.built.decks.length > 0 && <BuiltPanel built={data.built} />}
 
       {!!data.notes.length && (
         <section className={styles.block} data-hue="violet">

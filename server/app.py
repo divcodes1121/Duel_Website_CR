@@ -554,6 +554,13 @@ class Handler(BaseHTTPRequestHandler):
                     out["duelIndex"] = duel_index.status()
                 except Exception:  # noqa: BLE001
                     out["duelIndex"] = {"available": False}
+                # THE SYNERGY TABLE "Or bring one of these" is gated on. Rebuilt
+                # after every poll; null before the first build (= no gate).
+                try:
+                    import deck_synergy
+                    out["deckSynergy"] = deck_synergy.status()
+                except Exception:  # noqa: BLE001
+                    out["deckSynergy"] = None
                 # HOW MANY DAYS OF META HISTORY EXIST. Same reason again: if
                 # the snapshot timer stops, nothing breaks and no trend is ever
                 # wrong — the span just silently stops growing, which is

@@ -1311,7 +1311,6 @@ export interface CoachBuiltDeck {
 export interface CoachBuilt {
   brain: string;
   decks: CoachBuiltDeck[];
-  loadout: { win: number; decks: CoachBuiltDeck[]; against: string[] } | null;
   graphDecks?: number | null;
 }
 
@@ -1450,6 +1449,13 @@ export interface ComposedDeck {
    *  weighs, never a score — being handed eight unfamiliar cards mid-duel is
    *  a real cost. */
   familiar: number;
+  /** Share (0-100) of the decks duel players repeatedly field that this one
+   *  out-pairs (`deck_synergy`); null/absent without the table. */
+  synergy?: number | null;
+  /** `[games, wins]` in real duels in the window, when duel players field it
+   *  30+ times — then that record is the evidence and the percentile is not
+   *  shown. Wins may be null on a table built before they were kept. */
+  duelRecord?: [number, number | null] | null;
   /** The seed pool's win-condition key (the bot's classifier), which is what
    *  playstyle is matched on. `archetype` is the hash reading and calls any
    *  Miner deck "miner". Optional: absent from a server before 2026-09-25. */
@@ -1479,8 +1485,11 @@ export interface Composed {
    *  what the list was personalised on. Empty when nothing is stored. */
   playstyle?: string[];
   considered: number;
-  skipped: { illegal: number; vetoed: number; no_floor: number; excluded: number };
+  skipped: { illegal: number; vetoed: number; no_floor: number; excluded: number; synergy?: number };
   vetoed: boolean;
+  /** A duel-pairing gate ran (`deck_synergy`): decks whose cards duel
+   *  players do not put together were skipped. Absent before 2026-09-30. */
+  synergyGate?: boolean;
   poolSize: number;
   /** False means the SNAPSHOT has no seeds yet — which is a different thing
    *  from "no good decks", and the two must not look alike on screen. */

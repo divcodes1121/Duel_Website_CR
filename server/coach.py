@@ -1230,20 +1230,17 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
 BUILD_SEEDS = 12
 BUILD_SHOW = 3
 
-#: Finalists re-judged by the combined brain, and other seeds added to the
-#: loadout pool. THE COMBINED BRAIN READS A LIST'S LADDER HISTORY THE FIRST
+#: Finalists re-judged by the combined brain. THE COMBINED BRAIN READS A LIST'S LADDER HISTORY THE FIRST
 #: TIME IT RATES IT: staged, rating ~20 new lists made the first request 89 s
 #: (4 s warm). The fast model searches everything; the old brain rates only
 #: these. Measured on four real players (30-day window, cold): 5 finalists built
 #: 1 deck in total, 12 built 7 at the same time (the lists share history
-#: reads); a loadout pool of options + 4 left two players with no three
-#: card-disjoint decks, + 10 planned a loadout for all four, 2-8 s.
+#: reads).
 BUILD_FINALISTS = 12
-LOADOUT_EXTRA = 10
 
 
 def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int) -> dict | None:
-    """Decks Deckkies BUILT for this duel, and the loadout for the whole of it.
+    """Decks Deckkies BUILT for this duel.
 
     `deck_builder.build` walks human swaps (`swap_graph`) out from real decks,
     judged by the fast duel model; every finalist is then re-judged by the
@@ -1251,10 +1248,9 @@ def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int) 
     still gains. A built deck must stay a working deck: the three special slots,
     and no harmony problem its seed did not already have.
 
-    At game 1 the planner picks three card-disjoint decks from seeds + built
-    decks for the WHOLE best-of-3 (`deck_builder.plan_loadout`). Later in a duel
-    the results of the games played are not known here, so it plans nothing
-    rather than guess the score.
+    The whole-duel planner (`deck_builder.plan_loadout`) is NO LONGER CALLED:
+    the account holder judged "Planned for the whole duel" useless and asked
+    for it gone (2026-09-30). The function and its tests stay in deck_builder.
     """
     try:
         import deck_builder as dbl
@@ -1285,14 +1281,9 @@ def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int) 
 
         seeds = seeds[:BUILD_SEEDS]
         built = dbl.build(seeds, fast, graph, used=used, allow=allow, limit=BUILD_FINALISTS)
-        # Options are already rated in this request; the rest of the loadout
-        # pool is the best few other seeds by the fast model.
-        extra = sorted((x for x in seeds if x.get("source") != "option"),
-                       key=lambda x: -fast(x["cards"]))[:LOADOUT_EXTRA]
-        pool_seeds = [x for x in seeds if x.get("source") == "option"] + extra
         if rates is not None and rates.on:
-            rates.prepare([b["cards"] for b in built] + [b["seed"] for b in built]
-                          + [x["cards"] for x in extra], [d["cards"] for d in decks])
+            rates.prepare([b["cards"] for b in built] + [b["seed"] for b in built],
+                          [d["cards"] for d in decks])
         seat = counter.seater()
         kept = []
         for b in built:
@@ -1314,35 +1305,9 @@ def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int) 
                 "seedSource": b.get("seedSource"),
             })
         kept.sort(key=lambda r: -r["win"])
-        out = {"brain": dbl.BRAIN, "decks": kept[:BUILD_SHOW], "loadout": None,
+        out = {"brain": dbl.BRAIN, "decks": kept[:BUILD_SHOW],
                "graphDecks": (sg.load() or {}).get("decks")}
 
-        if stage == 0 and len(decks) >= 1:
-            pool = []
-            for x in pool_seeds:
-                e = _combined(model, rates, x["cards"], decks, kw)
-                if e:
-                    ordered, art, inferred = seat(x["cards"])
-                    arch = _archetype(ordered)
-                    pool.append({"cards": ordered, "art": art, "inferredArt": inferred,
-                                 "name": x.get("name") or cd.deck_title(arch, ordered),
-                                 "win": e["winRate"], "vs": e["vs"], "built": False})
-            for k in kept:
-                pool.append({**k, "built": True})
-            pool.sort(key=lambda r: -r["win"])
-            theirs = list(range(min(3, len(decks))))
-            plan = dbl.plan_loadout(pool, theirs,
-                                    lambda ci, tj: pool[ci]["vs"][tj]["winRate"] / 100.0,
-                                    size=3, used=used)
-            if plan:
-                out["loadout"] = {
-                    "win": round(100 * plan["win"], 1),
-                    "decks": [{k: pool[i][k] for k in ("cards", "art", "inferredArt", "name",
-                                                       "win", "vs", "built")}
-                              for i in plan["decks"]],
-                    "against": [decks[j].get("deckName") or decks[j].get("archetype") or ""
-                                for j in theirs],
-                }
         return out
     except Exception as exc:  # noqa: BLE001
         print("coach._build_for_duel: %r" % (exc,), file=sys.stderr)
@@ -1522,6 +1487,27 @@ def _playstyle(tag: str, since: str | None, until: str | None,
     return {"cards": cards, "families": families}
 
 
+def _synergy_gate():
+    """`(cards) -> (passes, percentile)` for the composer, or None.
+
+    "Or bring one of these" offers ladder decks the duels have barely seen, and
+    a list can pass every structural check and still be a pile. `deck_synergy`
+    counts which cards duel players put together; a deck less cohesive than 9
+    in 10 of the decks they repeatedly field is skipped (measured: such decks
+    win ~4 points less than their pilots predict). No table = no gate, so a
+    host without one keeps today's list rather than an empty one.
+    """
+    try:
+        import deck_synergy as syn
+    except Exception:  # pragma: no cover - deployment shape
+        return None
+    table = syn.load()
+    if not table:
+        return None
+    return lambda cards: (syn.passes(cards, table), syn.percentile(cards, table),
+                          syn.duel_record(cards, table))
+
+
 def tune(my_deck: list[str], opp_decks: list[dict],
          used: set | None = None, hist: dict | None = None,
          profile: dict | None = None,
@@ -1551,6 +1537,7 @@ def tune(my_deck: list[str], opp_decks: list[dict],
     except Exception as exc:  # pragma: no cover - deployment shape
         print("coach.tune: tuner unavailable: %r" % (exc,), file=sys.stderr)
         return None
+    synergy = _synergy_gate()
 
     archetypes, weights = _spread(opp_decks)
     if not archetypes:
@@ -1594,7 +1581,7 @@ def tune(my_deck: list[str], opp_decks: list[dict],
             veto=harmony.veto,
             # Never offer back the deck they are already being told to play.
             exclude={",".join(sorted(set(my_deck)))},
-            limit=10 ** 6)
+            limit=10 ** 6, synergy=synergy)
         composed["decks"] = tuner.personalise(composed["decks"], profile)
         for d in composed["decks"]:
             d["vs"] = (_chips(d["deck"], None, chips, None, record=d.get("archetypes") or {})
@@ -1604,7 +1591,7 @@ def tune(my_deck: list[str], opp_decks: list[dict],
         out["compose"] = composed
         out["loadout"] = (tuner.loadout(
             archetypes, weights=weights, comfort=comfort, veto=harmony.veto,
-            used=used or set(), size=games_left, profile=profile)
+            used=used or set(), size=games_left, profile=profile, synergy=synergy)
             if games_left >= 2 else None)
         for d in (out["loadout"] or {}).get("decks") or []:
             d["vs"] = (_chips(d["deck"], None, chips, None, record=d.get("archetypes") or {})

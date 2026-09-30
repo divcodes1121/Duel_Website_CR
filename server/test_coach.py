@@ -689,6 +689,12 @@ saved_mods = {k: sys.modules.get(k) for k in ("deck_tuner", "deck_harmony")}
 saved_spread = coach._spread
 sys.modules["deck_tuner"], sys.modules["deck_harmony"] = fake_tuner, fake_harmony
 coach._spread = lambda decks: (["hogcycle"], {"hogcycle": 1.0})
+# NO TABLE, whatever this machine has built: the VPS has a real one, and a
+# check that reads it is testing the host, not the code.
+no_table = types.ModuleType("deck_synergy")
+no_table.load = lambda: None
+saved_mods["deck_synergy"] = sys.modules.get("deck_synergy")
+sys.modules["deck_synergy"] = no_table
 try:
     SPENT = {"giant-skeleton", "goblin-drill", "bomber", "arrows",
              "fireball", "tesla", "knight", "skeletons"}
@@ -701,6 +707,33 @@ try:
           str(calls["loadout"]))
     check("and is sized to the games left, not always three",
           calls["loadout"].get("size") == 2, str(calls["loadout"].get("size")))
+
+    # THE SYNERGY GATE reaches both lists that draw on the composer. With no
+    # table the gate is None (today's list, never an empty one); with a table
+    # it is a callable answering (passes, percentile).
+    check("no synergy table = no gate, for the composer and the loadout",
+          calls["compose"].get("synergy", "absent") is None
+          and calls["loadout"].get("synergy", "absent") is None)
+    fake_syn = types.ModuleType("deck_synergy")
+    fake_syn.load = lambda: {"n": 1}
+    fake_syn.passes = lambda cards, table=None: "hog-rider" not in cards
+    fake_syn.percentile = lambda cards, table=None: 5 if "hog-rider" in cards else 70
+    fake_syn.duel_record = lambda cards, table=None: None if "hog-rider" in cards else [40, 22]
+    saved_syn = sys.modules.get("deck_synergy")
+    sys.modules["deck_synergy"] = fake_syn
+    try:
+        calls.clear()
+        coach.tune(BEST, [{"cards": BEST}], used=SPENT, games_left=2)
+        g1, g2 = calls["compose"].get("synergy"), calls["loadout"].get("synergy")
+        check("WITH a table, the composer gets the gate",
+              callable(g1) and g1(BEST) == (False, 5, None) and g1(SPENT) == (True, 70, [40, 22]),
+              str(g1))
+        check("and so does the loadout", callable(g2) and g2(BEST) == (False, 5, None))
+    finally:
+        if saved_syn is None:
+            sys.modules.pop("deck_synergy", None)
+        else:
+            sys.modules["deck_synergy"] = saved_syn
 
     calls.clear()
     out = coach.tune(BEST, [{"cards": BEST}], used=SPENT, games_left=1)

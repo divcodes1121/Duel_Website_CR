@@ -152,3 +152,5 @@ server/.after_poll.json
 server/.after_poll.json.tmp
 server/.swap_graph.json
 server/.swap_graph.json.tmp
+server/.deck_synergy.json
+server/.deck_synergy.json.tmp

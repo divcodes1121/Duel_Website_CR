@@ -502,6 +502,29 @@ def main() -> int:
           specials(tuner._offered(ALLROUND)) == 3
           and set(tuner._offered(ALLROUND)["cards"]) == set(ALLROUND))
 
+    print("\na deck whose cards duel players do not pair is skipped and replaced (2026-09-30)")
+    # The gate is a callable `(cards) -> (passes, percentile)`. OTHER is the
+    # pile here; the list must lose exactly it and keep the rest's order.
+    pile = ",".join(sorted(OTHER))
+    gate = lambda cards: ((",".join(sorted(cards)) != pile), 7 if ",".join(sorted(cards)) == pile else 64)
+    synbase = tuner.compose(archs, pool=pool, veto=harmony.veto)
+    gated = tuner.compose(archs, pool=pool, veto=harmony.veto, synergy=gate)
+    check("the fixture's pile was offered before the gate",
+          pile in [x["hash"] for x in synbase["decks"]])
+    check("A DECK THAT FAILS THE SYNERGY GATE IS NEVER OFFERED, however good its floor",
+          pile not in [x["hash"] for x in gated["decks"]])
+    check("the skip is counted", gated["skipped"]["synergy"] == 1, str(gated["skipped"]))
+    check("the rest keep their order",
+          [x["hash"] for x in gated["decks"]] == [h for h in (x["hash"] for x in synbase["decks"]) if h != pile])
+    check("every offered deck carries its synergy percentile",
+          all(x["synergy"] == 64 for x in gated["decks"]))
+    check("the report says a gate ran", gated["synergyGate"] is True and synbase["synergyGate"] is False)
+    check("no gate = no percentile and nothing skipped",
+          all(x["synergy"] is None for x in synbase["decks"]) and synbase["skipped"]["synergy"] == 0)
+    lo_g = tuner.loadout(archs, pool=pool, veto=harmony.veto, synergy=gate)
+    check("the loadout honours the gate too",
+          all(d["hash"] != pile for d in lo_g["decks"]), str([d["hash"][:20] for d in lo_g["decks"]]))
+
     print("\nan empty pool is a SNAPSHOT problem, not 'no good decks'")
     c0 = tuner.compose(archs, pool={})
     check("an empty pool says so", c0["poolReady"] is False and c0["decks"] == [])

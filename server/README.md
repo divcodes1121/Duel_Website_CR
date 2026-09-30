@@ -1471,6 +1471,26 @@ of the seed's; the loadout pool is the options + `LOADOUT_EXTRA` 10 other seeds
 by the fast model + the built decks. Payload `built`, only with `swaps=1`.
 Backups `coach.py.bak-*-prebuilder`, `*-prepool`.
 
+## The duel-pairing gate (`deck_synergy.py`, 2026-09-30)
+
+`deck_synergy.build` (after every poll, ~10 s; `.deck_synergy.json`,
+gitignored, counts only — no tags) reads the duel index's `games` table
+read-only for `WINDOW_DAYS` 60: card counts and pair counts over every fielded
+deck (once per game), the reference = decks with `REF_MIN_GAMES` 10 and
+`REF_MIN_PLAYERS` 3 (the catalogue's rule) as 101 game-weighted cohesion
+quantiles, and `proven` = `{deck: [games, wins]}` for decks with
+`PROVEN_GAMES` 30+. `cohesion` = mean PMI over the 28 pairs (`PAIR_PRIOR` 0.5);
+`percentile`; `passes` = proven OR percentile >= `GATE_PCT` 10 (no table =
+True). `coach._synergy_gate()` hands `deck_tuner.compose/loadout` a
+`(cards) -> (passes, percentile, duel record)` callable; a failing deck is
+skipped like a veto (`skipped.synergy`), rows carry `synergy` and
+`duelRecord`, the report `synergyGate`. `/api/analytics/status` ->
+`deckSynergy`. Evidence (temporal holdout, pilots out) is in the module
+docstring. Backups `*.bak-20260930-153444-presynergy`.
+
+`coach._build_for_duel` no longer calls `plan_loadout` ("Planned for the whole
+duel" removed on request); `LOADOUT_EXTRA` is gone and `built` has no `loadout`.
+
 ## Vetting the candidate pool (`deck_evidence.py`, 2026-09-30)
 
 `pair_matchup_agg` has no player and no mode column, so the seed pool that

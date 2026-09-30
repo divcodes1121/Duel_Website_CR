@@ -13,8 +13,9 @@ with it after any restart. This triggers on DATA instead:
      `QUIET_S` (the poll has finished — never update from half a poll),
   3. update the duel index (new duel payloads, records, player strength),
      retrain the duel model incrementally (only games stored since its own
-     watermark), rebuild the swap graph (the deck builder's move set), and
-     remember the stored_at it acted on.
+     watermark), rebuild the card-pairing table (`deck_synergy`, the gate on
+     "Or bring one of these"), rebuild the swap graph (the deck builder's move
+     set), and remember the stored_at it acted on.
 
 A split duel across two polls needs nothing special: native duels are only in
 the API once finished, the duel index and the model both read by STORED time
@@ -93,6 +94,9 @@ def main(argv: list[str]) -> int:
     steps = [
         ("duel index", [sys.executable, "-u", os.path.join(HERE, "duel_index.py"), "--build"]),
         ("duel model", [sys.executable, "-u", os.path.join(HERE, "duel_model_train.py")]),
+        # Which cards duel players put together: the gate on "Or bring one of
+        # these" (a deck whose cards they do not pair is skipped).
+        ("deck synergy", [sys.executable, "-u", os.path.join(HERE, "deck_synergy.py"), "--build"]),
         # The deck builder's move set: which cards humans interchange.
         ("swap graph", [sys.executable, "-u", os.path.join(HERE, "swap_graph.py"), "--build"]),
     ]

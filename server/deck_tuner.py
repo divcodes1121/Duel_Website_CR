@@ -592,7 +592,8 @@ def compose(archetypes: list[str],
             veto=None,
             exclude: set[str] | None = None,
             limit: int = TOP_DECKS,
-            pool: dict | None = None) -> dict:
+            pool: dict | None = None,
+            synergy=None) -> dict:
     """Real decks that cover `archetypes`, best worst-matchup first.
 
     `used`    -- cards spent elsewhere in the duel loadout. A deck containing
@@ -600,6 +601,10 @@ def compose(archetypes: list[str],
     `exclude` -- deck hashes already chosen, so a loadout does not offer the
                  same list twice.
     `pool`    -- override for testing; defaults to the snapshot's seeds.
+    `synergy` -- `(cards) -> (passes, percentile, duel record|None)` from
+                 `deck_synergy`: a deck whose cards duel players do not put
+                 together is SKIPPED and the next seed takes its place, like the
+                 veto. None = no gate.
 
     RANKED ON THE WORST MATCHUP, never the average. A deck that beats their
     likeliest deck and loses to the other two is not the deck to bring, and the
@@ -611,7 +616,7 @@ def compose(archetypes: list[str],
     used = used or set()
     exclude = exclude or set()
     out, skipped = [], {"illegal": 0, "vetoed": 0, "no_floor": 0, "excluded": 0,
-                        "slots": 0}
+                        "slots": 0, "synergy": 0}
 
     for _arch, decks in seedmap.items():
         for d in decks:
@@ -628,6 +633,10 @@ def compose(archetypes: list[str],
                 continue
             if veto is not None and veto(d["cards"]):
                 skipped["vetoed"] += 1
+                continue
+            syn = synergy(d["cards"]) if synergy is not None else (True, None, None)
+            if not syn[0]:
+                skipped["synergy"] += 1
                 continue
             f, fg, fw = _floor(d, archetypes)
             if f is None:
@@ -665,6 +674,12 @@ def compose(archetypes: list[str],
                 # score -- a number the reader weighs, because being handed a
                 # deck with eight unfamiliar cards mid-duel is a real cost.
                 "familiar": sum(1 for c in d["cards"] if c in (comfort or set())),
+                # Share of the decks duel players repeatedly field that this
+                # one out-pairs (`deck_synergy`). None without a table.
+                "synergy": syn[1],
+                # `[games, wins]` in real duels when duel players field it 30+
+                # times in the window; then THAT is the evidence, not the pairing.
+                "duelRecord": syn[2] if len(syn) > 2 else None,
             })
 
     # Floor first, then how much of the spread that floor was measured over --
@@ -679,6 +694,7 @@ def compose(archetypes: list[str],
         "considered": len(out),
         "skipped": skipped,
         "vetoed": veto is not None,
+        "synergyGate": synergy is not None,
         "poolSize": sum(len(v) for v in seedmap.values()),
         # An empty pool is a SNAPSHOT problem, not "no good decks", and the two
         # must not look the same on screen.
@@ -893,7 +909,8 @@ def loadout(archetypes: list[str],
             pool: dict | None = None,
             size: int = 3,
             used: set[str] | None = None,
-            profile: dict | None = None) -> dict:
+            profile: dict | None = None,
+            synergy=None) -> dict:
     """Three decks that share no cards, chosen to cover the field BETWEEN them.
 
         loadout_floor = min over archetype a of ( max over deck d of rate(d, a) )
@@ -923,7 +940,7 @@ def loadout(archetypes: list[str],
     # (`playable`), best floor first; strangers only top the pool up when the
     # player has too few pilotable decks to fill it, and each is labelled.
     first = compose(archetypes, weights, used=spent, comfort=comfort, veto=veto,
-                    limit=10 ** 6, pool=pool)
+                    limit=10 ** 6, pool=pool, synergy=synergy)
     cards = set((profile or {}).get("cards") or ())
     mine = playstyle_families((profile or {}).get("families"))
     ranked = first["decks"]
