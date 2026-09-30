@@ -738,6 +738,24 @@ KNOWN_MIN = 5
 STYLE_MIN_BATTLES = 15
 STYLE_MIN_SHARE = 0.05
 
+#: A deck THEY CAN PILOT: at least `KNOWN_MIN` of its eight cards are in decks
+#: they play, or its win condition is one they play. Reported 2026-09-30: two
+#: players with different styles facing one opponent were handed the same
+#: "Or bring one of these" (reordered) and the IDENTICAL loadout, including a
+#: Golem deck to a player who runs 1 of its 8 cards. A bonus of 1.5 points
+#: cannot move a list whose gaps are five points wide (`coach_daily`'s finding
+#: again), so being pilotable is now a GATE with a labelled fallback, not a
+#: weight: unfamiliar decks are offered only after every pilotable one that is
+#: close enough, and each carries `newToYou`.
+UNFAMILIAR_MAX = 2
+
+
+def playable(row: dict, cards: set[str], mine: set[str]) -> bool:
+    """Whether a composed deck is one this player could pilot today."""
+    known = len(set(row.get("deck") or []) & cards)
+    fam = row.get("family") or row.get("archetype") or ""
+    return known >= KNOWN_MIN or (bool(fam) and fam in mine)
+
 
 def _known_bonus(n: int) -> float:
     span = 8 - (KNOWN_MIN - 1)
@@ -797,8 +815,18 @@ def personalise(rows: list[dict], profile: dict | None,
         taken[fam] = taken.get(fam, 0) + 1
         out.append(r)
 
+    for c in pool:
+        c["playable"] = playable(c, cards, mine)
+    # WITH NO PROFILE nothing is personal and every deck is "new"; the field's
+    # answer is returned exactly as before rather than one deck and a label.
+    gate = bool(cards or mine)
+
     out: list[dict] = []
-    lead = min((r for r in pool if r["floor"] >= best - LEAD_BAND), key=order)
+    # THE LEAD STAYS INSIDE THE BAND — never a clearly weaker counter to look
+    # personal — but inside it, a deck they can pilot is preferred to one they
+    # cannot. Outside it the field's best leads and is labelled new to them.
+    band = [r for r in pool if r["floor"] >= best - LEAD_BAND]
+    lead = min(([r for r in band if r["playable"]] if gate else []) or band, key=order)
     take(lead, out)
 
     style = sorted((r for r in pool if r["yours"] and r is not lead
@@ -812,15 +840,44 @@ def personalise(rows: list[dict], profile: dict | None,
             take(r, out)
             reserved += 1
 
-    for r in sorted(pool, key=order):
-        if len(out) >= limit:
-            break
-        if any(r is o for o in out) or not room(r):
-            continue
-        take(r, out)
+    # PILOTABLE FIRST, then at most `UNFAMILIAR_MAX` decks new to them, each
+    # labelled — a counter they have never played is a real option in a duel,
+    # but it is not the same kind of advice as one built from their own cards.
+    # A pilotable deck must still COUNTER: win its worst matchup and sit within
+    # `STYLE_BAND` of the best — the reserved slots' own bar. Being theirs does
+    # not make a deck that loses to the opponent worth bringing.
+    bar = max(STYLE_FLOOR, best - STYLE_BAND)
+    rest = sorted(pool, key=order)
+    if gate:
+        for r in rest:
+            if len(out) >= limit:
+                break
+            if r["playable"] and r["floor"] >= bar and room(r) \
+                    and not any(r is o for o in out):
+                take(r, out)
+        strangers = sum(1 for r in out if not r["playable"])
+        for r in rest:
+            if len(out) >= limit or strangers >= UNFAMILIAR_MAX:
+                break
+            # The same bar as their own decks: a deck they have never played
+            # must at least COUNTER — live, a 33.5%-floor Golem list slipped in.
+            if (not r["playable"] and r["floor"] >= bar and room(r)
+                    and not any(r is o for o in out)):
+                take(r, out)
+                strangers += 1
+    else:
+        for r in rest:
+            if len(out) >= limit:
+                break
+            if any(r is o for o in out) or not room(r):
+                continue
+            take(r, out)
 
-    # Reading order: the lead, then by what the list was chosen on.
-    return [out[0]] + sorted(out[1:], key=order)
+    for r in out:
+        r["newToYou"] = gate and not r["playable"]
+    # Reading order: the lead, then pilotable by what the list was chosen on,
+    # then anything new to them.
+    return [out[0]] + sorted(out[1:], key=lambda r: (r["newToYou"],) + order(r))
 
 
 def loadout(archetypes: list[str],
@@ -829,7 +886,8 @@ def loadout(archetypes: list[str],
             veto=None,
             pool: dict | None = None,
             size: int = 3,
-            used: set[str] | None = None) -> dict:
+            used: set[str] | None = None,
+            profile: dict | None = None) -> dict:
     """Three decks that share no cards, chosen to cover the field BETWEEN them.
 
         loadout_floor = min over archetype a of ( max over deck d of rate(d, a) )
@@ -853,40 +911,74 @@ def loadout(archetypes: list[str],
     Skeleton drill deck in game 1, then a Giant Skeleton graveyard deck here).
     """
     spent = set(used or ())
+    # FROM THIS PLAYER'S DECKS OUTWARD. It used to pack the 24 highest-floor
+    # decks in the whole pool, so every player facing one opponent got the
+    # same three. With a profile the candidates are the decks THEY can pilot
+    # (`playable`), best floor first; strangers only top the pool up when the
+    # player has too few pilotable decks to fill it, and each is labelled.
     first = compose(archetypes, weights, used=spent, comfort=comfort, veto=veto,
-                    limit=LOADOUT_POOL, pool=pool)
-    cands = first["decks"]
+                    limit=10 ** 6, pool=pool)
+    cards = set((profile or {}).get("cards") or ())
+    mine = playstyle_families((profile or {}).get("families"))
+    ranked = first["decks"]
+    if cards or mine:
+        for c in ranked:
+            c["playable"] = playable(c, cards, mine)
+        own = [c for c in ranked if c["playable"]]
+        cands = own[:LOADOUT_POOL]
+        if len(cands) < LOADOUT_POOL:
+            cands += [c for c in ranked if not c["playable"]][:LOADOUT_POOL - len(cands)]
+        for c in cands:
+            c["newToYou"] = not c["playable"]
+    else:
+        cands = ranked[:LOADOUT_POOL]
     chosen: list[dict] = []
     used = set(spent)
 
-    for _ in range(size):
-        best, best_floor = None, None
-        for c in cands:
-            if c["hash"] in {d["hash"] for d in chosen}:
-                continue
-            if used & set(c["deck"]):
-                continue
-            # What the loadout's floor WOULD be with this deck added. Chosen on
-            # the group's worst archetype, not on the candidate's own quality:
-            # a mediocre deck that answers the one thing nothing else does is
-            # worth more here than a strong deck that repeats a strength.
-            trial = chosen + [c]
-            floor = None
-            for a in archetypes:
-                rates = [r for r in (_rate(d, a) for d in trial) if r is not None]
-                if not rates:
+    def pack(candidates: list[dict]) -> None:
+        nonlocal used
+        while len(chosen) < size:
+            best, best_floor = None, None
+            for c in candidates:
+                if c["hash"] in {d["hash"] for d in chosen}:
                     continue
-                bestrate = max(rates)
-                if floor is None or bestrate < floor:
-                    floor = bestrate
-            if floor is None:
-                continue
-            if best_floor is None or floor > best_floor:
-                best, best_floor = c, floor
-        if best is None:
-            break
-        chosen.append(best)
-        used |= set(best["deck"])
+                if used & set(c["deck"]):
+                    continue
+                # What the loadout's floor WOULD be with this deck added. Chosen
+                # on the group's worst archetype, not on the candidate's own
+                # quality: a mediocre deck that answers the one thing nothing
+                # else does is worth more here than a strong deck that repeats
+                # a strength.
+                trial = chosen + [c]
+                floor = None
+                for a in archetypes:
+                    rates = [r for r in (_rate(d, a) for d in trial) if r is not None]
+                    if not rates:
+                        continue
+                    bestrate = max(rates)
+                    if floor is None or bestrate < floor:
+                        floor = bestrate
+                if floor is None:
+                    continue
+                # A deck new to them must beat the best pilotable choice by a
+                # clear point to take the slot: the loadout is theirs to play.
+                adj = floor - (1.0 if c.get("newToYou") else 0.0)
+                if best_floor is None or adj > best_floor:
+                    best, best_floor = c, adj
+            if best is None:
+                return
+            chosen.append(best)
+            used |= set(best["deck"])
+
+    pack(cands)
+    # THEIR POOL CAN RUN OUT OF CARD-DISJOINT DECKS before the loadout is full:
+    # a player whose pilotable lists all share their favourite cards cannot
+    # field three of them. Staged on a real player it returned TWO decks. The
+    # rest of the loadout then comes from the whole vetted pool, labelled.
+    if len(chosen) < size and len(cands) < len(ranked):
+        for c in ranked:
+            c.setdefault("newToYou", bool(cards or mine) and not c.get("playable"))
+        pack(ranked)
 
     # What the group actually covers, archetype by archetype -- the reading the
     # reader needs to see, because "which of my three answers this" is the
@@ -916,4 +1008,6 @@ def loadout(archetypes: list[str],
         "poolSize": first["poolSize"],
         "poolReady": first["poolReady"],
         "vetoed": veto is not None,
+        # Whether the three were packed from this player's own pilotable decks.
+        "personal": bool(cards or mine),
     }

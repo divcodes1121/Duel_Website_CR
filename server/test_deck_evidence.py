@@ -13,6 +13,7 @@ import sqlite3
 import sys
 import tempfile
 import time
+import json
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import battle_modes as bm  # noqa: E402
@@ -88,7 +89,8 @@ con.executescript("""
 CREATE TABLE player_deck_agg(player_tag TEXT, deck_hash TEXT, battles INT, wins INT, draws INT,
                              archetype TEXT, last_seen TEXT);
 CREATE TABLE player_stats_agg(player_tag TEXT PRIMARY KEY, battles INT, wins INT);
-CREATE TABLE battles(player_tag TEXT, player_deck_hash TEXT, game_mode TEXT);
+CREATE TABLE battles(player_tag TEXT, player_deck_hash TEXT, game_mode TEXT,
+                      player_card_keys TEXT, player_evo TEXT);
 """)
 H = {n: ",".join(sorted(f"{n}{i}" for i in range(8))) for n in ("real", "event", "solo", "old", "next", "spare")}
 
@@ -99,8 +101,10 @@ def add(h, pilots, per, mode, last=FRESH, wins_frac=0.55):
         con.execute("INSERT INTO player_deck_agg VALUES(?,?,?,?,0,'x',?)",
                     (tag, h, per, int(per * wins_frac), last))
         con.execute("INSERT OR REPLACE INTO player_stats_agg VALUES(?,?,?)", (tag, per * 5, per * 5 // 2))
+        order = h.split(",")
         for _ in range(per):
-            con.execute("INSERT INTO battles VALUES(?,?,?)", (tag, h, mode))
+            con.execute("INSERT INTO battles VALUES(?,?,?,?,?)",
+                        (tag, h, mode, json.dumps(order), json.dumps([[order[0], 1, "evolution"]])))
 
 
 add(H["real"], 30, 5, "Ranked1v1_NewArena2")
@@ -137,6 +141,51 @@ out3, rep3 = dev.vet_pool(con, pool, 2, is_own_deck=bm.is_own_deck_1v1, now=now 
 check("past the TTL it measures again", rep3["sampled"] > 0, rep3)
 check("a stale-rejected deck is never cached as measured",
       (dev.known(H["old"]) or {}).get("measured") is False, dev.known(H["old"]))
+
+
+print("\nobserved seating — how the pilots field it")
+KIND = {"lumberjack": "evolution", "barbarians": "evolution", "baby-dragon": "evolution",
+        "mega-minion": "hero", "elite-barbarians": "evolution", "dark-prince": "hero",
+        "musketeer": "both", "skeleton-king": "champion"}.get
+lava = dev.observed_seating(
+    {("lumberjack", "mega-minion", "barbarians"): 90, ("barbarians", "mega-minion", "lumberjack"): 9,
+     ("baby-dragon", "mega-minion", "barbarians"): 1},
+    {("lumberjack", "evolution"): 31, ("barbarians", "evolution"): 31, ("mega-minion", "hero"): 31,
+     ("baby-dragon", "evolution"): 1}, 31, 100, KIND)
+check("the Lava list: Lumberjack is slot 1, as 90% of its pilots field it",
+      lava["slots"] == {"lumberjack": 0, "mega-minion": 1, "barbarians": 2}, lava)
+check("...evolved, and Baby Dragon (1%) is not", lava["art"].get("lumberjack") == "evolution"
+      and "baby-dragon" not in lava["art"], lava["art"])
+golem = dev.observed_seating(
+    {("elite-barbarians", "dark-prince", "musketeer"): 89, ("musketeer", "dark-prince", "elite-barbarians"): 8},
+    {("musketeer", "evolution"): 98, ("dark-prince", "hero"): 99, ("elite-barbarians", "hero"): 77,
+     ("elite-barbarians", "evolution"): 23}, 100, 100, KIND)
+check("a form the card cannot take is corrected: Elite Barbarians 'hero' -> evolution",
+      golem["art"]["elite-barbarians"] == "evolution", golem["art"])
+check("the rest as fielded: Musketeer evolution, Dark Prince hero",
+      golem["art"]["musketeer"] == "evolution" and golem["art"]["dark-prince"] == "hero")
+check("a champion takes no form", dev.observed_seating(
+    {}, {("skeleton-king", "hero"): 50}, 50, 50, KIND) is None)
+check("no dominant order means no slots (40% floor)", dev.observed_seating(
+    {("a", "b", "c"): 3, ("b", "a", "c"): 3, ("c", "b", "a"): 3, ("c", "a", "b"): 1}, {}, 0, 10, KIND) is None)
+check("too few battles says nothing", dev.observed_seating(
+    {("lumberjack", "mega-minion", "barbarians"): 3}, {}, 0, 3, KIND) is None)
+check("a rarely fielded form is not a form (under 30%)", dev.observed_seating(
+    {}, {("lumberjack", "evolution"): 2}, 20, 20, KIND) is None)
+
+dev.PATH = os.path.join(tmp, "ev2.json")
+dev._cache = None
+dev._seat_memo = None
+out4, rep4 = dev.vet_pool(con, pool, 2, is_own_deck=bm.is_own_deck_1v1, now=now,
+                          kind=lambda c: "evolution")
+art, slots = dev.seatings()
+check("the vetted pool's observed seatings are readable per hash",
+      art.get(H["real"]) == {H["real"].split(",")[0]: "evolution"}
+      and slots.get(H["real"]) == {c: i for i, c in enumerate(H["real"].split(",")[:3])}, (art, slots))
+check("a rejected deck publishes no seating", H["event"] not in art)
+check("an older cache format is re-sampled once",
+      dev.vet_pool(con, pool, 2, is_own_deck=bm.is_own_deck_1v1, now=now + 60,
+                   kind=lambda c: "evolution")[1]["sampled"] == 0)
 
 
 print("\nnothing here calls a model or the network")

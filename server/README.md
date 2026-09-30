@@ -1452,6 +1452,26 @@ lets a strong duel pick `LEAD_MARGIN` (3) points better lead the list.
 was marked stale (`computedAt` 0, backup `.counter_snapshot.json.bak-prevet`)
 so the vetted pool replaced it within two minutes of the restart.
 
+### Observed seating, and the tuner built from the player (2026-09-30)
+
+`vet_pool(..., kind=cd.slot_kind)` also records, per vetted deck, the pilots'
+dominant first-three order (`SEAT_MIN_SHARE` 0.4) and each card's majority
+form among battles that field any (`MARK_MIN_SHARE` 0.3), each form checked
+against `slot_kind` (a form the card cannot take is swapped or dropped).
+The bot's `player_evo` labels Elite Barbarians "hero"; the API says
+evolution. The cache format is `CACHE_VERSION` 2; an older hit is re-sampled
+once (735 decks, 116 s). `deck_evidence.seatings()` feeds
+`deck_counter._board_art` / `_board_slots` behind the board's own readings,
+so `seater()`, `deck_tuner._view` and every other caller draw observed forms.
+
+`deck_tuner.playable(row, cards, mine)` gates both tuner blocks:
+`personalise` leads with a pilotable deck inside `LEAD_BAND`, keeps pilotable
+and new-to-you decks alike above `max(STYLE_FLOOR, best - STYLE_BAND)`, and
+caps new-to-you at `UNFAMILIAR_MAX` 2 (`newToYou`); `loadout(profile=)`
+packs from the player's pilotable pool (a stranger pays 1 point), then the
+whole pool when theirs cannot complete the loadout (`personal: true`).
+Backups `*.bak-20260930-104325-prepersonal`, `deck_tuner.py.bak-*-prebar`.
+
 ## The card board (`player_cards.py`)
 
 Use rate and win rate for all 123 cards for one player, over a window, with

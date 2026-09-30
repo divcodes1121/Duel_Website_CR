@@ -1339,7 +1339,7 @@ def tune(my_deck: list[str], opp_decks: list[dict],
         out["compose"] = composed
         out["loadout"] = (tuner.loadout(
             archetypes, weights=weights, comfort=comfort, veto=harmony.veto,
-            used=used or set(), size=games_left)
+            used=used or set(), size=games_left, profile=profile)
             if games_left >= 2 else None)
         for d in (out["loadout"] or {}).get("decks") or []:
             d["vs"] = (_chips(d["deck"], None, chips, None, record=d.get("archetypes") or {})

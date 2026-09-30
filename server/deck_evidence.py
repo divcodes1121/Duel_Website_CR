@@ -88,6 +88,26 @@ PILOT_PRIOR = 20.0
 #: within a day, and the sample is the only per-deck database work here.
 CACHE_TTL = 24 * 3600
 
+#: HOW THE PILOTS FIELD IT. The slot order a seed is drawn in, and which card
+#: is its evolution or hero, used to be GUESSED from what the cards can be
+#: ("from slot position") for every deck not on the meta board's top 50. A
+#: Lava Hound list was shown with an evolved Baby Dragon in slot 1 where 90% of
+#: its real pilots put Lumberjack. The sample below already reads those
+#: pilots' battles, so it records the seating they actually use:
+#:   * the dominant first-three order, when at least `SEAT_MIN_SHARE` of
+#:     battles share it;
+#:   * each card's majority form among battles that field any form, when it is
+#:     fielded in at least `MARK_MIN_SHARE` of them, CHECKED AGAINST WHAT THE
+#:     CARD CAN BE — the bot labels Elite Barbarians "hero" in 77% of one
+#:     list's battles, while the raw API says `evolutionLevel: 1,
+#:     maxEvolutionLevel: 1` and the card has no hero form. A form the card
+#:     cannot take is swapped for the one it can, or dropped.
+SEAT_MIN_SHARE = 0.4
+MARK_MIN_SHARE = 0.3
+
+#: The cache format. A hit from an older format is re-sampled once.
+CACHE_VERSION = 2
+
 PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".deck_evidence.json")
 
 REASONS = ("few_pilots", "one_pilot", "stale", "event")
@@ -146,6 +166,44 @@ def verdict(p: dict, cutoff: str) -> str | None:
     return None
 
 
+def observed_seating(first3: dict, marks: dict, marked: int, battles: int,
+                     kind) -> dict | None:
+    """How the pilots field a list, or None when the evidence does not say.
+
+    `first3` is `{(c0, c1, c2): battles}`; `marks` `{(card, form): battles}`
+    over the `marked` battles that fielded any form; `kind(card)` is
+    `clash_data.slot_kind` ("evolution" | "hero" | "both" | "champion" | "").
+    """
+    if battles < MIN_SAMPLED:
+        return None
+    slots = None
+    if first3:
+        top, n = max(first3.items(), key=lambda kv: (kv[1], kv[0]))
+        if n / battles >= SEAT_MIN_SHARE:
+            slots = {c: i for i, c in enumerate(top)}
+    art: dict[str, str] = {}
+    if marked:
+        per: dict[str, dict[str, int]] = {}
+        for (card, form), n in marks.items():
+            per.setdefault(card, {})[form] = per.setdefault(card, {}).get(form, 0) + n
+        for card, forms in per.items():
+            if sum(forms.values()) / marked < MARK_MIN_SHARE:
+                continue
+            form = max(forms.items(), key=lambda kv: (kv[1], kv[0]))[0]
+            k = kind(card)
+            can = {"evolution": {"evolution"}, "hero": {"hero"},
+                   "both": {"evolution", "hero"}}.get(k, set())
+            if form not in can:
+                other = "hero" if form == "evolution" else "evolution"
+                if other not in can:
+                    continue
+                form = other
+            art[card] = form
+    if not slots and not art:
+        return None
+    return {"slots": slots, "art": art, "battles": battles}
+
+
 def public(p: dict) -> dict:
     """What rides on a seed: counts and shares, never a player tag."""
     games = int(p.get("games") or 0)
@@ -202,11 +260,34 @@ def known(hash_: str) -> dict | None:
     return (_load().get("decks") or {}).get(hash_)
 
 
+_seat_memo: tuple[float, dict, dict] | None = None
+
+
+def seatings() -> tuple[dict[str, dict], dict[str, dict]]:
+    """`({hash: art}, {hash: slots})` the pilots were OBSERVED using, for every
+    vetted deck that had any. Rebuilt only when the cache file changes."""
+    global _seat_memo
+    c = _load()
+    stamp_ = float(c.get("builtAt") or 0)
+    if _seat_memo is not None and _seat_memo[0] == stamp_:
+        return _seat_memo[1], _seat_memo[2]
+    art, slots = {}, {}
+    for h, v in (c.get("decks") or {}).items():
+        s = v.get("seating") or {}
+        if s.get("art"):
+            art[h] = s["art"]
+        if s.get("slots"):
+            slots[h] = s["slots"]
+    _seat_memo = (stamp_, art, slots)
+    return art, slots
+
+
 # ── The one impure function ───────────────────────────────────────────────────
 
 
 def vet_pool(con, by_arch: dict[str, list[dict]], keep: int, *,
-             is_own_deck, now: float | None = None) -> tuple[dict[str, list[dict]], dict]:
+             is_own_deck, now: float | None = None,
+             kind=None) -> tuple[dict[str, list[dict]], dict]:
     """`by_arch` (each list sorted most-played first) cut to `keep` VETTED decks.
 
     `con` is a read-only connection to the bot's database; `is_own_deck` is
@@ -248,22 +329,42 @@ def vet_pool(con, by_arch: dict[str, list[dict]], keep: int, *,
     decks_cache = dict(cache.get("decks") or {})
     sampled_now = 0
 
-    def own_share(h: str) -> tuple[float | None, int, float]:
-        """`(share, battles sampled, when it was measured)`."""
+    def own_share(h: str) -> tuple[float | None, int, float, dict | None]:
+        """`(share, battles sampled, when it was measured, observed seating)`."""
         nonlocal sampled_now
         hit = decks_cache.get(h)
-        if hit and hit.get("measured") and now - float(hit.get("at") or 0) < CACHE_TTL:
-            return hit["own"], int(hit.get("sampled") or 0), float(hit["at"])
+        if (hit and hit.get("measured") and hit.get("v") == CACHE_VERSION
+                and now - float(hit.get("at") or 0) < CACHE_TTL):
+            return hit["own"], int(hit.get("sampled") or 0), float(hit["at"]), hit.get("seating")
         top = heapq.nlargest(PILOT_SAMPLE, rows_by.get(h) or [])
-        own = tot = 0
+        own = tot = marked = 0
+        first3: dict = {}
+        marks: dict = {}
         for _b, _w, tag in top:
-            for (mode,) in con.execute(
-                    "SELECT game_mode FROM battles WHERE player_tag = ? AND player_deck_hash = ?",
-                    (tag, h)):
+            for mode, keys, evo in con.execute(
+                    "SELECT game_mode, player_card_keys, player_evo FROM battles "
+                    "WHERE player_tag = ? AND player_deck_hash = ?", (tag, h)):
                 tot += 1
-                own += 1 if is_own_deck(mode or "") else 0
+                if not is_own_deck(mode or ""):
+                    continue
+                own += 1
+                try:
+                    order = json.loads(keys) if keys else []
+                    fielded = json.loads(evo) if evo else []
+                except ValueError:
+                    continue
+                if len(order) == 8:
+                    t = tuple(order[:3])
+                    first3[t] = first3.get(t, 0) + 1
+                ent = [e for e in fielded if isinstance(e, list) and len(e) >= 3]
+                if ent:
+                    marked += 1
+                    for e in ent:
+                        marks[(e[0], e[2])] = marks.get((e[0], e[2]), 0) + 1
         sampled_now += 1
-        return (own / tot if tot else None), tot, now
+        seating = (observed_seating(first3, marks, marked, own, kind)
+                   if kind is not None else None)
+        return (own / tot if tot else None), tot, now, seating
 
     out: dict[str, list[dict]] = {}
     rejected = {r: 0 for r in REASONS}
@@ -275,16 +376,17 @@ def vet_pool(con, by_arch: dict[str, list[dict]], keep: int, *,
                 break
             p = dict(per.get(d["hash"]) or {"games": 0, "pilots": 0, "top": 0, "last": ""})
             reason = verdict(p, cutoff)
-            at, measured = now, False
+            at, measured, seating = now, False, None
             if reason is None:
-                p["own"], p["sampled"], at = own_share(d["hash"])
+                p["own"], p["sampled"], at, seating = own_share(d["hash"])
                 measured = True
                 reason = verdict(p, cutoff)
             # `at` is when the MODE SHARE was measured, so a cache hit keeps
             # its age and expires after CACHE_TTL instead of living forever.
             decks_cache[d["hash"]] = {**public(p), "own": p.get("own"),
                                       "sampled": p.get("sampled", 0),
-                                      "verdict": reason, "at": at, "measured": measured}
+                                      "verdict": reason, "at": at, "measured": measured,
+                                      "v": CACHE_VERSION, "seating": seating}
             if reason:
                 rejected[reason] += 1
                 if len(examples[reason]) < 5:

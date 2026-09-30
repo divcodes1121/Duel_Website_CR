@@ -895,7 +895,8 @@ def _build_seeds() -> dict[str, list[dict]]:
         vcon = cd.connect(tiers[0])
         try:
             by_arch, SEED_VETTING = _dev.vet_pool(
-                vcon, by_arch, SEEDS_PER_ARCHETYPE, is_own_deck=_bm.is_own_deck_1v1)
+                vcon, by_arch, SEEDS_PER_ARCHETYPE, is_own_deck=_bm.is_own_deck_1v1,
+                kind=cd.slot_kind)
         finally:
             vcon.close()
     except Exception:  # noqa: BLE001
@@ -1239,12 +1240,29 @@ def _board_art() -> dict[str, dict]:
     try:
         board = meta_board.board()
     except Exception:
-        return {}
-    return {
+        board = {}
+    out = _pilot_seatings()[0]
+    out.update({
         d["deckHash"]: d["art"]
         for d in (board.get("decks") or [])
         if d.get("deckHash") and d.get("art")
-    }
+    })
+    return out
+
+
+def _pilot_seatings() -> tuple[dict, dict]:
+    """The seatings the vetted pool's own pilots were observed using
+    (`deck_evidence.seatings`), as fresh dicts. BEHIND THE BOARD: the board's
+    reading is over more battles, so for its fifty decks it wins. Before this,
+    every other deck's forms were guessed from card capability ("from slot
+    position") — a Lava Hound list drew an evolved Baby Dragon where 90% of its
+    pilots put Lumberjack."""
+    try:
+        import deck_evidence
+        art, slots = deck_evidence.seatings()
+        return dict(art), dict(slots)
+    except Exception:  # noqa: BLE001
+        return {}, {}
 
 
 def _board_slots() -> dict[str, dict]:
@@ -1259,12 +1277,14 @@ def _board_slots() -> dict[str, dict]:
     try:
         board = meta_board.board()
     except Exception:
-        return {}
-    return {
+        board = {}
+    out = _pilot_seatings()[1]
+    out.update({
         d["deckHash"]: {c: i for i, c in enumerate((d.get("cards") or [])[:3])}
         for d in (board.get("decks") or [])
         if d.get("deckHash") and d.get("art")
-    }
+    })
+    return out
 
 
 def seater():

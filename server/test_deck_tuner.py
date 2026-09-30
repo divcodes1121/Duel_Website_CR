@@ -619,6 +619,101 @@ def main() -> int:
     check("the broken deck never enters the loadout either",
           all(d["hash"] != ",".join(sorted(BROKEN)) for d in lo["decks"]))
 
+    print("\nPILOTABLE FIRST, AND THE LOADOUT IS THEIRS (2026-09-30)")
+    # Two players, one opponent: one list reordered and ONE identical loadout,
+    # including a Golem deck for a player who runs 1 of its 8 cards.
+    GOLEM = ["golem", "elite-barbarians", "dark-prince", "musketeer", "phoenix",
+             "fireball", "skeletons", "zap"]
+    DRILL = ["goblin-drill", "giant-snowball", "ice-wizard", "poison", "goblin-hut",
+             "fire-spirit", "skeletons", "knight"]
+    MG = ["minion-giant", "goblinstein", "musketeer", "royal-ghost", "skeletons",
+          "barbarian-barrel", "fireball", "goblin-hut"]
+    duel_field = [row("go9", "golem", 65.8, GOLEM), row("mg9", "minion-giant", 64.4, MG),
+                  row("dr9", "drill", 60.0, DRILL), row("xb9", "xbow", 64.0),
+                  row("rg9", "royal-giant", 63.0), row("dr8", "drill", 49.0)]
+    drill_player = {"cards": set(DRILL) | {"cannon", "tesla"}, "families": {"drill": 300}}
+    got = tuner.personalise(duel_field, drill_player)
+    hashes = [r["hash"] for r in got]
+    check("a deck with 1/8 of their cards is labelled new to them",
+          all(r["newToYou"] for r in got if r["hash"] == "go9"))
+    check("their own win condition is offered when it still counters", "dr9" in hashes, str(hashes))
+    check("...and a pilotable deck that LOSES its worst matchup is not", "dr8" not in hashes)
+    check("at most UNFAMILIAR_MAX decks new to them",
+          sum(1 for r in got if r["newToYou"]) <= tuner.UNFAMILIAR_MAX, str(hashes))
+    weak_field = duel_field + [row("gz9", "golem", 33.5)]
+    got3 = tuner.personalise(weak_field, drill_player)
+    check("a deck new to them must still counter (no 33.5%-floor stranger)",
+          all(r["floor"] >= max(tuner.STYLE_FLOOR, 65.8 - tuner.STYLE_BAND) or r is got3[0] for r in got3),
+          str([(r["hash"], r["floor"]) for r in got3]))
+    check("new-to-them decks read after the pilotable ones",
+          [r["newToYou"] for r in got[1:]] == sorted(r["newToYou"] for r in got[1:]))
+    mg_player = {"cards": set(MG) | set(GOLEM[:5]), "families": {"minion-giant": 400}}
+    got2 = tuner.personalise(duel_field, mg_player)
+    check("inside the band a pilotable deck leads over a stronger stranger",
+          got2[0]["hash"] == "mg9", str([r["hash"] for r in got2]))
+    check("no profile: nothing is labelled new (the field's answer, as before)",
+          not any(r.get("newToYou") for r in tuner.personalise(duel_field, None)))
+
+    # The loadout, packed from each player's own pool. Five REAL decks that
+    # share no card and can each field the three special slots.
+    RG = ["royal-giant", "skeleton-king", "witch", "barbarian-barrel", "fisherman",
+          "lightning", "tombstone", "zappies"]
+    LAVA = ["baby-dragon", "mega-minion", "barbarians", "clone", "flying-machine",
+            "giant-snowball", "lava-hound", "lumberjack"]
+    DRILL2 = ["bats", "ice-wizard", "goblin-drill", "poison", "goblin-hut", "fire-spirit",
+              "knight", "tesla"]
+    MG2 = ["royal-ghost", "magic-archer", "cannon", "minion-giant", "goblinstein",
+           "electro-spirit", "goblins", "arrows"]
+    allc = [c for d in (GOLEM, RG, LAVA, DRILL2, MG2) for c in d]
+    check("the loadout fixture really is card-disjoint", len(allc) == len(set(allc)) == 40)
+
+    def seed(h, cards, rates):
+        return {"hash": h, "cards": cards, "games": 500,
+                "archetypes": {a: {"winRate": w, "games": 100, "wins": int(w)} for a, w in rates.items()}}
+    ARCH = ["hog", "e-giant", "royal-hogs"]
+    lpool = {
+        "golem": [seed("G", GOLEM, {"hog": 70, "e-giant": 70, "royal-hogs": 70})],
+        "royal-giant": [seed("R", RG, {"hog": 69, "e-giant": 69, "royal-hogs": 69})],
+        "lava": [seed("L", LAVA, {"hog": 68, "e-giant": 68, "royal-hogs": 68})],
+        "drill": [seed("D", DRILL2, {"hog": 60, "e-giant": 58, "royal-hogs": 61})],
+        "minion-giant": [seed("M", MG2, {"hog": 62, "e-giant": 60, "royal-hogs": 59})],
+    }
+
+    def lhashes(profile):
+        lo = tuner.loadout(ARCH, pool=lpool, size=3, profile=profile)
+        return [d["hash"] for d in lo["decks"]], lo
+    field_l, lo0 = lhashes(None)
+    drill_l, lo1 = lhashes({"cards": set(DRILL2), "families": {"drill": 300}})
+    mg_l, lo2 = lhashes({"cards": set(MG2), "families": {}})
+    check("with no profile the loadout is the field's three", set(field_l) == {"G", "R", "L"}, str(field_l))
+    check("a drill player's loadout holds their drill deck", "D" in drill_l, str(drill_l))
+    check("a Minion Giant player's holds theirs", "M" in mg_l, str(mg_l))
+    check("two players with different styles get different loadouts", drill_l != mg_l, f"{drill_l} {mg_l}")
+    check("their own deck costs the loadout's floor nothing here (70 either way)",
+          lo1["loadoutFloor"] == lo0["loadoutFloor"] == 70, f"{lo1['loadoutFloor']} {lo0['loadoutFloor']}")
+    check("the loadout says it was packed for them", lo1["personal"] and not lo0["personal"])
+    check("decks new to them are labelled in the loadout",
+          all(d["newToYou"] == (d["hash"] != "D") for d in lo1["decks"]), str([(d["hash"], d["newToYou"]) for d in lo1["decks"]]))
+    check("still no shared cards across the three",
+          len({c for d in lo1["decks"] for c in d["deck"]}) == 8 * len(lo1["decks"]))
+    # Their own decks all share cards: two pilotable lists that collide.
+    D_TWIN = DRILL2[:7] + ["valkyrie"]
+    lpool2 = dict(lpool, drill=[lpool["drill"][0], seed("D2", D_TWIN, {"hog": 61, "e-giant": 59, "royal-hogs": 60})])
+    # LOADOUT_POOL = 2: their two colliding decks fill the candidate pool on
+    # their own, which is the production case (a player with 24+ pilotable
+    # lists), so only the whole-pool fallback can complete the loadout.
+    _cap = tuner.LOADOUT_POOL
+    tuner.LOADOUT_POOL = 2
+    try:
+        lo3 = tuner.loadout(ARCH, pool=lpool2, size=3,
+                            profile={"cards": set(DRILL2) | {"valkyrie"}, "families": {"drill": 300}})
+    finally:
+        tuner.LOADOUT_POOL = _cap
+    check("a pool that runs out of disjoint pilotable decks still fills the loadout",
+          len(lo3["decks"]) == 3, str([d["hash"] for d in lo3["decks"]]))
+    check("...with one of theirs and the rest labelled new",
+          sum(1 for d in lo3["decks"] if not d["newToYou"]) == 1)
+
     print("\nseeds() degrades on an old snapshot")
     check("no snapshot gives an empty pool, not a crash",
           isinstance(counter.seeds(), dict))
