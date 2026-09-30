@@ -1454,6 +1454,23 @@ must gain on the same engine as the base. Backup `coach.py.bak-*-precombined`.
 fails (SQLite looks for `-wal`/`-shm` beside the link). Stage with
 `CLASH_DUEL_INDEX=/opt/royalweb/server/.duel_index.db`.
 
+## The deck builder and the loadout planner (`deck_builder.py`, `swap_graph.py`, 2026-09-30)
+
+`swap_graph.build` (after every poll, ~3 min; `.swap_graph.json`, gitignored)
+groups real decks by each 7-card subset; two decks in one group are a
+substitution, weighted by the smaller deck's games, scored
+`w / sqrt(out_total * in_total)`, kept at `MIN_PAIRS` 3. `deck_builder.build`
+is a beam search (`BEAM` 8, `PER_CARD` 5, `MAX_SWAPS` 2) over those swaps from
+real seeds, scored by a caller's function; `plan_loadout` enumerates
+card-disjoint triples from the top `LOADOUT_POOL` and scores each with
+`loadout_value` (`series_win` over every order of theirs, best order of
+mine). `coach._build_for_duel` wires it: the duel model searches, the combined
+brain re-judges `BUILD_FINALISTS` 12 against their seeds on one engine
+(`MIN_GAIN` 1), `allow` = `fillable_slots` >= 3 and harmony problems a subset
+of the seed's; the loadout pool is the options + `LOADOUT_EXTRA` 10 other seeds
+by the fast model + the built decks. Payload `built`, only with `swaps=1`.
+Backups `coach.py.bak-*-prebuilder`, `*-prepool`.
+
 ## Vetting the candidate pool (`deck_evidence.py`, 2026-09-30)
 
 `pair_matchup_agg` has no player and no mode column, so the seed pool that
