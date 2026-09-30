@@ -1418,6 +1418,40 @@ noise band, the counts and every floor still print** — they are what stop a
 coach acting on noise. Units are stated once per card rather than on each of
 68 rows.
 
+## Vetting the candidate pool (`deck_evidence.py`, 2026-09-30)
+
+`pair_matchup_agg` has no player and no mode column, so the seed pool that
+compose, the scout pool, the field plan and the loadout all draw from held
+Royale Shuffle event decks (`RR_*`, one fixed pool of 42 lists handed out at
+random) and one-player decks. `deck_counter._build_seeds` now calls
+`deck_evidence.vet_pool` before truncating to `SEEDS_PER_ARCHETYPE`:
+
+| rule | constant | from |
+| --- | --- | --- |
+| enough people play it | `MIN_PILOTS` 25 | `player_deck_agg`, one pass (~3 s) |
+| nobody owns it | `MAX_PILOT_SHARE` 0.5 | same pass (the duel catalogue's rule) |
+| the current meta | `RECENT_DAYS` 30 | `max(last_seen)` |
+| players chose it | `MIN_OWN_SHARE` 0.6 | top `PILOT_SAMPLE` 8 pilots' battles via `idx_battles_hash`, `battle_modes.is_own_deck_1v1` |
+| what the list adds | `adds` (published, not gated) | `player_stats_agg`: deck rate minus the pilots' other-deck rate, shrunk by `PILOT_PRIOR` 20 |
+
+Verdicts are cached in `server/.deck_evidence.json` (gitignored; counts and
+shares only, never a tag) for `CACHE_TTL` 24 h; a cache hit keeps its original
+timestamp, and a deck rejected before sampling is marked `measured: false` so
+it is never read later as "sampled and fine". The first build sampled 749
+decks in 104 s, and a rebuild inside the TTL takes about 9 s. The snapshot carries
+`seedVetting` (kept, rejected by reason, seconds). A vetting failure falls
+back to the old unvetted cut rather than costing the snapshot.
+
+`coach._drop_event_decks` reads the same cache per request (a dict lookup) and
+removes `event` decks from a player's own duel history; `coach._lead_with_proof`
+lets a strong duel pick `LEAD_MARGIN` (3) points better lead the list.
+`battle_modes._NOT_OWN_PREFIXES = ("rr_",)` is the router half.
+
+**Deployed 2026-09-30**, backups `{battle_modes,deck_counter,coach,test_battle_modes}
+.py.bak-20260930-094812-prevet` and `coach.py.bak-*-prelead`; the snapshot
+was marked stale (`computedAt` 0, backup `.counter_snapshot.json.bak-prevet`)
+so the vetted pool replaced it within two minutes of the restart.
+
 ## The card board (`player_cards.py`)
 
 Use rate and win rate for all 123 cards for one player, over a window, with

@@ -610,6 +610,28 @@ def _legal(decks: list[dict], used: set) -> list[dict]:
     return [d for d in decks if len(set(d["cards"]) & used) <= RECOMMEND_MAX_SHARED]
 
 
+def _drop_event_decks(decks: list[dict]) -> tuple[list[dict], int]:
+    """`decks` without the ones `deck_evidence` found to be event decks.
+
+    Only the `event` verdict is acted on here. `one_pilot` and `stale` are
+    reasons a deck may not be SUGGESTED from the population; a player's own
+    list is theirs however few others play it or however long ago it last
+    appeared.
+    """
+    try:
+        import deck_evidence
+    except Exception:  # noqa: BLE001
+        return decks, 0
+    kept, dropped = [], 0
+    for d in decks:
+        v = deck_evidence.known(",".join(sorted(d.get("cards") or [])))
+        if v and v.get("verdict") == "event":
+            dropped += 1
+            continue
+        kept.append(d)
+    return kept, dropped
+
+
 def _population_decks(limit: int = 24) -> list[dict]:
     """Meta decks, for a player whose own history cannot fill the list.
 
@@ -1062,6 +1084,38 @@ def _duel_decks(rates: "_Rates", tag: str, since: str | None,
         return []
 
 
+#: Points of expected win rate a duel-proven pick must clear the top row by
+#: before it takes "Play this". Measured on the live screen 2026-09-30: game 2
+#: against one opponent led with a 49.8% deck while the row under it was
+#: 56.3% AND 61.8% over 413 real duel games — better on both brains' evidence.
+LEAD_MARGIN = 3.0
+
+
+def _lead_with_proof(rows: list[dict]) -> list[dict]:
+    """The list, with a clearly better duel-proven pick moved to the top.
+
+    `duel_brain.merge` keeps the first row first because in Team Analysis that
+    row is a SQUAD decision. Coach Assist has no squad: its first row is only
+    the best ladder-rated deck of this player's pool. A pick that is strong in
+    real duels (`duel.strong`) AND expected `LEAD_MARGIN`+ points higher on the
+    same rates is the better answer by every measure the screen shows, so it
+    leads. Anything short of both stays where `merge` put it.
+    """
+    if len(rows) < 2 or not (rows[0].get("expected") or {}).get("winRate"):
+        return rows
+    bar = float(rows[0]["expected"]["winRate"]) + LEAD_MARGIN
+    best = None
+    for r in rows[1:]:
+        rate = (r.get("expected") or {}).get("winRate")
+        if (r.get("duelPick") and (r.get("duel") or {}).get("strong")
+                and rate is not None and float(rate) >= bar
+                and (best is None or float(rate) > float(best["expected"]["winRate"]))):
+            best = r
+    if best is None:
+        return rows
+    return [dict(best, ledByDuel=True)] + [r for r in rows if r is not best]
+
+
 def _duel_merge(recs: list[dict], opp: dict, chips: list[dict], snap,
                 rates: "_Rates", used: set, pool: list[dict], *,
                 my_tag: str, my_win: tuple, opp_tag: str, opp_win: tuple
@@ -1137,6 +1191,7 @@ def _duel_merge(recs: list[dict], opp: dict, chips: list[dict], snap,
             row["duelPick"] = p["pick"]
             rows.append(row)
         merged, picked = duel.merge(top, rows, slots=DUEL_SLOTS, limit=MY_TOP_DECKS)
+        merged = _lead_with_proof(merged)
         return merged, {
             "brain": duel.DUEL_BRAIN_VERSION,
             "weight": weight,
@@ -1335,6 +1390,14 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     else:
         pool = []
     mine = _legal(pool, used_mine)
+    # AN EVENT DECK IS NOT A DECK TO BRING, EVEN IF THEY HAVE PLAYED IT. The
+    # vetting (`deck_evidence`) records decks whose battles are Supercell event
+    # modes — one fixed pool handed to thousands of players once each — and
+    # their deck-level records are event records. One such list reached this
+    # player's own duel history only because Deckkies had suggested it, and
+    # was then offered back as "Play this" with event-inflated rates. A cached
+    # dict lookup; a deck never vetted is left alone.
+    mine, event_dropped = _drop_event_decks(mine)
     if len(mine) < MY_TOP_DECKS:
         mine = mine + _fills(mine, used_mine, MY_TOP_DECKS - len(mine),
                              full_loadout=True)
@@ -1415,6 +1478,8 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         "duelBrain": duel_brain,
         "best": best,
         "basis": basis,
+        # Decks from their own history refused as event decks (`deck_evidence`).
+        "eventDecksDropped": event_dropped,
         "observedLoadout": observed,
         # The opponent's real duel log for the decks they have shown — the same
         # sequence block the prediction window carries, because the question

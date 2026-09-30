@@ -85,6 +85,25 @@ _NOT_OWN_DECK = (
     "training",
 )
 
+#: ...and a mode STARTING with one of these is never an own-deck battle, however
+#: its name ends. A PREFIX, not a substring, so no ordinary mode can match it by
+#: accident.
+#:
+#: `RR_` IS ROYALE SHUFFLE (21 Sep - 5 Oct 2026): "every battle spins a wheel
+#: that loads one of 12 classic modes and hands you a RANDOM deck". FOUR OF ITS MODES END IN
+#: "_Friendly" (`RR_MortarCapture_Friendly`, `RR_Overtime_Friendly`,
+#: `RR_Rage_Friendly`, `RR_Blackout_Friendly`), SO THEY SAILED THROUGH AS OWN
+#: DECKS. Measured 2026-09-30 on six hours of raw payloads: every `RR_` mode
+#: draws from ONE FIXED POOL OF 42 DECKS (~540 battles a mode, exactly 42
+#: distinct lists, the same lists across modes), against 2,194 distinct decks in
+#: 25,367 ranked battles. The API still labels them `deckSelection:
+#: "collection"`, so that field cannot be trusted for this. Those event decks
+#: then reached Coach Assist as "real decks with thousands of games" — a
+#: player lost two duels on them.
+_NOT_OWN_PREFIXES = (
+    "rr_",
+)
+
 #: What makes a row 2v2. Kept separate from `_NOT_OWN_DECK` because these two
 #: lists answer different questions: that one is "may this be drawn as one
 #: deck against another", this one is "does this row belong to the duo
@@ -120,6 +139,8 @@ def is_own_deck_1v1(game_mode: str) -> bool:
     m = (game_mode or "").lower()
     if not m:
         return True
+    if m.startswith(_NOT_OWN_PREFIXES):
+        return False
     if not any(marker in m for marker in _FAMILY_MARKERS):
         return False
     return not any(marker in m for marker in _NOT_OWN_DECK)

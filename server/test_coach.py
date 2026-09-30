@@ -715,5 +715,54 @@ finally:
             sys.modules[k] = v
 
 
+print("\na clearly better duel-proven pick leads (2026-09-30)")
+
+
+def _row(name, rate, pick=None, strong=False):
+    r = {"deckName": name, "cards": [f"{name}{i}" for i in range(8)], "expected": {"winRate": rate}}
+    if pick:
+        r["duelPick"] = pick
+        r["duel"] = {"strong": strong}
+    return r
+
+
+live = [_row("Graveyard Poison", 49.8), _row("Bridge Spam Giant Skeleton", 56.3, "duel", True),
+        _row("Bridge Spam Ronin", 42.8)]
+out = coach._lead_with_proof(live)
+check("the live screen's case: 56.3% duel-proven leads a 49.8% top row",
+      out[0]["deckName"] == "Bridge Spam Giant Skeleton" and out[0].get("ledByDuel"))
+check("nothing is dropped and the old #1 is second", [r["deckName"] for r in out]
+      == ["Bridge Spam Giant Skeleton", "Graveyard Poison", "Bridge Spam Ronin"])
+check("the input is not mutated", "ledByDuel" not in live[1])
+check("inside the margin the ladder's #1 stays",
+      coach._lead_with_proof([_row("A", 55.0), _row("B", 57.9, "duel", True)])[0]["deckName"] == "A")
+check("a duel pick that is not strong never leads",
+      coach._lead_with_proof([_row("A", 50.0), _row("B", 60.0, "duel", False)])[0]["deckName"] == "A")
+check("a better row with no duel proof never leads (that is the ladder's own order)",
+      coach._lead_with_proof([_row("A", 50.0), _row("B", 60.0)])[0]["deckName"] == "A")
+check("of two qualifying picks the higher leads",
+      coach._lead_with_proof([_row("A", 50.0), _row("B", 55.0, "own", True),
+                              _row("C", 58.0, "duel", True)])[0]["deckName"] == "C")
+check("one row or none is returned as is",
+      coach._lead_with_proof([]) == [] and coach._lead_with_proof([_row("A", 1.0)])[0]["deckName"] == "A")
+
+
+print("\nevent decks leave the player's own history")
+import deck_evidence as _dev  # noqa: E402
+_saved = _dev.known
+EV = ["arrows", "dart-goblin", "goblin-barrel", "goblin-demolisher", "goblins", "inferno-tower",
+      "mega-knight", "the-log"]
+OK = [f"ok{i}" for i in range(8)]
+LONE = [f"lone{i}" for i in range(8)]
+verdicts = {",".join(sorted(EV)): {"verdict": "event"}, ",".join(sorted(LONE)): {"verdict": "few_pilots"}}
+_dev.known = lambda h: verdicts.get(h)
+try:
+    kept, dropped = coach._drop_event_decks([{"cards": EV}, {"cards": OK}, {"cards": LONE}])
+    check("the event deck is dropped and counted", dropped == 1 and all(d["cards"] != EV for d in kept))
+    check("a deck never vetted stays", any(d["cards"] == OK for d in kept))
+    check("a player's own few-pilot deck stays — only `event` acts here", any(d["cards"] == LONE for d in kept))
+finally:
+    _dev.known = _saved
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

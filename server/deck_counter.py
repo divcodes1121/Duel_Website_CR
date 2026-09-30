@@ -736,6 +736,9 @@ def _build_matrix() -> dict:
         # {} rather than raising, so an old snapshot costs the composer and
         # nothing else.
         "seeds": _build_seeds(),
+        # How the pool was vetted (`deck_evidence`). Read after `_build_seeds`,
+        # which sets it; a dict literal evaluates in order.
+        "seedVetting": dict(SEED_VETTING),
         "computedAt": time.time(),
     }
 
@@ -876,8 +879,36 @@ def _build_seeds() -> dict[str, list[dict]]:
 
     for a in by_arch:
         by_arch[a].sort(key=lambda d: (-d["games"], d["hash"]))
-        del by_arch[a][SEEDS_PER_ARCHETYPE:]
+
+    # VETTED ON WHO PLAYED IT AND IN WHAT MODE (`deck_evidence`), because
+    # `pair_matchup_agg` carries neither. Before this the pool held Supercell
+    # event decks (`RR_*` modes, one fixed pool of 42 lists handed to thousands
+    # of players once each) and one-pilot decks (96% of a list's games from one
+    # player), and Coach Assist offered both as real counters — a player lost
+    # two duels on them. Skip-and-replace: each archetype still keeps
+    # `SEEDS_PER_ARCHETYPE`. A vetting failure falls back to the old cut rather
+    # than costing the snapshot.
+    global SEED_VETTING
+    try:
+        import battle_modes as _bm
+        import deck_evidence as _dev
+        vcon = cd.connect(tiers[0])
+        try:
+            by_arch, SEED_VETTING = _dev.vet_pool(
+                vcon, by_arch, SEEDS_PER_ARCHETYPE, is_own_deck=_bm.is_own_deck_1v1)
+        finally:
+            vcon.close()
+    except Exception:  # noqa: BLE001
+        import traceback
+        traceback.print_exc()
+        SEED_VETTING = {"error": "vetting failed; pool unvetted"}
+        for a in by_arch:
+            del by_arch[a][SEEDS_PER_ARCHETYPE:]
     return by_arch
+
+
+#: What the last seed build's vetting did — kept, rejected by reason, time.
+SEED_VETTING: dict = {}
 
 
 def _symmetric(snap: dict, a: str, b: str) -> dict | None:

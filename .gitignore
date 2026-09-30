@@ -80,6 +80,8 @@ server/.cluster_index.db-shm
 server/.duel_index.db
 server/.duel_index.db-wal
 server/.duel_index.db-shm
+server/.deck_evidence.json
+server/.deck_evidence.json.tmp
 
 # Phase 2 feature cache — derived data, regenerable via `--dump` (8.7 MB)
 server/ml/results/*.jsonl.gz

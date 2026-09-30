@@ -244,6 +244,26 @@ def test_the_guard_refuses_exactly_what_recent_battles_refuses() -> None:
             check(f"{mode} is not also a 1v1", not bm.is_own_deck_1v1(mode))
 
 
+def test_royale_shuffle_is_never_an_own_deck() -> None:
+    """`RR_` is Royale Shuffle: every battle hands the player a RANDOM deck.
+
+    Four of its modes end in "_Friendly" and were routed as own-deck friendlies
+    until 2026-09-30 — measured, every `RR_` mode draws from one fixed pool of
+    42 decks. Those event decks then reached Coach Assist as real counters.
+    """
+    for m in ("RR_MortarCapture_Friendly", "RR_Overtime_Friendly", "RR_Rage_Friendly",
+              "RR_Blackout_Friendly", "RR_Event_Mega_Monk", "RR_Heist_Friendly",
+              "RR_Snowball_bombardment", "RR_CaptureTheEgg_Friendly",
+              "RR_AllEvoBattle_Friendly", "RR_SuperTroopBattle_Friendly",
+              "RR_FourCard_Friendly", "rr_rage_friendly"):
+        check(f"{m} is not an own-deck battle", not bm.is_own_deck_1v1(m))
+        check(f"{m} routes to other", bm.classify(m) == bm.OTHER)
+    # A PREFIX, not a substring: the ordinary modes it resembles are untouched.
+    for m in ("Rage_Friendly", "Overtime_Friendly", "Friendly", "Overtime_Ladder",
+              "Ranked1v1_NewArena2", "Duel_1v1_Friendly", "CW_Duel_1v1"):
+        check(f"{m} is still own-deck", bm.is_own_deck_1v1(m))
+
+
 if __name__ == "__main__":
     test_every_live_mode_routes_as_intended()
     test_the_four_families_the_user_asked_for()
@@ -255,6 +275,7 @@ if __name__ == "__main__":
     test_the_three_destinations_are_exclusive()
     test_the_bot_guard_and_the_router_agree()
     test_the_guard_refuses_exactly_what_recent_battles_refuses()
+    test_royale_shuffle_is_never_an_own_deck()
     test_the_share_this_change_was_made_for()
     print(f"\n{PASS} passed, {FAIL} failed")
     sys.exit(1 if FAIL else 0)
