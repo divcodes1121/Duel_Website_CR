@@ -1140,7 +1140,8 @@ def _combined(model, rates, deck, decks, kw) -> dict | None:
 
 
 def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
-           used: set, rates=None) -> tuple[list[dict], dict | None, list[dict]]:
+           used: set, rates=None, ctx_out: dict | None = None
+           ) -> tuple[list[dict], dict | None, list[dict]]:
     """The combined brain over the final options: `(rows, info, swaps)`.
 
     Every row gains `brain` = `{winRate, vs}` against the opponent's likely
@@ -1169,6 +1170,8 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
         my_def = (myp or {}).get("cardDeficits") or None
         opp_def = (opp_p or {}).get("cardDeficits") or None
         kw = dict(my_def=my_def, opp_def=opp_def, my_str=my_str, opp_str=opp_str)
+        if ctx_out is not None:
+            ctx_out.update(model=model, decks=decks, kw=kw)
 
         out = []
         for r in rows:
@@ -1221,6 +1224,129 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
     except Exception as exc:  # noqa: BLE001
         print("coach._brain: %r" % (exc,), file=sys.stderr)
         return rows, None, []
+
+
+#: How many seeds the builder starts from, and how many built decks it shows.
+BUILD_SEEDS = 12
+BUILD_SHOW = 3
+
+#: Finalists re-judged by the combined brain, and other seeds added to the
+#: loadout pool. THE COMBINED BRAIN READS A LIST'S LADDER HISTORY THE FIRST
+#: TIME IT RATES IT: staged, rating ~20 new lists made the first request 89 s
+#: (4 s warm). The fast model searches everything; the old brain rates only
+#: these. Measured on four real players (30-day window, cold): 5 finalists built
+#: 1 deck in total, 12 built 7 at the same time (the lists share history
+#: reads); a loadout pool of options + 4 left two players with no three
+#: card-disjoint decks, + 10 planned a loadout for all four, 2-8 s.
+BUILD_FINALISTS = 12
+LOADOUT_EXTRA = 10
+
+
+def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int) -> dict | None:
+    """Decks Deckkies BUILT for this duel, and the loadout for the whole of it.
+
+    `deck_builder.build` walks human swaps (`swap_graph`) out from real decks,
+    judged by the fast duel model; every finalist is then re-judged by the
+    combined brain against its own seed, on the same engine, and kept only if it
+    still gains. A built deck must stay a working deck: the three special slots,
+    and no harmony problem its seed did not already have.
+
+    At game 1 the planner picks three card-disjoint decks from seeds + built
+    decks for the WHOLE best-of-3 (`deck_builder.plan_loadout`). Later in a duel
+    the results of the games played are not known here, so it plans nothing
+    rather than guess the score.
+    """
+    try:
+        import deck_builder as dbl
+        import deck_harmony as harmony
+        import duel_model as dm
+        import swap_graph as sg
+        graph = (sg.load() or {}).get("graph")
+        if not ctx or not graph or not seeds:
+            return None
+        model, decks, kw = ctx["model"], ctx["decks"], ctx["kw"]
+        opponents = [(d["cards"], d.get("prob") or 0.0) for d in decks]
+
+        def fast(cards):
+            e = dm.expected(model, cards, opponents, **kw)
+            return e["winRate"] if e else 0.0
+
+        problems: dict[str, set] = {}
+
+        def issues(cards):
+            k = dbl.deck_key(cards)
+            if k not in problems:
+                problems[k] = set(harmony.check(list(cards))["problems"])
+            return problems[k]
+
+        def allow(new, seed):
+            return (cd.fillable_slots(new) >= cd.SPECIAL_SLOTS
+                    and issues(new) <= issues(seed))
+
+        seeds = seeds[:BUILD_SEEDS]
+        built = dbl.build(seeds, fast, graph, used=used, allow=allow, limit=BUILD_FINALISTS)
+        # Options are already rated in this request; the rest of the loadout
+        # pool is the best few other seeds by the fast model.
+        extra = sorted((x for x in seeds if x.get("source") != "option"),
+                       key=lambda x: -fast(x["cards"]))[:LOADOUT_EXTRA]
+        pool_seeds = [x for x in seeds if x.get("source") == "option"] + extra
+        if rates is not None and rates.on:
+            rates.prepare([b["cards"] for b in built] + [b["seed"] for b in built]
+                          + [x["cards"] for x in extra], [d["cards"] for d in decks])
+        seat = counter.seater()
+        kept = []
+        for b in built:
+            e = _combined(model, rates, b["cards"], decks, kw)
+            base = _combined(model, rates, b["seed"], decks, kw)
+            if not e or not base or e["sources"] != base["sources"]:
+                continue
+            gain = e["winRate"] - base["winRate"]
+            if gain < dbl.MIN_GAIN:
+                continue
+            ordered, art, inferred = seat(b["cards"])
+            arch = _archetype(ordered)
+            kept.append({
+                "cards": ordered, "art": art, "inferredArt": inferred,
+                "name": cd.deck_title(arch, ordered), "archetype": arch,
+                "win": e["winRate"], "seedWin": base["winRate"], "gain": round(gain, 1),
+                "vs": e["vs"], "swaps": b["swaps"],
+                "seedName": b.get("seedName") or cd.deck_title(_archetype(b["seed"]), b["seed"]),
+                "seedSource": b.get("seedSource"),
+            })
+        kept.sort(key=lambda r: -r["win"])
+        out = {"brain": dbl.BRAIN, "decks": kept[:BUILD_SHOW], "loadout": None,
+               "graphDecks": (sg.load() or {}).get("decks")}
+
+        if stage == 0 and len(decks) >= 1:
+            pool = []
+            for x in pool_seeds:
+                e = _combined(model, rates, x["cards"], decks, kw)
+                if e:
+                    ordered, art, inferred = seat(x["cards"])
+                    arch = _archetype(ordered)
+                    pool.append({"cards": ordered, "art": art, "inferredArt": inferred,
+                                 "name": x.get("name") or cd.deck_title(arch, ordered),
+                                 "win": e["winRate"], "vs": e["vs"], "built": False})
+            for k in kept:
+                pool.append({**k, "built": True})
+            pool.sort(key=lambda r: -r["win"])
+            theirs = list(range(min(3, len(decks))))
+            plan = dbl.plan_loadout(pool, theirs,
+                                    lambda ci, tj: pool[ci]["vs"][tj]["winRate"] / 100.0,
+                                    size=3, used=used)
+            if plan:
+                out["loadout"] = {
+                    "win": round(100 * plan["win"], 1),
+                    "decks": [{k: pool[i][k] for k in ("cards", "art", "inferredArt", "name",
+                                                       "win", "vs", "built")}
+                              for i in plan["decks"]],
+                    "against": [decks[j].get("deckName") or decks[j].get("archetype") or ""
+                                for j in theirs],
+                }
+        return out
+    except Exception as exc:  # noqa: BLE001
+        print("coach._build_for_duel: %r" % (exc,), file=sys.stderr)
+        return None
 
 
 #: Points of expected win rate a duel-proven pick must clear the top row by
@@ -1582,7 +1708,9 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     # ORDER. On 37,794 held-out game-2 choices, picking its preference won
     # 55.8% against 43.0%; the ranking above split the same choices 51.4/48.5.
     # Absent model or evidence: the list stands exactly as ranked above.
-    top, brain_info, brain_swaps = _brain(top, opp, my_tag, opp_tag, used_mine, rates)
+    brain_ctx: dict = {}
+    top, brain_info, brain_swaps = _brain(top, opp, my_tag, opp_tag, used_mine, rates,
+                                          ctx_out=brain_ctx)
     if brain_info and brain_info.get("ranked"):
         basis = "the combined brain's win chance"
 
@@ -1599,6 +1727,24 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
                     "deckName": dz.deck_label(d, opp_hist["arch"](d)),
                 } for d in others],
             }
+
+    tuner_out = (tune(best["cards"], opp["decks"], used_mine, mine_hist,
+                      _playstyle(my_tag, my_since, my_until, mine_hist),
+                      chips, games_left=DUEL_GAMES - stage)
+                 if swaps and best else None)
+    built = None
+    if swaps and best:
+        seeds, seen_keys = [], set()
+        compose_rows = ((tuner_out or {}).get("compose") or {}).get("decks") or []
+        for src, rows_ in (("option", [{"cards": r["cards"], "name": r.get("deckName")} for r in top]),
+                           ("bring", [{"cards": c["deck"], "name": c.get("name")} for c in compose_rows]),
+                           ("yours", [{"cards": d["cards"], "name": d.get("deckName")} for d in mine])):
+            for r in rows_:
+                k = ",".join(sorted(set(r["cards"] or [])))
+                if len(k.split(",")) == 8 and k not in seen_keys and not (set(r["cards"]) & used_mine):
+                    seen_keys.add(k)
+                    seeds.append({**r, "source": src})
+        built = _build_for_duel(brain_ctx, seeds, rates, used_mine, stage)
 
     return {
         "stage": stage,
@@ -1647,10 +1793,10 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         # null would read as "no swaps found" where the truth is "nobody
         # asked". Costs a sibling scan, so the client only asks for Pro and
         # admin sessions (`isPaid`). See `DECK_TUNER.md`.
-        **({"tuner": tune(best["cards"], opp["decks"], used_mine, mine_hist,
-                          _playstyle(my_tag, my_since, my_until, mine_hist),
-                          chips, games_left=DUEL_GAMES - stage)}
-           if swaps and best else {}),
+        **({"tuner": tuner_out} if swaps and best else {}),
+        # Decks Deckkies built for this duel by human swaps, and the loadout for
+        # the whole of it. Same opt-in as the tuner (it is Pro's tool).
+        **({"built": built} if swaps and best else {}),
         "notes": _read(stage, best, opp, my_played, opp_played, observed),
         # What the chips under every deck are rated against, in their order.
         "chipArchetypes": [{**c, "name": counter._label(c["archetype"])} for c in chips],

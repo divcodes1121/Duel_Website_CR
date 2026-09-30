@@ -17,6 +17,8 @@ import {
   type CoachSuggestion,
   type CoachBrainModel,
   type CoachBrainSwap,
+  type CoachBuilt,
+  type CoachBuiltDeck,
   type DeckTuner,
   type WildForm,
   fetchOpponentRead,
@@ -1228,6 +1230,83 @@ function BrainSwaps({ swaps, base }: { swaps: CoachBrainSwap[]; base: CoachDeck 
   );
 }
 
+/** Win chance against each of their likely decks, as chips. */
+function BuiltVs({ vs }: { vs: CoachBuiltDeck['vs'] }) {
+  return (
+    <span className={styles.blockNote}>
+      {vs.map((v) => `${v.name} ${v.winRate.toFixed(0)}%`).join(' · ')}
+    </span>
+  );
+}
+
+const SEED_LABEL = { option: 'your option', bring: 'from your list', yours: 'your deck' } as const;
+
+/** Decks Deckkies BUILT for this duel, and the loadout for the whole of it
+ *  (`deck_builder.py`). Every built deck is a real deck plus one or two swaps
+ *  real players make; the number beside each swap is how many real deck pairs
+ *  made it. The loadout is chosen on its best-of-3 win chance. */
+function BuiltPanel({ built }: { built: CoachBuilt }) {
+  return (
+    <>
+      {built.decks.length > 0 && (
+        <section className={styles.block} data-hue="violet">
+          <h4 className={styles.blockTitle}>
+            Deckkies built for this duel{' '}
+            <span className={styles.blockNote}>real decks + swaps real players make</span>
+          </h4>
+          {built.decks.map((d) => (
+            <div key={d.cards.join(',')} style={{ marginBottom: '.75rem' }}>
+              <strong style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {d.seedWin != null ? `${d.seedWin.toFixed(1)}% → ` : ''}{d.win.toFixed(1)}%
+              </strong>{' '}
+              {d.name}
+              {d.seedName && (
+                <span className={styles.blockNote}>
+                  {' '}· from {d.seedName}{d.seedSource ? ` (${SEED_LABEL[d.seedSource]})` : ''}
+                </span>
+              )}
+              <ul className={styles.notes}>
+                {(d.swaps ?? []).map((s) => (
+                  <li key={s.out + s.in} className={styles.swapRow}>
+                    <span className={styles.swapSide}><CardArt card={s.out} /></span>
+                    <span className={styles.swapArrow} aria-label="becomes">→</span>
+                    <span className={styles.swapSide}><CardArt card={s.in} variant={d.art[s.in]} /></span>
+                    <span className={styles.blockNote}>{s.pairs.toLocaleString('en-US')} real deck pairs make this swap</span>
+                  </li>
+                ))}
+              </ul>
+              <Strip cards={d.cards} art={d.art} inferred={d.inferredArt} name={d.name} size="sm" />
+              <BuiltVs vs={d.vs} />{' '}
+              <DeckActions cards={d.cards} name={d.name} size="sm" />
+            </div>
+          ))}
+        </section>
+      )}
+      {built.loadout && (
+        <section className={styles.block} data-hue="green">
+          <h4 className={styles.blockTitle}>
+            Planned for the whole duel{' '}
+            <span className={styles.blockNote}>
+              {built.loadout.win.toFixed(1)}% to win the best-of-3 · three decks, no shared cards
+            </span>
+          </h4>
+          {built.loadout.decks.map((d, i) => (
+            <div key={d.cards.join(',')} style={{ marginBottom: '.5rem' }}>
+              <strong>Game {i + 1}</strong> {d.name}{' '}
+              <span className={styles.blockNote}>
+                {d.win.toFixed(1)}%{d.built ? ' · built by Deckkies' : ''}
+              </span>
+              <Strip cards={d.cards} art={d.art} inferred={d.inferredArt} name={d.name} size="sm" />
+              <BuiltVs vs={d.vs} />{' '}
+              <DeckActions cards={d.cards} name={d.name} size="sm" />
+            </div>
+          ))}
+        </section>
+      )}
+    </>
+  );
+}
+
 function TunerPanel({ tuner }: { tuner: DeckTuner }) {
   const swaps = tuner.swaps;
   const others = tuner.compose?.decks ?? [];
@@ -1645,6 +1724,7 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
 
       {data.brainModel && <BrainLine model={data.brainModel} />}
       {!!data.brainSwaps?.length && best && <BrainSwaps swaps={data.brainSwaps} base={best} />}
+      {data.built && (data.built.decks.length > 0 || data.built.loadout) && <BuiltPanel built={data.built} />}
 
       {!!data.notes.length && (
         <section className={styles.block} data-hue="violet">

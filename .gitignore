@@ -150,3 +150,5 @@ server/.duel_games.pkl
 server/.duel_games.pkl.tmp
 server/.after_poll.json
 server/.after_poll.json.tmp
+server/.swap_graph.json
+server/.swap_graph.json.tmp

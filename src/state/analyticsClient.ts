@@ -1279,6 +1279,40 @@ export interface CoachSuggestion {
   /** One-card changes real duel players made to "Play this" that raise its
    *  win chance against this opponent. */
   brainSwaps?: CoachBrainSwap[];
+  /** Decks Deckkies built for this duel by human swaps, and the loadout for
+   *  the whole best-of-3 (`server/deck_builder.py`). Pro's tool, same opt-in
+   *  as `tuner`; null when nothing could be built. */
+  built?: CoachBuilt | null;
+}
+
+export interface CoachBuiltVs {
+  name: string;
+  likelihood: number;
+  winRate: number;
+}
+
+export interface CoachBuiltDeck {
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt?: boolean;
+  name: string;
+  archetype?: string;
+  win: number;
+  seedWin?: number;
+  gain?: number;
+  vs: CoachBuiltVs[];
+  swaps?: { out: string; in: string; pairs: number }[];
+  seedName?: string;
+  seedSource?: 'option' | 'bring' | 'yours';
+  /** In a planned loadout: a deck the builder made rather than a real one. */
+  built?: boolean;
+}
+
+export interface CoachBuilt {
+  brain: string;
+  decks: CoachBuiltDeck[];
+  loadout: { win: number; decks: CoachBuiltDeck[]; against: string[] } | null;
+  graphDecks?: number | null;
 }
 
 export interface CoachBrainReading {
