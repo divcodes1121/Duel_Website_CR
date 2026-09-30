@@ -13854,6 +13854,53 @@ game-3 matchup it leaves), and predict the opponent's next deck from his
 loadout reuse. The 65.7% is measured but not yet used to narrow "their likely
 decks".
 
+#### The old brain was better at judging decks, so Coach Assist ranks on both (2026-09-30)
+
+Asked, after the duel model shipped: *"the brain it replaced was doing a good
+job, only the synergy was missing, so why did we remove it?"* It had not been
+removed, only overruled in the ordering. But the question deserved a
+head-to-head, and **the head-to-head showed the switch was a step back**. The
+same held-out duel games (from 12 Sep); decisions are game-2 choices in
+held-out three-game series:
+
+| brain | log loss (3,000 games) | pick matched it / didn't (2,500 choices) |
+| --- | --- | --- |
+| new model, cards only | 0.671 | 53.4% / 46.2% |
+| new model (cards + strength + levels), shipped first | 0.640 | 56.1% / 42.5% |
+| old brain (fused ladder+duel rate) | 0.658 | 58.3% / 41.4% |
+| **old brain + player strength + card levels** | **0.630** | **59.0% / 39.4%** |
+
+**As a deck judge the old brain beats the new model's card half.** What it
+never had is *who* is playing and *at what level*. Coach Assist now ranks on
+the combination: the old brain's fused rate for each matchup, adjusted by the
+two players' duel strength and card-level gap, using the duel model's learned
+weights (`coach._combined_pair`, `COMBINED_MEASURED`). The duel model alone
+answers only a matchup the old brain has no rate for. Swaps are proposed by
+the fast model from real one-card variants, then kept only when the combined
+brain also finds a gain on the same engine. One caveat: the old brain's tables
+include the test games, which flatters it, and the combination is the best
+reading either way.
+
+**It updates after every bot poll, not daily.** `server/after_poll.py`
+(`royalweb-afterpoll.timer`, a check every 10 minutes) reads the newest
+`battle_raw.stored_at` (one indexed MAX). When the bot has written new rows
+and been quiet for five minutes (its poll has finished; it polls every four
+hours on a schedule set by its own restarts, so a clock time would drift),
+it updates the duel index, then retrains the duel model **incrementally**:
+the parsed games are cached (`.duel_games.pkl`) with the `stored_at` they
+were read up to, so a run reads only what the bot stored since, and refits.
+A full re-read happens weekly so games retention deleted drop out. It
+replaces `royalweb-duel.timer` and `royalweb-duelmodel.timer`, both disabled.
+Card levels are read live; player strength comes from the updated index.
+
+**A duel split across two polls is not lost.** Native duels appear in the
+API only once finished, and the index and the model read by *stored* time. A
+reconstructed friendly series is rebuilt from all stored battles on every
+read, by battle time: after the first poll a 1-1 is held back as unfinished;
+after the next poll brings game 3 it is one best-of-3. Measured over three
+days: 21 friendly duels had games collected by two different polls, and all
+21 came out whole. `test_after_poll.py` (13) pins both.
+
 ### Every suggested deck is one the meta actually plays (2026-09-30)
 
 Reported: *"the decks Deckkies suggests lack synergy — I played two duels

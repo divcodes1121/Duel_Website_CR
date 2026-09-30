@@ -1,0 +1,29 @@
+[Unit]
+# Brings the Coach's duel evidence up to date AS SOON AS A BOT POLL FINISHES
+# (server/after_poll.py): when battle_raw has new rows and has been quiet for
+# five minutes, it updates the duel index, then retrains the duel win model
+# incrementally. Replaces royalweb-duel.timer (every 4 h) and
+# royalweb-duelmodel.timer (daily) — keep those two DISABLED, or two index
+# builds can run at once.
+#
+# IT DOES NOT WRITE TO battles.db. It opens it mode=ro; it writes
+# .duel_index.db, .duel_model.json, .duel_games.pkl and .after_poll.json.
+Description=Deckkies duel evidence update after a bot poll
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+ExecStart=/usr/bin/python3 -u after_poll.py
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+SuccessExitStatus=0
+TimeoutStartSec=7200
+StandardOutput=append:/var/log/clashbot/after-poll.log
+StandardError=append:/var/log/clashbot/after-poll.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Check every 10 minutes whether a bot poll has finished
+Requires=royalweb-afterpoll.service
+
+[Timer]
+# CHECKS ARE FREE: one indexed MAX(stored_at). The real work runs only when a
+# poll has written new rows and gone quiet, i.e. once per poll (every 4 h), at
+# most ~15 minutes after it ends. Triggered on data, not the clock, because the
+# bot's poll schedule moves whenever the bot restarts.
+OnBootSec=5min
+OnUnitActiveSec=10min
+Unit=royalweb-afterpoll.service
+
+[Install]
+WantedBy=timers.target

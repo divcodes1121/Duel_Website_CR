@@ -146,3 +146,7 @@ server/.meta_history.db-shm
 # Storage jobs ledger (retention.py / db_backup.py) — server state, never committed.
 server/.data_ledger.db
 server/.data_ledger.db-*
+server/.duel_games.pkl
+server/.duel_games.pkl.tmp
+server/.after_poll.json
+server/.after_poll.json.tmp

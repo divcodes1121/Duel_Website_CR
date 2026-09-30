@@ -154,6 +154,78 @@ try:
 finally:
     dm.load, di.available, di.player_record, di.near_variants, coach.cd.cr_profile = saved
 
+print("\nthe COMBINED brain: the old brain's deck judgment + strength + levels")
+from types import SimpleNamespace  # noqa: E402
+
+
+class FakeRates:
+    """The old brain's per-matchup rates, as coach._Rates answers them."""
+    on = True
+
+    def __init__(self, table):
+        self.table = table
+        self.prepared = []
+
+    def rate(self, mine, theirs=None, archetype=None):
+        v = self.table.get(",".join(sorted(mine)))
+        return None if v is None else {"winRate": v, "games": 100, "source": "deck"}
+
+    def prepare(self, mine, theirs):
+        self.prepared.append(len(mine))
+
+
+strong_deck = A
+weak_deck = [c if c != "hog-rider" else "goblins" for c in A]
+old_table = {",".join(sorted(strong_deck)): 48.0, ",".join(sorted(weak_deck)): 60.0}
+saved = (dm.load, di.available, di.player_record, di.near_variants, coach.cd.cr_profile)
+try:
+    dm.load = lambda path=dm.PATH: {"weights": W2, "meta": {}}
+    di.available = lambda: True
+    di.player_record = lambda tag: (0, 0)
+    di.near_variants = lambda cards, **k: variants if set(cards) == set(A) else []
+    coach.cd.cr_profile = lambda tag: None
+    opp = {"decks": [{"cards": B, "prob": 1.0, "deckName": "Golem"}]}
+    rates = FakeRates(old_table)
+    rows = [{"cards": strong_deck, "deckName": "strong-by-model"},
+            {"cards": weak_deck, "deckName": "strong-by-old-brain"}]
+    out, info, swaps = coach._brain(rows, opp, "#ME", "#OPP", set(), rates)
+    check("equal players, no levels: the combined figure IS the old brain's rate",
+          {r["deckName"]: r["brain"]["winRate"] for r in out}
+          == {"strong-by-model": 48.0, "strong-by-old-brain": 60.0}, [(r["deckName"], r["brain"]) for r in out])
+    check("ordering follows the combined brain, not the new model alone",
+          out[0]["deckName"] == "strong-by-old-brain")
+    check("the mode is reported as combined, with the measured head-to-head",
+          info["mode"] == "combined" and info["measured"]["agree"] == 59.0)
+    # A on top by the old brain, so the fake variants (which belong to A) are proposed.
+    top_table = {",".join(sorted(strong_deck)): 60.0, ",".join(sorted(weak_deck)): 48.0}
+    r5 = FakeRates(dict(top_table, **{",".join(sorted(v["cards"])): 55.0 for v in variants}))
+    _o5, _i5, sw5 = coach._brain(rows, opp, "#ME", "#OPP", set(), r5)
+    check("the proposed variants were prepared for the old brain first",
+          bool(r5.prepared) and r5.prepared[0] > 0, r5.prepared)
+    check("swaps the fast model proposes are dropped when the combined brain sees a loss", sw5 == [], sw5)
+    r6 = FakeRates(top_table)
+    _o6, _i6, sw6 = coach._brain(rows, opp, "#ME", "#OPP", set(), r6)
+    check("a variant the old brain cannot rate is not compared against one it did", sw6 == [], sw6)
+
+    di.player_record = lambda tag: (200, 150) if tag == "#ME" else (200, 80)
+    out2, _i, _s = coach._brain(rows, opp, "#ME", "#OPP", set(), FakeRates(old_table))
+    check("a stronger player lifts the old brain's rate",
+          all(r["brain"]["winRate"] > old_table[",".join(sorted(r["cards"]))] for r in out2))
+
+    di.player_record = lambda tag: (0, 0)
+    good = {",".join(sorted(v["cards"])): 70.0 for v in variants}
+    good.update(old_table)
+    _o, _i, sw3 = coach._brain([rows[0]], opp, "#ME", "#OPP", set(), FakeRates(good))
+    check("a swap both brains like is kept, with the combined gain (48 -> 70)",
+          sw3 and sw3[0]["gain"] == 22.0 and sw3[0]["winRate"] == 70.0, sw3)
+    none_rates = FakeRates({})
+    out4, info4, _ = coach._brain(rows, opp, "#ME", "#OPP", set(), none_rates)
+    check("where the old brain has no rate, the new model answers that matchup",
+          all(r.get("brain") for r in out4) and all(r["brain"]["sources"] == {"model": 1} for r in out4))
+finally:
+    dm.load, di.available, di.player_record, di.near_variants, coach.cd.cr_profile = saved
+
+
 print("\nnothing here calls the network or writes the bot's database")
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "duel_model.py"), encoding="utf-8").read()
 check("no network", "urlopen" not in src and "requests." not in src)

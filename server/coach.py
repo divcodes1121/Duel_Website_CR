@@ -1084,19 +1084,74 @@ def _duel_decks(rates: "_Rates", tag: str, since: str | None,
         return []
 
 
+#: WHAT THE COMBINED BRAIN MEASURED, head to head on the same held-out duel
+#: games (from 12 Sep) against every alternative. Quoted on the screen.
+#:
+#:   brain                               log loss   game-2 pick matched it / not
+#:   new model, cards only                 0.671       53.4% / 46.2%
+#:   new model (cards+strength+levels)     0.640       56.1% / 42.5%
+#:   old brain (fused ladder+duel rate)    0.658       58.3% / 41.4%
+#:   OLD BRAIN + STRENGTH + LEVELS         0.630       59.0% / 39.4%
+#:
+#: The old brain judges DECKS better than the new model's card half; what it
+#: never had is who is playing and at what level. So this keeps its deck
+#: judgment and adds exactly those two learned terms. (Its tables include the
+#: test games, which flatters it; the combination is the best either way.)
+COMBINED_MEASURED = {"games": 3000, "logLoss": 0.630, "choices": 2500,
+                     "agree": 59.0, "disagree": 39.4}
+
+
+def _combined_pair(model: dict, rates, deck, od, *, my_def, opp_def,
+                   my_str: float, opp_str: float) -> tuple[float, str] | None:
+    """One matchup: the old brain's rate adjusted by player strength and card
+    levels, as a probability, and which engine answered. The new model alone
+    only where the old brain has no rate."""
+    import duel_model as dm
+    w = model.get("weights") or {}
+    md, odf = dm.deck_deficit(deck, my_def), dm.deck_deficit(od, opp_def)
+    m = rates.rate(deck, od) if rates is not None and rates.on else None
+    if m and m.get("winRate") is not None:
+        z = (dm.logit(float(m["winRate"]) / 100.0)
+             + w.get("pilot", 0.0) * (dm.logit(my_str) - dm.logit(opp_str))
+             + w.get("level", 0.0) * (odf - md))
+        return dm.sig(z), "combined"
+    if not w:
+        return None
+    return dm.score(w, dm.features(deck, od, md, odf, my_str, opp_str)), "model"
+
+
+def _combined(model, rates, deck, decks, kw) -> dict | None:
+    """`{winRate, vs, sources}` against the opponent's likely decks."""
+    total = sum(float(d.get("prob") or 0.0) for d in decks) or 0.0
+    if total <= 0:
+        return None
+    acc, vs, used = 0.0, [], {}
+    for d in decks:
+        got = _combined_pair(model, rates, deck, d["cards"], **kw)
+        if got is None:
+            return None
+        p, src = got
+        like = float(d.get("prob") or 0.0) / total
+        acc += like * p
+        used[src] = used.get(src, 0) + 1
+        vs.append({"name": d.get("deckName") or d.get("archetype") or "",
+                   "likelihood": round(like, 4), "winRate": round(100 * p, 1)})
+    return {"winRate": round(100 * acc, 1), "vs": vs, "sources": used}
+
+
 def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
-           used: set) -> tuple[list[dict], dict | None, list[dict]]:
-    """The duel win model over the final options: `(rows, info, swaps)`.
+           used: set, rates=None) -> tuple[list[dict], dict | None, list[dict]]:
+    """The combined brain over the final options: `(rows, info, swaps)`.
 
     Every row gains `brain` = `{winRate, vs}` against the opponent's likely
-    decks, each weighted by its likelihood. The rows are REORDERED by it only
-    when every row could be scored — a half-scored list would sort unscored
-    rows to the bottom for having no number, not for being worse. Swaps are
-    the one-card changes real duel players made to the top deck
-    (`duel_index.near_variants`) that raise its win chance here.
+    decks: the old brain's fused rate for each matchup, adjusted by the two
+    players' duel strength and card levels (the duel model's learned weights).
+    See `COMBINED_MEASURED`. The rows are REORDERED by it only when every row
+    could be scored. Swaps are proposed from real one-card variants
+    (`duel_index.near_variants`) by the fast duel model, then KEPT only if the
+    combined brain also finds they help.
 
-    Any failure returns the rows untouched: this adds a reading, it never takes
-    the screen down.
+    Any failure returns the rows untouched.
     """
     try:
         import duel_model as dm
@@ -1105,8 +1160,7 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
         if not model or not rows or not di.available():
             return rows, None, []
         decks = [d for d in (opp.get("decks") or []) if len(set(d.get("cards") or [])) == 8]
-        opponents = [(d["cards"], d.get("prob") or 0.0) for d in decks]
-        if not opponents:
+        if not decks:
             return rows, None, []
         rec_mine, rec_opp = di.player_record(my_tag), di.player_record(opp_tag)
         my_str, opp_str = dm.strength(*rec_mine), dm.strength(*rec_opp)
@@ -1118,12 +1172,9 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
 
         out = []
         for r in rows:
-            e = dm.expected(model, r["cards"], opponents, **kw)
             row = dict(r)
+            e = _combined(model, rates, r["cards"], decks, kw)
             if e:
-                for v, d in zip(e["vs"], decks):
-                    v.pop("cards", None)
-                    v["name"] = d.get("deckName") or d.get("archetype") or ""
                 row["brain"] = e
             out.append(row)
         ranked = all(r.get("brain") for r in out)
@@ -1131,21 +1182,37 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
             out.sort(key=lambda r: -r["brain"]["winRate"])
 
         swaps = []
-        if out and out[0].get("brain"):
+        top = out[0] if out and out[0].get("brain") else None
+        if top:
+            opponents = [(d["cards"], d.get("prob") or 0.0) for d in decks]
+            proposed = dm.swaps(model, top["cards"], di.near_variants(top["cards"]),
+                                opponents, used=used, limit=8, min_gain=0.0, **kw)
+            if proposed and rates is not None and rates.on:
+                rates.prepare([s["cards"] for s in proposed], [d["cards"] for d in decks])
             seat = counter.seater()
-            for s in dm.swaps(model, out[0]["cards"], di.near_variants(out[0]["cards"]),
-                              opponents, used=used, **kw):
+            base = top["brain"]["winRate"]
+            for s in proposed:
+                e = _combined(model, rates, s["cards"], decks, kw)
+                # ONE ENGINE PER COMPARISON: a variant the old brain has no
+                # rate for would be judged by the model alone against a base
+                # the old brain judged -- two different rulers.
+                if not e or e["sources"] != top["brain"]["sources"] or e["winRate"] - base < 0.5:
+                    continue
                 ordered, art, inferred = seat(s["cards"])
-                swaps.append({**s, "cards": ordered, "art": art, "inferredArt": inferred})
+                swaps.append({**s, "winRate": e["winRate"], "gain": round(e["winRate"] - base, 1),
+                              "cards": ordered, "art": art, "inferredArt": inferred})
+            swaps.sort(key=lambda x: (-x["gain"], -x["games"]))
+            swaps = swaps[:3]
 
         meta = model.get("meta") or {}
         info = {
             "brain": dm.BRAIN,
+            "mode": "combined" if rates is not None and rates.on else "model",
             "ranked": ranked,
+            "measured": COMBINED_MEASURED,
             "trainedAt": meta.get("trainedAt"),
             "games": meta.get("games"),
             "holdout": meta.get("holdout"),
-            "choice": meta.get("choice"),
             "strength": {"mine": round(100 * my_str, 1), "mineGames": rec_mine[0],
                          "theirs": round(100 * opp_str, 1), "theirsGames": rec_opp[0]},
             "levels": bool(my_def and opp_def),
@@ -1515,9 +1582,9 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     # ORDER. On 37,794 held-out game-2 choices, picking its preference won
     # 55.8% against 43.0%; the ranking above split the same choices 51.4/48.5.
     # Absent model or evidence: the list stands exactly as ranked above.
-    top, brain_info, brain_swaps = _brain(top, opp, my_tag, opp_tag, used_mine)
+    top, brain_info, brain_swaps = _brain(top, opp, my_tag, opp_tag, used_mine, rates)
     if brain_info and brain_info.get("ranked"):
-        basis = "the duel brain's win chance"
+        basis = "the combined brain's win chance"
 
     best = top[0] if top else None
     observed = None

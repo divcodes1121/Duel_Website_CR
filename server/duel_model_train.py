@@ -1,7 +1,16 @@
 """Train the duel win model (`duel_model.py`) from every stored duel game.
 
-    python3 duel_model_train.py            # holdout report, then fit + save
+    python3 duel_model_train.py            # new duels since the last run, then fit + save
+    python3 duel_model_train.py --full     # re-read every stored duel payload
     python3 duel_model_train.py --report   # holdout report only, nothing saved
+
+INCREMENTAL (2026-09-30), because "24 hours is very long — the coach should
+update as the bot polls". The parsed games are cached (`CACHE`) with the
+`stored_at` watermark they were read up to, so a run reads only payloads the
+bot stored since (`ix_raw_stored`, seconds) and refits (~2-3 minutes). With
+nothing new it exits without touching the model. A full re-read happens when
+the cache is missing, older than `FULL_EVERY_S`, or on `--full`, so games
+retention has deleted leave the model within a week.
 
 Reads `battle_raw` READ-ONLY: every native duel payload's rounds, both decks,
 both sides' card levels, the result. Player strength is a RUNNING record, known
@@ -26,6 +35,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import duel_model as dm  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".duel_games.pkl")
+FULL_EVERY_S = 7 * 24 * 3600
 
 
 def _card_keys() -> dict[int, str]:
@@ -33,13 +44,28 @@ def _card_keys() -> dict[int, str]:
         return {c["id"]: c["key"] for c in json.load(f)}
 
 
-def read_games(db_path: str) -> list[tuple]:
-    """`[(battle_time, round, tagA, tagB, deckA, deckB, defA, defB, a_won)]`, oldest first."""
+def read_games(db_path: str, since: str | None = None,
+               seen: set | None = None) -> tuple[list[tuple], set, str]:
+    """`(games, seen battle ids, newest stored_at read)`.
+
+    Games are `(battle_time, round, tagA, tagB, deckA, deckB, defA, defB,
+    a_won)`, oldest first. `since` reads only payloads stored after it (the
+    `stored_at` index); `seen` carries battle ids across runs, so a duel stored
+    from both players' logs is counted once however the polls split it.
+    """
     key = _card_keys()
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    games, seen = [], set()
+    games, seen = [], set(seen or ())
+    newest = since or ""
+    if since:
+        cur = con.execute("SELECT game_mode, raw_json, stored_at FROM battle_raw "
+                          "WHERE stored_at > ? ORDER BY stored_at", (since,))
+    else:
+        cur = con.execute("SELECT game_mode, raw_json, stored_at FROM battle_raw")
     try:
-        for mode, raw in con.execute("SELECT game_mode, raw_json FROM battle_raw"):
+        for mode, raw, stored in cur:
+            if stored and stored > newest:
+                newest = stored
             if not mode or "duel" not in mode.lower():
                 continue
             try:
@@ -67,7 +93,24 @@ def read_games(db_path: str) -> list[tuple]:
     finally:
         con.close()
     games.sort()
-    return games
+    return games, seen, newest
+
+
+def load_cache() -> dict | None:
+    import pickle
+    try:
+        with open(CACHE, "rb") as f:
+            return pickle.load(f)
+    except (OSError, EOFError, ValueError, ImportError):
+        return None
+
+
+def save_cache(c: dict) -> None:
+    import pickle
+    tmp = CACHE + ".tmp"
+    with open(tmp, "wb") as f:
+        pickle.dump(c, f, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(tmp, CACHE)
 
 
 def with_strength(games):
@@ -116,7 +159,23 @@ def choice_check(weights: dict, items) -> dict:
 def main(argv: list[str]) -> int:
     db = os.environ.get("CLASH_DB_PATH") or "/var/clashbot/battles.db"
     t0 = time.time()
-    games = read_games(db)
+    cache = None if "--full" in argv else load_cache()
+    if cache and time.time() - float(cache.get("fullAt") or 0) > FULL_EVERY_S:
+        cache = None
+    if cache:
+        new, seen, newest = read_games(db, since=cache["watermark"], seen=cache["seen"])
+        print(f"incremental: {len(new)} new duel games since {cache['watermark']}")
+        if not new and dm.load() is not None and "--report" not in argv:
+            print("no new duel games; model unchanged")
+            return 0
+        games = sorted(cache["games"] + new)
+        cache.update(games=games, seen=seen, watermark=newest)
+    else:
+        games, seen, newest = read_games(db)
+        cache = {"games": games, "seen": seen, "watermark": newest, "fullAt": time.time()}
+        print(f"full read: {len(games)} duel games")
+    if "--report" not in argv:
+        save_cache(cache)
     if len(games) < 1000:
         print(f"only {len(games)} duel games — not training")
         return 1

@@ -1168,16 +1168,20 @@ function Delta({ n }: { n: number | null }) {
  *             (Spirit Empress). Silence there would assert something nothing
  *             verified.
  */
-/** What the duel brain is, in figures: trained on, measured at, and the two
- *  players' duel strengths it used. One line, no explanation. */
+/** What ranked this list, in figures: the head-to-head it won, when the model
+ *  was last retrained and on how much, and the two players' duel strengths.
+ *  One line, no explanation. */
 function BrainLine({ model }: { model: CoachBrainModel }) {
+  const m = model.measured;
   const h = model.holdout;
   return (
     <p className={styles.askHint}>
       {[
-        'Duel brain',
-        model.games ? `${model.games.toLocaleString('en-US')} duel games` : null,
-        h?.accuracy != null ? `${h.accuracy.toFixed(1)}% right on ${h.n.toLocaleString('en-US')} unseen` : null,
+        model.mode === 'combined' ? 'Combined brain: ladder+duel rate + player strength + card levels' : 'Duel brain',
+        m && model.mode === 'combined'
+          ? `picks matching it won ${m.agree.toFixed(1)}% vs ${m.disagree.toFixed(1)}% on ${m.choices.toLocaleString('en-US')} unseen game-2 choices`
+          : h?.accuracy != null ? `${h.accuracy.toFixed(1)}% right on ${h.n.toLocaleString('en-US')} unseen` : null,
+        model.games ? `retrained ${model.trainedAt ? model.trainedAt.slice(0, 10) : ''} on ${model.games.toLocaleString('en-US')} duel games` : null,
         /* A player with no native duel games is read at 50% — neutral, and
            said as such rather than as "50% over 0 games". */
         model.strength.mineGames
@@ -1605,8 +1609,8 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
               <span className={styles.verdictFigure}>
                 {best.brain.winRate.toFixed(1)}%
                 <span className={styles.verdictFigureLabel}>
-                  win chance · duel brain
-                  {best.expected ? ` · ladder+duel ${best.expected.winRate.toFixed(1)}%` : ''}
+                  win chance · combined brain
+                  {best.expected ? ` · ladder+duel alone ${best.expected.winRate.toFixed(1)}%` : ''}
                 </span>
               </span>
             ) : best.expected && (

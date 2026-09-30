@@ -1441,6 +1441,15 @@ away, `VARIANT_MIN_GAMES` 10). `duel_index.player_record` gives the duel
 record; `clash_data.cr_profile` now carries `cardDeficits`. Any failure
 leaves the list as ranked before. Backups `*.bak-20260930-121413-prebrain`.
 
+**Coach Assist ranks on the COMBINED brain, not the model alone.** A
+head-to-head on the same held-out games (3,000 forecasts, 2,500 game-2
+choices) put the old fused rate + the model's `pilot`/`level` terms first
+(log loss 0.630; picks matching it won 59.0% vs 39.4%), ahead of the old
+brain alone (0.658; 58.3/41.4) and the model alone (0.640; 56.1/42.5).
+`coach._combined_pair` = `logit(fused rate) + w_pilot*dStrength +
+w_level*dDeficit`; the model alone only where the fused rate is missing. Swaps
+must gain on the same engine as the base. Backup `coach.py.bak-*-precombined`.
+
 **Staging trap:** the duel index is WAL, so opening it through a symlink
 fails (SQLite looks for `-wal`/`-shm` beside the link). Stage with
 `CLASH_DUEL_INDEX=/opt/royalweb/server/.duel_index.db`.

@@ -1284,11 +1284,19 @@ export interface CoachSuggestion {
 export interface CoachBrainReading {
   winRate: number;
   vs: { name: string; likelihood: number; winRate: number }[];
-  brain: string;
+  /** Which engine answered each matchup: `combined` (the old brain's rate
+   *  adjusted by strength and levels) or `model` (the duel model alone). */
+  sources?: Record<string, number>;
+  brain?: string;
 }
 
 export interface CoachBrainModel {
   brain: string;
+  /** `combined`: the old brain's deck judgment + player strength + card
+   *  levels. `model`: the duel model alone (the old brain was unavailable). */
+  mode?: 'combined' | 'model';
+  /** The head-to-head the combined brain won, on held-out duel games. */
+  measured?: { games: number; logLoss: number; choices: number; agree: number; disagree: number };
   ranked: boolean;
   trainedAt?: string | null;
   games?: number | null;
