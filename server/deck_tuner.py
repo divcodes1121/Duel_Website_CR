@@ -747,7 +747,13 @@ STYLE_MIN_SHARE = 0.05
 #: again), so being pilotable is now a GATE with a labelled fallback, not a
 #: weight: unfamiliar decks are offered only after every pilotable one that is
 #: close enough, and each carries `newToYou`.
-UNFAMILIAR_MAX = 2
+#:
+#: THE LIST STILL FILLS TO `TOP_DECKS`. The first version capped new-to-you
+#: decks at two and held them to the pilotable bar too; the account holder
+#: reported "Or bring one of these" shrinking from six to two, and measured it
+#: was — six for every staged player before, four or five after, two live. A
+#: new-to-you deck now only has to WIN ITS WORST MATCHUP (`STYLE_FLOOR`), which
+#: is what kept the 33.5%-floor Golem list out, and is labelled on the screen.
 
 
 def playable(row: dict, cards: set[str], mine: set[str]) -> bool:
@@ -840,8 +846,8 @@ def personalise(rows: list[dict], profile: dict | None,
             take(r, out)
             reserved += 1
 
-    # PILOTABLE FIRST, then at most `UNFAMILIAR_MAX` decks new to them, each
-    # labelled — a counter they have never played is a real option in a duel,
+    # PILOTABLE FIRST, then decks new to them up to `limit`, each labelled —
+    # a counter they have never played is a real option in a duel,
     # but it is not the same kind of advice as one built from their own cards.
     # A pilotable deck must still COUNTER: win its worst matchup and sit within
     # `STYLE_BAND` of the best — the reserved slots' own bar. Being theirs does
@@ -855,16 +861,16 @@ def personalise(rows: list[dict], profile: dict | None,
             if r["playable"] and r["floor"] >= bar and room(r) \
                     and not any(r is o for o in out):
                 take(r, out)
-        strangers = sum(1 for r in out if not r["playable"])
         for r in rest:
-            if len(out) >= limit or strangers >= UNFAMILIAR_MAX:
+            if len(out) >= limit:
                 break
-            # The same bar as their own decks: a deck they have never played
-            # must at least COUNTER — live, a 33.5%-floor Golem list slipped in.
-            if (not r["playable"] and r["floor"] >= bar and room(r)
+            # THEN ANY DECK THAT STILL WINS ITS WORST MATCHUP, theirs or not —
+            # live, a 33.5%-floor Golem list slipped in as filler, and a deck
+            # they CAN pilot that sat just under the pilotable bar was left out
+            # of both passes, which is what kept some lists at four.
+            if (r["floor"] >= STYLE_FLOOR and room(r)
                     and not any(r is o for o in out)):
                 take(r, out)
-                strangers += 1
     else:
         for r in rest:
             if len(out) >= limit:

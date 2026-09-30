@@ -1294,6 +1294,7 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
                   so a reader comparing two players' lists is owed the reason
                   they differ. */}
               {d.yours && <span className={styles.composeYours}> · your win con</span>}
+              {d.newToYou && <span className={styles.blockNote}> · new to you</span>}
               {d.familiar > 0 && (
                 <span className={styles.blockNote}> · {d.familiar}/8 cards you play</span>
               )}

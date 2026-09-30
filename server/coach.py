@@ -1695,7 +1695,10 @@ def _caveats(mine_hist, opp_hist, opp, basis) -> list[str]:
                    f"decks — those rows are labelled and hold {pct}% of the probability.")
     if not mine_hist or not mine_hist["allDecks"]:
         out.append("No duel history for you either — the options offered are meta decks.")
-    if basis != "expected win rate":
+    # Only when the list really IS ranked by play count. It used to fire for
+    # every basis but the old one, so a list ranked by the combined brain was
+    # also told it was "ranked by how much you play them".
+    if basis == "how much you play it":
         out.append("No matchup evidence for any of these pairings, so the options are "
                    "ranked by how much you play them rather than by matchup.")
     return out

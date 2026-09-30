@@ -1428,6 +1428,9 @@ export interface ComposedDeck {
   /** Held a slot for being one of their win conditions — it still wins its
    *  worst matchup, and sits within 8 points of the best counter. */
   reserved?: boolean;
+  /** Not a deck they can already pilot (fewer than 5 of its cards in decks
+   *  they play, and not their win condition). Listed after the ones that are. */
+  newToYou?: boolean;
   /** The worst-matchup figure plus what their playstyle is worth (at most 3
    *  points). What the list is ordered on below the lead. */
   personal?: number;

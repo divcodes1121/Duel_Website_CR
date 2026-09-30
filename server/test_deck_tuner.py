@@ -638,13 +638,22 @@ def main() -> int:
           all(r["newToYou"] for r in got if r["hash"] == "go9"))
     check("their own win condition is offered when it still counters", "dr9" in hashes, str(hashes))
     check("...and a pilotable deck that LOSES its worst matchup is not", "dr8" not in hashes)
-    check("at most UNFAMILIAR_MAX decks new to them",
-          sum(1 for r in got if r["newToYou"]) <= tuner.UNFAMILIAR_MAX, str(hashes))
+    check("the list fills with new-to-them decks that still win their worst matchup",
+          sum(1 for r in got if r["newToYou"]) >= 2
+          and all(r["floor"] >= tuner.STYLE_FLOOR for r in got), str(hashes))
     weak_field = duel_field + [row("gz9", "golem", 33.5)]
     got3 = tuner.personalise(weak_field, drill_player)
-    check("a deck new to them must still counter (no 33.5%-floor stranger)",
-          all(r["floor"] >= max(tuner.STYLE_FLOOR, 65.8 - tuner.STYLE_BAND) or r is got3[0] for r in got3),
-          str([(r["hash"], r["floor"]) for r in got3]))
+    check("a deck new to them must still win its worst matchup (no 33.5%-floor stranger)",
+          all(r["hash"] != "gz9" for r in got3), str([(r["hash"], r["floor"]) for r in got3]))
+    near_bar = [row("top", "hog", 66.0), row("mine", "drill", 55.0, DRILL)]
+    got5 = tuner.personalise(near_bar + [row(f"v{i}", f"fam{i}", 54.0 - i) for i in range(6)],
+                             {"cards": set(DRILL), "families": {}})
+    check("a deck they can pilot that sits under the pilotable bar is still listed (not new to them)",
+          any(r["hash"] == "mine" and not r["newToYou"] for r in got5), [(r["hash"], r["newToYou"]) for r in got5])
+    wide = [row(f"w{i}", f"fam{i}", 60.0 - i) for i in range(8)]
+    got4 = tuner.personalise(wide, {"cards": {"nothing"}, "families": {}})
+    check("with nothing pilotable the list still has TOP_DECKS rows, all labelled new",
+          len(got4) == tuner.TOP_DECKS and all(r["newToYou"] for r in got4), len(got4))
     check("new-to-them decks read after the pilotable ones",
           [r["newToYou"] for r in got[1:]] == sorted(r["newToYou"] for r in got[1:]))
     mg_player = {"cards": set(MG) | set(GOLEM[:5]), "families": {"minion-giant": 400}}
