@@ -1962,10 +1962,35 @@ def cr_profile(tag: str) -> dict | None:
             "rankedRank": cur["rank"],
             "rankedBest": best["trophies"],
             "rankedBestRank": best["rank"],
+            # EVERY CARD'S LEVEL DEFICIT (maxLevel - level, 0 = maxed), for the
+            # duel win model: clan-war duels are not level-capped and one full
+            # level ahead won 81.2% of 4,657 held-out duel games. Keyed by card
+            # key; the same response, so it costs no extra request.
+            "cardDeficits": _deficits(d.get("cards")),
         }
     except Exception:
         out = None
     _profile_cache[tag] = (out, now)
+    return out
+
+
+_ID_KEY: dict[int, str] | None = None
+
+
+def _deficits(cards) -> dict[str, int]:
+    """`{card key: maxLevel - level}` from a CR API `cards` list."""
+    global _ID_KEY
+    if _ID_KEY is None:
+        try:
+            import duel_combos as _dx
+            _ID_KEY = {int(_dx.card_info(k).get("id") or 0): k for k in _dx.card_keys()}
+        except Exception:  # noqa: BLE001
+            _ID_KEY = {}
+    out: dict[str, int] = {}
+    for c in cards or []:
+        k = _ID_KEY.get(int(c.get("id") or 0))
+        if k and c.get("maxLevel") is not None and c.get("level") is not None:
+            out[k] = max(0, int(c["maxLevel"]) - int(c["level"]))
     return out
 
 

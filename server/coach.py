@@ -1084,6 +1084,78 @@ def _duel_decks(rates: "_Rates", tag: str, since: str | None,
         return []
 
 
+def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
+           used: set) -> tuple[list[dict], dict | None, list[dict]]:
+    """The duel win model over the final options: `(rows, info, swaps)`.
+
+    Every row gains `brain` = `{winRate, vs}` against the opponent's likely
+    decks, each weighted by its likelihood. The rows are REORDERED by it only
+    when every row could be scored — a half-scored list would sort unscored
+    rows to the bottom for having no number, not for being worse. Swaps are
+    the one-card changes real duel players made to the top deck
+    (`duel_index.near_variants`) that raise its win chance here.
+
+    Any failure returns the rows untouched: this adds a reading, it never takes
+    the screen down.
+    """
+    try:
+        import duel_model as dm
+        import duel_index as di
+        model = dm.load()
+        if not model or not rows or not di.available():
+            return rows, None, []
+        decks = [d for d in (opp.get("decks") or []) if len(set(d.get("cards") or [])) == 8]
+        opponents = [(d["cards"], d.get("prob") or 0.0) for d in decks]
+        if not opponents:
+            return rows, None, []
+        rec_mine, rec_opp = di.player_record(my_tag), di.player_record(opp_tag)
+        my_str, opp_str = dm.strength(*rec_mine), dm.strength(*rec_opp)
+        myp = cd.cr_profile(my_tag) if my_tag else None
+        opp_p = cd.cr_profile(opp_tag) if opp_tag else None
+        my_def = (myp or {}).get("cardDeficits") or None
+        opp_def = (opp_p or {}).get("cardDeficits") or None
+        kw = dict(my_def=my_def, opp_def=opp_def, my_str=my_str, opp_str=opp_str)
+
+        out = []
+        for r in rows:
+            e = dm.expected(model, r["cards"], opponents, **kw)
+            row = dict(r)
+            if e:
+                for v, d in zip(e["vs"], decks):
+                    v.pop("cards", None)
+                    v["name"] = d.get("deckName") or d.get("archetype") or ""
+                row["brain"] = e
+            out.append(row)
+        ranked = all(r.get("brain") for r in out)
+        if ranked:
+            out.sort(key=lambda r: -r["brain"]["winRate"])
+
+        swaps = []
+        if out and out[0].get("brain"):
+            seat = counter.seater()
+            for s in dm.swaps(model, out[0]["cards"], di.near_variants(out[0]["cards"]),
+                              opponents, used=used, **kw):
+                ordered, art, inferred = seat(s["cards"])
+                swaps.append({**s, "cards": ordered, "art": art, "inferredArt": inferred})
+
+        meta = model.get("meta") or {}
+        info = {
+            "brain": dm.BRAIN,
+            "ranked": ranked,
+            "trainedAt": meta.get("trainedAt"),
+            "games": meta.get("games"),
+            "holdout": meta.get("holdout"),
+            "choice": meta.get("choice"),
+            "strength": {"mine": round(100 * my_str, 1), "mineGames": rec_mine[0],
+                         "theirs": round(100 * opp_str, 1), "theirsGames": rec_opp[0]},
+            "levels": bool(my_def and opp_def),
+        }
+        return out, info, swaps
+    except Exception as exc:  # noqa: BLE001
+        print("coach._brain: %r" % (exc,), file=sys.stderr)
+        return rows, None, []
+
+
 #: Points of expected win rate a duel-proven pick must clear the top row by
 #: before it takes "Play this". Measured on the live screen 2026-09-30: game 2
 #: against one opponent led with a 49.8% deck while the row under it was
@@ -1437,6 +1509,16 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         my_tag=my_tag, my_win=(my_since, my_until),
         opp_tag=opp_tag, opp_win=(opp_since, opp_until))
 
+    # THE DUEL WIN MODEL (2026-09-30, `duel_model.py`): a win chance for every
+    # option against the opponent's likely decks — player strength, card
+    # levels, cards and learned card-vs-card counters — and, when trained, THE
+    # ORDER. On 37,794 held-out game-2 choices, picking its preference won
+    # 55.8% against 43.0%; the ranking above split the same choices 51.4/48.5.
+    # Absent model or evidence: the list stands exactly as ranked above.
+    top, brain_info, brain_swaps = _brain(top, opp, my_tag, opp_tag, used_mine)
+    if brain_info and brain_info.get("ranked"):
+        basis = "the duel brain's win chance"
+
     best = top[0] if top else None
     observed = None
     if opp_tag and opp_played and opp_hist:
@@ -1480,6 +1562,11 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         "basis": basis,
         # Decks from their own history refused as event decks (`deck_evidence`).
         "eventDecksDropped": event_dropped,
+        # The duel win model: what it was trained on and measured at, the two
+        # players' strengths it used, and whether it ordered the list.
+        "brainModel": brain_info,
+        # One-card changes real duel players made to "Play this", that help here.
+        "brainSwaps": brain_swaps,
         "observedLoadout": observed,
         # The opponent's real duel log for the decks they have shown — the same
         # sequence block the prediction window carries, because the question

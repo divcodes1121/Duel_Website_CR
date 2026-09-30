@@ -1121,6 +1121,10 @@ export interface CoachDeck {
   fill?: boolean;
   /** Only on recommendations. */
   expected?: CoachExpected | null;
+  /** The duel win model's chance for this deck against their likely decks
+   *  (`server/duel_model.py`): player strength, card levels, cards and learned
+   *  card-vs-card counters. Only on recommendations; absent with no model. */
+  brain?: CoachBrainReading | null;
   /** This deck's record in real DUEL games against what they bring — the duel
    *  brain, Team Analysis's (2026-09-27). Null under ten effective duel games:
    *  withheld, never sent as 50%. Only on recommendations. */
@@ -1269,6 +1273,41 @@ export interface CoachSuggestion {
   fusion?: { brain: string; sources: Record<string, number> } | null;
   /** How much of the list the duel brain shaped. `picked` is 0 or 1. */
   duelBrain?: { brain: string; weight: number; picked: number; catalogueSlotSkipped: number } | null;
+  /** The duel win model: what it was trained on, its measured holdout, and
+   *  whether it ordered this list. Absent/null with no trained model. */
+  brainModel?: CoachBrainModel | null;
+  /** One-card changes real duel players made to "Play this" that raise its
+   *  win chance against this opponent. */
+  brainSwaps?: CoachBrainSwap[];
+}
+
+export interface CoachBrainReading {
+  winRate: number;
+  vs: { name: string; likelihood: number; winRate: number }[];
+  brain: string;
+}
+
+export interface CoachBrainModel {
+  brain: string;
+  ranked: boolean;
+  trainedAt?: string | null;
+  games?: number | null;
+  holdout?: { n: number; logLoss: number | null; accuracy: number | null } | null;
+  choice?: { agree: { n: number; won: number }; disagree: { n: number; won: number } } | null;
+  strength: { mine: number; mineGames: number; theirs: number; theirsGames: number };
+  levels: boolean;
+}
+
+export interface CoachBrainSwap {
+  out: string;
+  in: string;
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt?: boolean;
+  winRate: number;
+  gain: number;
+  games: number;
+  players: number;
 }
 
 /** A deck arranged into its slots with its evolution/hero art resolved —

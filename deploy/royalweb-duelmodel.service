@@ -1,0 +1,33 @@
+[Unit]
+# Retrains the duel win model (server/duel_model.py): every native duel game
+# in battle_raw -- both decks, both sides' card levels, who won -- with player
+# strength as a running record. It re-measures itself on a time split first
+# (first 70% fit, last 30% scored) and stores that report in the artifact, so
+# Coach Assist quotes measured figures, then refits on everything.
+#
+# IT DOES NOT WRITE TO battles.db. The bot's database is opened mode=ro; the
+# only file this writes is /opt/royalweb/server/.duel_model.json.
+#
+# IT IS EVIDENCE, NOT A DEPENDENCY. With no artifact Coach Assist ranks exactly
+# as it did before; a stopped timer only leaves the model a day older.
+Description=Deckkies duel win model retrain
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+ExecStart=/usr/bin/python3 -u duel_model_train.py
+
+# A full battle_raw read (~5 minutes) plus two fits; behind the bot and the API.
+Nice=15
+IOSchedulingClass=idle
+SuccessExitStatus=0
+TimeoutStartSec=5400
+
+StandardOutput=append:/var/log/clashbot/duel-model.log
+StandardError=append:/var/log/clashbot/duel-model.log
+
+[Install]
+WantedBy=multi-user.target

@@ -15,6 +15,8 @@ import {
   type CoachHistory,
   type CoachPrediction,
   type CoachSuggestion,
+  type CoachBrainModel,
+  type CoachBrainSwap,
   type DeckTuner,
   type WildForm,
   fetchOpponentRead,
@@ -424,7 +426,23 @@ function DeckRow({
         name={deck.deckName}
         size="sm"
       />
-      {exp ? (
+      {deck.brain ? (
+        /* THE DUEL BRAIN'S WIN CHANCE LEADS when it exists: on held-out
+           duels its choices won 55.8% against 43.0%. The ladder+duel rate it
+           replaced stays in the tooltip, so nothing is hidden. */
+        <div
+          className={styles.figure}
+          title={[
+            ...deck.brain.vs.map((v) => `${v.name}: ${v.winRate.toFixed(1)}%`),
+            exp ? `ladder+duel rate ${exp.winRate.toFixed(1)}%` : '',
+          ].filter(Boolean).join(' · ')}
+        >
+          <span className={styles.figureValue} data-good={deck.brain.winRate >= 50 ? '' : undefined}>
+            {deck.brain.winRate.toFixed(1)}%
+          </span>
+          <span className={styles.figureLabel}>win chance</span>
+        </div>
+      ) : exp ? (
         <div className={styles.figure} title={SOURCE_LABEL[exp.per[0]?.matchup?.source ?? ''] ?? ''}>
           <span className={styles.figureValue} data-good={exp.winRate >= 50 ? '' : undefined}>
             {exp.winRate.toFixed(1)}%
@@ -1150,6 +1168,62 @@ function Delta({ n }: { n: number | null }) {
  *             (Spirit Empress). Silence there would assert something nothing
  *             verified.
  */
+/** What the duel brain is, in figures: trained on, measured at, and the two
+ *  players' duel strengths it used. One line, no explanation. */
+function BrainLine({ model }: { model: CoachBrainModel }) {
+  const h = model.holdout;
+  return (
+    <p className={styles.askHint}>
+      {[
+        'Duel brain',
+        model.games ? `${model.games.toLocaleString('en-US')} duel games` : null,
+        h?.accuracy != null ? `${h.accuracy.toFixed(1)}% right on ${h.n.toLocaleString('en-US')} unseen` : null,
+        /* A player with no native duel games is read at 50% — neutral, and
+           said as such rather than as "50% over 0 games". */
+        model.strength.mineGames
+          ? `you ${model.strength.mine.toFixed(0)}% over ${model.strength.mineGames} duel games`
+          : 'no duel record for you',
+        model.strength.theirsGames
+          ? `them ${model.strength.theirs.toFixed(0)}% over ${model.strength.theirsGames}`
+          : 'none for them',
+        model.levels ? 'card levels read' : 'levels not read',
+      ].filter(Boolean).join(' · ')}
+    </p>
+  );
+}
+
+/** One-card changes REAL DUEL PLAYERS made to "Play this", that raise its win
+ *  chance against this opponent (`duel_model.swaps` over
+ *  `duel_index.near_variants`). Every row is a list people actually played. */
+function BrainSwaps({ swaps, base }: { swaps: CoachBrainSwap[]; base: CoachDeck }) {
+  return (
+    <section className={styles.block} data-hue="green">
+      <h4 className={styles.blockTitle}>
+        What duel players change{' '}
+        <span className={styles.blockNote}>one card, win chance vs these decks</span>
+      </h4>
+      <ul className={styles.notes}>
+        {swaps.map((s) => (
+          <li key={s.in} className={styles.swapRow}>
+            <Delta n={s.gain} />
+            <span className={styles.swapSide}>
+              <CardArt card={s.out} variant={base.art[s.out]} inferred={base.inferredArt} />
+            </span>
+            <span className={styles.swapArrow} aria-label="becomes">→</span>
+            <span className={styles.swapSide}>
+              <CardArt card={s.in} variant={s.art[s.in]} inferred={s.inferredArt} />
+            </span>
+            <span className={styles.blockNote}>
+              {s.winRate.toFixed(1)}% · {s.games.toLocaleString('en-US')} duel games · {s.players} players
+            </span>
+            <DeckActions cards={s.cards} name={`${base.deckName} (${s.in})`} size="sm" />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function TunerPanel({ tuner }: { tuner: DeckTuner }) {
   const swaps = tuner.swaps;
   const others = tuner.compose?.decks ?? [];
@@ -1527,7 +1601,15 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
           <span className={styles.verdictLabel}>Play this</span>
           <div className={styles.verdictBody}>
             <span className={styles.verdictName}>{best.deckName || best.archetype}</span>
-            {best.expected && (
+            {best.brain ? (
+              <span className={styles.verdictFigure}>
+                {best.brain.winRate.toFixed(1)}%
+                <span className={styles.verdictFigureLabel}>
+                  win chance · duel brain
+                  {best.expected ? ` · ladder+duel ${best.expected.winRate.toFixed(1)}%` : ''}
+                </span>
+              </span>
+            ) : best.expected && (
               <span className={styles.verdictFigure}>
                 {best.expected.winRate.toFixed(1)}%
                 <span className={styles.verdictFigureLabel}>
@@ -1555,6 +1637,9 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
           <VsChips vs={best.expected?.vs} />
         </section>
       )}
+
+      {data.brainModel && <BrainLine model={data.brainModel} />}
+      {!!data.brainSwaps?.length && best && <BrainSwaps swaps={data.brainSwaps} base={best} />}
 
       {!!data.notes.length && (
         <section className={styles.block} data-hue="violet">

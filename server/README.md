@@ -1418,6 +1418,33 @@ noise band, the counts and every floor still print** — they are what stop a
 coach acting on noise. Units are stated once per card rather than on each of
 68 rows.
 
+## The duel win model (`duel_model.py`, 2026-09-30)
+
+Logistic regression, antisymmetric (no intercept: P(A beats B) = 1 - P(B
+beats A)), over: player strength as a running record (`strength`, `PRIOR` 20
+= `duel_brain.PILOT_PRIOR`), mean card-level deficit difference, card
+presence (+1 mine / -1 theirs), and card-vs-card pairs (ordered key, signed).
+SGD, `L2` 0.03 on card weights only, `LR` 0.005, 3 epochs, chosen on a
+validation slice. Pure; `duel_model_train.py` reads `battle_raw` duel
+payloads read-only (~5 min), reports a 70/30 time-split holdout plus the
+game-2 choice check, refits on all, writes `.duel_model.json`.
+`royalweb-duelmodel.timer` runs it daily at 05:50 UTC.
+
+Holdout (fit before 12 Sep, 107,762 later games): log loss 0.6365, accuracy
+63.2%; game-2 choices matching it won 55.8% vs 43.0%. Player strength alone
+0.675 / 55.1%, + levels 0.656 / 59.0%, + cards 0.648 / 61.4%.
+
+`coach._brain` scores every final option against the opponent's likely decks
+(`duel_model.expected`), orders the list when all were scored, and offers
+`duel_model.swaps` over `duel_index.near_variants` (real duel decks one card
+away, `VARIANT_MIN_GAMES` 10). `duel_index.player_record` gives the duel
+record; `clash_data.cr_profile` now carries `cardDeficits`. Any failure
+leaves the list as ranked before. Backups `*.bak-20260930-121413-prebrain`.
+
+**Staging trap:** the duel index is WAL, so opening it through a symlink
+fails (SQLite looks for `-wal`/`-shm` beside the link). Stage with
+`CLASH_DUEL_INDEX=/opt/royalweb/server/.duel_index.db`.
+
 ## Vetting the candidate pool (`deck_evidence.py`, 2026-09-30)
 
 `pair_matchup_agg` has no player and no mode column, so the seed pool that

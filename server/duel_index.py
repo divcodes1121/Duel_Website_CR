@@ -1166,6 +1166,55 @@ def player_decks(tag: str, since: str | None = None, until: str | None = None) -
     return out
 
 
+def player_record(tag: str) -> tuple[int, int]:
+    """`(games, wins)` over every duel game of theirs the index holds — the
+    running record `duel_model.strength` turns into a player's strength."""
+    if not tag or _current() is None:
+        return 0, 0
+    try:
+        rows = _player_rows(tag, None, None)
+    except sqlite3.Error:
+        return 0, 0
+    return len(rows), sum(int(w) for _d, w, _t in rows)
+
+
+#: A variant must have been played this many duel games to be offered as a
+#: change real players made — one game of a one-card difference is a typo.
+VARIANT_MIN_GAMES = 10
+
+
+def near_variants(cards, min_games: int = VARIANT_MIN_GAMES, limit: int = 60) -> list[dict]:
+    """Real duel decks ONE CARD away from `cards`: what duel players changed.
+
+    The `sub7` table nominates every stored deck sharing a 7-card subset; the
+    overlap is then checked on the cards, so a hash collision cannot admit a
+    stranger. Most-played first. `[]` with no index.
+    """
+    key = deck_key(cards)
+    have = set(key.split(","))
+    if len(have) != 8 or _current() is None:
+        return []
+    hs = sub7_hashes(key)
+    try:
+        con = _ro(PATH)
+        try:
+            rows = con.execute(
+                f"SELECT DISTINCT d.key, d.games, d.wins, d.players FROM sub7 s "
+                f"JOIN deck d ON d.id = s.deck WHERE s.h IN ({','.join('?' for _ in hs)}) "
+                f"AND d.games >= ?", (*hs, int(min_games))).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+    out = []
+    for k, g, w, p in rows:
+        c = k.split(",")
+        if len(set(c) & have) == 7:
+            out.append({"cards": c, "games": int(g), "wins": int(w), "players": int(p)})
+    out.sort(key=lambda d: (-d["games"], ",".join(d["cards"])))
+    return out[:limit]
+
+
 def player_wcs(tag: str, since: str | None = None, until: str | None = None) -> dict[str, int]:
     """`{win condition: games}` — what one player brings to their duels."""
     out: dict[str, int] = {}
