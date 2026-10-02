@@ -9,7 +9,7 @@ Companion to `README.md` (the narrative record) and `server/README.md` (the
 operational half). This file is the **mechanism**: the reasoning chain, end to
 end, at the level of individual functions and constants.
 
-> **SCOPE, as of 2026-09-27.** This file documents the **prediction** chain —
+> **SCOPE, as of 2026-10-02.** This file documents the **prediction** chain —
 > the OIE, the Coach's duel prediction and what they refuse to do. It does
 > **not** cover the recommendation engines that shipped after it, and a reader
 > should not conclude from its silence that they do not exist:
@@ -30,9 +30,36 @@ end, at the level of individual functions and constants.
 >   PREDICTION of what the opponent brings next is unchanged and is what this
 >   file documents; the rate is what its suggestions are ranked by.)
 >
-> None of them trains or calls a model — the duel brain's shrinkage and the
-> fused rate's five weights were fitted once, by grid search against held-out
-> games, and are constants in the code. Every recommendation is still scored by
+> * **`server/deck_evidence.py`** (2026-09-30) — who played a deck and in what
+>   mode. Every deck Deckkies offers from the population passes it: 25+
+>   pilots, no pilot over half its games, played in the last 30 days, 60%+ of
+>   its battles in modes where the player chose the deck. It exists because
+>   `pair_matchup_agg` carries neither player nor mode, and Royale Shuffle
+>   event decks were being offered as counters.
+> * **`server/duel_model.py`** (2026-09-30) — **a TRAINED model, the first one
+>   on a live path.** A pure-Python logistic regression over every stored
+>   duel game: pilot running record, card-level deficit, card presence and
+>   card-vs-card. Refitted after every bot poll (`after_poll.py`), never on a
+>   request. On 110,536 held-out games it scored 0.6359 log loss and 63.2%
+>   on 2026-10-02. Coach Assist's list is ordered by the **combined brain**:
+>   the fused rate with the model's pilot and level terms added.
+> * **`server/deck_builder.py` + `swap_graph.py`** (2026-09-30) — decks built
+>   by at most two swaps real players make, out from a real deck.
+> * **`server/deck_synergy.py`** (2026-09-30) — which cards duel players put
+>   together; a gate on thin-evidence decks, not a rating term.
+> * **`server/coach_choice.py` + `server/deck_architect.py`** (2026-10-02) —
+>   Coach Assist's "Build around your cards": decks holding the cards a
+>   reader names, including decks BUILT from how duel players build around
+>   them (a shell's core, the open slots chosen against the opponent).
+> * **`server/coach_session.py`** (2026-09-30) — the Coach Roster's daily
+>   practice session.
+>
+> **"None of them trains or calls a model" stopped being true on 2026-09-30.**
+> The duel brain's shrinkage and the fused rate's five weights are still
+> constants fitted once against held-out games. The duel win model is not: it
+> is refitted on every poll's new duel games, off the request path, and its
+> own held-out figures are stored in the artifact. Team Analysis and the
+> field plan still call no model. Every Team Analysis recommendation is still scored by
 > `team_scout.score()`, which takes the threat space as an injected parameter
 > (and, since 2026-09-27, an optional per-threat rate — the fused one); the
 > duel brain's picks are scored the same way and placed in the list around that
@@ -105,13 +132,25 @@ share no code and answer different questions.
 additive, flagged, and structurally unable to change a prediction
 (`policy.enforce_primary()` runs last and unconditionally).
 
+> **Two cells of that table have moved (2026-10-02).** *trains: never — there
+> is no model* was true of Coach Assist until 2026-09-30. Its PREDICTION of
+> what the opponent brings is still deterministic and unchanged, which is
+> what this file documents; its RECOMMENDATION is ordered by the combined
+> brain, which uses a duel win model refitted after every bot poll. And the
+> OIE is no longer `off` on the server: `CLASH_OIE=shadow` since 2026-09-18,
+> so it observes and logs. It still shows nothing — the opponent-read
+> endpoint answers `enabled: false` in every mode but `on`. The labelled
+> sampler that was to evaluate it stopped itself on 2026-09-19, eight hours
+> into seven days (a deploy restarted the service, one of its preregistered
+> stop conditions), and was not restarted.
+
 ---
 
 ## 3. The file map
 
 ```
 server/
-├── coach.py            1,694 lines — BOTH Coach Assist windows
+├── coach.py            2,490 lines (2026-10-02) — BOTH Coach Assist windows
 │   ├── _history()          one DB read per (tag, since, until), 120 s TTL
 │   ├── opening_decks()     what they open a duel with
 │   ├── next_decks()        what is still legal after n reveals
@@ -122,6 +161,10 @@ server/
 │   ├── _expected()         expected win rate over the distribution
 │   ├── _duel_merge()       one of the three options held for a legal duel-proven deck
 │   ├── suggest()           the recommendation
+│   ├── _brain()/_combined()  the combined brain: fused rate + pilot strength + card levels (2026-09-30)
+│   ├── _build_for_duel()   decks built by human swaps, re-judged by the combined brain
+│   ├── tune()              the tuner block (deck_tuner): swaps, "Or bring one of these", the loadout
+│   ├── chosen()            decks around the cards a reader names (2026-10-02)
 │   └── _read()/_caveats()  the prose, narrating evidence only
 │
 ├── duel_zone.py        the deck-ranking primitives coach imports
@@ -145,14 +188,26 @@ server/
 │
 ├── duel_combos.py      read_duel_rows() — the single duel reader
 ├── meta.py             the population fallback board
-└── ml/production/      the OIE, flagged off
+├── duel_index.py       every native duel GAME and each deck's record in them (own file)
+├── duel_brain.py       what a duel record is worth; the held slot
+├── matchup_fusion.py   one rate from the ladder and the duels
+├── duel_model.py       the duel win model; duel_model_train.py fits it
+├── deck_evidence.py    who played a deck, in what mode — the vetting
+├── deck_tuner.py       swaps, the composer, the loadout (DECK_TUNER.md)
+├── deck_harmony.py     the structural checklist (cardRoles.json)
+├── deck_synergy.py     which cards duel players pair — a gate
+├── deck_builder.py     human swaps out from a real deck; swap_graph.py is its move set
+├── deck_architect.py   a deck built around named cards, from duel shells
+├── coach_choice.py     the rules of "Build around your cards"
+├── after_poll.py       refreshes the four duel artifacts when a bot poll ends
+└── ml/production/      the OIE — observing in shadow on the server, showing nothing
 
 src/
-├── data/cards.json         122 cards: key, name, elixir, type, rarity, arena,
+├── data/cards.json         123 cards: key, name, elixir, type, rarity, arena,
 │                           description, id      <- NO targets/damage/transport
 ├── data/cardMeta.json      can_evolve / can_be_hero / is_champion /
 │                           is_win_condition
-├── components/Analytics/CoachAssist.tsx   1,452 lines, both interviews
+├── components/Analytics/CoachAssist.tsx   2,183 lines, both interviews
 └── state/analyticsClient.ts               the typed client
 ```
 
@@ -160,7 +215,7 @@ Routes, in `server/app.py`:
 
 ```
 GET /api/analytics/coach/predict/<tag>?r1=&r2=&days=
-GET /api/analytics/coach/suggest?me=&opp=&m1=&m2=&o1=&o2=&days=
+GET /api/analytics/coach/suggest?me=&opp=&m1=&m2=&o1=&o2=&days=[&swaps=1 | &want=<cards>]
 GET /api/analytics/coach/opponent-read/<tag>          (OIE, off by default)
 ```
 
@@ -620,6 +675,27 @@ directly. Go through `deck_counter`, or the 58.6% bias comes back.
 ---
 
 ## 11. How "generation" works today — it does not generate
+
+> **THIS SECTION DESCRIBES 2026-09-02, AND ITS HEADLINE IS NO LONGER TRUE.**
+> It is kept because the reasoning is why the later work took the shape it
+> did. What changed, in order:
+>
+> * **2026-09-05** — `cardRoles.json` and `deck_harmony.py` exist: the system
+>   does know what a card does (122 of 123 cards; Minion Giant awaits its
+>   entry in the card manual). `deck_tuner` names card swaps and composes
+>   from real decks (`DECK_TUNER.md`).
+> * **2026-09-30** — `deck_builder` constructs a deck by at most two swaps
+>   real players make, out from a real one, and keeps it only if the combined
+>   brain still rates it higher than the deck it came from.
+> * **2026-10-02** — `deck_architect` constructs a deck around cards a reader
+>   names: the core of a way duel players really play the card, with the
+>   open slots chosen against this opponent from the cards that shell's
+>   pilots rotate through.
+>
+> Still true: the three MAIN options ("Your options, ranked") are selection —
+> the player's own decks, topped up from the meta board — and both builders
+> stay inside real decks' neighbourhoods. Free generation over all
+> 123-choose-8 lists is still closed (Phase 18).
 
 This is the crux of the "not unique" complaint, stated plainly.
 
@@ -1173,6 +1249,25 @@ Other constraints:
 ## 19. Future plans, in order
 
 Ordered by value per unit of risk. Each item states what it needs.
+
+> **WHERE THIS PLAN STANDS, 2026-10-02.** Written on 2026-09-02; kept as
+> written below. Against it:
+>
+> * **Tier 1** — floor and coverage ranking (1, 2) exist in the TUNER
+>   (`deck_tuner._floor`, `coverage`); "Your options" still ranks on the
+>   mean, now the combined brain's. Loadout-level coverage (5) is
+>   `deck_tuner.loadout`. `weight` (3) is in the payload and not on screen.
+>   `_fills` (4) still reads the meta board.
+> * **Tier 2** — `cardRoles.json` (6) and the harmony checklist (8) are
+>   built; structural coverage (9) and role-exhaustion reads (7) are not.
+> * **Tier 3** — selection from real decks (11) is `deck_tuner.compose` over
+>   vetted seeds; construction is `deck_builder` and `deck_architect`, both
+>   bounded to real decks' neighbourhoods rather than snapped to them (12);
+>   free synthesis (13) and a `#/forge` screen (14) are not built.
+> * **Native duel evidence is in production** for RATES (`duel_index` since
+>   2026-09-27, the duel win model since 2026-09-30). Native duel
+>   PREDICTION — using the stored game order to say what they open with — is
+>   still not built.
 
 ### Tier 1 — no new data, no card file, days of work
 

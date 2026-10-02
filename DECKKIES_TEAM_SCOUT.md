@@ -190,6 +190,15 @@ a new rung added upstream makes this cautious rather than breaking the request.
 > `test_team_analysis.py` cannot see it — `test_coach.py` pins Coach Assist's
 > side. `_FusionContext.prepare(hubs_too=...)` exists for it; Team Analysis
 > never passes `True`.
+>
+> **A THIRD READER SINCE 2026-10-02: `coach.chosen`** (Coach Assist's "Build
+> around your cards"). It builds the same `_Rates`, reads the duel context's
+> `on`, `catalogue` and `figures`, calls `duel_brain.duel_projection` through
+> `coach._duel_projection`, and rates every row with `_Rates.rate` after
+> `prepare`. It also reads `duel_index.decks_holding` (new that day) and
+> `player_decks`. `test_coach_choice.py` pins its side against fakes; like
+> `test_coach.py`, it cannot see a rename made here. The catalogue's row
+> shape (`key`, `cards`, `games`, `wins`, `players`) is what it depends on.
 
 **`server/coach_daily.py` — the Coach Roster's "Against the field" tab and the
 linked player's own `#/my` — calls `team_scout.score()` directly.** It was

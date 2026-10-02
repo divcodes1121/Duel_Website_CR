@@ -179,6 +179,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 14. [Cards — one player's whole card pool](#cards--one-players-whole-card-pool)
 15. [Deck Counter — what beats what](#deck-counter--what-beats-what)
 16. [Coach Assist — mid-duel help](#coach-assist--mid-duel-help)
+16a. [Build around your cards](#build-around-your-cards-2026-10-02-admin-only-for-now)
 17. [Colour: how it was chosen](#colour-how-it-was-chosen)
 18. [The UI pass — surfaces, selection and navigation](#the-ui-pass--surfaces-selection-and-navigation)
 18a. [Trends that count games, and tables that fit a laptop](#trends-that-count-games-and-tables-that-fit-a-laptop-2026-09-28)
@@ -250,25 +251,34 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 1,141 tests in 51 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
+npm run test                      # 1,181 tests in 54 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
 python server/test_team_analysis.py # 163 checks over both tabs of the squad board, incl. the fused rate's wiring
 python server/test_team_scout.py  # 160 checks over the coaching brain: projection, scoring, squad plan
 python server/test_matchup_fusion.py # 34 checks over the fused ladder+duel rate, against literals
-python server/test_duel_index.py  # 60 checks over the duel index and its version cells, on synthetic data
+python server/test_duel_index.py  # 68 checks over the duel index, its version cells and its readers, on synthetic data
 python server/test_duel_brain.py  # 83 checks over the duel brain's figures and picks
 python server/test_suggested_seating.py # 49 checks: a suggested deck fields every slot its cards can fill
 python server/test_coach_daily.py # 204 checks over the plan against the field
-python server/test_coach.py       # 99 checks over the Coach Assist rules, incl. its duel wiring
-python server/test_deck_tuner.py  # 119 checks over the swap brain, incl. the three-slot rule
+python server/test_coach.py       # 118 checks over the Coach Assist rules, incl. its duel wiring
+python server/test_coach_choice.py # 77 checks: decks around the cards a reader names — which lists are rated, the order, the sections
+python server/test_deck_architect.py # 51 checks: building around a card from how duel players build (shells, core, open slots)
+python server/test_deck_tuner.py  # 152 checks over the swap brain, incl. the three-slot rule and the player-first lists
+python server/test_deck_builder.py # 28 checks: human swaps out from a real deck, and the series arithmetic
+python server/test_duel_model.py  # 45 checks over the duel win model and the combined brain's arithmetic
+python server/test_deck_synergy.py # 22 checks over the duel-pairing gate
+python server/test_deck_evidence.py # 48 checks: who played a deck and in what mode — the vetting every offered deck passes
+python server/test_coach_session.py # 48 checks over today's practice session
+python server/test_after_poll.py  # 13 checks: the duel evidence updates when a bot poll finishes, never mid-poll
+python server/test_db_keeper.py   # 11 checks over the one idle connection per database file
 python server/test_card_art.py    # 131 checks over deck arrangement and card art
 python server/test_duel_combos.py # 55 checks over the duel logic, no DB needed
-python server/test_meta.py        # 33 checks over the meta board and card rules
+python server/test_meta.py        # 41 checks over the meta board and card rules
 python server/test_duel_zone.py   # 88 checks over the series and sequence rules
 python server/test_player_cards.py # 60 checks over the card board
 python server/test_deck_counter.py # 58 checks over the matchup engine
 python server/test_live_player.py # 23 checks over the live battlelog reader
 python server/test_recruit.py     # 39 checks over the tag recruiter
-python server/test_battle_modes.py # 135 checks over which game modes go where
+python server/test_battle_modes.py # 166 checks over which game modes go where
 python server/test_duo_pairs.py   # 468 checks over the 2v2 partnership collection
 python server/test_recent_battles.py # 40 checks over the battle log and its mode router
 python server/test_player_trends.py # 10 checks: the daily series carries games per day
@@ -3458,7 +3468,7 @@ Two windows over `server/coach.py`, ported from the bot's duel advisor:
 | window | the bot | asks | answers |
 |---|---|---|---|
 | **Duel Prediction** | `!predict` / `!predict2` / `!predict3` | one tag | which decks they open with, and what is still legal after each reveal |
-| **Suggestion** | `!suggestion #YOU [#THEM]` | your tag; the opponent comes from the route | the same read, then YOUR still-legal decks ranked by expected win rate — and since 2026-09-27 one of the three can be a legal deck proven in real duels against them, marked **Duel pick** |
+| **Suggestion** | `!suggestion #YOU [#THEM]` | your tag; the opponent comes from the route | the same read, then YOUR still-legal decks ranked by expected win rate — and since 2026-09-27 one of the three can be a legal deck proven in real duels against them, marked **Duel pick**; since 2026-09-30 the list is ordered by the combined brain (that rate, adjusted by both players' duel strength and card levels); since 2026-10-02 an admin can name up to four cards and get decks built around them |
 
 ### Build around your cards (2026-10-02, admin-only for now)
 
@@ -6494,10 +6504,21 @@ quoting for weeks turned out to be backwards. Full reasoning in
 
 The bot's duel advisor, in two windows: what they will bring, and what you
 should answer with. Both are interviews rather than forms, because a duel has a
-state and the useful question is different at each one. Scored on the Deck
-Counter's evidence ladder rather than a trained model — card-sensitive, and it
-prints which rung answered. Under it sits the thing that is not a prediction at
-all: the real three-deck loadouts they have run containing the deck you pasted.
+state and the useful question is different at each one. Under the prediction
+sits the thing that is not a prediction at all: the real three-deck loadouts
+they have run containing the deck you pasted.
+
+**How it is scored has moved three times, each measured on held-out duel
+games.** It began on the Deck Counter's evidence ladder alone (0.6853 log
+loss). Since 2026-09-27 every pairing is the fused ladder+duel rate at the
+level of the lists (0.6793), with one of the three options held for a deck
+proven in real duels. Since 2026-09-30 the list is ordered by the **combined
+brain** — that rate, adjusted by both players' duel strength and card levels
+with weights learned by a duel win model retrained after every bot poll
+(0.630; picks matching it won 59.0% against 39.4%). Pro and admin also get
+card swaps, "Or bring one of these" and decks built by human swaps; since
+2026-10-02 an admin can name the cards and get decks built around them
+([Build around your cards](#build-around-your-cards-2026-10-02-admin-only-for-now)).
 Full reasoning in [Coach Assist](#coach-assist--mid-duel-help).
 
 ---
@@ -15455,6 +15476,24 @@ server/
   coach_intel.py              one roster player's intelligence, in one read
   deck_tuner.py               the swap brain
   deck_harmony.py             is an eight-card list a deck, or a pile of cards?
+  deck_evidence.py            who played a deck and in what mode: the vetting every
+                              offered deck passes (event and one-pilot lists out)
+  deck_synergy.py             do these eight cards go together the way duel decks
+                              do — the gate on "Or bring one of these"
+  duel_model.py               the duel win model (cards, card-vs-card, levels,
+                              pilot strength); duel_model_train.py fits it
+  deck_builder.py             decks built by human swaps out from a real deck;
+                              swap_graph.py learns which cards people interchange
+  deck_architect.py           decks built AROUND named cards from how duel players
+                              build: a shell's core, the open slots chosen against
+                              the opponent. No imports
+  coach_choice.py             "Build around your cards": which lists are rated,
+                              the order, the sections. No imports
+  coach_session.py            today's practice session — the daily surface that
+                              really changes daily
+  after_poll.py               brings the duel index, the model, the pairing table
+                              and the swap graph up to date when a bot poll ends
+                              (10-minute timer, triggers on data)
   team_analysis.py            squad vs squad, AND one roster on its own — an empty
                               `blue_tags` IS the scouting report. Builds each
                               candidate's profiles ONCE, and rates every matchup
@@ -15479,7 +15518,7 @@ server/
   live_player.py              the live CR battlelog, analysed for a new tag
   recruit.py                  how a tag gets collected without anyone searching for it
   tracking.py                 the tag-enrolment queue — ours, not the bot's
-  test_*.py                   66 suites, 3,710 checks (2026-09-30); none needs the
+  test_*.py                   70 suites, 3,890 checks (2026-10-02); none needs the
                               bot's database. See Running it for the counts
   README.md                   API and storage detail
 

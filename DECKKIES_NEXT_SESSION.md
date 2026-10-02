@@ -17,6 +17,12 @@ carries the full reasoning; this is the short version plus what to do next.
 > **Updated 2026-09-28** with the interface pass (four commits, client-side
 > except one additive server field). Nothing in it changes a coaching figure;
 > the list of what reaches these screens is in the table below.
+>
+> **Updated 2026-10-02** with the four days since: the daily session, the
+> vetted deck pool, the duel win model and the combined brain, the deck
+> builders, and Coach Assist's "Build around your cards" (admin-only, a
+> release decision below). The trend item is done; four faults found by
+> reading Coach Assist end to end are listed and NOT fixed.
 
 ## Where things stand
 
@@ -28,7 +34,7 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **1,159 vitest** (52 files), **3,457 Python checks** across 61 suites (one known failure, `test_ml_21a`), route count **26** — counted 2026-09-29 |
+| Tests | **1,181 vitest** (54 files), **3,890 Python checks** across 70 suites (one known failure, `test_ml_21a`), route count **26** — counted by a full run on 2026-10-02 |
 | Storage jobs | daily timers on the VPS: retention (one battle-day a run, nothing due until 2027-04-02), ladder raw 72 h, 2v2 raw 24 h, verified backup pulled to the owner's PC — the console's Data lifecycle view shows all four |
 
 ## What the field plan answers
@@ -83,6 +89,24 @@ Backups on the VPS for the last three:
 `{clash_data,team_analysis,coach_daily,coach}.py.bak-20260927-082012-preslots`,
 `{duel_index,team_analysis,team_scout,deck_counter}.py.bak-20260927-085838-prefusion`.
 
+## Shipped 2026-09-29 to 2026-10-02 (all live)
+
+| commit | what | on the coach screens |
+|---|---|---|
+| `be6d8b8` | Coach Assist's loadout never offers a card already played this duel | none directly |
+| `8153eae` | a deck the bot files under `other` is named by its win condition, not "Mixed" | every single-deck label here |
+| `ae0938a` | **today's session** (`coach_session.py`): the daily practice changes daily; the trend contract bug fixed | the Today card and `#/my` lead with it; roster rows say "Drill X" |
+| `80e8b8c` | **offered decks are vetted** (`deck_evidence.py`): 25+ pilots, no pilot over half, played in 30 days, 60%+ own-deck modes — Royale Shuffle and one-pilot lists out | the field plan's pool is the same vetted seeds |
+| `c018789` | the tuner's lists are built from the player; forms are what pilots field (`observed_seating`) | deck art on every seeded list |
+| `7f8cb64` + `b146bae` | **a duel win model** trained on every stored duel game, and Coach Assist ordered by the **combined brain**; the duel evidence updates after every bot poll (`after_poll.py`) | none directly |
+| `f846c74`, `6208918` | "Or bring one of these" is six decks, says which are new to you, and offers only decks whose cards duel players pair (`deck_synergy.py`) | none directly |
+| `2247381` | **decks built by human swaps** (`deck_builder.py`, `swap_graph.py`) | none directly |
+| `416c026` | Coach Assist 80 s -> ~7 s: one idle connection per database file | every analytics read on the roster is faster cold |
+| `db7570d`, `415b8b3`, `9804765` | **Build around your cards** (admin-only): name up to four cards, get duel decks, your decks and the meta, and decks BUILT from how duel players build around them (`deck_architect.py`) | none directly |
+
+Backups on the VPS for the last row: `{coach,app}.py.bak-20261002-040707-prechoice`,
+`{coach,coach_choice,duel_index}.py.bak-20261002-045206-prearchitect`.
+
 ## Decisions waiting on the account holder
 
 1. **The R3 prediction sampler STOPPED on 2026-09-19 21:05 UTC** (its own stop
@@ -105,6 +129,16 @@ Backups on the VPS for the last three:
    own Miner list, pointed at all five teammates). The band was deliberately
    NOT re-tuned; forcing distinct #1s would hand some teammates a measurably
    worse deck.
+
+5. **Release "Build around your cards" (2026-10-02).** It is admin-only by
+   request ("admin only first, then I will see, then we release for all").
+   Releasing is one line (`choiceAllowed` in `CoachAssist.tsx`, e.g. to
+   `isPaid(access)`), `tests/coachChoiceGate.test.ts`, and a release note.
+   Which tier is the decision. The gate is in the client only.
+6. **The pilots question from 2026-09-27 is answered.** The duel-rating
+   adjustment that was measured and held back then shipped on 2026-09-30 as
+   the combined brain's strength and level terms, at the account holder's
+   request. Nothing left to decide there.
 
 ## THE ONE BLOCKING GAP: `is_coach` grants the screen, not the rows
 
@@ -159,6 +193,12 @@ deserves a real assertion.
 
 ### 2. The trend switches on 2026-09-30 — look at it then
 
+**DONE, 2026-09-30.** It switched on that day and its first run on real data
+found a bug: the client read `trend.days` while the server sends
+`daysApart`, so the screen printed "trend undefinedd". Fixed, and
+`tests/fieldTrendContract.test.ts` reads both files so the two cannot drift.
+What follows is kept as the record of what was expected.
+
 `meta_history` began banking daily boards on 2026-09-23 and `plan()` asks
 `movement(TREND_DAYS)` with `TREND_DAYS = 7`, which needs a snapshot at or
 before `latest - 7`. So the screen says `trend off` truthfully until **seven
@@ -181,7 +221,44 @@ mind. Decide whether a player gets it at all before building it.
 Untouched. Needs a service worker this site deliberately lacks, so it is a
 real architectural decision rather than a feature.
 
+### 5. Four faults found reading Coach Assist end to end (2026-10-02) — NOT fixed
+
+None was asked for; each is a real behaviour, read off the code.
+
+- **The opponent's rank and percentage can disagree.** `duel_zone.
+  rank_companions_by_series` orders their likely decks by `3 x co-occurrence
+  + count`, but `coach.next_decks` / `opponent_next` take `prob` from the
+  count alone. The first row can show a lower percentage than the second,
+  and "The read" quotes the first row's.
+- **Native duel game order is unused for prediction.** `duel_index.games`
+  stores `round` for every native duel game, but `coach._history` reads
+  native duels as unordered loadouts (`duel_combos.read_duel_rows`), so
+  "what do they open with" comes only from friendly series. The known
+  loadout-reuse signal (65.7%) does not narrow the opponent's decks either.
+- **"Switch a card" targets are not vetted.** `deck_tuner.compose` draws
+  from the vetted seeds; `rank` draws from every sibling in
+  `pair_matchup_agg`, guarded only by the 60-game `thin` flag. A one-pilot
+  or event list can be a swap target.
+- **The accuracy line on the screen is a constant.** `coach.
+  COMBINED_MEASURED` (59.0% vs 39.4% on 2,500 choices) is hardcoded, not
+  re-measured when the model retrains, and its own comment says the old
+  brain's tables included the test games.
+
+Also noted: the combined brain's pilot-strength term is the same for every
+one of a player's options against one opponent, so it moves the printed win
+chance and almost never the ORDER; the card-level term is what re-orders.
+
 ## Rules this work must not break
+
+- **A built deck is CONSTRUCTED from how duel players build, never a real
+  deck with one card swapped in.** `deck_architect` reads every duel list
+  holding the card, keeps a shell's core and chooses only the open slots.
+  The substitution path shipped once and was rejected the same day.
+- **Duel-proven lists lead.** Half the duel lists the combined brain rates
+  are simply the most duel-played, and a list under 30 duel games ranks
+  after every proven one.
+- **No prose in "Build around your cards".** One step line, three bare
+  headings, figures. A test bans the removed strings.
 
 - **`my_coach_players()` does not return `notes`.** See task 1.
 - **`is_coach` / `linked_user_id` are read as `=== true` / non-null, never

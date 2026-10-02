@@ -388,7 +388,7 @@ happily against a server that never called it.
 | `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, **the projected threat space (`threats`), and 5–7 decks that answer it**. With `blue` those come from the squad's own lists; **omit `blue` entirely** and they come from the snapshot's seed pool (~200 real decks), plus an `overall` block ranking the same pool against the whole roster's pooled projection. `mode` says which, and `brain` says which reasoning produced it (`team-scout-2.1`: a match plan's per-teammate lists are chosen as a squad, with `squadCover` on each folder). See `DECKKIES_TEAM_SCOUT.md`. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
 | `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
 | `GET /api/analytics/coach/field/<tag>` | **what to play with NO OPPONENT** (`coach_daily.py`) — the meta board becomes a threat projection, that projection is reweighted by where this player measurably loses, and `team_scout.score()` ranks ~204 real decks against it. Works because `score()` takes the threat space as an INJECTED parameter and does not know where it came from, so there is no second scorer and no model. `basis` is `weighted` / `unweighted` / `no_history` / `none` and a client must say which. `tailoredPicks` reports how many picks the weighting actually put there, measured by ranking the unweighted projection too — live it is 0-1 of 7, and that is the correct answer rather than a weak one. Costs no database read per candidate; 1.4 s warm. `days` as everywhere else. Returns `families` / `closest` / `learn` / `repertoire` on the full read (not `brief`). **`compare=1`** adds `progress` — this window against the one of the same length before it, recomputed from the rows rather than read from a snapshot table (+~60 ms) |
-| `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle |
+| `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle. **`swaps=1`** (the client sends it for Pro and admin) adds `tuner` (card swaps, "Or bring one of these", the loadout) and `built` (decks built by human swaps). **`want=<up to 4 card keys>`** (2026-10-02; the client sends it for admin only) answers with `coach.chosen` INSTEAD — decks holding those cards, in sections duel / yours / meta / built — and nothing else |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
 | `GET /api/analytics/meta?movement=<days>` | **how that board has MOVED** (`meta_history.py`) — rank and use-rate deltas between the newest stored day and the newest one at or before `days` back. Rides on the `/meta` path deliberately, so the **route count stays 23**. Answers `basis: "none"` with NO rows when there is nothing to compare against, never a list of zeros; a deck absent from the older day carries `entered: true` with a NULL delta rather than a climb from beyond the board's edge, and one that dropped off carries `left: true`. `comparedWith` / `daysApart` describe the snapshots ACTUALLY used, so a missed timer widens the span visibly instead of silently. Reads its own ~18k-row file, not the bot's database |
 | `GET /api/analytics/duo-pairs?page=&per=&sort=&cards=` | **the unique DECK PAIRS played in 2v2** (`duo_pairs.py`) — 1,483,672 of them then; since 2026-09-17 bounded to the top 50 per win condition (736). One record per combination of two teammate decks, with an occurrence count, distinct participants, and first/last seen. Reads a LOCAL collection, not `battle_raw` — the migration is a full scan of a 44.7 GB table and is a job. `sort` is a KEY into a closed vocabulary (`played` / `recent` / `first`), never a column, and all three are index reads at 9-15 ms. `cards` is comma-separated card keys, checked against the catalog, ANDed within ONE deck and matched WHOLE — the column is a JSON array so `%"giant"%` has boundaries a bare `%giant%` does not (605,447 pairs against the real Giant's 45,360). An unknown key is dropped rather than refused and the accepted list is echoed back. `q` is the older free-text search over the same columns plus the fingerprints; `cards` wins when both are given |
@@ -2112,6 +2112,21 @@ duel exact rung off `ctx.records`, the cells for a hub candidate against a
 threat hub, and — for a teammate's own list — the family level from its own
 ladder history (`_ladder_history`, read on `_POOL`, cached an hour). Tier and
 interval come from `duel_combos.confidence_tier`, the site's one rule.
+
+### `decks_holding(cards)` — every duel list holding a card (2026-10-02)
+
+The catalogue is the decks the duel brain may OFFER (10+ games, 3+ pilots, no pilot over
+half): 2,030 lists on 2026-10-02. It is not the evidence for how people BUILD. The `deck`
+table holds every list fielded in the window — 349,496 of them over 365,278 games that day —
+and `decks_holding(cards, min_games=2)` reads the ones holding ALL the given cards,
+most-played first, with `games`, `wins`, `players` and `topPilot`. Graveyard: 2,501 lists over
+16,591 games against the catalogue's 148. It is `deck_architect`'s corpus (see Coach Assist).
+
+One `LIKE` narrows on the LONGEST key (the most selective substring of a sorted, comma-joined
+key); membership is then checked on the split key, because `%giant%` also matches
+`royal-giant`, `goblin-giant` and `giant-skeleton` — a test pins that asking for `giant`
+does not return a Royal Giant list. 0.05-0.11 s measured (Graveyard, Hog Rider). Like every
+reader here it answers `[]` when the index is missing or was built from another database.
 
 ## Safety
 

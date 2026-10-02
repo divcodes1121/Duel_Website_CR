@@ -1617,6 +1617,54 @@ the server ran the gate (`compose.synergyGate`). **"Planned for the whole duel"
 is removed** (on request); "Deckkies built for this duel" stays, and the
 tuner's own "A full loadout" is unchanged.
 
+## Coach Assist: build around your cards (2026-10-02, admin-only)
+
+A block under **Play this** on the Suggestion result: the card picker Meta and Duel Zone
+filter with (`WinConFilter`, which gained `label` / `title` props so its trigger can say
+"Pick cards" here and "Filter" everywhere else) and a **Find decks** button. Up to four
+cards; a fifth is ignored. Server side in `server/README.md` and the main README.
+
+**IT SHIPPED THREE TIMES IN ONE DAY, AND THE THIRD IS THE ONE TO COPY.** The first cut drew
+provenance on every row; the second added more (which shell a build rested on, the lists and
+games behind it, the slots the opponent changed). The account holder pasted the screen back:
+*"too many texts in that filter — remove, just tell what to do, what now, what will happen"*.
+What is on screen now:
+
+- **ONE line that says what to do next** (`data-choice-step`), and it follows the state:
+  "Pick the cards you want in the deck (up to 4)." -> "Press Find decks." -> how to read the
+  list; or that a named card was already played, or that no deck has the cards together, each
+  with what to do about it. It is the only sentence in the block.
+- **Three bare headings:** Duel decks / Your decks and meta / Built by Deckkies. No note
+  beside any of them.
+- **Per deck:** the name, ONE short figure (`321 duel games · 54% won`, or `you played it
+  4×`), the eight cards with copy / picture / open-in-game, the win chance, and a chip per
+  opponent deck.
+- **A swap, when one raises it:** the gain, the card leaving, the card arriving, the new win
+  chance, and the buttons for THAT deck. Two swaps are joined by a `+`, because
+  `A -> B C -> D` read as A becoming B and C.
+
+Source tags, "Duel proven", "Deckkies' build", the duel chip, "n/8 cards you play", pilots,
+ladder games, the thin-evidence note and the whole shell / core / open-slot line are GONE
+from the screen and still in the payload. `tests/coachChoiceGate.test.ts` bans the strings
+by name, so they cannot drift back. This is the same rule Team Scout's screens follow, and
+the third time it was asked for: **a new block starts text-light, with the working in the
+README.**
+
+Three behaviours worth knowing:
+
+- **Nothing is asked until the button is pressed**, and the request is gated with the
+  render (`choiceAllowed`) — the panel is the only caller of `fetchCoachChosen`.
+- **The named cards live in the parent** (`Suggestion`), not in the panel. The result view
+  unmounts whenever the Suggestion reloads (a game was played, the window changed); the panel
+  then re-asks with the same cards on its own. Changing the picked cards puts the old list
+  away until Find decks is pressed, so the list on screen always matches the cards shown.
+- **A server that predates the feature ignores `want` and answers with an ordinary
+  suggestion.** The panel checks for `decks` and `counts` and says so rather than throwing.
+
+Probe notes: the card chips' accessible name is the image alt ("Graveyard"), their `title`
+is "Graveyard decks" — select by `button[title=...]`. The deck buttons are icon-only; count
+`button[title], button[aria-label]`, not text.
+
 ## Working on this
 
 ```bash

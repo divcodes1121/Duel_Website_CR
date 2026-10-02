@@ -86,6 +86,29 @@
 > * Counts today: **6 tabs**, **1,141 vitest** (51 files), **204 Python
 >   checks** in `test_coach_daily`, route count **25**.
 >
+> **Further superseded, 2026-09-30 and 2026-10-02:**
+>
+> * **The daily practice changes daily now** (`ae0938a`, `server/coach_session.py`).
+>   The Today card and `#/my` lead with a session: a focus matchup chosen from
+>   excess losses since yesterday (else the three weakest take turns by the
+>   date), the deck to practise it with, what to practise against, and what
+>   is rising. Measured before: the same deck five days running for 7 of 8
+>   roster players. The 30-day board is unchanged and correctly stable.
+> * **The field plan's 7-day trend is ON** since 2026-09-30 (seven daily meta
+>   boards were stored that day). The client read `trend.days` where the
+>   server sends `daysApart`; fixed, and `tests/fieldTrendContract.test.ts`
+>   reads both files.
+> * **A deck the bot files under `other` is named by its win condition**
+>   (`8153eae`), on every single-deck label these screens draw.
+> * **The Opponent tab inherits Coach Assist's later engines only where it
+>   reads Team Analysis.** The duel win model, the combined brain, the deck
+>   builder and "Build around your cards" are Coach Assist's and do not
+>   reach the roster.
+> * **STILL TRUE:** the RLS gap above.
+> * Counts today: **6 tabs**, **1,181 vitest** (54 files), **204 Python
+>   checks** in `test_coach_daily` and **48** in `test_coach_session`, route
+>   count **26**.
+>
 > What is still accurate here: the data model, the RLS boundary, the evidence
 > floors and the "no score, no rating" contract.
 

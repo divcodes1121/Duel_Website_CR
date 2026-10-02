@@ -1,19 +1,47 @@
 # Deck Tuner — the swap brain and the composer
 
-**Status: PHASES A–D BUILT, NOT YET DEPLOYED OR MEASURED.** Written and built
-2026-09-05.
+**Status: LIVE for Pro and admin since 2026-09-27; measured on production.**
+Written and built 2026-09-05. *(This line read "NOT YET DEPLOYED OR MEASURED"
+until the 2026-10-02 doc sweep, three weeks after the first production run
+(recorded in `deck_tuner.py`, beside `SWAP_MIN_GAMES`). The paragraph below the
+table is the original and is kept as the record of where it started.)*
 
 | phase | what | state |
 |---|---|---|
-| A | `deck_tuner.neighbours()` / `rank()` — swaps | **built**, 79 checks |
-| B | `cardRoles.json` + `deck_harmony.py` — the veto | **built**, 74 checks |
-| C | `_build_seeds()` + `compose()` / `loadout()` | **built**, in A's suite |
+| A | `deck_tuner.neighbours()` / `rank()` — swaps | **live**; `test_deck_tuner.py` is 152 checks today (79 then) |
+| B | `cardRoles.json` + `deck_harmony.py` — the veto | **live**; `test_deck_harmony.py` is 75 checks today (74 then) |
+| C | `_build_seeds()` + `compose()` / `loadout()` | **live**, in A's suite |
 | D | `swaps=1` on the route + the panel — **Pro and admin** (`isPaid`) since 2026-09-27, admin-only before | **built** |
 
-**Nothing has run against the real database.** Every figure below that is
-called an estimate is still an estimate, the cost discrepancy in section 6 is
-still unresolved, and the API has not been deployed to the VPS. `tsc -b`, 398
-vitest and 787 Python checks are green — that is not evidence the brain works.
+**What changed after this document was written** (each is recorded where it
+landed; this list is the index):
+
+| date | what | where |
+|---|---|---|
+| 2026-09-05 | first production run: a 25-game +34.5 led the swaps -> `SWAP_MIN_GAMES` 60 and the `thin` flag | `deck_tuner.py`, beside `SWAP_MIN_GAMES` |
+| 2026-09-25 | "Or bring one of these" is chosen per player (`personalise`) | section 7 |
+| 2026-09-27 | every offered deck fields three special slots; open to Pro (`isPaid`); measured 1.4-2.4 s on the first suggestion for a deck, nothing warm | section 9 |
+| 2026-09-29 | the loadout honours cards already played and is sized to the games left | `loadout(used=, size=)` |
+| 2026-09-30 | the seed pool is VETTED (`deck_evidence.py`: 25+ pilots, no pilot over half, played in 30 days, 60%+ own-deck modes) — Royale Shuffle event decks had been offered | `deck_counter._build_seeds` |
+| 2026-09-30 | lists are built from the player outward (`playable`), fill to six with `newToYou` labels; forms are what pilots field (`observed_seating`) | `personalise`, `loadout(profile=)` |
+| 2026-09-30 | a duel-pairing gate on thin-evidence decks (`deck_synergy.py`), and a proven deck's own duel record in place of the percentile | `compose(synergy=)` |
+
+**Two builders sit beside the tuner now and are NOT part of it:**
+`deck_builder.py` (2026-09-30: at most two human swaps out from a real deck,
+judged by the duel win model and re-judged by the combined brain) and
+`deck_architect.py` (2026-10-02: a deck around cards the reader names, from the
+shells duel players really play). Both are in `server/README.md`.
+
+**One thing found on 2026-10-02 and not fixed:** `compose` draws from the vetted
+seeds, but `rank` ("Switch a card") draws its candidates from every sibling in
+`pair_matchup_agg`, guarded only by the `thin` flag. A one-pilot or event list
+can still be a swap target.
+
+*The original status paragraph, 2026-09-05:* **Nothing has run against the real
+database.** Every figure below that is called an estimate is still an estimate,
+the cost discrepancy in section 6 is still unresolved, and the API has not been
+deployed to the VPS. `tsc -b`, 398 vitest and 787 Python checks are green — that
+is not evidence the brain works.
 
 **Two things the tests caught that reasoning had not**, both recorded in place:
 a delta between floors measured over different archetype subsets is not a
@@ -279,6 +307,11 @@ i.e. the cost of a single `cluster_profile` call. `CLAUDE.md` elsewhere
 calls this "the 11.6 s path", which does not match the in-file timings —
 **the discrepancy is unresolved and the real figure must be MEASURED against
 the live database before anything is claimed.**
+
+> **Measured since (2026-09-27, live):** the swap scan adds **1.4-2.4 s** to the
+> first suggestion for a deck and nothing once warm. The sibling scan itself
+> became milliseconds on 2026-09-21, when `cluster_index.py` replaced the walk
+> over every stored hash with precomputed bitsets; what is left is the join.
 
 Its own cache, its own key, its own cap. **It must not share
 `_CLUSTER_CACHE`**, whose whole-clear behaviour is tuned for a different
@@ -563,4 +596,8 @@ production after deploy; and report which half was which.** A green
   cards of something real, which is what keeps it scoreable.
 - **No "harmony score".** A checklist naming what is missing.
 - **The existing suggestion is not replaced.** Parallel, additive,
-  admin-gated.
+  Pro-gated (admin-gated until 2026-09-27).
+- **"No free combinatorial generation" still holds for this module.** The
+  two builders added later (`deck_builder`, `deck_architect`) are bounded
+  too — two human swaps from a real deck, or one shell's own cards — and
+  neither is in this file.

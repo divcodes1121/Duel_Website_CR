@@ -61,6 +61,57 @@ Before doing ANY work:
 ============================================================
 ```
 
+> ### STATE AS OF 2026-10-02 — read this before the phase record below
+>
+> Written by a documentation sweep, not by a Brain phase. Nothing in the
+> frozen engine was changed by it. It exists because this file's CURRENT
+> PHASE and SESSION HANDOFF stop on 2026-09-17 (Phase 13A) and the system
+> around the engine has moved a long way since.
+>
+> **The engine (OIE), verified on the server that day:**
+>
+> * `CLASH_OIE=shadow` in `/etc/royalweb.env`, logging to
+>   `ml/results/shadow-log-r3-ce85bca.jsonl`. It observes; it shows nothing
+>   (the opponent-read endpoint answers `enabled: false` in every mode but
+>   `on`). Sections 3 and 4 below still say `off`.
+> * The labelled sampler's state directory holds
+>   `r3s-20260919T1315Z.STOPPED` and `royalweb-sampler.timer` is disabled:
+>   it stopped itself on 2026-09-19, about eight hours into its seven-day
+>   window, because a deploy restarted the service (one of its preregistered
+>   stop conditions). It was not restarted. There is therefore NO result
+>   from it and no evidence for turning the engine `on`.
+> * The phases between 13A and that stop — the Coach calibration, temporal
+>   decay and history-depth studies, the x9 override, the R1 dark deploy, the
+>   R3 shadow run, shadow schema 2 and the sampler — are recorded in
+>   `DECKKIES_BRAIN_PHASE15..20_*.md` and `DECKKIES_BRAIN_R3_*.md` in the
+>   working tree (not committed) and in `server/README.md`. **They are NOT in
+>   this file's phase log.** `Not verified here` beyond the two facts above.
+>
+> **The live product around it, which any Brain work must now beat:**
+>
+> * Coach Assist is no longer "deterministic, no model". Since 2026-09-30
+>   its options are ordered by a **combined brain**: the fused ladder+duel
+>   rate, adjusted by both players' duel strength and card levels with
+>   weights learned by a **duel win model** (`server/duel_model.py`, a
+>   pure-Python logistic regression over every stored duel game, refitted
+>   after each bot poll). On 2026-10-02: 368,450 duel games, 0.6359 log loss
+>   and 63.2% on 110,536 held-out games; held-out game-2 choices matching
+>   the model won 55.8% against 43.0%.
+> * Its PREDICTION of the opponent's next deck is unchanged and still
+>   count-based (section 5). That is the part the OIE would compete with.
+> * `battle_raw.rounds` is read in production by `duel_index.py` (365,278
+>   games, 349,496 distinct lists on 2026-10-02) for RATES and for deck
+>   building. It is still not read for prediction: native duels reach
+>   `coach._history` as unordered loadouts, so the stored game order is
+>   unused there. That is the most direct open opportunity.
+> * New modules since the last handoff, all outside `server/ml/`:
+>   `deck_evidence`, `duel_model` (+ `_train`), `after_poll`,
+>   `deck_builder`, `swap_graph`, `deck_synergy`, `coach_session`,
+>   `coach_choice`, `deck_architect`. `server/README.md` has each.
+> * Tests, counted by a full run: **3,890 Python checks across 70 suites**
+>   (one failing, the known `test_ml_21a` `123 != 122`), **1,181 vitest**
+>   across 54 files, route count **26**.
+
 **The single most important prior document is
 [`server/ml/evaluation/phase22-final-spec.md`](server/ml/evaluation/phase22-final-spec.md).**
 It is a signed contract, not a proposal. Twenty-one research phases closed into
@@ -278,7 +329,7 @@ first.
 
 | component | file | what it is |
 |---|---|---|
-| Opponent Intelligence Engine (OIE) | `server/ml/` | the frozen predictor. **`CLASH_OIE=off`** — not live |
+| Opponent Intelligence Engine (OIE) | `server/ml/` | the frozen predictor. `CLASH_OIE` defaults to `off`; **on the server it is `shadow` since 2026-09-18** — observing and logging, showing nothing |
 | Coach Assist | `server/coach.py` | the live duel advisor. This IS the shipped prediction product |
 | Duel Zone | `server/duel_zone.py` | series reconstruction + companion ranking |
 | Duel combinations | `server/duel_combos.py` | the single duel reader; mode taxonomy |
@@ -288,6 +339,10 @@ first.
 | Fused matchup rate | `server/matchup_fusion.py` | **(2026-09-27)** Team Analysis's and Coach Assist's rate (Coach Assist's `win_prob` scored 0.6853 on the same held-out duels, the fused rate 0.6793): ladder + duels as one number per threat LIST, every weight fitted on a temporal duel holdout |
 | 2v2 pairs | `server/duo_pairs.py` | the precedent for a separate derived SQLite store |
 | Tag tracking | `server/tracking.py` | enrolment queue, own SQLite |
+| Deck vetting | `server/deck_evidence.py` | **(2026-09-30)** who played a deck and in what mode; every deck offered from the population passes it |
+| Duel win model + combined brain | `server/duel_model.py`, `duel_model_train.py`, `coach._brain` | **(2026-09-30)** a trained logistic regression over every stored duel game; Coach Assist's list is ordered by the fused rate plus its pilot and level terms. Refitted after every bot poll by `after_poll.py` |
+| Deck builders | `server/deck_builder.py` + `swap_graph.py`; `server/deck_architect.py` | **(2026-09-30 / 2026-10-02)** decks by human swaps out from a real deck; decks around named cards from how duel players build |
+| Duel-pairing gate | `server/deck_synergy.py` | **(2026-09-30)** which cards duel players put together; a gate on thin-evidence decks |
 
 ### What is live vs dark
 
@@ -295,12 +350,17 @@ first.
 |---|---|---|
 | Coach Assist (prediction + suggestion) | **LIVE**, pro tier | `PRO_ONLY_SECTIONS` |
 | OIE opponent read | **DARK** | `CLASH_OIE=off` (default), plus `OIE_ALLOWLIST` on the Vercel proxy |
-| OIE shadow logging | **DARK** | `CLASH_OIE=shadow` |
+| OIE shadow logging | **ON since 2026-09-18** (verified in the server's env on 2026-10-02); nothing is shown to anybody | `CLASH_OIE=shadow` |
 | Team Analysis | **LIVE**, trial and up | — |
 | Deck tuner (card swaps) | **LIVE**, Pro and admin (`isPaid`) since 2026-09-27 (`c3309c6`), admin-only before; every deck it offers fields its special slots | cost: 1.4–2.4 s on the first suggestion for a deck, nothing warm (measured live 2026-09-27; was quoted as ~2.6 s) |
 
 `CLASH_OIE` defaults to `"off"` — verified at `server/coach.py:1124`. Nothing in
 `server/ml/production/` runs against user traffic today.
+
+> **2026-10-02:** the default is still `"off"` (now near the foot of
+> `server/coach.py`), but the server's environment sets `shadow`, so
+> `ml/production/` DOES run on every Coach prediction request there — on a
+> background thread, for the log only. See the state note at the top.
 
 ---
 
@@ -512,7 +572,9 @@ pool ≥ 5** — exactly where ranking would have to do real work.
 | `win_prob(mine, theirs, snap)` | P(win) walked lazily down the evidence ladder, carrying the rung |
 | `_expected(mine, opp_decks, snap)` | **probability-weighted expected win rate across the whole opponent distribution** |
 | `_spread(opp_decks)` | that distribution collapsed to archetype weights |
-| `tune(my_deck, opp_decks)` | card-level swaps (`DECK_TUNER.md`); admin-only, ~2.6 s |
+| `tune(my_deck, opp_decks)` | card-level swaps (`DECK_TUNER.md`); Pro and admin since 2026-09-27, measured 1.4-2.4 s cold |
+| `_brain(rows, opp, ...)` | **(2026-09-30)** the combined brain: every option's win chance, and the ORDER of the list |
+| `chosen(me, opp, ..., want)` | **(2026-10-02)** decks holding the cards a reader names, duel decks first, plus decks built around them |
 | `suggest(...)` | the recommendation, with `basis` = *expected win rate* or *most played* |
 
 **The thing the Brain prompt asks for as a future feature already exists.**
@@ -4528,12 +4590,14 @@ Bump them in the same commit as the change.
 ### Other suites
 
 **Python overall:** 2,194 checks across 43 suites (as of 2026-09-11).
+**3,890 across 70 suites on 2026-10-02**, by a full run; one failing, the known
+`test_ml_21a`.
 **Totalling them requires reading two different lines** — most print
 `N passed, M failed` from a homegrown `check()`, while the `test_ml_*` ones and
 `test_api_security` are stdlib `unittest` and print `Ran N tests`. A script
 that greps only the first scores fourteen suites as zero.
 
-**Frontend:** 500 vitest across 18 files. Use
+**Frontend:** 500 vitest across 18 files. (1,181 across 54 files on 2026-10-02.) Use
 `npx vitest run --pool=forks --poolOptions.forks.singleFork` — the default pool
 OOM-crashes on this machine.
 
