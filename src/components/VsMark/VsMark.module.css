@@ -19,6 +19,16 @@
   user-select: none;
 }
 
+/* The battle log's, since its redesign: the VS there is the label on a hairline
+   divider between two panels, not a centrepiece, so it is set at label size in
+   the body face with the tracking a label takes. */
+.mark[data-size='xs'] {
+  font-family: var(--font-body, inherit);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
 .mark[data-size='sm'] {
   font-size: 1.25rem;
 }
@@ -27,8 +37,8 @@
   font-size: 1.75rem;
 }
 
-/* The battle log's, and the largest thing in the row that is not a card. It is
-   the joint between two decks and has the middle of the row to itself. */
+/* Was the battle log's until that row was redesigned around a small divider
+   label (`xs`); kept for a caller that wants the word as a centrepiece. */
 .mark[data-size='lg'] {
   font-size: 2.5rem;
 }

@@ -12845,6 +12845,94 @@ It exists for the reader who does not yet trust an aggregate. A win rate is an
 argument; a battle is a fact, and this is the page that shows the facts the
 arguments were computed from.
 
+### The row, redesigned (2026-10-02)
+
+Asked for by brief: a minimal, clean row with a slim header, a panel per player,
+the deck as four cards over four, a small VS, and nothing decorative. **The
+subsections below this one describe the layout it replaced** and are kept as
+the record of why that one was shaped the way it was.
+
+| | before | now |
+|---|---|---|
+| a battle | a card holding two deck blocks and a 2.5rem VS | one card, two tinted halves, a hairline with a small VS on it |
+| who | a name; the tag in a tooltip | initials disc, name, **the tag printed under it** |
+| the deck | eight bare cutouts, 4×2 | eight cards **in slots**, two rows of four; the first row's slots take the side's tint |
+| the result | outcome badge **and** a 3px coloured leading edge | the outcome badge |
+| actions | 25px chips trailing the deck name | 32px buttons (`DeckActions size="lg"`) |
+| layout decided by | the window (`max-width: 56rem`) | two container queries |
+| a row on a desktop | ~405px (read off the screenshot of the old row, not measured in a browser) | 274px (measured) |
+
+**Pieces.** `BattleRow` → `MatchHeader` + two `PlayerDeckPanel` (`PlayerIdentity`,
+`DeckGrid`, `DeckMeta`, `DeckActions`) either side of a `VsDivider`. Both panels
+are the one component; `data-side="mine" | "theirs"` is the only difference and
+CSS reads it.
+
+**What was asked for and is not there, because the data does not exist.**
+The brief drew a player avatar, trophies and a trophy change (`🏆 8123 +28`).
+Clash Royale has no player avatars and the API sends none, so the disc is the
+player's initials. The stored battle row (`recent_battles._read_rows`) holds no
+trophy columns, so no trophy figure is printed — an invented one would be the
+first made-up number on a screen whose whole argument is that it lists facts.
+Adding them means storing them in the bot, which is its own change.
+
+**Colour says who, not who won.** `--side-hue` is blue for the searched player
+and red for the opponent — the hues the score's two crowns already wore — and
+everything coloured in a panel mixes it in at a low strength: a 7% wash fading
+from the panel's outer edge, the avatar's ring, the first row's slots. Won and
+lost are green and red on the outcome badge and nowhere else.
+
+**The brief's hex values were not used; the site's tokens were.** It specified
+a dark palette (`#0B0D10`, `#11151A`, grey `#9CA3AF` secondary text). This site
+has two themes and a standing rule from the 2026-09-19 contrast pass that
+secondary text is full ink, not grey. The row is built on `--surface-sunken`,
+`--bg-2`, `--border`, `--hue-*`, so it is correct on light as well, and
+hierarchy comes from size and weight.
+
+**Two container queries, one inside the other.**
+- `.body` is the container `battles`. From **40rem of list** the two panels sit
+  abreast and the opponent's mirrors (name at the outer edge, deck at the
+  rule). Below it they stack and the rule turns horizontal. It asks the LIST,
+  not the window, because the rail's state changes the list's width by ~180px
+  at one window size.
+- each `.deckPanel` is the container `side`. From **26.5rem** the deck takes a
+  column of its own beside the identity, capped at 22rem; below it the panel
+  stacks (name, deck, foot), capped at 21rem. From 36rem the avatar and name go
+  back onto one line.
+- the opponent's wide-and-abreast rules are a `@container side` **nested in**
+  `@container battles`, because the mirrored rules are more specific than the
+  plain wide ones and would otherwise leave the opponent's wide panel wearing
+  the narrow one's `row-reverse`.
+
+**A container query measures the CONTENT box.** The first cut wrote the
+on-screen panel width as the threshold; a panel has 1rem of padding each side,
+so a 466px panel measured 434 and stayed stacked at 363px tall.
+
+**`DeckActions` centres itself** (`align-self: center`, written for trailing a
+card strip). In the wide panel's column that floated the three buttons into the
+middle of the column under nothing. Every check passed; a screenshot showed it.
+
+**Measured** (production data, real browser, `#YYPCUUY0`):
+
+| window | list | panels | card | row |
+|---|---|---|---|---|
+| 1920 | 1589 | abreast, 786px | 75px | 274px |
+| 1440 | 1109 | abreast, 546px | 75px | 274px |
+| 1280 | 949 | abreast, 466px | 57px | 258px |
+| 1024 / 768 | 693 / 689 | abreast, 338px | 64px | 344px |
+| 600 | 521 | stacked | 71px | 495px |
+| 390 | 311 | stacked | 57px | 669px |
+| 320 | 241 | stacked | 45px | 613px |
+
+171/171 browser checks across twelve size-and-theme combinations: 8 cards a
+side in two rows of four, equal size, the server's order (compared against the
+captured payload), no broken images, nothing outside its row, no page overflow,
+the copy button putting an 8-card deck link on the clipboard, a form pip still
+ringing its row, no console errors.
+
+`initialsOf` moved to `src/utils/initials.ts` (no imports) so the main bundle
+does not pull the dashboard shell in for two letters, and it no longer counts a
+separator or an emoji as a word: "傳奇 | Sir✨Jose✨" was "傳|" and is "傳S".
+
 ### The row is the design
 
 A battle is a **comparison**, so the two decks sit parallel with the VS between

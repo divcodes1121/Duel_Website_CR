@@ -59,6 +59,16 @@
   height: 1.8rem;
 }
 
+/* 32px: a panel's own controls rather than chips squeezed beside a strip. */
+.actions[data-size='lg'] {
+  gap: 0.35rem;
+}
+
+.actions[data-size='lg'] .button {
+  width: 2rem;
+  height: 2rem;
+}
+
 .button:hover {
   color: var(--text);
   background: var(--neutral-wash-sunken);
@@ -124,7 +134,8 @@
     height: 2.15rem;
   }
 
-  .actions[data-size='md'] .button {
+  .actions[data-size='md'] .button,
+  .actions[data-size='lg'] .button {
     width: 2.3rem;
     height: 2.3rem;
   }

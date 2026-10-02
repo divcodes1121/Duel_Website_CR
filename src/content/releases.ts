@@ -82,6 +82,16 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-02-recent-battles-rows',
+    date: '2026-10-02',
+    kind: 'improved',
+    title: 'Recent Battles has a cleaner row: both players, both decks, less scrolling',
+    body: [
+      'Each battle is now one compact card. Your side is tinted blue and your opponent’s red, each with the player’s name and tag, the deck as two rows of four cards, its average elixir and its name. The big VS in the middle is gone; a small one sits on the line between the two decks.',
+      'The opponent’s tag is printed under their name, so you can read it off and look them up. The copy link, save picture and open in game buttons are larger, and on a phone a long deck name wraps instead of being cut off.',
+    ],
+  },
+  {
     id: '2026-09-28-card-inspect-and-tabs',
     date: '2026-09-28',
     kind: 'improved',

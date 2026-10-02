@@ -1665,6 +1665,36 @@ Probe notes: the card chips' accessible name is the image alt ("Graveyard"), the
 is "Graveyard decks" — select by `button[title=...]`. The deck buttons are icon-only; count
 `button[title], button[aria-label]`, not text.
 
+## The Recent Battles row (2026-10-02)
+
+One card per battle: a slim header (mode, score, result, time), then two tinted halves with
+a hairline between them carrying a small VS. Record and measurements: README, "The row,
+redesigned".
+
+- **Pieces**, all in `RecentBattles.tsx`: `MatchHeader`, `PlayerDeckPanel` (`PlayerIdentity`,
+  `DeckGrid`, `DeckMeta`, `DeckActions size="lg"`), `VsDivider`. One panel component for both
+  players; `data-side` is the difference.
+- **`--side-hue`** (blue mine, red theirs) is the only colour in a panel and is always mixed
+  in at a low strength — wash, avatar ring, first-row slots. Green/red is the outcome badge
+  only. No hex values: the row is on the site's tokens, so light works.
+- **A card sits in a slot** (`.slot`: 3px padding, 1px edge, `--bg-2`). The art is a cutout
+  with frames of different shapes; a slot each makes eight of one thing. Same size in both
+  rows; the first row's SLOT takes the tint, never the card.
+- **Order is the server's.** `DeckGrid` slices at four and does nothing else. A test bans
+  `.sort(` / `.reverse(` in the file.
+- **Two container queries**: `battles` on `.body` (40rem: abreast + the opponent mirrors),
+  `side` on each `.deckPanel` (26.5rem: deck in its own column; 36rem: avatar beside the
+  name). The opponent's wide rules are a `side` query nested in the `battles` one.
+  **A container query measures the content box** — subtract the panel's padding.
+- **`DeckActions` has `align-self: center` and a leading margin** for trailing a card strip.
+  A caller using it as a flex item resets both (`.panelActions.panelActions`).
+- **No avatar picture, no trophies**: neither is in the data. Do not draw either.
+- Hover lift on a slot is behind `@media (hover: hover)`; on touch a hover sticks to the last
+  card tapped, and the tap already opens the inspect sheet.
+
+Probe notes: a panel is `[data-side][role="group"]`; walk every row into view before
+measuring (card images are `loading="lazy"`); the pager and the form strip are unchanged.
+
 ## Working on this
 
 ```bash

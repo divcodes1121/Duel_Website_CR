@@ -43,6 +43,7 @@ import { createPortal } from 'react-dom';
 import { ThemeToggle } from '../Theme/ThemeToggle';
 import type { DashTone } from './bionis-dashboard';
 import { MenuIcon, PanelCloseIcon, PanelOpenIcon, XIcon } from './dash-icons';
+import { initialsOf } from '../../utils/initials';
 import './bionis-dashboard.css';
 import './dash-shell.css';
 
@@ -118,15 +119,9 @@ function useNarrow(): boolean {
   return narrow;
 }
 
-/** Two letters for an avatar: the first of each of the first two words, or
- *  the first two of a single word. A tag loses its `#`. "Coach Mira" is CM,
- *  not CO — the first two letters of a shared prefix say nothing. */
-export function initialsOf(label: string): string {
-  const clean = label.replace(/^#/, '').trim();
-  const words = clean.split(/\s+/).filter(Boolean);
-  const chars = words.length > 1 ? [words[0], words[1]].map((w) => [...w][0]) : [...clean].slice(0, 2);
-  return chars.join('').toUpperCase();
-}
+/* Re-exported so the roster keeps importing it from the shell it is used in;
+   the function itself is in a module with no imports (see the note there). */
+export { initialsOf };
 
 /** A small deterministic hue for an avatar, so a player keeps their colour. */
 function hueFor(id: string): number {

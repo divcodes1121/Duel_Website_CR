@@ -1,11 +1,18 @@
 /* Recent Battles — the raw log.
  *
- * THE ROW IS THE WHOLE DESIGN. A battle is a comparison, so the two decks sit
- * side by side as equal blocks with the score between them; anything that made
- * one side louder than the other would be reading the result into the layout.
- * Colour therefore stays off the decks entirely and lives on the row's leading
- * edge and its outcome badge, where green/red mean won/lost as they do
- * everywhere else in the app.
+ * THE ROW IS THE WHOLE DESIGN. A battle is a comparison, so the two players
+ * are the two halves of one card, each holding who played and their eight
+ * cards, with a small VS on the rule between them; anything that made one side
+ * louder than the other would be reading the result into the layout.
+ *
+ * COLOUR SAYS WHO, NOT WHO WON. Each half takes its player's hue (blue for
+ * the searched player, red for the opponent) at a low strength, the way the
+ * two crowns in the score already do. Won/lost is green/red on the outcome
+ * badge and nowhere else.
+ *
+ * LAID OUT BY CONTAINER QUERY, twice: the list decides whether the halves sit
+ * abreast, and each half decides whether its own deck sits beside the name or
+ * under it. See the notes on `.body` and `.deckPanel`.
  */
 
 .page {
@@ -236,11 +243,16 @@
 .body {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.75rem;
   /* One-shot, transform/opacity only: the rows dim while a page loads rather
      than being replaced by a loader, so turning a page reads as a control
      rather than as navigating away. */
   transition: opacity var(--dur-2) var(--ease);
+  /* A ROW LAYS ITSELF OUT AGAINST THIS BOX, NOT THE WINDOW. The list is as
+     wide as whatever the rail leaves it, so a 1440px window holds either a
+     1,080px list or a 1,300px one. Asking the window (it was `max-width:
+     56rem`) answered for the wrong one of those half the time. */
+  container: battles / inline-size;
 }
 
 .body[data-busy] {
@@ -256,9 +268,14 @@
   color: var(--text-muted);
 }
 
+/* ONE BOX PER BATTLE, AND NO BOXES INSIDE IT. The row used to be a card
+   holding two blocks; the redesign's two player panels are the two HALVES of
+   this card, told apart by a faint wash and the rule between them rather than
+   by a border each. Three nested rounded containers is the look this was
+   asked to get away from. */
 .battle {
   position: relative;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--surface-sunken);
   overflow: hidden;
@@ -266,8 +283,8 @@
 
 /* THE ROW A FORM PIP ASKED FOR, marked once. A ring in the selection hue that
    fades out — opacity only, one-shot, on a pseudo-element so the row's own
-   edge (the 3px result colour) is untouched. Scrolling alone was not enough:
-   ten battle rows look alike and the eye does not know which one it landed on. */
+   border is untouched. Scrolling alone was not enough: ten battle rows look
+   alike and the eye does not know which one it landed on. */
 .battle[data-flash]::after {
   content: '';
   position: absolute;
@@ -295,40 +312,31 @@
   }
 }
 
-/* The outcome lives on a 3px leading edge, not on the card's fill. A battle
-   row is a large surface and a green one would drown the two decks it exists
-   to show — the same call the Duel Zone's series cards make. */
-.battle[data-outcome='win'] {
-  border-left: 3px solid var(--hue-green);
-}
-
-.battle[data-outcome='loss'] {
-  border-left: 3px solid var(--hue-red);
-}
-
-.battle[data-outcome='draw'] {
-  border-left: 3px solid var(--border-strong);
-}
-
 /* --------------------------------------------------------------- header */
 
+/* A slim bar: what kind of battle, the score, how it went, when. The result
+   is said ONCE, by the badge. It was also a 3px coloured leading edge on the
+   whole card; with the badge beside the score that was the same fact twice,
+   and a hued edge on a rounded card is the loudest thing in a row whose cards
+   are meant to be. */
 .head {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
+  gap: 0.65rem;
   flex-wrap: wrap;
-  padding: 0.55rem 0.85rem;
+  padding: 0.5rem 1rem;
   border-bottom: 1px solid var(--border);
 }
 
 .mode {
-  padding: 0.18rem 0.45rem;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
+  padding: 0.16rem 0.45rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--neutral-wash);
   color: var(--text);
   font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
@@ -337,7 +345,7 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.95rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
@@ -359,15 +367,15 @@
 
 .dash {
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .outcome {
   padding: 0.16rem 0.5rem;
-  border-radius: 999px;
+  border-radius: 5px;
   font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
@@ -390,172 +398,449 @@
 
 .when {
   margin-left: auto;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 
 /* ------------------------------------------------------------ the pair */
 
-/* PARALLEL, NOT STACKED, AND CENTRED AS ONE GROUP.
-   A battle reads as one comparison rather than as two decks that happen to be
-   near each other, so the pair has to sit TOGETHER around the VS.
-
-   THE DECKS SIT OUT AT THE EDGES with the VS between them, which is the
-   shape the in-game end screen uses and the one a reader already knows. It
-   took two goes: `1fr auto 1fr` tracks pushed the two apart but left the VS
-   marooned in a 250px hole, because a track's own alignment decides where a
-   capped deck sits inside it and neither deck was aiming at the middle. Doing
-   it with `space-between` instead puts the free space in ONE place, under the
-   VS, which is a gap with something in it rather than a hole. */
+/* STACKED IS THE BASE; ABREAST IS THE CONTAINER QUERY FURTHER DOWN.
+   One column here, so a phone and a narrow list get player / rule / player. */
 .versus {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1.15rem;
-  padding: 0.85rem 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-/* The joint between the two decks. `VsMark` sizes itself, so this only has to
-   place it and keep it clear of the two card grids either side. */
-.vs {
-  align-self: center;
-  flex: none;
+/* One player's half of the card.
+
+   THE ACCENT IS ONE CUSTOM PROPERTY. `--side-hue` is blue for the searched
+   player and red for the opponent — the hues the score's two crowns already
+   wear — and everything coloured in the panel mixes it in at a low strength:
+   the wash, the avatar's ring, the first row's slots. Nothing is a solid hue.
+
+   `--wash-angle` points the wash away from the panel's OUTER edge, so abreast
+   the two fade toward the rule between them.
+
+   A CONTAINER OF ITS OWN, so the panel's inside can answer to the panel's
+   width: it is half the list abreast and all of it stacked, and the same
+   window width can mean either. */
+.deckPanel {
+  --side-hue: var(--hue-blue);
+  --wash-angle: 90deg;
+  container: side / inline-size;
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  background: linear-gradient(
+    var(--wash-angle),
+    color-mix(in srgb, var(--side-hue) 7%, transparent),
+    transparent 60%
+  );
+}
+
+.deckPanel[data-side='theirs'] {
+  --side-hue: var(--hue-red);
+}
+
+/* NARROW PANEL: who, then the deck, then what the deck is and its actions.
+   Capped at 21rem, which is a 71px card: past that four tiles stop being a
+   deck and start being wallpaper, and a row grows past 380px for no gain. */
+.panelGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'id'
+    'deck'
+    'foot';
+  gap: 0.7rem;
+  max-width: 21rem;
+}
+
+/* --------------------------------------------------------------- who */
+
+.identity {
+  grid-area: id;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0 0.9rem;
+  gap: 0.6rem;
+  min-width: 0;
 }
 
-/* A SIDE IS EXACTLY AS WIDE AS ITS DECK, and that width is declared once.
-   Left to `width: auto`, a flex item sizes to its max-content — which here is
-   the widest LINE OF TEXT in it, not the card grid. An opponent called "A
-   Rather Long Opponent Name" made the block 538px against a 280px deck, and
-   since both blocks did it the pair filled the row and opened a hole down the
-   middle where the VS sat alone. A name is not a reason for a deck to move. */
-.side {
+/* Initials, because there is no picture: the game has no player avatars. The
+   ring is the side's hue; the letters are plain ink. */
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--side-hue) 60%, transparent);
+  background: color-mix(in srgb, var(--side-hue) 12%, var(--surface-sunken));
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  user-select: none;
+}
+
+.who {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  /* `flex: 1 1 0`, and the ZERO is the whole point. With `auto` the basis is
-     max-content, which is the longest line of TEXT in the block rather than
-     the deck: an opponent called "A Rather Long Opponent Name" made the side
-     538px against a 280px grid, and since both sides did it the pair filled
-     the row and left the VS alone in a hole down the middle. From a zero
-     basis the two sides take an equal share of real space and the name is
-     something that ellipsises inside it.
-
-     Capped, because four card tiles stop being a deck and start being
-     wallpaper somewhere past 90px each; past the cap the slack collects in
-     the middle, under the VS. */
-  flex: 1 1 0;
-  max-width: 21rem;
   min-width: 0;
 }
 
-/* The right-hand side mirrors, so the two blocks read outward from the score
-   in the middle rather than both running left-to-right past it. */
-.side[data-align='right'] {
-  align-items: flex-end;
-  text-align: right;
-}
-
-.sideHead {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.sideName {
+/* A name is not a reason for a deck to move: it ellipsises inside the column
+   it is given (the title carries the whole of it). */
+.playerName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.92rem;
-  font-weight: 750;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
 
-/* FOUR ACROSS, TWO DOWN — the in-game loadout shape, which is what makes a
-   deck recognisable at a glance rather than a row of sixteen thumbnails. */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.3rem;
-  width: 100%;
-}
-
-.card {
-  width: 100%;
-  height: auto;
-  aspect-ratio: 302 / 363;
-  border-radius: 6px;
-  display: block;
-}
-
-.sideFoot {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-  min-width: 0;
-  max-width: 100%;
-  font-size: 0.72rem;
+.playerTag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.3;
   color: var(--text-muted);
-}
-
-.side[data-align='right'] .sideFoot {
-  justify-content: flex-end;
-}
-
-.deckName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 18ch;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.elixir {
   font-variant-numeric: tabular-nums;
 }
 
-/* Below this there is no room for two blocks abreast. They stack, and the VS
-   becomes a divider between them instead of a centrepiece — so the row still
-   says which two decks met, without either of them being crushed. */
-@media (max-width: 56rem) {
-  .versus {
+/* -------------------------------------------------------------- deck */
+
+.deck {
+  grid-area: deck;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.cardRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+/* A CARD SITS IN A SLOT. The served art is a cutout with its own frame, and
+   the frames are not one shape — an evolution carries a gem above its top
+   edge, a champion's is pointed. Laid straight on the panel they read as eight
+   stickers; in a slot each they read as eight of one thing, which is what the
+   PDF's deck rows already do.
+
+   The slot is a shade off the card's ground and takes a 1px edge. No shadow
+   and no glow: the art is the only thing here allowed to be loud. */
+.slot {
+  display: block;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  transition:
+    transform var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease);
+}
+
+/* THE FIRST ROW IS THE ROW A DECK IS RECOGNISED BY — the evolution, hero and
+   wild slots are its first three — so its ground takes the side's tint. The
+   cards are the same size in both rows; the difference is the slot. */
+.cardRow[data-row='featured'] .slot {
+  border-color: color-mix(in srgb, var(--side-hue) 32%, var(--border));
+  background: color-mix(in srgb, var(--side-hue) 9%, var(--bg-2));
+}
+
+.card {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Only where there is a pointer that hovers: on touch a hover sticks to the
+   last card tapped, and the tap already opens the inspect sheet. */
+@media (hover: hover) {
+  .slot:hover {
+    transform: translateY(-2px) scale(1.02);
+    border-color: var(--border-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot:hover {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------- deck meta + actions */
+
+.deckFoot {
+  grid-area: foot;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+/* The elixir over the deck's name, in every layout. They shared a line once,
+   and on a phone the three action buttons left the name 60px: "Bridge Spam …".
+   Stacked, the name has the whole column and may take a second line. */
+.deckMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.elixir {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The drop is the app's line icon, filled: at 14px an outline drop reads as a
+   map pin. The hue is the elixir's own, and it is the only violet in the row. */
+.elixirIcon {
+  display: inline-flex;
+  color: var(--hue-violet);
+}
+
+.elixirIcon svg {
+  fill: currentColor;
+}
+
+.deckName {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+/* `DeckActions` is built to trail a card strip: it carries a leading margin
+   and centres ITSELF (`align-self: center`). Here it is a flex item with a gap
+   already, and in the wide panel's column that self-centring floated the three
+   buttons into the middle of the column, under nothing — seen in a screenshot,
+   not in any check. It takes its alignment from the foot instead. Doubled so
+   it wins whichever stylesheet loads last. */
+.panelActions.panelActions {
+  margin-left: 0;
+  align-self: auto;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------- the rule */
+
+/* A hairline with the word on it. Horizontal here, between two stacked
+   panels; the abreast block below stands it up. */
+.vsDivider {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0 1rem;
+}
+
+.vsDivider::before,
+.vsDivider::after {
+  content: '';
+  flex: 1 1 0;
+  height: 1px;
+  background: var(--border);
+}
+
+/* --------------------------------------------------- a very narrow list */
+
+/* A 320px phone leaves the list ~240px. Every pixel of padding there comes
+   straight out of the cards, so the panel and the slots give most of theirs
+   back: 39px cards become 45px. */
+@container battles (max-width: 17rem) {
+  .deckPanel {
+    padding: 0.75rem 0.7rem;
+  }
+
+  .cardRow,
+  .deck {
+    gap: 0.3rem;
+  }
+
+  .slot {
+    padding: 2px;
+    border-radius: 7px;
+  }
+}
+
+/* -------------------------------------------- a panel with room to spare */
+
+/* WIDE PANEL: who and what on one side, the deck on the other.
+   Past 26.5rem a panel has more width than eight cards want, and stacking
+   would either blow the cards up or leave half the panel empty. So the deck
+   takes a column of its own, capped at 22rem, and the identity and the deck's
+   meta take the rest — the name at the top, the elixir and the actions at the
+   foot, level with the deck's two edges. It is also what keeps a row short.
+
+   A CONTAINER QUERY MEASURES THE CONTENT BOX. The panel has 1rem of padding
+   each side, so 26.5rem here is a 28.5rem panel on screen. The first cut wrote
+   the on-screen figure and a 466px panel stayed stacked, 363px tall.
+
+   The deck track is listed second, so it lands beside the rule.
+
+   THE AVATAR SITS OVER THE NAME UNTIL THE COLUMN CAN HOLD THEM ABREAST. At the
+   bottom of this range the identity column is 8.5rem; beside a 36px disc that
+   left a name ~90px, and a player's name is the first thing the row is for.
+   Over the name, it has the whole column. From 36rem they go back in a line. */
+@container side (min-width: 26.5rem) {
+  .panelGrid {
+    max-width: none;
+    grid-template-columns: minmax(8.5rem, 1fr) minmax(0, 22rem);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id deck'
+      'foot deck';
+    column-gap: 1.1rem;
+    row-gap: 0.6rem;
+  }
+
+  .identity {
+    align-self: start;
     flex-direction: column;
     align-items: flex-start;
-    justify-content: flex-start;
+    gap: 0.45rem;
   }
 
-  .vs {
-    align-self: center;
-    padding: 0.2rem 0;
+  .who {
+    max-width: 100%;
   }
 
-  .side[data-align='right'] {
+  .deckFoot {
+    align-self: end;
+    flex-direction: column;
     align-items: flex-start;
-    text-align: left;
+    justify-content: flex-end;
+    gap: 0.6rem;
   }
 
-  .side[data-align='right'] .sideFoot {
-    justify-content: flex-start;
+  .deckMeta {
+    max-width: 100%;
+  }
+}
+
+@container side (min-width: 36rem) {
+  .identity {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+  }
+}
+
+/* ------------------------------------------------- two panels abreast */
+
+/* ABREAST, AND THE OPPONENT'S PANEL MIRRORS. From 40rem of LIST the two
+   panels sit either side of the rule — as early as two decks of phone-sized
+   cards fit, because a comparison you have to scroll between is not one you
+   can make. The right-hand panel is the left-hand one reflected — name at the
+   outer edge, deck at the rule — so the pair reads outward from the middle
+   instead of both running left-to-right past it.
+
+   Only the PLACEMENT mirrors; no line of text is reversed. */
+@container battles (min-width: 40rem) {
+  .versus {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   }
 
-  /* Stacked. `flex: none` because in a COLUMN the flex axis is vertical, and
-     `1 1 0` would hand the two sides equal heights rather than equal widths. */
-  .side {
-    flex: none;
-    width: 100%;
-    max-width: none;
+  .vsDivider {
+    flex-direction: column;
+    padding: 0.9rem 0;
   }
 
-  .grid {
-    width: min(19rem, 100%);
+  .vsDivider::before,
+  .vsDivider::after {
+    width: 1px;
+    height: auto;
+  }
+
+  .deckPanel[data-side='theirs'] {
+    --wash-angle: 270deg;
+  }
+
+  .deckPanel[data-side='theirs'] .panelGrid {
+    margin-left: auto;
+  }
+
+  .deckPanel[data-side='theirs'] .identity {
+    flex-direction: row-reverse;
+    text-align: right;
+  }
+
+  .deckPanel[data-side='theirs'] .who {
+    align-items: flex-end;
+  }
+
+  .deckPanel[data-side='theirs'] .deckFoot {
+    flex-direction: row-reverse;
+  }
+
+  .deckPanel[data-side='theirs'] .deckMeta {
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  /* Both at once: abreast AND wide. The mirrored rules above are more
+     specific than the wide block's, so the opponent's wide panel is restated
+     here rather than left to inherit the narrow one's row-reverse. */
+  @container side (min-width: 26.5rem) {
+    .deckPanel[data-side='theirs'] .panelGrid {
+      grid-template-columns: minmax(0, 22rem) minmax(8.5rem, 1fr);
+      grid-template-areas:
+        'deck id'
+        'deck foot';
+    }
+
+    .deckPanel[data-side='theirs'] .identity {
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .deckPanel[data-side='theirs'] .deckFoot {
+      flex-direction: column;
+      align-items: flex-end;
+    }
+  }
+
+  @container side (min-width: 36rem) {
+    .deckPanel[data-side='theirs'] .identity {
+      flex-direction: row-reverse;
+      align-items: center;
+    }
   }
 }
 

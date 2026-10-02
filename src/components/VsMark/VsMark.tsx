@@ -14,7 +14,7 @@ import styles from './VsMark.module.css';
  * ways a shader can run correctly and show nothing — and the code itself would
  * only be a thing to wonder about later.
  */
-export function VsMark({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+export function VsMark({ size = 'md' }: { size?: 'xs' | 'sm' | 'md' | 'lg' }) {
   return (
     <span className={styles.mark} data-size={size} role="img" aria-label="versus">
       <span aria-hidden="true">VS</span>

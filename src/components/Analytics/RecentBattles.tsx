@@ -19,6 +19,8 @@ import { useHeldLoading } from '../../hooks/useHeldLoading';
 import { rememberPlayer } from '../../state/recentPlayers';
 import { FormStrip } from './FormStrip';
 import { FORM_SIZE, pageOf } from '../../utils/formStrip';
+import { DropIcon } from '../Dashboard/icons';
+import { initialsOf } from '../../utils/initials';
 
 /* Recent Battles — the raw log, newest first.
  *
@@ -28,10 +30,11 @@ import { FORM_SIZE, pageOf } from '../../utils/formStrip';
  *
  * THE TWO DECKS SIT SIDE BY SIDE, not stacked. A battle is a comparison — what
  * they brought against what you brought — and a comparison you have to scroll
- * between is not one you can make. Each side is a 4x2 block of eight cards, so
- * the pair reads as two objects of equal weight with the score between them.
- * Below 900px there is no room for two blocks abreast and they stack, with the
- * VS becoming a divider rather than a centrepiece.
+ * between is not one you can make. Each side is a panel holding who played and
+ * their eight cards as two rows of four, so the pair reads as two objects of
+ * equal weight with a small VS on the rule between them. When the LIST (not
+ * the window — the rail changes it) is too narrow for two panels abreast they
+ * stack, and the rule turns horizontal.
  *
  * PAGED BY THE SERVER, ten at a time. The date range picks the pool; the pager
  * walks it. The summary always describes the WHOLE window, never the page —
@@ -66,16 +69,19 @@ const ICONS = {
   ),
 };
 
-/** '20260824T104652.000Z' -> '24 Aug, 10:46'. */
-function stamp(raw: string): string {
+/** '20260824T104652.000Z' -> '24 Aug, 10:46', or '24 Aug 2026, 10:46' with
+ *  the year. A row carries the year (a 90-day or all-data window can cross
+ *  one); the form strip's tooltips do not need it. */
+function stamp(raw: string, withYear = false): string {
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/.exec(raw || '');
   if (!m) return raw || '—';
   const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]));
   if (Number.isNaN(d.getTime())) return raw;
-  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString(
+  const day = d.toLocaleDateString(
     'en-GB',
-    { hour: '2-digit', minute: '2-digit' },
-  )}`;
+    withYear ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' },
+  );
+  return `${day}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 /** '2026-08-10' -> '10 Aug'. */
@@ -87,100 +93,199 @@ function shortDay(iso: string | null): string {
     : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
-/* One player's eight cards as a 4x2 block, with their NAME above and their
- * deck below. The two of these in a row are deliberately identical components:
- * rendering the opponent plainer than the player would make the two strips
- * incomparable, which is the one thing the row exists to let you do.
+/* THE ROW, as five small pieces.
  *
- * THE NAME, NOT THE TAG. A tag identifies a player to the API; it does not
- * tell a reader who they played. The tag is still on the element as a
- * tooltip, so it can be read off and searched, but it is not what the row
- * says. When no name has ever been stored the tag is the fallback — it is the
- * only identifier that always exists. */
-function Side({
+ *   BattleRow
+ *    ├─ MatchHeader        mode · score · result · time, one slim bar
+ *    └─ versus
+ *        ├─ PlayerDeckPanel (mine)    PlayerIdentity · DeckGrid · DeckMeta · DeckActions
+ *        ├─ VsDivider
+ *        └─ PlayerDeckPanel (theirs)  the same component, mirrored in CSS
+ *
+ * The two panels are deliberately ONE component: drawing the opponent plainer
+ * than the player would make the two decks incomparable, which is the one
+ * thing the row exists to let you do. Which side is which is `data-side`, and
+ * everything that differs between them — the accent, and the mirroring when
+ * they sit abreast — is CSS reading that attribute. */
+
+type Who = 'mine' | 'theirs';
+
+/** The API's identifier, shown the way a player would type it. */
+function shownTag(tag: string | undefined): string {
+  const t = (tag || '').trim();
+  if (!t) return '';
+  return t.startsWith('#') ? t : `#${t}`;
+}
+
+function MatchHeader({ battle }: { battle: RecentBattle }) {
+  const won = battle.result === 'win';
+  const lost = battle.result === 'loss';
+  return (
+    <header className={styles.head}>
+      <span className={styles.mode}>{battle.modeLabel}</span>
+
+      <span
+        className={styles.score}
+        aria-label={`${battle.crowns} crowns to ${battle.opponentCrowns}`}
+      >
+        <span className={styles.crown} data-side="mine">
+          {ICONS.crown}
+          {battle.crowns}
+        </span>
+        <span className={styles.dash}>–</span>
+        <span className={styles.crown} data-side="theirs">
+          {battle.opponentCrowns}
+          {ICONS.crown}
+        </span>
+      </span>
+
+      <span className={styles.outcome} data-outcome={battle.result}>
+        {won ? 'Victory' : lost ? 'Defeat' : 'Draw'}
+      </span>
+
+      <time className={styles.when}>{stamp(battle.battleTime, true)}</time>
+    </header>
+  );
+}
+
+/* WHO: an initials disc ringed in the side's hue, the name, and the tag.
+ *
+ * THE DISC IS INITIALS BECAUSE THERE IS NO PICTURE TO SHOW. Clash Royale has
+ * no player avatars and the API sends none, so anything drawn there beyond the
+ * player's own two letters would be invented.
+ *
+ * THE TAG IS PRINTED NOW, under the name. It was a tooltip only; a tag is what
+ * a reader copies to look the opponent up, and a tooltip cannot be copied. The
+ * name still leads — a tag identifies a player to the API, it does not tell a
+ * reader who they played — and when no name was ever stored the tag stands in
+ * for it once, not twice. */
+function PlayerIdentity({ name, tag }: { name: string; tag?: string }) {
+  const shown = shownTag(tag);
+  const nameIsTag = !!shown && shownTag(name) === shown;
+  return (
+    <div className={styles.identity}>
+      <span className={styles.avatar} aria-hidden="true">
+        {initialsOf(name)}
+      </span>
+      <span className={styles.who}>
+        <span className={styles.playerName} title={name}>
+          {name}
+        </span>
+        {shown && !nameIsTag && <span className={styles.playerTag}>{shown}</span>}
+      </span>
+    </div>
+  );
+}
+
+/* EIGHT CARDS AS TWO ROWS OF FOUR, IN THE ORDER THE SERVER SENT.
+ *
+ * The first row is the deck's special slots plus one (evolution, hero, wild),
+ * so it is the row a reader identifies the deck by; it takes the side's tint
+ * and the second row stays neutral. Same size in both — the emphasis is the
+ * ground, never the card.
+ *
+ * Nothing here sorts or reorders. `arrange_deck` on the server decided the
+ * order and the forms; slicing at four is the whole of what this does. */
+function DeckGrid({ side }: { side: BattleSide }) {
+  const rows: Array<['featured' | 'secondary', string[]]> = [
+    ['featured', side.cards.slice(0, 4)],
+    ['secondary', side.cards.slice(4)],
+  ];
+  return (
+    <div className={styles.deck}>
+      {rows.map(
+        ([kind, cards], r) =>
+          cards.length > 0 && (
+            <div key={kind} className={styles.cardRow} data-row={kind}>
+              {cards.map((c, i) => (
+                <span key={`${c}-${r}-${i}`} className={styles.slot}>
+                  <CardArt
+                    card={c}
+                    variant={side.art?.[c]}
+                    inferred={side.artInferred}
+                    className={styles.card}
+                  />
+                </span>
+              ))}
+            </div>
+          ),
+      )}
+    </div>
+  );
+}
+
+function DeckMeta({ side }: { side: BattleSide }) {
+  return (
+    <div className={styles.deckMeta}>
+      <span className={styles.elixir} title="Average elixir">
+        <span className={styles.elixirIcon} aria-hidden="true">
+          <DropIcon size={14} />
+        </span>
+        {side.avgElixir.toFixed(1)}
+        <span className={styles.srOnly}> average elixir</span>
+      </span>
+      <span className={styles.deckName} title={side.deckName}>
+        {side.deckName}
+      </span>
+    </div>
+  );
+}
+
+function PlayerDeckPanel({
   side,
   name,
   tag,
-  align,
+  who,
 }: {
   side: BattleSide;
   name: string;
   tag?: string;
-  align: 'left' | 'right';
+  who: Who;
 }) {
   return (
-    <div className={styles.side} data-align={align}>
-      <div className={styles.sideHead}>
-        <span className={styles.sideName} title={tag ? `${name} · ${tag}` : name}>
-          {name}
-        </span>
-      </div>
-
-      <div className={styles.grid}>
-        {side.cards.map((c, i) => (
-          <CardArt
-            key={`${c}-${i}`}
-            card={c}
-            variant={side.art?.[c]}
-            inferred={side.artInferred}
-            className={styles.card}
+    <div className={styles.deckPanel} data-side={who} role="group" aria-label={`${name}'s deck`}>
+      <div className={styles.panelGrid}>
+        <PlayerIdentity name={name} tag={tag} />
+        <DeckGrid side={side} />
+        <div className={styles.deckFoot}>
+          <DeckMeta side={side} />
+          {/* Renders nothing unless the side really is eight known cards, which
+              is what keeps it off a native duel row's 16-card loadout. */}
+          <DeckActions
+            cards={side.cards}
+            name={side.deckName}
+            size="lg"
+            className={styles.panelActions}
           />
-        ))}
-      </div>
-
-      <div className={styles.sideFoot}>
-        <span className={styles.deckName} title={side.deckName}>
-          {side.deckName}
-        </span>
-        <span className={styles.elixir}>{side.avgElixir.toFixed(1)} elixir</span>
-        {/* Renders nothing unless the side really is eight known cards, which
-            is what keeps it off a native duel row's 16-card loadout. */}
-        <DeckActions cards={side.cards} name={side.deckName} />
+        </div>
       </div>
     </div>
   );
 }
 
+/* A hairline with the word on it. It is its own cell rather than a border on
+   either panel so it can turn from a vertical rule into a horizontal one when
+   the panels stack, without either of them knowing which is on top. */
+function VsDivider() {
+  return (
+    <div className={styles.vsDivider}>
+      <VsMark size="xs" />
+    </div>
+  );
+}
+
 function BattleRow({ battle, you, youTag }: { battle: RecentBattle; you: string; youTag: string }) {
-  const won = battle.result === 'win';
-  const lost = battle.result === 'loss';
   return (
     <article className={styles.battle} data-outcome={battle.result} data-battle-id={battle.id}>
-      <header className={styles.head}>
-        <span className={styles.mode}>{battle.modeLabel}</span>
-
-        <span className={styles.score}>
-          <span className={styles.crown} data-side="mine">
-            {ICONS.crown}
-            {battle.crowns}
-          </span>
-          <span className={styles.dash}>–</span>
-          <span className={styles.crown} data-side="theirs">
-            {battle.opponentCrowns}
-            {ICONS.crown}
-          </span>
-        </span>
-
-        <span className={styles.outcome} data-outcome={battle.result}>
-          {won ? 'Victory' : lost ? 'Defeat' : 'Draw'}
-        </span>
-
-        <span className={styles.when}>{stamp(battle.battleTime)}</span>
-      </header>
-
-      {/* The comparison itself. `vs` is a separate cell rather than a border so
-          it can carry the divider on a narrow screen without the two blocks
-          having to know which of them is on top. */}
+      <MatchHeader battle={battle} />
       <div className={styles.versus}>
-        <Side side={battle.player} name={you} tag={youTag} align="left" />
-        <span className={styles.vs}>
-          <VsMark size="lg" />
-        </span>
-        <Side
+        <PlayerDeckPanel side={battle.player} name={you} tag={youTag} who="mine" />
+        <VsDivider />
+        <PlayerDeckPanel
           side={battle.opponent}
           name={battle.opponent.name || battle.opponent.tag || 'Unknown'}
           tag={battle.opponent.tag}
-          align="right"
+          who="theirs"
         />
       </div>
     </article>

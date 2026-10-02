@@ -31,8 +31,9 @@ interface DeckActionsProps {
   cards: readonly string[];
   /** Names the deck in the tooltips, so a row of these is distinguishable. */
   name?: string;
-  /** `sm` for dense table rows, `md` beside a full deck panel. */
-  size?: 'sm' | 'md';
+  /** `sm` for dense table rows, `md` beside a full deck panel, `lg` where the
+   *  three are a panel's own controls (the battle log's deck panels). */
+  size?: 'sm' | 'md' | 'lg';
   /** Forms for the special slots, when the screen knows them; otherwise the
    *  seated order decides, as it does everywhere a deck is drawn. */
   art?: Record<string, 'evolution' | 'hero' | 'champion' | undefined>;
@@ -56,6 +57,7 @@ export function DeckActions({ cards, name, size = 'sm', className, art }: DeckAc
   if (!link) return null;
 
   const label = name ? `${name} deck link` : 'deck link';
+  const glyph = size === 'sm' ? 12 : size === 'md' ? 14 : 15;
 
   function flash() {
     setCopied(true);
@@ -108,7 +110,7 @@ export function DeckActions({ cards, name, size = 'sm', className, art }: DeckAc
         data-flash={copied || undefined}
         onClick={copy}
       >
-        {copied ? <CheckIcon size={size === 'sm' ? 12 : 14} /> : <LinkIcon size={size === 'sm' ? 12 : 14} />}
+        {copied ? <CheckIcon size={glyph} /> : <LinkIcon size={glyph} />}
       </button>
 
       <button
@@ -120,7 +122,7 @@ export function DeckActions({ cards, name, size = 'sm', className, art }: DeckAc
         data-flash={imageState === 'done' || undefined}
         onClick={image}
       >
-        {imageState === 'done' ? <CheckIcon size={size === 'sm' ? 12 : 14} /> : <ImageIcon size={size === 'sm' ? 12 : 14} />}
+        {imageState === 'done' ? <CheckIcon size={glyph} /> : <ImageIcon size={glyph} />}
       </button>
 
       <button
@@ -130,7 +132,7 @@ export function DeckActions({ cards, name, size = 'sm', className, art }: DeckAc
         aria-label="Open this deck in Clash Royale"
         onClick={open}
       >
-        <LaunchIcon size={size === 'sm' ? 12 : 14} />
+        <LaunchIcon size={glyph} />
       </button>
     </span>
   );
