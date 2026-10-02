@@ -31,7 +31,7 @@ function CrownIcon({ size = 14 }: { size?: number }) {
 }
 
 /**
- * What "Subscribe to Royal Pro" actually does: says there is no till yet, and
+ * What "Subscribe to Deckkies Pro" actually does: says there is no till yet, and
  * hands over the two ways to reach a person.
  *
  * A button that opens a checkout that does not exist would be the one dishonest
@@ -88,14 +88,14 @@ export function ProContact({ onClose }: { onClose: () => void }) {
 
         <span className={styles.badge}>
           <CrownIcon />
-          Royal Pro
+          Deckkies Pro
         </span>
 
         <h2 className={styles.title} id="pro-contact-title">
           Write to me
         </h2>
         <p className={styles.blurb}>
-          There is no checkout yet — Royal Pro is set up by hand. Send a message either way
+          There is no checkout yet — Deckkies Pro is set up by hand. Send a message either way
           below and I will sort your account out.
         </p>
 

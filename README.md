@@ -15123,6 +15123,18 @@ account already registered. Renaming it makes every signed-in device look new
 and burns a slot against the device limit — the same reasoning that keeps the
 `royal-` persistence keys as they are.
 
+**2026-10-02: the paid tier is Deckkies Pro on every surface, and the tab says
+what the site is for.** The gate card's badge and its button, the "Write to me"
+dialog and the Deck Counter wall still printed "Royal Pro" while the sidebar
+card and the tier badge already said "Deckkies Pro" — one product under two
+names, and the old one was on the screen a reader sees at the moment of
+buying. All four say Deckkies Pro now. The browser tab title is
+`Deckkies — Analyze, Snipe, Win` (was "Clash Royale Duel Deck Builder", which
+described one tool of nine). The three deck tools' "Back to Royal Arena"
+tooltips say "Back to Deckkies". Older sections of this file that say "Royal
+Pro" describe the gate as it was named when they were written. **Royal Duels
+is unchanged** — that is the duel builder's own name, not the brand.
+
 ---
 
 ## Project layout
@@ -15400,7 +15412,7 @@ src/
       DeckLab.tsx             home Deck Analysis — paste a deck, measure it
       CounterLab.tsx          home Deck Counter — Find counters (three free rows, then the gate) | Deck vs Deck
       GlobalCards.tsx         home Cards — every card, across the player base
-      ProLock.tsx             the Royal Pro gate: the real thing, behind glass
+      ProLock.tsx             the Deckkies Pro gate: the real thing, behind glass
       DuelInsights.tsx        the interpretation section under Duel Analysis —
                               reads the SERIES log, not the pair board above it
       duelInsightRules.ts     its pure calculations + evidence floors, no UI

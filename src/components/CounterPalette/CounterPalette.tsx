@@ -342,7 +342,7 @@ export function CounterPalette({ embedded = false }: { embedded?: boolean } = {}
           onClick={() => {
             window.location.hash = '';
           }}
-          title="Back to Royal Arena"
+          title="Back to Deckkies"
         >
           <span className={homeStyles.logoMark}>
             <PaletteIcon />

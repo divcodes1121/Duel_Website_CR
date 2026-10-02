@@ -132,7 +132,7 @@ export function CounterLab() {
 
   /* ENTITLEMENT IS CHECKED HERE, and it was not before.
      Deck Counter is a FREE section, so every tier reaches this screen — which
-     means a trial, pro or admin account also reached the "Royal Pro shows the
+     means a trial, pro or admin account also reached the "Deckkies Pro shows the
      rest" wall over the counters beyond the third, and was asked to buy
      something it already had. Same fault as the home screen's ProLock, which
      was removed for the same reason: a gate written before the tier system
@@ -280,7 +280,7 @@ export function CounterLab() {
                  was missed. */
               hue="pink"
               title={`${locked.length} more counter${locked.length === 1 ? '' : 's'}`}
-              blurb={`This deck has ${counters.length} archetypes that beat it. The top ${FREE_ROWS} are above — Royal Pro shows the rest, with the deck each one is actually running.`}
+              blurb={`This deck has ${counters.length} archetypes that beat it. The top ${FREE_ROWS} are above — Deckkies Pro shows the rest, with the deck each one is actually running.`}
               perks={[
                 'Every counter, not the first three',
                 'The real deck behind each row',

@@ -18,7 +18,7 @@ owns its own scroll, and how a ranked table fits the width it has.
 |---|---|---|
 | **Fireflies, hero** | landing hero, over the castle art | both themes |
 | **Fireflies, app-wide** | fixed behind the whole signed-in shell, in the open area's hue | both themes |
-| **Fireflies, gated** | drifting over the Royal Pro gate's blurred preview | both themes |
+| **Fireflies, gated** | drifting over the Deckkies Pro gate's blurred preview | both themes |
 | **Login backdrop** | the painted castle pair behind the sign-in card | both themes |
 | **Slot aura** | empty special slots and the selected slot, on all three deck screens | both themes |
 | **Placement burst** | a card landing in a slot; a crown pip being taken | one-shot |

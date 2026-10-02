@@ -52,7 +52,7 @@ export function Header({ embedded = false }: { embedded?: boolean } = {}) {
         onClick={() => {
           window.location.hash = '';
         }}
-        title="Back to Royal Arena"
+        title="Back to Deckkies"
       >
         <span className={styles.logoMark} aria-hidden="true">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">

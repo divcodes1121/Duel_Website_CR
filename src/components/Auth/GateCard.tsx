@@ -38,7 +38,7 @@ export function GateCard({ access, section }: { access: Access; section: string 
      lines of copy, so a visitor was asked to sign up for a screen they had
      never seen. The real screen now sits behind the copy, blurred past reading
      — it says "there is a full board here" without giving the board away, the
-     way the Royal Pro gate already sits behind glass. Two files, one per
+     way the Deckkies Pro gate already sits behind glass. Two files, one per
      theme, chosen in CSS so a theme switch needs no re-render. */
   const slug = GATE_PREVIEW[section];
   const base = import.meta.env.BASE_URL;

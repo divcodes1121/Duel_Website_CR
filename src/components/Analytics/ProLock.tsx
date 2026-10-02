@@ -40,7 +40,7 @@ interface ProLockProps {
 }
 
 /**
- * A Royal Pro gate: the real thing, behind glass.
+ * A Deckkies Pro gate: the real thing, behind glass.
  *
  * **This is the one place blur comes back.** The app dropped frosted panels
  * everywhere else because a translucent pane refracted whatever scrolled behind
@@ -99,7 +99,7 @@ export function ProLock({
         <div className={styles.card} data-hue={hue}>
           <span className={styles.badge}>
             <CrownIcon />
-            Royal Pro
+            Deckkies Pro
           </span>
           <span className={styles.mark}>
             <LockIcon size={22} />
@@ -114,7 +114,7 @@ export function ProLock({
             </ul>
           )}
           <button type="button" className={styles.cta} onClick={() => setContact(true)}>
-            Subscribe to Royal Pro
+            Subscribe to Deckkies Pro
           </button>
           <p className={styles.note}>Set up by hand — press it and I will tell you how to reach me.</p>
         </div>
