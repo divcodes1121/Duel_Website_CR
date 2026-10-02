@@ -14,7 +14,6 @@ import {
   fetchDrawnDeck,
   type CoachChosen,
   type CoachChoiceDeck,
-  type CoachChoiceSource,
   type CoachDeck,
   type CoachVs,
   type CoachHistory,
@@ -1444,92 +1443,39 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
 
 /* ─────────────────────────────── decks around the cards the reader names */
 
-const CHOICE_SOURCE: Record<CoachChoiceSource, string> = {
-  yours: 'your deck',
-  duel: 'duel deck',
-  meta: 'meta deck',
-  built: 'built',
-};
-
-const CHOICE_ENGINE: Record<string, string> = {
-  combined: 'combined brain',
-  model: 'duel model',
-  fused: 'ladder+duel rate',
-  ladder: 'ladder rate',
-};
-
-/** Duel games under which a duel list is thin (`coach_choice.PROVEN_GAMES`).
- *  The server ranks those after every proven list; the row says why. */
-const CHOICE_PROVEN_GAMES = 30;
-
 const pctOf = (wins: number, games: number) => ((100 * wins) / Math.max(1, games)).toFixed(0);
 
-/** What stands behind one deck, as counts: the player's own plays, its real
- *  duel record, its ladder games, and how much of it they already play. */
+/** ONE short figure under the name, and nothing else: how often the player
+ *  ran it, or its real duel record. Everything longer was removed on request
+ *  (2026-10-02, "too many texts — just tell what to do"). */
 function choiceMeta(d: CoachChoiceDeck): string {
-  const parts: string[] = [];
-  if (d.yours) parts.push(`you played it ${d.yours.toLocaleString('en-US')}×`);
-  if (d.duelRecord) {
-    const [g, w] = d.duelRecord;
-    /* THE POPULATION'S record with this exact list, not the player's — said,
-       because beside "you played it 86×" a bare "660 duel games" reads as
-       theirs. */
-    const who = d.players ? ` by ${d.players.toLocaleString('en-US')} players` : '';
-    parts.push(`${g.toLocaleString('en-US')} duel games${who}, ${pctOf(w, g)}% won`);
-  } else if (d.real) {
-    /* A built deck that HAS been fielded as listed, under the bar a duel deck
-       needs to be offered on its own. Its record is said, not hidden. */
-    const [g, w, p] = d.real;
-    parts.push(`fielded as listed in ${g.toLocaleString('en-US')} duel games by ${p} players, ${pctOf(w, g)}% won`);
-  } else if (d.source === 'meta' && d.plays) {
-    parts.push(`${d.plays.toLocaleString('en-US')} ladder games`);
-  }
-  if (d.source !== 'yours' && d.familiar > 0) parts.push(`${d.familiar}/8 cards you play`);
-  return parts.join(' · ');
+  if (d.yours) return `you played it ${d.yours.toLocaleString('en-US')}×`;
+  const rec = d.duelRecord ?? (d.real ? [d.real[0], d.real[1]] : null);
+  if (rec) return `${rec[0].toLocaleString('en-US')} duel games · ${pctOf(rec[1], rec[0])}% won`;
+  return '';
 }
 
 function choiceVs(vs: CoachChoiceDeck['vs']): CoachVs[] {
   return vs.map((v, i) => ({ archetype: `${i}-${v.name}`, name: v.name, winRate: v.winRate, share: v.likelihood, kind: 'likely' }));
 }
 
-/** One deck holding the named cards: its win chance, the same figure against
- *  each of their likely decks, what stands behind it, how it was built, and —
- *  where the swap builder found one — the change that raises it. */
+/** One deck holding the named cards: the deck, the win chance, the same
+ *  figure against each of their likely decks, and — when a swap raises it —
+ *  the swap and what it raises it to. No tags, no working. */
 function ChoiceRow({ deck, rank }: { deck: CoachChoiceDeck; rank: number }) {
   const meta = choiceMeta(deck);
   const im = deck.improve;
-  const ar = deck.architect;
-  const thin = deck.source === 'duel' && deck.plays < CHOICE_PROVEN_GAMES;
   return (
     <li className={styles.deckRow} data-hue="blue" data-choice={deck.source} data-section={deck.section}>
       <span className={styles.rank}>{rank}</span>
       <div className={styles.deckIdent}>
-        <span className={styles.deckName}>
-          {deck.deckName || deck.archetype}
-          <span className={styles.fillTag}>{CHOICE_SOURCE[deck.source]}</span>
-          {deck.duel?.strong && <span className={styles.duelTag}>Duel proven</span>}
-          {/* A REAL list the builder itself arrived at: the shell's core and
-              the slots it would choose against this opponent ARE this list. */}
-          {ar && deck.source !== 'built' && <span className={styles.duelTag}>Deckkies' build</span>}
-        </span>
+        <span className={styles.deckName}>{deck.deckName || deck.archetype}</span>
         {meta && <span className={styles.deckMeta}>{meta}</span>}
-        {thin && <span className={styles.deckMeta}>thin evidence — ranked after proven lists</span>}
-        {deck.duel && (
-          <span className={styles.duelRate} data-strong={deck.duel.strong || undefined} title={duelTitle(deck.duel)}>
-            {duelChip(deck.duel)}
-          </span>
-        )}
       </div>
       <Strip cards={deck.cards} art={deck.art} inferred={deck.inferredArt} filled={deck.artFilled}
              name={deck.deckName} size="sm" />
       {deck.win !== null ? (
-        <div
-          className={styles.figure}
-          title={[
-            deck.engine ? CHOICE_ENGINE[deck.engine] : '',
-            deck.fused !== null && deck.engine !== 'fused' ? `ladder+duel rate ${deck.fused.toFixed(1)}%` : '',
-          ].filter(Boolean).join(' · ')}
-        >
+        <div className={styles.figure}>
           <span className={styles.figureValue} data-good={deck.win >= 50 ? '' : undefined}>
             {deck.win.toFixed(1)}%
           </span>
@@ -1543,36 +1489,9 @@ function ChoiceRow({ deck, rank }: { deck: CoachChoiceDeck; rank: number }) {
       )}
       <VsChips vs={choiceVs(deck.vs)} className={styles.deckRowVs}
                label="Win chance against each of their likely decks" />
-      {/* HOW IT WAS BUILT (`deck_architect`). The way of playing the card it
-          rests on — how many real duel lists and games — then the open slots:
-          the cards chosen for them, and which of those the OPPONENT changed
-          from the shell's usual pick. Card art, as everywhere on this screen. */}
-      {ar && (
-        <div className={`${styles.deckRowVs} ${styles.swapRow}`} data-choice-build="">
-          <span className={styles.blockNote}>
-            {ar.shell.decks.toLocaleString('en-US')} duel lists play it this way
-            {ar.shell.games ? ` · ${ar.shell.games.toLocaleString('en-US')} games, ${pctOf(ar.shell.wins, ar.shell.games)}% won` : ''}
-            {' · '}core {ar.core.length} cards · open {ar.flex.length === 1 ? 'slot' : 'slots'}
-          </span>
-          <span className={styles.swapSide}>
-            {ar.flex.map((c) => (
-              <CardArt key={c} card={c} variant={deck.art[c]} />
-            ))}
-          </span>
-          <span className={styles.blockNote}>
-            {ar.tuned.length
-              ? `${ar.tuned.map(filterCardName).join(', ')} chosen against this opponent`
-              : 'the picks most of its pilots make'}
-            {ar.nearest && ar.nearest.shared < 8
-              ? ` · ${ar.nearest.shared}/8 of ${ar.nearest.name} (${ar.nearest.games.toLocaleString('en-US')} duel games)`
-              : ''}
-          </span>
-        </div>
-      )}
-      {/* THE SWAP BUILDER'S CHANGE TO THIS DECK, on the deck it changes. Both
-          rates are the same engine against the same decks, so the gain is a
-          like-for-like difference. The named cards and the deck's own win
-          condition are never the ones swapped out. */}
+      {/* THE SWAP, AND WHAT IT DOES: the gain, the card leaving, the card
+          arriving, the new win chance, and the buttons to take THAT deck into
+          the game. Both rates are the same engine against the same decks. */}
       {im && (
         <div className={`${styles.deckRowVs} ${styles.swapRow}`} data-choice-improve="">
           <Delta n={im.gain} />
@@ -1586,9 +1505,7 @@ function ChoiceRow({ deck, rank }: { deck: CoachChoiceDeck; rank: number }) {
               <span className={styles.swapSide}><CardArt card={s.in} variant={im.art[s.in]} /></span>
             </span>
           ))}
-          <span className={styles.blockNote}>
-            {im.seedWin.toFixed(1)}% → {im.win.toFixed(1)}% · {im.swaps.map((s) => s.pairs.toLocaleString('en-US')).join(' + ')} real deck pairs
-          </span>
+          <span className={styles.blockNote}>{im.win.toFixed(1)}%</span>
           <DeckActions cards={im.cards} name={`${deck.deckName} (${im.swaps.map((s) => filterCardName(s.in)).join(', ')})`} size="sm" />
         </div>
       )}
@@ -1600,13 +1517,17 @@ function ChoiceRow({ deck, rank }: { deck: CoachChoiceDeck; rank: number }) {
  * "The decks it gave, the player might not play" — so the reader NAMES the
  * cards: up to four win conditions or cards, and every deck returned holds all
  * of them, rated against this opponent's likely decks on the brain that ranks
- * "Play this" (`server/coach.py` `chosen`, rules in `coach_choice.py`).
+ * "Play this" (`server/coach.py` `chosen`, rules in `coach_choice.py`, the
+ * builder in `deck_architect.py`).
  *
- * THREE SECTIONS, DUEL FIRST. Decks duel players repeatedly field lead; then
- * the player's own and the ladder's; then the decks Deckkies BUILDS — a way
- * duel players play the card (its core), with the open slots chosen against
- * this opponent (`server/deck_architect.py`). The first cut of this block
- * "built" by swapping one card into a stranger's deck; that is gone.
+ * THE TEXT WAS CUT ON REQUEST (2026-10-02): "too many texts in that filter —
+ * remove, just tell what to do, what now, what will happen". The block used
+ * to print where each deck came from, how many lists and games stood behind
+ * it, which shell a build rested on and which slots the opponent changed.
+ * All of that is still computed and still in the payload; none of it is on
+ * screen. What is: ONE line saying what to do now (`step`), three plain
+ * section names, and per deck its cards, win chance, matchups and swap. The
+ * working lives in the README and the server modules. Do not add prose back.
  *
  * The named cards and "was this asked" live in the PARENT. The result view
  * unmounts whenever the Suggestion reloads (a game was played, the window
@@ -1650,7 +1571,7 @@ function ChoicePanel({
         .catch((e) => {
           if (id !== seq.current) return;
           setRes(null);
-          setError((e as AnalyticsError).message || 'Could not build decks for those cards.');
+          setError((e as AnalyticsError).message || 'Could not find decks for those cards.');
         })
         .finally(() => {
           if (id === seq.current) setBusy(false);
@@ -1675,31 +1596,47 @@ function ChoicePanel({
         : want.length >= COACH_CHOICE_MAX ? want : [...want, key],
     );
 
-  /* `section` is the server's; an older server (one day's worth) sent none,
-     and its built rows are told by their source. */
+  /* `section` is the server's; the first day's server sent none, and its
+     built rows are told by their source. */
   const sectionOf = (d: CoachChoiceDeck) => d.section ?? (d.source === 'built' ? 'built' : d.source);
   const decks = res?.decks ?? [];
   const duel = decks.filter((d) => sectionOf(d) === 'duel');
   const own = decks.filter((d) => sectionOf(d) === 'yours' || sectionOf(d) === 'meta');
   const built = decks.filter((d) => sectionOf(d) === 'built');
   const named = (res?.want ?? []).map(filterCardName).join(' + ');
-  const engine = res?.engine ? `win chance · ${CHOICE_ENGINE[res.engine]}` : '';
+  /* The answer on screen is for other cards than the ones now picked. */
+  const stale = !!res && res.want.join(',') !== want.join(',');
+
+  /* WHAT TO DO NOW — one line, and it changes with the state. This is the
+     only sentence in the block. */
+  let step: string;
+  if (busy) step = '';
+  else if (error) step = error;
+  else if (!want.length) step = `Pick the cards you want in the deck (up to ${COACH_CHOICE_MAX}).`;
+  else if (!res || stale) step = 'Press Find decks.';
+  else if (res.reason === 'spent')
+    step = `${res.spent.map(filterCardName).join(', ')} was already played this duel. Pick other cards.`;
+  else if (res.reason === 'none' || !decks.length)
+    step = `No deck has ${named} together. Pick fewer or other cards.`;
+  else
+    step = 'Open a deck in the game with its buttons. % = your win chance vs this opponent. Green + = a swap that raises it.';
+
+  const sections: [string, CoachChoiceDeck[], number][] = [
+    ['Duel decks', duel, 0],
+    ['Your decks and meta', own, duel.length],
+    ['Built by Deckkies', built, duel.length + own.length],
+  ];
 
   return (
     <section className={styles.block} data-hue="blue" data-choice-panel="">
-      <h4 className={styles.blockTitle}>
-        Build around your cards{' '}
-        <span className={styles.blockNote}>
-          up to {COACH_CHOICE_MAX} win conditions or cards · every deck holds all of them
-        </span>
-      </h4>
+      <h4 className={styles.blockTitle}>Build around your cards</h4>
       <div className={styles.choiceBar}>
         <WinConFilter
           selected={want}
           onToggle={toggle}
           onClear={() => onWant([])}
           label="Pick cards"
-          title="Name the win conditions or cards the deck must hold"
+          title="Pick the cards the deck must hold"
         />
         <button
           type="button"
@@ -1716,77 +1653,23 @@ function ChoicePanel({
 
       {busy && (
         <ReadingState k="coach-choice" hue="blue">
-          Reading every duel deck with those cards and building around them…
+          Finding decks…
         </ReadingState>
       )}
-      {error && !busy && <p className={styles.askHint}>{error}</p>}
+      {step && <p className={styles.askHint} data-choice-step="">{step}</p>}
 
-      {res && !busy && (
-        <>
-          {res.reason === 'spent' && (
-            <p className={styles.askHint}>
-              {res.spent.map(filterCardName).join(', ')} already played this duel — a duel cannot repeat a card.
-            </p>
-          )}
-          {res.reason === 'none' && (
-            <p className={styles.askHint}>
-              No duel, ladder or own deck holds {named} together, so there is nothing to build from.
-            </p>
-          )}
-          {duel.length > 0 && (
-            <>
-              <h4 className={styles.blockTitle}>
-                Duel decks with {named}{' '}
-                <span className={styles.blockNote}>
-                  {[engine, `${res.counts.duel.toLocaleString('en-US')} duel decks hold ${res.want.length > 1 ? 'them' : 'it'}`, 'most duel-proven first']
-                    .filter(Boolean).join(' · ')}
-                </span>
-              </h4>
+      {res && !busy && !stale &&
+        sections.map(([title, rows, offset]) =>
+          rows.length > 0 && (
+            <div key={title}>
+              <h4 className={styles.blockTitle}>{title}</h4>
               <ul className={styles.deckList}>
-                {duel.map((d, i) => (
-                  <ChoiceRow key={d.cards.join(',')} deck={d} rank={i + 1} />
+                {rows.map((d, i) => (
+                  <ChoiceRow key={d.cards.join(',')} deck={d} rank={offset + i + 1} />
                 ))}
               </ul>
-            </>
-          )}
-          {own.length > 0 && (
-            <>
-              <h4 className={styles.blockTitle}>
-                Yours and the meta{' '}
-                <span className={styles.blockNote}>
-                  {[duel.length ? '' : engine, `${res.counts.yours} of your decks`, `${res.counts.meta} ladder decks`]
-                    .filter(Boolean).join(' · ')}
-                </span>
-              </h4>
-              <ul className={styles.deckList}>
-                {own.map((d, i) => (
-                  <ChoiceRow key={d.cards.join(',')} deck={d} rank={duel.length + i + 1} />
-                ))}
-              </ul>
-            </>
-          )}
-          {built.length > 0 && (
-            <>
-              <h4 className={styles.blockTitle}>
-                Built by Deckkies around {named}{' '}
-                <span className={styles.blockNote}>
-                  {[
-                    res.corpus?.decks
-                      ? `from ${res.corpus.decks.toLocaleString('en-US')} duel lists · ${res.corpus.games.toLocaleString('en-US')} duel games`
-                      : '',
-                    'each way duel players play it: its core, the open slots chosen against this opponent',
-                  ].filter(Boolean).join(' · ')}
-                </span>
-              </h4>
-              <ul className={styles.deckList}>
-                {built.map((d, i) => (
-                  <ChoiceRow key={d.cards.join(',')} deck={d} rank={duel.length + own.length + i + 1} />
-                ))}
-              </ul>
-            </>
-          )}
-        </>
-      )}
+            </div>
+          ))}
     </section>
   );
 }

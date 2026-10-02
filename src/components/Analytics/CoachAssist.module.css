@@ -1417,25 +1417,9 @@
   margin: 0.2rem 0 0.6rem;
 }
 
-/* The swap and the builder's change sit under the cards like the chip line
-   does (`.deckRowVs` places them); a little air above so three lines under
-   one deck do not read as one. */
-.deckRow [data-choice-build],
+/* The swap sits under the cards like the chip line does (`.deckRowVs` places
+   it); a little air above so two lines under one deck do not read as one. */
 .deckRow [data-choice-improve] {
   margin-top: 0.1rem;
   row-gap: 0.25rem;
-}
-
-/* The source tag is two words ("duel deck"); in the 11rem name column it broke
-   across two lines inside its own pill. It keeps one line and the name wraps
-   around it instead. */
-.deckRow[data-choice] .deckName {
-  flex-wrap: wrap;
-  row-gap: 0.15rem;
-}
-
-.deckRow[data-choice] .fillTag,
-.deckRow[data-choice] .duelTag {
-  flex: none;
-  white-space: nowrap;
 }

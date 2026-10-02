@@ -53,6 +53,52 @@ describe('Coach Assist: build around your cards', () => {
     expect(client).toBe(server);
   });
 
+  /* "TOO MANY TEXTS IN THAT FILTER — REMOVE, JUST TELL WHAT TO DO" (asked
+     for 2026-10-02, with the screen pasted back). The block printed where
+     each deck came from, the lists and games behind it, the shell a build
+     rested on and the slots the opponent changed. All of it is still in the
+     payload; none of it may come back onto the screen. */
+  const BLOCK = SRC.slice(SRC.indexOf('function choiceMeta('), SRC.indexOf('window 2: Suggestion'));
+
+  it('carries no explanatory prose: one step line, three section names, figures', () => {
+    for (const gone of [
+      'duel lists play it this way', 'chosen against this opponent', 'real deck pairs',
+      'most duel-proven first', 'thin evidence', 'cards you play', 'every deck holds all of them',
+      'the picks most of its pilots make', 'fielded as listed', 'ladder games', 'Duel proven',
+      "Deckkies' build", 'combined brain', 'held them', 'hold it',
+    ]) {
+      expect(BLOCK, gone).not.toContain(gone);
+    }
+    expect(BLOCK).not.toMatch(/deck\.architect|duelChip\(|styles\.fillTag|styles\.duelTag/);
+  });
+
+  it('names its three sections plainly, with no note beside them', () => {
+    expect(BLOCK).toMatch(/\['Duel decks', duel, 0\]/);
+    expect(BLOCK).toMatch(/\['Your decks and meta', own, duel\.length\]/);
+    expect(BLOCK).toMatch(/\['Built by Deckkies', built, duel\.length \+ own\.length\]/);
+    expect(BLOCK).toMatch(/<h4 className=\{styles\.blockTitle\}>\{title\}<\/h4>/);
+    expect(BLOCK).toMatch(/<h4 className=\{styles\.blockTitle\}>Build around your cards<\/h4>/);
+  });
+
+  it('says what to do NOW in one line that follows the state', () => {
+    expect(BLOCK).toMatch(/step = `Pick the cards you want in the deck \(up to \$\{COACH_CHOICE_MAX\}\)\.`/);
+    expect(BLOCK).toMatch(/step = 'Press Find decks\.'/);
+    expect(BLOCK).toMatch(/was already played this duel\. Pick other cards\./);
+    expect(BLOCK).toMatch(/No deck has \$\{named\} together\. Pick fewer or other cards\./);
+    expect(BLOCK).toMatch(/% = your win chance vs this opponent\. Green \+ = a swap that raises it\./);
+    // One step paragraph; nothing else in the block is a sentence.
+    expect((BLOCK.match(/data-choice-step/g) ?? [])).toHaveLength(1);
+    expect((BLOCK.match(/styles\.askHint/g) ?? [])).toHaveLength(1);
+  });
+
+  it('keeps what a reader acts on: the win chance, each matchup, and the swap', () => {
+    expect(BLOCK).toMatch(/deck\.win\.toFixed\(1\)\}%/);
+    expect(BLOCK).toMatch(/<VsChips vs=\{choiceVs\(deck\.vs\)\}/);
+    expect(BLOCK).toMatch(/<Delta n=\{im\.gain\} \/>/);
+    expect(BLOCK).toMatch(/\{im\.win\.toFixed\(1\)\}%/);
+    expect(BLOCK).toMatch(/<DeckActions cards=\{im\.cards\}/);
+  });
+
   it('rides on the suggest route as a parameter, not a route of its own', () => {
     const fn = CLIENT.slice(CLIENT.indexOf('export function fetchCoachChosen('));
     expect(fn.slice(0, fn.indexOf('\n}\n'))).toMatch(/\/api\/analytics\/coach\/suggest\?/);
