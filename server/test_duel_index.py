@@ -226,6 +226,30 @@ try:
           str(di.player_wcs("#O00")))
     check("a stranger has none", di.player_decks("#NOBODY") == [])
 
+    # EVERY LIST HOLDING A CARD (`decks_holding`) — the deck architect's
+    # evidence. The whole `deck` table, which is far more than the catalogue.
+    holding = di.decks_holding(["hog-rider"], min_games=1)
+    hk = [d["key"] for d in holding]
+    check("every duel list holding a card comes back, catalogue or not",
+          di.deck_key(HOG) in hk and len(hk) > sum(1 for k in cat if "hog-rider" in k.split(",")),
+          str(len(hk)))
+    check("each really holds it", all("hog-rider" in d["cards"] and len(d["cards"]) == 8 for d in holding))
+    check("most-played first", [d["games"] for d in holding] == sorted((d["games"] for d in holding), reverse=True))
+    check("it carries the record and who flew it",
+          all({"games", "wins", "players", "topPilot", "archetype"} <= set(d) for d in holding)
+          and holding[0]["games"] >= holding[0]["wins"] >= 0 and holding[0]["players"] >= 1)
+    check("a floor on games is applied",
+          all(d["games"] >= 3 for d in di.decks_holding(["hog-rider"], min_games=3)))
+    both = di.decks_holding(["hog-rider", "musketeer"], min_games=1)
+    check("two cards: only lists holding BOTH",
+          both and all({"hog-rider", "musketeer"} <= set(d["cards"]) for d in both))
+    rg = di.decks_holding(["royal-giant"], min_games=1)
+    check("`giant` does not match royal-giant: membership is checked on the cards, not the text",
+          di.decks_holding(["giant"], min_games=1) == [] and
+          (not rg or all("giant" not in d["cards"] for d in rg)), str(len(rg)))
+    check("no card, or a card nobody fielded, is an empty answer",
+          di.decks_holding([]) == [] and di.decks_holding(["three-musketeers"], min_games=1) == [])
+
     print("\n-- Incremental --")
     insert(bot, "#P1", "CW_Duel_1v1",
            payload(day(0).replace("T12", "T13"), "#P1", "#O99",
@@ -247,7 +271,8 @@ try:
     cd._tier_paths = lambda: [os.path.join(TMP, "someone-else.db")]
     di._state["checked"] = 0.0
     check("an index of another database is not served", not di.available()
-          and di.records(MORTAR) is None and di.catalogue() == [])
+          and di.records(MORTAR) is None and di.catalogue() == []
+          and di.decks_holding(["hog-rider"], min_games=1) == [])
     cd._tier_paths = lambda: [BOT]
     di._state["checked"] = 0.0
     check("and is served again for its own", di.available())

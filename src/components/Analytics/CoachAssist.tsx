@@ -1458,6 +1458,12 @@ const CHOICE_ENGINE: Record<string, string> = {
   ladder: 'ladder rate',
 };
 
+/** Duel games under which a duel list is thin (`coach_choice.PROVEN_GAMES`).
+ *  The server ranks those after every proven list; the row says why. */
+const CHOICE_PROVEN_GAMES = 30;
+
+const pctOf = (wins: number, games: number) => ((100 * wins) / Math.max(1, games)).toFixed(0);
+
 /** What stands behind one deck, as counts: the player's own plays, its real
  *  duel record, its ladder games, and how much of it they already play. */
 function choiceMeta(d: CoachChoiceDeck): string {
@@ -1469,7 +1475,12 @@ function choiceMeta(d: CoachChoiceDeck): string {
        because beside "you played it 86×" a bare "660 duel games" reads as
        theirs. */
     const who = d.players ? ` by ${d.players.toLocaleString('en-US')} players` : '';
-    parts.push(`${g.toLocaleString('en-US')} duel games${who}, ${((100 * w) / Math.max(1, g)).toFixed(0)}% won`);
+    parts.push(`${g.toLocaleString('en-US')} duel games${who}, ${pctOf(w, g)}% won`);
+  } else if (d.real) {
+    /* A built deck that HAS been fielded as listed, under the bar a duel deck
+       needs to be offered on its own. Its record is said, not hidden. */
+    const [g, w, p] = d.real;
+    parts.push(`fielded as listed in ${g.toLocaleString('en-US')} duel games by ${p} players, ${pctOf(w, g)}% won`);
   } else if (d.source === 'meta' && d.plays) {
     parts.push(`${d.plays.toLocaleString('en-US')} ladder games`);
   }
@@ -1482,21 +1493,27 @@ function choiceVs(vs: CoachChoiceDeck['vs']): CoachVs[] {
 }
 
 /** One deck holding the named cards: its win chance, the same figure against
- *  each of their likely decks, what stands behind it, and — where the builder
- *  found one — the change that raises it. */
+ *  each of their likely decks, what stands behind it, how it was built, and —
+ *  where the swap builder found one — the change that raises it. */
 function ChoiceRow({ deck, rank }: { deck: CoachChoiceDeck; rank: number }) {
   const meta = choiceMeta(deck);
   const im = deck.improve;
+  const ar = deck.architect;
+  const thin = deck.source === 'duel' && deck.plays < CHOICE_PROVEN_GAMES;
   return (
-    <li className={styles.deckRow} data-hue="blue" data-choice={deck.source}>
+    <li className={styles.deckRow} data-hue="blue" data-choice={deck.source} data-section={deck.section}>
       <span className={styles.rank}>{rank}</span>
       <div className={styles.deckIdent}>
         <span className={styles.deckName}>
           {deck.deckName || deck.archetype}
           <span className={styles.fillTag}>{CHOICE_SOURCE[deck.source]}</span>
           {deck.duel?.strong && <span className={styles.duelTag}>Duel proven</span>}
+          {/* A REAL list the builder itself arrived at: the shell's core and
+              the slots it would choose against this opponent ARE this list. */}
+          {ar && deck.source !== 'built' && <span className={styles.duelTag}>Deckkies' build</span>}
         </span>
         {meta && <span className={styles.deckMeta}>{meta}</span>}
+        {thin && <span className={styles.deckMeta}>thin evidence — ranked after proven lists</span>}
         {deck.duel && (
           <span className={styles.duelRate} data-strong={deck.duel.strong || undefined} title={duelTitle(deck.duel)}>
             {duelChip(deck.duel)}
@@ -1526,22 +1543,33 @@ function ChoiceRow({ deck, rank }: { deck: CoachChoiceDeck; rank: number }) {
       )}
       <VsChips vs={choiceVs(deck.vs)} className={styles.deckRowVs}
                label="Win chance against each of their likely decks" />
-      {/* A BUILT deck says what was changed and from which real deck: the
-          swap in card art, and how many real deck pairs differ by it. */}
-      {deck.source === 'built' && !!deck.swaps?.length && (
-        <div className={`${styles.deckRowVs} ${styles.swapRow}`} data-choice-swap="">
-          {deck.swaps.map((s) => (
-            <span key={s.out + s.in} className={styles.swapRow}>
-              <span className={styles.swapSide}><CardArt card={s.out} /></span>
-              <span className={styles.swapArrow} aria-label="becomes">→</span>
-              <span className={styles.swapSide}><CardArt card={s.in} variant={deck.art[s.in]} /></span>
-              <span className={styles.blockNote}>{s.pairs.toLocaleString('en-US')} real deck pairs make this swap</span>
-            </span>
-          ))}
-          {deck.seedName && <span className={styles.blockNote}>from {deck.seedName}</span>}
+      {/* HOW IT WAS BUILT (`deck_architect`). The way of playing the card it
+          rests on — how many real duel lists and games — then the open slots:
+          the cards chosen for them, and which of those the OPPONENT changed
+          from the shell's usual pick. Card art, as everywhere on this screen. */}
+      {ar && (
+        <div className={`${styles.deckRowVs} ${styles.swapRow}`} data-choice-build="">
+          <span className={styles.blockNote}>
+            {ar.shell.decks.toLocaleString('en-US')} duel lists play it this way
+            {ar.shell.games ? ` · ${ar.shell.games.toLocaleString('en-US')} games, ${pctOf(ar.shell.wins, ar.shell.games)}% won` : ''}
+            {' · '}core {ar.core.length} cards · open {ar.flex.length === 1 ? 'slot' : 'slots'}
+          </span>
+          <span className={styles.swapSide}>
+            {ar.flex.map((c) => (
+              <CardArt key={c} card={c} variant={deck.art[c]} />
+            ))}
+          </span>
+          <span className={styles.blockNote}>
+            {ar.tuned.length
+              ? `${ar.tuned.map(filterCardName).join(', ')} chosen against this opponent`
+              : 'the picks most of its pilots make'}
+            {ar.nearest && ar.nearest.shared < 8
+              ? ` · ${ar.nearest.shared}/8 of ${ar.nearest.name} (${ar.nearest.games.toLocaleString('en-US')} duel games)`
+              : ''}
+          </span>
         </div>
       )}
-      {/* THE BUILDER'S CHANGE TO THIS DECK, on the deck it changes. Both
+      {/* THE SWAP BUILDER'S CHANGE TO THIS DECK, on the deck it changes. Both
           rates are the same engine against the same decks, so the gain is a
           like-for-like difference. The named cards and the deck's own win
           condition are never the ones swapped out. */}
@@ -1574,9 +1602,11 @@ function ChoiceRow({ deck, rank }: { deck: CoachChoiceDeck; rank: number }) {
  * of them, rated against this opponent's likely decks on the brain that ranks
  * "Play this" (`server/coach.py` `chosen`, rules in `coach_choice.py`).
  *
- * REAL DECKS LEAD, BUILT DECKS FOLLOW, under their own heading. A built deck
- * has never been played as listed — its rate is inherited from the real deck
- * it came from — so the two are not ranked against each other.
+ * THREE SECTIONS, DUEL FIRST. Decks duel players repeatedly field lead; then
+ * the player's own and the ladder's; then the decks Deckkies BUILDS — a way
+ * duel players play the card (its core), with the open slots chosen against
+ * this opponent (`server/deck_architect.py`). The first cut of this block
+ * "built" by swapping one card into a stranger's deck; that is gone.
  *
  * The named cards and "was this asked" live in the PARENT. The result view
  * unmounts whenever the Suggestion reloads (a game was played, the window
@@ -1645,9 +1675,15 @@ function ChoicePanel({
         : want.length >= COACH_CHOICE_MAX ? want : [...want, key],
     );
 
-  const real = res?.decks.filter((d) => d.source !== 'built') ?? [];
-  const built = res?.decks.filter((d) => d.source === 'built') ?? [];
+  /* `section` is the server's; an older server (one day's worth) sent none,
+     and its built rows are told by their source. */
+  const sectionOf = (d: CoachChoiceDeck) => d.section ?? (d.source === 'built' ? 'built' : d.source);
+  const decks = res?.decks ?? [];
+  const duel = decks.filter((d) => sectionOf(d) === 'duel');
+  const own = decks.filter((d) => sectionOf(d) === 'yours' || sectionOf(d) === 'meta');
+  const built = decks.filter((d) => sectionOf(d) === 'built');
   const named = (res?.want ?? []).map(filterCardName).join(' + ');
+  const engine = res?.engine ? `win chance · ${CHOICE_ENGINE[res.engine]}` : '';
 
   return (
     <section className={styles.block} data-hue="blue" data-choice-panel="">
@@ -1680,7 +1716,7 @@ function ChoicePanel({
 
       {busy && (
         <ReadingState k="coach-choice" hue="blue">
-          Finding and building decks with those cards…
+          Reading every duel deck with those cards and building around them…
         </ReadingState>
       )}
       {error && !busy && <p className={styles.askHint}>{error}</p>}
@@ -1694,25 +1730,37 @@ function ChoicePanel({
           )}
           {res.reason === 'none' && (
             <p className={styles.askHint}>
-              No real deck holds {named} together, and no swap real players make builds one.
+              No duel, ladder or own deck holds {named} together, so there is nothing to build from.
             </p>
           )}
-          {real.length > 0 && (
+          {duel.length > 0 && (
             <>
               <h4 className={styles.blockTitle}>
-                Decks with {named}{' '}
+                Duel decks with {named}{' '}
                 <span className={styles.blockNote}>
-                  {[
-                    res.engine ? `win chance · ${CHOICE_ENGINE[res.engine]}` : '',
-                    `${res.counts.yours} yours`,
-                    `${res.counts.duel.toLocaleString('en-US')} duel`,
-                    `${res.counts.meta} meta held them`,
-                  ].filter(Boolean).join(' · ')}
+                  {[engine, `${res.counts.duel.toLocaleString('en-US')} duel decks hold ${res.want.length > 1 ? 'them' : 'it'}`, 'most duel-proven first']
+                    .filter(Boolean).join(' · ')}
                 </span>
               </h4>
               <ul className={styles.deckList}>
-                {real.map((d, i) => (
+                {duel.map((d, i) => (
                   <ChoiceRow key={d.cards.join(',')} deck={d} rank={i + 1} />
+                ))}
+              </ul>
+            </>
+          )}
+          {own.length > 0 && (
+            <>
+              <h4 className={styles.blockTitle}>
+                Yours and the meta{' '}
+                <span className={styles.blockNote}>
+                  {[duel.length ? '' : engine, `${res.counts.yours} of your decks`, `${res.counts.meta} ladder decks`]
+                    .filter(Boolean).join(' · ')}
+                </span>
+              </h4>
+              <ul className={styles.deckList}>
+                {own.map((d, i) => (
+                  <ChoiceRow key={d.cards.join(',')} deck={d} rank={duel.length + i + 1} />
                 ))}
               </ul>
             </>
@@ -1720,14 +1768,19 @@ function ChoicePanel({
           {built.length > 0 && (
             <>
               <h4 className={styles.blockTitle}>
-                Built for {named}{' '}
+                Built by Deckkies around {named}{' '}
                 <span className={styles.blockNote}>
-                  a real deck + one swap real players make · not played as listed
+                  {[
+                    res.corpus?.decks
+                      ? `from ${res.corpus.decks.toLocaleString('en-US')} duel lists · ${res.corpus.games.toLocaleString('en-US')} duel games`
+                      : '',
+                    'each way duel players play it: its core, the open slots chosen against this opponent',
+                  ].filter(Boolean).join(' · ')}
                 </span>
               </h4>
               <ul className={styles.deckList}>
                 {built.map((d, i) => (
-                  <ChoiceRow key={d.cards.join(',')} deck={d} rank={real.length + i + 1} />
+                  <ChoiceRow key={d.cards.join(',')} deck={d} rank={duel.length + own.length + i + 1} />
                 ))}
               </ul>
             </>

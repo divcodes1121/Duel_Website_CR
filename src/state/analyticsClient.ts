@@ -1602,10 +1602,30 @@ export function fetchCoachSuggestion(
    ────────────────────────────────────────────────────────────────────────
    "The decks it gave, the player might not play": the reader names up to four
    cards and gets decks that hold ALL of them, each rated against the
-   opponent's likely decks on the same brain that ranks "Play this". */
+   opponent's likely decks on the same brain that ranks "Play this". Duel decks
+   lead; the built ones come from how duel players build around the cards
+   (`server/deck_architect.py`), not from swapping one card into a stranger's
+   deck — the first cut did that and it was reported the same day. */
 
-/** Where a deck on that list came from, in the order they are trusted. */
+/** Where a deck on that list came from. */
 export type CoachChoiceSource = 'yours' | 'duel' | 'meta' | 'built';
+
+/** How Deckkies built a deck around the named cards (`server/deck_architect.py`):
+ *  the way duel players play the card that it rests on, that shell's core, the
+ *  cards chosen for the open slots, and which of those the OPPONENT changed
+ *  from the shell's usual pick. */
+export interface CoachChoiceArchitect {
+  /** The shell: distinct real lists, their duel games and wins, and its rank
+   *  among the ways the card is played (0 = the most played). */
+  shell: { decks: number; games: number; wins: number; weight: number; rank: number };
+  core: string[];
+  flex: string[];
+  tuned: string[];
+  value: number;
+  /** The shell's real list closest to the build. `shared` 8 = it IS a list
+   *  that has been fielded. */
+  nearest?: { name: string; shared: number; games: number; wins: number | null; players: number } | null;
+}
 
 export interface CoachChoiceSwap {
   out: string;
@@ -1661,10 +1681,16 @@ export interface CoachChoiceDeck {
   yours?: number;
   /** Cards of the eight the player already plays. */
   familiar: number;
-  /** Built decks: the swap that brought a named card in, and the real deck. */
-  swaps?: CoachChoiceSwap[];
-  seedName?: string;
-  seedSource?: CoachChoiceSource;
+  /** Which section the server placed it in. A REAL list the builder arrived
+   *  at can sit with the built decks, so this is not always `source`. Absent
+   *  from the first day's server. */
+  section?: CoachChoiceSource;
+  /** How it was built. On every built deck, and on a real list when the
+   *  builder's own answer for a shell IS that list. */
+  architect?: CoachChoiceArchitect;
+  /** A built deck that has been fielded as listed in real duels, under the
+   *  bar a duel deck needs to be offered on its own: `[games, wins, players]`. */
+  real?: [number, number, number] | null;
   improve?: CoachChoiceImprove;
 }
 
@@ -1685,6 +1711,9 @@ export interface CoachChosen {
    *  deck holds them and no single human swap builds one. */
   reason: 'no_cards' | 'spent' | 'none' | null;
   opponent?: { source: string; decks: { deckName: string; prob?: number; archetype: string }[] };
+  /** What the builder learned from: every real duel list holding the named
+   *  cards (the whole duel index, not only the catalogue) and their games. */
+  corpus?: { decks: number; games: number };
   considered?: number;
   rated?: number;
   improved?: number;

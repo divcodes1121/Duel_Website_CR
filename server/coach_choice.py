@@ -1,4 +1,4 @@
-"""DECKS BUILT AROUND THE CARDS THE PLAYER NAMES — Coach Assist's "your cards".
+"""DECKS AROUND THE CARDS THE PLAYER NAMES — Coach Assist's "your cards".
 
 Asked for (2026-10-02): "the decks it gave, the player might not play — so we
 tell it to give us decks by our choice: we enter the win conditions or cards,
@@ -6,40 +6,43 @@ it finds and makes the decks accordingly, shows the matchup percentage,
 prioritises duel battles and the brain's deck making".
 
 Coach Assist's answer is chosen from the player's own history and the meta. A
-coach who knows their player wants Hog Rider, or will not give up Fireball, had
+coach who knows their player wants Graveyard, or will not give up Fireball, had
 no way to say so. This is that control: up to `MAX_WANT` cards, every deck
 returned holds ALL of them, and each is rated against the opponent's likely
 decks by the same brain that ranks "Play this".
 
-WHERE THE DECKS COME FROM, in the order they are trusted:
+WHERE THE DECKS COME FROM, and the order they are shown in:
 
-  yours   a deck the player has actually played (duel history, native duels,
-          ladder) that holds the cards
-  duel    a deck duel players repeatedly field (`duel_index.catalogue`)
-  meta    a vetted ladder deck (`deck_counter.seeds`)
-  built   a real deck that lacks ONE of the cards, with the swap real players
-          make to bring it in (`swap_graph`); and, after rating, improvements
-          the deck builder finds that keep every named card
+  duel    decks duel players repeatedly field (`duel_index.catalogue`) — the
+          section the screen leads with
+  yours   decks the player has actually played that hold the cards
+  meta    vetted ladder decks (`deck_counter.seeds`)
+  built   decks Deckkies builds around the cards from how duel players build
+          (`deck_architect.py`): a shell's core, plus the open slots chosen
+          against this opponent
+
+THE FIRST CUT GOT TWO THINGS WRONG, both reported the day it shipped:
+
+  * ITS "BUILT" DECKS WERE A SUBSTITUTION — a real Balloon deck with Balloon
+    swapped for Graveyard. "That is not how it works." That path (`forced`) is
+    deleted; `deck_architect` builds from the shells duel players really play.
+  * IT RATED THE WRONG DUEL DECKS. The lists sent to the combined brain were
+    the quick model's favourites, so of 148 Graveyard lists in the duel
+    catalogue the one shown had 14 duel games while the most-played list —
+    1,348 duel games across 841 players — was never rated at all. HALF the
+    duel lists rated are now simply the most duel-played (`EVIDENCE_FIRST`),
+    and a list under `PROVEN_GAMES` duel games ranks after every proven one
+    (`thin`) — evidence before size, the swap tuner's rule.
 
 RULES, each a function below and each tested against literals:
 
   * every named card is in every deck returned (`holds`);
   * no card already spent this duel (`legal`) — a named card that IS spent is
     reported, never silently ignored;
-  * a built deck is at most `MAX_FORCED` human swaps from a real one, never
-    swaps a named card out, and the swap is one `swap_graph` has seen;
-  * DUEL PROOF BREAKS NEAR-TIES, IT DOES NOT OVERRULE. A deck proven in real
-    duels against what this opponent brings leads another within `DUEL_BAND`
-    points; outside the band the higher win chance leads (`order`);
-  * near-copies are one answer (`pick`);
-  * REAL DECKS LEAD, BUILT DECKS FOLLOW (`arrange`). A built deck has never
-    been played by anyone: its rate is inherited from the deck it came from.
-    Staged on production (2026-10-02) four of six answers for "Hog Rider"
-    were built decks ranked above every real one on inherited figures. So the
-    two are not cross-ranked: real decks first in their own order, then up to
-    `BUILT_SLOTS` built ones, more only when the real ones run out;
-  * the player's OWN deck holding the cards is always on the list when it
-    could be rated — it is the one deck the reader certainly can play.
+  * a duel-proven deck leads another within `DUEL_BAND` points and nothing
+    outside it (`order`);
+  * near-copies are one answer, and the player's own deck is the one that
+    stands for them (`arrange`).
 
 Pure: no database, no network, no imports beyond the standard library.
 `coach.chosen` gathers the candidates and rates them.
@@ -47,55 +50,41 @@ Pure: no database, no network, no imports beyond the standard library.
 
 from __future__ import annotations
 
-BRAIN = "coach-choice-1.0"
+BRAIN = "coach-choice-2.0"
 
 #: Cards a reader may name. Four leaves four free slots; past that the request
 #: is a whole deck and there is nothing left to find.
 MAX_WANT = 4
 
-#: Decks shown.
-SHOW = 6
+#: Decks shown, per section. Duel decks lead and get the most room.
+SHOW = {"duel": 4, "yours": 2, "meta": 2, "built": 3}
 
-#: Of those, how many a built deck may take while real ones are available.
-BUILT_SLOTS = 2
+#: Lists rated by the combined brain, per source. It reads a list's ladder
+#: history the first time it rates it, so this is the cost lever
+#: (`coach.BUILD_FINALISTS`). They sum to `FINALISTS`.
+QUOTA = {"yours": 4, "duel": 10, "meta": 4, "built": 8}
+FINALISTS = sum(QUOTA.values())
 
-#: Lists rated by the combined brain. It reads a list's ladder history the
-#: first time it rates it, so this is the cost lever (`coach.BUILD_FINALISTS`).
-FINALISTS = 20
+#: Sources where HALF the quota goes to the most-played lists before the quick
+#: model's favourites get the rest. See the module note.
+EVIDENCE_FIRST = ("duel",)
 
-#: Finalists held per source, so one large source cannot crowd the others out
-#: before anything has been rated. They sum to `FINALISTS`. Duel decks hold the
-#: most: they are the evidence this screen is asked to lead with.
-QUOTA = {"yours": 4, "duel": 8, "meta": 5, "built": 3}
+#: Duel games under which a duel list is THIN: shown, ranked after every
+#: proven one. `deck_synergy.PROVEN_GAMES`' figure for the same claim.
+PROVEN_GAMES = 30
 
 #: Points of win chance inside which a duel-proven deck leads one that is not.
 #: `coach.LEAD_MARGIN`'s figure, for the same claim.
 DUEL_BAND = 3.0
 
-#: Named cards a real deck may lack and still be built from. One: the result
-#: is then a real deck plus a single swap real players make.
-MAX_FORCED = 1
+#: Shared cards at which two BUILT decks are one answer.
+SAME_BUILD = 7
 
-#: Substitutes of a card looked at for the named one (`swap_graph` lists them
-#: best first). Wider than the builder's 5 because here the incoming card is
-#: fixed by the reader, not chosen by the search.
-FORCED_PER_CARD = 8
-
-#: Ways to bring one card into one deck that are kept.
-FORCED_PER_DECK = 2
-
-#: Real deck pairs that must make a swap before it brings a named card in.
-#: `swap_graph` keeps an edge from 3; staged on production those thin edges
-#: built Royal Giant -> Graveyard (3 pairs) and Poison -> X-Bow (8), lists
-#: nobody would field. The swaps a reader would recognise sit far above it:
-#: Minion Giant -> Hog Rider 165, Royal Hogs -> Hog Rider 96, Battle Ram -> Hog
-#: Rider 36, Balloon -> Graveyard 28.
-FORCED_MIN_PAIRS = 20
-
-#: Real decks per source that built decks are made from, most-played first.
-FORCED_SEEDS = 150
-
+#: The order of trust — which source keeps a deck two of them hold.
 SOURCES = ("yours", "duel", "meta", "built")
+
+#: The order sections are SHOWN in.
+SECTIONS = ("duel", "yours", "meta", "built")
 
 
 def deck_key(cards) -> str:
@@ -136,68 +125,17 @@ def legal(cards, used) -> bool:
     return not (set(cards or []) & set(used or ()))
 
 
-def missing(cards, want) -> list[str]:
-    s = set(cards or [])
-    return [c for c in want or [] if c not in s]
-
-
-def forced(cards, want, graph, *, used=(), role=None, per_card: int = FORCED_PER_CARD,
-           per_deck: int = FORCED_PER_DECK, min_pairs: int = FORCED_MIN_PAIRS) -> list[dict]:
-    """`cards` with its ONE missing named card swapped in, the human way.
-
-    `graph` is `swap_graph`'s `{card: [[substitute, score, pairs], ...]}`: the
-    cards people put in `card`'s place. A deck lacking the named card W gives
-    up the card whose substitutes list W highest — the card real players
-    actually trade for it. Returns up to `per_deck` of `{"cards", "swaps":
-    [{"out", "in", "pairs"}], "score"}`, best swap first; `[]` when the deck
-    lacks none or more than `MAX_FORCED`, when W is spent, or when nobody makes
-    such a swap.
-
-    `role(card)` names what a card IS (win condition, spell, building, troop).
-    Given it, the card leaving must be the same kind as the one arriving: a
-    win condition takes a win condition's place, a spell a spell's. Without
-    that rule Poison gave way to X-Bow and a Graveyard deck gained a second
-    win condition and lost its spell. And the swap must be one at least
-    `min_pairs` real deck pairs make.
-    """
-    cards = list(cards or [])
-    lacks = missing(cards, want)
-    if len(set(cards)) != 8 or not lacks or len(lacks) > MAX_FORCED:
-        return []
-    new = lacks[0]
-    if new in set(used or ()):
-        return []
-    keep = set(want or ())
-    kind = role(new) if role is not None else None
-    options = []
-    for c in cards:
-        if c in keep:
-            continue                    # a named card never leaves
-        if role is not None and role(c) != kind:
-            continue                    # like for like
-        for sub, score, pairs in ((graph or {}).get(c) or [])[:per_card]:
-            if sub == new:
-                if int(pairs) >= min_pairs:
-                    options.append((float(score), int(pairs), c))
-                break
-    options.sort(key=lambda o: (-o[0], -o[1], o[2]))
-    out = []
-    for score, pairs, c in options[:per_deck]:
-        out.append({"cards": [new if x == c else x for x in cards],
-                    "swaps": [{"out": c, "in": new, "pairs": pairs}],
-                    "score": round(score, 4)})
-    return out
-
-
 def shortlist(cands: list[dict], limit: int = FINALISTS, quota: dict | None = None) -> list[dict]:
     """The lists worth the combined brain's time, source by source.
 
-    `cands` carry `source` and `fast` (the quick model's win chance, or None)
-    and `plays` (games behind the list). Within a source: best `fast` first,
-    then most-played. Each source takes up to its quota; slots a source cannot
-    fill go to the best of what is left, so a request only the meta can answer
-    still gets `limit` lists. One entry per deck — the first source to hold it
-    keeps it, and `SOURCES` is the order of trust.
+    `cands` carry `source`, `fast` (the quick model's win chance, or None) and
+    `plays` (games behind the list). Within a source the quick model's best
+    come first — except in `EVIDENCE_FIRST` sources, where half the quota is
+    the MOST-PLAYED lists, so the lists with the most real duels behind them
+    are always rated. A candidate marked `pin` is taken first whatever its
+    rank (the builder's own pick when it is a real list). Slots a source
+    cannot fill go to the best of what is left. One entry per deck — the first
+    source to hold it keeps it, and `SOURCES` is the order of trust.
     """
     quota = dict(QUOTA if quota is None else quota)
 
@@ -205,22 +143,40 @@ def shortlist(cands: list[dict], limit: int = FINALISTS, quota: dict | None = No
         f = c.get("fast")
         return (f is None, -(f or 0.0), -int(c.get("plays") or 0), deck_key(c["cards"]))
 
+    def played(c):
+        return (-int(c.get("plays") or 0), deck_key(c["cards"]))
+
     seen: set[str] = set()
-    by_source: dict[str, list[dict]] = {s: [] for s in SOURCES}
+    out: list[dict] = []
+    rest: list[dict] = []
     for s in SOURCES:
+        pool: list[dict] = []
         for c in sorted((c for c in cands if c.get("source") == s), key=rank):
             k = deck_key(c["cards"])
             if k in seen:
                 continue
             seen.add(k)
-            by_source[s].append(c)
+            pool.append(c)
+        q = max(0, int(quota.get(s, 0)))
+        take: list[dict] = [c for c in pool if c.get("pin")][:q]
 
-    out: list[dict] = []
-    rest: list[dict] = []
-    for s in SOURCES:
-        take = by_source[s][:max(0, int(quota.get(s, 0)))]
+        def add(c) -> bool:
+            if len(take) < q and not any(c is t for t in take):
+                take.append(c)
+                return True
+            return False
+
+        if s in EVIDENCE_FIRST:
+            by_play = (q + 1) // 2
+            for c in sorted(pool, key=played):
+                if by_play <= 0:
+                    break
+                if add(c):
+                    by_play -= 1
+        for c in pool:
+            add(c)
         out.extend(take)
-        rest.extend(by_source[s][len(take):])
+        rest.extend(c for c in pool if not any(c is t for t in take))
     rest.sort(key=rank)
     out.extend(rest[:max(0, limit - len(out))])
     return out[:limit]
@@ -231,18 +187,24 @@ def proven(row: dict) -> bool:
     return bool((row.get("duel") or {}).get("strong"))
 
 
+def thin(row: dict) -> bool:
+    """A duel list with too few duel games behind it to rank beside a proven
+    one. Only duel lists can be thin: the player's own deck and a ladder deck
+    are not on the list for their duel record."""
+    return row.get("source") == "duel" and int(row.get("plays") or 0) < PROVEN_GAMES
+
+
 def order(rows: list[dict], band: float = DUEL_BAND) -> list[dict]:
-    """Best first. Rated rows before unrated; among rated, the win chance —
-    with a duel-proven row treated as `band` points higher, which is exactly
-    "it leads anything within the band and nothing outside it". Ties: proof,
-    then a deck the player already plays, then games, then the deck key.
+    """Best first. Rated rows before unrated; a thin duel list after every
+    proven one; then the win chance — with a duel-proven row treated as `band`
+    points higher, which is exactly "it leads anything within the band and
+    nothing outside it". Ties: proof, games, the deck key.
     """
     def key(r):
         w = r.get("win")
         eff = None if w is None else float(w) + (band if proven(r) else 0.0)
-        return (eff is None, -(eff or 0.0), not proven(r),
-                r.get("source") != "yours", -int(r.get("plays") or 0),
-                deck_key(r["cards"]))
+        return (eff is None, thin(r), -(eff or 0.0), not proven(r),
+                -int(r.get("plays") or 0), deck_key(r["cards"]))
     return sorted(rows, key=key)
 
 
@@ -252,44 +214,64 @@ def same_at(want) -> int:
     return 7 if len(want or ()) >= 4 else 6
 
 
-def pick(rows: list[dict], want=(), show: int = SHOW) -> list[dict]:
-    """The first `show` of `rows` (already ordered) that are different decks."""
-    at = same_at(want)
-    out: list[dict] = []
-    for r in rows:
-        if any(len(set(r["cards"]) & set(o["cards"])) >= at for o in out):
-            continue
-        out.append(r)
-        if len(out) >= show:
-            break
-    return out
+def arrange(rows: list[dict], want=(), show: dict | None = None) -> list[dict]:
+    """The list as shown: duel decks, the player's own, the meta, then built.
+    Each returned row carries `section`.
 
+    Each section is in `order` and capped by `show`. A near-copy of a deck
+    already taken is not a second answer — and the sections CLAIM in the order
+    of trust (the player's own first), so when their deck and a duel list are
+    one deck apart it is theirs that stands. A built deck is dropped only when
+    it IS a deck already shown; a card or two from a real list is what a build
+    usually is, and the row says how close.
 
-def arrange(rows: list[dict], want=(), show: int = SHOW,
-            built_slots: int = BUILT_SLOTS) -> list[dict]:
-    """The list as shown: real decks in `order`, then built ones.
-
-    Up to `built_slots` built decks when there are real ones to show beside
-    them; the rest of `show` when there are not. A built deck that is a
-    near-copy of a real one already listed is not a second answer. The
-    player's own best deck is kept on the list if `pick` would have cut it.
+    A real list the builder itself arrived at (`architect` on a non-built row)
+    that did not make its own section is shown with the built decks, so the
+    brain's pick is never lost to a cap.
     """
-    ordered = order(rows)
-    real = [r for r in ordered if r.get("source") != "built"]
-    built = [r for r in ordered if r.get("source") == "built"]
+    show = dict(SHOW if show is None else show)
     at = same_at(want)
+    ordered = order(rows)
+    taken: list[dict] = []
+    by: dict[str, list[dict]] = {s: [] for s in SECTIONS}
 
-    top = pick(real, want, show)
-    fresh = [b for b in built
-             if not any(len(set(b["cards"]) & set(r["cards"])) >= at for r in top)]
-    room = max(built_slots, show - len(top))
-    made = pick(fresh, want, min(room, show))
-    top = top[:max(0, show - len(made))]
+    for s in SOURCES:
+        if s == "built":
+            continue
+        for r in ordered:
+            if r.get("source") != s or len(by[s]) >= show.get(s, 0):
+                continue
+            if any(len(set(r["cards"]) & set(t["cards"])) >= at for t in taken):
+                continue
+            by[s].append(r)
+            taken.append(r)
 
-    mine = next((r for r in real if r.get("source") == "yours" and r.get("win") is not None), None)
-    if mine is not None and top and not any(r is mine for r in top):
-        # In place of the lowest real row, unless it is a near-copy of one
-        # that is staying (then that one already stands for it).
-        if not any(len(set(mine["cards"]) & set(r["cards"])) >= at for r in top[:-1]):
-            top = order(top[:-1] + [mine])
-    return top + made
+    # ONE BUILD PER WAY OF PLAYING THE CARD FIRST, then the rest. Staged, two
+    # of three built Graveyard decks were the same Freeze shell with one card
+    # different while three other shells went unshown.
+    shown = {deck_key(t["cards"]) for t in taken}
+    made = [r for r in ordered
+            if (r.get("source") == "built" or r.get("architect"))
+            and deck_key(r["cards"]) not in shown]
+    shells: set = set()
+    for first_of_shell in (True, False):
+        for r in made:
+            if len(by["built"]) >= show.get("built", 0):
+                break
+            if any(r is m for m in by["built"]):
+                continue
+            rank = ((r.get("architect") or {}).get("shell") or {}).get("rank")
+            if first_of_shell and rank in shells:
+                continue
+            if any(len(set(r["cards"]) & set(m["cards"])) >= SAME_BUILD for m in by["built"]):
+                continue
+            by["built"].append(r)
+            shells.add(rank)
+    by["built"] = [r for r in ordered if any(r is m for m in by["built"])]
+
+    out = []
+    for s in SECTIONS:
+        for r in by[s]:
+            r["section"] = s
+            out.append(r)
+    return out

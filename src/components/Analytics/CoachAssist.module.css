@@ -1420,7 +1420,7 @@
 /* The swap and the builder's change sit under the cards like the chip line
    does (`.deckRowVs` places them); a little air above so three lines under
    one deck do not read as one. */
-.deckRow [data-choice-swap],
+.deckRow [data-choice-build],
 .deckRow [data-choice-improve] {
   margin-top: 0.1rem;
   row-gap: 0.25rem;

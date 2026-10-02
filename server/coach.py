@@ -1948,21 +1948,21 @@ def _read(stage, best, opp, my_played, opp_played, observed) -> list[str]:
 # Asked for: "the decks it gave, the player might not play — we enter the win
 # conditions or cards, it finds and makes the decks accordingly, shows the
 # matchup percentage, prioritises duel battles and the brain's deck making".
-# The rules are `coach_choice.py` (pure); this gathers the candidates and
-# rates them on the SAME brain that ranks "Play this", so a deck here and a
-# deck in "Your options" are on one scale.
+# The rules are `coach_choice.py` and the builder is `deck_architect.py` (both
+# pure); this gathers the candidates and rates them on the SAME brain that
+# ranks "Play this", so a deck here and a deck in "Your options" are on one
+# scale.
 
-#: Top rated rows handed to the deck builder to improve, named cards kept.
+#: Top rated rows handed to the swap builder to improve, named cards kept.
 CHOICE_IMPROVE_SEEDS = 6
 
-
-def _card_role(card: str) -> str:
-    """What a card is, for a like-for-like swap: a win condition first (X-Bow
-    and Mortar are win conditions that happen to be buildings), then the
-    game's own type."""
-    i = dx.card_info(card)
-    return ("wincon" if i.get("is_win_condition") else "spell" if i.get("is_spell")
-            else "building" if i.get("is_building") else "troop")
+#: What a list with no duel record weighs in the builder's corpus: a vetted
+#: ladder deck, and the player's own deck (which also counts their plays, up
+#: to a cap). A duel list weighs its duel games, so these sit beside a duel
+#: list a handful of pilots field — present, never dominant.
+CORPUS_META_WEIGHT = 10.0
+CORPUS_OWN_WEIGHT = 10.0
+CORPUS_OWN_CAP = 20.0
 
 
 def _own_decks(tag: str, since: str | None, until: str | None, hist: dict | None,
@@ -2002,18 +2002,29 @@ def _own_decks(tag: str, since: str | None, until: str | None, hist: dict | None
     return own, {c for e in own.values() for c in e["cards"]}
 
 
+def _duel_lists(cards: list[str]) -> list[dict]:
+    """Every list fielded in real duels that holds `cards` — the builder's
+    evidence (`duel_index.decks_holding`). `[]` without an index."""
+    try:
+        import duel_index as di
+        return di.decks_holding(cards) if di.available() else []
+    except Exception as exc:  # noqa: BLE001 - no corpus is a smaller answer
+        print("coach._duel_lists: %r" % (exc,), file=sys.stderr)
+        return []
+
+
 def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
            opp_played: list[list[str]], want: list[str],
            my_since: str | None = None, my_until: str | None = None,
            opp_since: str | None = None, opp_until: str | None = None) -> dict:
     """Decks holding EVERY card in `want`, rated against this opponent.
 
-    Real decks first — the player's own, then decks duel players repeatedly
-    field, then vetted ladder decks — and built ones: a real deck one named
-    card short with the swap real players make, and the deck builder's
-    improvements that keep the named cards. Every row carries its win chance
-    against each of the opponent's likely decks and, where the duels have
-    enough games on it, its real duel record against what they bring.
+    Four sources: decks duel players repeatedly field, the player's own, vetted
+    ladder decks, and decks Deckkies BUILDS around the cards from how duel
+    players build (`deck_architect`: a shell's core, the open slots chosen
+    against this opponent). Every row carries its win chance against each of
+    the opponent's likely decks and, where the duels have enough games on it,
+    its real duel record against what they bring.
 
     A named card already spent this duel is REPORTED (`spent`) and nothing is
     offered: the request cannot be met, and quietly answering a different one
@@ -2063,6 +2074,21 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
         special slots and no structural hole — the composer's own two rules."""
         return cd.fillable_slots(cards) >= cd.SPECIAL_SLOTS and not issues(cards)
 
+    # ── The brain's context first: the builder scores with it ───────────────
+    ctx = None
+    try:
+        ctx = _brain_ctx(opp, my_tag, opp_tag)
+    except Exception as exc:  # noqa: BLE001 - the fused rate still answers
+        print("coach.chosen: brain: %r" % (exc,), file=sys.stderr)
+    fast = None
+    if ctx:
+        import duel_model as dm
+        opponents = [(d["cards"], d.get("prob") or 0.0) for d in ctx["decks"]]
+
+        def fast(cards):
+            e = dm.expected(ctx["model"], cards, opponents, **ctx["kw"])
+            return e["winRate"] if e else None
+
     # ── The three pools of REAL decks, each most-played first ───────────────
     catalogue = rates.duel.catalogue if duel_on else []
     duel_record = {d["key"]: (int(d["games"]), int(d["wins"]), int(d.get("players") or 0))
@@ -2076,7 +2102,7 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
                        key=lambda c: (-c["plays"], cc.deck_key(c["cards"]))),
     }
     cands: list[dict] = []
-    held: set[str] = set()
+    by_key: dict[str, dict] = {}
     for source in ("yours", "duel", "meta"):
         # An event deck is not a deck to bring, whoever played it.
         pool, _dropped = _drop_event_decks(pools[source])
@@ -2090,38 +2116,77 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
                 continue
             k = cc.deck_key(c["cards"])
             out["counts"][source] += 1
-            if k not in held:
-                held.add(k)
-                cands.append({**c, "source": source})
+            if k not in by_key:
+                by_key[k] = {**c, "source": source}
+                cands.append(by_key[k])
 
-    # ── Built: a real deck ONE named card short, plus the human swap ────────
-    try:
-        import swap_graph as sg
-        graph = (sg.load() or {}).get("graph")
-    except Exception:  # pragma: no cover - deployment shape
-        graph = None
+    # ── Built: how duel players build around these cards ────────────────────
+    # `deck_architect` reads every real list holding the cards — the whole
+    # duel index, not the catalogue — finds the ways people play them, keeps
+    # each one's core and fills the open slots against THIS opponent with the
+    # duel model (the player's card levels included). Ladder decks and the
+    # player's own decks holding the cards sit in the corpus too.
     synergy = _synergy_gate()
-    if graph:
-        for source in ("yours", "duel", "meta"):
-            near = [c for c in pools[source]
-                    if len(set(c["cards"])) == 8 and cc.legal(c["cards"], used)
-                    and len(cc.missing(c["cards"], want)) == 1][:cc.FORCED_SEEDS]
-            for c in near:
-                for f in cc.forced(c["cards"], want, graph, used=used, role=_card_role):
-                    k = cc.deck_key(f["cards"])
-                    if k in held:
-                        continue
-                    # It must stay a working deck: three special slots, no
-                    # structural problem its seed did not already have, and
-                    # cards duel players actually put together.
-                    if (cd.fillable_slots(f["cards"]) < cd.SPECIAL_SLOTS
-                            or not issues(f["cards"]) <= issues(c["cards"])
-                            or (synergy is not None and not synergy(f["cards"])[0])):
-                        continue
-                    held.add(k)
-                    out["counts"]["built"] += 1
-                    cands.append({"cards": f["cards"], "plays": c["plays"], "source": "built",
-                                  "swaps": f["swaps"], "seed": c["cards"], "seedSource": source})
+    try:
+        import deck_architect as arch
+    except Exception:  # pragma: no cover - deployment shape
+        arch = None
+    if arch is not None:
+        def corpus_for(needed: list[str]) -> list[dict]:
+            rows = [dict(d) for d in _duel_lists(needed)]
+            for c in pools["meta"]:
+                if set(needed) <= set(c["cards"]) and len(set(c["cards"])) == 8:
+                    rows.append({"cards": c["cards"], "w": CORPUS_META_WEIGHT})
+            for c in pools["yours"]:
+                if set(needed) <= set(c["cards"]) and len(set(c["cards"])) == 8:
+                    rows.append({"cards": c["cards"],
+                                 "w": CORPUS_OWN_WEIGHT + min(float(c["plays"]), CORPUS_OWN_CAP)})
+            return rows
+
+        # ONLY LISTS HOLDING EVERY NAMED CARD. Widening to "decks with the win
+        # condition, the other named cards forced in" was tried and staged:
+        # asked for Graveyard + X-Bow it put X-Bow into Freeze Graveyard and
+        # rated it 60%. If nobody in duels plays the cards together there is
+        # nothing to learn a build from, and the answer is that sentence.
+        corpus = corpus_for(want)
+
+        def allow(cards) -> bool:
+            return (len(set(cards)) == 8 and cc.legal(cards, used)
+                    and cd.fillable_slots(cards) >= cd.SPECIAL_SLOTS
+                    and not issues(cards)
+                    and (synergy is None or synergy(cards)[0]))
+
+        try:
+            builds = arch.build(corpus, want, score=fast, allow=allow, used=used)
+        except Exception:  # noqa: BLE001 - the real decks still answer
+            traceback.print_exc()
+            builds = []
+        duel_lists = [d for d in corpus if d.get("games")]
+        out["corpus"] = {"decks": len(duel_lists),
+                         "games": sum(int(d["games"]) for d in duel_lists)}
+        real = {cc.deck_key(d["cards"]): d for d in duel_lists}
+        for b in builds:
+            k = cc.deck_key(b["cards"])
+            near = b.get("nearest")
+            info = {"shell": b["shell"], "core": b["core"], "flex": b["flex"],
+                    "tuned": b["tuned"], "value": b["value"],
+                    "nearest": near and {
+                        "name": dz.deck_label(near["cards"], _archetype(near["cards"])),
+                        "shared": near["shared"], "games": near["games"],
+                        "wins": near["wins"], "players": near["players"]}}
+            if k in by_key:
+                # The build IS a real list already on the table: it stays a
+                # real deck, is rated whatever its rank, and says the builder
+                # arrived at it.
+                by_key[k]["architect"] = info
+                by_key[k]["pin"] = True
+                continue
+            r = real.get(k)
+            out["counts"]["built"] += 1
+            by_key[k] = {"cards": b["cards"], "source": "built", "fast": b["fast"],
+                         "plays": int((r or {}).get("games") or 0), "architect": info,
+                         "real": r and [int(r["games"]), int(r["wins"]), int(r.get("players") or 0)]}
+            cands.append(by_key[k])
 
     if not cands:
         out["reason"] = "none"
@@ -2130,17 +2195,10 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
 
     # ── The quick model orders every candidate; the combined brain rates the
     #    shortlist. One scale with "Play this". ───────────────────────────────
-    ctx = None
-    try:
-        ctx = _brain_ctx(opp, my_tag, opp_tag)
-    except Exception as exc:  # noqa: BLE001 - the fused rate still answers
-        print("coach.chosen: brain: %r" % (exc,), file=sys.stderr)
-    if ctx:
-        import duel_model as dm
-        opponents = [(d["cards"], d.get("prob") or 0.0) for d in ctx["decks"]]
+    if fast is not None:
         for c in cands:
-            e = dm.expected(ctx["model"], c["cards"], opponents, **ctx["kw"])
-            c["fast"] = e["winRate"] if e else None
+            if c.get("fast") is None:
+                c["fast"] = fast(c["cards"])
     finalists = cc.shortlist(cands)
 
     opp_cards = [d["cards"] for d in opp["decks"] if d.get("cards")]
@@ -2165,9 +2223,9 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
             ordered, art, inferred = seat(cards)
         seated, art, filled = cd.complete_seating(
             ordered, art or {}, slot_of=cd.seated_positions(ordered, art or {}))
-        arch = _archetype(seated)
-        v = {"cards": seated, "art": art, "inferredArt": bool(inferred), "archetype": arch,
-             "deckName": dz.deck_label(seated, arch), "avgElixir": dz._avg_elixir(seated)}
+        a = _archetype(seated)
+        v = {"cards": seated, "art": art, "inferredArt": bool(inferred), "archetype": a,
+             "deckName": dz.deck_label(seated, a), "avgElixir": dz._avg_elixir(seated)}
         if filled:
             v["artFilled"] = filled
         return v
@@ -2215,14 +2273,16 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
         row = {**view(cards, f["source"]), "source": f["source"], "plays": f.get("plays") or 0,
                "win": win, "vs": vs, "engine": engine,
                "fused": exp["winRate"] if exp else None, **evidence(cards)}
-        if f["source"] == "built":
-            row["swaps"] = f["swaps"]
-            row["seedSource"] = f["seedSource"]
-            row["seedName"] = dz.deck_label(f["seed"], _archetype(f["seed"]))
+        if f.get("architect"):
+            row["architect"] = f["architect"]
+        if f.get("real"):
+            # A built deck that HAS been fielded as listed, under the bar a
+            # duel deck needs to be offered on its own: its record, said.
+            row["real"] = f["real"]
         rows.append(row)
     shown = cc.arrange(rows, want)
 
-    # ── The deck builder, on the decks SHOWN, with the named cards kept ─────
+    # ── The swap builder, on the decks SHOWN, with the named cards kept ─────
     # Its answer is a change to one of these decks, so it rides on that row
     # (`improve`) rather than standing as a deck of its own: "your deck, with
     # Cannon for Tesla, 58 -> 63" is the thing a reader acts on, and as a
@@ -2233,9 +2293,9 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
                  for r in shown if r["win"] is not None][:CHOICE_IMPROVE_SEEDS]
         built = (_build_for_duel(ctx, seeds, rates, used, stage, keep=set(want),
                                  keep_win_conditions=True) if seeds else None)
-        by_key = {cc.deck_key(r["cards"]): r for r in shown}
+        shown_by = {cc.deck_key(r["cards"]): r for r in shown}
         for b in (built or {}).get("decks") or []:
-            row = by_key.get(cc.deck_key(b.get("seed") or []))
+            row = shown_by.get(cc.deck_key(b.get("seed") or []))
             if row is None or not cc.holds(b["cards"], want):
                 continue
             if row.get("improve") and row["improve"]["win"] >= b["win"]:

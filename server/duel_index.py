@@ -1215,6 +1215,52 @@ def near_variants(cards, min_games: int = VARIANT_MIN_GAMES, limit: int = 60) ->
     return out[:limit]
 
 
+#: A list must have been fielded this many duel games to count as a way
+#: people build around a card. Two: one game of a list is one person's try.
+HOLDING_MIN_GAMES = 2
+
+
+def decks_holding(cards, min_games: int = HOLDING_MIN_GAMES, limit: int = 6000) -> list[dict]:
+    """Every duel list in the window that holds ALL of `cards`, most-played
+    first: `[{"key", "cards", "archetype", "games", "wins", "players",
+    "topPilot"}]`.
+
+    THE WHOLE `deck` TABLE, NOT THE CATALOGUE. The catalogue is the decks
+    Deckkies may OFFER (10+ games, 3+ pilots, no pilot over half); this is the
+    evidence for HOW DUEL PLAYERS BUILD around a card, and it is ten times
+    larger — measured 2026-10-02, Graveyard: 148 catalogue lists against 2,501
+    here over 16,591 games. `topPilot` is the largest single pilot's games, so
+    a caller can keep one player's pet list from speaking for everyone.
+
+    The SQL narrows on ONE card with LIKE (the key is the sorted card list);
+    membership is then checked on the split key, because `%giant%` also
+    matches royal-giant, goblin-giant and giant-skeleton. `[]` with no index.
+    """
+    want = {c for c in (cards or []) if c}
+    if not want or _current() is None:
+        return []
+    # The longest key is the most selective substring.
+    probe = max(want, key=lambda c: (len(c), c))
+    try:
+        con = _ro(PATH)
+        try:
+            rows = con.execute(
+                "SELECT key, wc, games, wins, players, top_pilot FROM deck "
+                "WHERE games >= ? AND key LIKE ? ORDER BY games DESC, key LIMIT ?",
+                (int(min_games), f"%{probe}%", int(limit))).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+    out = []
+    for k, wc, g, w, p, top in rows:
+        c = k.split(",")
+        if len(c) == 8 and want <= set(c):
+            out.append({"key": k, "cards": c, "archetype": wc, "games": int(g),
+                        "wins": int(w), "players": int(p), "topPilot": int(top or 0)})
+    return out
+
+
 def player_wcs(tag: str, since: str | None = None, until: str | None = None) -> dict[str, int]:
     """`{win condition: games}` — what one player brings to their duels."""
     out: dict[str, int] = {}

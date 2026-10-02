@@ -2129,32 +2129,47 @@ under 10 ms warm.
 
 ## Coach Assist (`coach.py`)
 
-**DECKS AROUND THE CARDS THE READER NAMES (2026-10-02, `coach_choice.py`, admin-only in the
-client).** `want=<up to 4 card keys>` on `/api/analytics/coach/suggest` returns `coach.chosen(...)`
-instead of the suggestion — only that list, on the same tags, windows and played decks. No new
-route. Unknown keys are dropped and echoed (`dropped`), never a 400.
+**DECKS AROUND THE CARDS THE READER NAMES (2026-10-02, `coach_choice.py` + `deck_architect.py`,
+admin-only in the client).** `want=<up to 4 card keys>` on `/api/analytics/coach/suggest` returns
+`coach.chosen(...)` instead of the suggestion — only that list, on the same tags, windows and played
+decks. No new route. Unknown keys are dropped and echoed (`dropped`), never a 400.
 
-- **Rules** (`coach_choice.py`, pure): `valid_want`, `holds`, `legal`, `forced` (a real deck one
-  named card short + the like-for-like swap at least `FORCED_MIN_PAIRS` 20 real deck pairs make),
-  `shortlist` (`FINALISTS` 20, `QUOTA` yours 4 / duel 8 / meta 5 / built 3), `order` (win chance,
-  duel proof worth `DUEL_BAND` 3 points), `arrange` (real decks first, at most `BUILT_SLOTS` 2
-  built ones after them, the player's own deck always kept), `pick` (near-copies fold).
-- **Wiring** (`coach.chosen`): pools = `_own_decks` (duel history + `duel_index.player_decks` +
-  `player_report`), `_DuelContext.catalogue`, `deck_counter.seeds()`; event decks dropped
-  (`deck_evidence`); a stranger's list must field three special slots and pass the harmony
-  checklist. Every candidate is scored by the fast duel model, the shortlist by `_combined` (the
-  brain behind "Play this", extracted as `_brain_ctx`), with `_expected` as the answer when no
-  model is trained. `_duel_projection` (extracted from `_duel_merge`) gives each row its duel
-  figures. `_build_for_duel(..., keep=<named cards>, keep_win_conditions=True)` then improves the
-  rows SHOWN; its result is attached to the row it changes as `improve`.
-- **Payload**: `want`, `dropped`, `spent`, `reason` (`no_cards` / `spent` / `none`), `counts` per
-  source, `engine`, `decks[]` with `source`, `win`, `vs[]` (per opponent deck), `fused`, `duel`,
-  `duelRecord`, `players`, `yours`, `familiar`, `swaps`/`seedName` (built), `improve`.
-- **Measured live**: ~8 s cold, 0.7-3 s after; the plain suggestion is unchanged (2.5 s warm).
-- **Tests**: `test_coach_choice.py`, 85 checks, no database — the rules against literals and the
-  wiring with every reader replaced, on real card keys so the structural checks are the real ones.
-- **Deployed** 2026-10-02 04:07 UTC; rollback `{coach,app}.py.bak-20261002-040707-prechoice` and
-  remove `coach_choice.py`.
+- **REBUILT THE DAY IT SHIPPED.** The first cut's built decks were a one-card substitution into a
+  real deck (`coach_choice.forced`, deleted), and its shortlist rated the quick model's favourites
+  so the most duel-played list was never rated. Both reported by the account holder with the answer
+  pasted back.
+- **The builder** (`deck_architect.py`, pure): `shells` (real lists grouped at `SHELL_OVERLAP` 5,
+  `SHELL_MIN_WEIGHT` 30 and `SHELL_MIN_DECKS` 3 distinct lists, `PILOT_CAP` 10 games a pilot),
+  `core_of` (`CORE_SHARE` 0.7, `CORE_MAX` 7), `flex_pool` (`FLEX_POOL` 10 at `FLEX_MIN_SHARE` 0.05),
+  `assemble` (every fill of the open slots, `value = model win % + PRIOR_POINTS 10 x mean share`,
+  gated by the caller's `allow`), `build` (each shell's best fill before any second, `LIMIT` 8).
+- **Its evidence** is `duel_index.decks_holding(cards)`: every list in the `deck` table holding the
+  cards (2+ games), not the catalogue — Graveyard 2,501 lists against 148. One LIKE on the longest
+  key, membership checked on the split key (`%giant%` also matches royal-giant). ~0.05-0.1 s.
+  Vetted ladder seeds and the player's own decks holding the cards join the corpus with a fixed
+  weight (`CORPUS_META_WEIGHT`, `CORPUS_OWN_WEIGHT` + plays up to `CORPUS_OWN_CAP`).
+- **Rules** (`coach_choice.py`, pure): `valid_want`, `holds`, `legal`, `shortlist` (`QUOTA` yours 4 /
+  duel 10 / meta 4 / built 8; in `EVIDENCE_FIRST` sources half the quota is the most-played lists;
+  `pin` for a real list the builder arrived at), `thin` (a duel list under `PROVEN_GAMES` 30),
+  `order` (unrated last, thin after proven, win chance with `DUEL_BAND` 3 for duel proof),
+  `arrange` (`SHOW` duel 4 / yours 2 / meta 2 / built 3; sections claim in the order of trust, shown
+  duel first; one build per shell first; each row gets `section`).
+- **Wiring** (`coach.chosen`): pools = `_own_decks`, `_DuelContext.catalogue`, `deck_counter.seeds()`;
+  event decks dropped; a stranger's list must field three special slots and pass the harmony
+  checklist. `_brain_ctx` first (the builder scores with the duel model and the player's levels),
+  then the architect, then `shortlist`, `_combined` on the shortlist (`_expected` with no model),
+  `_duel_projection` for each row's duel figures, `arrange`, and `_build_for_duel(keep=,
+  keep_win_conditions=True)` on the rows shown, attached as `improve`.
+- **Payload**: `want`, `dropped`, `spent`, `reason` (`no_cards` / `spent` / `none`), `counts`,
+  `corpus {decks, games}`, `engine`, `decks[]` with `section`, `source`, `plays`, `win`, `vs[]`,
+  `fused`, `duel`, `duelRecord`, `players`, `yours`, `familiar`, `architect {shell, core, flex,
+  tuned, nearest}`, `real [games, wins, players]`, `improve`.
+- **Measured live**: ~8 s cold, 1-3 s after; the plain suggestion is unchanged.
+- **Tests**: `test_deck_architect.py` 51, `test_coach_choice.py` 77, `test_duel_index.py` +8 (68),
+  none needing the bot's database.
+- **Deployed** 2026-10-02 04:52 UTC; rollback `{coach,coach_choice,duel_index}.py.bak-20261002-
+  045206-prearchitect` and remove `deck_architect.py` (the first cut's own rollback is
+  `{coach,app}.py.bak-20261002-040707-prechoice`).
 
 **THE FUSED RATE AND THE DUEL BRAIN, FROM TEAM ANALYSIS (2026-09-27, `93e45e2`).** `_Rates`
 wraps `team_analysis._FusionContext` over a `_DuelContext` (soft import; off =

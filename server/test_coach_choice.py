@@ -1,17 +1,17 @@
-"""test_coach_choice.py — decks built around the cards the reader names.
+"""test_coach_choice.py — decks around the cards the reader names.
 
     python server/test_coach_choice.py
 
 No database. The rules (`coach_choice.py`) are pure and tested against
 literals; the wiring (`coach.chosen`) is driven with every reader replaced, on
-real card keys so the structural checks it calls are the real ones.
+real card keys so the structural checks it calls are the real ones. The
+builder itself is tested in `test_deck_architect.py`.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-import types
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import coach  # noqa: E402
@@ -35,16 +35,21 @@ def key(cards):
     return ",".join(sorted(cards))
 
 
-HOG = ["hog-rider", "musketeer", "cannon", "fireball", "the-log", "ice-spirit", "skeletons", "ice-golem"]
+HOG7 = ["hog-rider", "musketeer", "cannon", "fireball", "the-log", "ice-spirit", "skeletons"]
+HOG = HOG7 + ["ice-golem"]
+HOG_K = HOG7 + ["knight"]
+HOG_V = HOG7 + ["valkyrie"]
 HOG_EQ = ["hog-rider", "firecracker", "tesla", "earthquake", "the-log", "ice-spirit", "skeletons", "valkyrie"]
 GOLEM = ["golem", "night-witch", "baby-dragon", "lightning", "tornado", "lumberjack", "mega-minion",
          "barbarian-barrel"]
 BAIT = ["goblin-barrel", "princess", "knight", "rocket", "goblin-gang", "inferno-tower", "ice-spirit",
         "the-log"]
-RAM = ["ram-rider", "bandit", "pekka", "electro-wizard", "magic-archer", "zap", "poison", "royal-ghost"]
-RAMHOG = ["hog-rider" if c == "ram-rider" else c for c in RAM]
 MINER = ["miner", "poison", "wall-breakers", "knight", "bats", "spear-goblins", "bomb-tower", "the-log"]
-KNOWN = set(HOG + HOG_EQ + GOLEM + BAIT + RAM + MINER)
+CAT_HOG = ["hog-rider", "executioner", "tornado", "rocket", "goblins", "mini-pekka", "bats",
+           "barbarian-barrel"]
+CAT_THIN = ["hog-rider", "firecracker", "mighty-miner", "earthquake", "goblins", "bomb-tower",
+            "electro-spirit", "barbarian-barrel"]
+KNOWN = set(HOG + HOG_EQ + GOLEM + BAIT + MINER + ["pekka", "bandit", "x-bow"])
 
 
 # ── What the reader named ───────────────────────────────────────────────────
@@ -71,91 +76,63 @@ check("seven cards, or a repeated card, is not a deck",
       not cc.holds(HOG[:7], ["hog-rider"]) and not cc.holds(HOG[:7] + ["hog-rider"], ["hog-rider"]))
 check("a deck sharing a spent card is illegal; one sharing none is legal",
       not cc.legal(HOG, {"fireball"}) and cc.legal(HOG, {"zap"}) and cc.legal(HOG, set()))
-check("missing lists the named cards a deck lacks, in the order named",
-      cc.missing(RAM, ["hog-rider", "bandit", "golem"]) == ["hog-rider", "golem"])
-
-
-# ── A real deck one card short, and the swap people make ────────────────────
-print("\nbringing a named card into a real deck")
-
-G = {"ram-rider": [["battle-ram", 0.4, 300], ["hog-rider", 0.3, 120]],
-     "zap": [["the-log", 0.5, 900], ["hog-rider", 0.01, 30]],
-     "bandit": [["royal-ghost", 0.2, 50]]}
-f = cc.forced(RAM, ["hog-rider"], G)
-check("the card real players trade for it gives way (Ram Rider -> Hog Rider)",
-      f and f[0]["swaps"] == [{"out": "ram-rider", "in": "hog-rider", "pairs": 120}]
-      and set(f[0]["cards"]) == set(RAMHOG), str(f[:1]))
-check("the best swap comes first, by the graph's own score",
-      [x["swaps"][0]["out"] for x in f] == ["ram-rider", "zap"], str(f))
-check("a built deck is still eight distinct cards holding the named one",
-      all(cc.holds(x["cards"], ["hog-rider"]) for x in f))
-check("at most FORCED_PER_DECK ways per deck",
-      len(cc.forced(RAM, ["hog-rider"], {c: [["hog-rider", 0.1, 50]] for c in RAM})) == cc.FORCED_PER_DECK)
-f2 = cc.forced(RAM, ["hog-rider", "bandit"], {"bandit": [["hog-rider", 0.9, 999]],
-                                             "zap": [["hog-rider", 0.1, 40]]})
-check("a NAMED card never leaves, however good the swap looks",
-      f2 and [x["swaps"][0]["out"] for x in f2] == ["zap"], str(f2))
-check("a deck that already holds every named card is not rebuilt",
-      cc.forced(RAMHOG, ["hog-rider"], G) == [])
-check("two named cards short is out of reach — one human swap, not two",
-      cc.forced(RAM, ["hog-rider", "golem"], G) == [] and cc.MAX_FORCED == 1)
-check("a named card already spent this duel is never swapped in",
-      cc.forced(RAM, ["hog-rider"], G, used={"hog-rider"}) == [])
-check("a swap nobody makes is not made", cc.forced(RAM, ["golem"], G) == [])
-check("no graph, no built decks", cc.forced(RAM, ["hog-rider"], None) == [])
-deep = {"ram-rider": [[f"x{i}", 0.9, 9] for i in range(cc.FORCED_PER_CARD)] + [["hog-rider", 0.1, 9]]}
-check("only a card's leading substitutes count (FORCED_PER_CARD)",
-      cc.forced(RAM, ["hog-rider"], deep) == [])
-thin = {"ram-rider": [["hog-rider", 0.9, cc.FORCED_MIN_PAIRS - 1]]}
-check("a swap too few real deck pairs make is not made (FORCED_MIN_PAIRS)",
-      cc.forced(RAM, ["hog-rider"], thin) == []
-      and len(cc.forced(RAM, ["hog-rider"], {"ram-rider": [["hog-rider", 0.9, cc.FORCED_MIN_PAIRS]]})) == 1)
-ROLE = {"hog-rider": "wincon", "ram-rider": "wincon", "zap": "spell", "poison": "spell"}
-role = lambda c: ROLE.get(c, "troop")
-fr = cc.forced(RAM, ["hog-rider"], G, role=role, min_pairs=1)
-check("like for like: a win condition takes a win condition's place, never a spell's",
-      [x["swaps"][0]["out"] for x in fr] == ["ram-rider"], str(fr))
-check("…and with no win condition to give way, nothing is built",
-      cc.forced(RAM, ["hog-rider"], {"zap": [["hog-rider", 0.9, 500]]}, role=role) == [])
+check("the substitution path is gone: no `forced`, no one-card swap into a stranger's deck",
+      not hasattr(cc, "forced") and not hasattr(cc, "FORCED_MIN_PAIRS"))
 
 
 # ── Which lists the combined brain rates ────────────────────────────────────
 print("\nthe shortlist")
 
 
-def cand(n, source, fast=None, plays=0):
+def cand(n, source, fast=None, plays=0, **kw):
     return {"cards": [f"{source}{n}-{i}" for i in range(8)], "source": source,
-            "fast": fast, "plays": plays}
+            "fast": fast, "plays": plays, **kw}
 
 
-many = ([cand(i, "yours", 50 + i) for i in range(6)] + [cand(i, "duel", 60 + i) for i in range(20)]
+many = ([cand(i, "yours", 50 + i) for i in range(6)]
+        + [cand(i, "duel", 60 + i, plays=1000 - 10 * i) for i in range(30)]
         + [cand(i, "meta", 55 + i) for i in range(20)] + [cand(i, "built", 58 + i) for i in range(20)])
 sl = cc.shortlist(many)
 per = {s: sum(1 for c in sl if c["source"] == s) for s in cc.SOURCES}
 check("never more than FINALISTS", len(sl) == cc.FINALISTS == sum(cc.QUOTA.values()), str(len(sl)))
 check("each source gets its quota when it can fill it", per == cc.QUOTA, str(per))
-check("within a source the quick model's best come first",
-      [c["fast"] for c in sl if c["source"] == "duel"] == [79 - i for i in range(cc.QUOTA["duel"])])
-check("duel decks hold the largest share of the shortlist",
-      cc.QUOTA["duel"] == max(cc.QUOTA.values()))
-only_meta = [cand(i, "meta", 50 + i) for i in range(30)]
+check("duel decks hold the largest share of the shortlist", cc.QUOTA["duel"] == max(cc.QUOTA.values()))
+duel = [c for c in sl if c["source"] == "duel"]
+most_played = sorted(duel, key=lambda c: -c["plays"])[:cc.QUOTA["duel"] // 2]
+check("HALF the duel lists rated are simply the most duel-played",
+      [c["plays"] for c in most_played] == [1000 - 10 * i for i in range(cc.QUOTA["duel"] // 2)],
+      str([c["plays"] for c in most_played]))
+check("…and the other half are the quick model's favourites",
+      sorted((c["fast"] for c in duel), reverse=True)[:cc.QUOTA["duel"] // 2]
+      == [89 - i for i in range(cc.QUOTA["duel"] // 2)], str(sorted(c["fast"] for c in duel)))
+# The reported fault: 148 lists, the most-played (1,348 duel games) scored low
+# by the quick model and was never rated.
+field = [cand(i, "duel", 70 - i * 0.1, plays=14) for i in range(147)] + [cand("big", "duel", 20.0, plays=1348)]
+check("the most duel-played list is ALWAYS rated, however the quick model scores it",
+      any(c["plays"] == 1348 for c in cc.shortlist(field)))
+check("a source that is not evidence-first is by the quick model alone",
+      [c["fast"] for c in sl if c["source"] == "meta"] == [74, 73, 72, 71] and "meta" not in cc.EVIDENCE_FIRST)
+only_meta = [cand(i, "meta", 50 + i) for i in range(40)]
 check("a request only one source can answer still gets a full shortlist",
       len(cc.shortlist(only_meta)) == cc.FINALISTS)
-nofast = [cand(1, "duel", None, plays=5), cand(2, "duel", None, plays=90)]
+nofast = [cand(1, "meta", None, plays=5), cand(2, "meta", None, plays=90)]
 check("with no model the most-played lead", cc.shortlist(nofast)[0]["plays"] == 90)
 dup = [dict(cand(1, "yours", 40), cards=HOG), dict(cand(1, "duel", 70), cards=list(reversed(HOG)))]
 got = cc.shortlist(dup)
 check("one deck in two sources is rated once, as the more trusted source",
       len(got) == 1 and got[0]["source"] == "yours", str(got))
+pinned = [cand(i, "meta", 90 - i) for i in range(10)] + [cand("p", "meta", 1.0, pin=True)]
+check("a pinned list is rated whatever its rank (the builder's own pick)",
+      any(c.get("pin") for c in cc.shortlist(pinned, quota={"meta": 3}, limit=3)))
 
 
-# ── The order: win chance, with duel proof breaking near-ties ───────────────
+# ── The order ───────────────────────────────────────────────────────────────
 print("\nthe order")
 
 
-def row(name, win, strong=False, source="meta", plays=0):
+def row(name, win, strong=False, source="meta", plays=0, **kw):
     return {"cards": [f"{name}{i}" for i in range(8)], "win": win, "source": source, "plays": plays,
-            "duel": {"strong": strong} if strong is not None else None, "name": name}
+            "duel": {"strong": strong} if strong is not None else None, "name": name, **kw}
 
 
 names = lambda rows: [r["name"] for r in rows]
@@ -165,56 +142,61 @@ check("a duel-proven deck leads one within the band",
 check("but not one clearly better — proof breaks near-ties, it does not overrule",
       names(cc.order([row("plain", 60.0), row("proven", 56.0, strong=True)])) == ["plain", "proven"])
 check("the band is three points, Coach Assist's lead margin", cc.DUEL_BAND == coach.LEAD_MARGIN == 3.0)
-check("exactly on the band, proof wins the tie",
-      names(cc.order([row("plain", 59.0), row("proven", 56.0, strong=True)])) == ["proven", "plain"])
 check("an unrated deck comes after every rated one",
       names(cc.order([row("none", None), row("low", 41.0)])) == ["low", "none"])
-check("level on everything else, the player's own deck leads",
-      names(cc.order([row("meta", 55.0), row("mine", 55.0, source="yours")])) == ["mine", "meta"])
 check("a row with no duel figures at all is simply not proven",
       names(cc.order([row("nofig", 55.0, strong=None), row("p", 54.0, strong=True)])) == ["p", "nofig"])
+# Evidence before size: the reported list led with a 14-game deck.
+thin_hi = row("thin", 60.0, source="duel", plays=14)
+solid_lo = row("solid", 46.0, source="duel", plays=321)
+check("a THIN duel list (under 30 duel games) ranks after every proven one, whatever it rates",
+      names(cc.order([thin_hi, solid_lo])) == ["solid", "thin"] and cc.PROVEN_GAMES == 30)
+check("exactly at the floor a list is proven", not cc.thin(row("x", 50.0, source="duel", plays=30))
+      and cc.thin(row("y", 50.0, source="duel", plays=29)))
+check("only duel lists can be thin — the player's own deck is not here for its duel record",
+      not cc.thin(row("m", 50.0, source="yours", plays=1)) and not cc.thin(row("l", 50.0, source="meta", plays=0)))
 a = cc.order([row("x", 50.0), row("y", 50.0)])
 check("identical evidence orders identically", names(a) == names(cc.order(list(reversed(a)))))
 
-near = [{"cards": HOG, "win": 60.0}, {"cards": HOG[:7] + ["zap"], "win": 59.0},
-        {"cards": GOLEM, "win": 50.0}]
-check("near-copies are one answer", [r["cards"] for r in cc.pick(near, ["hog-rider"])] == [HOG, GOLEM])
-check("never more than SHOW decks",
-      len(cc.pick([row(str(i), 50.0) for i in range(20)], ["a"])) == cc.SHOW)
+
+# ── What is shown ───────────────────────────────────────────────────────────
+print("\nwhat is shown: duel decks, then yours, the meta, then built")
+
+duels = [row(f"d{i}", 60.0 - i, source="duel", plays=100) for i in range(7)]
+mine = [row(f"y{i}", 40.0 - i, source="yours", plays=5) for i in range(3)]
+meta = [row(f"m{i}", 70.0 - i, source="meta", plays=900) for i in range(4)]
+made = [row(f"b{i}", 80.0 - i, source="built", architect={"shell": {"rank": i}}) for i in range(5)]
+shown = cc.arrange(duels + mine + meta + made, ["x"])
+check("sections come in the order duel, yours, meta, built",
+      [r["section"] for r in shown] == ["duel"] * 4 + ["yours"] * 2 + ["meta"] * 2 + ["built"] * 3,
+      str([r["section"] for r in shown]))
+check("duel decks lead even when a ladder deck rates higher (70 vs 60)",
+      shown[0]["name"] == "d0" and cc.SHOW["duel"] == max(cc.SHOW.values()))
+check("each section keeps its own order", names(shown) ==
+      ["d0", "d1", "d2", "d3", "y0", "y1", "m0", "m1", "b0", "b1", "b2"], str(names(shown)))
+check("a built deck never outranks a real one — it has its own section", cc.SECTIONS[-1] == "built")
+twin = dict(row("twin", 65.0, source="duel", plays=500), cards=mine[0]["cards"][:7] + ["zz"])
+kept = cc.arrange([twin] + duels + mine, ["x"])
+check("a duel list one card from the player's own deck: THEIR deck stands for both",
+      "twin" not in names(kept) and "y0" in names(kept), str(names(kept)))
+same = dict(row("same", 90.0, source="built", architect={"shell": {"rank": 0}}), cards=list(duels[0]["cards"]))
+check("a built deck that IS a deck already shown is not shown twice",
+      "same" not in names(cc.arrange(duels + [same], ["x"])))
+close = dict(row("close", 50.0, source="built", architect={"shell": {"rank": 0}}),
+             cards=duels[0]["cards"][:7] + ["zz"])
+check("…but one card from a real list is what a build is, and it stays",
+      "close" in names(cc.arrange(duels + [close], ["x"])))
+one_shell = [row(f"s{i}", 80.0 - i, source="built", architect={"shell": {"rank": 0}}) for i in range(3)]
+other = row("o", 50.0, source="built", architect={"shell": {"rank": 1}})
+picked = names(cc.arrange(one_shell + [other], ["x"]))
+check("one build per way of playing the card before any gets a second",
+      "o" in picked and picked[:2] == ["s0", "s1"] and len(picked) == 3, str(picked))
+real_pick = row("rp", 30.0, source="duel", plays=40, architect={"shell": {"rank": 2}})
+lost = cc.arrange(duels + [real_pick], ["x"])
+check("a real list the builder arrived at that missed its own section is shown with the builds",
+      [r["section"] for r in lost if r["name"] == "rp"] == ["built"], str(names(lost)))
 check("with four cards named, decks one card apart are still the same answer",
       cc.same_at(["a", "b", "c", "d"]) == 7 and cc.same_at(["a"]) == 6)
-four = [{"cards": HOG, "win": 60.0}, {"cards": HOG[:6] + ["zap", "bats"], "win": 59.0}]
-check("…and decks two apart are different answers",
-      len(cc.pick(four, HOG[:4])) == 2 and len(cc.pick(four, HOG[:1])) == 1)
-
-
-# ── What is shown: real decks lead, built decks follow ──────────────────────
-print("\nreal decks lead, built decks follow")
-
-real = [row(f"r{i}", 55.0 - i) for i in range(8)]
-made = [row(f"b{i}", 70.0 - i, source="built") for i in range(5)]
-shown = cc.arrange(real + made, ["x"])
-check("a built deck never outranks a real one, whatever its inherited rate",
-      [r["source"] for r in shown] == ["meta"] * 4 + ["built"] * 2, str([r["name"] for r in shown]))
-check("the real ones keep their own order, and so do the built",
-      names(shown) == ["r0", "r1", "r2", "r3", "b0", "b1"])
-check("built decks take BUILT_SLOTS while real ones are available", cc.BUILT_SLOTS == 2)
-few = cc.arrange(real[:1] + made, ["x"])
-check("when real decks run out, built ones fill the list",
-      names(few) == ["r0", "b0", "b1", "b2", "b3", "b4"], str(names(few)))
-check("with no built decks the list is all real", names(cc.arrange(real, ["x"])) == [f"r{i}" for i in range(6)])
-check("with only built decks they are the list", len(cc.arrange(made, ["x"])) == 5)
-copy = dict(row("copy", 80.0, source="built"), cards=real[0]["cards"][:7] + ["zz"])
-check("a built near-copy of a real deck already shown is not a second answer",
-      "copy" not in names(cc.arrange(real + [copy], ["x"])))
-own = row("mine", 40.0, source="yours")
-kept = cc.arrange(real + [own] + made, ["x"])
-check("the player's own deck holding the cards is always shown, in rank order",
-      names(kept) == ["r0", "r1", "r2", "mine", "b0", "b1"], str(names(kept)))
-unrated = row("mine", None, source="yours")
-check("…unless it could not be rated at all",
-      "mine" not in names(cc.arrange(real + [unrated] + made, ["x"])))
-check("never more than SHOW in total", len(cc.arrange(real + made + [own], ["x"])) == cc.SHOW)
 
 
 # ── The wiring: `coach.chosen`, every reader replaced ───────────────────────
@@ -233,17 +215,16 @@ class FakeDuel:
 
 
 class FakeRates:
-    """`_Rates`' surface: a fused rate keyed on my deck's first card."""
+    """`_Rates`' surface: a fused rate keyed on my deck."""
     table: dict = {}
     duel_ctx = None
 
     def __init__(self, snap):
         self.on = True
         self.duel = FakeRates.duel_ctx
-        self.prepared = []
 
     def prepare(self, mine, theirs):
-        self.prepared.append((len(list(mine)), len(list(theirs))))
+        pass
 
     def rate(self, mine, theirs=None, archetype=None):
         r = FakeRates.table.get(key(mine))
@@ -258,21 +239,36 @@ OPP = {"decks": [{"cards": GOLEM, "prob": 0.6, "deckName": "Golem Night Witch", 
                  {"cards": BAIT, "prob": 0.4, "deckName": "Log Bait", "archetype": "bait"}],
        "source": "opponent-history", "nCandidates": 2}
 
+
+def cat(cards, games, wins, players):
+    return {"key": key(cards), "cards": sorted(cards), "archetype": "hog", "games": games,
+            "wins": wins, "players": players, "records": {}}
+
+
+def lst(cards, games, wins, players=None):
+    return {"key": key(cards), "cards": sorted(cards), "archetype": "hog", "games": games,
+            "wins": wins, "players": games if players is None else players, "topPilot": 1}
+
+
+# Every duel list holding Hog Rider: the 2.6 shell (a seven-card core and one
+# slot its pilots vary), and two catalogue lists of other shells.
+DUEL_LISTS = [lst(HOG, 300, 160), lst(HOG_K, 100, 50), lst(HOG_V, 60, 30),
+              lst(CAT_HOG, 140, 80, 31), lst(CAT_THIN, 14, 10, 8)]
+
 saved = {n: getattr(coach, n) for n in
          ("_history", "opponent_next", "_Rates", "_own_decks", "_archetype", "_brain_ctx",
-          "_drop_event_decks", "_synergy_gate", "_duel_projection", "_build_for_duel")}
+          "_drop_event_decks", "_synergy_gate", "_duel_projection", "_build_for_duel", "_duel_lists")}
 saved_seeds, saved_snap, saved_seater = coach.counter.seeds, coach.counter._snap, coach.counter.seater
-saved_sg = sys.modules.get("swap_graph")
 built_calls: list = []
+asked_lists: list = []
 try:
     coach._history = lambda tag, since=None, until=None: {"allDecks": [], "series": [],
                                                           "marks": lambda c: {}, "arch": lambda c: ""}
     coach.opponent_next = lambda tag, played, hist=None: OPP
     coach._Rates = FakeRates
-    coach._archetype = lambda cards: {"hog-rider": "hog", "golem": "golem", "ram-rider": "ram",
-                                      "miner": "miner", "goblin-barrel": "bait"}.get(
-        next((c for c in cards if c in ("hog-rider", "golem", "ram-rider", "miner", "goblin-barrel")), ""),
-        "other")
+    coach._archetype = lambda cards: next((a for c, a in (("hog-rider", "hog"), ("golem", "golem"),
+                                                          ("miner", "miner"), ("goblin-barrel", "bait"))
+                                           if c in cards), "other")
     coach._brain_ctx = lambda opp, me, them: None          # the fused rate answers
     coach._drop_event_decks = lambda decks: (list(decks), 0)
     coach._synergy_gate = lambda: None
@@ -281,23 +277,19 @@ try:
     coach.counter.seater = lambda: (lambda cards: (list(cards), {}, True))
     coach.counter.seeds = lambda: {"hog": [{"hash": key(HOG_EQ), "cards": sorted(HOG_EQ), "games": 900,
                                            "archetypes": {}}],
-                                  "ram": [{"hash": key(RAM), "cards": sorted(RAM), "games": 700,
-                                           "archetypes": {}}],
                                   "miner": [{"hash": key(MINER), "cards": sorted(MINER), "games": 500,
                                              "archetypes": {}}]}
     coach._own_decks = lambda tag, since, until, hist, rates: (
         {key(HOG): {"cards": HOG, "plays": 40}}, set(HOG))
-    fake_sg = types.ModuleType("swap_graph")
-    fake_sg.load = lambda: {"graph": {"ram-rider": [["hog-rider", 0.3, 120]]}, "decks": 10}
-    sys.modules["swap_graph"] = fake_sg
 
-    CAT_HOG = ["hog-rider", "executioner", "tornado", "rocket", "goblins", "mini-pekka", "bats",
-               "barbarian-barrel"]
-    FakeRates.duel_ctx = FakeDuel(
-        [{"key": key(CAT_HOG), "cards": sorted(CAT_HOG), "archetype": "hog", "games": 140, "wins": 80,
-          "players": 31, "records": {}}], strong=[CAT_HOG])
-    FakeRates.table = {key(HOG): 58.0, key(HOG_EQ): 54.0, key(CAT_HOG): 56.5, key(RAMHOG): 51.0,
-                       key(MINER): 70.0}
+    def duel_lists(cards):
+        asked_lists.append(list(cards))
+        return [dict(d) for d in DUEL_LISTS if set(cards) <= set(d["cards"])]
+
+    coach._duel_lists = duel_lists
+    FakeRates.duel_ctx = FakeDuel([cat(CAT_HOG, 140, 80, 31), cat(CAT_THIN, 14, 10, 8)], strong=[CAT_HOG])
+    FakeRates.table = {key(HOG): 58.0, key(HOG_EQ): 54.0, key(CAT_HOG): 46.0, key(CAT_THIN): 66.0,
+                       key(HOG_V): 51.0, key(HOG_K): 49.0, key(MINER): 70.0}
 
     r = coach.chosen("#ME", "#OPP", [], [], ["hog-rider"])
     decks = r["decks"]
@@ -305,27 +297,33 @@ try:
           decks and all("hog-rider" in d["cards"] for d in decks), str([d["cards"][:2] for d in decks]))
     check("a deck without it is never offered, however good (Miner 70%)",
           all("miner" not in d["cards"] for d in decks))
-    src = {d["source"]: d for d in decks}
-    check("it draws on all four sources: yours, duel, meta and built",
-          set(src) == set(cc.SOURCES), str(sorted(src)))
-    check("the duel-proven deck leads the player's own within the band (56.5 vs 58.0)",
-          decks[0]["source"] == "duel" and decks[1]["source"] == "yours",
-          str([(d["source"], d["win"]) for d in decks]))
+    check("duel decks come first, then the player's own, then the meta",
+          [d["section"] for d in decks] == ["duel", "duel", "yours", "meta"], str([d["section"] for d in decks]))
+    check("the proven duel list (140 games, 46%) leads the thin one (14 games, 66%)",
+          [d["plays"] for d in decks[:2]] == [140, 14] and decks[0]["win"] < decks[1]["win"],
+          str([(d["plays"], d["win"]) for d in decks[:2]]))
     check("each row carries its win chance and the matchup against EACH of their decks",
           all(d["win"] is not None and [v["name"] for v in d["vs"]] == ["Golem Night Witch", "Log Bait"]
               for d in decks), str(decks[0]["vs"]))
-    check("the duel deck carries its real duel record and pilots",
-          src["duel"]["duelRecord"] == [140, 80] and src["duel"]["players"] == 31)
-    check("the built deck names its swap and the real deck it came from",
-          src["built"]["swaps"] == [{"out": "ram-rider", "in": "hog-rider", "pairs": 120}]
-          and src["built"]["seedSource"] == "meta" and src["built"]["seedName"], str(src["built"]))
+    check("a duel deck carries its real duel record and pilots",
+          decks[0]["duelRecord"] == [140, 80] and decks[0]["players"] == 31)
+    check("the builder read EVERY duel list holding the card, not only the catalogue",
+          asked_lists == [["hog-rider"]] and r["corpus"] == {"decks": 5, "games": 614}, str(r.get("corpus")))
+    mine_row = next(d for d in decks if d["section"] == "yours")
+    ar = mine_row.get("architect")
+    check("with no model the shell's consensus build IS the player's own list — and says so on that row",
+          ar and ar["shell"]["decks"] == 3 and ar["tuned"] == [] and ar["nearest"]["shared"] == 8,
+          str(ar))
+    check("so nothing is listed twice: no separate built row for a deck already shown",
+          all(d["section"] != "built" for d in decks) and r["counts"]["built"] == 0)
     check("how much of each deck the player already plays is counted",
-          src["yours"]["familiar"] == 8 and src["meta"]["familiar"] < 8)
+          mine_row["familiar"] == 8 and decks[0]["familiar"] < 8)
     check("the counts say how many decks held the card, per source",
-          r["counts"] == {"yours": 1, "duel": 1, "meta": 1, "built": 1}, str(r["counts"]))
+          r["counts"] == {"yours": 1, "duel": 2, "meta": 1, "built": 0}, str(r["counts"]))
     check("with no trained model the engine is the fused rate, and says so",
           r["engine"] == "fused" and all(d["engine"] == "fused" for d in decks))
-    check("the request is echoed back", r["want"] == ["hog-rider"] and r["reason"] is None)
+    check("the request is echoed back", r["want"] == ["hog-rider"] and r["reason"] is None
+          and r["brain"] == cc.BRAIN)
 
     r = coach.chosen("#ME", "#OPP", [HOG], [GOLEM], ["hog-rider"])
     check("a named card already spent this duel is REPORTED and nothing is offered",
@@ -336,10 +334,8 @@ try:
     check("no deck offered shares a card with what has been played (their own Hog has Fireball)",
           r["decks"] and all(not (set(d["cards"]) & set(spent)) for d in r["decks"]),
           str([d["source"] for d in r["decks"]]))
-    check("…so the player's own deck is out and the stage is game 2",
+    check("…so the player's own deck is out, and the stage is game 2",
           "yours" not in {d["source"] for d in r["decks"]} and r["stage"] == 1)
-    check("…and the built deck that needed Zap's seed is out too (Ram has Zap)",
-          "built" not in {d["source"] for d in r["decks"]})
 
     r = coach.chosen("#ME", "#OPP", [], [], ["hog-rider", "earthquake"])
     check("two named cards: only decks holding BOTH",
@@ -347,8 +343,10 @@ try:
           str([d["cards"] for d in r["decks"]]))
 
     r = coach.chosen("#ME", "#OPP", [], [], ["golem", "hog-rider"])
-    check("cards no real deck holds together, and no single swap makes: none, with the reason",
-          r["decks"] == [] and r["reason"] == "none")
+    check("cards nobody plays together: nothing found, nothing built, and the reason",
+          r["decks"] == [] and r["reason"] == "none" and r["counts"]["built"] == 0)
+    check("…and the builder was NOT asked to force one of them into the other's decks",
+          asked_lists[-1] == ["golem", "hog-rider"], str(asked_lists[-1]))
 
     r = coach.chosen("#ME", "#OPP", [], [], ["nonsense"])
     check("only unknown cards named: nothing asked, the key echoed",
@@ -357,20 +355,22 @@ try:
     # An event deck is refused whoever played it.
     coach._drop_event_decks = lambda decks: ([d for d in decks if key(d["cards"]) != key(HOG_EQ)], 1)
     r = coach.chosen("#ME", "#OPP", [], [], ["hog-rider", "earthquake"])
-    check("an event deck is never offered", r["decks"] == [] and r["reason"] == "none", str(r["decks"]))
+    check("an event deck is never offered",
+          all(key(d["cards"]) != key(HOG_EQ) for d in r["decks"]), str([d["cards"] for d in r["decks"]]))
     coach._drop_event_decks = lambda decks: (list(decks), 0)
 
     # A structural hole: a meta list that cannot field three special slots.
     real_slots = coach.cd.fillable_slots
     coach.cd.fillable_slots = lambda cards: 2 if key(cards) == key(HOG_EQ) else real_slots(cards)
-    r = coach.chosen("#ME", "#OPP", [], [], ["hog-rider", "earthquake"])
+    r = coach.chosen("#ME", "#OPP", [], [], ["hog-rider", "tesla"])
     check("a stranger's deck that cannot field three special slots is not offered",
           r["decks"] == [], str([d["cards"] for d in r["decks"]]))
     coach.cd.fillable_slots = real_slots
 
-    # With a trained model: the combined brain rates, and the builder runs
-    # with the named cards KEPT.
-    ctx = {"model": {"weights": {}}, "decks": OPP["decks"],
+    # With a trained model: it fills the shell's open slot against THIS
+    # opponent, the combined brain rates, and the swap builder keeps the cards.
+    model = {"weights": {"p:valkyrie": 2.0}}
+    ctx = {"model": model, "decks": OPP["decks"],
            "kw": dict(my_def=None, opp_def=None, my_str=0.5, opp_str=0.5), "records": ((0, 0), (0, 0))}
     coach._brain_ctx = lambda opp, me, them: ctx
 
@@ -388,42 +388,51 @@ try:
 
     coach._build_for_duel = fake_build
     r = coach.chosen("#ME", "#OPP", [], [], ["hog-rider"])
+    built = [d for d in r["decks"] if d["section"] == "built"]
+    check("with a model Deckkies BUILDS: the shell's core, the open slot chosen for this opponent",
+          len(built) == 1 and set(built[0]["cards"]) == set(HOG_V) and built[0]["source"] == "built",
+          str([d["cards"] for d in built]))
+    ar = built[0]["architect"]
+    check("the build says what was core, what was chosen, and what the opponent changed",
+          set(ar["core"]) == set(HOG7) and ar["flex"] == ["valkyrie"] and ar["tuned"] == ["valkyrie"], str(ar))
+    check("…and which way of playing the card it rests on: its lists and duel games",
+          ar["shell"]["decks"] == 3 and ar["shell"]["games"] == 460 and ar["shell"]["wins"] == 240, str(ar["shell"]))
+    check("a build that HAS been fielded as listed carries that list's real duel record",
+          built[0]["real"] == [60, 30, 60] and ar["nearest"]["shared"] == 8, str(built[0].get("real")))
+    check("built decks come after every real one", [d["section"] for d in r["decks"]][-1] == "built"
+          and r["counts"]["built"] == 1)
     check("with a model the combined brain rates every row", r["engine"] == "combined"
           and all(d["engine"] in ("combined", "model") for d in r["decks"]), str(r["engine"]))
-    check("the deck builder is asked to keep the named cards, and each deck's win conditions",
+    check("the swap builder is asked to keep the named cards, and each deck's win conditions",
           built_calls and built_calls[-1]["keep"] == {"hog-rider"} and built_calls[-1]["wincons"] is True,
           str(built_calls[-1:]))
     check("it improves the decks SHOWN, at most CHOICE_IMPROVE_SEEDS of them",
           0 < len(built_calls[-1]["seeds"]) <= coach.CHOICE_IMPROVE_SEEDS
-          and {key(c) for c in built_calls[-1]["seeds"]} == {key(d["cards"]) for d in r["decks"]})
-    srcs = [d["source"] for d in r["decks"]]
-    check("real decks lead and built decks follow", srcs == sorted(srcs, key=lambda x: x == "built")
-          and "built" in srcs, str(srcs))
-    mine = next(d for d in r["decks"] if d["source"] == "yours")
-    imp = mine.get("improve")
-    check("the builder's change rides on the deck it changes: the swap, the new rate, the gain",
+          and {key(c) for c in built_calls[-1]["seeds"]} <= {key(d["cards"]) for d in r["decks"]})
+    mine_row = next(d for d in r["decks"] if d["source"] == "yours")
+    imp = mine_row.get("improve")
+    check("its change rides on the deck it changes: the swap, the new rate, the gain",
           imp and imp["win"] == 63.0 and imp["seedWin"] == 58.0 and imp["gain"] == 5.0
           and imp["swaps"] == [{"out": "cannon", "in": "tesla", "pairs": 800}]
           and "tesla" in imp["cards"] and "hog-rider" in imp["cards"], str(imp))
-    check("it carries its own matchup against each of their decks",
-          imp and [v["name"] for v in imp["vs"]] == ["Golem Night Witch", "Log Bait"])
-    check("a deck the builder did not change carries no improvement",
-          all("improve" not in d for d in r["decks"] if d is not mine) and r["improved"] == 1)
-    check("and it is not a second row — the list is still different decks",
-          all(len(set(x["cards"]) & set(y["cards"])) < 6
-              for i, x in enumerate(r["decks"]) for y in r["decks"][i + 1:]))
+    check("a deck the swap builder did not change carries no improvement",
+          all("improve" not in d for d in r["decks"] if d is not mine_row) and r["improved"] == 1)
+
+    # A build may not hold a card already spent, and a spent core card leaves the core.
+    r = coach.chosen("#ME", "#OPP", [["valkyrie", "zap", "arrows", "giant", "witch", "minions", "bomber",
+                                      "archers"]], [GOLEM], ["hog-rider"])
+    check("mid-duel, no build holds a card already played (Valkyrie is spent)",
+          all("valkyrie" not in d["cards"] for d in r["decks"]), str([d["cards"] for d in r["decks"]]))
 finally:
     for n, v in saved.items():
         setattr(coach, n, v)
     coach.counter.seeds, coach.counter._snap, coach.counter.seater = saved_seeds, saved_snap, saved_seater
-    if saved_sg is None:
-        sys.modules.pop("swap_graph", None)
-    else:
-        sys.modules["swap_graph"] = saved_sg
 
-# The real builder honours `keep`: a swap that removes a named card is refused.
-print("\nthe builder keeps the named cards")
+# The real swap builder honours `keep`: a swap that removes a named card is refused.
+print("\nthe swap builder keeps the named cards")
 try:
+    import types
+
     import deck_builder as dbl
     seen_allow: list = []
     real_build = dbl.build
