@@ -1403,3 +1403,39 @@
     font-size: 0.63rem;
   }
 }
+
+/* ── Build around your cards (2026-10-02) ───────────────────────────────── */
+
+/* The card picker and its button on one line; the picker's own bar wraps the
+   chosen cards, so the button stays beside the trigger rather than under a
+   row of chips. */
+.choiceBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.2rem 0 0.6rem;
+}
+
+/* The swap and the builder's change sit under the cards like the chip line
+   does (`.deckRowVs` places them); a little air above so three lines under
+   one deck do not read as one. */
+.deckRow [data-choice-swap],
+.deckRow [data-choice-improve] {
+  margin-top: 0.1rem;
+  row-gap: 0.25rem;
+}
+
+/* The source tag is two words ("duel deck"); in the 11rem name column it broke
+   across two lines inside its own pill. It keeps one line and the name wraps
+   around it instead. */
+.deckRow[data-choice] .deckName {
+  flex-wrap: wrap;
+  row-gap: 0.15rem;
+}
+
+.deckRow[data-choice] .fillTag,
+.deckRow[data-choice] .duelTag {
+  flex: none;
+  white-space: nowrap;
+}

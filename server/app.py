@@ -886,6 +886,19 @@ class Handler(BaseHTTPRequestHandler):
                 # `test_api_security.py` stays at 21 and there is no second
                 # file to hand-deploy. Same arrangement as the ops snapshot,
                 # which rides on `/coverage`.
+                # DECKS AROUND THE CARDS THE READER NAMES (2026-10-02). `want`
+                # is up to four card keys; the answer is `coach.chosen` — only
+                # that list, not the whole suggestion again — on the same tags,
+                # windows and played decks. A PARAMETER, NOT A ROUTE, for the
+                # same reason as `swaps` above: the route count stays put.
+                # Unknown keys are dropped and echoed, never a 400 (the card
+                # catalogue moves; see `coach_choice.valid_want`).
+                want = [c for c in (q.get("want") or [""])[0].split(",") if c.strip()]
+                if want:
+                    out = coach.chosen(me, opp, _decks(q, ("m1", "m2")),
+                                       _decks(q, ("o1", "o2")), want[:16],
+                                       my_since, my_until, opp_since, opp_until)
+                    return self._send(out)
                 swaps = (q.get("swaps") or [""])[0] in ("1", "true", "yes")
                 out = coach.suggest(me, opp, _decks(q, ("m1", "m2")),
                                     _decks(q, ("o1", "o2")),

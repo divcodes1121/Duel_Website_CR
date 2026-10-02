@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardArt } from './CardArt';
 import { drawnDeck } from '../../utils/deckSeating';
 import { duelChip, duelPickLabel, duelTitle } from '../../utils/duelFigures';
@@ -9,7 +9,12 @@ import {
   AnalyticsError,
   fetchCoachPrediction,
   fetchCoachSuggestion,
+  fetchCoachChosen,
+  COACH_CHOICE_MAX,
   fetchDrawnDeck,
+  type CoachChosen,
+  type CoachChoiceDeck,
+  type CoachChoiceSource,
   type CoachDeck,
   type CoachVs,
   type CoachHistory,
@@ -33,6 +38,7 @@ import { useHeldLoading } from '../../hooks/useHeldLoading';
 import { useReportRegistration } from '../../state/reportExport';
 import { isPaid, useAccess } from '../../state/gate';
 import { DAY_PRESETS } from '../../utils/datePresets';
+import { WinConFilter, filterCardName } from '../WinConFilter/WinConFilter';
 
 /* Coach Assist — two windows over `server/coach.py`.
  *
@@ -344,10 +350,12 @@ const KIND_TITLE: Record<string, string> = {
   meta: 'One of the most-played archetypes right now',
 };
 
-function VsChips({ vs, className }: { vs?: CoachVs[]; className?: string }) {
+function VsChips({ vs, className, label = 'Win rate against each of their archetypes' }: {
+  vs?: CoachVs[]; className?: string; label?: string;
+}) {
   if (!vs?.length) return null;
   return (
-    <ul className={`${styles.vsChips} ${className ?? ''}`} aria-label="Win rate against each of their archetypes">
+    <ul className={`${styles.vsChips} ${className ?? ''}`} aria-label={label}>
       {vs.map((v) => (
         <li
           key={v.archetype}
@@ -1434,6 +1442,302 @@ function TunerPanel({ tuner }: { tuner: DeckTuner }) {
 }
 
 
+/* ─────────────────────────────── decks around the cards the reader names */
+
+const CHOICE_SOURCE: Record<CoachChoiceSource, string> = {
+  yours: 'your deck',
+  duel: 'duel deck',
+  meta: 'meta deck',
+  built: 'built',
+};
+
+const CHOICE_ENGINE: Record<string, string> = {
+  combined: 'combined brain',
+  model: 'duel model',
+  fused: 'ladder+duel rate',
+  ladder: 'ladder rate',
+};
+
+/** What stands behind one deck, as counts: the player's own plays, its real
+ *  duel record, its ladder games, and how much of it they already play. */
+function choiceMeta(d: CoachChoiceDeck): string {
+  const parts: string[] = [];
+  if (d.yours) parts.push(`you played it ${d.yours.toLocaleString('en-US')}×`);
+  if (d.duelRecord) {
+    const [g, w] = d.duelRecord;
+    /* THE POPULATION'S record with this exact list, not the player's — said,
+       because beside "you played it 86×" a bare "660 duel games" reads as
+       theirs. */
+    const who = d.players ? ` by ${d.players.toLocaleString('en-US')} players` : '';
+    parts.push(`${g.toLocaleString('en-US')} duel games${who}, ${((100 * w) / Math.max(1, g)).toFixed(0)}% won`);
+  } else if (d.source === 'meta' && d.plays) {
+    parts.push(`${d.plays.toLocaleString('en-US')} ladder games`);
+  }
+  if (d.source !== 'yours' && d.familiar > 0) parts.push(`${d.familiar}/8 cards you play`);
+  return parts.join(' · ');
+}
+
+function choiceVs(vs: CoachChoiceDeck['vs']): CoachVs[] {
+  return vs.map((v, i) => ({ archetype: `${i}-${v.name}`, name: v.name, winRate: v.winRate, share: v.likelihood, kind: 'likely' }));
+}
+
+/** One deck holding the named cards: its win chance, the same figure against
+ *  each of their likely decks, what stands behind it, and — where the builder
+ *  found one — the change that raises it. */
+function ChoiceRow({ deck, rank }: { deck: CoachChoiceDeck; rank: number }) {
+  const meta = choiceMeta(deck);
+  const im = deck.improve;
+  return (
+    <li className={styles.deckRow} data-hue="blue" data-choice={deck.source}>
+      <span className={styles.rank}>{rank}</span>
+      <div className={styles.deckIdent}>
+        <span className={styles.deckName}>
+          {deck.deckName || deck.archetype}
+          <span className={styles.fillTag}>{CHOICE_SOURCE[deck.source]}</span>
+          {deck.duel?.strong && <span className={styles.duelTag}>Duel proven</span>}
+        </span>
+        {meta && <span className={styles.deckMeta}>{meta}</span>}
+        {deck.duel && (
+          <span className={styles.duelRate} data-strong={deck.duel.strong || undefined} title={duelTitle(deck.duel)}>
+            {duelChip(deck.duel)}
+          </span>
+        )}
+      </div>
+      <Strip cards={deck.cards} art={deck.art} inferred={deck.inferredArt} filled={deck.artFilled}
+             name={deck.deckName} size="sm" />
+      {deck.win !== null ? (
+        <div
+          className={styles.figure}
+          title={[
+            deck.engine ? CHOICE_ENGINE[deck.engine] : '',
+            deck.fused !== null && deck.engine !== 'fused' ? `ladder+duel rate ${deck.fused.toFixed(1)}%` : '',
+          ].filter(Boolean).join(' · ')}
+        >
+          <span className={styles.figureValue} data-good={deck.win >= 50 ? '' : undefined}>
+            {deck.win.toFixed(1)}%
+          </span>
+          <span className={styles.figureLabel}>win chance</span>
+        </div>
+      ) : (
+        <div className={styles.figure}>
+          <span className={styles.figureValue}>—</span>
+          <span className={styles.figureLabel}>no evidence</span>
+        </div>
+      )}
+      <VsChips vs={choiceVs(deck.vs)} className={styles.deckRowVs}
+               label="Win chance against each of their likely decks" />
+      {/* A BUILT deck says what was changed and from which real deck: the
+          swap in card art, and how many real deck pairs differ by it. */}
+      {deck.source === 'built' && !!deck.swaps?.length && (
+        <div className={`${styles.deckRowVs} ${styles.swapRow}`} data-choice-swap="">
+          {deck.swaps.map((s) => (
+            <span key={s.out + s.in} className={styles.swapRow}>
+              <span className={styles.swapSide}><CardArt card={s.out} /></span>
+              <span className={styles.swapArrow} aria-label="becomes">→</span>
+              <span className={styles.swapSide}><CardArt card={s.in} variant={deck.art[s.in]} /></span>
+              <span className={styles.blockNote}>{s.pairs.toLocaleString('en-US')} real deck pairs make this swap</span>
+            </span>
+          ))}
+          {deck.seedName && <span className={styles.blockNote}>from {deck.seedName}</span>}
+        </div>
+      )}
+      {/* THE BUILDER'S CHANGE TO THIS DECK, on the deck it changes. Both
+          rates are the same engine against the same decks, so the gain is a
+          like-for-like difference. The named cards and the deck's own win
+          condition are never the ones swapped out. */}
+      {im && (
+        <div className={`${styles.deckRowVs} ${styles.swapRow}`} data-choice-improve="">
+          <Delta n={im.gain} />
+          {im.swaps.map((s, i) => (
+            <span key={s.out + s.in} className={styles.swapRow}>
+              {/* Two swaps are two changes, not a chain: without the mark
+                  "A → B C → D" read as A becoming B and C. */}
+              {i > 0 && <span className={styles.swapArrow} aria-hidden="true">+</span>}
+              <span className={styles.swapSide}><CardArt card={s.out} variant={deck.art[s.out]} /></span>
+              <span className={styles.swapArrow} aria-label="becomes">→</span>
+              <span className={styles.swapSide}><CardArt card={s.in} variant={im.art[s.in]} /></span>
+            </span>
+          ))}
+          <span className={styles.blockNote}>
+            {im.seedWin.toFixed(1)}% → {im.win.toFixed(1)}% · {im.swaps.map((s) => s.pairs.toLocaleString('en-US')).join(' + ')} real deck pairs
+          </span>
+          <DeckActions cards={im.cards} name={`${deck.deckName} (${im.swaps.map((s) => filterCardName(s.in)).join(', ')})`} size="sm" />
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * "The decks it gave, the player might not play" — so the reader NAMES the
+ * cards: up to four win conditions or cards, and every deck returned holds all
+ * of them, rated against this opponent's likely decks on the brain that ranks
+ * "Play this" (`server/coach.py` `chosen`, rules in `coach_choice.py`).
+ *
+ * REAL DECKS LEAD, BUILT DECKS FOLLOW, under their own heading. A built deck
+ * has never been played as listed — its rate is inherited from the real deck
+ * it came from — so the two are not ranked against each other.
+ *
+ * The named cards and "was this asked" live in the PARENT. The result view
+ * unmounts whenever the Suggestion reloads (a game was played, the window
+ * changed), and a panel that forgot the cards each time would ask the reader
+ * to pick them again in the middle of a duel.
+ */
+function ChoicePanel({
+  me, opp, myPlayed, oppPlayed, days, want, onWant, asked, onAsked,
+}: {
+  me: string;
+  opp: string;
+  myPlayed: string[][];
+  oppPlayed: string[][];
+  days: number;
+  want: string[];
+  onWant: (cards: string[]) => void;
+  asked: boolean;
+  onAsked: () => void;
+}) {
+  const [res, setRes] = useState<CoachChosen | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const seq = useRef(0);
+
+  const run = useCallback(
+    (cards: string[]) => {
+      if (!cards.length) return;
+      const id = ++seq.current;
+      setBusy(true);
+      setError(null);
+      fetchCoachChosen(me, opp, myPlayed, oppPlayed, { days }, cards)
+        .then((r) => {
+          /* A server that predates this feature ignores `want` and answers
+             with an ordinary suggestion. That is not a list of decks, and
+             drawing it as one would throw. */
+          if (!Array.isArray(r?.decks) || !r.counts) {
+            throw new Error('The analytics server does not have this yet.');
+          }
+          if (id === seq.current) setRes(r);
+        })
+        .catch((e) => {
+          if (id !== seq.current) return;
+          setRes(null);
+          setError((e as AnalyticsError).message || 'Could not build decks for those cards.');
+        })
+        .finally(() => {
+          if (id === seq.current) setBusy(false);
+        });
+    },
+    [me, opp, myPlayed, oppPlayed, days],
+  );
+
+  /* The duel moved on, or the window changed: an answer already asked for is
+     asked again for the new state, with the same cards. Nothing runs until
+     the reader has pressed the button once. */
+  const state = `${me}|${opp}|${days}|${myPlayed.map((d) => d.join(',')).join(';')}|${oppPlayed.map((d) => d.join(',')).join(';')}`;
+  useEffect(() => {
+    if (asked && want.length) run(want);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  const toggle = (key: string) =>
+    onWant(
+      want.includes(key)
+        ? want.filter((k) => k !== key)
+        : want.length >= COACH_CHOICE_MAX ? want : [...want, key],
+    );
+
+  const real = res?.decks.filter((d) => d.source !== 'built') ?? [];
+  const built = res?.decks.filter((d) => d.source === 'built') ?? [];
+  const named = (res?.want ?? []).map(filterCardName).join(' + ');
+
+  return (
+    <section className={styles.block} data-hue="blue" data-choice-panel="">
+      <h4 className={styles.blockTitle}>
+        Build around your cards{' '}
+        <span className={styles.blockNote}>
+          up to {COACH_CHOICE_MAX} win conditions or cards · every deck holds all of them
+        </span>
+      </h4>
+      <div className={styles.choiceBar}>
+        <WinConFilter
+          selected={want}
+          onToggle={toggle}
+          onClear={() => onWant([])}
+          label="Pick cards"
+          title="Name the win conditions or cards the deck must hold"
+        />
+        <button
+          type="button"
+          className={styles.primary}
+          disabled={!want.length || busy}
+          onClick={() => {
+            onAsked();
+            run(want);
+          }}
+        >
+          Find decks
+        </button>
+      </div>
+
+      {busy && (
+        <ReadingState k="coach-choice" hue="blue">
+          Finding and building decks with those cards…
+        </ReadingState>
+      )}
+      {error && !busy && <p className={styles.askHint}>{error}</p>}
+
+      {res && !busy && (
+        <>
+          {res.reason === 'spent' && (
+            <p className={styles.askHint}>
+              {res.spent.map(filterCardName).join(', ')} already played this duel — a duel cannot repeat a card.
+            </p>
+          )}
+          {res.reason === 'none' && (
+            <p className={styles.askHint}>
+              No real deck holds {named} together, and no swap real players make builds one.
+            </p>
+          )}
+          {real.length > 0 && (
+            <>
+              <h4 className={styles.blockTitle}>
+                Decks with {named}{' '}
+                <span className={styles.blockNote}>
+                  {[
+                    res.engine ? `win chance · ${CHOICE_ENGINE[res.engine]}` : '',
+                    `${res.counts.yours} yours`,
+                    `${res.counts.duel.toLocaleString('en-US')} duel`,
+                    `${res.counts.meta} meta held them`,
+                  ].filter(Boolean).join(' · ')}
+                </span>
+              </h4>
+              <ul className={styles.deckList}>
+                {real.map((d, i) => (
+                  <ChoiceRow key={d.cards.join(',')} deck={d} rank={i + 1} />
+                ))}
+              </ul>
+            </>
+          )}
+          {built.length > 0 && (
+            <>
+              <h4 className={styles.blockTitle}>
+                Built for {named}{' '}
+                <span className={styles.blockNote}>
+                  a real deck + one swap real players make · not played as listed
+                </span>
+              </h4>
+              <ul className={styles.deckList}>
+                {built.map((d, i) => (
+                  <ChoiceRow key={d.cards.join(',')} deck={d} rank={real.length + i + 1} />
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 /* ──────────────────────────────────────────────── window 2: Suggestion */
 
 type SuggestStep =
@@ -1475,6 +1779,16 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
      `useAccess` knows 'anon' is not a tier. */
   const tunerAllowed = isPaid(useAccess());
 
+  /* "BUILD AROUND YOUR CARDS" IS ADMIN-ONLY FOR NOW (2026-10-02, asked for:
+     "initially do it admin only, then I will see, then we release for all").
+     The same staging shelf the tuner sat on before it was measured. The flag
+     gates the REQUEST too: the block is the only caller of `fetchCoachChosen`,
+     so a reader who cannot see it never sends `want`. */
+  const access = useAccess();
+  const choiceAllowed = access === 'admin';
+  const [choiceWant, setChoiceWant] = useState<string[]>([]);
+  const [choiceAsked, setChoiceAsked] = useState(false);
+
   useEffect(() => setOpp(tag), [tag]);
 
   const run = useCallback(
@@ -1508,6 +1822,8 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
     setOppPlayed([]);
     setData(null);
     setError(null);
+    setChoiceWant([]);
+    setChoiceAsked(false);
   };
 
   if (error) {
@@ -1721,6 +2037,22 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
       )}
 
       {data.brainModel && <BrainLine model={data.brainModel} />}
+
+      {/* ADMIN-ONLY FOR NOW. Directly under the pick, because it is the
+          answer to "the player will not play that". */}
+      {choiceAllowed && (
+        <ChoicePanel
+          me={me.trim()}
+          opp={opp.trim()}
+          myPlayed={myPlayed}
+          oppPlayed={oppPlayed}
+          days={days}
+          want={choiceWant}
+          onWant={setChoiceWant}
+          asked={choiceAsked}
+          onAsked={() => setChoiceAsked(true)}
+        />
+      )}
       {!!data.brainSwaps?.length && best && <BrainSwaps swaps={data.brainSwaps} base={best} />}
       {data.built && data.built.decks.length > 0 && <BuiltPanel built={data.built} />}
 

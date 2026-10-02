@@ -1597,6 +1597,119 @@ export function fetchCoachSuggestion(
 }
 
 /* ────────────────────────────────────────────────────────────────────────
+   DECKS AROUND THE CARDS THE READER NAMES (2026-10-02, `server/coach.py`
+   `chosen`, rules in `server/coach_choice.py`)
+   ────────────────────────────────────────────────────────────────────────
+   "The decks it gave, the player might not play": the reader names up to four
+   cards and gets decks that hold ALL of them, each rated against the
+   opponent's likely decks on the same brain that ranks "Play this". */
+
+/** Where a deck on that list came from, in the order they are trusted. */
+export type CoachChoiceSource = 'yours' | 'duel' | 'meta' | 'built';
+
+export interface CoachChoiceSwap {
+  out: string;
+  in: string;
+  /** Real deck pairs that differ by exactly this swap (`swap_graph`). */
+  pairs: number;
+}
+
+/** The deck builder's change to a listed deck: the swap(s), the deck after
+ *  them, and both rates on one engine. */
+export interface CoachChoiceImprove {
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt?: boolean;
+  artFilled?: string[];
+  win: number;
+  seedWin: number;
+  gain: number;
+  swaps: CoachChoiceSwap[];
+  vs: CoachBuiltVs[];
+}
+
+export interface CoachChoiceDeck {
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt?: boolean;
+  artFilled?: string[];
+  archetype: string;
+  deckName: string;
+  avgElixir?: number | null;
+  source: CoachChoiceSource;
+  /** Games behind the list in its own source (yours: your battles; duel: duel
+   *  games; meta: ladder games). An ordering hint, not a rate. */
+  plays: number;
+  /** Win chance against their likely decks, 0-100. Null when nothing could
+   *  rate it — withheld, never 50. */
+  win: number | null;
+  /** The same figure against EACH of their likely decks. */
+  vs: CoachBuiltVs[];
+  /** Which engine produced `win`: the combined brain, the duel model alone
+   *  (no ladder+duel rate for this list), or the fused rate with no model. */
+  engine: 'combined' | 'model' | 'fused' | 'ladder' | null;
+  /** The ladder+duel rate on its own, where there is one. */
+  fused: number | null;
+  /** Its record in real duels against what they bring; null under ten
+   *  effective games. `strong` is the duel brain's proof gate. */
+  duel?: TeamDuelFigures | null;
+  /** `[games, wins]` in real duels over the window, for a deck duel players
+   *  repeatedly field. */
+  duelRecord?: [number, number];
+  players?: number;
+  /** How many times the player has played this exact list. */
+  yours?: number;
+  /** Cards of the eight the player already plays. */
+  familiar: number;
+  /** Built decks: the swap that brought a named card in, and the real deck. */
+  swaps?: CoachChoiceSwap[];
+  seedName?: string;
+  seedSource?: CoachChoiceSource;
+  improve?: CoachChoiceImprove;
+}
+
+export interface CoachChosen {
+  brain: string;
+  stage: number;
+  /** The named cards the server accepted, in order. */
+  want: string[];
+  /** Named cards it does not know or that were past the cap. */
+  dropped: string[];
+  /** Named cards already played this duel. Non-empty means nothing is offered. */
+  spent: string[];
+  decks: CoachChoiceDeck[];
+  /** Decks holding the cards, per source, before any were rated. */
+  counts: Record<CoachChoiceSource, number>;
+  engine: 'combined' | 'model' | 'fused' | 'ladder' | null;
+  /** Why the list is empty: nothing asked, a named card is spent, or no real
+   *  deck holds them and no single human swap builds one. */
+  reason: 'no_cards' | 'spent' | 'none' | null;
+  opponent?: { source: string; decks: { deckName: string; prob?: number; archetype: string }[] };
+  considered?: number;
+  rated?: number;
+  improved?: number;
+  seconds?: number;
+}
+
+/** The most cards a reader may name (`coach_choice.MAX_WANT`). */
+export const COACH_CHOICE_MAX = 4;
+
+/** Decks holding every card in `want`, for this pairing at this point in the
+ *  duel. Rides on `/coach/suggest` as a parameter — no route of its own. */
+export function fetchCoachChosen(
+  me: string, opp: string, myPlayed: string[][], oppPlayed: string[][],
+  win: DateWindow | undefined, want: string[],
+): Promise<CoachChosen> {
+  const q = new URLSearchParams(win ? windowQuery(win) : undefined);
+  q.set('me', me);
+  if (opp) q.set('opp', opp);
+  myPlayed.forEach((d, i) => q.set(`m${i + 1}`, d.join(',')));
+  oppPlayed.forEach((d, i) => q.set(`o${i + 1}`, d.join(',')));
+  q.set('want', want.join(','));
+  return get<CoachChosen>(`/api/analytics/coach/suggest?${q.toString()}`);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
    OPPONENT READ — Phase 19B
    ────────────────────────────────────────────────────────────────────────
    A SEPARATE request on purpose. This used to ride along on /coach/predict,

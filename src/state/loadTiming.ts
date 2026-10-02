@@ -40,6 +40,8 @@ const WINDOW = 5;
 const SEEDS: Record<string, number> = {
   'coach-history': 40_000,
   'coach-matchups': 40_000,
+  // Decks around named cards: measured staged at 4-14 s cold, 2-4 s after.
+  'coach-choice': 8_000,
   'meta-cold': 90_000,
   meta: 9_000,
   player: 14_000,

@@ -1139,6 +1139,32 @@ def _combined(model, rates, deck, decks, kw) -> dict | None:
     return {"winRate": round(100 * acc, 1), "vs": vs, "sources": used}
 
 
+def _brain_ctx(opp: dict, my_tag: str, opp_tag: str) -> dict | None:
+    """What the combined brain needs for ONE pairing of players, or None.
+
+    `{"model", "decks", "kw", "records"}`: the trained duel model, the
+    opponent's likely 8-card decks, the two players' duel strength and card
+    level deficits (`kw`, the keyword arguments every scorer takes), and their
+    duel records `(games, wins)`. None when no model has been trained, the duel
+    index is unavailable, or there is nothing of theirs to score against.
+    """
+    import duel_model as dm
+    import duel_index as di
+    model = dm.load()
+    if not model or not di.available():
+        return None
+    decks = [d for d in (opp.get("decks") or []) if len(set(d.get("cards") or [])) == 8]
+    if not decks:
+        return None
+    rec_mine, rec_opp = di.player_record(my_tag), di.player_record(opp_tag)
+    myp = cd.cr_profile(my_tag) if my_tag else None
+    opp_p = cd.cr_profile(opp_tag) if opp_tag else None
+    kw = dict(my_def=(myp or {}).get("cardDeficits") or None,
+              opp_def=(opp_p or {}).get("cardDeficits") or None,
+              my_str=dm.strength(*rec_mine), opp_str=dm.strength(*rec_opp))
+    return {"model": model, "decks": decks, "kw": kw, "records": (rec_mine, rec_opp)}
+
+
 def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
            used: set, rates=None, ctx_out: dict | None = None
            ) -> tuple[list[dict], dict | None, list[dict]]:
@@ -1157,19 +1183,13 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
     try:
         import duel_model as dm
         import duel_index as di
-        model = dm.load()
-        if not model or not rows or not di.available():
+        ctx = _brain_ctx(opp, my_tag, opp_tag) if rows else None
+        if ctx is None:
             return rows, None, []
-        decks = [d for d in (opp.get("decks") or []) if len(set(d.get("cards") or [])) == 8]
-        if not decks:
-            return rows, None, []
-        rec_mine, rec_opp = di.player_record(my_tag), di.player_record(opp_tag)
-        my_str, opp_str = dm.strength(*rec_mine), dm.strength(*rec_opp)
-        myp = cd.cr_profile(my_tag) if my_tag else None
-        opp_p = cd.cr_profile(opp_tag) if opp_tag else None
-        my_def = (myp or {}).get("cardDeficits") or None
-        opp_def = (opp_p or {}).get("cardDeficits") or None
-        kw = dict(my_def=my_def, opp_def=opp_def, my_str=my_str, opp_str=opp_str)
+        model, decks, kw = ctx["model"], ctx["decks"], ctx["kw"]
+        rec_mine, rec_opp = ctx["records"]
+        my_str, opp_str = kw["my_str"], kw["opp_str"]
+        my_def, opp_def = kw["my_def"], kw["opp_def"]
         if ctx_out is not None:
             ctx_out.update(model=model, decks=decks, kw=kw)
 
@@ -1239,7 +1259,8 @@ BUILD_SHOW = 3
 BUILD_FINALISTS = 12
 
 
-def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int) -> dict | None:
+def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int,
+                    keep: set | None = None, keep_win_conditions: bool = False) -> dict | None:
     """Decks Deckkies BUILT for this duel.
 
     `deck_builder.build` walks human swaps (`swap_graph`) out from real decks,
@@ -1247,6 +1268,13 @@ def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int) 
     combined brain against its own seed, on the same engine, and kept only if it
     still gains. A built deck must stay a working deck: the three special slots,
     and no harmony problem its seed did not already have.
+
+    `keep` is cards every built deck must still hold — the cards a reader named
+    (`chosen`). A swap that takes one out is not an improvement of THEIR deck.
+    `keep_win_conditions` holds every win condition of the seed in place too:
+    staged, the builder "improved" a player's X-Bow deck by trading X-Bow for
+    Minion Giant and Tesla for Mortar, which is a different deck, not a change
+    to theirs. `chosen` sets it; the Suggestion's own built decks do not.
 
     The whole-duel planner (`deck_builder.plan_loadout`) is NO LONGER CALLED:
     the account holder judged "Planned for the whole duel" useless and asked
@@ -1275,8 +1303,14 @@ def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int) 
                 problems[k] = set(harmony.check(list(cards))["problems"])
             return problems[k]
 
+        held = set(keep or ())
+
         def allow(new, seed):
-            return (cd.fillable_slots(new) >= cd.SPECIAL_SLOTS
+            if keep_win_conditions and not {
+                    c for c in seed if dx.card_info(c).get("is_win_condition")} <= set(new):
+                return False
+            return (held <= set(new)
+                    and cd.fillable_slots(new) >= cd.SPECIAL_SLOTS
                     and issues(new) <= issues(seed))
 
         seeds = seeds[:BUILD_SEEDS]
@@ -1303,6 +1337,9 @@ def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int) 
                 "vs": e["vs"], "swaps": b["swaps"],
                 "seedName": b.get("seedName") or cd.deck_title(_archetype(b["seed"]), b["seed"]),
                 "seedSource": b.get("seedSource"),
+                # The deck it was built from, so a caller can put the change
+                # beside that deck (`chosen` does).
+                "seed": list(b["seed"]),
             })
         kept.sort(key=lambda r: -r["win"])
         out = {"brain": dbl.BRAIN, "decks": kept[:BUILD_SHOW],
@@ -1346,6 +1383,21 @@ def _lead_with_proof(rows: list[dict]) -> list[dict]:
     return [dict(best, ledByDuel=True)] + [r for r in rows if r is not best]
 
 
+def _duel_projection(rates: "_Rates", opp: dict, opp_tag: str,
+                     opp_win: tuple) -> tuple[dict, float]:
+    """What this opponent brings to a DUEL, as the duel brain reads it:
+    `(projection, weight of their own duels)`. Their likely decks' win
+    conditions blended with the win conditions of their real duel games
+    (`duel_brain.duel_projection`). `({}, 0.0)` with nothing to project."""
+    duel = _ta._duel
+    threats = [{"archetype": _archetype(d["cards"]), "likelihood": d.get("prob") or 0.0}
+               for d in opp["decks"] if d.get("cards")]
+    opp_wcs: dict[str, int] = {}
+    for d in _duel_decks(rates, opp_tag, *opp_win):
+        opp_wcs[d["archetype"]] = opp_wcs.get(d["archetype"], 0) + int(d["games"])
+    return duel.duel_projection(threats, opp_wcs)
+
+
 def _duel_merge(recs: list[dict], opp: dict, chips: list[dict], snap,
                 rates: "_Rates", used: set, pool: list[dict], *,
                 my_tag: str, my_win: tuple, opp_tag: str, opp_win: tuple
@@ -1369,12 +1421,7 @@ def _duel_merge(recs: list[dict], opp: dict, chips: list[dict], snap,
     if duel is None or rates.duel is None or not rates.duel.on:
         return top, None
     try:
-        threats = [{"archetype": _archetype(d["cards"]), "likelihood": d.get("prob") or 0.0}
-                   for d in opp["decks"] if d.get("cards")]
-        opp_wcs: dict[str, int] = {}
-        for d in _duel_decks(rates, opp_tag, *opp_win):
-            opp_wcs[d["archetype"]] = opp_wcs.get(d["archetype"], 0) + int(d["games"])
-        projection, weight = duel.duel_projection(threats, opp_wcs)
+        projection, weight = _duel_projection(rates, opp, opp_tag, opp_win)
         if not projection:
             return top, None
 
@@ -1893,6 +1940,325 @@ def _read(stage, best, opp, my_played, opp_played, observed) -> list[str]:
         # no deck to suggest and no read to give, it is the screen sounding
         # like it has something to say when it does not.
         out.append("Nothing is burned yet — this pick sets up the next two.")
+    return out
+
+
+# ── DECKS AROUND THE CARDS THE READER NAMES (2026-10-02) ───────────────────
+#
+# Asked for: "the decks it gave, the player might not play — we enter the win
+# conditions or cards, it finds and makes the decks accordingly, shows the
+# matchup percentage, prioritises duel battles and the brain's deck making".
+# The rules are `coach_choice.py` (pure); this gathers the candidates and
+# rates them on the SAME brain that ranks "Play this", so a deck here and a
+# deck in "Your options" are on one scale.
+
+#: Top rated rows handed to the deck builder to improve, named cards kept.
+CHOICE_IMPROVE_SEEDS = 6
+
+
+def _card_role(card: str) -> str:
+    """What a card is, for a like-for-like swap: a win condition first (X-Bow
+    and Mortar are win conditions that happen to be buildings), then the
+    game's own type."""
+    i = dx.card_info(card)
+    return ("wincon" if i.get("is_win_condition") else "spell" if i.get("is_spell")
+            else "building" if i.get("is_building") else "troop")
+
+
+def _own_decks(tag: str, since: str | None, until: str | None, hist: dict | None,
+               rates: "_Rates") -> tuple[dict[str, dict], set[str]]:
+    """Every deck this player has played, from all three readers:
+    `({deck key: {"cards", "plays"}}, the cards across them)`.
+
+    Duel history (friendly series), native duel games (the duel index) and all
+    stored battles (`player_report`). `plays` is the LARGEST of the three
+    counts, not their sum — the readers overlap, and it only orders the list.
+    """
+    own: dict[str, dict] = {}
+
+    def add(cards, n) -> None:
+        cards = list(cards or [])
+        if len(set(cards)) != 8:
+            return
+        e = own.setdefault(",".join(sorted(cards)), {"cards": cards, "plays": 0})
+        e["plays"] = max(e["plays"], int(n or 0))
+
+    seen: dict[str, list] = {}
+    for d in (hist or {}).get("allDecks") or []:
+        e = seen.setdefault(",".join(sorted(d)), [d, 0])
+        e[1] += 1
+    for d, n in seen.values():
+        add(d, n)
+    if rates.duel is not None and rates.duel.on:
+        for d in _duel_decks(rates, tag, since, until):
+            add(d.get("cards"), d.get("games"))
+    try:
+        rep = cd.player_report(tag, since, until) if tag else None
+    except Exception as exc:  # noqa: BLE001 - their decks are a bonus, never a failure
+        print("coach._own_decks: %r" % (exc,), file=sys.stderr)
+        rep = None
+    for d in (rep or {}).get("decks") or []:
+        add(d.get("cards"), d.get("matches"))
+    return own, {c for e in own.values() for c in e["cards"]}
+
+
+def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
+           opp_played: list[list[str]], want: list[str],
+           my_since: str | None = None, my_until: str | None = None,
+           opp_since: str | None = None, opp_until: str | None = None) -> dict:
+    """Decks holding EVERY card in `want`, rated against this opponent.
+
+    Real decks first — the player's own, then decks duel players repeatedly
+    field, then vetted ladder decks — and built ones: a real deck one named
+    card short with the swap real players make, and the deck builder's
+    improvements that keep the named cards. Every row carries its win chance
+    against each of the opponent's likely decks and, where the duels have
+    enough games on it, its real duel record against what they bring.
+
+    A named card already spent this duel is REPORTED (`spent`) and nothing is
+    offered: the request cannot be met, and quietly answering a different one
+    is worse than saying so.
+    """
+    import coach_choice as cc
+
+    t0 = time.monotonic()
+    stage = max(len(my_played), len(opp_played))
+    used = set().union(*[set(d) for d in my_played]) if my_played else set()
+    want, dropped = cc.valid_want(want, dx.card_keys())
+    out = {
+        "brain": cc.BRAIN, "stage": stage, "want": want, "dropped": dropped,
+        "spent": [c for c in want if c in used], "decks": [],
+        "counts": {s: 0 for s in cc.SOURCES}, "engine": None, "reason": None,
+    }
+    if not want:
+        out["reason"] = "no_cards"
+        return out
+    if out["spent"]:
+        out["reason"] = "spent"
+        return out
+
+    snap = counter._snap()
+    mine_hist = _history(my_tag, my_since, my_until) if my_tag else None
+    opp_hist = _history(opp_tag, opp_since, opp_until) if opp_tag else None
+    opp = opponent_next(opp_tag, opp_played, opp_hist)
+    rates = _Rates(snap)
+    duel_on = rates.duel is not None and rates.duel.on
+    own, known = _own_decks(my_tag, my_since, my_until, mine_hist, rates)
+
+    try:
+        import deck_harmony as harmony
+    except Exception:  # pragma: no cover - deployment shape
+        harmony = None
+    problems: dict[str, frozenset] = {}
+
+    def issues(cards) -> frozenset:
+        k = cc.deck_key(cards)
+        if k not in problems:
+            problems[k] = (frozenset(harmony.check(list(cards))["problems"])
+                           if harmony is not None else frozenset())
+        return problems[k]
+
+    def offerable(cards) -> bool:
+        """A deck Deckkies offers somebody who does not play it: all three
+        special slots and no structural hole — the composer's own two rules."""
+        return cd.fillable_slots(cards) >= cd.SPECIAL_SLOTS and not issues(cards)
+
+    # ── The three pools of REAL decks, each most-played first ───────────────
+    catalogue = rates.duel.catalogue if duel_on else []
+    duel_record = {d["key"]: (int(d["games"]), int(d["wins"]), int(d.get("players") or 0))
+                   for d in catalogue}
+    pools = {
+        "yours": sorted(({"cards": e["cards"], "plays": e["plays"]} for e in own.values()),
+                        key=lambda c: (-c["plays"], cc.deck_key(c["cards"]))),
+        "duel": [{"cards": d["cards"], "plays": int(d["games"])} for d in catalogue],
+        "meta": sorted(({"cards": d["cards"], "plays": int(d.get("games") or 0)}
+                        for decks in counter.seeds().values() for d in decks),
+                       key=lambda c: (-c["plays"], cc.deck_key(c["cards"]))),
+    }
+    cands: list[dict] = []
+    held: set[str] = set()
+    for source in ("yours", "duel", "meta"):
+        # An event deck is not a deck to bring, whoever played it.
+        pool, _dropped = _drop_event_decks(pools[source])
+        pools[source] = pool
+        for c in pool:
+            if not (cc.holds(c["cards"], want) and cc.legal(c["cards"], used)):
+                continue
+            # Their own deck is theirs whatever its shape; a stranger's must
+            # be one Deckkies would offer.
+            if source == "meta" and not offerable(c["cards"]):
+                continue
+            k = cc.deck_key(c["cards"])
+            out["counts"][source] += 1
+            if k not in held:
+                held.add(k)
+                cands.append({**c, "source": source})
+
+    # ── Built: a real deck ONE named card short, plus the human swap ────────
+    try:
+        import swap_graph as sg
+        graph = (sg.load() or {}).get("graph")
+    except Exception:  # pragma: no cover - deployment shape
+        graph = None
+    synergy = _synergy_gate()
+    if graph:
+        for source in ("yours", "duel", "meta"):
+            near = [c for c in pools[source]
+                    if len(set(c["cards"])) == 8 and cc.legal(c["cards"], used)
+                    and len(cc.missing(c["cards"], want)) == 1][:cc.FORCED_SEEDS]
+            for c in near:
+                for f in cc.forced(c["cards"], want, graph, used=used, role=_card_role):
+                    k = cc.deck_key(f["cards"])
+                    if k in held:
+                        continue
+                    # It must stay a working deck: three special slots, no
+                    # structural problem its seed did not already have, and
+                    # cards duel players actually put together.
+                    if (cd.fillable_slots(f["cards"]) < cd.SPECIAL_SLOTS
+                            or not issues(f["cards"]) <= issues(c["cards"])
+                            or (synergy is not None and not synergy(f["cards"])[0])):
+                        continue
+                    held.add(k)
+                    out["counts"]["built"] += 1
+                    cands.append({"cards": f["cards"], "plays": c["plays"], "source": "built",
+                                  "swaps": f["swaps"], "seed": c["cards"], "seedSource": source})
+
+    if not cands:
+        out["reason"] = "none"
+        out["seconds"] = round(time.monotonic() - t0, 2)
+        return out
+
+    # ── The quick model orders every candidate; the combined brain rates the
+    #    shortlist. One scale with "Play this". ───────────────────────────────
+    ctx = None
+    try:
+        ctx = _brain_ctx(opp, my_tag, opp_tag)
+    except Exception as exc:  # noqa: BLE001 - the fused rate still answers
+        print("coach.chosen: brain: %r" % (exc,), file=sys.stderr)
+    if ctx:
+        import duel_model as dm
+        opponents = [(d["cards"], d.get("prob") or 0.0) for d in ctx["decks"]]
+        for c in cands:
+            e = dm.expected(ctx["model"], c["cards"], opponents, **ctx["kw"])
+            c["fast"] = e["winRate"] if e else None
+    finalists = cc.shortlist(cands)
+
+    opp_cards = [d["cards"] for d in opp["decks"] if d.get("cards")]
+    rates.prepare([f["cards"] for f in finalists], opp_cards)
+    projection: dict = {}
+    if duel_on:
+        try:
+            projection, _weight = _duel_projection(rates, opp, opp_tag, (opp_since, opp_until))
+        except Exception:  # noqa: BLE001 - a row without duel figures
+            traceback.print_exc()
+    seat = counter.seater()
+    opp_names = {cc.deck_key(d["cards"]): d.get("deckName") or counter._label(d.get("archetype") or "")
+                 for d in opp["decks"] if d.get("cards")}
+
+    def view(cards, source: str) -> dict:
+        """Seated the way it is fielded, then every special slot it can fill."""
+        marks = mine_hist["marks"](cards) if source == "yours" and mine_hist else {}
+        if marks:
+            ordered, art = cd.arrange_deck(list(cards), marks)
+            inferred = False
+        else:
+            ordered, art, inferred = seat(cards)
+        seated, art, filled = cd.complete_seating(
+            ordered, art or {}, slot_of=cd.seated_positions(ordered, art or {}))
+        arch = _archetype(seated)
+        v = {"cards": seated, "art": art, "inferredArt": bool(inferred), "archetype": arch,
+             "deckName": dz.deck_label(seated, arch), "avgElixir": dz._avg_elixir(seated)}
+        if filled:
+            v["artFilled"] = filled
+        return v
+
+    def evidence(cards) -> dict:
+        """What every row carries besides its rate: the duel record against
+        what they bring, the list's own duel games, and how much of it the
+        player already plays."""
+        k = cc.deck_key(cards)
+        e: dict = {"familiar": len(set(cards) & known), "duel": None}
+        if duel_on and projection:
+            try:
+                e["duel"] = rates.duel.figures(cards, projection)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+        if k in duel_record:
+            g, w, p = duel_record[k]
+            e["duelRecord"] = [g, w]
+            e["players"] = p
+        if k in own:
+            e["yours"] = own[k]["plays"]
+        return e
+
+    rows: list[dict] = []
+    for f in finalists:
+        cards = f["cards"]
+        brain = None
+        if ctx:
+            try:
+                brain = _combined(ctx["model"], rates, cards, ctx["decks"], ctx["kw"])
+            except Exception:  # noqa: BLE001 - the fused rate still answers
+                traceback.print_exc()
+        exp = _expected(cards, opp["decks"], snap, rates)
+        if brain:
+            win, vs = brain["winRate"], brain["vs"]
+            engine = "combined" if set(brain["sources"]) == {"combined"} else "model"
+        elif exp:
+            win = exp["winRate"]
+            vs = [{"name": opp_names.get(cc.deck_key(p["cards"]), ""),
+                   "likelihood": p["prob"], "winRate": p["matchup"]["winRate"]}
+                  for p in exp["per"] if p.get("matchup")]
+            engine = "fused" if rates.on else "ladder"
+        else:
+            win, vs, engine = None, [], None
+        row = {**view(cards, f["source"]), "source": f["source"], "plays": f.get("plays") or 0,
+               "win": win, "vs": vs, "engine": engine,
+               "fused": exp["winRate"] if exp else None, **evidence(cards)}
+        if f["source"] == "built":
+            row["swaps"] = f["swaps"]
+            row["seedSource"] = f["seedSource"]
+            row["seedName"] = dz.deck_label(f["seed"], _archetype(f["seed"]))
+        rows.append(row)
+    shown = cc.arrange(rows, want)
+
+    # ── The deck builder, on the decks SHOWN, with the named cards kept ─────
+    # Its answer is a change to one of these decks, so it rides on that row
+    # (`improve`) rather than standing as a deck of its own: "your deck, with
+    # Cannon for Tesla, 58 -> 63" is the thing a reader acts on, and as a
+    # separate row it would be folded as the near-copy it is.
+    improved = 0
+    if ctx:
+        seeds = [{"cards": r["cards"], "name": r["deckName"], "source": r["source"]}
+                 for r in shown if r["win"] is not None][:CHOICE_IMPROVE_SEEDS]
+        built = (_build_for_duel(ctx, seeds, rates, used, stage, keep=set(want),
+                                 keep_win_conditions=True) if seeds else None)
+        by_key = {cc.deck_key(r["cards"]): r for r in shown}
+        for b in (built or {}).get("decks") or []:
+            row = by_key.get(cc.deck_key(b.get("seed") or []))
+            if row is None or not cc.holds(b["cards"], want):
+                continue
+            if row.get("improve") and row["improve"]["win"] >= b["win"]:
+                continue
+            improved += 0 if row.get("improve") else 1
+            v = view(b["cards"], "built")
+            row["improve"] = {
+                "cards": v["cards"], "art": v["art"], "inferredArt": v["inferredArt"],
+                **({"artFilled": v["artFilled"]} if v.get("artFilled") else {}),
+                "win": b["win"], "seedWin": b["seedWin"],
+                "gain": round(b["win"] - b["seedWin"], 1),
+                "swaps": b["swaps"], "vs": b["vs"]}
+
+    out["decks"] = shown
+    out["improved"] = improved
+    out["engine"] = ("combined" if ctx and rates.on else "model" if ctx
+                     else "fused" if rates.on else "ladder")
+    out["opponent"] = {"source": opp["source"],
+                       "decks": [{"deckName": d.get("deckName") or "", "prob": d.get("prob"),
+                                  "archetype": d.get("archetype") or ""} for d in opp["decks"]]}
+    out["considered"] = len(cands)
+    out["rated"] = len(rows)
+    out["seconds"] = round(time.monotonic() - t0, 2)
     return out
 
 

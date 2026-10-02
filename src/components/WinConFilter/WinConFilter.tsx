@@ -62,6 +62,12 @@ interface WinConFilterProps {
    * the left margin and there is nothing to correct.
    */
   align?: 'start' | 'center' | 'end';
+  /** The trigger's word. "Filter" where it narrows decks already on screen;
+   *  Coach Assist uses it to NAME cards for decks that do not exist yet, where
+   *  "Filter" would describe the wrong action. */
+  label?: string;
+  /** The trigger's tooltip, for the same reason. */
+  title?: string;
   /** Optional trailing content (e.g. a "2 of 5 decks" counter). */
   children?: React.ReactNode;
 }
@@ -85,6 +91,8 @@ export function WinConFilter({
   onToggle,
   onClear,
   align = 'start',
+  label = 'Filter',
+  title = 'Show only decks holding particular cards',
   children,
 }: WinConFilterProps) {
   const [open, setOpen] = useState(false);
@@ -129,10 +137,10 @@ export function WinConFilter({
           data-on={selected.length > 0 || undefined}
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          title="Show only decks holding particular cards"
+          title={title}
         >
           <FilterIcon />
-          Filter
+          {label}
           {selected.length > 0 && <span className={styles.triggerCount}>{selected.length}</span>}
         </button>
 

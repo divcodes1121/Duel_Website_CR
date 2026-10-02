@@ -2129,6 +2129,33 @@ under 10 ms warm.
 
 ## Coach Assist (`coach.py`)
 
+**DECKS AROUND THE CARDS THE READER NAMES (2026-10-02, `coach_choice.py`, admin-only in the
+client).** `want=<up to 4 card keys>` on `/api/analytics/coach/suggest` returns `coach.chosen(...)`
+instead of the suggestion — only that list, on the same tags, windows and played decks. No new
+route. Unknown keys are dropped and echoed (`dropped`), never a 400.
+
+- **Rules** (`coach_choice.py`, pure): `valid_want`, `holds`, `legal`, `forced` (a real deck one
+  named card short + the like-for-like swap at least `FORCED_MIN_PAIRS` 20 real deck pairs make),
+  `shortlist` (`FINALISTS` 20, `QUOTA` yours 4 / duel 8 / meta 5 / built 3), `order` (win chance,
+  duel proof worth `DUEL_BAND` 3 points), `arrange` (real decks first, at most `BUILT_SLOTS` 2
+  built ones after them, the player's own deck always kept), `pick` (near-copies fold).
+- **Wiring** (`coach.chosen`): pools = `_own_decks` (duel history + `duel_index.player_decks` +
+  `player_report`), `_DuelContext.catalogue`, `deck_counter.seeds()`; event decks dropped
+  (`deck_evidence`); a stranger's list must field three special slots and pass the harmony
+  checklist. Every candidate is scored by the fast duel model, the shortlist by `_combined` (the
+  brain behind "Play this", extracted as `_brain_ctx`), with `_expected` as the answer when no
+  model is trained. `_duel_projection` (extracted from `_duel_merge`) gives each row its duel
+  figures. `_build_for_duel(..., keep=<named cards>, keep_win_conditions=True)` then improves the
+  rows SHOWN; its result is attached to the row it changes as `improve`.
+- **Payload**: `want`, `dropped`, `spent`, `reason` (`no_cards` / `spent` / `none`), `counts` per
+  source, `engine`, `decks[]` with `source`, `win`, `vs[]` (per opponent deck), `fused`, `duel`,
+  `duelRecord`, `players`, `yours`, `familiar`, `swaps`/`seedName` (built), `improve`.
+- **Measured live**: ~8 s cold, 0.7-3 s after; the plain suggestion is unchanged (2.5 s warm).
+- **Tests**: `test_coach_choice.py`, 85 checks, no database — the rules against literals and the
+  wiring with every reader replaced, on real card keys so the structural checks are the real ones.
+- **Deployed** 2026-10-02 04:07 UTC; rollback `{coach,app}.py.bak-20261002-040707-prechoice` and
+  remove `coach_choice.py`.
+
 **THE FUSED RATE AND THE DUEL BRAIN, FROM TEAM ANALYSIS (2026-09-27, `93e45e2`).** `_Rates`
 wraps `team_analysis._FusionContext` over a `_DuelContext` (soft import; off =
 `win_prob` exactly as before, and `fusion: null` says so). `_expected(...,
