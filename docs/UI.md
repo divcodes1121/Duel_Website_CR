@@ -1617,7 +1617,10 @@ the server ran the gate (`compose.synergyGate`). **"Planned for the whole duel"
 is removed** (on request); "Deckkies built for this duel" stays, and the
 tuner's own "A full loadout" is unchanged.
 
-## Coach Assist: build around your cards (2026-10-02, admin-only)
+## Coach Assist: build around your cards (2026-10-02)
+
+**Pro and admin** since 2026-10-02 evening (`choiceAllowed = isPaid(useAccess())`, the
+tuner's gate); admin-only for its first day.
 
 A block under **Play this** on the Suggestion result: the card picker Meta and Duel Zone
 filter with (`WinConFilter`, which gained `label` / `title` props so its trigger can say

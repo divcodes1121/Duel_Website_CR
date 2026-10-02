@@ -20,8 +20,8 @@ carries the full reasoning; this is the short version plus what to do next.
 >
 > **Updated 2026-10-02** with the four days since: the daily session, the
 > vetted deck pool, the duel win model and the combined brain, the deck
-> builders, and Coach Assist's "Build around your cards" (admin-only, a
-> release decision below). The trend item is done; four faults found by
+> builders, and Coach Assist's "Build around your cards" (admin-only at first,
+> released to Pro the same evening). The trend item is done; four faults found by
 > reading Coach Assist end to end are listed and NOT fixed.
 
 ## Where things stand
@@ -102,7 +102,7 @@ Backups on the VPS for the last three:
 | `f846c74`, `6208918` | "Or bring one of these" is six decks, says which are new to you, and offers only decks whose cards duel players pair (`deck_synergy.py`) | none directly |
 | `2247381` | **decks built by human swaps** (`deck_builder.py`, `swap_graph.py`) | none directly |
 | `416c026` | Coach Assist 80 s -> ~7 s: one idle connection per database file | every analytics read on the roster is faster cold |
-| `db7570d`, `415b8b3`, `9804765` | **Build around your cards** (admin-only): name up to four cards, get duel decks, your decks and the meta, and decks BUILT from how duel players build around them (`deck_architect.py`) | none directly |
+| `db7570d`, `415b8b3`, `9804765` | **Build around your cards** (Pro and admin; admin-only for its first day): name up to four cards, get duel decks, your decks and the meta, and decks BUILT from how duel players build around them (`deck_architect.py`) | none directly |
 
 Backups on the VPS for the last row: `{coach,app}.py.bak-20261002-040707-prechoice`,
 `{coach,coach_choice,duel_index}.py.bak-20261002-045206-prearchitect`.
@@ -130,11 +130,13 @@ Backups on the VPS for the last row: `{coach,app}.py.bak-20261002-040707-prechoi
    NOT re-tuned; forcing distinct #1s would hand some teammates a measurably
    worse deck.
 
-5. **Release "Build around your cards" (2026-10-02).** It is admin-only by
-   request ("admin only first, then I will see, then we release for all").
-   Releasing is one line (`choiceAllowed` in `CoachAssist.tsx`, e.g. to
-   `isPaid(access)`), `tests/coachChoiceGate.test.ts`, and a release note.
-   Which tier is the decision. The gate is in the client only.
+5. **DONE 2026-10-02 evening: "Build around your cards" is open to Pro.**
+   Asked for: "make it available for pro also as it's shipped".
+   `choiceAllowed = isPaid(useAccess())`, `tests/coachChoiceGate.test.ts`
+   (13), release note `2026-10-02-build-around-your-cards`. Client only.
+   The gate is still in the client only. **Watch the first-request time**:
+   20.7 s on one real pair at release, against ~8 s recorded at launch;
+   3.7-4.2 s repeated.
 6. **The pilots question from 2026-09-27 is answered.** The duel-rating
    adjustment that was measured and held back then shipped on 2026-09-30 as
    the combined brain's strength and level terms, at the account holder's

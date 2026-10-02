@@ -1,27 +1,42 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { isPaid, sectionAllowed, type Access } from '../src/state/tiers';
 
 /**
- * "BUILD AROUND YOUR CARDS" IS ADMIN-ONLY FOR NOW (2026-10-02, asked for:
- * "initially do it admin only, then I will see, then we release for all").
+ * "BUILD AROUND YOUR CARDS" IS PRO, NOT MEMBERS (released 2026-10-02, asked
+ * for: "make it available for pro also as it's shipped").
+ *
+ * It was admin-only for its first day ("initially do it admin only, then I
+ * will see, then we release"). It is gated on `isPaid` now — paid Pro or
+ * admin, never a trial — the same line the tuner and Coach Assist itself sit
+ * behind.
  *
  * A source contract, like `coachTunerGate.test.ts`: this suite runs in `node`
- * with no DOM. What is pinned is that the block cannot reach a reader the
- * account holder has not released it to, and that the request is gated with
- * the render. Releasing it is a deliberate edit to this file.
+ * with no DOM. What is pinned is who the block reaches, and that the request
+ * is gated with the render. Moving the gate is a deliberate edit to this file.
  */
 const read = (p: string) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf-8');
 const SRC = read('../src/components/Analytics/CoachAssist.tsx');
 const CLIENT = read('../src/state/analyticsClient.ts');
 const RULES = read('../server/coach_choice.py');
+const ALL: Access[] = ['anon', 'free', 'trial', 'pro', 'admin'];
 
 describe('Coach Assist: build around your cards', () => {
-  it('is admin-only, read from useAccess (never the raw store)', () => {
-    expect(SRC).toMatch(/const access = useAccess\(\);\s+const choiceAllowed = access === 'admin';/);
+  it('is gated on isPaid, read from useAccess (never the raw store, never admin alone)', () => {
+    expect(SRC).toMatch(/const choiceAllowed = isPaid\(useAccess\(\)\);/);
+    expect(SRC).not.toMatch(/choiceAllowed = [^;]*'admin'/);
     // The raw store says 'free' for a signed-out visitor; only a comment may
     // name it here.
     expect(SRC).not.toMatch(/^import .*useAccountStore/m);
+  });
+
+  it('opens for Pro and admin and never for a Member (trial), free or anonymous reader', () => {
+    expect(ALL.filter((a) => isPaid(a))).toEqual(['pro', 'admin']);
+  });
+
+  it('reaches exactly the readers who can open Coach Assist', () => {
+    for (const a of ALL) expect(isPaid(a), a).toBe(sectionAllowed(a, 'Coach Assist'));
   });
 
   it('renders only behind the gate', () => {

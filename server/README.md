@@ -2145,7 +2145,7 @@ under 10 ms warm.
 ## Coach Assist (`coach.py`)
 
 **DECKS AROUND THE CARDS THE READER NAMES (2026-10-02, `coach_choice.py` + `deck_architect.py`,
-admin-only in the client).** `want=<up to 4 card keys>` on `/api/analytics/coach/suggest` returns
+Pro and admin in the client since that evening; admin-only for its first day).** `want=<up to 4 card keys>` on `/api/analytics/coach/suggest` returns
 `coach.chosen(...)` instead of the suggestion — only that list, on the same tags, windows and played
 decks. No new route. Unknown keys are dropped and echoed (`dropped`), never a 400.
 

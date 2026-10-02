@@ -82,6 +82,17 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-02-build-around-your-cards',
+    date: '2026-10-02',
+    kind: 'new',
+    title: 'Coach Assist can build around the cards you want to play',
+    body: [
+      'Under “Play this” on a Coach Assist suggestion there is now a card picker. Pick up to four cards or win conditions, press Find decks, and every deck that comes back holds all of them, with your win chance against this opponent and against each of their likely decks.',
+      'Decks that real duel players field come first, then your own decks and the meta’s, then decks Deckkies builds around your cards. Where swapping a card raises your chance, the swap is shown with the new figure. The first search for a pair of players can take a few seconds.',
+    ],
+    needs: 'pro',
+  },
+  {
     id: '2026-10-02-recent-battles-rows',
     date: '2026-10-02',
     kind: 'improved',

@@ -1715,13 +1715,18 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
      `useAccess` knows 'anon' is not a tier. */
   const tunerAllowed = isPaid(useAccess());
 
-  /* "BUILD AROUND YOUR CARDS" IS ADMIN-ONLY FOR NOW (2026-10-02, asked for:
-     "initially do it admin only, then I will see, then we release for all").
-     The same staging shelf the tuner sat on before it was measured. The flag
-     gates the REQUEST too: the block is the only caller of `fetchCoachChosen`,
-     so a reader who cannot see it never sends `want`. */
-  const access = useAccess();
-  const choiceAllowed = access === 'admin';
+  /* "BUILD AROUND YOUR CARDS" IS PRO, LIKE THE TUNER (released 2026-10-02,
+     asked for: "make it available for pro also as it's shipped"). It spent
+     its first day admin-only — "initially do it admin only, then I will see,
+     then we release" — and was rebuilt and cut back in that day. `isPaid` is
+     the line Coach Assist itself sits behind, so the block reaches exactly the
+     readers who can open this screen, and never a trial.
+
+     The flag gates the REQUEST too: the block is the only caller of
+     `fetchCoachChosen`, so a reader who cannot see it never sends `want`.
+     A separate call from the tuner's on purpose — each gate is one line a
+     test pins, and one can move without the other. */
+  const choiceAllowed = isPaid(useAccess());
   const [choiceWant, setChoiceWant] = useState<string[]>([]);
   const [choiceAsked, setChoiceAsked] = useState(false);
 
@@ -1974,8 +1979,8 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
 
       {data.brainModel && <BrainLine model={data.brainModel} />}
 
-      {/* ADMIN-ONLY FOR NOW. Directly under the pick, because it is the
-          answer to "the player will not play that". */}
+      {/* PRO AND ADMIN. Directly under the pick, because it is the answer to
+          "the player will not play that". */}
       {choiceAllowed && (
         <ChoicePanel
           me={me.trim()}
