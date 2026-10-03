@@ -1,3 +1,4 @@
+import { asciiFold, romanize } from './report/romanize';
 /**
  * The shape every analytics screen exports itself as.
  *
@@ -509,8 +510,11 @@ export function int(n: number | null | undefined): string {
 
 /** A filename that sorts by date and says what it is. */
 export function reportFilename(doc: ReportDoc): string {
+  /* A NAME IN KANA STILL NAMES THE FILE. Slugging keeps a-z and 0-9 only, so
+     a roster of Japanese names used to save as "...-7-players-4-...". The
+     romanised form goes in instead, with its macrons folded to plain vowels. */
   const slug = (s: string) =>
-    s
+    asciiFold(romanize(s) ?? s)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');

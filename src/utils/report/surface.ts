@@ -22,7 +22,7 @@ import type { Box } from './audit';
 import { artUrl, cardName, type Form, type Raster } from './art';
 import { faceOf } from './fonts';
 import { PT, RADIUS_SM, TYPE, cardH } from './geometry';
-import { drawable, type FontRole } from './text';
+import { drawable, faceFor, type ExtraFace, type Face, type FontRole } from './text';
 import { HUES, P, hue, mix, type HueName, type RGB } from './theme';
 
 export interface TextStyle {
@@ -38,10 +38,23 @@ export interface TextStyle {
 /** The share of the em a capital occupies — for centring type in a box. */
 export const CAP = 0.71;
 
+/** A stretch of one string drawn in one face. */
+interface Run { face: Face; text: string; scale: number }
+
+/**
+ * A FALLBACK FACE BESIDE BEBAS IS DRAWN SMALLER. Bebas is all capitals 0.70 em
+ * tall; a kana fills ~0.88 em and an Inter capital 0.73, so at the heading's
+ * own size a Japanese name stood a fifth taller than the title around it.
+ */
+const DISPLAY_SCALE: Partial<Record<Face, number>> = { kana: 0.8, kanji: 0.8, bodyBold: 0.94 };
+
 export class Surface {
   readonly doc: jsPDF;
 
   readonly embedded: boolean;
+
+  /** The fallback faces (Japanese) registered on this document. */
+  readonly extra: ReadonlySet<ExtraFace>;
 
   /** Card art by URL, already flattened onto the slot colour. */
   readonly tiles: Map<string, Raster | null>;
@@ -52,9 +65,11 @@ export class Surface {
    *  body-bleed rule; everything else is 'body'. */
   zone: 'body' | 'chrome' = 'body';
 
-  constructor(doc: jsPDF, embedded: boolean, tiles: Map<string, Raster | null>) {
+  constructor(doc: jsPDF, embedded: boolean, tiles: Map<string, Raster | null>,
+    extra: ReadonlySet<ExtraFace> = new Set()) {
     this.doc = doc;
     this.embedded = embedded;
+    this.extra = extra;
     this.tiles = tiles;
   }
 
@@ -71,17 +86,48 @@ export class Surface {
 
   /* ----------------------------------------------------------------- type */
 
-  private face(s: TextStyle): void {
-    const [family, style] = faceOf(s.role ?? 'body', this.embedded);
+  private face(s: TextStyle, face?: Face, scale = 1): void {
+    const [family, style] = faceOf(face ?? s.role ?? 'body', this.embedded);
     this.doc.setFont(family, style);
-    this.doc.setFontSize(s.size);
+    this.doc.setFontSize(s.size * scale);
   }
 
   /** The string exactly as it will be drawn: cased, then filtered to the
-   *  glyphs the font holds. */
+   *  glyphs the fonts on this document hold. */
   prep(text: string | null | undefined, s: TextStyle): string {
     const t = s.caps ? String(text ?? '').toUpperCase() : String(text ?? '');
-    return drawable(t, s.role ?? 'body', this.embedded);
+    return drawable(t, s.role ?? 'body', this.embedded, this.extra);
+  }
+
+  /**
+   * A prepared string as runs of one face each. Almost every string is ONE
+   * run in the role's own face and takes the path it always took; a name in
+   * kana, or a Cyrillic word in a Bebas heading, is cut where the face
+   * changes. A space always belongs to the role's own face: the Japanese
+   * files hold no Latin, a space included.
+   */
+  private runs(t: string, s: TextStyle): Run[] {
+    const role = s.role ?? 'body';
+    if (!this.embedded) return [{ face: role, text: t, scale: 1 }];
+    const out: Run[] = [];
+    for (const ch of t) {
+      const own = faceFor(ch.codePointAt(0) as number, role, this.extra) ?? role;
+      const last = out[out.length - 1];
+      if (last && last.face === own) last.text += ch;
+      else out.push({ face: own, text: ch, scale: role === 'display' && own !== role ? DISPLAY_SCALE[own] ?? 1 : 1 });
+    }
+    // Bebas draws lower case as capitals; a face standing in for it must too.
+    if (role === 'display') for (const r of out) if (r.face !== role) r.text = r.text.toUpperCase();
+    return out;
+  }
+
+  /** Advance of each run — glyphs plus the tracking after every glyph. */
+  private advances(runs: Run[], s: TextStyle): number[] {
+    const track = s.track ?? 0;
+    return runs.map((r) => {
+      this.face(s, r.face, r.scale);
+      return this.doc.getTextWidth(r.text) + track * r.text.length;
+    });
   }
 
   /** Visual width: glyph advances plus tracking between glyphs (the trailing
@@ -89,8 +135,8 @@ export class Surface {
   width(text: string, s: TextStyle): number {
     const t = this.prep(text, s);
     if (!t) return 0;
-    this.face(s);
-    return this.doc.getTextWidth(t) + (s.track ?? 0) * Math.max(0, t.length - 1);
+    const adv = this.advances(this.runs(t, s), s);
+    return adv.reduce((a, b) => a + b, 0) - (s.track ?? 0);
   }
 
   /** Draw at baseline `y`. Alignment is computed here, from `width`, because
@@ -98,14 +144,20 @@ export class Surface {
   text(text: string, x: number, y: number, s: TextStyle): number {
     const t = this.prep(text, s);
     if (!t) return 0;
-    this.face(s);
-    const w = this.doc.getTextWidth(t) + (s.track ?? 0) * Math.max(0, t.length - 1);
+    const runs = this.runs(t, s);
+    const adv = this.advances(runs, s);
+    const w = adv.reduce((a, b) => a + b, 0) - (s.track ?? 0);
     let left = x;
     if (s.align === 'right') left = x - w;
     else if (s.align === 'center') left = x - w / 2;
     const c = s.color ?? P.text;
     this.doc.setTextColor(c[0], c[1], c[2]);
-    this.doc.text(t, left, y, s.track ? { charSpace: s.track } : undefined);
+    let at = left;
+    runs.forEach((r, i) => {
+      this.face(s, r.face, r.scale);
+      this.doc.text(r.text, at, y, s.track ? { charSpace: s.track } : undefined);
+      at += adv[i];
+    });
     this.box({ x: left, y: y - s.size * PT * CAP, w, h: s.size * PT, kind: 'text', font: s.size });
     return w;
   }
@@ -129,16 +181,46 @@ export class Surface {
   wrap(text: string, w: number, s: TextStyle, maxLines = Infinity): string[] {
     const t = this.prep(text, s);
     if (!t) return [];
-    this.face(s);
-    const track = s.track ?? 0;
-    const avg = s.size * PT * 0.5;
-    const budget = track > 0 ? Math.max(4, w * (avg / (avg + track))) : w;
-    const lines = this.doc.splitTextToSize(t, budget) as string[];
+    let lines: string[];
+    if (this.runs(t, s).length > 1) {
+      // jsPDF measures a line in ONE face; a line holding two is broken here.
+      lines = this.wrapMixed(t, w, { ...s, caps: false });
+    } else {
+      this.face(s);
+      const track = s.track ?? 0;
+      const avg = s.size * PT * 0.5;
+      const budget = track > 0 ? Math.max(4, w * (avg / (avg + track))) : w;
+      lines = this.doc.splitTextToSize(t, budget) as string[];
+    }
     if (lines.length <= maxLines) return lines;
     const kept = lines.slice(0, maxLines);
     const rest = lines.slice(maxLines - 1).join(' ');
     kept[maxLines - 1] = this.clip(rest, w, { ...s, caps: false });
     return kept;
+  }
+
+  /** Greedy word wrap measured run by run. A word wider than the line (a
+   *  sentence in a script with no spaces) is broken between characters. */
+  private wrapMixed(t: string, w: number, s: TextStyle): string[] {
+    const lines: string[] = [];
+    let line = '';
+    const push = (word: string) => {
+      const next = line ? `${line} ${word}` : word;
+      if (this.width(next, s) <= w) { line = next; return; }
+      if (line) { lines.push(line); line = ''; }
+      if (this.width(word, s) <= w) { line = word; return; }
+      let part = '';
+      for (const ch of word) {
+        if (part && this.width(part + ch, s) > w) { lines.push(part); part = ch; } else part += ch;
+      }
+      line = part;
+    };
+    for (const para of t.split('\n')) {
+      for (const word of para.split(' ')) if (word) push(word);
+      lines.push(line);
+      line = '';
+    }
+    return lines;
   }
 
   /** Height of `n` lines at `size` with the given leading. */

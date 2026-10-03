@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-03-pdf-names',
+    date: '2026-10-03',
+    kind: 'fixed',
+    title: 'PDFs print Japanese and Cyrillic player names, with the name in Latin letters beside them',
+    body: [
+      'A player whose name is written in Japanese or Cyrillic used to appear in every PDF as their tag. The name now prints as it is written, and where a report lists its players it is followed by the same name in Latin letters and the tag, for example こっとん (Kotton) · #ABC002.',
+      'Names in kanji print as written without a Latin form, because a kanji name cannot be read reliably by rule. Korean names still print as the tag.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Export a scouting report',
+  },
+  {
     id: '2026-10-03-scroll-rail',
     date: '2026-10-03',
     kind: 'new',

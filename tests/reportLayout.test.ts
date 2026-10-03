@@ -193,9 +193,10 @@ describe('text', () => {
   });
 
   it('falls back to the tag when most of a name cannot be printed', () => {
-    // Keeps only the Latin "i": printed, it was a different player.
-    expect(printableName('Потужнi лававод', '#J00VYRCR2')).toBe('#J00VYRCR2');
-    expect(printableName('ゴリラ✨', '#RQ0J8GQRJ')).toBe('#RQ0J8GQRJ');
+    // Hangul is in no face: keeping only the Latin "i" printed a different
+    // player. Kana and Cyrillic ARE held now — see reportNames.test.ts.
+    expect(printableName('한국i 선수', '#J00VYRCR2')).toBe('#J00VYRCR2');
+    expect(printableName('✨👑✨', '#RQ0J8GQRJ')).toBe('#RQ0J8GQRJ');
     expect(printableName('EthanWinters', '#8CRPJ2RCG')).toBe('EthanWinters');
     expect(printableName('', '#TAG')).toBe('#TAG');
     // Cleaned, not raw: the space before a stripped emoji must not survive
@@ -203,8 +204,10 @@ describe('text', () => {
     expect(printableName('Danzai ✨', '#TAG')).toBe('Danzai');
     expect(`${printableName('Danzai ✨', '#TAG')}’s decks`).toBe('Danzai’s decks');
     // A separator whose other half was dropped goes with it: the contents
-    // listed "| SirJose" for "傳奇 | Sir✨Jose✨".
-    expect(printableName('傳奇 | Sir✨Jose✨', '#YYPCUUY0')).toBe('SirJose');
+    // listed "| SirJose" for "傳奇 | Sir✨Jose✨" when no face held kanji.
+    // Hangul is the script still unheld; kanji now prints.
+    expect(printableName('전설 | Sir✨Jose✨', '#YYPCUUY0')).toBe('SirJose');
+    expect(printableName('傳奇 | Sir✨Jose✨', '#YYPCUUY0')).toBe('傳奇 | SirJose');
     // Nothing dropped, nothing trimmed.
     expect(printableName('-Bob-', '#TAG')).toBe('-Bob-');
   });

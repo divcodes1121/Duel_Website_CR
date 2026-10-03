@@ -421,12 +421,17 @@ describe('teamAnalysisReport — what the page will look like', () => {
   it('prints the tag under the name once, never twice when the name fell back to it', () => {
     const named = teamAnalysisReport(report(), { focus: { side: 'red', tag: '#R1' } });
     expect(named.summary).toBe('#R1');
-    // A Cyrillic name cannot be printed in the report's fonts, so the subject
+    // A Korean name cannot be printed in the report's fonts, so the subject
     // IS the tag; a summary repeating it printed "#J00VYRCR2 · #J00VYRCR2".
-    const cyr = report({ folders: [folder('#R1', 'Потужнi лававод')] });
-    const doc = teamAnalysisReport(cyr, { focus: { side: 'red', tag: '#R1' } });
+    const kor = report({ folders: [folder('#R1', '한국 선수')] });
+    const doc = teamAnalysisReport(kor, { focus: { side: 'red', tag: '#R1' } });
     expect(doc.subject).toBe('#R1');
     expect(doc.summary).toBeUndefined();
+    // A Cyrillic name IS printed, with its Latin form leading the tag line.
+    const cyr = report({ folders: [folder('#R1', 'Потужнi лававод')] });
+    const named2 = teamAnalysisReport(cyr, { focus: { side: 'red', tag: '#R1' } });
+    expect(named2.subject).toBe('Потужнi лававод');
+    expect(named2.summary).toBe('Potuzhni lavavod  ·  #R1');
   });
 
   it('refuses a player who is not in the analysis rather than printing an empty file', () => {

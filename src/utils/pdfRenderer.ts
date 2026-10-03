@@ -30,6 +30,7 @@ import { getClashRoyaleDeckLink } from './deckLink';
 import { paginate, summarize, type ContentPage, type ExportRequest } from './deckExport';
 import { CROWN, artUrl, cardTile, coverPlate, glowPlate, logoTile, type Form, type Raster } from './report/art';
 import { loadFonts } from './report/fonts';
+import { facesNeeded } from './report/text';
 import { BODY_TOP, CONTENT_W, MARGIN, PAGE_H, PAGE_W, PT, TYPE, cardH, stripWidth } from './report/geometry';
 import { CAP, Surface, type TextStyle } from './report/surface';
 import { HUES, P, hue, mix, type HueName } from './report/theme';
@@ -242,7 +243,7 @@ export async function renderDeckReport(req: ExportRequest, opts: RenderOptions =
 
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true, putOnlyUsedFonts: true });
-  const embedded = await loadFonts(doc);
+  const { embedded, extra } = await loadFonts(doc, facesNeeded(`${req.title} ${req.handle} ${JSON.stringify(req.sections)}`));
 
   const urls = collectUrls(pages, stats.topCards);
   let loaded = 0;
@@ -255,7 +256,7 @@ export async function renderDeckReport(req: ExportRequest, opts: RenderOptions =
   const tiles = new Map<string, Raster | null>(urls.map((u, i) => [u, tileList[i]]));
   const [plate, glow, logo] = await Promise.all([coverPlate(HUE), glowPlate(HUE), logoTile()]);
 
-  const s = new Surface(doc, embedded, tiles);
+  const s = new Surface(doc, embedded, tiles, extra);
   const generated = stamp(new Date());
   const total = pages.length + 1;
   const crumbs = { screen: req.title, subject: req.handle };

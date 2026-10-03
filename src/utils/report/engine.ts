@@ -22,6 +22,7 @@ import {
   blockAtoms, drawTile, readAtom, statsAtoms, TILE_H, type Atom, type BlockCtx,
 } from './blocks';
 import { loadFonts } from './fonts';
+import { facesNeeded } from './text';
 import {
   BLOCK_GAP, BODY_BOTTOM, BODY_H, BODY_TOP, CONTENT_W, FOOTER_Y, HEADER_H, MARGIN, PAGE_H, PAGE_W, PT, TYPE,
 } from './geometry';
@@ -347,7 +348,9 @@ export async function renderReport(input: ReportDoc): Promise<RenderResult> {
   const t0 = performance.now();
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true, putOnlyUsedFonts: true });
-  const embedded = await loadFonts(doc);
+  // The Japanese faces are fetched only if a string in this document needs
+  // one — a name in kana, usually. Most reports fetch neither.
+  const { embedded, extra } = await loadFonts(doc, facesNeeded(JSON.stringify(input)));
   const docHue = (model.hue ?? 'violet') as HueName;
   const fullCover = (model.cover ?? (model.contents ? 'full' : 'band')) === 'full';
   const generated = stamp(new Date());
@@ -375,7 +378,7 @@ export async function renderReport(input: ReportDoc): Promise<RenderResult> {
   const tiles = new Map<string, Raster | null>(urls.map((u, i) => [u, tileList[i]]));
   const plates = new Map(plateList);
 
-  const s = new Surface(doc, embedded, tiles);
+  const s = new Surface(doc, embedded, tiles, extra);
   const ctx: BlockCtx = { s, w: CONTENT_W, hue: docHue };
 
   // Atoms.

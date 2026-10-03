@@ -158,3 +158,7 @@ server/.swap_graph.json
 server/.swap_graph.json.tmp
 server/.deck_synergy.json
 server/.deck_synergy.json.tmp
+
+# The Noto Sans JP master (9.6 MB variable font). scripts/build-report-fonts.py
+# downloads it from a pinned commit and checks its SHA-256, so it is never source.
+assets/fonts/noto/

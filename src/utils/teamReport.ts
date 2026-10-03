@@ -1,4 +1,4 @@
-import { printableName } from './report/text';
+import { latinName, printableName } from './report/text';
 import type {
   TeamFolder,
   TeamMatchupRow,
@@ -68,19 +68,37 @@ function windowLabel(w: { from: string | null; to: string | null }): string {
   return `${DAY(w.from)} – ${DAY(w.to)}`;
 }
 
-/** The tag under a focused PDF's name — unless the name could not be printed
- *  and `who()` already fell back to the tag, which would print it twice. */
+/**
+ * The line under a player's name: their tag, led by the name in Latin letters
+ * when it is written in another script — "Kotton · #ABC002" under
+ * "こっとん". Nothing when the name could not be printed and `who()` already
+ * fell back to the tag, which would print it twice.
+ */
 function tagLine(m: { name: string; tag: string }): string | undefined {
-  return who(m) === m.tag ? undefined : m.tag;
+  if (who(m) === m.tag) return undefined;
+  const latin = latinName(m.name);
+  return latin ? `${latin}  ·  ${m.tag}` : m.tag;
+}
+
+/**
+ * A player as a LIST names them — the roster table, the contents: as written,
+ * then in Latin letters when those differ. Headings use `who()` alone; they
+ * repeat on every sheet and the opener has already said both.
+ */
+function whoFull(m: { name: string; tag: string }): string {
+  const shown = who(m);
+  const latin = shown === m.tag ? null : latinName(m.name);
+  return latin ? `${shown} (${latin})` : shown;
 }
 
 /** A member's name, falling back to the tag the way every screen does. */
 function who(m: { name: string; tag: string }): string {
   /* THE TAG WHEN THE NAME CANNOT BE PRINTED. A Clash Royale name may be
-     entirely emoji or entirely non-Latin script, and the PDF's fonts are
-     WinAnsi — such a name sanitises to nothing and the row would print a
-     blank where a person belongs. A tag is a worse label than a name and a
-     far better one than empty. */
+     entirely emoji, or in a script the report's fonts do not hold (Latin,
+     Cyrillic and Japanese are held; Korean and Arabic are not) — such a name
+     sanitises to nothing and the row would print a blank where a person
+     belongs. A tag is a worse label than a name and a far better one than
+     empty. */
   const named = m.name && m.name !== m.tag ? m.name : '';
   return printableName(named, m.tag);
 }
@@ -353,7 +371,7 @@ function scoutRosterBlocks(report: TeamReport): ReportBlock[] {
       ],
       rows: report.red.map((m, i): TableRow => ({
         n: String(i + 1),
-        name: { text: who(m), hue: 'red' },
+        name: { text: whoFull(m), hue: 'red' },
         tag: m.tag,
         basis: { text: basisText(m), thin: m.basis !== 'stored' },
         battles: int(m.battles),
@@ -388,7 +406,7 @@ function rosterBlocks(report: TeamReport): ReportBlock[] {
     ],
     rows: members.map((m, i): TableRow => ({
       n: String(i + 1),
-      name: { text: who(m), hue },
+      name: { text: whoFull(m), hue },
       tag: m.tag,
       // A tag nobody has ever collected is the thing the reader most needs to
       // notice: everything printed about that player rests on ~25 battles.
@@ -519,7 +537,7 @@ function opponentDivider(folder: TeamFolder, index: number, total: number): Repo
     kind: 'divider',
     title: name,
     subtitle: `Opponent ${index + 1} of ${total}`,
-    tag: folder.player.tag,
+    tag: tagLine(folder.player) ?? folder.player.tag,
     hue: 'red',
     /* THE SIDE IS PART OF THE LABEL. Every name in this report appears twice —
        once as an opponent and once as a teammate, unless the rosters are
@@ -527,7 +545,7 @@ function opponentDivider(folder: TeamFolder, index: number, total: number): Repo
        nothing between them sends the reader to the wrong half of the document.
        The sheets themselves say which they are in the subtitle; the contents
        has only this line. */
-    contents: `${name} — opponent`,
+    contents: `${whoFull(folder.player)} — opponent`,
     depth: 1,
     stats: [
       { label: 'Battles', value: int(folder.player.battles), note: basisText(folder.player) },
@@ -831,9 +849,9 @@ function teammateBlocks(
     kind: 'divider',
     title: name,
     subtitle: `Your squad — player ${index + 1} of ${total}`,
-    tag: member.tag,
+    tag: tagLine(member) ?? member.tag,
     hue: 'blue',
-    contents: `${name} — your squad`,
+    contents: `${whoFull(member)} — your squad`,
     depth: 1,
     stats: [
       { label: 'Battles', value: int(member.battles), note: basisText(member) },

@@ -1115,6 +1115,12 @@ only some screens had.
 - **The PDF it produces is always dark** and does not read the page's CSS —
   see "Exporting a screen as a PDF" in the README. Nothing in the report engine
   may set a transparency state; a test enforces it.
+- **A name in Japanese or Cyrillic prints as written** (2026-10-03), and where
+  a report lists its players the name in Latin letters and the tag follow it:
+  `こっとん (Kotton)` in the roster table and the contents,
+  `Kotton · #ABC002` under the name on a player's opening band. The
+  Japanese fonts are fetched only when a document needs them. Korean names
+  still print as the tag. README "Names in Japanese and Cyrillic".
 
 ## The dashboard shell, and charts that follow the rules (2026-09-27)
 
