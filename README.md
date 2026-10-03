@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **The scroll rail — one scroller on every screen** | **2026-10-03, client only.** Asked for directly: a scroller on every screen that is not the ordinary one — look at what exists online, make it interactive, make it match the site. The native vertical scrollbar is gone everywhere and one component replaces it: a rail of ticks standing for the whole content, the lit violet run being the part on screen. Ticks rise toward the pointer like a dock, the lit run drags, a press goes there, and the longer ticks are the page's own sections — point at one for its name, press it to jump. Ported from Ruixen UI's Chapter Scrubber (MIT), eight deviations listed in the file. **Mounted once** (`ui/scroll-rail.tsx`): it attaches itself to anything that scrolls, so no screen was rewired, and scrolling itself stays the browser's. A page gets the full rail in the shell's gutter, where it covers no content; a pane, a dialog list or a textarea gets a slim one. On a phone it is an indicator that shows while the page moves. **79/79 in a browser on production data** (both themes, 1440/1280/390, reduced motion), 53 unit checks, no animation loop at rest. Main bundle +6.50 kB gzip. See [The scroll rail](#the-scroll-rail--one-scroller-on-every-screen-2026-10-03) |
 | **Coach Assist answers in ~7 s, not 80** | **2026-09-30, server only.** Reported: *"the time taking is more than 80 seconds"*. Profiled live: 65 of 76 s were SQLite `execute`, and a one-row indexed lookup cost 0.73 s. The bot's WAL had grown to 2.9 GB, and while no other connection to the file was open in the process, a fresh connection's first query paid 0.7-0.9 s — and the API opens, queries once and closes, hundreds of times a request. `clash_data.connect` now keeps ONE idle connection per file open for the process's life (it holds no transaction: the bot's checkpoint is unaffected, proven by a test), and a fresh connection's first query takes ~1 ms. Same request, A/B alternated: **cold 57-107 s -> 7.5 s, repeat 16.8 -> 1.6 s, byte-identical answer**. Live after deploy: new players 6-11 s (was 45-56), repeat 3 s (was ~20); prediction 2-5 s, a Team Analysis board 4 s. See [One idle connection, and the 80-second Coach](#one-idle-connection-and-the-80-second-coach-2026-09-30) |
 | **"Or bring one of these" offers only decks whose cards duel players pair; the whole-duel plan is gone** | **2026-09-30, server deployed first.** `server/deck_synergy.py` counts which cards duel players put in one deck; decks less cohesive than 9 in 10 of the decks they repeatedly field are skipped (held-out: the least cohesive fifth won 5.7 points under their pilots' prediction), unless duel players field the deck 30+ times, when its duel record is shown instead. Live: 26 of 30 offered decks proven in duels. "Planned for the whole duel" removed on request. See ["Or bring one of these" only offers decks whose cards duel players pair](#or-bring-one-of-these-only-offers-decks-whose-cards-duel-players-pair-2026-09-30) |
 | **Retention one battle-day at a time, a real backup, and a Data lifecycle view** | **2026-09-29, server + bot + console.** Battles are kept 304 days (10 months) from the day they were played and removed the next day, ONE BATTLE-DAY A RUN (at most three), by a daily job (`server/retention.py`) instead of the bot's startup-only delete that would have removed every expired day in one statement; the bot hands deletion over (`CLASH_RETENTION_EXTERNAL`). Nothing is due until **2027-04-02**. The VPS had no backup — three stale one-off copies (152 GB) sat on the same disk; a daily verified, compressed backup now streams a consistent snapshot through zstd without a temp copy (`server/db_backup.py`, `server/tools/dbstream.c`), and a scheduled task on the owner's PC pulls it, re-verifies it and confirms it. The console gained **Data lifecycle**; ladder raw payloads (a heavier copy nothing reads) now keep 72 hours instead of growing ~4 GB a day between bot restarts. The view shows data in and out per day, players affected, what expires next, stored by month, capacity at 10 vs 12 months, the deletion log and every backup. 46 Python + 18 vitest checks; 64/64 in a browser. See [Retention, backups and the Data lifecycle view](#retention-backups-and-the-data-lifecycle-view-2026-09-29) |
@@ -121,7 +122,7 @@ bot's SQLite files read-only.
 | Coach Assist — Suggestion | **reads real duels (2026-09-27, live)** — the fused ladder+duel rate on every pairing and one option held for duel proof; see the row at the top. Before that, **personal and archetype-by-archetype (2026-09-25, live).** "Or bring one of these" is chosen per player from their playstyle (12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition), and every deck shows its rate against **five** archetypes — their likely ones, their other win conditions, then the meta — on one line |
 | R3 prediction sampler | **STOPPED 2026-09-19 21:05 UTC** by its own stop condition (a royalweb restart during a deploy), ~8 h into 7 days; found 2026-09-25, not restarted per protocol. Re-running needs a deploy freeze or an amendment — the account holder's call. See `server/README.md` |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **3,890 Python checks** across **70 suites** and **1,192 vitest** across 55 files as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **3,890 Python checks** across **70 suites** and **1,245 vitest** across 56 files as of 2026-10-03 — the scroll rail added `scrollRail.test.ts` (53: the tick arithmetic, the section marks, the springs, and twelve contracts read off the stylesheets and the mount); before it 1,192 across 55 as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -186,6 +187,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 18b. [A command palette, keyboard shortcuts, and undo in the deck tools](#a-command-palette-keyboard-shortcuts-and-undo-in-the-deck-tools-2026-09-28)
 18c. [Save a deck as a picture, fill a deck legally, and the meta's weekly movement](#save-a-deck-as-a-picture-fill-a-deck-legally-and-the-metas-weekly-movement-2026-09-28)
 18d. [One tab component, a card inspect sheet, and motion that stays out of the way](#one-tab-component-a-card-inspect-sheet-and-motion-that-stays-out-of-the-way-2026-09-28)
+18e. [The scroll rail — one scroller on every screen](#the-scroll-rail--one-scroller-on-every-screen-2026-10-03)
 19. [The display face, and the one property that decides it](#the-display-face-and-the-one-property-that-decides-it)
 19a. [The display face, and the dark ground](#the-display-face-and-the-dark-ground)
 20. ["Why is Evolutions 0?" — two emptinesses that shared a sentence](#why-is-evolutions-0--two-emptinesses-that-shared-a-sentence)
@@ -4797,6 +4799,167 @@ strip that carries deck actions:
 view timeline (above). A pruning script dropped the builder stylesheet's file
 header with the first rule under it; the header was put back, and no other
 file lost one.
+
+---
+
+## The scroll rail — one scroller on every screen (2026-10-03)
+
+Asked for directly: *"add a scroll on all screens — it should not be a common
+or normal scroll; check online components, an interactive scroller, custom,
+matching the vibe of the website"*. The details for anyone adding a screen are
+in `docs/UI.md`, "The scroll rail".
+
+### What it is
+
+`components/ui/scroll-rail.tsx` + `scroll-rail.css`, arithmetic in
+`scrollRailGeometry.ts` (no imports, `tests/scrollRail.test.ts`).
+
+A column of ticks down the right edge of whatever scrolls. The whole column
+stands for the whole content; the run of lit violet ticks is the part on
+screen. That is all a scrollbar is, drawn as marks instead of a slab.
+
+- **Ticks rise toward the pointer**, like a dock. They start lifting 64px
+  away and reach full length on the rail.
+- **The lit run drags** like a thumb, and a press anywhere else scrolls there.
+- **The longer ticks are the page's sections.** Point at one and a label names
+  it with how far down the page it is; press it and that section scrolls to
+  the top. On a page with no sections the label is the percentage alone.
+- **The wheel works with the pointer on the rail.**
+
+Violet, because violet is this site's "you are here" — the same hue as the
+focus ring, the active tab and the active page number.
+
+### Where it came from
+
+What exists online was looked at first: 21st.dev's scroll-progress bars
+(bundui, skyleen77), reuno-ui's circular progress button, the shadcn Scroll
+Area and its restyled variants, and a "scroll area gutter". **None of the
+progress bars is a control** — you cannot press or drag them — and this
+project has already removed one of those (a glow that tracked the page down
+the edge of `.main`, judged decoration). The scroll-area wrappers are controls
+but ordinary ones: a restyled slab.
+
+The one that fitted is Ruixen UI's **Chapter Scrubber** (MIT,
+`ruixen.com/r/chapter-scrubber.json`): a rail of ticks that magnify toward the
+cursor on a raised-cosine wave driven by two springs. It is a *list of chapters
+you pick from*, not a scrollbar, so the tick rail, the wave and the springs are
+its, and everything that makes it a scroller is new. The eight deviations are
+listed at the top of `scroll-rail.tsx`; the ones that matter:
+
+- **No `motion`, no Tailwind.** The source is 37 `useTransform`s a rail. This
+  is plain DOM written from one `requestAnimationFrame` loop that runs only
+  while something is moving.
+- **Scrolling stays the browser's.** Nothing here replaces native scrolling —
+  wheel, touch, keyboard, `scrollIntoView`, find-in-page all behave as before.
+  The rail is drawn *beside* the scroller in a fixed layer and only reads and
+  writes `scrollTop`.
+- **Not in the accessibility tree.** The source is a `listbox` with roving
+  focus. A scrollbar is not a tab stop, and the scroller is already keyboard
+  scrollable, so the layer is `aria-hidden`.
+
+### One host, no wrappers
+
+`<ScrollRailHost />` is mounted once in `App.tsx`, beside the card inspect
+host. **No screen was rewired.** A wrapper component would have meant touching
+about forty-five scroll regions, each sitting in a flex or grid arrangement
+this README has several sections of hard-won rules about.
+
+It finds scrollers three ways: nine points sampled across the window find the
+page-sized ones, which keep a rail at rest; the pointer finds the one it is
+over; and a `scroll` event finds anything else. A modal's scrim covers all
+nine sample points, so the page behind it loses its rail without being told.
+
+Two layers, because one `z-index` cannot be right for both jobs: a page's rail
+sits under dialogs and menus (150), and the rail for a scroller *inside* one
+sits above it (1400).
+
+### A page, a pane, and a phone
+
+| | rail | where |
+|---|---|---|
+| a page — big, and ending at the window's right edge | full: 28px crest, marks, label | in the shell's 1rem gutter, so the pressable strip **covers no content** |
+| a pane in the middle of a layout, a dialog list, a dropdown, a textarea | slim: 14px crest, no label | inside its right edge, in the lane a native bar had |
+| a coarse pointer | slim, shown while the page moves, then faded | takes no input |
+
+On a phone a pressable strip down the right edge would eat the edge of every
+swipe, so there it is an indicator only.
+
+**The strip never widens toward the pointer**, and it **steps aside for a
+control that is not part of its scroller**. The sidebar's collapse button
+straddles the sidebar's right edge by design; at a short window height the
+sidebar overflows, gets a rail, and the two overlap. The button keeps its
+press. A control *inside* the scroller does not win: that lane is where a
+native scrollbar was, and a scrollbar always outranked the content under it.
+
+### Naming sections, opting out, and dressing it
+
+- `data-rail-mark="Name"` on an element makes it a section. `h1`–`h3` are
+  picked up without it. A named section owns the headings inside it.
+- More than twelve marks is a list, not a set of sections: the deepest heading
+  level is dropped whole, and fifty deck names of one level leave no marks at
+  all. Top Meta Decks therefore shows a rail with none.
+- `data-no-rail` on a scroller opts it out.
+- A screen with its own palette sets `--rail-ink`, `--rail-lit` and
+  `--rail-glow` on the element that scrolls. The field book does: it is cream
+  paper in both themes, and on dark the site's white ticks all but vanished on
+  it.
+
+### The native scrollbars
+
+The vertical one is switched off for every element in `index.css`, not per
+element as a rail attaches — a classic scrollbar takes layout width, and
+removing it on hover would shift the content under the pointer.
+
+`::-webkit-scrollbar { width: 0; height: 8px }`: `width` is the vertical bar
+and `height` the horizontal one, so **a table that scrolls sideways keeps its
+thin bar**. A mouse with no tilt wheel needs it, and the rail does not cover
+that axis. Firefox has no per-axis control, so it hides both and the three
+boxes that only scroll sideways put theirs back.
+
+`scrollbar-width: thin` outranks `::-webkit-scrollbar` in Chromium, so one
+stray declaration draws the browser's bar beside the rail. The dashboard shell
+had two; a test now fails on any.
+
+### Measured
+
+- **79 of 79 browser checks** on production data: landing, five analytics
+  boards, the duel builder at two sizes, the command palette, the card filter
+  panel, a textarea, the field book, a phone with real touch events, and
+  reduced motion. Both themes.
+- **No animation loop at rest**: 0 frames in 1.5 s, counted by wrapping
+  `requestAnimationFrame`, before and after an interaction.
+- A drag is proportional to the pixel: 120px on the rail moved the page 528px
+  against 528 expected, and a drag to the bottom lands on the last pixel
+  (2,647 of 2,647).
+- **Main bundle 368.24 → 374.74 kB gzip (+6.50)**, CSS 55.28 → 55.86 (+0.58),
+  baseline taken by stashing and rebuilding. Eager on purpose: it is the
+  scrollbar, and a scrollbar that arrives late is a page with none.
+- 53 unit checks; 1,245 vitest across 56 files.
+
+### Four things that were wrong before they were right
+
+1. **The field book's rail was invisible.** White ticks on cream paper, on
+   dark. Found in a screenshot; hence `--rail-ink`.
+2. **The strip sat over the sidebar's collapse button** at 1280×640 and would
+   have taken its clicks. Found by reading the survey's coordinates; hence the
+   step-aside rule.
+3. **A press on a section mark inside the lit run did nothing.** The label
+   named the section, the press was read as the start of a drag, and nothing
+   moved. A click that turns out not to be a drag now goes there on release.
+4. **A check passed for the wrong reason.** "The native scrollbar takes no
+   width" read 0px — and so did a deliberately wrong stylesheet, because
+   Playwright launches headless Chromium with `--hide-scrollbars`. Launched
+   without that flag the shipped rule measures 0px vertical / 8px sideways and
+   a wrong one measures 1px.
+
+### Not done
+
+- **Sideways scrolling keeps the native bar.** There is no horizontal rail.
+- **Not seen in Firefox or Safari.** Checked in Chromium only. The Firefox
+  path is the `@supports not selector(::-webkit-scrollbar)` block.
+- The label wears the site's colours on the field book, not the paper's.
+- A heading that is `position: sticky` would be marked where it is stuck, not
+  where it belongs. Nothing on the site does that today.
 
 ---
 
@@ -15375,6 +15538,13 @@ src/
                               stored daily history. NO IMPORTS
   components/ui/tabs.tsx      the one tab strip: violet slab, arrow keys, scrolls
                               or stacks on a phone. Nothing else draws a tablist
+  components/ui/scroll-rail.tsx
+                              THE SCROLLER, on every screen. Mounted once in
+                              App.tsx; attaches itself to whatever scrolls.
+                              Ported from Ruixen UI's Chapter Scrubber
+  components/ui/scrollRailGeometry.ts
+                              its arithmetic: ticks, the lit run, the wave,
+                              placement, section marks, springs. NO IMPORTS
   components/CardInspect/     the card inspect sheet; state and rules in
                               state/cardInspect.ts
   utils/viewTransition.ts     the route cross-fade, called from App's hashchange

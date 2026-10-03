@@ -131,6 +131,10 @@ server/ml/results/shadow-log.jsonl*
 verify*.mjs
 probe*.mjs
 shot-*.png
+# Where a browser check saves its screenshots for the account holder to look
+# at. They are taken against production data, so they can show real players'
+# names and tags, and this repository is public.
+/testing/
 
 # Cygwin/MSYS crash dumps
 *.stackdump

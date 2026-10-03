@@ -984,8 +984,21 @@ button {
   border-radius: inherit;
 }
 
+/* ==========================================================================
+   Scrollbars
+   ==========================================================================
+   THE VERTICAL SCROLLBAR IS THE SCROLL RAIL (`components/ui/scroll-rail.tsx`),
+   on every screen. The browser's own is switched off here so the two are never
+   drawn together — and switched off for EVERYTHING, not per element as a rail
+   attaches, because a classic scrollbar takes layout width and removing it on
+   hover would shift the content under the pointer.
+
+   `width` is the vertical bar and `height` the horizontal one, so this hides
+   one axis and keeps the other: a table that scrolls SIDEWAYS keeps its thin
+   bar, which a mouse without a tilt wheel needs. Nothing replaces that one. */
+
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 0;
   height: 8px;
 }
 
@@ -1000,6 +1013,23 @@ button {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* Firefox has no per-axis control: `scrollbar-width` hides both or neither.
+   The boxes that only scroll sideways put theirs back in their own files. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: none;
+  }
+}
+
+/* A finger needs no bar on either axis, and this is the property a phone
+   browser honours even where it ignores the pseudo-element above — without it
+   the native overlay bar would flash beside the rail on every swipe. */
+@media (pointer: coarse) {
+  * {
+    scrollbar-width: none;
+  }
 }
 
 /* Visually hidden, still read aloud — used for labels on icon-only controls. */

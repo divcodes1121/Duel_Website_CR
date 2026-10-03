@@ -1,0 +1,210 @@
+/* The scroll rail. `scroll-rail.tsx` says what it is and where it came from;
+   this file is only how it looks.
+
+   PREFIX-SCOPED, plain CSS, like every other vendored piece in `ui/`: the
+   rails are appended to `document.body`, outside any wrapper a CSS module could
+   scope them under.
+
+   THE RULES THIS FILE KEEPS:
+   - Colour comes from the tokens, so one declaration serves both themes. The
+     ticks are `--text` (white on dark, black on light) and the lit run is
+     `--hue-violet` — violet is this site's "you are here", the same hue the
+     focus ring, the active tab and the active page number wear. `--hue-*`, not
+     `--solid-*`: a tick is a bare mark, not a fill that carries text.
+   - Glow is dark-only and static: one blurred bar behind the lit run, mixed at
+     `--glow-core`, which is 0% on light. It moves by transform; it is never in
+     a keyframe.
+   - Nothing here loops. The only transitions are opacity and transform. */
+
+.srail-layer {
+  position: fixed;
+  inset: 0;
+  /* Above the app, below every dialog, menu and scrim (those start at 200). */
+  z-index: 150;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+
+/* Rails for scrollers that live inside an overlay: above the command palette
+   (1300), which is the highest thing on the site. */
+.srail-layer[data-over] {
+  z-index: 1400;
+}
+
+.srail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  transition: opacity var(--dur-3) var(--ease);
+}
+
+.srail[data-state='rest'] {
+  opacity: 0.72;
+}
+
+.srail[data-state='active'] {
+  opacity: 1;
+}
+
+/* ── ticks ───────────────────────────────────────────────────────────── */
+
+.srail-ticks {
+  position: absolute;
+  inset: 0;
+}
+
+/* Every tick is the rail's full width and is SCALED to its length from its
+   right-hand end, so a frame of the wave is a dozen transforms and no layout. */
+.srail-tick {
+  position: absolute;
+  right: 0;
+  width: 100%;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  /* `--srail-*` are set on the rail when its scroller declares `--rail-*`
+     (see `dress` in scroll-rail.tsx); otherwise the site's tokens apply. */
+  background: var(--srail-ink, var(--text));
+  opacity: 0.34;
+  transform: scaleX(0.2);
+  transform-origin: 100% 50%;
+}
+
+/* The lit colour is a second layer faded in by `--lit`, rather than a
+   `color-mix()` on the tick itself: a tick at the edge of the window is PARTLY
+   lit, and an opacity takes a fraction in every browser. */
+.srail-tick::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--srail-lit, var(--hue-violet));
+  opacity: var(--lit, 0);
+}
+
+.srail[data-variant='compact'] .srail-tick {
+  height: 1.5px;
+  margin-top: -0.75px;
+}
+
+/* ── the glow behind the lit run (dark only) ─────────────────────────── */
+
+.srail-glow {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 18px;
+  border-radius: 999px;
+  background: var(--srail-glow, color-mix(in srgb, var(--hue-violet) var(--glow-core), transparent));
+  filter: blur(7px);
+}
+
+.srail[data-variant='compact'] .srail-glow {
+  right: -2px;
+  width: 11px;
+  filter: blur(5px);
+}
+
+/* ── the pressable strip ─────────────────────────────────────────────── */
+
+.srail-hit {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.srail[data-state='hidden'] .srail-hit,
+/* A control from outside the scroller is under the pointer: it keeps its
+   press, and the strip steps aside for it. */
+.srail[data-yield] .srail-hit {
+  pointer-events: none;
+}
+
+.srail[data-dragging] .srail-hit {
+  cursor: grabbing;
+}
+
+/* ── the label ───────────────────────────────────────────────────────── */
+
+/* Two elements, because the two motions must not share a transition: the
+   outer one follows the pointer exactly, the inner one eases in and out. */
+.srail-label {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 0.6rem);
+  transform: translate3d(0, calc(var(--srail-y, 0px) - 50%), 0);
+  pointer-events: none;
+}
+
+/* Opaque: it floats over whatever the page is showing. */
+.srail-label-card {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  max-width: 17rem;
+  padding: 0.32rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface-strong);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.2),
+    0 1px 4px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  transform: translate3d(6px, 0, 0) scale(0.97);
+  transform-origin: 100% 50%;
+  transition:
+    opacity var(--dur-2) var(--ease),
+    transform var(--dur-2) var(--ease);
+}
+
+.srail[data-variant='full'][data-engaged] .srail-label-card {
+  opacity: 1;
+  transform: none;
+}
+
+.srail-label-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.srail-label-name[hidden] {
+  display: none;
+}
+
+.srail-label-pct {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--hue-violet);
+}
+
+/* ── touch ───────────────────────────────────────────────────────────── */
+
+/* An indicator, not a control: it shows while the page moves and takes no
+   input. A pressable strip down the right edge of a phone would eat the edge
+   of every swipe, and the browser's own edge gestures with it. */
+@media (pointer: coarse) {
+  .srail-hit {
+    pointer-events: none;
+  }
+
+  .srail[data-state='rest'] {
+    opacity: 0;
+  }
+}
+
+@media print {
+  .srail-layer {
+    display: none !important;
+  }
+}

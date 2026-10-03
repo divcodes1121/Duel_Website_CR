@@ -22,6 +22,15 @@
   --earth: #9a6a3e;
   --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
 
+  /* THE SCROLL RAIL WEARS THE PAPER'S INK HERE, not the site's. This page is
+     cream in both themes, so on dark the site's white ticks and pastel violet
+     all but vanish on it. A rail takes `--rail-*` from the element that
+     scrolls (see `dress` in ui/scroll-rail.tsx). No glow: nothing on paper
+     emits light. */
+  --rail-ink: var(--ink);
+  --rail-lit: var(--earth);
+  --rail-glow: transparent;
+
   position: relative;
   height: 100%;
   min-height: 0;

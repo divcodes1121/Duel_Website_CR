@@ -1269,7 +1269,15 @@ export function Dashboard({
           ) : section === 'Search Player' ? (
             /* The scroll target for the top bar's Analytics item — the field
                and the Analyze button are what it is pressed to get back to. */
-            <section ref={heroRef} className={styles.hero} id="player-search">
+            <section
+              ref={heroRef}
+              className={styles.hero}
+              id="player-search"
+              /* `data-rail-mark` names a section for the scroll rail: it becomes
+                 one of the rail's longer ticks, the label beside the pointer,
+                 and somewhere a press on the rail goes. */
+              data-rail-mark="Search a player"
+            >
               <div className={styles.heroBody}>
                 <div className={styles.heroScroll}>
                   {/* Copy left, character right. The four corner cards that used
@@ -1427,7 +1435,7 @@ export function Dashboard({
                   Each card keeps its OWN hue — the same one its sidebar row
                   and its section wear — through the per-item `hue`, so the
                   strip does not flatten eight identities into one. */}
-              <div className={styles.areaGrid} id="analytics-areas">
+              <div className={styles.areaGrid} id="analytics-areas" data-rail-mark="Analytics">
                 <Filmstrip
                   label="Analytics areas"
                   /* OPENS ON DUEL ZONE, which is the middle of them — so
@@ -1489,6 +1497,7 @@ export function Dashboard({
                     type="button"
                     className={`${styles.toolPanel} ${i % 2 === 1 ? styles.toolPanelFlip : ''}`}
                     data-hue={f.hue}
+                    data-rail-mark={f.kicker}
                     /* THE NAME, NOT AN EMPTY FLAG. Framing is a property of the
                        PICTURE — which side of it may be cropped depends on where
                        its subject stands — so the stylesheet has to be able to

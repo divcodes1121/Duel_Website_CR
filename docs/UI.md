@@ -8,7 +8,8 @@ the surface ladder — lives in the main `README.md`. This file covers the three
 work and the two canvases that are not three.js (`LiquidMetal` and the tier
 badge are raw WebGL; the electric border is 2D), plus the layout behaviours that
 have nowhere better to live: how a filtered deck list closes, how a route
-owns its own scroll, and how a ranked table fits the width it has.
+owns its own scroll, how a ranked table fits the width it has, and the scroll
+rail that every scrolling region now wears.
 
 ---
 
@@ -27,6 +28,7 @@ owns its own scroll, and how a ranked table fits the width it has.
 | **Liquid metal** | every circular icon control, app-wide | on hover / press only |
 | **Tier badge** | the ADMIN / PRO / MEMBER badge — a liquid that fills the button, sloshes toward the pointer and discharges on click. In the top bar at 112x34, and again in the account menu's tier row at 68x24 | both themes |
 | **Electric border** | the two squad paste boxes on `#/teams`, in the side's own hue — blue for your squad, red for the opposition | both themes |
+| **Scroll rail** | the scroller on every scrolling region, app-wide — plain DOM, no canvas; see "The scroll rail" | both themes; an indicator on touch |
 
 **The tier badge is the one WebGL surface not in `src/three/`.** It is a port of
 ThreeUI's Tactile Fluidics button and lives in `components/TierBadge/`, raw
@@ -1697,6 +1699,59 @@ redesigned".
 
 Probe notes: a panel is `[data-side][role="group"]`; walk every row into view before
 measuring (card images are `loading="lazy"`); the pager and the form strip are unchanged.
+
+## The scroll rail (2026-10-03)
+
+The site's scroller, on every screen: a rail of ticks, the lit violet run being the part of
+the content on screen. Why it is this component and what was measured: README, "The scroll
+rail — one scroller on every screen". This section is what to know when adding a screen.
+
+**You do nothing to get one.** `<ScrollRailHost />` is mounted once in `App.tsx` and attaches
+a rail to anything that scrolls vertically (`overflow-y: auto | scroll`, and actually
+overflowing). The scroller itself is untouched: the rail is drawn beside it in a fixed layer
+on `document.body`, and scrolling stays native.
+
+- **Name a section** with `data-rail-mark="Name"`. It becomes a longer tick, the label
+  beside the pointer, and somewhere a press goes. `h1`–`h3` are picked up without it; a named
+  section owns the headings inside it, so the hero's `<h1>` is not a second section.
+- **More than twelve is a list.** The deepest heading level is dropped whole; if one level is
+  left and it is still too many, there are no marks. Do not expect fifty rows to be marked.
+- **Opt out** with `data-no-rail` on the scroller. Its native bar is already off, so this
+  means no scroller at all — for something that scrolls but should not look like it.
+- **A screen with its own palette dresses its rail**: set `--rail-ink`, `--rail-lit` and
+  `--rail-glow` on the element that scrolls. The rail lives outside that element and cannot
+  inherit them, so they are read and carried across. The field book is the one user.
+- **Do not set `scrollbar-width` or `scrollbar-color`.** In Chromium the standard property
+  outranks `::-webkit-scrollbar`, so `thin` brings the browser's bar back beside the rail.
+  `tests/scrollRail.test.ts` fails on it. The one exception is the Firefox-only block that
+  restores a SIDEWAYS bar (`@supports not selector(::-webkit-scrollbar)`), which the rail does
+  not cover.
+- **Full or slim is decided for you.** Full (28px crest, marks, label) needs 420×320 AND the
+  scroller ending at the window's right edge, flush or a gutter away. Anything else — a pane
+  mid-layout, a dialog list, a dropdown, a textarea — is slim, in the lane a native bar had.
+- **A gutter of 10–32px beside a scroller is the rail's.** That is the shell's 1rem padding;
+  the rail sits in it and its strip covers no content. Do not put a control there.
+- **The strip yields to a control from outside its scroller** (the sidebar's collapse button),
+  never to one inside it. If a new control straddles a scroller's edge it keeps its press; if
+  it is inside the scroller's last 12px it does not.
+- **Two layers**: `.srail-layer` at 150 (under every dialog and menu) and
+  `.srail-layer[data-over]` at 1400 (for a scroller under a `position: fixed` ancestor,
+  outside `#root`, or under anything with `z-index >= 150`). `UNDER_Z` in the component must
+  equal the stylesheet's value; a test holds them together.
+- **Motion**: no keyframes, nothing infinite. One `requestAnimationFrame` loop that runs only
+  while a spring is unsettled, a drag is live, or for 700ms after a layout change. Reduced
+  motion keeps the wave's shape and drops its easing; a press jumps instead of gliding.
+- **Touch**: `@media (pointer: coarse)` makes it an indicator — visible while the scroller
+  moves, no pointer events.
+
+Probe notes. Rails are `.srail` with `data-state` (`hidden | rest | active`),
+`data-variant`, `data-outset`, `data-engaged`, `data-dragging`, `data-yield`; ticks are
+`.srail-tick`, marks carry `data-mark`, and each tick's lit amount is the inline `--lit`.
+**Launch Chromium with `ignoreDefaultArgs: ['--hide-scrollbars']`** or every native-scrollbar
+measurement reads 0 whatever the stylesheet says — Playwright hides them by default, and a
+"takes no width" check then passes on a wrong rule. A press on the rail needs the pointer
+moved there first (the strip is real, but the label and wave follow `pointermove`). Wait for
+a board's rail to reach `rest` rather than for a clock: these screens read production.
 
 ## Working on this
 

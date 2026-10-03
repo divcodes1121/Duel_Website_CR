@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-03-scroll-rail',
+    date: '2026-10-03',
+    kind: 'new',
+    title: 'Every screen has a new scroller: a rail of ticks you can drag, press and read',
+    body: [
+      'The plain scrollbar is gone. Down the right edge of anything that scrolls there is now a rail of ticks standing for the whole page, and the lit violet run is the part you are looking at. Drag the lit run to scrub, or press anywhere on the rail to go there. The mouse wheel, the keyboard and touch scrolling work exactly as before.',
+      'Move the pointer toward the rail and the ticks rise to meet it. The longer ticks are the page’s own sections: point at one to see its name, press it to jump there. On a phone the rail shows while the page moves and fades when it stops.',
+    ],
+    href: '#/',
+    hrefLabel: 'Try it on the home page',
+  },
+  {
     id: '2026-10-02-build-around-your-cards',
     date: '2026-10-02',
     kind: 'new',

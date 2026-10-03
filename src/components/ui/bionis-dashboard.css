@@ -1162,6 +1162,16 @@
   border-radius: 12px;
 }
 
+/* Firefox hides every native scrollbar (see "Scrollbars" in index.css). This
+   box only scrolls sideways, which the scroll rail does not cover, so it puts
+   its own back. */
+@supports not selector(::-webkit-scrollbar) {
+  .bd-tableWrap {
+    scrollbar-width: thin;
+    scrollbar-color: var(--dash-line) transparent;
+  }
+}
+
 .bd-table {
   width: 100%;
   border-collapse: collapse;

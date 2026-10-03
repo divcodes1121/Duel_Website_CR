@@ -9,6 +9,7 @@ import { isSupabaseConfigured } from './state/supabase';
 import styles from './App.module.css';
 import { withViewTransition } from './utils/viewTransition';
 import { CardInspectHost } from './components/CardInspect/CardInspect';
+import { ScrollRailHost } from './components/ui/scroll-rail';
 /* SPLIT OUT, the same treatment jsPDF and three.js get and for the same reason:
    it is a side route most visitors never open, and everything it needs — the
    book, the leaf machinery, the magnifier, eight plates of copy — would
@@ -240,12 +241,16 @@ function AppRoutes() {
 }
 
 /* The card inspect sheet sits beside every route, so card art opens it on any
-   screen that draws a card — the analytics shell, the coach roster and #/my. */
+   screen that draws a card — the analytics shell, the coach roster and #/my.
+
+   The scroll rail sits beside every route for the same reason: it is the
+   scroller for whatever scrolls, on every screen, and attaches itself. */
 function App() {
   return (
     <>
       <AppRoutes />
       <CardInspectHost />
+      <ScrollRailHost />
     </>
   );
 }

@@ -162,8 +162,8 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 1rem 0.75rem 1.5rem;
-  scrollbar-width: thin;
-  scrollbar-color: var(--dash-line) transparent;
+  /* No `scrollbar-width` here: the scroll rail is this column's scroller, and
+     the standard property would bring the native bar back beside it. */
 }
 
 .dk-group {
@@ -592,8 +592,6 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--dash-line) transparent;
 }
 
 .dk-contentInner {

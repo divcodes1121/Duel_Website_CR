@@ -169,7 +169,7 @@ export function Footer5({
   );
 
   return (
-    <footer className={cn('footer-5', className)}>
+    <footer className={cn('footer-5', className)} data-rail-mark="Contact and links">
       <div className="f5-wrap f5-top">
         <div className="f5-brand">
           {logo && <div className="f5-logo">{logo}</div>}

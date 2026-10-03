@@ -38,7 +38,7 @@ export function ClosingBand() {
   const reveal = useReveal<HTMLDivElement>();
 
   return (
-    <div className={styles.band} ref={reveal}>
+    <div className={styles.band} ref={reveal} data-rail-mark="Coming soon">
       <section className={styles.card}>
         <p className={styles.soon}>Coming soon...</p>
       </section>

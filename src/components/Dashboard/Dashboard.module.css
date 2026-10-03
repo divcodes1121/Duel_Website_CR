@@ -593,14 +593,16 @@
 /* The home screen scrolls: the hero fills the first view, the tool panels and
    analytics grid sit below it. A hosted tool still fills the column exactly,
    because it manages its own internal scrolling. */
-/* THE SCROLLBAR IS HIDDEN, in both themes, and nothing replaces it.
+/* THE NATIVE SCROLLBAR IS HIDDEN, in both themes, and the SCROLL RAIL replaces
+ * it (`components/ui/scroll-rail.tsx`, mounted once in `App.tsx`). It sits in
+ * the shell's right-hand gutter beside this panel, so it covers no content.
  *
  * There was briefly a travelling glow on the right edge on dark, fed by a
- * `--scroll-progress` custom property. It went because the page did not need
- * it: the content itself is the cue that there is more — panels are cut off
- * mid-card at the fold — and a light tracking down the edge of a page that is
- * only three screens tall is decoration pretending to be a control. The hook
- * that fed it was deleted with it rather than left dangling.
+ * `--scroll-progress` custom property. It went because it was decoration
+ * pretending to be a control: a light tracking down the edge that you could not
+ * press, drag or read anything from. The rail is the opposite case — it drags,
+ * a press on it scrolls, and its longer ticks are the page's own sections — so
+ * the objection to the glow does not carry over to it.
  *
  * `position: relative` stays: it is the containing block for anything the
  * panel positions against its own edges rather than the window's. */
