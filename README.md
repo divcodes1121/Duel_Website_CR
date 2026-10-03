@@ -48,7 +48,7 @@ bot's SQLite files read-only.
 
 ---
 
-## Status — 2026-09-29
+## Status — 2026-10-03
 
 | | |
 |---|---|
@@ -256,7 +256,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 1,181 tests in 54 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
+npm run test                      # 1,293 tests in 58 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
 python server/test_team_analysis.py # 163 checks over both tabs of the squad board, incl. the fused rate's wiring
 python server/test_team_scout.py  # 160 checks over the coaching brain: projection, scoring, squad plan
 python server/test_matchup_fusion.py # 34 checks over the fused ladder+duel rate, against literals
@@ -298,8 +298,8 @@ npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
 ```
 
-That is 27 of the **66** Python suites; all of them total **3,710** checks, and
-the only failure is `test_ml_21a`'s `123 != 122` (the card count moved when
+That is 36 of the **70** Python suites; all of them total **3,890** checks
+(counted by a full run on 2026-10-02), and the only failure is `test_ml_21a`'s `123 != 122` (the card count moved when
 Minion Giant shipped; accepted). A script totalling them has to read BOTH
 result lines — the homegrown `check()` suites print `N passed, M failed`, the
 `test_ml_*` ones and `test_api_security` print `Ran N tests` — or it scores
@@ -376,7 +376,7 @@ open, so links and refreshes work.
 | Route | Screen |
 |---|---|
 | `#/` | Landing — hero search, analytics blocks, tool panels. No sidebar. |
-| `#/builder` | Duel deck builder (5 decks × 8 slots, cards unique across the set) |
+| `#/builder` | Duel deck builder (5 decks × 8 slots, cards unique across the set; the eye on a deck turns it grey and frees its cards for the others) |
 | `#/decks` | Deck's Home — unlimited auto-saving single decks |
 | `#/palette` | Counter Palette — archetype folders of counter decks |
 | `#/teams` | **Team Analysis** — two rosters in, a folder per opponent out |
@@ -438,7 +438,7 @@ that used to stand in front of everything is deleted outright. See
 [Accounts, tiers and the gate](#accounts-tiers-and-the-gate).
 
 Deck lists can be **filtered by card**. Pick any cards — win conditions lead the
-panel, the full 122 follow — and only decks holding *all* of them stay. On Deck's
+panel, the full 123 follow — and only decks holding *all* of them stay. On Deck's
 Home and the Counter Palette the non-matching rows **collapse** rather than
 vanishing, so the list narrows instead of becoming a different list; the duel
 builder dims them instead, because its decks are positional and collapsing one
@@ -4611,6 +4611,9 @@ it is disabled.
 - `tests/deckFill.test.ts` checks 40 seeded fills for every rule above,
   that a card held by another duel deck is never reused, and the store path
   including the undo label.
+- **Since 2026-10-03 a deck hidden with the eye holds none of its cards**, so
+  the wand may take them, and each one it takes is marked as the newer copy.
+  See [Hide a duel deck to reuse its cards](#hide-a-duel-deck-to-reuse-its-cards-2026-10-03).
 
 ### The elixir curve
 
@@ -5926,6 +5929,11 @@ The deck panel's five text buttons ("Open in Game", "Copy Link", "Import",
 a third of the panel's width. Every label survives in `title` and `aria-label`,
 and the one primary action keeps its words, in the footer where it reads as the
 end of the deck rather than one more control in a row of six.
+
+*The rail has grown since: a picture button and the wand on 2026-09-28, and the
+eye on 2026-10-03. That is seven buttons, and under 24rem of header the rename
+pencil is not drawn, because the name itself renames. See
+[Hide a duel deck to reuse its cards](#hide-a-duel-deck-to-reuse-its-cards-2026-10-03).*
 
 ### What the library gained
 
@@ -8802,9 +8810,8 @@ push.
 
 ## Testing and verification
 
-**3,890 Python checks across 70 suites** and **1,181 vitest tests across 54
-files** as of 2026-10-02 (the last full run was 3,710 across 66 on 2026-09-30;
-the suites added since are counted by their own runs); the only failure
+**3,890 Python checks across 70 suites** as of 2026-10-02, counted by a full
+run, and **1,293 vitest tests across 58 files** as of 2026-10-03; the only failure
 is the known, accepted `test_ml_21a` `123 != 122`. (It was 1,386 across 38 and
 378 vitest on 2026-08-30; the status table's `tests` row carries the history.)
 None needs the bot's database to pass. Sixteen write temp files of their own,
@@ -12083,7 +12090,7 @@ phones had no export at all. Only the picker is hidden now.
 | Team Analysis | the dossier, notes cut to one line each, forced breaks removed; a **PDF covers** dropdown picks the whole plan or ONE player (see below) |
 | 2v2 Decks | the page of pairs on screen, teammates joined by a `+` |
 | Global Cards | a grid per card type |
-| Builder (Royal Duels / Deck's Home) | `pdfRenderer.ts` on the same engine; pagination unchanged in `deckExport.ts` |
+| Builder (Royal Duels / Deck's Home) | `pdfRenderer.ts` on the same engine; pagination unchanged in `deckExport.ts`; a duel deck hidden with the eye is not printed |
 
 **One player's PDF (Team Analysis, 2026-09-26).** A dropdown beside the
 export button, captioned *PDF covers*, lists the whole plan first and then every
@@ -16022,7 +16029,8 @@ src/
     reportAdapters.ts         one adapter per screen, pure, no layout
   state/
     store.ts                  builder store (zustand + persist, v9)
-    deckUtils.ts              pure deck logic
+    deckUtils.ts              pure deck logic, incl. the hidden-deck rule (the eye)
+                              and which copy of a shared card is drawn grey
     analyticsClient.ts        the ONLY thing that knows the API's shape
   data/cards.json             123 cards, vendored from RoyaleAPI/cr-api-data
   data/cardMeta.json          can_evolve / can_be_hero / is_champion / is_win_condition

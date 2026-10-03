@@ -23,6 +23,10 @@ carries the full reasoning; this is the short version plus what to do next.
 > builders, and Coach Assist's "Build around your cards" (admin-only at first,
 > released to Pro the same evening). The trend item is done; four faults found by
 > reading Coach Assist end to end are listed and NOT fixed.
+>
+> **Updated 2026-10-03** with three client-only changes: the scroll rail, PDF
+> names in Japanese and Cyrillic, and the eye on duel decks. None of them
+> touches the coach engines.
 
 ## Where things stand
 
@@ -34,7 +38,7 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **1,181 vitest** (54 files), **3,890 Python checks** across 70 suites (one known failure, `test_ml_21a`), route count **26** — counted by a full run on 2026-10-02 |
+| Tests | **1,293 vitest** (58 files, as of 2026-10-03), **3,890 Python checks** across 70 suites (one known failure, `test_ml_21a`), route count **26** — counted by a full run on 2026-10-02 |
 | Storage jobs | daily timers on the VPS: retention (one battle-day a run, nothing due until 2027-04-02), ladder raw 72 h, 2v2 raw 24 h, verified backup pulled to the owner's PC — the console's Data lifecycle view shows all four |
 
 ## What the field plan answers
@@ -106,6 +110,14 @@ Backups on the VPS for the last three:
 
 Backups on the VPS for the last row: `{coach,app}.py.bak-20261002-040707-prechoice`,
 `{coach,coach_choice,duel_index}.py.bak-20261002-045206-prearchitect`.
+
+## Shipped 2026-10-03 (all live, client only)
+
+| commit | what | on the coach screens |
+| --- | --- | --- |
+| `19a4af0` | **the scroll rail**: one scroller on every screen, a rail of ticks that drags, presses and names the page's sections (`ui/scroll-rail.tsx`, mounted once) | the roster, each player's tabs and `#/my` scroll with it |
+| `b7e4942` | **PDFs print Japanese and Cyrillic names**, with the Latin form and the tag beside them | the roster exports through the same engine, so a player's name prints as written |
+| `f8dfc02` + `870b838` | **the eye on a duel deck** (Royal Duels): a hidden deck stays on the board in grey and frees its cards for the other decks; when two decks in play hold one card, the newer copy is the grey one (`Deck.hidden`, `Deck.newerCopies`) | none |
 
 ## Decisions waiting on the account holder
 
