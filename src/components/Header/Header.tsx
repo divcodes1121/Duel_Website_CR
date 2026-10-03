@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useBuilderStore } from '../../state/store';
 import { useAccess } from '../../state/gate';
-import { getTotalCardsUsed } from '../../state/deckUtils';
+import { countActiveDecks, getTotalCardsUsed } from '../../state/deckUtils';
 import { DECK_SIZE } from '../../types/deck';
 import { SaveDialog } from '../Library/SaveDialog';
 import { LibraryModal } from '../Library/LibraryModal';
@@ -24,7 +24,10 @@ export function Header({ embedded = false }: { embedded?: boolean } = {}) {
   const resetAll = useBuilderStore((s) => s.resetAll);
   /* Tier, not username: the export gate moved off the retired test store. */
   const access = useAccess();
-  const maxFor = (owner: 'solo' | 'blue' | 'red') => deckSlotCount[owner] * DECK_SIZE;
+  /* Decks in play: revealed, and not set aside with the eye. A hidden deck's
+     cards are not counted above the line, so its eight are not owed below it. */
+  const decksFor = (owner: 'solo' | 'blue' | 'red') => countActiveDecks(sets[owner], deckSlotCount[owner]);
+  const maxFor = (owner: 'solo' | 'blue' | 'red') => decksFor(owner) * DECK_SIZE;
   const [justSaved, setJustSaved] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -70,9 +73,11 @@ export function Header({ embedded = false }: { embedded?: boolean } = {}) {
         {mode === 'solo' ? (
           <span
             className={`${styles.counter} ${
-              getTotalCardsUsed(sets.solo) === maxFor('solo') ? styles.counterFull : ''
+              maxFor('solo') > 0 && getTotalCardsUsed(sets.solo) === maxFor('solo')
+                ? styles.counterFull
+                : ''
             }`}
-            title={`Unique cards used across your ${deckSlotCount.solo} decks`}
+            title={`Unique cards used across your ${decksFor('solo')} decks`}
           >
             <span className={styles.counterValue}>{getTotalCardsUsed(sets.solo)}</span>
             <span className={styles.counterMax}>/ {maxFor('solo')} cards</span>
@@ -81,14 +86,14 @@ export function Header({ embedded = false }: { embedded?: boolean } = {}) {
           <>
             <span
               className={`${styles.counter} ${styles.counterBlue}`}
-              title={`Unique cards used across Blue's ${deckSlotCount.blue} decks`}
+              title={`Unique cards used across Blue's ${decksFor('blue')} decks`}
             >
               <span className={styles.counterValue}>{getTotalCardsUsed(sets.blue)}</span>
               <span className={styles.counterMax}>/ {maxFor('blue')}</span>
             </span>
             <span
               className={`${styles.counter} ${styles.counterRed}`}
-              title={`Unique cards used across Red's ${deckSlotCount.red} decks`}
+              title={`Unique cards used across Red's ${decksFor('red')} decks`}
             >
               <span className={styles.counterValue}>{getTotalCardsUsed(sets.red)}</span>
               <span className={styles.counterMax}>/ {maxFor('red')}</span>

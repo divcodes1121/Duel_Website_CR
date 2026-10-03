@@ -28,6 +28,9 @@
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+  /* Measured by `.renameButton` below. On the header rather than the panel so
+     the containment it brings wraps one row and nothing that pops out of it. */
+  container: deckhead / inline-size;
 }
 
 /* Deck ORDER, not the name. In a duel collection the position is a fact about
@@ -105,6 +108,31 @@
   background: var(--green-fill);
 }
 
+/* --- A deck set aside with the eye --------------------------------------- */
+
+/* Folded to its header: the slots and the footer are not rendered at all. It
+   steps DOWN to the well and loses its shadow and its solid edge, so it reads
+   as a deck out of play rather than as a short one — said by the surface, not
+   by fading the type, which the contrast pass forbids. */
+.panel[data-hidden] {
+  border-style: dashed;
+  background: var(--surface-sunken);
+  box-shadow: none;
+}
+
+/* Where the 8/8 count stands on a deck in play. */
+.hiddenTag {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  flex-shrink: 0;
+}
+
 /* --- Icon action rail --------------------------------------------------- */
 
 .actions {
@@ -164,6 +192,21 @@
   color: var(--hue-red);
   background: var(--red-wash);
   border-color: var(--red-edge);
+}
+
+/* THE EYE MADE THE RAIL SEVEN BUTTONS, AND A NARROW HEADER HAS ROOM FOR SIX.
+   Measured with seven: a Versus panel at 1440 (header 326px) left the name
+   20px and "Deck 1" read "D.."; on a touch phone seven 40px targets are 299px
+   in a 290px rail, and the one cut off is the eye, the last of them.
+
+   The pencil is the button to give up, because it is the only one with a twin:
+   the deck's name is itself the rename control. A container query rather than
+   a breakpoint — a Versus column is narrow on a wide screen and a Solo one is
+   not, and no viewport width can tell those apart. */
+@container deckhead (max-width: 24rem) {
+  .renameButton {
+    display: none;
+  }
 }
 
 /* --- Deck link import --------------------------------------------------- */
@@ -664,6 +707,15 @@
 
   .actions::-webkit-scrollbar {
     display: none;
+  }
+
+  /* A folded deck's rail is the eye (and the trash, on the last deck), so it
+     stays on the name's line instead of taking a line of its own for one
+     button. */
+  .panel[data-hidden] .actions {
+    width: auto;
+    margin-left: auto;
+    overflow-x: visible;
   }
 }
 

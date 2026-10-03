@@ -8,9 +8,13 @@ import type { BuilderMode, Deck, PlayerId, SavedDeckSet } from '../../types/deck
 import styles from './SavedGroups.module.css';
 
 
-/** Hidden/unused deck slots stay out of the preview; empty groups show deck 1. */
+/**
+ * Unused deck slots stay out of the preview, and so does a deck set aside with
+ * the eye button — it is still in the group and comes back, still hidden, on
+ * Load. Empty groups show deck 1.
+ */
 function withCards(decks: Deck[]): Deck[] {
-  const filled = decks.filter((d) => d.slots.some((k) => k !== null));
+  const filled = decks.filter((d) => !d.hidden && d.slots.some((k) => k !== null));
   return filled.length > 0 ? filled : decks.slice(0, 1);
 }
 
@@ -106,6 +110,9 @@ function GroupCard({
     year: 'numeric',
   });
 
+  // Decks the group holds but does not draw, so a Load is not a surprise.
+  const hiddenCount = groupDecks(entry, true).filter((d) => d.hidden).length;
+
   function handleLoad() {
     if (window.confirm(`Load "${entry.name}"? Your current decks will be replaced.`)) {
       loadSaved(entry.id);
@@ -146,7 +153,10 @@ function GroupCard({
           ) : (
             <h3 className={styles.groupName}>{entry.name}</h3>
           )}
-          <span className={styles.groupMeta}>Saved {savedDate}</span>
+          <span className={styles.groupMeta}>
+            Saved {savedDate}
+            {hiddenCount > 0 && ` · ${hiddenCount} hidden`}
+          </span>
         </div>
         <div className={styles.groupActions}>
           <button type="button" className={styles.groupButton} onClick={handleLoad}>
@@ -192,10 +202,17 @@ function GroupCard({
   );
 }
 
-/** Every deck a saved group holds, across both sides for a versus set. */
-function groupDecks(entry: SavedDeckSet): Deck[] {
-  if (entry.mode === 'solo') return entry.solo?.decks ?? [];
-  return [...(entry.blue?.decks ?? []), ...(entry.red?.decks ?? [])];
+/**
+ * The decks of a saved group, across both sides for a versus set. Those in
+ * play by default — the ones the card draws and the filter may match;
+ * `withHidden` adds the ones set aside with the eye.
+ */
+function groupDecks(entry: SavedDeckSet, withHidden = false): Deck[] {
+  const all =
+    entry.mode === 'solo'
+      ? entry.solo?.decks ?? []
+      : [...(entry.blue?.decks ?? []), ...(entry.red?.decks ?? [])];
+  return withHidden ? all : all.filter((d) => !d.hidden);
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useBuilderStore } from '../../state/store';
-import { getTotalCardsUsed } from '../../state/deckUtils';
+import { getTotalCardsUsed, holdsAnyCard } from '../../state/deckUtils';
 import type { SavedDeckSet } from '../../types/deck';
 import styles from './Library.module.css';
 
@@ -46,10 +46,12 @@ export function LibraryModal({ onClose }: LibraryModalProps) {
   }, [onClose]);
 
   function handleLoad(entry: SavedDeckSet) {
+    // `holdsAnyCard`, not the unique-card count: a board whose only cards sit
+    // in hidden decks counts zero and would be replaced without a word.
     const targetHasCards =
       entry.mode === 'solo'
-        ? getTotalCardsUsed(sets.solo) > 0
-        : getTotalCardsUsed(sets.blue) > 0 || getTotalCardsUsed(sets.red) > 0;
+        ? holdsAnyCard(sets.solo)
+        : holdsAnyCard(sets.blue) || holdsAnyCard(sets.red);
     if (targetHasCards && !window.confirm(`Load "${entry.name}" and replace your current decks?`)) {
       return;
     }
@@ -60,8 +62,8 @@ export function LibraryModal({ onClose }: LibraryModalProps) {
   function handleNewBlank() {
     const currentHasCards =
       mode === 'solo'
-        ? getTotalCardsUsed(sets.solo) > 0
-        : getTotalCardsUsed(sets.blue) > 0 || getTotalCardsUsed(sets.red) > 0;
+        ? holdsAnyCard(sets.solo)
+        : holdsAnyCard(sets.blue) || holdsAnyCard(sets.red);
     if (currentHasCards && !window.confirm('Start a new blank set? Your current decks will be cleared (save them first if needed).')) {
       return;
     }

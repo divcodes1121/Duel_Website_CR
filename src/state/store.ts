@@ -23,6 +23,7 @@ import {
   getUsedCardKeys,
   moveCard as moveCardUtil,
   renameDeck as renameDeckUtil,
+  setDeckHidden as setDeckHiddenUtil,
   setWildVariant as setWildVariantUtil,
   validateImportedDeck,
   type SlotRef,
@@ -147,6 +148,12 @@ interface BuilderState extends PersistedSlice {
   setWildVariant: (owner: DeckOwner, deckIndex: number, variant: WildVariant) => void;
   /** Crowns this deck won in the duel (clamped to 0..MAX_CROWNS). */
   setDeckCrowns: (owner: DeckOwner, deckIndex: number, crowns: number) => void;
+  /**
+   * The eye button: set a duel deck aside so its cards are free for the other
+   * decks of the collection, or bring it back. Duel collections only — Deck's
+   * Home and Counter Palette decks share nothing, so there is nothing to free.
+   */
+  setDeckHidden: (owner: DuelOwner, deckIndex: number, hidden: boolean) => void;
   setFilterType: (filter: CardTypeFilter) => void;
   setSort: (key: SortKey) => void;
   setCardSearch: (query: string) => void;
@@ -684,6 +691,25 @@ export const useBuilderStore = create<BuilderState>()(
           };
         }),
 
+      setDeckHidden: (owner, deckIndex, hidden) =>
+        set((state) => {
+          const current = state.sets[owner];
+          const updated = setDeckHiddenUtil(current, deckIndex, hidden);
+          if (updated === current) return state;
+          // A hidden deck has no slots on screen, so a selection inside it
+          // would point at nothing and the next pick would land out of sight.
+          const selectedHere =
+            hidden &&
+            state.selectedSlot?.owner === owner &&
+            state.selectedSlot.deckIndex === deckIndex;
+          return {
+            ...commitSet(state, owner, updated),
+            ...remember(state, 'duels', `${hidden ? 'Hide' : 'Show'} ${current.decks[deckIndex].name}`),
+            selectedSlot: selectedHere ? null : state.selectedSlot,
+            selectionPinned: selectedHere ? false : state.selectionPinned,
+          };
+        }),
+
       setFilterType: (filter) => set({ filterType: filter }),
 
       setCardSearch: (query) => set({ cardSearch: query }),
@@ -831,11 +857,13 @@ export const useBuilderStore = create<BuilderState>()(
           const lastIndex = count - 1;
           return {
             ...remember(state, 'duels', `Remove ${state.sets[owner].decks[lastIndex]?.name ?? 'a deck slot'}`),
-            // The hidden deck must not keep holding cards (they'd still block
-            // uniqueness invisibly) — clear it on the way out.
+            // The removed slot's deck must not keep holding cards (they'd still
+            // block uniqueness invisibly) — clear it on the way out. Its eye
+            // goes back to open too, or the slot would return folded when
+            // re-added.
             sets: {
               ...state.sets,
-              [owner]: clearDeckUtil(state.sets[owner], lastIndex),
+              [owner]: setDeckHiddenUtil(clearDeckUtil(state.sets[owner], lastIndex), lastIndex, false),
             },
             deckSlotCount: { ...state.deckSlotCount, [owner]: lastIndex },
             selectedSlot:

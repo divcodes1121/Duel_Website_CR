@@ -109,6 +109,28 @@ export function ClearIcon({ size }: P = {}) {
   );
 }
 
+/** The deck is shown — press to hide it and free its cards. */
+export function EyeIcon({ size }: P = {}) {
+  return (
+    <Svg size={size}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="2.8" />
+    </Svg>
+  );
+}
+
+/** The deck is hidden — the same eye, struck through. */
+export function EyeOffIcon({ size }: P = {}) {
+  return (
+    <Svg size={size}>
+      <path d="M10.6 5.6A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.5 3.3" />
+      <path d="M6.7 6.9A15.6 15.6 0 0 0 2.5 12S6 18.5 12 18.5a9.4 9.4 0 0 0 5.2-1.6" />
+      <path d="M9.9 9.9a2.9 2.9 0 0 0 4.2 4.2" />
+      <path d="M3.5 3.5l17 17" />
+    </Svg>
+  );
+}
+
 export function TrashIcon({ size }: P = {}) {
   return (
     <Svg size={size}>

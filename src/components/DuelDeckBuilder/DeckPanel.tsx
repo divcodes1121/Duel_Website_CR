@@ -16,6 +16,8 @@ import {
   ImportIcon,
   RenameIcon,
   ClearIcon,
+  EyeIcon,
+  EyeOffIcon,
   TrashIcon,
   CheckIcon,
   CloseIcon,
@@ -48,6 +50,13 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
   const renameDeck = useBuilderStore((s) => s.renameDeck);
   const clearDeck = useBuilderStore((s) => s.clearDeck);
   const fillDeck = useBuilderStore((s) => s.fillDeck);
+  const setDeckHidden = useBuilderStore((s) => s.setDeckHidden);
+  /* The eye exists only where decks share cards. A duel collection forbids a
+     card in two of its decks, so setting one deck aside frees eight cards for
+     the others; Deck's Home and Counter Palette decks are independent, and an
+     eye there would hide a deck and free nothing. */
+  const duelOwner = owner === 'solo' || owner === 'blue' || owner === 'red' ? owner : null;
+  const hidden = duelOwner !== null && !!deck.hidden;
   /* The image button's state: the renderer and the art arrive on the first
      press, so there is a visible "working" moment, then a "saved" flash. */
   const [imageState, setImageState] = useState<'idle' | 'busy' | 'done'>('idle');
@@ -163,7 +172,7 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
   }
 
   return (
-    <section className={styles.panel} data-owner={owner}>
+    <section className={styles.panel} data-owner={owner} data-hidden={hidden ? '' : undefined}>
       <header className={styles.header}>
         <span className={styles.index} aria-hidden="true">
           {deckIndex + 1}
@@ -197,99 +206,135 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
           </button>
         )}
 
-        <span
-          className={`${styles.fillCount} ${filledCount === DECK_SIZE ? styles.fillCountFull : ''}`}
-          title={`${filledCount} of ${DECK_SIZE} cards placed`}
-        >
-          {filledCount}/{DECK_SIZE}
-        </span>
+        {hidden ? (
+          <span className={styles.hiddenTag}>Hidden</span>
+        ) : (
+          <span
+            className={`${styles.fillCount} ${filledCount === DECK_SIZE ? styles.fillCountFull : ''}`}
+            title={`${filledCount} of ${DECK_SIZE} cards placed`}
+          >
+            {filledCount}/{DECK_SIZE}
+          </span>
+        )}
 
         <div className={styles.actions}>
-          <button
-            type="button"
-            className={styles.iconButton} data-metal
-            title={
-              deckLink
-                ? "Copy this deck's Clash Royale share link"
-                : 'Fill all 8 slots to copy the deck link'
-            }
-            aria-label="Copy deck link"
-            aria-disabled={!deckLink}
-            data-flash={linkOnlyCopied || undefined}
-            onClick={copyDeckLink}
-          >
-            {linkOnlyCopied ? <CheckIcon /> : <LinkIcon />}
-          </button>
+          {!hidden && (
+            <>
+              <button
+                type="button"
+                className={styles.iconButton} data-metal
+                title={
+                  deckLink
+                    ? "Copy this deck's Clash Royale share link"
+                    : 'Fill all 8 slots to copy the deck link'
+                }
+                aria-label="Copy deck link"
+                aria-disabled={!deckLink}
+                data-flash={linkOnlyCopied || undefined}
+                onClick={copyDeckLink}
+              >
+                {linkOnlyCopied ? <CheckIcon /> : <LinkIcon />}
+              </button>
 
-          <button
-            type="button"
-            className={styles.iconButton} data-metal
-            title={
-              filledCount === DECK_SIZE
-                ? 'Save this deck as an image to share'
-                : 'Fill all 8 slots to save the deck as an image'
-            }
-            aria-label="Save this deck as an image"
-            aria-disabled={filledCount !== DECK_SIZE}
-            aria-busy={imageState === 'busy' || undefined}
-            data-flash={imageState === 'done' || undefined}
-            onClick={saveImage}
-          >
-            {imageState === 'done' ? <CheckIcon /> : <ImageIcon />}
-          </button>
+              <button
+                type="button"
+                className={styles.iconButton} data-metal
+                title={
+                  filledCount === DECK_SIZE
+                    ? 'Save this deck as an image to share'
+                    : 'Fill all 8 slots to save the deck as an image'
+                }
+                aria-label="Save this deck as an image"
+                aria-disabled={filledCount !== DECK_SIZE}
+                aria-busy={imageState === 'busy' || undefined}
+                data-flash={imageState === 'done' || undefined}
+                onClick={saveImage}
+              >
+                {imageState === 'done' ? <CheckIcon /> : <ImageIcon />}
+              </button>
 
-          <button
-            type="button"
-            className={styles.iconButton} data-metal
-            title="Paste a Clash Royale deck link to build this deck"
-            aria-label="Import a deck link"
-            aria-expanded={importOpen}
-            data-on={importOpen || undefined}
-            onClick={() => (importOpen ? closeImport() : setImportOpen(true))}
-          >
-            <ImportIcon />
-          </button>
+              <button
+                type="button"
+                className={styles.iconButton} data-metal
+                title="Paste a Clash Royale deck link to build this deck"
+                aria-label="Import a deck link"
+                aria-expanded={importOpen}
+                data-on={importOpen || undefined}
+                onClick={() => (importOpen ? closeImport() : setImportOpen(true))}
+              >
+                <ImportIcon />
+              </button>
 
-          <button
-            type="button"
-            className={styles.iconButton} data-metal
-            title="Rename this deck"
-            aria-label="Rename this deck"
-            onClick={startRename}
-          >
-            <RenameIcon />
-          </button>
+              {/* The one button with a twin — the name itself renames — so it
+                  is the one a narrow header gives up (see `.renameButton`). */}
+              <button
+                type="button"
+                className={`${styles.iconButton} ${styles.renameButton}`} data-metal
+                title="Rename this deck"
+                aria-label="Rename this deck"
+                onClick={startRename}
+              >
+                <RenameIcon />
+              </button>
 
-          {/* Completes the deck with legal cards, keeping every card already
-              placed; on an empty deck it builds one from nothing. Undoable,
-              like every other edit here. */}
-          <button
-            type="button"
-            className={styles.iconButton} data-metal
-            title={
-              filledCount === DECK_SIZE
-                ? 'This deck is full'
-                : filledCount === 0
-                  ? 'Surprise me — build a legal deck'
-                  : 'Fill the empty slots with legal cards'
-            }
-            aria-label={filledCount === 0 ? 'Build a random legal deck' : 'Fill the empty slots'}
-            aria-disabled={filledCount === DECK_SIZE}
-            onClick={() => filledCount < DECK_SIZE && fillDeck(owner, deckIndex)}
-          >
-            <WandIcon />
-          </button>
+              {/* Completes the deck with legal cards, keeping every card already
+                  placed; on an empty deck it builds one from nothing. Undoable,
+                  like every other edit here. */}
+              <button
+                type="button"
+                className={styles.iconButton} data-metal
+                title={
+                  filledCount === DECK_SIZE
+                    ? 'This deck is full'
+                    : filledCount === 0
+                      ? 'Surprise me — build a legal deck'
+                      : 'Fill the empty slots with legal cards'
+                }
+                aria-label={filledCount === 0 ? 'Build a random legal deck' : 'Fill the empty slots'}
+                aria-disabled={filledCount === DECK_SIZE}
+                onClick={() => filledCount < DECK_SIZE && fillDeck(owner, deckIndex)}
+              >
+                <WandIcon />
+              </button>
 
-          <button
-            type="button"
-            className={styles.iconButton} data-metal
-            title="Clear every card from this deck"
-            aria-label="Clear this deck"
-            aria-disabled={filledCount === 0}
-            onClick={() => filledCount > 0 && clearDeck(owner, deckIndex)}
-          >
-            <ClearIcon />
-          </button>
+              <button
+                type="button"
+                className={styles.iconButton} data-metal
+                title="Clear every card from this deck"
+                aria-label="Clear this deck"
+                aria-disabled={filledCount === 0}
+                onClick={() => filledCount > 0 && clearDeck(owner, deckIndex)}
+              >
+                <ClearIcon />
+              </button>
+            </>
+          )}
+
+          {/* Last in the rail (the trash aside), so it keeps its place there
+              whether the deck is folded or open. */}
+          {duelOwner && (
+            <button
+              type="button"
+              className={styles.iconButton} data-metal
+              title={
+                hidden
+                  ? 'Show this deck again'
+                  : filledCount === 0
+                    ? 'This deck is empty — there are no cards to free'
+                    : 'Hide this deck — its cards become free for your other decks'
+              }
+              aria-label={hidden ? 'Show this deck' : 'Hide this deck'}
+              aria-disabled={!hidden && filledCount === 0}
+              data-on={hidden || undefined}
+              data-eye=""
+              onClick={() => {
+                if (hidden) setDeckHidden(duelOwner, deckIndex, false);
+                else if (filledCount > 0) setDeckHidden(duelOwner, deckIndex, true);
+              }}
+            >
+              {hidden ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          )}
 
           {onDelete && (
             <button
@@ -305,7 +350,7 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
         </div>
       </header>
 
-      {importOpen && (
+      {!hidden && importOpen && (
         <div className={styles.importRow}>
           <input
             className={`${styles.importInput} ${importError ? styles.importInputError : ''}`}
@@ -340,25 +385,31 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
         </div>
       )}
 
-      <DeckSlotGrid owner={owner} deckIndex={deckIndex} deck={deck} />
+      {/* A hidden deck is its header and nothing else: no slots to select or
+          drop on, so nothing can be placed into a deck that is out of play. */}
+      {!hidden && (
+        <>
+          <DeckSlotGrid owner={owner} deckIndex={deckIndex} deck={deck} />
 
-      <footer className={styles.footer}>
-        <DeckStats deck={deck} />
-        <button
-          type="button"
-          className={styles.launch}
-          title={
-            deckLink
-              ? 'Open this deck in Clash Royale — the share link is copied too'
-              : 'Fill all 8 slots to open this deck in Clash Royale'
-          }
-          aria-disabled={!deckLink}
-          onClick={openInClashRoyale}
-        >
-          <LaunchIcon size={14} />
-          {linkCopied ? 'Link copied' : 'Open in Game'}
-        </button>
-      </footer>
+          <footer className={styles.footer}>
+            <DeckStats deck={deck} />
+            <button
+              type="button"
+              className={styles.launch}
+              title={
+                deckLink
+                  ? 'Open this deck in Clash Royale — the share link is copied too'
+                  : 'Fill all 8 slots to open this deck in Clash Royale'
+              }
+              aria-disabled={!deckLink}
+              onClick={openInClashRoyale}
+            >
+              <LaunchIcon size={14} />
+              {linkCopied ? 'Link copied' : 'Open in Game'}
+            </button>
+          </footer>
+        </>
+      )}
     </section>
   );
 }

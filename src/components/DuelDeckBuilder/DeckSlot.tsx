@@ -89,12 +89,13 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
   const card = cardKey ? CARDS_BY_KEY.get(cardKey) : undefined;
   // An imported deck may repeat a card another duel deck already owned — only
   // the pasted copy renders black & white, and only while the clash persists
-  // (removing either copy restores the color live).
+  // (removing either copy, or hiding the other deck, restores the color live).
+  // A deck shown again with the eye is marked the same way.
   const isDuplicate =
     !!card &&
     owner !== 'home' &&
     !!deck.importedDuplicates?.includes(card.key) &&
-    ownerSet.decks.some((d, i) => i !== deckIndex && d.slots.includes(card.key));
+    ownerSet.decks.some((d, i) => i !== deckIndex && !d.hidden && d.slots.includes(card.key));
   const variant = getSlotVisualVariant(deck, slotIndex, CARDS_BY_KEY);
   // Champions occupy the Hero/Wild slot but aren't Heroes — they get their own
   // "CHAMPION" label there instead of the misleading "HERO" one.

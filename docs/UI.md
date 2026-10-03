@@ -1759,6 +1759,34 @@ measurement reads 0 whatever the stylesheet says — Playwright hides them by de
 moved there first (the strip is real, but the label and wave follow `pointermove`). Wait for
 a board's rail to reach `rest` rather than for a clock: these screens read production.
 
+## The eye on a duel deck (2026-10-03)
+
+The mechanics; the README's "Hide a duel deck to reuse its cards" is the record.
+
+- **Where**: last in the deck panel's action rail (before the trash on the last
+  deck), in Royal Duels only. An open eye on a deck in play, a struck-through
+  eye lit in the selection hue (`data-on`) on a hidden one. Disabled on an empty
+  deck, like Clear.
+- **A hidden deck is its header**: number, name, a `Hidden` tag where the 8/8
+  count stands, the eye. The slot grid and the footer are not rendered.
+- **Out of play is said by the surface, not by fading.** The panel steps down
+  to `--surface-sunken`, loses its shadow and takes a dashed edge; the name and
+  the tag stay full ink, as the contrast sweep requires.
+- **A returning deck's taken cards are black and white** — the existing
+  `.slotDuplicate` treatment and its "already used in another deck" title,
+  nothing new.
+- **Under 24rem of header the rename pencil is not drawn**
+  (`@container deckhead`). Seven buttons do not fit a Versus header at 1440 or
+  a touch phone's rail; the name is the rename control, so the pencil is the
+  one to yield. The container is the HEADER, not the panel, so the containment
+  wraps one row.
+- **Below 560px a folded deck stays one line**: its rail is one or two buttons
+  and keeps to the name's line instead of wrapping under it.
+- **Checking it in a browser**: Playwright will not click an `aria-disabled`
+  control without `force`; and measure the eye's position from the TOP of the
+  deck column — scrolled to the bottom, a panel folding shortens the content,
+  the browser clamps the scroll and everything moves.
+
 ## Working on this
 
 ```bash

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useBuilderStore, type DuelOwner } from '../../state/store';
 import { DUEL_DECK_COUNT, type BuilderMode, type Deck, type PlayerId } from '../../types/deck';
-import { getTotalCardsUsed } from '../../state/deckUtils';
+import { countActiveDecks, getTotalCardsUsed } from '../../state/deckUtils';
 import { DECK_SIZE } from '../../types/deck';
 import { DeckPanel } from './DeckPanel';
 import { CrownCounter } from './CrownCounter';
@@ -100,13 +100,16 @@ export function DuelDeckBuilder() {
   /** Decks keep their slot positions — matches stay lit, the rest just fade back. */
   const matches = (deck: Deck) => deckMatchesFilter(deck.slots, winFilter);
 
-  const visibleDecks = (owner: DuelOwner) => sets[owner].decks.slice(0, deckSlotCount[owner]);
+  /* The filter counts decks in play. One set aside with the eye is folded to
+     its header, so it is neither a match nor one of the decks searched. */
+  const activeDecks = (owner: DuelOwner) =>
+    sets[owner].decks.slice(0, deckSlotCount[owner]).filter((d) => !d.hidden);
   const matchCount = mode === 'solo'
-    ? visibleDecks('solo').filter(matches).length
-    : visibleDecks('blue').filter(matches).length + visibleDecks('red').filter(matches).length;
+    ? activeDecks('solo').filter(matches).length
+    : activeDecks('blue').filter(matches).length + activeDecks('red').filter(matches).length;
   const totalDecks = mode === 'solo'
-    ? deckSlotCount.solo
-    : deckSlotCount.blue + deckSlotCount.red;
+    ? activeDecks('solo').length
+    : activeDecks('blue').length + activeDecks('red').length;
 
   /** One duel collection: its decks, its crowns, its add tile. */
   function renderCollection(owner: DuelOwner) {
@@ -116,14 +119,16 @@ export function DuelDeckBuilder() {
     return (
       <>
         {sets[owner].decks.slice(0, count).map((deck, i) => {
-          const match = matches(deck);
+          const match = !deck.hidden && matches(deck);
           const isLast = i === count - 1;
           return (
             <div
               key={deck.id}
               className={`${styles.deckWrap} ${filtering && !match ? styles.deckDim : ''}`}
             >
-              {isVersus && (
+              {/* No crowns on a deck that is out of play. The count itself is
+                  kept on the deck and returns with it. */}
+              {isVersus && !deck.hidden && (
                 <CrownCounter
                   value={deck.crowns ?? 0}
                   onChange={(c) => setDeckCrowns(owner as PlayerId, i, c)}
@@ -214,7 +219,7 @@ export function DuelDeckBuilder() {
                 <span className={styles.playerCount}>
                   {getTotalCardsUsed(sets[player.id])}
                   <span className={styles.playerCountMax}>
-                    /{deckSlotCount[player.id] * DECK_SIZE}
+                    /{countActiveDecks(sets[player.id], deckSlotCount[player.id]) * DECK_SIZE}
                   </span>
                 </span>
               </header>

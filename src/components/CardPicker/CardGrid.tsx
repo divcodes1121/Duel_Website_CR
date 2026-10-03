@@ -71,7 +71,11 @@ export function CardGrid() {
             // Deck's Home decks are independent — only the deck being edited blocks reuse.
             const searchDecks =
               selectedSlot.owner === 'home' ? [currentDeck] : activeSet.decks;
-            const ownerIndex = searchDecks.findIndex((deck) => deck.slots.includes(card.key));
+            // A deck hidden with the eye holds none of its cards (see
+            // `getUsedCardKeys`), so it never blocks a tile here either.
+            const ownerIndex = searchDecks.findIndex(
+              (deck) => !deck.hidden && deck.slots.includes(card.key),
+            );
             if (ownerIndex !== -1) {
               state = 'used';
               disabledReason =

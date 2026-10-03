@@ -27,15 +27,78 @@ export function createEmptyDuelDeckSet(name: string): DuelDeckSet {
   };
 }
 
+/**
+ * The cards a collection's decks hold between them. A deck hidden with the eye
+ * button holds none of its own: this is the ONE place that rule lives, and
+ * availability, the counters, the Versus ribbons and a paste's duplicate marks
+ * all read it from here.
+ */
 export function getUsedCardKeys(duelSet: DuelDeckSet, excludeDeckIndex?: number): Set<string> {
   const used = new Set<string>();
   duelSet.decks.forEach((deck, i) => {
-    if (i === excludeDeckIndex) return;
+    if (i === excludeDeckIndex || deck.hidden) return;
     deck.slots.forEach((k) => {
       if (k) used.add(k);
     });
   });
   return used;
+}
+
+/** Whether any deck holds a card at all — hidden decks included, unlike the count above. */
+export function holdsAnyCard(duelSet: DuelDeckSet): boolean {
+  return duelSet.decks.some((deck) => deck.slots.some((k) => k !== null));
+}
+
+/** How many of the first `revealed` decks are in play, i.e. not hidden. */
+export function countActiveDecks(duelSet: DuelDeckSet, revealed = duelSet.decks.length): number {
+  return duelSet.decks.slice(0, revealed).filter((deck) => !deck.hidden).length;
+}
+
+/** `deck` with its duplicate marks replaced — the same object when nothing changed. */
+function withDuplicateMarks(deck: Deck, marks: string[]): Deck {
+  const had = deck.importedDuplicates ?? [];
+  if (had.length === marks.length && had.every((k, i) => k === marks[i])) return deck;
+  const next = { ...deck };
+  if (marks.length > 0) next.importedDuplicates = marks;
+  else delete next.importedDuplicates;
+  return next;
+}
+
+/**
+ * Hide a duel deck (its cards become free for the rest of the collection) or
+ * show it again. No-op when the deck is already in that state.
+ *
+ * A deck that comes back may find its cards taken, and that is allowed, the
+ * same way a pasted deck may repeat a card: the ARRIVING deck carries the
+ * black-and-white marks (`importedDuplicates`), never the deck that took the
+ * card while it was away. Marks elsewhere that no longer describe a clash are
+ * dropped here too — otherwise hiding one copy and showing it again would
+ * leave both copies marked.
+ */
+export function setDeckHidden(duelSet: DuelDeckSet, deckIndex: number, hidden: boolean): DuelDeckSet {
+  const target = duelSet.decks[deckIndex];
+  if (!target || !!target.hidden === hidden) return duelSet;
+
+  const toggled = duelSet.decks.map((deck, i) => {
+    if (i !== deckIndex) return deck;
+    const next = { ...deck };
+    if (hidden) next.hidden = true;
+    else delete next.hidden;
+    return next;
+  });
+  const view = { ...duelSet, decks: toggled };
+
+  const decks = toggled.map((deck, i) => {
+    if (deck.hidden) return withDuplicateMarks(deck, []);
+    const elsewhere = getUsedCardKeys(view, i);
+    const clashing = (k: string | null): k is string => k !== null && elsewhere.has(k);
+    if (i === deckIndex) return withDuplicateMarks(deck, deck.slots.filter(clashing));
+    return withDuplicateMarks(
+      deck,
+      (deck.importedDuplicates ?? []).filter((k) => deck.slots.includes(k) && elsewhere.has(k)),
+    );
+  });
+  return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }
 
 /**
@@ -390,6 +453,8 @@ export function validateDuelDeckSet(
 
   const seen = new Map<string, number>();
   duelSet.decks.forEach((deck, i) => {
+    // A hidden deck holds none of its cards, so it cannot repeat one.
+    if (deck.hidden) return;
     deck.slots.forEach((k) => {
       if (!k) return;
       if (seen.has(k)) {

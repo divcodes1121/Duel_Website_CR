@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-03-hide-duel-deck',
+    date: '2026-10-03',
+    kind: 'new',
+    title: 'Hide a duel deck to use its cards in another one',
+    body: [
+      'Every deck in Royal Duels has an eye button now. Press it and the deck folds down to its name, and its cards become free for your other decks, so you can build a second version of a deck without taking the first one apart. Add a deck slot if you need room for it.',
+      'Press the eye again to bring the deck back. A card that another deck took in the meantime shows in black and white until you swap one of the two. Hidden decks are saved with the set and are left out of the PDF report.',
+    ],
+    href: '#/builder',
+    hrefLabel: 'Open Royal Duels',
+  },
+  {
     id: '2026-10-03-pdf-names',
     date: '2026-10-03',
     kind: 'fixed',

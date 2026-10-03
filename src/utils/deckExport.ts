@@ -189,9 +189,18 @@ export function limitSections(sections: ExportSection[], limit: number | null): 
 
 /* ---------------------------------------------------------------- builders */
 
-/** Drops empty decks and stamps a fallback name on anything left unnamed. */
+/**
+ * What a report prints: a deck that holds cards and is in play. One set aside
+ * with the eye button is left out — its cards may already be in another deck
+ * of the same set, and a sheet that prints both shows a set nobody can bring.
+ */
+function printable(deck: Deck | null | undefined): deck is Deck {
+  return hasCards(deck) && !deck!.hidden;
+}
+
+/** Drops empty and hidden decks. */
 function toDeckEntries(decks: Deck[], note?: string): DeckEntry[] {
-  return decks.filter(hasCards).map((deck) => ({ deck, note }));
+  return decks.filter(printable).map((deck) => ({ deck, note }));
 }
 
 /**
@@ -203,8 +212,8 @@ function toPairEntries(blue: Deck[], red: Deck[], note?: string): PairEntry[] {
   const rows: PairEntry[] = [];
   const count = Math.max(blue.length, red.length);
   for (let i = 0; i < count; i++) {
-    const b = hasCards(blue[i]) ? blue[i] : null;
-    const r = hasCards(red[i]) ? red[i] : null;
+    const b = printable(blue[i]) ? blue[i] : null;
+    const r = printable(red[i]) ? red[i] : null;
     if (!b && !r) continue;
     rows.push({ blue: b, red: r, note });
   }

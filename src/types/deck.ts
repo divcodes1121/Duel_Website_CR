@@ -37,6 +37,15 @@ export interface Deck {
    * Versus mode; absent means 0. Lives on the Deck so it travels with saves.
    */
   crowns?: number;
+  /**
+   * Set aside with the eye button in a duel collection. A hidden deck keeps
+   * its eight cards but no longer holds them: they are free for the other
+   * decks of the collection, the panel folds to its header, and the deck is
+   * left out of the counters, the saved-group preview and the PDF. Absent
+   * means shown. Never set in Deck's Home or Counter Palette, whose decks
+   * share nothing with each other.
+   */
+  hidden?: boolean;
 }
 
 export interface DuelDeckSet {
