@@ -110,14 +110,48 @@
 
 /* --- A deck set aside with the eye --------------------------------------- */
 
-/* Folded to its header: the slots and the footer are not rendered at all. It
-   steps DOWN to the well and loses its shadow and its solid edge, so it reads
-   as a deck out of play rather than as a short one — said by the surface, not
-   by fading the type, which the contrast pass forbids. */
+/* THE DECK STAYS WHERE IT IS AND GOES GREY. Same panel, same height, nothing
+   on the board moves when the eye is pressed — it folded to its header for one
+   build, and a deck you are building a second version of is one you need to
+   keep looking at.
+
+   Grey is carried by the CARDS and by the surface (stepped down to the well,
+   no shadow, dashed edge) — never by fading the type, which the contrast pass
+   forbids. The name, the tag and the two figures stay full ink. */
 .panel[data-hidden] {
   border-style: dashed;
   background: var(--surface-sunken);
   box-shadow: none;
+}
+
+/* The whole slot — art, EVO/HERO badge, the role outline — so no colour is
+   left on a deck that is out of play. The same recipe a duplicate card wears. */
+.panel[data-hidden] .slot {
+  filter: grayscale(1) brightness(0.82);
+  cursor: default;
+}
+
+.panel[data-hidden] .slotEmpty:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 40%, transparent);
+  background: var(--surface-sunken);
+}
+
+/* A full deck's figures go green because they are final; on a deck out of
+   play that green is the one colour left on the panel. Back to ink. */
+.panel[data-hidden] .stats[data-complete] .statValue {
+  color: var(--text);
+}
+
+.panel[data-hidden] .stats[data-complete] .statIcon {
+  color: var(--text-muted);
+}
+
+.panel[data-hidden] .curveBar:not([data-empty]) {
+  background: var(--text-muted);
+}
+
+.panel[data-hidden] .launch {
+  filter: grayscale(1);
 }
 
 /* Where the 8/8 count stands on a deck in play. */
@@ -709,7 +743,7 @@
     display: none;
   }
 
-  /* A folded deck's rail is the eye (and the trash, on the last deck), so it
+  /* A hidden deck's rail is the eye (and the trash, on the last deck), so it
      stays on the name's line instead of taking a line of its own for one
      button. */
   .panel[data-hidden] .actions {

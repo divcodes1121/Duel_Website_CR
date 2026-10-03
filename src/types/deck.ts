@@ -27,9 +27,18 @@ export interface Deck {
    */
   wildVariant?: WildVariant;
   /**
-   * Cards this deck imported even though another deck in the collection
-   * already used them — rendered black & white until the clash is resolved.
-   * Only the pasted deck carries the flag, never the original copies.
+   * Cards that were already in another deck of the duel collection when they
+   * arrived in this one — by a paste, or by reusing a card of a deck hidden
+   * with the eye. This deck's copy is the NEWER one, and it is the copy drawn
+   * black & white while both decks are in play (`getDuplicateKeys`). The older
+   * copy keeps its colour.
+   */
+  newerCopies?: string[];
+  /**
+   * @deprecated The same marks before 2026-10-03. For one build a deck shown
+   * again with the eye was marked here instead of the deck that had taken its
+   * card, so the field no longer says which copy is newer. Still present in
+   * stored decks; never read and never written.
    */
   importedDuplicates?: string[];
   /**
@@ -40,10 +49,10 @@ export interface Deck {
   /**
    * Set aside with the eye button in a duel collection. A hidden deck keeps
    * its eight cards but no longer holds them: they are free for the other
-   * decks of the collection, the panel folds to its header, and the deck is
-   * left out of the counters, the saved-group preview and the PDF. Absent
-   * means shown. Never set in Deck's Home or Counter Palette, whose decks
-   * share nothing with each other.
+   * decks of the collection. It stays on the board, drawn grey and read-only,
+   * and is left out of the counters and the PDF. Absent means in play. Never
+   * set in Deck's Home or Counter Palette, whose decks share nothing with
+   * each other.
    */
   hidden?: boolean;
 }

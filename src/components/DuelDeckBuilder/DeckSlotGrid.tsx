@@ -6,9 +6,11 @@ interface DeckSlotGridProps {
   owner: DeckOwner;
   deckIndex: number;
   deck: Deck;
+  /** A deck hidden with the eye: its slots are drawn but cannot be edited. */
+  readOnly?: boolean;
 }
 
-export function DeckSlotGrid({ owner, deckIndex, deck }: DeckSlotGridProps) {
+export function DeckSlotGrid({ owner, deckIndex, deck, readOnly }: DeckSlotGridProps) {
   return (
     <div className={styles.slotGrid}>
       {deck.slots.map((cardKey, slotIndex) => (
@@ -19,6 +21,7 @@ export function DeckSlotGrid({ owner, deckIndex, deck }: DeckSlotGridProps) {
           slotIndex={slotIndex}
           cardKey={cardKey}
           deck={deck}
+          readOnly={readOnly}
         />
       ))}
     </div>

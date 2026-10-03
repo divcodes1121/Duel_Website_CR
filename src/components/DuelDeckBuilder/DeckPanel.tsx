@@ -123,7 +123,7 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
   }
 
   function openInClashRoyale() {
-    if (!deckLink) return;
+    if (!deckLink || hidden) return;
     // Also put the link on the clipboard so it can be shared directly.
     navigator.clipboard?.writeText(deckLink).catch(() => {});
     setLinkCopied(true);
@@ -311,7 +311,7 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
           )}
 
           {/* Last in the rail (the trash aside), so it keeps its place there
-              whether the deck is folded or open. */}
+              whether the deck is hidden or in play. */}
           {duelOwner && (
             <button
               type="button"
@@ -385,31 +385,32 @@ export function DeckPanel({ owner, deckIndex, deck, onDelete, deleteLabel }: Dec
         </div>
       )}
 
-      {/* A hidden deck is its header and nothing else: no slots to select or
-          drop on, so nothing can be placed into a deck that is out of play. */}
-      {!hidden && (
-        <>
-          <DeckSlotGrid owner={owner} deckIndex={deckIndex} deck={deck} />
+      {/* A hidden deck STAYS ON THE BOARD, grey. It folded to its header for
+          one build and that was wrong: the reason to hide a deck is to build
+          another version of it, and you cannot build from a deck you can no
+          longer see. The panel's `data-hidden` greys it; `readOnly` is what
+          keeps a card from being placed into a deck that is out of play. */}
+      <DeckSlotGrid owner={owner} deckIndex={deckIndex} deck={deck} readOnly={hidden} />
 
-          <footer className={styles.footer}>
-            <DeckStats deck={deck} />
-            <button
-              type="button"
-              className={styles.launch}
-              title={
-                deckLink
-                  ? 'Open this deck in Clash Royale — the share link is copied too'
-                  : 'Fill all 8 slots to open this deck in Clash Royale'
-              }
-              aria-disabled={!deckLink}
-              onClick={openInClashRoyale}
-            >
-              <LaunchIcon size={14} />
-              {linkCopied ? 'Link copied' : 'Open in Game'}
-            </button>
-          </footer>
-        </>
-      )}
+      <footer className={styles.footer}>
+        <DeckStats deck={deck} />
+        <button
+          type="button"
+          className={styles.launch}
+          title={
+            hidden
+              ? 'Show this deck to open it in Clash Royale'
+              : deckLink
+                ? 'Open this deck in Clash Royale — the share link is copied too'
+                : 'Fill all 8 slots to open this deck in Clash Royale'
+          }
+          aria-disabled={hidden || !deckLink}
+          onClick={openInClashRoyale}
+        >
+          <LaunchIcon size={14} />
+          {linkCopied ? 'Link copied' : 'Open in Game'}
+        </button>
+      </footer>
     </section>
   );
 }

@@ -9,12 +9,12 @@ import styles from './SavedGroups.module.css';
 
 
 /**
- * Unused deck slots stay out of the preview, and so does a deck set aside with
- * the eye button — it is still in the group and comes back, still hidden, on
- * Load. Empty groups show deck 1.
+ * Unused deck slots stay out of the preview; empty groups show deck 1. A deck
+ * set aside with the eye button is drawn, grey, exactly as the builder draws
+ * it — it is in the group and comes back, still hidden, on Load.
  */
 function withCards(decks: Deck[]): Deck[] {
-  const filled = decks.filter((d) => !d.hidden && d.slots.some((k) => k !== null));
+  const filled = decks.filter((d) => d.slots.some((k) => k !== null));
   return filled.length > 0 ? filled : decks.slice(0, 1);
 }
 
@@ -56,7 +56,10 @@ function DeckRow({ deck, dim, side }: { deck: Deck; dim?: boolean; side?: Player
   );
 
   return (
-    <div className={`${styles.deckRow} ${dim ? styles.deckRowDim : ''}`}>
+    <div
+      className={`${styles.deckRow} ${dim || deck.hidden ? styles.deckRowDim : ''}`}
+      title={deck.hidden ? `${deck.name} — hidden` : undefined}
+    >
       <span className={styles.deckRowName}>{deck.name}</span>
       {side === 'red' && badge}
       <div className={styles.deckRowCards}>
@@ -110,9 +113,6 @@ function GroupCard({
     year: 'numeric',
   });
 
-  // Decks the group holds but does not draw, so a Load is not a surprise.
-  const hiddenCount = groupDecks(entry, true).filter((d) => d.hidden).length;
-
   function handleLoad() {
     if (window.confirm(`Load "${entry.name}"? Your current decks will be replaced.`)) {
       loadSaved(entry.id);
@@ -153,10 +153,7 @@ function GroupCard({
           ) : (
             <h3 className={styles.groupName}>{entry.name}</h3>
           )}
-          <span className={styles.groupMeta}>
-            Saved {savedDate}
-            {hiddenCount > 0 && ` · ${hiddenCount} hidden`}
-          </span>
+          <span className={styles.groupMeta}>Saved {savedDate}</span>
         </div>
         <div className={styles.groupActions}>
           <button type="button" className={styles.groupButton} onClick={handleLoad}>
@@ -203,16 +200,16 @@ function GroupCard({
 }
 
 /**
- * The decks of a saved group, across both sides for a versus set. Those in
- * play by default — the ones the card draws and the filter may match;
- * `withHidden` adds the ones set aside with the eye.
+ * The decks of a saved group that are in play, across both sides for a versus
+ * set — the ones the win-condition filter may match. A deck set aside with the
+ * eye is drawn grey and is not an answer to "which groups play this card".
  */
-function groupDecks(entry: SavedDeckSet, withHidden = false): Deck[] {
+function groupDecks(entry: SavedDeckSet): Deck[] {
   const all =
     entry.mode === 'solo'
       ? entry.solo?.decks ?? []
       : [...(entry.blue?.decks ?? []), ...(entry.red?.decks ?? [])];
-  return withHidden ? all : all.filter((d) => !d.hidden);
+  return all.filter((d) => !d.hidden);
 }
 
 /**

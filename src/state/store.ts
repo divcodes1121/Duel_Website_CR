@@ -20,7 +20,7 @@ import {
   clearSlot as clearSlotUtil,
   createEmptyDeck,
   createEmptyDuelDeckSet,
-  getUsedCardKeys,
+  markNewerCopies,
   moveCard as moveCardUtil,
   renameDeck as renameDeckUtil,
   setDeckHidden as setDeckHiddenUtil,
@@ -590,11 +590,14 @@ export const useBuilderStore = create<BuilderState>()(
           ...remember(state, scopeOfOwner(owner), before === 0 ? `Surprise me on ${deck.name}` : `Fill ${deck.name}`),
           ...commitSet(state, owner, {
             ...current,
-            decks: current.decks.map((d, i) =>
+            decks: current.decks.map((d, i) => {
+              if (i !== deckIndex) return d;
               // The Wild slot may have changed, so any form choice it carried
               // goes, the same as a paste.
-              i === deckIndex ? { ...d, slots, wildVariant: d.slots[2] === slots[2] ? d.wildVariant : undefined } : d,
-            ),
+              const filled = { ...d, slots, wildVariant: d.slots[2] === slots[2] ? d.wildVariant : undefined };
+              // A card the wand took from a hidden deck is the newer copy of it.
+              return scopeFor(owner) === 'collection' ? markNewerCopies(current, i, filled) : filled;
+            }),
             updatedAt: new Date().toISOString(),
           }),
           selectedSlot: null,
@@ -625,22 +628,20 @@ export const useBuilderStore = create<BuilderState>()(
               : 'This deck is already in this folder';
           }
         }
-        // Cards other decks already own: only this freshly-pasted deck shows
-        // them black & white; the original copies keep their color.
-        const usedElsewhere = getUsedCardKeys(current, deckIndex);
-        const importedDuplicates =
-          independentDecks ? [] : result.slots.filter((k) => usedElsewhere.has(k));
         set({
           ...remember(state, scopeOfOwner(owner), `Paste into ${current.decks[deckIndex]?.name ?? 'a deck'}`),
           ...commitSet(state, owner, {
             ...current,
-            decks: current.decks.map((d, i) =>
-              i === deckIndex
-                ? // A fresh 8 cards land in every slot, so any Wild-form choice
-                  // the old card carried is meaningless now.
-                  { ...d, slots: [...result.slots], importedDuplicates, wildVariant: undefined }
-                : d,
-            ),
+            decks: current.decks.map((d, i) => {
+              if (i !== deckIndex) return d;
+              // A fresh 8 cards land in every slot, so any Wild-form choice
+              // the old card carried is meaningless now.
+              const pasted = { ...d, slots: [...result.slots], wildVariant: undefined };
+              // Cards another duel deck already owns: the freshly pasted deck
+              // holds the NEWER copy, so it is the one shown black & white and
+              // the original keeps its color. Independent decks share nothing.
+              return independentDecks ? pasted : markNewerCopies(current, i, pasted);
+            }),
             updatedAt: new Date().toISOString(),
           }),
           selectedSlot: null,
@@ -696,8 +697,8 @@ export const useBuilderStore = create<BuilderState>()(
           const current = state.sets[owner];
           const updated = setDeckHiddenUtil(current, deckIndex, hidden);
           if (updated === current) return state;
-          // A hidden deck has no slots on screen, so a selection inside it
-          // would point at nothing and the next pick would land out of sight.
+          // A hidden deck is read-only, so a selection left inside it would
+          // send the next pick into a deck that is out of play.
           const selectedHere =
             hidden &&
             state.selectedSlot?.owner === owner &&
@@ -859,7 +860,7 @@ export const useBuilderStore = create<BuilderState>()(
             ...remember(state, 'duels', `Remove ${state.sets[owner].decks[lastIndex]?.name ?? 'a deck slot'}`),
             // The removed slot's deck must not keep holding cards (they'd still
             // block uniqueness invisibly) — clear it on the way out. Its eye
-            // goes back to open too, or the slot would return folded when
+            // goes back to open too, or the slot would return hidden when
             // re-added.
             sets: {
               ...state.sets,

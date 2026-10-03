@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Hide a duel deck to reuse its cards** | **2026-10-03, client only.** Asked for directly: an eye button in duel mode — with three decks built, hide one and use its cards again in a slot below. Every deck in Royal Duels (Solo and both Versus players) has an eye at the end of its action rail. A hidden deck folds to its header and **keeps its eight cards but holds none of them**: they are free for the rest of the collection, so a second version of a deck can be built in a new slot without taking the first apart. Showing it again is allowed even if its cards were taken — the returning deck's copies draw black and white, the same mark a pasted duplicate gets, until one copy goes. One optional field on the deck (`hidden`), so it saves, syncs and undoes like any edit and the persist version did not move. Hidden decks are left out of the card counters, the saved-group preview (which says "1 hidden") and the PDF. Not offered in Deck's Home or Counter Palette, whose decks share nothing. **57/57 in a browser** (both themes, 1440, 390, a touch phone), 18 unit checks proven red with the rule removed. See [Hide a duel deck to reuse its cards](#hide-a-duel-deck-to-reuse-its-cards-2026-10-03) |
+| **Hide a duel deck to reuse its cards** | **2026-10-03, client only; corrected the same day.** Asked for directly: an eye button in duel mode — with three decks built, hide one and use its cards again in a slot below. Every deck in Royal Duels (Solo and both Versus players) has an eye at the end of its action rail. A hidden deck **stays on the board, grey and read-only**, and **keeps its eight cards but holds none of them**: they are free for the rest of the collection, so a second version of a deck can be built in a new slot while looking at the first. When both decks are in play again and hold the same card, **the newer deck's copy is the one drawn black and white**; which copy is newer is recorded when the card arrives (`Deck.newerCopies`), so hiding and showing never flips it. The first version, live for an hour, folded the hidden deck to its header and greyed the OLDER deck — both changed on request. One optional field on the deck (`hidden`), so it saves, syncs and undoes like any edit and the persist version did not move. Hidden decks are left out of the card counters and the PDF, and are drawn grey in the saved-group preview. Not offered in Deck's Home or Counter Palette, whose decks share nothing. **55/55 in a browser** (both themes, 1440, 390, a touch phone), 28 unit checks proven red two ways. See [Hide a duel deck to reuse its cards](#hide-a-duel-deck-to-reuse-its-cards-2026-10-03) |
 | **PDFs print Japanese and Cyrillic names** | **2026-10-03, client only.** Reported against a seven-player scouting report: four players whose names are kana printed as their tags, because the report fonts were Latin only. A name now prints as written, and where a report lists its players the Latin form and the tag follow it — `こっとん (Kotton)`, `Kotton · #ABC002`. Two Noto Sans JP files (kana 49 kB, kanji 2.0 MB) are fetched only when a document needs them; Cyrillic went into the Inter subsets. Kanji names print without a Latin form; Korean still prints as the tag. Exported in a real browser on production data and looked at; 1,265 vitest across 57 files. See [Names in Japanese and Cyrillic](#names-in-japanese-and-cyrillic-2026-10-03) |
 | **The scroll rail — one scroller on every screen** | **2026-10-03, client only.** Asked for directly: a scroller on every screen that is not the ordinary one — look at what exists online, make it interactive, make it match the site. The native vertical scrollbar is gone everywhere and one component replaces it: a rail of ticks standing for the whole content, the lit violet run being the part on screen. Ticks rise toward the pointer like a dock, the lit run drags, a press goes there, and the longer ticks are the page's own sections — point at one for its name, press it to jump. Ported from Ruixen UI's Chapter Scrubber (MIT), eight deviations listed in the file. **Mounted once** (`ui/scroll-rail.tsx`): it attaches itself to anything that scrolls, so no screen was rewired, and scrolling itself stays the browser's. A page gets the full rail in the shell's gutter, where it covers no content; a pane, a dialog list or a textarea gets a slim one. On a phone it is an indicator that shows while the page moves. **79/79 in a browser on production data** (both themes, 1440/1280/390, reduced motion), 53 unit checks, no animation loop at rest. Main bundle +6.50 kB gzip. See [The scroll rail](#the-scroll-rail--one-scroller-on-every-screen-2026-10-03) |
 | **Coach Assist answers in ~7 s, not 80** | **2026-09-30, server only.** Reported: *"the time taking is more than 80 seconds"*. Profiled live: 65 of 76 s were SQLite `execute`, and a one-row indexed lookup cost 0.73 s. The bot's WAL had grown to 2.9 GB, and while no other connection to the file was open in the process, a fresh connection's first query paid 0.7-0.9 s — and the API opens, queries once and closes, hundreds of times a request. `clash_data.connect` now keeps ONE idle connection per file open for the process's life (it holds no transaction: the bot's checkpoint is unaffected, proven by a test), and a fresh connection's first query takes ~1 ms. Same request, A/B alternated: **cold 57-107 s -> 7.5 s, repeat 16.8 -> 1.6 s, byte-identical answer**. Live after deploy: new players 6-11 s (was 45-56), repeat 3 s (was ~20); prediction 2-5 s, a Team Analysis board 4 s. See [One idle connection, and the 80-second Coach](#one-idle-connection-and-the-80-second-coach-2026-09-30) |
@@ -124,7 +124,7 @@ bot's SQLite files read-only.
 | Coach Assist — Suggestion | **reads real duels (2026-09-27, live)** — the fused ladder+duel rate on every pairing and one option held for duel proof; see the row at the top. Before that, **personal and archetype-by-archetype (2026-09-25, live).** "Or bring one of these" is chosen per player from their playstyle (12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition), and every deck shows its rate against **five** archetypes — their likely ones, their other win conditions, then the meta — on one line |
 | R3 prediction sampler | **STOPPED 2026-09-19 21:05 UTC** by its own stop condition (a royalweb restart during a deploy), ~8 h into 7 days; found 2026-09-25, not restarted per protocol. Re-running needs a deploy freeze or an amendment — the account holder's call. See `server/README.md` |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **3,890 Python checks** across **70 suites** and **1,283 vitest** across 58 files as of 2026-10-03 (`deckHidden.test.ts`, 18, came with the eye button on duel decks; before it 1,265 across 57, when `reportNames.test.ts`, 19, came with the PDF names fix) — the scroll rail added `scrollRail.test.ts` (53: the tick arithmetic, the section marks, the springs, and twelve contracts read off the stylesheets and the mount); before it 1,192 across 55 as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **3,890 Python checks** across **70 suites** and **1,293 vitest** across 58 files as of 2026-10-03 (`deckHidden.test.ts`, 28, came with the eye button on duel decks — 18 at first, 28 once a hidden deck stayed on the board and the newer copy became the grey one; before it 1,265 across 57, when `reportNames.test.ts`, 19, came with the PDF names fix) — the scroll rail added `scrollRail.test.ts` (53: the tick arithmetic, the section marks, the springs, and twelve contracts read off the stylesheets and the mount); before it 1,192 across 55 as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -4975,19 +4975,29 @@ exists. A duel collection forbids a card in two of its decks, so trying a
 second version of a deck used to mean taking the first one apart. Now the first
 one is set aside.
 
+**Corrected the same day**, an hour after the first version went live, in the
+account holder's words: *"hide will not hide but just make it grey … and if 2
+decks will have same cards the new one will have cards grey"*. The first
+version folded a hidden deck down to its header, and when the deck came back
+it greyed the returning deck's copies. Both were wrong, and this section
+describes what is live now.
+
 ### What it does
 
 Every deck in Royal Duels — Solo, and each Versus player's — has an eye at the
 end of its action rail.
 
-- **Press it and the deck folds to its header**: number, name, a `Hidden` tag
-  and the eye, now struck through and lit. The slots and the footer are not
-  rendered, so nothing can be selected in, dragged onto or pasted into a deck
-  that is out of play.
+- **Press it and the deck turns grey. It does not go anywhere.** Same panel,
+  same height, all eight cards on screen in black and white, a `Hidden` tag
+  where the 8/8 count stands, the eye struck through and lit. Nothing else on
+  the board moves.
 - **Its eight cards stay in it and are free for the rest of the collection.**
   Add a deck slot (the tile that was already there) and build the other
-  version below with the same cards.
-- **Press it again and the deck is back**, as it was.
+  version below, looking at the first one while you do.
+- **A hidden deck is read-only**: its slots cannot be selected, cleared,
+  dragged from or dropped on, Open in Game is off, and its rail is the eye
+  alone. The name still renames.
+- **Press the eye again and the deck is back in colour.**
 - **It is one undo step** ("Hide Deck 1" / "Show Deck 1"), it is saved with the
   set, and it syncs to the account's other devices like any other edit.
 - **The eye is disabled on an empty deck** — there are no cards to free.
@@ -4997,42 +5007,64 @@ end of its action rail.
 A hidden deck **keeps its cards and holds none of them**. `getUsedCardKeys` in
 `state/deckUtils.ts` skips a deck whose `hidden` is set, and everything that
 asks "is this card taken" already read that function: `isCardAvailable` (a
-click, a drag, the wand), the unique-card counters, the Versus ownership
-ribbons, and a paste's duplicate marks. Two readers kept their own copy of the
-question and were changed to match — the card library's "Already used in Deck
-n" and the slot's black-and-white test.
+click, a drag, the wand), the unique-card counters and the Versus ownership
+ribbons. The card library's "Already used in Deck n" kept its own copy of the
+question and was changed to match.
 
 `hidden` is an optional field on `Deck`, like `wildVariant` and `crowns`, so
 the persist version stays at 9 and an old blob or an old client simply reads
-every deck as shown.
+every deck as in play.
 
-### Coming back to cards another deck took
+### Two decks, one card: the newer copy is the grey one
 
-While deck 1 is hidden, deck 4 can take its Hog Rider. Showing deck 1 again is
-**allowed, not refused**, the same way a pasted deck may repeat a card: the
-deck that ARRIVES carries the marks (`importedDuplicates`, the field a paste
-already uses), so deck 1's Hog Rider draws black and white with "already used
-in another deck" and deck 4's does not. Hide deck 4 instead and the mark clears
-at once — swapping two versions is hide one, show the other, in either order.
+While deck 1 is hidden, deck 4 can take its Giant — in colour, because deck 1
+is out of play and the card really is deck 4's. Show deck 1 again and two
+decks in play hold the Giant. **Deck 1's stays in colour; deck 4's, the newer
+one, goes black and white** with "already used in another deck" until one of
+the two is removed. Hide either deck and the clash is over.
 
-`setDeckHidden` also drops marks elsewhere that no longer describe a clash.
-Without that, showing A, hiding B, then showing B again left BOTH copies
-marked, because A's mark from the first step was still on record when B came
-back. There is a test for exactly that walk.
+Which copy is newer is recorded **when the card arrives**, not when a deck is
+shown:
 
-### Where a hidden deck is left out
+- `Deck.newerCopies` lists the cards that were already in another deck of the
+  collection — in play or hidden — when they arrived in this one.
+  `markNewerCopies` writes it on a click or a drop, on the wand, and on a
+  paste (which is why a pasted duplicate has always been the grey one). A mark
+  leaves with its card, and travels with it when a card is dragged to another
+  deck.
+- `getDuplicateKeys` reads it back: of the decks in play that hold a card,
+  **exactly one copy keeps its colour** — the holder with no mark. With several
+  unmarked holders, or none, it is the deck highest on the board, since a
+  second version is built below the first. So a clash always shows, and never
+  as every copy grey.
+- `setDeckHidden` moves the flag and nothing else. Hiding and showing either
+  deck, in any order, cannot change which copy is grey; there is a test that
+  walks all four toggles.
+
+**Why a new field and not the old one.** `importedDuplicates` carried a
+paste's marks, and for the one build that was live it also carried the marks
+of a deck shown again — which is the OLDER copy. Read as "newer", those marks
+would have left the account holder's own board showing the old deck grey after
+the fix. The field is no longer read or written; marks made before today fall
+to the position rule, which gives the same answer for a paste made below the
+original and the right answer for the hour-old case.
+
+Black and white is a duel rule. Deck's Home and Counter Palette decks may
+share any card, are never marked and are never drawn as duplicates.
+
+### Where a hidden deck is left out, and where it is drawn grey
 
 | Place | What it does |
 |---|---|
 | **Card counters** (the builder header, each Versus player's header) | counts cards in decks in play, out of decks in play × 8 — three full decks with one hidden read `16 / 16`, not `16 / 24` |
 | **Win-condition filter** | "n of m decks" counts decks in play |
-| **Versus crown counter** | not drawn for a hidden deck; the crowns stay on the deck and return with it |
-| **Saved groups** | the preview draws decks in play and the meta line says `· 1 hidden`; Load brings the hidden deck back, still hidden |
+| **Versus crown counter** | stays with its deck, grey, its buttons disabled; the crowns are kept |
+| **Saved groups** | the hidden deck is drawn in the preview, grey; Load brings it back still hidden |
 | **PDF report** | not printed — its cards may be in another deck of the same set, and a sheet showing both shows a set nobody can bring |
 | **"Replace your current decks?"** (My Decks) | asks `holdsAnyCard`, which counts hidden decks, so a board whose only cards are hidden is not replaced without a word |
 
 Removing the last deck slot clears the deck as before and also opens its eye,
-so the slot does not come back folded when it is added again.
+so the slot does not come back hidden when it is added again.
 
 ### Only where decks share cards
 
@@ -5058,36 +5090,63 @@ name measures 57px with the eye and 57px with the old six buttons. A container
 query on the header, not a breakpoint, because a Versus column is narrow on a
 wide screen and a Solo one is not.
 
-A folded deck on a phone keeps its eye on the name's line rather than giving
-one button a line of its own.
+On a phone a hidden deck's rail — the eye, and the trash on the last deck —
+stays on the name's line rather than taking a line of its own.
 
 ### How it was verified
 
-`tests/deckHidden.test.ts` (18): the rule, the no-op cases, the marks on
-return and the back-and-forth walk, undo and redo by name, the selection
-dropped when its deck folds, Versus players kept apart, a removed slot
-returning open, a saved group carrying the flag through Load, the PDF sections
-for Solo and Versus, and where the eye is offered. **Removing the one line in
-`getUsedCardKeys` turns 5 of them red.**
+`tests/deckHidden.test.ts` (28): the rule and its no-op cases; nothing grey
+while the older deck is hidden; the NEW deck's copy grey once both are in
+play, including when the new deck sits above the old one; the four-toggle
+walk; either copy removed ending the clash; three decks sharing a card with
+one copy in colour; decks with no marks at all; a dragged card taking its mark
+along; a paste and the wand marking what they take from a hidden deck; undo
+and redo by name; the selection dropped when its deck is hidden; a removed
+slot returning open; a saved group carrying the flag through Load; the PDF for
+Solo and Versus; and three source contracts — the eye on duel owners only, the
+slot grid rendered read-only rather than removed, and black and white kept to
+duel collections. **Removing the one line in `getUsedCardKeys` turns 8 red;
+removing the arrival marks turns 3 red.**
 
-**57 of 57 in a real browser**, driving the builder itself: three decks filled
-with the wand, a fourth slot added, a deck-1 card shown blocked for deck 4,
-deck 1 hidden (58px against 217px open, the eye not moving), the same card now
-free and placed in deck 4, deck 1 shown again with one black-and-white slot on
-the whole board, deck 4 hidden instead and the mark gone, Ctrl Z and Ctrl
-Shift Z, a save and the saved group's preview, Versus, Deck's Home and Counter
-Palette without an eye, 390px, and a second context with a real coarse
+**55 of 55 in a real browser**, driving the builder itself: three decks filled
+with the wand and a fourth slot added; deck 1 hidden — eight slots still on
+screen, all grey, the panel 217.1px before and after, decks 2 and 4 at the
+same y, the eye under the pointer; a hidden slot refusing a click, with no
+remove button and not draggable; a deck-1 card free for deck 4 and landing in
+colour; deck 1 shown — its copy in colour, deck 4's grey, one marked slot on
+the whole board; either deck toggled without the grey changing sides; Ctrl Z
+and Ctrl Shift Z; the saved group drawing four decks, the hidden one grey;
+Versus with the crown counter kept and disabled; Deck's Home and Counter
+Palette without an eye; 390px; and a second context with a real coarse
 pointer. Both themes looked at.
 
-1,283 vitest across 58 files; `tsc -b` and the build clean. Main JS 375.07 to
-376.14 kB gzip against the last recorded figure, the release note included.
+1,293 vitest across 58 files; `tsc -b` and the build clean. Main JS 375.07 to
+376.38 kB gzip against the figure recorded before the eye, the release note
+included.
+
+### What went wrong the first time
+
+1. **"Hidden" was built as "gone".** The request said the deck "gets hidden",
+   and it was folded to its header. But the point of hiding a deck is to build
+   another version of it, and you cannot build from a deck you can no longer
+   see. Grey and in place is what was meant.
+2. **The grey landed on the wrong deck.** A deck shown again was treated as
+   the one arriving, so IT carried the marks — the paste rule, applied to the
+   deck that had been there first. The deck that took the card while the other
+   was away is the new one.
+3. **A check passed that should have been a question.** "Shown again, deck 1's
+   copy is marked" was asserted green in the first browser run. It verified
+   that the code did what was written, not that what was written was what was
+   asked.
 
 ### Not done
 
 - **Five slots is still the ceiling, and a hidden deck occupies one.** With
   three in play that leaves room for two alternates.
-- **The saved-group preview and the PDF do not show hidden decks at all**, only
-  the count. Drawing them dimmed was the alternative.
+- **The PDF does not print hidden decks.** Printing them grey was the
+  alternative.
+- **Dragging a card onto a hidden deck is refused in code and not exercised in
+  the browser pass** — Playwright does not drive HTML5 drag and drop here.
 - The older "My Decks" dialog lists a card count per set; it counts cards in
   play, like the header.
 

@@ -8,6 +8,7 @@ import {
   canAssignCardToSlot,
   canMoveCard,
   canSwitchWildVariant,
+  getDuplicateKeys,
   getSlotRoleByPosition,
   getSlotVisualVariant,
   getWildVariant,
@@ -24,6 +25,11 @@ interface DeckSlotProps {
   slotIndex: number;
   cardKey: string | null;
   deck: Deck;
+  /**
+   * The slot of a deck hidden with the eye: drawn as it is (the panel greys
+   * it), but it cannot be selected, cleared, dragged from or dropped on.
+   */
+  readOnly?: boolean;
 }
 
 // Champions don't have a separate "hero" art file — their normal card art already
@@ -65,7 +71,7 @@ const ROLE_STUB = {
   normal: '',
 };
 
-export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlotProps) {
+export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck, readOnly = false }: DeckSlotProps) {
   const selectedSlot = useBuilderStore((s) => s.selectedSlot);
   const selectSlot = useBuilderStore((s) => s.selectSlot);
   const clearSlot = useBuilderStore((s) => s.clearSlot);
@@ -83,19 +89,21 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
   useEffect(() => setVariantMenuAt(null), [cardKey]);
 
   const isSelected =
+    !readOnly &&
     selectedSlot?.owner === owner &&
     selectedSlot?.deckIndex === deckIndex &&
     selectedSlot?.slotIndex === slotIndex;
   const card = cardKey ? CARDS_BY_KEY.get(cardKey) : undefined;
-  // An imported deck may repeat a card another duel deck already owned — only
-  // the pasted copy renders black & white, and only while the clash persists
-  // (removing either copy, or hiding the other deck, restores the color live).
-  // A deck shown again with the eye is marked the same way.
+  // Two duel decks in play may hold the same card — after a paste, or when a
+  // deck hidden with the eye is shown again after another deck reused its
+  // card. The NEWER copy renders black & white and the older keeps its color,
+  // only while the clash persists (removing either copy, or hiding either
+  // deck, restores it live). Deck's Home and Counter Palette decks share
+  // nothing, so there is no such thing as a duplicate there.
   const isDuplicate =
     !!card &&
-    owner !== 'home' &&
-    !!deck.importedDuplicates?.includes(card.key) &&
-    ownerSet.decks.some((d, i) => i !== deckIndex && !d.hidden && d.slots.includes(card.key));
+    (owner === 'solo' || owner === 'blue' || owner === 'red') &&
+    getDuplicateKeys(ownerSet, deckIndex).has(card.key);
   const variant = getSlotVisualVariant(deck, slotIndex, CARDS_BY_KEY);
   // Champions occupy the Hero/Wild slot but aren't Heroes — they get their own
   // "CHAMPION" label there instead of the misleading "HERO" one.
@@ -112,7 +120,7 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
   const roleClass = ROLE_CLASS[role] ? styles[ROLE_CLASS[role]] : '';
   // Knight, Valkyrie, Musketeer and Wizard have both forms — in the Wild slot
   // clicking the card opens a menu to pick which one is fielded, like in-game.
-  const canSwitchVariant = role === 'wild' && canSwitchWildVariant(deck, CARDS_BY_KEY);
+  const canSwitchVariant = !readOnly && role === 'wild' && canSwitchWildVariant(deck, CARDS_BY_KEY);
 
   const title = card
     ? isDuplicate
@@ -147,7 +155,7 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
   /** Whether the drag currently in progress may drop on this slot. */
   function canAcceptDrag(): boolean {
     const drag = getDrag();
-    if (!drag) return false;
+    if (!drag || readOnly) return false;
     const set = useBuilderStore.getState().sets[owner];
     // Deck's Home decks are independent — uniqueness only applies within one deck.
     const scope = owner === 'home' ? ('deck' as const) : ('collection' as const);
@@ -213,19 +221,24 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
            CLAUDE.md already records costing an afternoon. Attributes say what
            they mean and survive the hashing. */
         data-role={role}
-        data-empty={card ? undefined : ''}
+        /* Not on a read-only slot: `data-empty` is what DeckFx lights as a
+           place to put a card, and nothing can be put in a hidden deck. */
+        data-empty={card || readOnly ? undefined : ''}
         data-selected={isSelected ? '' : undefined}
         aria-haspopup={canSwitchVariant || undefined}
         aria-expanded={canSwitchVariant ? variantMenuAt !== null : undefined}
+        aria-disabled={readOnly || undefined}
+        tabIndex={readOnly ? -1 : undefined}
         onClick={(e) => {
+          if (readOnly) return;
           selectSlot(owner, deckIndex, slotIndex);
           // A dual-form card in the Wild slot drops its form picker below the slot.
           if (canSwitchVariant) setVariantMenuAt(e.currentTarget.getBoundingClientRect());
         }}
         title={title}
-        draggable={!!card}
+        draggable={!readOnly && !!card}
         onDragStart={(e) => {
-          if (!card) return;
+          if (!card || readOnly) return;
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', card.key);
           startDrag({
@@ -288,14 +301,16 @@ export function DeckSlot({ owner, deckIndex, slotIndex, cardKey, deck }: DeckSlo
                 </span>
               </span>
             )}
-            <span
-              className={styles.slotClear}
-              role="button"
-              aria-label={`Remove ${card.name}`}
-              onClick={handleRemove}
-            >
-              ×
-            </span>
+            {!readOnly && (
+              <span
+                className={styles.slotClear}
+                role="button"
+                aria-label={`Remove ${card.name}`}
+                onClick={handleRemove}
+              >
+                ×
+              </span>
+            )}
           </>
         ) : ROLE_STUB[role] ? (
           <span className={styles.slotStub} aria-hidden="true">

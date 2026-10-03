@@ -30,8 +30,7 @@ export function createEmptyDuelDeckSet(name: string): DuelDeckSet {
 /**
  * The cards a collection's decks hold between them. A deck hidden with the eye
  * button holds none of its own: this is the ONE place that rule lives, and
- * availability, the counters, the Versus ribbons and a paste's duplicate marks
- * all read it from here.
+ * availability, the counters and the Versus ribbons all read it from here.
  */
 export function getUsedCardKeys(duelSet: DuelDeckSet, excludeDeckIndex?: number): Set<string> {
   const used = new Set<string>();
@@ -54,51 +53,96 @@ export function countActiveDecks(duelSet: DuelDeckSet, revealed = duelSet.decks.
   return duelSet.decks.slice(0, revealed).filter((deck) => !deck.hidden).length;
 }
 
-/** `deck` with its duplicate marks replaced — the same object when nothing changed. */
-function withDuplicateMarks(deck: Deck, marks: string[]): Deck {
-  const had = deck.importedDuplicates ?? [];
-  if (had.length === marks.length && had.every((k, i) => k === marks[i])) return deck;
-  const next = { ...deck };
-  if (marks.length > 0) next.importedDuplicates = marks;
-  else delete next.importedDuplicates;
-  return next;
-}
-
 /**
  * Hide a duel deck (its cards become free for the rest of the collection) or
  * show it again. No-op when the deck is already in that state.
  *
- * A deck that comes back may find its cards taken, and that is allowed, the
- * same way a pasted deck may repeat a card: the ARRIVING deck carries the
- * black-and-white marks (`importedDuplicates`), never the deck that took the
- * card while it was away. Marks elsewhere that no longer describe a clash are
- * dropped here too — otherwise hiding one copy and showing it again would
- * leave both copies marked.
+ * ONLY THE FLAG MOVES. Which copy of a shared card is the newer one is decided
+ * when a card ARRIVES in a deck (`markNewerCopies`), not here — so hiding a
+ * deck and showing it again can never change which of two copies is grey.
  */
 export function setDeckHidden(duelSet: DuelDeckSet, deckIndex: number, hidden: boolean): DuelDeckSet {
   const target = duelSet.decks[deckIndex];
   if (!target || !!target.hidden === hidden) return duelSet;
-
-  const toggled = duelSet.decks.map((deck, i) => {
+  const decks = duelSet.decks.map((deck, i) => {
     if (i !== deckIndex) return deck;
     const next = { ...deck };
     if (hidden) next.hidden = true;
     else delete next.hidden;
     return next;
   });
-  const view = { ...duelSet, decks: toggled };
-
-  const decks = toggled.map((deck, i) => {
-    if (deck.hidden) return withDuplicateMarks(deck, []);
-    const elsewhere = getUsedCardKeys(view, i);
-    const clashing = (k: string | null): k is string => k !== null && elsewhere.has(k);
-    if (i === deckIndex) return withDuplicateMarks(deck, deck.slots.filter(clashing));
-    return withDuplicateMarks(
-      deck,
-      (deck.importedDuplicates ?? []).filter((k) => deck.slots.includes(k) && elsewhere.has(k)),
-    );
-  });
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
+}
+
+/* --- Two decks, one card: which copy is the newer one --------------------
+ * A duel collection may briefly hold a card twice: a pasted deck may repeat
+ * one, and a deck hidden with the eye frees its cards for another deck and can
+ * then be shown again. The NEWER copy is the one drawn black and white; the
+ * copy that was there first keeps its colour. "Newer" is recorded when the
+ * card arrives (`Deck.newerCopies`) and read back by `getDuplicateKeys`. */
+
+/** `deck` with its newer-copy marks replaced — the same object when nothing changed. */
+function withNewerCopies(deck: Deck, marks: string[]): Deck {
+  const had = deck.newerCopies ?? [];
+  if (had.length === marks.length && had.every((k, i) => k === marks[i])) return deck;
+  const next = { ...deck };
+  if (marks.length > 0) next.newerCopies = marks;
+  else delete next.newerCopies;
+  return next;
+}
+
+/**
+ * `next` is deck `deckIndex` after an edit. A card that ARRIVED in it while
+ * another deck of the collection — in play or hidden — already held it is
+ * marked: this deck's copy is the newer one. A mark stays with a card that
+ * stayed and goes with a card that left.
+ */
+export function markNewerCopies(duelSet: DuelDeckSet, deckIndex: number, next: Deck): Deck {
+  const prev = duelSet.decks[deckIndex];
+  const before = new Set(prev?.slots ?? []);
+  const elsewhere = new Set<string>();
+  duelSet.decks.forEach((deck, i) => {
+    if (i === deckIndex) return;
+    deck.slots.forEach((k) => {
+      if (k) elsewhere.add(k);
+    });
+  });
+  const kept = (prev?.newerCopies ?? []).filter((k) => before.has(k) && next.slots.includes(k));
+  const arrived = next.slots.filter(
+    (k): k is string => k !== null && !before.has(k) && elsewhere.has(k),
+  );
+  return withNewerCopies(next, [...kept, ...arrived]);
+}
+
+/**
+ * The cards of deck `deckIndex` drawn black and white: cards another deck IN
+ * PLAY also holds, where this deck's copy is not the one that keeps its colour.
+ *
+ * Exactly one copy of a shared card stays in colour — the oldest. That is the
+ * holder with no newer-copy mark; with several unmarked holders, or none (decks
+ * edited by an older build carry no marks), it is the one highest on the
+ * board, since a second version of a deck is built below the first. So a clash
+ * always shows, and never as every copy grey.
+ *
+ * A hidden deck is grey as a whole and takes no part: its cards are free, so
+ * the deck that reuses one is in colour until the hidden deck is shown again.
+ */
+export function getDuplicateKeys(duelSet: DuelDeckSet, deckIndex: number): Set<string> {
+  const out = new Set<string>();
+  const deck = duelSet.decks[deckIndex];
+  if (!deck || deck.hidden) return out;
+  for (const k of deck.slots) {
+    if (!k || out.has(k)) continue;
+    const holders: number[] = [];
+    duelSet.decks.forEach((d, i) => {
+      if (!d.hidden && d.slots.includes(k)) holders.push(i);
+    });
+    if (holders.length < 2) continue;
+    const original =
+      holders.find((i) => !duelSet.decks[i].newerCopies?.includes(k)) ?? holders[0];
+    if (original !== deckIndex) out.add(k);
+  }
+  return out;
 }
 
 /**
@@ -171,14 +215,16 @@ export function assignCard(
   scope: UniquenessScope = 'collection',
 ): DuelDeckSet {
   if (!isCardAvailable(duelSet, deckIndex, cardKey, scope)) return duelSet;
-  const decks = duelSet.decks.map((deck, i) =>
-    i !== deckIndex
-      ? deck
-      : withWildChoiceReset(
-          { ...deck, slots: deck.slots.map((s, si) => (si === slotIndex ? cardKey : s)) },
-          slotIndex,
-        ),
-  ) as DuelDeckSet['decks'];
+  const decks = duelSet.decks.map((deck, i) => {
+    if (i !== deckIndex) return deck;
+    const next = withWildChoiceReset(
+      { ...deck, slots: deck.slots.map((s, si) => (si === slotIndex ? cardKey : s)) },
+      slotIndex,
+    );
+    // Only a duel collection shares cards; there, a card taken from a hidden
+    // deck is the newer copy of it.
+    return scope === 'collection' ? markNewerCopies(duelSet, i, next) : next;
+  }) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }
 
@@ -186,9 +232,14 @@ export function clearSlot(duelSet: DuelDeckSet, deckIndex: number, slotIndex: nu
   const decks = duelSet.decks.map((deck, i) =>
     i !== deckIndex
       ? deck
-      : withWildChoiceReset(
-          { ...deck, slots: deck.slots.map((s, si) => (si === slotIndex ? null : s)) },
-          slotIndex,
+      : // Nothing arrives on a clear; this only lets the card's mark leave with it.
+        markNewerCopies(
+          duelSet,
+          i,
+          withWildChoiceReset(
+            { ...deck, slots: deck.slots.map((s, si) => (si === slotIndex ? null : s)) },
+            slotIndex,
+          ),
         ),
   ) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
@@ -198,9 +249,13 @@ export function clearDeck(duelSet: DuelDeckSet, deckIndex: number): DuelDeckSet 
   const decks = duelSet.decks.map((deck, i) =>
     i !== deckIndex
       ? deck
-      : withWildChoiceReset(
-          { ...deck, slots: Array(DECK_SIZE).fill(null), crowns: 0 },
-          WILD_SLOT_INDEX,
+      : markNewerCopies(
+          duelSet,
+          i,
+          withWildChoiceReset(
+            { ...deck, slots: Array(DECK_SIZE).fill(null), crowns: 0 },
+            WILD_SLOT_INDEX,
+          ),
         ),
   ) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
@@ -414,8 +469,11 @@ export function moveCard(
   cardsByKey: Map<string, Card>,
 ): DuelDeckSet {
   if (!canMoveCard(duelSet, from, to, cardsByKey)) return duelSet;
-  const fromKey = duelSet.decks[from.deckIndex].slots[from.slotIndex];
-  const toKey = duelSet.decks[to.deckIndex].slots[to.slotIndex];
+  const fromDeck = duelSet.decks[from.deckIndex];
+  const toDeck = duelSet.decks[to.deckIndex];
+  const fromKey = fromDeck.slots[from.slotIndex];
+  const toKey = toDeck.slots[to.slotIndex];
+  const acrossDecks = from.deckIndex !== to.deckIndex;
   const decks = duelSet.decks.map((deck, di) => {
     if (di !== from.deckIndex && di !== to.deckIndex) return deck;
     const slots = deck.slots.map((k, si) => {
@@ -427,7 +485,16 @@ export function moveCard(
     const touchesWild =
       (di === from.deckIndex && from.slotIndex === WILD_SLOT_INDEX) ||
       (di === to.deckIndex && to.slotIndex === WILD_SLOT_INDEX);
-    return withWildChoiceReset({ ...deck, slots }, touchesWild ? WILD_SLOT_INDEX : -1);
+    const moved = withWildChoiceReset({ ...deck, slots }, touchesWild ? WILD_SLOT_INDEX : -1);
+    if (!acrossDecks) return moved;
+    // A newer-copy mark belongs to the card, so it travels with it: dragging
+    // the grey copy of a shared card to another deck must not turn it into
+    // the original.
+    const [leaving, arriving, source] =
+      di === from.deckIndex ? [fromKey, toKey, toDeck] : [toKey, fromKey, fromDeck];
+    const marks = (deck.newerCopies ?? []).filter((k) => k !== leaving);
+    if (arriving && source.newerCopies?.includes(arriving)) marks.push(arriving);
+    return withNewerCopies(moved, marks);
   }) as DuelDeckSet['decks'];
   return { ...duelSet, decks, updatedAt: new Date().toISOString() };
 }

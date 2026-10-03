@@ -1767,25 +1767,41 @@ The mechanics; the README's "Hide a duel deck to reuse its cards" is the record.
   deck), in Royal Duels only. An open eye on a deck in play, a struck-through
   eye lit in the selection hue (`data-on`) on a hidden one. Disabled on an empty
   deck, like Clear.
-- **A hidden deck is its header**: number, name, a `Hidden` tag where the 8/8
-  count stands, the eye. The slot grid and the footer are not rendered.
-- **Out of play is said by the surface, not by fading.** The panel steps down
-  to `--surface-sunken`, loses its shadow and takes a dashed edge; the name and
-  the tag stay full ink, as the contrast sweep requires.
-- **A returning deck's taken cards are black and white** — the existing
-  `.slotDuplicate` treatment and its "already used in another deck" title,
-  nothing new.
+- **A hidden deck stays where it is and goes grey.** Same panel, same height —
+  nothing on the board moves when the eye is pressed. A `Hidden` tag stands
+  where the 8/8 count does, and the rail is the eye alone (and the trash on
+  the last deck). It folded to its header for one build; that was changed on
+  request the same day.
+- **Grey is carried by the cards and the surface, never by fading type.** Each
+  slot takes `grayscale(1) brightness(0.82)` — art, EVO/HERO badge and role
+  outline together, the recipe a duplicate card already wore — and the panel
+  steps down to `--surface-sunken`, loses its shadow and takes a dashed edge.
+  The name, the tag and the two figures stay full ink (the figures drop their
+  "complete" green, the one colour that would otherwise be left); Open in Game
+  is disabled.
+- **Read-only**: slots are `aria-disabled`, out of the tab order, not
+  draggable, with no remove button and no `data-empty` (which is what
+  `DeckFx` lights as a place to put a card).
+- **In Versus the crown counter stays with its deck**, grey
+  (`.counter[data-idle]`) with its buttons `disabled`, so hiding a deck there
+  moves nothing either.
+- **Two decks in play holding one card: the NEWER copy is black and white**,
+  the existing `.slotDuplicate` treatment and its "already used in another
+  deck" title. The older copy keeps its colour. Never drawn in Deck's Home or
+  Counter Palette.
+- **Saved groups draw a hidden deck grey** (`.deckRowDim`, the filter's own
+  treatment) with "hidden" in the row's `title`.
 - **Under 24rem of header the rename pencil is not drawn**
   (`@container deckhead`). Seven buttons do not fit a Versus header at 1440 or
   a touch phone's rail; the name is the rename control, so the pencil is the
   one to yield. The container is the HEADER, not the panel, so the containment
   wraps one row.
-- **Below 560px a folded deck stays one line**: its rail is one or two buttons
-  and keeps to the name's line instead of wrapping under it.
+- **Below 560px a hidden deck's rail stays on the name's line**: it is one or
+  two buttons and does not take a line of its own.
 - **Checking it in a browser**: Playwright will not click an `aria-disabled`
-  control without `force`; and measure the eye's position from the TOP of the
-  deck column — scrolled to the bottom, a panel folding shortens the content,
-  the browser clamps the scroll and everything moves.
+  control without `force`. To ask "is this card grey", walk the `filter` from
+  the image up to the panel — a hidden deck's grey is on the slot and a
+  duplicate's is on the image, so reading the image alone misses one of them.
 
 ## Working on this
 

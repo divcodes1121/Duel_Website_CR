@@ -51,6 +51,16 @@
   box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
+/* Its deck is hidden with the eye: the counter goes grey with it and stays in
+   place, so the board does not move. The buttons are `disabled`. */
+.counter[data-idle] {
+  filter: grayscale(1);
+}
+
+.counter[data-idle] .pip {
+  cursor: default;
+}
+
 .value {
   font-size: 1.15rem;
   font-weight: 850;

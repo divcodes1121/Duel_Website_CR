@@ -45,6 +45,8 @@ interface CrownCounterProps {
    * card slots' to spend, so the counter sits above the deck instead.
    */
   orientation?: 'column' | 'row';
+  /** The deck is hidden with the eye: drawn grey, and the crowns cannot be set. */
+  idle?: boolean;
 }
 
 /**
@@ -57,6 +59,7 @@ export function CrownCounter({
   side,
   deckName,
   orientation = 'column',
+  idle = false,
 }: CrownCounterProps) {
   const crowns = Math.max(0, Math.min(MAX_CROWNS, Math.round(value || 0)));
 
@@ -66,6 +69,7 @@ export function CrownCounter({
       data-side={side}
       data-layout={orientation}
       data-empty={crowns === 0 ? 'true' : undefined}
+      data-idle={idle ? '' : undefined}
       role="group"
       aria-label={`Crowns won by ${deckName}: ${crowns} of ${MAX_CROWNS}`}
     >
@@ -80,6 +84,7 @@ export function CrownCounter({
               type="button"
               className={`${styles.pip} ${lit ? styles.pipLit : ''}`}
               aria-pressed={lit}
+              disabled={idle}
               title={`${n} crown${n === 1 ? '' : 's'}`}
               onClick={(e) => {
                 /* Gold shards, but only when crowns are actually GAINED.
@@ -103,6 +108,7 @@ export function CrownCounter({
           type="button"
           className={`${styles.pip} ${styles.pipZero} ${crowns === 0 ? styles.pipZeroActive : ''}`}
           aria-pressed={crowns === 0}
+          disabled={idle}
           title="No crowns"
           onClick={() => onChange(0)}
         >

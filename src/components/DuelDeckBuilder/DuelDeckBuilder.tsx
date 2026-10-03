@@ -100,8 +100,8 @@ export function DuelDeckBuilder() {
   /** Decks keep their slot positions — matches stay lit, the rest just fade back. */
   const matches = (deck: Deck) => deckMatchesFilter(deck.slots, winFilter);
 
-  /* The filter counts decks in play. One set aside with the eye is folded to
-     its header, so it is neither a match nor one of the decks searched. */
+  /* The filter counts decks in play. One set aside with the eye is grey and
+     out of the duel, so it is neither a match nor one of the decks searched. */
   const activeDecks = (owner: DuelOwner) =>
     sets[owner].decks.slice(0, deckSlotCount[owner]).filter((d) => !d.hidden);
   const matchCount = mode === 'solo'
@@ -126,15 +126,16 @@ export function DuelDeckBuilder() {
               key={deck.id}
               className={`${styles.deckWrap} ${filtering && !match ? styles.deckDim : ''}`}
             >
-              {/* No crowns on a deck that is out of play. The count itself is
-                  kept on the deck and returns with it. */}
-              {isVersus && !deck.hidden && (
+              {isVersus && (
                 <CrownCounter
                   value={deck.crowns ?? 0}
                   onChange={(c) => setDeckCrowns(owner as PlayerId, i, c)}
                   side={owner as PlayerId}
                   deckName={deck.name}
                   orientation="row"
+                  /* Grey and still with its deck, so hiding one moves nothing
+                     on the board. The count is kept and returns with it. */
+                  idle={!!deck.hidden}
                 />
               )}
               <DeckPanel
