@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-04-player-decks',
+    date: '2026-10-04',
+    kind: 'new',
+    title: 'Decks: every deck a player is using, most played first',
+    body: [
+      'Search a player and open Decks in the sidebar. It lists every deck they played in the last 7, 14 or 30 days, in order of how often they play it, with the eight cards, the average elixir, the four-card cycle and the share of their games it was.',
+      'Each deck shows two records side by side: the player’s own wins, draws and losses with it, and the same deck’s record across all players. It is open to everyone, and it is part of the PDF export.',
+    ],
+    href: '#/',
+    hrefLabel: 'Search a player',
+  },
+  {
     id: '2026-10-03-hide-duel-deck',
     date: '2026-10-03',
     kind: 'new',

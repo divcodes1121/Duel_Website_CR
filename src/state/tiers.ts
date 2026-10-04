@@ -148,6 +148,11 @@ export const FREE_SECTIONS = [
      types a tag is told the tag is worth nothing to them. What costs money is
      the reading of those rows, which is every other area. */
   'Recent Battles',
+  /* FREE, because it is the battle log counted by deck — and because the free
+     Search Player screen already prints a player's top decks with their use
+     and win rates. Gating the full list would put a paywall on the second half
+     of a table whose first half is public. */
+  'Decks',
   'Top Meta Decks',
   'Deck Counter',
 ] as const;

@@ -616,6 +616,35 @@ def exact(cards: list[str]) -> dict | None:
     return res
 
 
+def totals(keys: list[str]) -> dict[str, tuple[int, int, int]] | None:
+    """`{deck hash: (wins, losses, draws)}` over every opponent archetype, for
+    the lists the index knows.
+
+    The same `deck_arch` rows `exact` reads, summed across archetypes with no
+    evidence floor — `_score` drops an archetype under `MIN_GAMES`, which is
+    right for a per-archetype rate and wrong for a deck's whole record. None
+    without a usable index; a list newer than the last build is simply absent
+    and the caller reads it live.
+    """
+    if _current() is None:
+        return None
+    out: dict[str, tuple[int, int, int]] = {}
+    try:
+        con = _ro(PATH)
+        try:
+            for key in keys:
+                row = con.execute(
+                    "SELECT SUM(x.w), SUM(x.l), SUM(x.d) FROM deck k "
+                    "JOIN deck_arch x ON x.deck = k.id WHERE k.hash = ?", (key,)).fetchone()
+                if row and row[0] is not None:
+                    out[key] = (int(row[0] or 0), int(row[1] or 0), int(row[2] or 0))
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+    return out
+
+
 def deck_count() -> int | None:
     """How many decks the index knows, or None without one."""
     if _current() is None:

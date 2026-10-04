@@ -8,6 +8,7 @@ import type {
   GlobalCardBoard,
   MatchupReport,
   PlayerCounterReport,
+  PlayerDecksReport,
   PlayerMatchup,
   RecentBattlesReport,
 } from '../state/analyticsClient';
@@ -17,6 +18,7 @@ import { frac, int, pct, type DeckLine, type ReportBlock, type ReportDoc } from 
 import { DAY } from './reportAdapters';
 import { printableName } from './report/text';
 import { duelPickLabel, duelShort } from './duelFigures';
+import { distinctDeckLabels } from './trendSeries';
 
 /* Report models for the screens that had NO export before this module:
  * Recent Battles, Deck Counter, Coach Assist, 2v2 Decks and the global Cards
@@ -108,6 +110,69 @@ export function recentBattlesDoc(r: RecentBattlesReport, playerTag: string): Rep
       { label: 'Window', value: range(r.window) },
       { label: 'Battles', value: int(r.total) },
       { label: 'Archive used', value: s.archiveUsed ? 'yes' : 'no' },
+    ],
+    blocks,
+  };
+}
+
+/* ------------------------------------------------------------ player decks */
+
+/** The Decks screen: every deck in the window, most played first, one line a
+ *  deck — the share of their games, then their record and the community's. */
+export function playerDecksDoc(r: PlayerDecksReport, playerTag: string): ReportDoc {
+  const s = r.summary;
+  const top = r.decks[0];
+  // Same-named lists are told apart exactly as the screen tells them apart.
+  const names = distinctDeckLabels(
+    r.decks.map((d) => ({ name: d.deckName || d.archetype, cards: d.cards })),
+    (k) => CARDS_BY_KEY.get(k)?.name ?? k,
+  );
+  const blocks: ReportBlock[] = [
+    {
+      kind: 'stats',
+      tiles: [
+        { label: 'Games', value: int(r.total), note: range(r.window) },
+        { label: 'Decks', value: int(s.decks), note: `last ${r.days} days` },
+        { label: 'Win rate', value: r.total ? pct(s.winRate) : '—', note: `${int(s.wins)}W ${int(s.losses)}L${s.draws ? ` ${int(s.draws)}D` : ''}`, hue: 'green' },
+        { label: 'Most played', value: top ? pct(top.useRate) : '—', note: top ? `${int(top.battles)} of ${int(r.total)} games` : 'no games' },
+      ],
+    },
+  ];
+  if (r.decks.length) {
+    blocks.push({
+      kind: 'decks',
+      layout: 'rows',
+      heading: 'Decks, most played first',
+      note: 'Share of games, then the win rate with each deck and the same deck across all players',
+      decks: r.decks.map((d, i): DeckLine => ({
+        rank: i + 1,
+        name: names[i],
+        meta: [`${d.avgElixir.toFixed(1)} elixir`, d.cycle != null ? `${d.cycle} cycle` : ''].filter(Boolean).join(' · '),
+        value: pct(d.useRate),
+        valueNote: `${int(d.battles)} of ${int(r.total)} games`,
+        // A share of play, not a win rate — never coloured as a result.
+        valueHue: 'neutral',
+        cards: d.cards,
+        art: d.art,
+        inferredArt: d.artInferred,
+        chips: [
+          { label: 'Won', value: pct(d.winRate), good: d.winRate >= 50 },
+          { label: 'Lost', value: pct(d.lossRate) },
+          ...(d.draws ? [{ label: 'Drawn', value: pct(d.drawRate) }] : []),
+          ...(d.community ? [{ label: 'Community', value: `${pct(d.community.winRate)} · ${int(d.community.battles)}` }] : []),
+        ],
+      })),
+    });
+  }
+  return {
+    screen: 'Decks',
+    subject: playerTag,
+    summary: r.player.name ? printableName(r.player.name, '') || undefined : undefined,
+    hue: 'pink',
+    meta: [
+      { label: 'Window', value: range(r.window) },
+      { label: 'Games', value: int(r.total) },
+      { label: 'Community', value: 'all stored battles' },
     ],
     blocks,
   };

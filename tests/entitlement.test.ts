@@ -39,6 +39,9 @@ import { canExportDecks } from '../src/utils/deckExport';
 const ALL_SECTIONS = [
   'Search Player',
   'Recent Battles',
+  /* The player's decks, most played first. Added 4 Oct 2026, free: it is the
+     battle log counted by deck, and Search Player already shows the top ten. */
+  'Decks',
   'Top Meta Decks',
   'Deck Analysis',
   'Duel Analysis',
@@ -262,14 +265,15 @@ describe('an unpaid tier opens exactly the free sections', () => {
      on a public page. Recent Battles joined them for the same reason: it is
      the rawest thing stored — a list of battles that happened — and a visitor
      who types a tag and is told the tag buys them nothing has been shown a
-     paywall, not a product.
+     paywall, not a product. Decks (4 Oct 2026) is that log counted by deck,
+     and the free Search Player screen already prints the top ten of it.
 
      THIS LIST IS A TRIPWIRE. It fails whenever an area changes tier, which is
      the point: that decision should be made in a commit, not inherited from
      whatever order someone appended a constant in. */
   it('the free sections are the ones that were chosen', () => {
     expect([...FREE_SECTIONS].sort()).toEqual(
-      ['Deck Counter', 'Recent Battles', 'Search Player', 'Top Meta Decks'].sort(),
+      ['Deck Counter', 'Decks', 'Recent Battles', 'Search Player', 'Top Meta Decks'].sort(),
     );
   });
 });

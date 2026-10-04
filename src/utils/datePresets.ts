@@ -27,6 +27,22 @@ export type DayPreset = (typeof DAY_PRESETS)[number];
 /** The window a screen opens on when nothing has been chosen. */
 export const DEFAULT_DAYS: DayPreset = 30;
 
+/**
+ * THE DECKS SCREEN'S WINDOWS, and the one list that is not the six above.
+ *
+ * Asked for by name (2026-10-04): 7, 14 and 30 days, "that's all" — the windows
+ * a deck list is read over on the reference it was modelled on. It lives here
+ * so there are still exactly two lists in the app and both are in one file.
+ * The server accepts these three and nothing else (`player_decks.DAYS`), and a
+ * test holds the two equal.
+ */
+export const DECK_DAY_PRESETS = [7, 14, 30] as const;
+
+export type DeckDayPreset = (typeof DECK_DAY_PRESETS)[number];
+
+/** The Decks screen opens on the shortest: it answers "what are they playing". */
+export const DECK_DEFAULT_DAYS: DeckDayPreset = 7;
+
 /** "Last 15 Days" — the long form the analytics screens' menus print. */
 export function dayLabel(days: number): string {
   return `Last ${days} Days`;

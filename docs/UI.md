@@ -1803,6 +1803,45 @@ The mechanics; the README's "Hide a duel deck to reuse its cards" is the record.
   the image up to the panel — a hidden deck's grey is on the slot and a
   duplicate's is on the image, so reading the image alone misses one of them.
 
+## The Decks screen (2026-10-04)
+
+`components/Analytics/PlayerDecks.tsx` + `.module.css`, the third row of a
+loaded player's rail. README "Decks — every deck a player is using" is the
+record of what it counts; this is how it is drawn.
+
+- **One row a deck, three parts in a fixed order**: the deck and its share of
+  play, the eight cards, the record. Three layouts by CONTAINER query on the
+  list (`decks`): one line from 62rem, two columns from 40rem with the record
+  under the cards, stacked below that. The window is the wrong thing to ask —
+  the rail opens and closes.
+- **The record's track is `auto`.** A fixed 16.5rem track let a ~19rem table
+  run through the row's border; a table does not shrink below its content.
+  Found in a screenshot, then measured. If a column is added to the table,
+  the 62rem threshold moves with it.
+- **Eight cards in one line at every width**, each in a slot as on the battle
+  log, capped at 27rem so a wide list does not blow the art up. 42px at 1440,
+  32px at 390.
+- **Colour**: wins green and losses red in BOTH records, because those two
+  columns are what the eye compares between the two lines; everything else is
+  the page's ink. The share bar wears the section's hue (`--hue-pink`) and is
+  read against the most-played deck, so the first row's bar is full.
+- **No prose.** The header is three counts, the chips are `7d` `14d` `30d`,
+  and the only words in a row are its two labels. What the Community line is
+  measured over is a tooltip on its label; what was not counted is one
+  footnote with the modes in its tooltip, the battle log's rule.
+- **Changing the window dims the list in place** (`data-busy`); the loader is
+  for the first read only, so the chips stay under the pointer.
+- **Same-named decks** are told apart with `distinctDeckLabels`, as on the
+  trend charts: a generated name is not an identity.
+- The rail icon is `DeckRankIcon` (three strips, longest first). The stacked
+  pair is Cards and the upright bars are the meta board.
+
+Probe notes: `aria-label="Time frame"` is the chip group; rows carry
+`data-deck` (the sorted card key); the landing filmstrip only puts the cards
+near its centre into `innerText`, so read `textContent` to find a card's
+title; a "runs past the list" check must compare each element with its own
+ROW, not with the list.
+
 ## Working on this
 
 ```bash

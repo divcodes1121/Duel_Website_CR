@@ -201,6 +201,19 @@ export function TargetIcon({ size = 17 }: P) {
   );
 }
 
+/* Three strips, longest first — a player's decks in the order they are played.
+   Not the stacked pair (that is Cards) and not the upright bars (that is the
+   meta board): two rail rows wearing one glyph read as one screen. */
+export function DeckRankIcon({ size = 17 }: P) {
+  return (
+    <svg {...base(size)}>
+      <rect x="3" y="4" width="18" height="4" rx="1.2" />
+      <rect x="3" y="10" width="12.5" height="4" rx="1.2" />
+      <rect x="3" y="16" width="7.5" height="4" rx="1.2" />
+    </svg>
+  );
+}
+
 export function CardsIcon({ size = 17 }: P) {
   return (
     <svg {...base(size)}>

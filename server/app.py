@@ -60,6 +60,7 @@ import meta as meta_board  # noqa: E402
 import coach  # noqa: E402
 import live_player as live  # noqa: E402
 import recent_battles as battles  # noqa: E402
+import player_decks as pdecks  # noqa: E402
 import duo_pairs as duo  # noqa: E402
 import tracking  # noqa: E402
 import recruit  # noqa: E402
@@ -752,6 +753,31 @@ class Handler(BaseHTTPRequestHandler):
                 report["sources"] = _sources()
                 # A player with no battles in the window is a real answer, not
                 # a 404 — the screen says so and keeps its date control.
+                return self._send(report)
+
+            # THE DECKS A PLAYER IS USING, most played first, each beside the
+            # same list's record across everybody. Its own route (the tripwire
+            # moves to 27): the player report's deck table is its top ten over
+            # every mode, and this is every deck over own-deck 1v1 and duel
+            # games, with a second record per row — a different payload.
+            if path.startswith("/api/analytics/decks/"):
+                raw = unquote(path[len("/api/analytics/decks/"):])
+                tag = cd.normalize_tag(raw)
+                if not tag:
+                    return self._send({"error": "invalid_tag", "input": raw}, 400)
+                _note_tag(tag, "decks")
+
+                q = parse_qs(parsed.query)
+                cov = cd.coverage(tag)
+                # Three windows and nothing else: anything that is not one of
+                # them is the default, so `from`/`to` are not read here.
+                days = pdecks.valid_days((q.get("days") or [""])[0])
+                since, until = _window({"days": [str(days)]}, cov)
+                report = pdecks.report(tag, since, until)
+                report["days"] = days
+                report["coverage"] = cov
+                report["window"] = {"from": since, "to": until}
+                report["sources"] = _sources()
                 return self._send(report)
 
             if path == "/api/analytics/matchup":

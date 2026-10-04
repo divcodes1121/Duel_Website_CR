@@ -1,0 +1,199 @@
+{
+ "player": {
+  "tag": "#ABC002",
+  "name": "Player Two"
+ },
+ "decks": [
+  {
+   "key": "cannon,fireball,hog-rider,ice-golem,ice-spirit,musketeer,skeletons,the-log",
+   "cards": [
+    "skeletons",
+    "musketeer",
+    "hog-rider",
+    "ice-golem",
+    "ice-spirit",
+    "cannon",
+    "fireball",
+    "the-log"
+   ],
+   "avgElixir": 2.6,
+   "art": {
+    "skeletons": "evolution",
+    "musketeer": "hero"
+   },
+   "archetype": "hog",
+   "deckName": "Hog Rider Musketeer",
+   "cycle": 6,
+   "lastSeen": "20260913T120000.000Z",
+   "battles": 13,
+   "wins": 8,
+   "losses": 4,
+   "draws": 1,
+   "winRate": 61.5,
+   "drawRate": 7.7,
+   "lossRate": 30.8,
+   "useRate": 59.09,
+   "community": {
+    "battles": 7525,
+    "wins": 4110,
+    "losses": 3400,
+    "draws": 15,
+    "winRate": 54.6,
+    "drawRate": 0.2,
+    "lossRate": 45.2
+   }
+  },
+  {
+   "key": "baby-dragon,barbarian-barrel,golem,lightning,lumberjack,mega-minion,night-witch,tornado",
+   "cards": [
+    "baby-dragon",
+    "mega-minion",
+    "lumberjack",
+    "golem",
+    "night-witch",
+    "tornado",
+    "lightning",
+    "barbarian-barrel"
+   ],
+   "avgElixir": 4.2,
+   "art": {
+    "baby-dragon": "evolution",
+    "mega-minion": "hero",
+    "lumberjack": "evolution"
+   },
+   "artInferred": true,
+   "archetype": "golem",
+   "deckName": "Golem Lightning",
+   "cycle": 12,
+   "lastSeen": "20260918T120000.000Z",
+   "battles": 5,
+   "wins": 2,
+   "losses": 3,
+   "draws": 0,
+   "winRate": 40.0,
+   "drawRate": 0.0,
+   "lossRate": 60.0,
+   "useRate": 22.73,
+   "community": {
+    "battles": 6952,
+    "wins": 3140,
+    "losses": 3800,
+    "draws": 12,
+    "winRate": 45.2,
+    "drawRate": 0.2,
+    "lossRate": 54.7
+   }
+  },
+  {
+   "key": "goblin-barrel,goblin-gang,ice-spirit,inferno-tower,knight,princess,rocket,the-log",
+   "cards": [
+    "goblin-barrel",
+    "knight",
+    "princess",
+    "goblin-gang",
+    "inferno-tower",
+    "rocket",
+    "ice-spirit",
+    "the-log"
+   ],
+   "avgElixir": 3.2,
+   "art": {
+    "goblin-barrel": "evolution",
+    "knight": "hero",
+    "princess": "evolution"
+   },
+   "artInferred": true,
+   "archetype": "bait",
+   "deckName": "Log Bait Rocket",
+   "cycle": 9,
+   "lastSeen": "20260921T120000.000Z",
+   "battles": 3,
+   "wins": 3,
+   "losses": 0,
+   "draws": 0,
+   "winRate": 100.0,
+   "drawRate": 0.0,
+   "lossRate": 0.0,
+   "useRate": 13.64,
+   "community": {
+    "battles": 3253,
+    "wins": 1600,
+    "losses": 1650,
+    "draws": 3,
+    "winRate": 49.2,
+    "drawRate": 0.1,
+    "lossRate": 50.7
+   }
+  },
+  {
+   "key": "bats,knight,miner,poison,skeletons,tesla,the-log,wall-breakers",
+   "cards": [
+    "wall-breakers",
+    "knight",
+    "bats",
+    "miner",
+    "poison",
+    "the-log",
+    "tesla",
+    "skeletons"
+   ],
+   "avgElixir": 2.6,
+   "art": {
+    "wall-breakers": "evolution",
+    "knight": "hero",
+    "bats": "evolution"
+   },
+   "artInferred": true,
+   "archetype": "miner",
+   "deckName": "Miner Tesla",
+   "cycle": 7,
+   "lastSeen": "20260922T120000.000Z",
+   "battles": 1,
+   "wins": 0,
+   "losses": 1,
+   "draws": 0,
+   "winRate": 0.0,
+   "drawRate": 0.0,
+   "lossRate": 100.0,
+   "useRate": 4.55,
+   "community": null
+  }
+ ],
+ "total": 22,
+ "summary": {
+  "battles": 22,
+  "wins": 13,
+  "losses": 8,
+  "draws": 1,
+  "winRate": 59.1,
+  "drawRate": 4.5,
+  "lossRate": 36.4,
+  "decks": 4,
+  "duelGames": 0,
+  "duelIndex": false,
+  "archiveUsed": false,
+  "loadouts": 0,
+  "hidden": 3,
+  "hiddenByMode": {
+   "TeamVsTeam": 2,
+   "PickMode": 1
+  }
+ },
+ "communityBasis": "all_stored",
+ "days": 30,
+ "coverage": {
+  "start": "2026-06-01",
+  "end": "2026-09-30",
+  "days": 122
+ },
+ "window": {
+  "from": "2026-09-01",
+  "to": "2026-09-30"
+ },
+ "sources": {
+  "hot": {
+   "available": true,
+   "sizeBytes": 0
+  }
+ }
+}

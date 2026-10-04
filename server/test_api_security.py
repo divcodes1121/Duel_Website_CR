@@ -160,6 +160,7 @@ class Authentication(unittest.TestCase):
                   "/api/analytics/coach/opponent-read/%23Y022GRCJQ",
                   "/api/analytics/track/pending",
                   "/api/analytics/battles/%23Y022GRCJQ",
+                  "/api/analytics/decks/%23Y022GRCJQ",
                   # The most expensive route on the service: sixteen player
                   # resolutions and a profile of every blue deck. An unkeyed
                   # caller must not be able to start one.
@@ -743,7 +744,11 @@ class RoutingUnchanged(unittest.TestCase):
         # 26 on 29 Sep 2026: `/api/analytics/admin/retention` (the console's
         # Data lifecycle view — what the rolling retention job deleted, day by
         # day, and every backup). Admin-gated; `RetentionAdminGate` pins it.
-        self.assertEqual(len(routes), 26)
+        #
+        # 27 on 4 Oct 2026: `/api/analytics/decks/<tag>` (the Decks screen —
+        # every deck a player fielded in 7, 14 or 30 days, most played first,
+        # each beside the same list's record across all players).
+        self.assertEqual(len(routes), 27)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]

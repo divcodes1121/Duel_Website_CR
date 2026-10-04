@@ -25,10 +25,11 @@ import type { ReactNode } from 'react';
 import { CARDS } from '../../data/cards';
 import { FREE_SECTIONS, PRO_ONLY_SECTIONS, sectionAllowed, type Access } from '../../state/tiers';
 
-/** The nine analytics areas, in rail order. */
+/** The ten analytics areas, in rail order. */
 export const AREAS = [
   { label: 'Search Player', blurb: 'The tag overview behind the hero search — decks, use and win rates, trends.' },
   { label: 'Recent Battles', blurb: 'Every stored battle, newest first. Their deck against the one they faced.' },
+  { label: 'Decks', blurb: 'The decks a player is using, most played first, beside each deck’s record across all players.' },
   { label: 'Top Meta Decks', blurb: 'What the whole player base is running, ranked by use rate.' },
   { label: 'Deck Analysis', blurb: 'Elixir curve, cycle, role coverage and the matchup spread for one deck.' },
   { label: 'Duel Analysis', blurb: 'Which two cards you actually rebuild around, across duel play.' },
@@ -266,13 +267,13 @@ export const PLATES: Plate[] = [
 
   {
     id: 'areas',
-    title: 'The nine areas',
+    title: 'The ten areas',
     tab: 'IV \u00b7 Areas',
     date: 'PLATE V',
     layout: 'split',
     art: {
       file: 'the-reading-room',
-      caption: 'Nine ways of watching, none of them a fight.',
+      caption: 'Ten ways of watching, none of them a fight.',
       alt: 'A watercolour barbarian reading from a deckchair while a battle goes on behind him',
       supplied: true,
       brief:

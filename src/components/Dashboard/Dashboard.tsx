@@ -67,6 +67,7 @@ import { usePointerDepth } from '../../hooks/usePointerDepth';
 import { ClosingBand } from './ClosingBand';
 import { SiteFooter } from './SiteFooter';
 import { RecentBattles } from '../Analytics/RecentBattles';
+import { PlayerDecks } from '../Analytics/PlayerDecks';
 import { CommandPalette, type PaletteCommand } from '../CommandPalette/CommandPalette';
 import { ShortcutSheet } from '../CommandPalette/ShortcutSheet';
 import { useGlobalShortcuts } from '../CommandPalette/useGlobalShortcuts';
@@ -92,6 +93,7 @@ import {
   CoachIcon,
   CrownIcon,
   DeckIcon,
+  DeckRankIcon,
   DuoIcon,
   HomeIcon,
   LoadoutIcon,
@@ -200,7 +202,7 @@ const TOP_NAV = [
  *
  * `hue` is the section's identity colour, worn only by its small icon tile.
  * It cycles violet → blue → pink → green in fixed order; because every tile
- * sits directly beside its own label, a repeat across nine sections carries no
+ * sits directly beside its own label, a repeat across ten sections carries no
  * ambiguity. This is decoration with a job — it makes an area recognisable at
  * a glance — and it is deliberately NOT the selected state, which is always
  * violet regardless of the row's identity hue. */
@@ -210,8 +212,13 @@ const SIDE_NAV = [
      answer to "what has this player been doing", and the rows every screen
      below it aggregates. */
   { label: 'Recent Battles', icon: LogIcon, slug: 'battles', hue: 'green' },
+  /* THE DECKS THIS PLAYER IS USING, most played first (2026-10-04). Under the
+     battle log because it is the same rows counted by deck. It owns the
+     `decks` slug: `#/player/<tag>/decks` was a placeholder for a year — the
+     paste-a-deck lab has no player in it — and is this screen now. */
+  { label: 'Decks', icon: DeckRankIcon, slug: 'decks', hue: 'pink' },
   { label: 'Top Meta Decks', icon: BarsIcon, slug: 'meta', hue: 'blue' },
-  { label: 'Deck Analysis', icon: PieIcon, slug: 'decks', hue: 'pink' },
+  { label: 'Deck Analysis', icon: PieIcon, slug: 'deck-analysis', hue: 'pink' },
   { label: 'Duel Analysis', icon: SwordsIcon, slug: 'duels', hue: 'green' },
   { label: 'Duel Zone', icon: LoadoutIcon, slug: 'duelzone', hue: 'violet' },
   { label: 'Cards', icon: CardsIcon, slug: 'cards', hue: 'blue' },
@@ -219,7 +226,7 @@ const SIDE_NAV = [
   { label: 'Coach Assist', icon: CoachIcon, slug: 'coach', hue: 'green' },
 ] as const;
 
-/* The eight analytics areas as the landing screen lists them — SIDE_NAV minus
+/* The nine analytics areas as the landing screen lists them — SIDE_NAV minus
    Search Player, which is the search itself rather than an area. Hoisted so the
    filmstrip's start index and its items are computed from ONE list; deriving
    them from two copies of the same filter is how an index drifts off the item
@@ -233,6 +240,7 @@ const AREAS = SIDE_NAV.filter((s) => s.label !== 'Search Player');
 
 const SECTION_BLURB: Record<string, string> = {
   'Recent Battles': 'Every stored battle, newest first — their deck against the one they faced.',
+  Decks: 'The decks a player is using, most played first — their record with each beside everybody else’s.',
   'Top Meta Decks': 'What the whole player base is running, ranked by use rate.',
   'Deck Analysis': 'Break a deck down: elixir curve, cycle, role coverage and matchups.',
   'Duel Analysis': 'How a five-deck duel collection holds up across the field.',
@@ -513,14 +521,13 @@ export function Dashboard({
    * player, so once a tag is open it is not one of that player's sections.
    *
    * Deck Analysis is the other way round: the home version is a real screen —
-   * paste a deck, get its curve and its matchups — while `#/player/<tag>/decks`
-   * was only ever the placeholder shell, twelve grey bars and a note saying no
-   * data was wired up. Offering it beside six screens that DO have data is
-   * offering a dead end. Both routes still render, so existing links keep
-   * working; neither is advertised any more. */
+   * paste a deck, get its curve and its matchups — and it has no player in it,
+   * so with a tag loaded there is nothing for it to show. Its player route
+   * (`/deck-analysis`) is the placeholder shell and is not advertised. The
+   * `decks` slug it used to hold belongs to the Decks screen now. */
   const sideNav =
     view === 'player'
-      ? SIDE_NAV.filter((s) => s.slug !== 'meta' && s.slug !== 'decks')
+      ? SIDE_NAV.filter((s) => s.slug !== 'meta' && s.slug !== 'deck-analysis')
       : SIDE_NAV;
 
   /* THE LANDING STATE: home route, nothing picked, no player loaded.
@@ -1165,6 +1172,8 @@ export function Dashboard({
               />
             ) : playerSection === 'battles' ? (
               <RecentBattles tag={playerTag} season={season as Season} />
+            ) : playerSection === 'decks' ? (
+              <PlayerDecks tag={playerTag} />
             ) : playerSection === 'duels' ? (
               <DuelAnalysis tag={playerTag} season={season as Season} />
             ) : playerSection === 'duelzone' ? (
@@ -1640,6 +1649,11 @@ const TAG_SECTIONS: Record<string, { blurb: string; perks: string[] }> = {
     blurb:
       'Every battle we hold for a player, newest first — the deck they brought beside the one they faced, with the crowns and the mode, ten to a page.',
     perks: ['Both decks, side by side', 'Ladder, duels, friendlies and challenges', 'Any date range you like'],
+  },
+  Decks: {
+    blurb:
+      'Every deck a player has fielded in the last 7, 14 or 30 days, most played first — the eight cards, the share of their games, and their record beside the same deck’s record across all players.',
+    perks: ['Most played first', 'Player and community records', '7, 14 or 30 days'],
   },
   'Duel Analysis': {
     blurb:

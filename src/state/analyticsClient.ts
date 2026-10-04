@@ -999,6 +999,76 @@ export function fetchRecentBattles(
   );
 }
 
+/* ------------------------------------------------------------ player decks */
+
+/** A win / draw / loss record. The three rates are shares of ALL games, draws
+ *  included, so they add up to 100 — this is the one screen with a Draws
+ *  column, and a rate over decided games would not sum with it. */
+export interface DeckRecord {
+  battles: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  drawRate: number;
+  lossRate: number;
+}
+
+/** One deck the player fielded in the window. */
+export interface PlayerDeckRow extends DeckRecord {
+  /** The sorted card list — a deck is its cards, never its name. */
+  key: string;
+  cards: string[];
+  art?: Record<string, 'evolution' | 'hero'>;
+  artInferred?: boolean;
+  avgElixir: number;
+  /** The four cheapest cards. Null only for a list of fewer than four. */
+  cycle: number | null;
+  archetype: string;
+  deckName: string;
+  lastSeen: string;
+  /** Share of the player's counted games, 0-100, two places. */
+  useRate: number;
+  /** The same exact list across every player we hold, over ALL stored time —
+   *  not the window. Null when nobody has a stored record with it. */
+  community: DeckRecord | null;
+}
+
+export interface PlayerDecksReport {
+  player: { tag: string; name: string | null };
+  /** Most played first. */
+  decks: PlayerDeckRow[];
+  /** Games counted: eight-card 1v1 battles plus native duel games. */
+  total: number;
+  days: number;
+  summary: DeckRecord & {
+    decks: number;
+    /** Native duel games, counted one by one from the duel index. */
+    duelGames: number;
+    /** False when the duel index could not answer — duel games are then absent. */
+    duelIndex: boolean;
+    archiveUsed: boolean;
+    loadouts: number;
+    hidden: number;
+    hiddenByMode: Record<string, number>;
+  };
+  communityBasis: string;
+  coverage: ApiCoverage;
+  window: { from: string | null; to: string | null };
+  sources: ApiSources;
+}
+
+/**
+ * Every deck a player fielded in 7, 14 or 30 days, most played first, each
+ * beside the same list's record across all players. The server takes those
+ * three windows and nothing else (`utils/datePresets.ts`).
+ */
+export function fetchPlayerDecks(tag: string, days: number): Promise<PlayerDecksReport> {
+  return get<PlayerDecksReport>(
+    `/api/analytics/decks/${encodeURIComponent(tag)}?days=${days}`,
+  );
+}
+
 /** Every card, as one player actually plays it — the Cards screen. */
 export function fetchCardBoard(
   tag: string,

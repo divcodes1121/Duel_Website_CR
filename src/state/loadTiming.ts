@@ -46,6 +46,9 @@ const SEEDS: Record<string, number> = {
   meta: 9_000,
   player: 14_000,
   'player-cards': 14_000,
+  // One window of battles plus a small read per deck — a starting guess, which
+  // the median of the last five real loads replaces.
+  'player-decks': 6_000,
   'duel-analysis': 14_000,
   'duel-zone': 14_000,
   'duel-insights': 14_000,

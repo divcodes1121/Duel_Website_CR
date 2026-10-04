@@ -1,0 +1,571 @@
+/* Decks — one row a deck, most played first.
+ *
+ * THE ROW HAS THREE PARTS and they keep their order at every width: what the
+ * deck is and how much it is played, the eight cards, the record. Wide, they
+ * sit in one line so a screen holds as many decks as it can; narrower, the
+ * record drops under the cards; on a phone all three stack.
+ *
+ * LAID OUT AGAINST THE LIST, NOT THE WINDOW (`container: decks`). The rail
+ * opens and closes, so one window width is two list widths.
+ *
+ * COLOUR: wins are green and losses red, in both records, because those two
+ * columns are what the eye compares between the lines. Everything else is the
+ * page's own ink. The share bar wears the section's hue.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.glass {
+  border-radius: 18px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-fill);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+}
+
+.panel {
+  composes: glass;
+  padding: 1.25rem 1.4rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.notice {
+  composes: glass;
+  padding: 2.25rem 1.6rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.noticeTitle {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display, inherit);
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.noticeBody {
+  margin: 0 auto;
+  max-width: 46ch;
+  line-height: 1.55;
+}
+
+.noticeCode {
+  display: inline-block;
+  margin: 0.9rem 0 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------- panel header */
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.panelIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.panelHeadText {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.32rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.blurb {
+  margin: 0.15rem 0 0;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ time frame */
+
+.range {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.rangeChip {
+  min-width: 2.9rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.rangeChip:hover {
+  background: var(--neutral-wash);
+  color: var(--text);
+}
+
+.rangeChipOn,
+.rangeChipOn:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
+}
+
+/* ------------------------------------------------------------------ list */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  container: decks / inline-size;
+  /* Opacity only, one-shot: a new window dims the list while it is read. */
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.body[data-busy] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.empty {
+  margin: 0;
+  padding: 2rem 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+/* STACKED IS THE BASE; the two container queries at the foot widen it. */
+.deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'lead'
+    'cards'
+    'record';
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+/* --------------------------------------------------------------- the deck */
+
+.lead {
+  grid-area: lead;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.rank {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8rem;
+  height: 1.8rem;
+  padding: 0 0.3rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* The podium the other ranked boards use: solid, tint, outline. */
+.rank[data-medal] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: none;
+}
+
+.rank[data-medal='2'] {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-1));
+  color: var(--text);
+}
+
+.rank[data-medal='3'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+  color: var(--text);
+}
+
+.ident {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Two lines at most; the title carries the whole name. */
+.name {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-family: inherit;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+.figures {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.elixir {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* The drop filled, as on the battle log: an outline drop at 13px is a map pin. */
+.elixirIcon {
+  display: inline-flex;
+  color: var(--hue-violet);
+}
+
+.elixirIcon svg {
+  fill: currentColor;
+}
+
+.unit {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* How much of their play this deck was: the share, the count it is a share of,
+   and a bar read against the most-played deck. */
+.use {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.55rem;
+  max-width: 19rem;
+}
+
+.useValue {
+  font-size: 1.12rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.useCount {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.meter {
+  flex: 1 1 100%;
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  overflow: hidden;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--hue-pink);
+}
+
+/* -------------------------------------------------------------- the cards */
+
+.cardsCell {
+  grid-area: cards;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+/* EIGHT IN ONE LINE at every width — a deck read left to right, the three
+   special slots first. Capped so a wide list does not blow the art up. */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.3rem;
+  width: 100%;
+  max-width: 27rem;
+}
+
+/* A card sits in a slot, as on the battle log: the art is a cutout whose frame
+   is not one shape, and eight slots read as eight of one thing. */
+.slot {
+  display: block;
+  padding: 2px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  transition:
+    transform var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease);
+}
+
+.card {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@media (hover: hover) {
+  .slot:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot:hover {
+    transform: none;
+  }
+}
+
+/* `DeckActions` is built to trail a strip on one line and centres itself.
+   Here it sits under the strip, at its leading edge. Doubled so it wins
+   whichever stylesheet loads last. */
+.actions.actions {
+  margin-left: 0;
+  align-self: flex-start;
+}
+
+/* ------------------------------------------------------------- the record */
+
+.record {
+  grid-area: record;
+  width: 100%;
+  max-width: 25rem;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.record th,
+.record td {
+  padding: 0.32rem 0.45rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.record thead th {
+  padding-top: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.record tbody th {
+  padding-left: 0;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.record tbody td {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.record tbody tr > * {
+  border-top: 1px solid var(--border);
+}
+
+.record td[data-kind='win'] {
+  color: var(--hue-green);
+}
+
+.record td[data-kind='loss'] {
+  color: var(--hue-red);
+}
+
+/* The community line is every stored battle, not the window; its label says so
+   on hover. Underlined, not coloured — a footnote, not a warning. */
+.record tbody th[title] {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+/* ------------------------------------------------------------------- foot */
+
+.more {
+  align-self: center;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-nested);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.more:hover {
+  background: var(--neutral-wash);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.hidden {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------ a very narrow list */
+
+/* A phone leaves the list ~310px. Every pixel of padding comes out of the
+   cards, so the row and the slots give most of theirs back. */
+@container decks (max-width: 24rem) {
+  .deck {
+    padding: 0.75rem 0.65rem;
+  }
+
+  .strip {
+    gap: 0.2rem;
+  }
+
+  .slot {
+    padding: 1px;
+    border-radius: 6px;
+  }
+
+  .record {
+    font-size: 0.78rem;
+  }
+
+  .record th,
+  .record td {
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .panel {
+    padding: 1rem 0.8rem 0.9rem;
+  }
+}
+
+/* --------------------------------------------------- the deck beside its cards */
+
+/* From 40rem of LIST the deck's name and share take a column of their own and
+   the cards sit beside them, with the record under the cards. */
+@container decks (min-width: 40rem) {
+  .deck {
+    grid-template-columns: minmax(12rem, 1fr) minmax(0, 27rem);
+    grid-template-areas:
+      'lead cards'
+      'lead record';
+    column-gap: 1.2rem;
+  }
+
+  .record {
+    max-width: 27rem;
+  }
+}
+
+/* -------------------------------------------------------- all three in a line */
+
+/* A CONTAINER QUERY MEASURES THE CONTENT BOX, so 62rem here is the list, not
+   the panel around it.
+
+   THE RECORD'S TRACK IS `auto`, NOT A WIDTH. It was 16.5rem, and a table does
+   not shrink below its content: five columns of figures are ~19rem, so the
+   Losses column ran out through the row's border (seen in a screenshot at
+   1440, and measured). `auto` is as wide as the table is, the cards give up
+   what is needed, and 62rem is 11.5 + 26 + ~20 with the gaps and the padding. */
+@container decks (min-width: 62rem) {
+  .deck {
+    grid-template-columns: minmax(11.5rem, 1fr) minmax(0, 26rem) auto;
+    grid-template-areas: 'lead cards record';
+    align-items: center;
+  }
+
+  .record {
+    width: auto;
+    max-width: none;
+  }
+}

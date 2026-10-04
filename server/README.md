@@ -198,7 +198,8 @@ rollback, not a backup.** Restore = `zstd -d battles-*.db.zst -o battles.db`.
 snapshot of the database a day (size, freelist, intake since the previous
 reading, oldest battle, battles by month, the next 30 days due to expire, raw
 payload rows and an estimated size), every job run and every backup.
-`/api/analytics/admin/retention` (admin-gated; route count **26**) serves it to
+`/api/analytics/admin/retention` (admin-gated; the route count was **26** with it,
+27 since the Decks route) serves it to
 the console's **Data lifecycle** view, so no request ever scans the bot's file.
 
 ### Ladder raw payloads: a 72-hour window (`ladder_raw_purge.py`, 2026-09-29)
@@ -378,6 +379,7 @@ happily against a server that never called it.
 | `GET /api/analytics/suggest` | a few real tags with the most stored battles |
 | `GET /api/analytics/coverage?tag=` | earliest/latest stored day, globally and per player |
 | `GET /api/analytics/player/<tag>` | summary, top decks, per-day trends. Since 2026-09-28 each deck's day carries `games` beside its rates, so the client can pool a trend by games played instead of averaging an unplayed day in as 0% (`test_player_trends.py`) |
+| `GET /api/analytics/decks/<tag>` | **the decks a player is using** (`player_decks.py`) — every list fielded in `?days=7`, `14` or `30`, most played first, with the player's wins, draws and losses and the same list's record across all players. Own-deck 1v1 rows plus native duel games from the duel index |
 | `GET /api/analytics/duels/<tag>` | card combinations in duel play, three tabs |
 | `GET /api/analytics/duelzone/<tag>` | duel series log (Bo3/Bo5) + deck sequence |
 | `GET /api/analytics/cards/<tag>` | per-card use/win rate + movement (`?mode=`) |
@@ -1558,6 +1560,43 @@ caps new-to-you at `UNFAMILIAR_MAX` 2 (`newToYou`); `loadout(profile=)`
 packs from the player's pilotable pool (a stranger pays 1 point), then the
 whole pool when theirs cannot complete the loadout (`personal: true`).
 Backups `*.bak-20260930-104325-prepersonal`, `deck_tuner.py.bak-*-prebar`.
+
+## The Decks list (`player_decks.py`, 2026-10-04)
+
+`GET /api/analytics/decks/<tag>?days=7|14|30` — every deck a player fielded
+in the window, most played first, each beside the same list's record across
+all players. `report(tag, since, until)` is pure reading; `app.py` adds
+`days`, `coverage`, `window` and `sources`. Route count **27**.
+
+- **The window is one of three.** `valid_days` returns 7, 14 or 30 and treats
+  anything else as 7 (`DEFAULT_DAYS`); `from`/`to` are not read on this route.
+  The client's list (`DECK_DAY_PRESETS`) is held equal to `DAYS` by a test.
+- **Games come from two places, never twice.** `recent_battles._read_rows`
+  (mode router first) for rows holding exactly one eight-card deck, and
+  `duel_index.player_decks` for native duel games. A row in a native duel
+  mode is never counted from `battles` — it is one row for a whole duel and
+  carries only the duel's result. No duel index: `summary.duelIndex` is false
+  and `duelGames` is 0.
+- **Rates are shares of all games**, draws included: `winRate + drawRate +
+  lossRate` is 100. `useRate` has two decimal places (one game in 260 is
+  0.38%).
+- **`community`** is `(wins, losses, draws)` for the exact list over every
+  stored battle: `cluster_index.totals(keys)` for the lists the index knows,
+  `pair_matchup_agg` live (both directions, the second swapped) for the rest,
+  cached 30 minutes. Absent means nobody has a stored pairing with the list;
+  the row then has `community: null`. `communityBasis` is `all_stored`.
+- **`cluster_index.totals`** is new: `deck_arch` summed over archetypes with
+  no evidence floor. `exact()` goes through `_score`, which drops an
+  archetype under `MIN_GAMES` — right for a per-archetype rate, wrong for a
+  deck's whole record.
+- **Forms** are the newest marks seen for the list: from its own row, or for
+  a duel deck from its eight cards of the loadout row. `_arranged` seats it.
+- `summary` carries `loadouts` (own-deck rows that are not one deck) and
+  `hidden` / `hiddenByMode`, the battle log's counts of what was routed away.
+
+Staged read-only on production data, five players, three windows each:
+0.06-0.61 s with the community cache empty, 0.02-0.12 s warm, 0 invariant
+breaks. `test_player_decks.py`, 46 checks on a temporary database.
 
 ## The card board (`player_cards.py`)
 

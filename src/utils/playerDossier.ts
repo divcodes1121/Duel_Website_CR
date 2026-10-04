@@ -3,6 +3,7 @@ import {
   fetchDuelReport,
   fetchDuelZone,
   fetchPlayerCounter,
+  fetchPlayerDecks,
   fetchPlayerReport,
   fetchRecentBattles,
   isLiveReport,
@@ -13,7 +14,8 @@ import { sectionAllowed, type Access } from '../state/tiers';
 import type { ReportBlock, ReportDoc, StatsBlock } from './analyticsReport';
 import { duelAnalysisDoc, duelZoneDoc } from './duelAdapters';
 import { cardBoardDoc, livePlayerReportDoc, playerReportDoc } from './reportAdapters';
-import { deckCounterDoc, duelInsightBlocks, recentBattlesDoc } from './screenAdapters';
+import { deckCounterDoc, duelInsightBlocks, playerDecksDoc, recentBattlesDoc } from './screenAdapters';
+import { DECK_DAY_PRESETS } from './datePresets';
 import { printableName } from './report/text';
 
 /* THE FULL PLAYER REPORT — every section of the player page in one document.
@@ -83,6 +85,12 @@ export function combineReports(
   };
 }
 
+/** The Decks section's window: the dossier's, when it is one the screen offers. */
+export function deckDays(win: DateWindow): number {
+  const days = win.days ?? 0;
+  return (DECK_DAY_PRESETS as readonly number[]).includes(days) ? days : DECK_DAY_PRESETS[DECK_DAY_PRESETS.length - 1];
+}
+
 export async function buildPlayerDossier(
   tag: string,
   win: DateWindow,
@@ -115,6 +123,12 @@ export async function buildPlayerDossier(
         name ??= r.player.name ?? undefined;
         return recentBattlesDoc(r, tag);
       },
+    },
+    {
+      label: 'Decks',
+      // The Decks screen has three windows; the dossier's own is used when it
+      // is one of them, and the longest of the three otherwise.
+      run: async () => playerDecksDoc(await fetchPlayerDecks(tag, deckDays(win)), tag),
     },
     {
       label: 'Duel Analysis',
