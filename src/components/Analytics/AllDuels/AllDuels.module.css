@@ -175,8 +175,65 @@
 .duelHead {
   display: flex;
   align-items: center;
-  padding: 0.4rem 0.9rem;
+  justify-content: space-between;
+  gap: 0.65rem;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.9rem;
   border-bottom: 1px solid var(--border);
+}
+
+/* SAVE THIS DUEL, the Duel Zone's button. Quiet at rest — it repeats on every
+   duel, and a coloured chip per row would turn the list into a column of
+   buttons — and takes the action wash when it is the thing being reached for. */
+.saveBtn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+
+.saveBtn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--accent-action-wash-sunken);
+}
+
+.saveBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The answer, in the button's place: a duel already in the builder has nothing
+   left to press. Green, the one colour here that means done. */
+.savedNote {
+  flex: none;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--green-edge);
+  background: var(--green-wash);
+  color: var(--hue-green);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  /* A finger's worth of target, without changing the type. */
+  .saveBtn {
+    min-height: 2.25rem;
+    padding-inline: 0.85rem;
+  }
 }
 
 .when {

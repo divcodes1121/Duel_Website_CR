@@ -1886,6 +1886,13 @@ refusal) are in `utils/duelFeed.ts`, which has no imports.
 - **The matched deck takes a ring** (`data-match`, the selection hue) on a
   filtered page, and the duel is still drawn whole. Marked from `report.cards`
   — what the server accepted — never from what was picked.
+- **Save duel sits at the right of a duel's bar**, quiet at rest (it repeats
+  on every row) and replaced by a green `Saved as Duel Deck n` once the duel
+  is in the builder. That note is READ FROM THE LIBRARY, so it is there after
+  a page turn and a reload, and goes when the set is deleted. The bar keeps
+  one height either way (`min-height`), so a row does not shift on the click.
+  Blue = the left player, Red = the right, as drawn. Disabled unless every
+  game can be built.
 - **Three windows as one segmented group** (`aria-pressed`), not a dropdown:
   three choices fit, and the one in force stays on screen.
 - **No prose.** One line under the title; the only sentences are the empty
@@ -1905,7 +1912,9 @@ the pager is `nav[aria-label="Duel pages"]`. `revealListTop` scrolls smoothly,
 so measure the list's top ~1 s after a page turn. The pager's `cp-sheen` is a
 decoration clipped inside its own button and will trip a "runs past the edge"
 sweep. A name's own width says nothing about the room it was given — measure
-its column. `aria-pressed` chips are `button`s inside the group.
+its column. `aria-pressed` chips are `button`s inside the group. To see a
+saved duel in the builder a probe must click the `Versus` tab and then
+`Saved`: it opens on Solo, whose Saved count is its own.
 
 ## Working on this
 

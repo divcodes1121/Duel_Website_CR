@@ -2,13 +2,17 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { CARDS } from '../src/data/cards';
+import { buildDuelImport, duelPairs } from '../src/state/duelImport';
 import { ADMIN_ONLY_SECTIONS, sectionAllowed } from '../src/state/tiers';
+import type { SavedDeckSet } from '../src/types/deck';
 import { DUEL_FEED_DAY_PRESETS, DUEL_FEED_DEFAULT_DAYS } from '../src/utils/datePresets';
 import {
   DUEL_FEED_DEFAULT_PER_PAGE,
   DUEL_FEED_MAX_CARDS,
   DUEL_FEED_PER_PAGE,
   deckHolds,
+  duelAsPlayed,
   duelFeedProblem,
   duelStamp,
   feedCount,
@@ -426,5 +430,129 @@ describe('the layout', () => {
     const used = new Set([...page.matchAll(/styles\.([A-Za-z0-9]+)/g)].map((m) => m[1]));
     const missing = [...used].filter((c) => !new RegExp(`\\.${c}\\b`).test(css));
     expect(missing).toEqual([]);
+  });
+});
+
+describe('saving a duel into the builder', () => {
+  /* Asked for after the list went live: "also add save duel option so I can
+     directly save it". It is the Duel Zone's Save duel — the same store
+     action, the same duplicate rule — and the one thing this screen has to
+     decide for itself is WHO IS BLUE, because the Duel Zone's save assumes a
+     searched player and this list has none. */
+  const KEYS = CARDS.map((c) => c.key);
+  /** Eight distinct real cards starting at `n`. */
+  const deck = (n: number) => Array.from({ length: 8 }, (_, i) => KEYS[(n * 8 + i) % KEYS.length]);
+  const side = (n: number, crowns: number, art?: Record<string, 'evolution' | 'hero'>) => ({
+    cards: deck(n),
+    art,
+    crowns,
+  });
+  const duel = {
+    games: [
+      { a: side(0, 1), b: side(3, 3) },
+      { a: side(1, 2), b: side(4, 0) },
+      { a: side(2, 0), b: side(5, 1) },
+    ],
+  };
+  const filled = (s?: { decks: { slots: (string | null)[] }[] }) =>
+    s?.decks.filter((d) => d.slots.some(Boolean)) ?? [];
+
+  it('the left player becomes Blue and the right one Red, as they are drawn', () => {
+    const played = duelAsPlayed(duel);
+    expect(played.map((g) => g.cards)).toEqual([deck(0), deck(1), deck(2)]);
+    expect(played.map((g) => g.opponent.cards)).toEqual([deck(3), deck(4), deck(5)]);
+    const { entry } = buildDuelImport(played, []);
+    expect(entry?.mode).toBe('versus');
+    expect(filled(entry?.blue).map((d) => d.slots)).toEqual([deck(0), deck(1), deck(2)]);
+    expect(filled(entry?.red).map((d) => d.slots)).toEqual([deck(3), deck(4), deck(5)]);
+  });
+
+  it('a three-game duel is three decks a side, in game order, named for their games', () => {
+    const { outcome, entry } = buildDuelImport(duelAsPlayed(duel), []);
+    expect(outcome).toMatchObject({ ok: true, games: 3, name: 'Duel Deck 1' });
+    expect(filled(entry?.blue).map((d) => d.name)).toEqual(['G1', 'G2', 'G3']);
+    expect(filled(entry?.red)).toHaveLength(3);
+  });
+
+  it('each deck keeps the crowns its player took in that game', () => {
+    const { entry } = buildDuelImport(duelAsPlayed(duel), []);
+    expect(filled(entry?.blue).map((d) => d.crowns)).toEqual([1, 2, 0]);
+    expect(filled(entry?.red).map((d) => d.crowns)).toEqual([3, 0, 1]);
+  });
+
+  it('the cards go in the order the server seated them — nothing is re-sorted', () => {
+    const seated = [...deck(7)].reverse();
+    const { entry } = buildDuelImport(
+      duelAsPlayed({ games: [{ a: { cards: seated, crowns: 0 }, b: side(8, 1) }] }),
+      [],
+    );
+    expect(filled(entry?.blue)[0].slots).toEqual(seated);
+  });
+
+  it('a hero fielded in the wild slot is saved as a hero, for either player', () => {
+    /* Four cards have both forms and the builder draws the wild slot as an
+       evolution unless told otherwise. */
+    const rest = KEYS.filter((k) => k !== 'knight');
+    const withKnight = [rest[0], rest[1], 'knight', ...rest.slice(2, 7)];
+    const art = { knight: 'hero' as const };
+    const { entry } = buildDuelImport(
+      duelAsPlayed({
+        games: [{ a: { cards: withKnight, art, crowns: 0 }, b: { cards: withKnight, art, crowns: 1 } }],
+      }),
+      [],
+    );
+    expect(filled(entry?.blue)[0].wildVariant).toBe('hero');
+    expect(filled(entry?.red)[0].wildVariant).toBe('hero');
+  });
+
+  it('the same duel is not saved twice, and says what it was saved as', () => {
+    const first = buildDuelImport(duelAsPlayed(duel), []);
+    const library = [first.entry as SavedDeckSet];
+    expect(buildDuelImport(duelAsPlayed(duel), library).outcome).toEqual({
+      ok: false,
+      reason: 'duplicate',
+      name: 'Duel Deck 1',
+    });
+    // A different duel takes the next name.
+    const other = { games: [{ a: side(9, 2), b: side(10, 1) }] };
+    expect(buildDuelImport(duelAsPlayed(other), library).outcome).toMatchObject({
+      ok: true,
+      name: 'Duel Deck 2',
+    });
+  });
+
+  it('every game of a listed duel can be built', () => {
+    expect(duelPairs(duelAsPlayed(duel))).toHaveLength(3);
+  });
+
+  it('a deck holding a card this build does not know leaves the duel short', () => {
+    const odd = { games: [...duel.games, { a: { cards: [...deck(6).slice(0, 7), 'not-a-card'], crowns: 0 }, b: side(11, 1) }] };
+    expect(duelPairs(duelAsPlayed(odd))).toHaveLength(3);
+    expect(odd.games).toHaveLength(4);
+  });
+
+  const save = block(page, 'function SaveDuel(');
+
+  it('the screen saves through the store action the Duel Zone uses', () => {
+    expect(save).toContain('useBuilderStore((s) => s.saveDuelPlayed)');
+    expect(save).toContain('onClick={() => saveDuelPlayed(games)}');
+    expect(R('src', 'components', 'Analytics', 'DuelZone.tsx')).toContain('saveDuelPlayed(series.games)');
+  });
+
+  it('every duel carries the button, in its head', () => {
+    expect(page).toMatch(/<time className=\{styles\.when\}>[^\n]*\n\s*<SaveDuel duel=\{duel\} \/>/);
+  });
+
+  it('whether a duel is saved is read from the library, not remembered by the row', () => {
+    /* A flag in the component forgets on the next page turn and the row then
+       offers to save a duel that is already in the builder. */
+    expect(save).toContain('useBuilderStore((s) => s.library)');
+    expect(save).toContain('buildDuelImport(games, library)');
+    expect(save).not.toContain('useState');
+  });
+
+  it('it will not save part of a duel', () => {
+    expect(save).toContain('duelPairs(games).length === duel.games.length');
+    expect(save).toContain('disabled={!whole}');
   });
 });

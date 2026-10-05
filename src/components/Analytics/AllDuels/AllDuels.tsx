@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CardArt } from '../CardArt';
 import { ReadingState } from '../ReadingState';
@@ -18,6 +18,8 @@ import {
   type DuelFeedReport,
 } from '../../../state/analyticsClient';
 import { coachToken } from '../../../state/coachToken';
+import { buildDuelImport, duelPairs } from '../../../state/duelImport';
+import { useBuilderStore } from '../../../state/store';
 import {
   DUEL_FEED_DAY_PRESETS,
   DUEL_FEED_DEFAULT_DAYS,
@@ -29,6 +31,7 @@ import {
   DUEL_FEED_MAX_CARDS,
   DUEL_FEED_PER_PAGE,
   deckHolds,
+  duelAsPlayed,
   duelFeedProblem,
   duelStamp,
   feedCount,
@@ -181,11 +184,73 @@ function GameRow({
   );
 }
 
+function SaveIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <path d="M17 21v-8H7v8M7 3v5h8" />
+    </svg>
+  );
+}
+
+/* SAVE THIS DUEL INTO THE BUILDER — the Duel Zone's Save duel, on this list.
+ *
+ * A duel already is a Versus set: one player's three decks against another's.
+ * The button hands it to the same store action the Duel Zone uses
+ * (`saveDuelPlayed`), so it lands in Royal Duels' saved groups as "Duel Deck
+ * n" — the left player's decks as Blue, the right player's as Red, in game
+ * order, with their forms and crowns — and syncs like any other saved set.
+ *
+ * WHETHER IT IS SAVED IS READ FROM THE LIBRARY, NOT REMEMBERED HERE. A flag in
+ * this component would forget on the next page turn, and the row would offer
+ * to save a duel that is already in the builder. Asking the library — the same
+ * duplicate rule the save itself applies — means a duel saved yesterday says
+ * so today, and one deleted from the builder can be saved again.
+ *
+ * It is disabled unless EVERY game can be built. The save skips a game holding
+ * a card this build of the site does not know yet, and on a list whose whole
+ * point is that all three games were played, two-thirds of a duel is not it. */
+function SaveDuel({ duel }: { duel: DuelFeedDuel }) {
+  const library = useBuilderStore((s) => s.library);
+  const saveDuelPlayed = useBuilderStore((s) => s.saveDuelPlayed);
+  const games = useMemo(() => duelAsPlayed(duel), [duel]);
+  const whole = useMemo(() => duelPairs(games).length === duel.games.length, [games, duel]);
+  const savedAs = useMemo(() => {
+    const { outcome } = buildDuelImport(games, library);
+    return !outcome.ok && outcome.reason === 'duplicate' ? outcome.name : null;
+  }, [games, library]);
+
+  if (savedAs) {
+    return (
+      <span className={styles.savedNote} role="status">
+        Saved as {savedAs}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={styles.saveBtn}
+      disabled={!whole}
+      onClick={() => saveDuelPlayed(games)}
+      title={
+        whole
+          ? `Save to Royal Duels as a Versus set: ${duel.games.length} decks each side`
+          : 'A deck in this duel holds a card this version of the site does not know yet'
+      }
+    >
+      <SaveIcon />
+      Save duel
+    </button>
+  );
+}
+
 function DuelCard({ duel, picked }: { duel: DuelFeedDuel; picked: readonly string[] }) {
   return (
     <article className={styles.duel} data-duel-id={duel.id}>
       <header className={styles.duelHead}>
         <time className={styles.when}>{duelStamp(duel.battleTime)}</time>
+        <SaveDuel duel={duel} />
       </header>
 
       <div className={styles.players}>

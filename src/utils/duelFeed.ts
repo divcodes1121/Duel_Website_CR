@@ -68,6 +68,40 @@ export function deckHolds(cards: readonly string[], picked: readonly string[]): 
   return picked.length > 0 && picked.every((c) => cards.includes(c));
 }
 
+/**
+ * A listed duel in the shape the builder's duel save takes
+ * (`state/duelImport.ts`'s `PlayedGame`, restated structurally so this file
+ * keeps no imports).
+ *
+ * THE LEFT PLAYER IS BLUE AND THE RIGHT ONE RED, on the screen and in the save.
+ * That save was written for the Duel Zone, where "mine" is the searched player
+ * and "the opponent" is whoever they met; this list has no searched player, so
+ * the only honest mapping is the one the reader is already looking at — side
+ * `a`, drawn blue on the left, becomes the Blue Player's decks, and side `b`
+ * the Red Player's. Each deck goes in the order the server seated it, with the
+ * forms it was fielded in and that game's crowns.
+ */
+export function duelAsPlayed(duel: {
+  games: readonly {
+    a: { cards: string[]; art?: Record<string, 'evolution' | 'hero'>; crowns: number };
+    b: { cards: string[]; art?: Record<string, 'evolution' | 'hero'>; crowns: number };
+  }[];
+}): {
+  cards: string[];
+  art?: Record<string, 'evolution' | 'hero'>;
+  playerCrowns: number;
+  opponentCrowns: number;
+  opponent: { cards: string[]; art?: Record<string, 'evolution' | 'hero'> };
+}[] {
+  return duel.games.map((g) => ({
+    cards: g.a.cards,
+    art: g.a.art,
+    playerCrowns: g.a.crowns,
+    opponentCrowns: g.b.crowns,
+    opponent: { cards: g.b.cards, art: g.b.art },
+  }));
+}
+
 const nf = new Intl.NumberFormat('en-US');
 
 /**
