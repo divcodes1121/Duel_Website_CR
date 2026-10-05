@@ -42,7 +42,14 @@ import { revealListTop } from '../../../utils/revealListTop';
 import styles from './AllDuels.module.css';
 
 /**
- * All Duels — every duel stored, newest first. ADMIN ONLY.
+ * All Duels — friendly duels that went to three games, newest first. ADMIN
+ * ONLY.
+ *
+ * WHICH DUELS IS THE SERVER'S RULE, NOT THIS FILE'S. The first build listed
+ * every native duel and nineteen in twenty were war duels; the account holder
+ * looked at it and asked for friendly ones only, and only those where all
+ * three games were played. So a row has no mode label — they are all the same
+ * kind — and the line under the title says what kind.
  *
  * ONE CARD A DUEL, AND A DUEL IS READ ACROSS. Two players, so two columns: who
  * they are and the score in games at the top, then one line a game with each
@@ -178,9 +185,6 @@ function DuelCard({ duel, picked }: { duel: DuelFeedDuel; picked: readonly strin
   return (
     <article className={styles.duel} data-duel-id={duel.id}>
       <header className={styles.duelHead}>
-        <span className={styles.mode} title={duel.mode}>
-          {duel.modeLabel}
-        </span>
         <time className={styles.when}>{duelStamp(duel.battleTime)}</time>
       </header>
 

@@ -220,8 +220,9 @@ export const PRO_ONLY_SECTIONS = [
  * want it.
  *
  * **ALL DUELS IS HERE TO STAY (2026-10-05), which is the other use of the
- * shelf.** It lists every stored duel newest first — both players by name and
- * tag, each game's decks and crowns. That is a log of people, asked for as an
+ * shelf.** It lists the friendly duels that went to three games, newest first
+ * — both players by name and tag, each game's decks and crowns. That is a log
+ * of people, asked for as an
  * admin page by name, and its route is refused by the analytics service for
  * anybody who is not one (`/api/analytics/admin/duels`, `admin_auth.verify`).
  * It is not waiting to be released.

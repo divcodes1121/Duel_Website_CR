@@ -169,31 +169,20 @@
   overflow: hidden;
 }
 
-/* A slim bar: what kind of duel, and when. */
+/* A slim bar that says when. It also said what KIND of duel, until the screen
+   listed one kind only: a label that reads the same on every row is not a
+   label, and the line under the title says it once. */
 .duelHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  padding: 0.45rem 0.9rem;
+  padding: 0.4rem 0.9rem;
   border-bottom: 1px solid var(--border);
 }
 
-.mode {
-  padding: 0.16rem 0.45rem;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  background: var(--neutral-wash);
-  color: var(--text);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
 .when {
-  font-size: 0.76rem;
-  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 

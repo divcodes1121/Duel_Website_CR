@@ -301,14 +301,19 @@ def _ensure(con: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS games_b ON games(b_tag, battle_time);
         CREATE INDEX IF NOT EXISTS games_time ON games(battle_time);
         -- THE DUEL FEED'S INDEX (2026-10-05). A duel is the games sharing
-        -- (battle_time, a_tag, b_tag), so listing DUELS newest first is a
-        -- GROUP BY over exactly these columns. With it the grouping is a
-        -- backward walk of a covering index that stops at the page's last
-        -- row; without it every page sorts the whole window in a temp
-        -- B-tree. Measured on the live table (388,908 games in 90 days):
-        -- 0.55-0.64 s a page without, 0.0001-0.096 s with, and it built in
-        -- 0.6 s. `test_duel_index.py` checks the plan.
-        CREATE INDEX IF NOT EXISTS games_duel ON games(battle_time, a_tag, b_tag);
+        -- (battle_time, a_tag, b_tag), so listing one MODE's duels newest
+        -- first is an equality on `mode` and a GROUP BY over those three
+        -- columns. With this index that is a backward walk of a covering
+        -- index, inside the one mode, that stops at the page's last row;
+        -- without it every page reads and sorts the whole window. NOCASE,
+        -- because the stored strings are Supercell's (`Duel_1v1_Friendly`) and
+        -- the allowlist is lower-case. `test_duel_feed.py` checks the plan.
+        --
+        -- `games_duel` was this index without the mode, for one day, when the
+        -- feed listed every mode. Nothing reads it now.
+        DROP INDEX IF EXISTS games_duel;
+        CREATE INDEX IF NOT EXISTS games_mode_duel
+            ON games(mode COLLATE NOCASE, battle_time, a_tag, b_tag);
         """
     )
 
@@ -1274,13 +1279,17 @@ def decks_holding(cards, min_games: int = HOLDING_MIN_GAMES, limit: int = 6000) 
 #
 # Every reader above counts DECKS. This one lists the duels themselves, newest
 # first: who played whom, each game's two decks and its crowns. It is the admin
-# screen's read (`duel_feed.py` shapes it; this owns the SQL, like every other
-# read of this file).
+# screen's read (`duel_feed.py` shapes it and says WHICH duels; this owns the
+# SQL, like every other read of this file).
 #
 # A DUEL IS ITS GAMES. `games` has one row a game and no duel table, so a duel
 # is the rows sharing (battle_time, a_tag, b_tag) — the identity `games_of`
-# builds the key from — and a page of duels is a GROUP BY on those columns,
-# walked backward along `games_duel`.
+# builds the key from — and a page of duels is a GROUP BY on those columns.
+#
+# ONE MODE AT A TIME. The screen lists friendly duels and not war duels, which
+# are 95% of the table, so the listing is asked of one mode and walks
+# `games_mode_duel` (mode, then the three duel columns): only that mode's rows
+# are ever touched — 18,192 of 391,863 when it was written.
 
 #: Filtered answers remembered until the table next grows.
 FEED_CACHE = 48
@@ -1289,18 +1298,12 @@ FEED_CACHE = 48
 #: nothing. Larger ones keep the count and page with LIMIT/OFFSET.
 FEED_KEEP_IDS = 2000
 
-_DUEL_GROUP = (
-    "SELECT battle_time, a_tag, b_tag FROM games WHERE battle_time >= ? {match}"
-    "GROUP BY battle_time, a_tag, b_tag "
-    # All three DESC, so the order IS the index read backward: no sort.
-    "ORDER BY battle_time DESC, a_tag DESC, b_tag DESC")
-
 _feed_lock = threading.Lock()
 _feed: dict = {"tip": None, "items": OrderedDict()}
 
 
 def _holds(cards) -> tuple[str, list[str]]:
-    """`(sql, args)` for "one side's deck in this game holds EVERY card".
+    """`(sql, args)`: 1 when one side's deck in this game holds EVERY card.
 
     EVERY CARD, IN ONE DECK — the 2v2 board's rule. Asking for Hog Rider and
     Fireball is a question about a deck that runs both; a duel with one in
@@ -1311,6 +1314,8 @@ def _holds(cards) -> tuple[str, list[str]]:
     a bare `giant` is also inside royal-giant, goblin-giant, giant-skeleton
     and three more. `instr`, not LIKE — a card key holds no wildcard, and a
     plain substring search is all this is.
+
+    An empty string when no card is asked for.
     """
     cards = list(cards or ())
     if not cards:
@@ -1319,8 +1324,34 @@ def _holds(cards) -> tuple[str, list[str]]:
     def side(col: str) -> str:
         return " AND ".join(f"instr(',' || {col} || ',', ?) > 0" for _ in cards)
 
-    return (f"AND (({side('a_deck')}) OR ({side('b_deck')})) ",
+    return (f"(({side('a_deck')}) OR ({side('b_deck')}))",
             [f",{c}," for c in cards] * 2)
+
+
+def _duel_sql(match: str, games: int | None) -> str:
+    """The duels of one mode in a window, newest first. Bind `(mode, since,
+    [games], *match args)`.
+
+    THE CARDS ARE ASKED OF THE DUEL, NOT OF THE ROW — both conditions are in
+    HAVING. With the match in WHERE, `COUNT(*)` counts only the games that
+    hold the card: a three-game duel whose Hog deck was played once becomes a
+    one-game duel, fails "three games", and vanishes from the very filter
+    that should find it.
+
+    All three ORDER BY terms DESC, so the order IS `games_mode_duel` read
+    backward inside one mode: nothing is sorted, and a LIMIT stops the walk at
+    the page's last duel.
+    """
+    having = []
+    if games:
+        having.append("COUNT(*) = ?")
+    if match:
+        having.append(f"MAX({match}) = 1")
+    return ("SELECT battle_time, a_tag, b_tag FROM games "
+            "WHERE mode COLLATE NOCASE = ? AND battle_time >= ? "
+            "GROUP BY battle_time, a_tag, b_tag "
+            + (f"HAVING {' AND '.join(having)} " if having else "")
+            + "ORDER BY battle_time DESC, a_tag DESC, b_tag DESC")
 
 
 def _feed_get(tip, key):
@@ -1345,31 +1376,36 @@ def _feed_put(tip, key, value) -> None:
             _feed["items"].popitem(last=False)
 
 
-def duel_feed(days: int, cards=(), page: int = 1, per: int = 20) -> dict | None:
-    """One page of duels, newest first, or None with no usable index.
+def duel_feed(days: int, cards=(), page: int = 1, per: int = 20, *,
+              mode: str, games: int | None = None) -> dict | None:
+    """One page of ONE mode's duels, newest first, or None with no usable index.
 
-    `days` counts back from the newest game STORED, the convention every
-    window on the site uses: a stalled collector shows as an old window, not
-    an empty one. `cards` must already be catalogue keys (`duel_feed` checks
-    them); they reach the SQL only as bound parameters.
+    `mode` is a native duel mode, matched without regard to case (the stored
+    strings are Supercell's: `Duel_1v1_Friendly`). `games` keeps only the
+    duels with exactly that many games stored — 3 is a duel that went the
+    distance, 2 a sweep.
 
-    Returns `{since, newest, from, to, total, windowDuels, windowGames, page,
-    pages, duels}`. `total` is the duels matching `cards`; `windowDuels` and
-    `windowGames` are the whole window. A duel is `{battleTime, mode, a, b,
-    games}` and a game `(round, a_deck, b_deck, a_crowns, b_crowns, winner)`
-    with winner 1 = a, 2 = b, 0 = level, in round order.
+    `days` counts back from the newest game STORED in any mode, the convention
+    every window on the site uses: a stalled collector shows as an old window,
+    not an empty one. `cards` must already be catalogue keys (`duel_feed`
+    checks them); they reach the SQL only as bound parameters.
 
-    COST, measured on the live table (160,626 duels / 388,908 games in 90
-    days). Unfiltered: the count is one covering-index pass (0.08 s, then
-    remembered) and a page stops at its last row (0.1 ms at the top, 96 ms at
-    the far end). Filtered: the decks are not in the index, so the first ask
-    reads the window once (~0.8 s) and that one pass answers both how many
-    and which; it is remembered until the table next grows.
+    Returns `{since, newest, from, to, total, windowDuels, page, pages,
+    duels}`. `windowDuels` is every duel of that mode and length in the
+    window; `total` is the ones matching `cards`. A duel is `{battleTime,
+    mode, a, b, games}` and a game `(round, a_deck, b_deck, a_crowns,
+    b_crowns, winner)` with winner 1 = a, 2 = b, 0 = level, in round order.
+
+    The count, the page and its games are read in one transaction, and counts
+    are remembered until the table next grows. A filtered answer of up to
+    `FEED_KEEP_IDS` duels keeps its list, so its pages read nothing.
     """
     if _current() is None:
         return None
     days = max(1, int(days))
     per = max(1, int(per))
+    mode = (mode or "").lower()
+    games = int(games) if games else None
     picked = tuple(cards or ())
     match, margs = _holds(picked)
     try:
@@ -1384,35 +1420,32 @@ def duel_feed(days: int, cards=(), page: int = 1, per: int = 20) -> dict | None:
             if anchor is None:
                 con.execute("COMMIT")
                 return {"since": None, "newest": None, "from": None, "to": None,
-                        "total": 0, "windowDuels": 0, "windowGames": 0,
-                        "page": 1, "pages": 1, "duels": []}
+                        "total": 0, "windowDuels": 0, "page": 1, "pages": 1, "duels": []}
             first = anchor - datetime.timedelta(days=days - 1)
             since = _stamp(first)
+            base = [mode, since] + ([games] if games else [])
 
-            whole = _feed_get(tip, (since, ()))
+            whole = _feed_get(tip, (since, mode, games, ()))
             if whole is None:
                 whole = {
                     "total": con.execute(
-                        "SELECT COUNT(*) FROM (SELECT 1 FROM games WHERE battle_time >= ? "
-                        "GROUP BY battle_time, a_tag, b_tag)", (since,)).fetchone()[0],
-                    "games": con.execute(
-                        "SELECT COUNT(*) FROM games WHERE battle_time >= ?",
-                        (since,)).fetchone()[0],
+                        "SELECT COUNT(*) FROM (" + _duel_sql("", games) + ")",
+                        base).fetchone()[0],
                     "ids": None,
                 }
-                _feed_put(tip, (since, ()), whole)
+                _feed_put(tip, (since, mode, games, ()), whole)
 
-            found = whole if not picked else _feed_get(tip, (since, picked))
+            found = whole if not picked else _feed_get(tip, (since, mode, games, picked))
             if found is None:
                 # The first ask of a filter: one pass counts every match and
                 # keeps the newest `FEED_KEEP_IDS` of them.
                 total, head = 0, []
-                for row in con.execute(_DUEL_GROUP.format(match=match), (since, *margs)):
+                for row in con.execute(_duel_sql(match, games), (*base, *margs)):
                     total += 1
                     if total <= FEED_KEEP_IDS:
                         head.append(tuple(row))
                 found = {"total": total, "ids": head if total <= FEED_KEEP_IDS else None}
-                _feed_put(tip, (since, picked), found)
+                _feed_put(tip, (since, mode, games, picked), found)
                 # This request may still be answerable from the head it read.
                 found = {**found, "head": head}
 
@@ -1429,8 +1462,8 @@ def duel_feed(days: int, cards=(), page: int = 1, per: int = 20) -> dict | None:
                 ids = known[offset:offset + per]
             else:
                 ids = [tuple(r) for r in con.execute(
-                    _DUEL_GROUP.format(match=match) + " LIMIT ? OFFSET ?",
-                    (since, *margs, per, offset))]
+                    _duel_sql(match, games) + " LIMIT ? OFFSET ?",
+                    (*base, *margs, per, offset))]
 
             duels = []
             for bt, ta, tb in ids:
@@ -1453,7 +1486,6 @@ def duel_feed(days: int, cards=(), page: int = 1, per: int = 20) -> dict | None:
     return {"since": since, "newest": newest,
             "from": first.isoformat(), "to": anchor.isoformat(),
             "total": total, "windowDuels": int(whole["total"]),
-            "windowGames": int(whole["games"]),
             "page": page, "pages": pages, "duels": duels}
 
 

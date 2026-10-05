@@ -1845,16 +1845,25 @@ ROW, not with the list.
 ## All Duels (2026-10-05)
 
 `components/Analytics/AllDuels/AllDuels.tsx` + `.module.css`, at `#/all-duels`.
-**Admin only** — the profile menu's row is its door. README "All Duels — every
-stored duel, newest first" is the record of what it lists and how it is gated;
-this is how it is drawn. The small decisions (stamps, labels, the count line,
-which deck matched, the wording of a refusal) are in `utils/duelFeed.ts`, which
-has no imports.
+**Admin only** — the profile menu's row is its door. It lists **friendly duels
+that went to three games** (the server's rule; war duels and 2-0s are not
+here). README "All Duels — friendly duels that went to three games" is the
+record of what it lists and how it is gated; this is how it is drawn. The small
+decisions (stamps, labels, the count line, which deck matched, the wording of a
+refusal) are in `utils/duelFeed.ts`, which has no imports.
 
 - **One card a duel, read across.** Three tracks, `minmax(0, 1fr) auto
   minmax(0, 1fr)`, used twice: the players with the score between them, and
   each game with its crowns between the two decks. The same tracks, so a name
   sits over its own decks.
+- **The line under the title says what the list is**: `1,169 friendly duels
+  played to three games · <window>`, or `580 of 1,169 friendly duels played to
+  three games` under a card filter. The page's name says less than its rule,
+  so this line carries the rest. It does not count games — always three times
+  the duels.
+- **The bar over a duel is the time and nothing else.** It carried a mode
+  label until the screen listed one mode; a label that reads the same on every
+  row is not a label. Every card is the same height now (489px at 1440).
 - **A game is one line from 46rem of LIST** (a container query on `.list`,
   never the window — the rail opens and closes). Each deck is capped at 31rem
   and pinned to its own player's edge, the right-hand one mirrored, so the
@@ -1875,16 +1884,14 @@ has no imports.
 - **The tag is printed under a name, never twice.** With no stored name the
   tag is the label.
 - **The matched deck takes a ring** (`data-match`, the selection hue) on a
-  filtered page. Marked from `report.cards` — what the server accepted — never
-  from what was picked.
+  filtered page, and the duel is still drawn whole. Marked from `report.cards`
+  — what the server accepted — never from what was picked.
 - **Three windows as one segmented group** (`aria-pressed`), not a dropdown:
   three choices fit, and the one in force stays on screen.
-- **No prose.** One line of counts under the title; the only sentences are the
-  empty states and a refusal.
+- **No prose.** One line under the title; the only sentences are the empty
+  states and a refusal.
 - **A newer page dims the list in place** (`data-busy`) and a small `Reading…`
-  mark joins the count line — the first ask of a card filter can take a few
-  seconds, and a dimmed list alone does not say anything is happening. The
-  loader is for the first read only.
+  mark joins the count line. The loader is for the first read only.
 - **Every control goes back to page 1**; only the pager carries another page.
 - **A non-admin gets "Admins only"**, not a `GateCard`: nothing they could buy
   opens it. Nobody is judged until the account has arrived (`accountResolved`

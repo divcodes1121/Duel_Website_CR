@@ -2577,11 +2577,12 @@ export function fetchDuoPairs(
   return get<DuoReport>(`/api/analytics/duo-pairs?${q.toString()}`);
 }
 
-/* ── All Duels: every stored duel, newest first (ADMIN ONLY) ───────────────
+/* ── All Duels: friendly three-game duels, newest first (ADMIN ONLY) ───────
  *
  * `server/duel_feed.py`, over the duel index's own table of duel GAMES. One
  * row a duel: both players, the score in games, and each game's two decks
- * with its crowns.
+ * with its crowns. WHICH duels is the server's rule (`rule` in the payload):
+ * friendly ones that went to the third game. No war duels, no sweeps.
  */
 
 /** One player's deck in one game of a duel. */
@@ -2624,9 +2625,8 @@ export interface DuelFeedDuel {
   id: string;
   /** Supercell's stamp: `20261005T024430.000Z`. */
   battleTime: string;
-  /** The raw stored mode, kept so a reader can check the label. */
+  /** The raw stored mode, kept so a row can be checked against the rule. */
   mode: string;
-  modeLabel: string;
   /** By games won. SIDE `a` IS NOBODY IN PARTICULAR — it is the lexically
    *  first tag, the order the duel index stores a duel in — so the winner is
    *  named here rather than implied by which side is on the left. */
@@ -2643,6 +2643,9 @@ export interface DuelFeedReport {
   /** The window the SERVER used — one of `windows`, whatever was asked. */
   days: number;
   windows: number[];
+  /** What the list is OF: one native duel mode, and how many games a duel
+   *  must have. Today `duel_1v1_friendly` and 3. */
+  rule: { mode: string; games: number };
   /** The card keys the server accepted. An unknown key is dropped, so the
    *  screen quotes this and never what it sent. */
   cards: string[];
@@ -2655,9 +2658,8 @@ export interface DuelFeedReport {
   perPage: number;
   /** Duels matching `cards`. */
   total: number;
-  /** Every duel, and every game, in the window. */
+  /** Every listed duel in the window, whatever the card filter. */
   windowDuels: number;
-  windowGames: number;
   duels: DuelFeedDuel[];
 }
 

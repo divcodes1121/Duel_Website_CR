@@ -187,9 +187,9 @@ export function AdminConsole() {
       label: 'Tools',
       items: [
         { id: 'coach', label: 'Coach Roster', icon: <CoachIcon size={18} />, href: '#/admin/coach' },
-        /* Every stored duel, newest first. A screen of its own in the main
-           shell, not a console view: it is what people played, not how the
-           service is doing. */
+        /* Friendly three-game duels, newest first. A screen of its own in
+           the main shell, not a console view: it is what people played, not
+           how the service is doing. */
         { id: 'all-duels', label: 'All Duels', icon: <SwordsIcon size={18} />, href: '#/all-duels' },
         { id: 'home', label: 'Back to Deckkies', icon: <HomeIcon size={18} />, href: '#/' },
       ],

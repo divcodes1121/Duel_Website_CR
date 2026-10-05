@@ -1,4 +1,5 @@
-"""duel_feed: every stored duel, newest first — the admin "All Duels" screen.
+"""duel_feed: friendly duels that went to three games, newest first — the admin
+"All Duels" screen.
 
 Runs against a synthetic bot database and a duel index built from it, both in
 a temp directory; nothing touches the real ones. Every tag and name here is
@@ -50,13 +51,18 @@ RG = ["royal-giant", "fisherman", "hunter", "lightning", "the-log",
       "royal-ghost", "electro-spirit", "mother-witch"]
 XBOW = ["x-bow", "tesla", "archers", "knight", "the-log", "electro-spirit",
         "skeletons", "fireball"]
+# Fielded ONLY in duels the screen must not list — a war duel and a friendly
+# sweep — so asking for one of its cards proves a filter cannot pull them in.
+LAVA = ["lava-hound", "balloon", "guards", "mega-minion", "minions", "arrows",
+        "fireball", "tombstone"]
 
 ID = {k: int(dx.card_info(k).get("id") or 0)
-      for k in set(HOG + BAIT + GOLEM + MORTAR + GIANT + RG + XBOW)}
+      for k in set(HOG + BAIT + GOLEM + MORTAR + GIANT + RG + XBOW + LAVA)}
 check("every test card is in the catalogue with an id", all(ID.values()),
       str([k for k, v in ID.items() if not v]))
 
 NEWEST = datetime.date(2026, 9, 20)
+FRIENDLY, WAR = "Duel_1v1_Friendly", "CW_Duel_1v1"
 
 
 def stamp(days_ago: int, hhmmss: str = "120000") -> str:
@@ -112,6 +118,10 @@ def rebuild():
     di._state["checked"] = 0.0      # look at the new build now, not in a minute
 
 
+def decks_of(rep):
+    return [g[s] for d in rep["duels"] for g in d["games"] for s in ("a", "b")]
+
+
 try:
     bot = sqlite3.connect(BOT)
     bot.executescript(
@@ -131,13 +141,15 @@ try:
                       ("#DDD", "Delta"), ("#EEE", "Echo")):
         bot.execute("INSERT INTO player_names VALUES (?,?,?,?)", (tag, name, "", "test"))
 
-    # D1 — today. #BBB beats #AAA 2-1. Stored under BOTH players, sides swapped.
-    #      team = #BBB, so the index must flip it: side a is #AAA.
+    # ── THE FIVE THE SCREEN LISTS: friendly, three games each ──────────────
+    #
+    # D1 — today 18:00. #BBB beats #AAA 2-1. Stored under BOTH players, sides
+    #      swapped. team = #BBB, so the index must flip it: side a is #AAA.
     T1 = stamp(0, "180000")
     d1_b = [rnd(HOG, 3), rnd(MORTAR, 0), rnd(XBOW, 2)]      # #BBB's three decks
     d1_a = [rnd(BAIT, 1), rnd(GOLEM, 1), rnd(RG, 1)]        # #AAA's
-    store(bot, "#BBB", "CW_Duel_1v1", payload(T1, "#BBB", "#AAA", d1_b, d1_a))
-    store(bot, "#AAA", "CW_Duel_1v1", payload(T1, "#AAA", "#BBB", d1_a, d1_b))
+    store(bot, "#BBB", FRIENDLY, payload(T1, "#BBB", "#AAA", d1_b, d1_a))
+    store(bot, "#AAA", FRIENDLY, payload(T1, "#AAA", "#BBB", d1_a, d1_b))
     # Both players' own rows carry marks. #AAA's row has a WRONG idea of what
     # #BBB fielded (valkyrie as a hero); #BBB's own row says evolution.
     battle_row(bot, T1, "#AAA", "#BBB",
@@ -150,40 +162,56 @@ try:
     # this duel, and its marks must not be borrowed.
     battle_row(bot, T1, "#BBB", "#ZZZ", mine=[["musketeer", 2, "hero"]])
 
-    # D2 — today, earlier. #CCC sweeps #DDD 2-0. Only #CCC is tracked, so the
-    #      one row answers for both sides.
+    # D2 — today 09:00. #CCC beats #DDD 2-1. Only #CCC is tracked, so the one
+    #      row answers for both sides.
     T2 = stamp(0, "090000")
-    store(bot, "#CCC", "Duel_1v1_Friendly",
-          payload(T2, "#CCC", "#DDD", [rnd(GIANT, 2), rnd(HOG, 1)],
-                  [rnd(GOLEM, 0), rnd(BAIT, 0)]))
+    store(bot, "#CCC", FRIENDLY,
+          payload(T2, "#CCC", "#DDD", [rnd(GIANT, 2), rnd(HOG, 1), rnd(MORTAR, 3)],
+                  [rnd(GOLEM, 0), rnd(BAIT, 2), rnd(XBOW, 1)]))
     battle_row(bot, T2, "#CCC", "#DDD",
                mine=[["archers", 1, "evolution"]],
                theirs=[["knight", 1, "evolution"]])
 
-    # D3 — 10 days ago. #EEE (no battles row at all) beats #NONAME 2-0.
+    # D3 — 10 days ago. #EEE (no battles row at all) beats #NONAME 2-1. Its
+    #      mode is stored in lower case: the rule must not depend on Supercell's
+    #      capitals.
     T3 = stamp(10)
-    store(bot, "#EEE", "CW_Duel_1v1",
-          payload(T3, "#EEE", "#NONAME", [rnd(RG, 3), rnd(MORTAR, 1)],
-                  [rnd(XBOW, 0), rnd(GOLEM, 0)]))
+    store(bot, "#EEE", FRIENDLY.lower(),
+          payload(T3, "#EEE", "#NONAME", [rnd(RG, 3), rnd(MORTAR, 0), rnd(HOG, 2)],
+                  [rnd(XBOW, 0), rnd(GOLEM, 1), rnd(GIANT, 0)]))
 
     # D4 — 45 days ago: in the 60- and 90-day windows, not the 30.
     T4 = stamp(45)
-    store(bot, "#AAA", "CW_Duel_1v1",
-          payload(T4, "#AAA", "#CCC", [rnd(HOG, 1), rnd(GOLEM, 0)],
-                  [rnd(GIANT, 2), rnd(XBOW, 1)]))
+    store(bot, "#AAA", FRIENDLY,
+          payload(T4, "#AAA", "#CCC", [rnd(HOG, 1), rnd(GOLEM, 2), rnd(MORTAR, 0)],
+                  [rnd(GIANT, 2), rnd(XBOW, 1), rnd(BAIT, 1)]))
 
-    # D5 — 75 days ago: the 90-day window only.
+    # D5 — 75 days ago: the 90-day window only. The one listed duel with no
+    #      Hog Rider in it.
     T5 = stamp(75)
-    store(bot, "#DDD", "CW_Duel_1v1",
-          payload(T5, "#DDD", "#EEE", [rnd(BAIT, 3), rnd(MORTAR, 2)],
-                  [rnd(HOG, 0), rnd(RG, 1)]))
+    store(bot, "#DDD", FRIENDLY,
+          payload(T5, "#DDD", "#EEE", [rnd(BAIT, 3), rnd(MORTAR, 0), rnd(GOLEM, 1)],
+                  [rnd(GIANT, 0), rnd(RG, 1), rnd(XBOW, 2)]))
 
-    # D6 — 120 days ago: stored, and in no window this screen offers.
-    store(bot, "#AAA", "CW_Duel_1v1",
-          payload(stamp(120), "#AAA", "#EEE", [rnd(HOG, 3), rnd(GOLEM, 3)],
-                  [rnd(BAIT, 0), rnd(XBOW, 0)]))
+    # D6 — 120 days ago: friendly, three games, and in no window offered.
+    store(bot, "#AAA", FRIENDLY,
+          payload(stamp(120), "#AAA", "#EEE", [rnd(HOG, 3), rnd(GOLEM, 0), rnd(MORTAR, 2)],
+                  [rnd(BAIT, 0), rnd(XBOW, 1), rnd(GIANT, 1)]))
 
-    # Not native duels: a ladder battle and a plain friendly, rounds or not.
+    # ── WHAT THE SCREEN MUST NOT LIST ──────────────────────────────────────
+    #
+    # A WAR duel: three games, and NEWER than every friendly one, so a rule
+    # that merely ordered by time would put it first.
+    TW = stamp(0, "190000")
+    store(bot, "#AAA", WAR,
+          payload(TW, "#AAA", "#BBB", [rnd(LAVA, 3), rnd(GOLEM, 0), rnd(MORTAR, 2)],
+                  [rnd(BAIT, 0), rnd(XBOW, 1), rnd(GIANT, 1)]))
+    # A friendly SWEEP: two games, 2-0.
+    TS = stamp(0, "120000")
+    store(bot, "#CCC", FRIENDLY,
+          payload(TS, "#CCC", "#DDD", [rnd(LAVA, 2), rnd(HOG, 1)],
+                  [rnd(GOLEM, 0), rnd(BAIT, 0)]))
+    # Not native duels at all: a ladder battle and a plain friendly.
     store(bot, "#AAA", "Ladder",
           payload(stamp(0, "200000"), "#AAA", "#BBB", [rnd(HOG, 3)], [rnd(BAIT, 0)]))
     store(bot, "#AAA", "Friendly",
@@ -191,36 +219,51 @@ try:
     bot.commit()
     rebuild()
 
+    print("\n-- Which duels --")
+    check("the rule is friendly duels of three games", (df.MODE, df.GAMES) == ("duel_1v1_friendly", 3))
+    check("and that mode is one the site recognises as a native duel",
+          df.MODE in {m.lower() for m in dx.NATIVE_DUEL_MODES} and dx.is_native_duel(df.MODE))
+    r30, r60, r90 = df.report(30), df.report(60), df.report(90)
+    check("the payload says what the list is of", r30["rule"] == {"mode": df.MODE, "games": 3})
+    check("every listed duel is a friendly duel",
+          all(d["mode"].lower() == df.MODE for d in r90["duels"]) and len(r90["duels"]) == 5,
+          str([d["mode"] for d in r90["duels"]]))
+    check("a war duel is never listed, however new", not any(d["battleTime"] == TW for d in r90["duels"]))
+    check("every listed duel has exactly three games", all(len(d["games"]) == 3 for d in r90["duels"]))
+    check("a friendly sweep is never listed", not any(d["battleTime"] == TS for d in r90["duels"]))
+    check("so every listed duel ends 2-1",
+          all(sorted((d["a"]["wins"], d["b"]["wins"])) == [1, 2] for d in r90["duels"]))
+    check("the mode is matched whatever its capitals", any(d["battleTime"] == T3 for d in r90["duels"]))
+    check("no ladder battle, no plain friendly",
+          not any(d["battleTime"] in (stamp(0, "200000"), stamp(0, "210000")) for d in r90["duels"]))
+    both = di.duel_feed(90, (), 1, 50, mode=df.MODE)
+    check("the reader itself lists a mode's sweeps too when no length is asked",
+          both["total"] == 6 and any(len(d["games"]) == 2 for d in both["duels"]), str(both["total"]))
+    war = di.duel_feed(90, (), 1, 50, mode="cw_duel_1v1", games=3)
+    check("and another mode's duels when asked for that mode",
+          war["total"] == 1 and war["duels"][0]["battleTime"] == TW, str(war["total"]))
+
     print("\n-- The windows --")
     check("three windows, and they are 30, 60 and 90", df.DAYS == (30, 60, 90))
     check("it opens on 30", df.DEFAULT_DAYS == 30 and df.valid_days("") == 30)
     check("anything else is the default",
           [df.valid_days(v) for v in ("7", "45", "abc", None, "-1", "9999", "90 ")]
           == [30, 30, 30, 30, 30, 30, 90])
-    r30, r60, r90 = df.report(30), df.report(60), df.report(90)
     check("30 days holds the three recent duels", r30["total"] == 3, str(r30["total"]))
     check("60 days adds the one from 45 days ago", r60["total"] == 4)
     check("90 days adds the one from 75 days ago, and stops there", r90["total"] == 5)
-    check("the window is counted back from the newest duel STORED",
+    check("the window is counted back from the newest duel STORED, in any mode",
           r30["window"] == {"from": "2026-08-22", "to": "2026-09-20"}, str(r30["window"]))
-    check("games are counted for the window too",
-          (r30["windowGames"], r90["windowGames"]) == (7, 11),
-          f"{r30['windowGames']} {r90['windowGames']}")
     check("unfiltered, the total IS the window", r90["total"] == r90["windowDuels"])
     check("the payload says which windows exist", r30["windows"] == [30, 60, 90])
+    check("no figure is published that is always three times another",
+          "windowGames" not in r30)
 
     print("\n-- Newest first, one row a duel --")
     ids = [d["id"] for d in r90["duels"]]
-    check("newest first", [d["battleTime"] for d in r90["duels"]]
-          == sorted((d["battleTime"] for d in r90["duels"]), reverse=True), str(ids))
+    check("newest first", [d["battleTime"] for d in r90["duels"]] == [T1, T2, T3, T4, T5], str(ids))
     check("a duel stored under both players is listed once",
           sum(1 for d in r90["duels"] if d["battleTime"] == T1) == 1)
-    check("only native duels: no ladder battle, no plain friendly",
-          all(d["mode"] in ("CW_Duel_1v1", "Duel_1v1_Friendly") for d in r90["duels"])
-          and not any(d["battleTime"] > T1 for d in r90["duels"]))
-    check("the modes are named", [d["modeLabel"] for d in r30["duels"]]
-          == ["War duel", "Friendly duel", "War duel"])
-    check("an unknown mode is a Duel, not a guess", df.mode_label("Duel_New_Thing") == "Duel")
 
     print("\n-- A duel --")
     d1 = r90["duels"][0]
@@ -241,11 +284,11 @@ try:
           and sorted(d1["games"][2]["a"]["cards"]) == sorted(RG)
           and sorted(d1["games"][2]["b"]["cards"]) == sorted(XBOW))
     check("every deck is eight distinct cards, with a name and an elixir cost",
-          all(len(set(g[s]["cards"])) == 8 and g[s]["deckName"] and g[s]["avgElixir"] > 0
-              for d in r90["duels"] for g in d["games"] for s in ("a", "b")))
+          all(len(set(x["cards"])) == 8 and x["deckName"] and x["avgElixir"] > 0
+              for x in decks_of(r90)))
     d2 = r90["duels"][1]
-    check("a sweep is two games, 2-0", len(d2["games"]) == 2
-          and (d2["a"]["wins"], d2["b"]["wins"]) == (2, 0) and d2["winner"] == "a")
+    check("the winner can be side a", d2["winner"] == "a"
+          and (d2["a"]["tag"], d2["a"]["wins"], d2["b"]["wins"]) == ("#CCC", 2, 1))
     d3 = r90["duels"][2]
     check("a player nobody has a name for has name None, never their tag",
           d3["b"]["tag"] == "#NONAME" and d3["b"]["name"] is None, str(d3["b"]))
@@ -278,19 +321,30 @@ try:
 
     print("\n-- The card filter --")
     hog = df.report(90, ["hog-rider"])
-    check("one card: every duel where a deck holds it",
+    check("one card: every listed duel where a deck holds it",
           hog["total"] == 4 and hog["cards"] == ["hog-rider"], str(hog["total"]))
     check("and only those", all(
         any("hog-rider" in g[s]["cards"] for g in d["games"] for s in ("a", "b"))
         for d in hog["duels"]))
-    check("the whole window is still reported beside the filtered total",
-          hog["windowDuels"] == 5 and hog["windowGames"] == 11)
+    check("the whole window is still reported beside the filtered total", hog["windowDuels"] == 5)
+    check("A DUEL WHERE THE CARD WAS PLAYED IN ONE GAME OF THREE IS STILL A THREE-GAME DUEL",
+          # D1 holds Mortar in game 2 only. Asked of the ROW, `COUNT(*)` would
+          # see one matching game, fail "three games", and drop the duel from
+          # the very filter that should find it.
+          any(d["battleTime"] == T1 for d in df.report(90, ["mortar"])["duels"])
+          and all(len(d["games"]) == 3 for d in df.report(90, ["mortar"])["duels"]))
+    check("and it is drawn whole: all three games, not the one that matched",
+          [len(d["games"]) for d in hog["duels"]] == [3, 3, 3, 3])
+    check("a filter cannot pull in a war duel or a sweep",
+          # Lava Hound was fielded only in the war duel and the friendly sweep.
+          df.report(90, ["lava-hound"])["total"] == 0, str(df.report(90, ["lava-hound"])["total"]))
     check("`giant` is the Giant, not the Royal Giant",
-          df.report(90, ["giant"])["total"] == 2 and df.report(90, ["royal-giant"])["total"] == 3,
+          df.report(90, ["giant"])["total"] == 4 and df.report(90, ["royal-giant"])["total"] == 3
+          and not any(d["battleTime"] == T1 for d in df.report(90, ["giant"])["duels"]),
           f"{df.report(90, ['giant'])['total']} {df.report(90, ['royal-giant'])['total']}")
     check("two cards: ONE deck must hold both",
           df.report(90, ["hog-rider", "valkyrie"])["total"] == 4
-          and df.report(90, ["giant", "graveyard"])["total"] == 2)
+          and df.report(90, ["giant", "graveyard"])["total"] == 4)
     check("two cards in two different decks of one duel do not match",
           # D1 holds Hog Rider (#BBB, game 1) and Golem (#AAA, game 2).
           df.report(90, ["hog-rider", "golem"])["total"] == 0)
@@ -298,7 +352,8 @@ try:
           # D1 game 1 is Bait against Hog.
           df.report(90, ["goblin-barrel", "hog-rider"])["total"] == 0)
     check("a filter narrows inside the window it is asked for",
-          df.report(30, ["hog-rider"])["total"] == 2, str(df.report(30, ["hog-rider"])["total"]))
+          df.report(30, ["hog-rider"])["total"] == 3 and df.report(30, ["royal-giant"])["total"] == 2,
+          str(df.report(30, ["hog-rider"])["total"]))
     check("an unknown key is dropped, and the accepted list is echoed",
           df.report(90, ["hog-rider", "not-a-card", "HOG-RIDER"])["cards"] == ["hog-rider"])
     check("a filter of only unknown keys is no filter",
@@ -309,6 +364,10 @@ try:
     sql, args = di._holds(["giant", "poison"])
     check("the filter is bound, and matched on whole keys",
           args == [",giant,", ",poison,"] * 2 and "giant" not in sql and "instr" in sql, sql)
+    full = di._duel_sql(sql, 3)
+    check("the cards and the length are both asked of the DUEL (HAVING), not of the row",
+          full.index("HAVING") < full.index("COUNT(*) = ?") < full.index("MAX(")
+          and "instr" not in full[:full.index("GROUP BY")], full)
 
     print("\n-- Paging --")
     p1, p2, p3 = (df.report(90, per=2, page=n) for n in (1, 2, 3))
@@ -329,19 +388,23 @@ try:
 
     print("\n-- The plan --")
     con = sqlite3.connect(IDX)
-    check("the build created the feed's index",
-          "games_duel" in [r[1] for r in con.execute("PRAGMA index_list(games)")])
+    names = [r[1] for r in con.execute("PRAGMA index_list(games)")]
+    check("the build created the feed's index", "games_mode_duel" in names, str(names))
+    check("and the one-day-old index it replaced is gone", "games_duel" not in names, str(names))
+    since = stamp(89, "000000")
     plan = [r[3] for r in con.execute(
-        "EXPLAIN QUERY PLAN " + di._DUEL_GROUP.format(match="") + " LIMIT 20 OFFSET 0",
-        (stamp(89, "000000"),))]
-    check("a page walks the index", any("games_duel" in p for p in plan), str(plan))
+        "EXPLAIN QUERY PLAN " + di._duel_sql("", 3) + " LIMIT 20 OFFSET 0", (df.MODE, since, 3))]
+    check("a page walks the mode's index", any("games_mode_duel" in p for p in plan), str(plan))
+    check("with the mode AND the window as its range",
+          any("mode=?" in p.replace(" ", "") and "battle_time>?" in p.replace(" ", "") for p in plan), str(plan))
+    check("reading the index alone", any("COVERING INDEX" in p for p in plan), str(plan))
     check("and sorts nothing", not any("TEMP B-TREE" in p for p in plan), str(plan))
     match, margs = di._holds(["hog-rider"])
     plan = [r[3] for r in con.execute(
-        "EXPLAIN QUERY PLAN " + di._DUEL_GROUP.format(match=match) + " LIMIT 20 OFFSET 0",
-        (stamp(89, "000000"), *margs))]
+        "EXPLAIN QUERY PLAN " + di._duel_sql(match, 3) + " LIMIT 20 OFFSET 0",
+        (df.MODE, since, 3, *margs))]
     check("a filtered page too, so it can stop at its last row",
-          any("games_duel" in p for p in plan) and not any("TEMP B-TREE" in p for p in plan),
+          any("games_mode_duel" in p for p in plan) and not any("TEMP B-TREE" in p for p in plan),
           str(plan))
     con.close()
 
@@ -349,32 +412,46 @@ try:
     FEED = di._feed["items"]
     FEED.clear()
     df.report(90, ["hog-rider"])
-    key = next(k for k in FEED if k[1] == ("hog-rider",))
+    key = next(k for k in FEED if k[-1] == ("hog-rider",))
     check("a small filtered answer keeps its duels", FEED[key]["ids"] is not None
           and len(FEED[key]["ids"]) == 4)
+    check("what is remembered is remembered per mode and length",
+          key[1:3] == (df.MODE, 3), str(key))
     keep = di.FEED_KEEP_IDS
     di.FEED_KEEP_IDS = 2
     FEED.clear()
     big1 = df.report(90, ["hog-rider"], per=2, page=1)
-    key = next(k for k in FEED if k[1] == ("hog-rider",))
+    key = next(k for k in FEED if k[-1] == ("hog-rider",))
     check("a large one keeps only its count", FEED[key]["ids"] is None and FEED[key]["total"] == 4)
     big2 = df.report(90, ["hog-rider"], per=2, page=2)
     check("and still pages correctly from it",
           [d["id"] for d in big1["duels"] + big2["duels"]] == [d["id"] for d in hog["duels"]])
     di.FEED_KEEP_IDS = keep
-    # A new duel arrives. Nothing remembered may outlive it.
+    # A new friendly three-game duel arrives. Nothing remembered may outlive it.
     T7 = stamp(0, "230000")
-    store(bot, "#EEE", "CW_Duel_1v1",
-          payload(T7, "#EEE", "#BBB", [rnd(HOG, 3), rnd(GIANT, 3)],
-                  [rnd(BAIT, 0), rnd(GOLEM, 0)]))
+    store(bot, "#EEE", FRIENDLY,
+          payload(T7, "#EEE", "#BBB", [rnd(HOG, 3), rnd(GIANT, 0), rnd(MORTAR, 2)],
+                  [rnd(BAIT, 0), rnd(GOLEM, 1), rnd(XBOW, 1)]))
     bot.commit()
     rebuild()
     after = df.report(90)
-    check("a new duel is counted at once", after["total"] == 6 and after["windowGames"] == 13,
-          f"{after['total']} {after['windowGames']}")
+    check("a new duel is counted at once", after["total"] == 6, str(after["total"]))
     check("and leads the list", after["duels"][0]["battleTime"] == T7)
     check("the remembered filter count moved with it",
           df.report(90, ["hog-rider"])["total"] == 5)
+    # A new WAR duel and a new sweep arrive: the list does not move.
+    store(bot, "#AAA", WAR,
+          payload(stamp(0, "233000"), "#AAA", "#CCC", [rnd(HOG, 3), rnd(GOLEM, 0), rnd(MORTAR, 2)],
+                  [rnd(BAIT, 0), rnd(XBOW, 1), rnd(GIANT, 1)]))
+    store(bot, "#AAA", FRIENDLY,
+          payload(stamp(0, "234000"), "#AAA", "#DDD", [rnd(HOG, 3), rnd(GOLEM, 1)],
+                  [rnd(BAIT, 0), rnd(XBOW, 0)]))
+    bot.commit()
+    rebuild()
+    still = df.report(90)
+    check("a new war duel and a new sweep change nothing on the screen",
+          still["total"] == 6 and still["duels"][0]["battleTime"] == T7
+          and df.report(90, ["hog-rider"])["total"] == 5, str(still["total"]))
 
     print("\n-- With no index --")
     di.PATH = os.path.join(TMP, "absent.db")
@@ -383,7 +460,8 @@ try:
     check("no index is a state, not an error",
           none["available"] is False and none["duels"] == [] and none["total"] == 0
           and none["page"] == 1 and none["pages"] == 1)
-    check("and it still says what was asked", none["days"] == 30 and none["cards"] == ["hog-rider"])
+    check("and it still says what was asked", none["days"] == 30 and none["cards"] == ["hog-rider"]
+          and none["rule"] == {"mode": df.MODE, "games": 3})
     di.PATH = IDX
     di._state["checked"] = 0.0
     check("and it is served again when the index is back", df.report(30)["available"] is True)
@@ -402,6 +480,8 @@ try:
           and block.index("admin_auth.verify(") < block.index("duel_feed.report("))
     check("it enrols nobody", "_note_tag" not in block and "_enrol(" not in block)
     check("the window is validated, not passed through", "duel_feed.valid_days(" in block)
+    check("the caller cannot ask for another mode or length",
+          "mode" not in block.split("duel_feed.report(")[1] and "games" not in block.split("duel_feed.report(")[1])
 
     bot.close()
 finally:

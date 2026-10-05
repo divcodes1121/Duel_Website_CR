@@ -792,7 +792,7 @@ export function Dashboard({
     { id: 'tool-guide', group: 'Tools', label: 'The field book', sub: 'What the site is, and what each account gets', icon: <InfoIcon size={15} />, keys: keysFor('guide'), run: () => goTo('guide') },
     ...(access === 'admin'
       ? [
-          { id: 'tool-all-duels', group: 'Tools', label: 'All Duels', sub: 'Every stored duel, newest first', icon: <SwordsIcon size={15} />, hue: 'blue', keywords: 'duel feed log war battles admin', run: () => go(ALL_DUELS_HASH) },
+          { id: 'tool-all-duels', group: 'Tools', label: 'All Duels', sub: 'Friendly duels that went to three games, newest first', icon: <SwordsIcon size={15} />, hue: 'blue', keywords: 'duel feed log war battles admin', run: () => go(ALL_DUELS_HASH) },
           { id: 'tool-admin', group: 'Tools', label: 'Admin console', sub: 'Accounts, storage, collection', icon: <ShieldIcon size={15} />, run: () => go('#/admin') },
         ]
       : []),

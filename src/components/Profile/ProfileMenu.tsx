@@ -450,8 +450,9 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                     My coaching
                   </a>
                 )}
-                {/* ALL DUELS, ADMINS ONLY (2026-10-05): every stored duel,
-                    newest first. Asked for here by name. Drawn only for an
+                {/* ALL DUELS, ADMINS ONLY (2026-10-05): the friendly duels
+                    that went to three games, newest first. Asked for here by
+                    name. Drawn only for an
                     admin, like the console under it — the screen refuses
                     everyone else and the analytics service refuses the data,
                     so this just avoids showing a door that does not open. */}

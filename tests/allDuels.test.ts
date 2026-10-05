@@ -31,7 +31,19 @@ import {
  * Every name and tag below is invented.
  */
 
-const R = (...p: string[]) => readFileSync(join(process.cwd(), ...p), 'utf8');
+/* LINE ENDINGS ARE NORMALISED. Half this tree is CRLF on a Windows checkout,
+   and a slice that ends at `indexOf('\n}\n')` finds nothing there, returns -1
+   and quietly becomes "the rest of the file" — which contains everything, so
+   every `toContain` on it passes. Two checks here were doing exactly that. */
+const R = (...p: string[]) => readFileSync(join(process.cwd(), ...p), 'utf8').replace(/\r\n/g, '\n');
+
+/** One exported declaration out of a module, from its header to its close. */
+function block(src: string, header: string): string {
+  const a = src.indexOf(header);
+  const b = src.indexOf('\n}\n', a);
+  if (a < 0 || b < 0) throw new Error(`block not found: ${header}`);
+  return src.slice(a, b + 2);
+}
 
 const dash = R('src', 'components', 'Dashboard', 'Dashboard.tsx');
 const app = R('src', 'App.tsx');
@@ -153,27 +165,59 @@ describe('marking the deck that matched', () => {
   });
 });
 
-describe('the count line', () => {
-  it('unfiltered: the window’s duels and games', () => {
-    expect(feedCount({ total: 79544, windowDuels: 79544, windowGames: 192928, cards: [] })).toBe(
-      '79,544 duels · 192,928 games',
-    );
+describe('which duels: friendly ones that went to three games', () => {
+  /* Asked for after the first build went live with every native duel on it:
+     "war duels we don't need, only friendly ones, that too which are played
+     all 3 battles". The rule is the SERVER's — two constants in
+     `duel_feed.py` — and the screen's only job is to say it truthfully. */
+  it('the server lists friendly duels of three games, and nothing else can be asked for', () => {
+    expect(/^MODE = "([^"]+)"/m.exec(feedPy)?.[1]).toBe('duel_1v1_friendly');
+    expect(Number(/^GAMES = (\d+)/m.exec(feedPy)?.[1])).toBe(3);
+    expect(feedPy).toContain('mode=MODE, games=GAMES');
+    // Neither is a query parameter: the client could not widen the list.
+    expect(block(client, 'export function fetchDuelFeed')).not.toMatch(/mode|games/);
   });
 
+  it('the count line says so, in the words the rule is in', () => {
+    const line = feedCount({ total: 1169, windowDuels: 1169, cards: [] });
+    expect(line).toBe('1,169 friendly duels played to three games');
+    // Held to the constants: change the rule and this wording is wrong.
+    expect(line).toContain('friendly');
+    expect(line).toContain('three games');
+  });
+
+  it('a row carries no mode label — they are all the same kind', () => {
+    expect(page).not.toContain('modeLabel');
+    expect(page).not.toContain('styles.mode');
+    expect(css).not.toMatch(/^\.mode \{/m);
+    // Scoped to this screen's type: the battle log has a `modeLabel` of its own.
+    expect(block(client, 'export interface DuelFeedDuel')).not.toContain('modeLabel');
+  });
+
+  it('and no figure that is always three times another', () => {
+    expect(block(client, 'export interface DuelFeedReport')).not.toContain('windowGames');
+    expect(block(client, 'export interface DuelFeedReport')).toContain('windowDuels');
+    expect(feedPy).not.toContain('windowGames');
+  });
+});
+
+describe('the count line', () => {
   it('filtered: how many of the window', () => {
-    expect(feedCount({ total: 3341, windowDuels: 160626, windowGames: 388908, cards: ['minion-giant'] })).toBe(
-      '3,341 of 160,626 duels',
+    expect(feedCount({ total: 37, windowDuels: 3046, cards: ['minion-giant'] })).toBe(
+      '37 of 3,046 friendly duels played to three games',
     );
   });
 
   it('counts one as one', () => {
-    expect(feedCount({ total: 1, windowDuels: 1, windowGames: 2, cards: [] })).toBe('1 duel · 2 games');
-    expect(feedCount({ total: 0, windowDuels: 1, windowGames: 1, cards: ['x-bow'] })).toBe('0 of 1 duel');
+    expect(feedCount({ total: 1, windowDuels: 1, cards: [] })).toBe('1 friendly duel played to three games');
+    expect(feedCount({ total: 0, windowDuels: 1, cards: ['x-bow'] })).toBe(
+      '0 of 1 friendly duel played to three games',
+    );
   });
 
   it('the footer says which rows these are', () => {
-    expect(pageRange({ page: 1, perPage: 10, total: 79544 })).toBe('1–10 of 79,544');
-    expect(pageRange({ page: 7955, perPage: 10, total: 79544 })).toBe('79,541–79,544 of 79,544');
+    expect(pageRange({ page: 1, perPage: 10, total: 1169 })).toBe('1–10 of 1,169');
+    expect(pageRange({ page: 117, perPage: 10, total: 1169 })).toBe('1,161–1,169 of 1,169');
     expect(pageRange({ page: 1, perPage: 10, total: 0 })).toBe('');
   });
 });
@@ -226,8 +270,7 @@ describe('admin only, at every layer', () => {
   it('the data is asked for with the admin token', () => {
     expect(client).toContain('/api/analytics/admin/duels?');
     expect(page).toContain('const token = await coachToken();');
-    const fetcher = client.slice(client.indexOf('export function fetchDuelFeed'));
-    expect(fetcher.slice(0, fetcher.indexOf('\n}\n'))).toContain("'X-Coach-Token': token");
+    expect(block(client, 'export function fetchDuelFeed')).toContain("'X-Coach-Token': token");
   });
 
   it('the server route is behind the admin gate and enrols nobody', () => {
@@ -274,7 +317,7 @@ describe('the one door', () => {
 
 describe('the screen', () => {
   it('filters, pages and windows on the SERVER', () => {
-    /* There are 160,000 duels in ninety days. Filtering what one page
+    /* There are thousands of duels in a window. Filtering what one page
        returned would answer for ten of them while looking like an answer for
        all. */
     expect(page).not.toMatch(/report\.duels[\s.]*(filter|sort|slice)\(/);

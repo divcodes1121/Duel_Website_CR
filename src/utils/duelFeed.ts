@@ -70,17 +70,20 @@ export function deckHolds(cards: readonly string[], picked: readonly string[]): 
 
 const nf = new Intl.NumberFormat('en-US');
 
-/** The one line under the title: how much is in the window, or how much of
- *  it the filter kept. */
-export function feedCount(r: {
-  total: number;
-  windowDuels: number;
-  windowGames: number;
-  cards: readonly string[];
-}): string {
-  const duels = (n: number) => `${nf.format(n)} duel${n === 1 ? '' : 's'}`;
-  if (r.cards.length) return `${nf.format(r.total)} of ${duels(r.windowDuels)}`;
-  return `${duels(r.windowDuels)} · ${nf.format(r.windowGames)} game${r.windowGames === 1 ? '' : 's'}`;
+/**
+ * The one line under the title: how many duels the window holds, or how many
+ * of them the card filter kept — AND WHAT THEY ARE.
+ *
+ * The page is called All Duels and lists friendly duels that went to the third
+ * game (`duel_feed.MODE` / `GAMES` on the server; a test holds this wording to
+ * those two constants). The name says less than that, so the line under it
+ * says the rest: it is the one place a reader learns why a war duel or a 2-0
+ * is not here.
+ */
+export function feedCount(r: { total: number; windowDuels: number; cards: readonly string[] }): string {
+  const what = (n: number) => `${nf.format(n)} friendly duel${n === 1 ? '' : 's'} played to three games`;
+  if (r.cards.length) return `${nf.format(r.total)} of ${what(r.windowDuels)}`;
+  return what(r.windowDuels);
 }
 
 /** `1–10 of 79,544` for the footer; empty when there is nothing to count. */

@@ -33,8 +33,8 @@ Endpoints
                                            whether the bot has them (admin)
     GET /api/analytics/admin/retention     what the retention and backup jobs
                                            did, day by day (admin)
-    GET /api/analytics/admin/duels         every duel stored, newest first,
-                                           filtered by card (admin)
+    GET /api/analytics/admin/duels         friendly duels that went to three
+                                           games, newest first, by card (admin)
 
 Every handler answers 200 with a useful body or a JSON error; the drive being
 unplugged is a normal state, not a failure.
@@ -1104,17 +1104,19 @@ class Handler(BaseHTTPRequestHandler):
                 }
                 return self._send(out)
 
-            # ALL DUELS — every native duel the duel index holds, newest first:
-            # both players, the score in games, each game's two decks and its
-            # crowns, narrowed by card over 30, 60 or 90 days (`duel_feed.py`).
+            # ALL DUELS — the friendly duels that went to three games, newest
+            # first: both players, the score in games, each game's two decks
+            # and its crowns, narrowed by card over 30, 60 or 90 days. WHICH
+            # duels is `duel_feed.MODE` and `duel_feed.GAMES`, set there and
+            # nowhere else; nothing in the query string can widen it.
             #
             # ADMIN-GATED, the same second gate as tracking: it lists every
             # player's tag, name and decks in time order, which is a log of
             # people and not something the injected key should hand to anyone.
             #
             # NO `_note_tag`. Every other route that takes a tag queues it for
-            # collection; this one takes none, and reading a list of 160,000
-            # duels must not enrol the strangers in it.
+            # collection; this one takes none, and reading a list of duels
+            # must not enrol the strangers in it.
             #
             # Its own route (the tripwire moves to 28): a paged, filterable
             # read of the duel index's own file, nothing like what the other
