@@ -53,8 +53,8 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **All Duels — friendly duels that went to three games (admin)** | **2026-10-05, server deployed first (backups `*.bak-20261005-075221-preallduels`, then `*.bak-20261005-082423-prefriendly`); the frontend ships in the commit this row is in.** Asked for directly: a page only for admins, opened from the profile drop-down, listing duels from newest to oldest with both players' names, the crowns, a card filter and three windows (30, 60, 90 days) and no others. **The first build listed every native duel; the account holder looked at it live and asked for friendly duels only, and only those played to all three games** — nineteen in twenty had been war duels. `#/all-duels`. One card a duel: the two players and the score in games, then one line a game with each player's eight cards in the forms they were fielded in and that game's crowns between them. It reads the duel index's own table of duel games — **1,169 such duels in thirty days, 2,431 in sixty, 3,046 in ninety** on production — through an admin-gated route, `/api/analytics/admin/duels` (route count 28), and an index on the mode that keeps the walk inside the friendly rows. Staged read-only against production: **every page of thirty days walked, 0 rule breaks**, every player named, 6,828 of 7,014 decks drawn with observed forms. **159/159 in a browser** on those payloads (both themes, 1440, 1100, a 390 touch phone); the door and the refusals were covered by the first build's 205/205 and 10/10 signed out. 94 Python + 55 vitest checks, thirteen rules broken on purpose and each caught. Live: 401 without an admin's token, a page in 11-15 ms, the first ask of a card filter in 28-61 ms. **Each row has a Save duel button** (asked for the same day): it writes the duel into Royal Duels' saved Versus groups, the left player's decks as Blue and the right player's as Red, and the row then reads `Saved as Duel Deck n` — from the library, so it still does after a reload. 36/36 in a browser, from the click to the set in the builder. See [All Duels — friendly duels that went to three games](#all-duels--friendly-duels-that-went-to-three-games-2026-10-05) |
-| **Decks — every deck a player is using** | **2026-10-04, server deployed first (backups `*.bak-20261004-163517-predecks`); the frontend ships in the commit this row is in.** Asked for directly: an option called Decks beside a player's other sections, listing the decks they are using in descending order, over 7, 14 or 30 days and nothing else, modelled on a pasted reference deck list. `#/player/<tag>/decks`, directly under Recent Battles in the rail, open to everyone (confirmed by the account holder). One row a deck: name, average elixir, four-card cycle, the share of their games (`55.1% · 189 / 343 games`), the eight cards in their forms with the copy, picture and Open in Game buttons, and two records — the **Player's** battles, wins, draws and losses with it, and the **Community's**: the same exact list across every player held. Games are own-deck 1v1 battles plus native duel games counted one by one from the duel index, so a duel never counts twice. New route `/api/analytics/decks/<tag>` (route count 27). Staged read-only against production data for five real players over all three windows: **0 rule breaks, 0.06-0.61 s a read with the community cache empty and 0.02-0.12 s with it warm**, a community record for 95-100% of each player's decks. Live after the server deploy: the route answers the production origin with the same figures the staged run gave, in about 1.3 s end to end. **54/54 in a browser** on those payloads (both themes, 1440, 1100, a 390 touch phone), the PDF exported and looked at. 46 Python + 20 vitest checks, proven red three ways. See [Decks — every deck a player is using](#decks--every-deck-a-player-is-using-2026-10-04) |
+| **All Duels — friendly duels that went to three games (admin)** | **LIVE 2026-10-05 as `7b4eb52`** — three commits the same day (`03ecdeb` the page, `c1523a3` friendly three-game duels only, `7b4eb52` Save duel), the server half deployed first each time it changed (backups `*.bak-20261005-075221-preallduels`, then `*.bak-20261005-082423-prefriendly`); `/api/health` reported each commit one to two minutes after its push and the served bundle was read each time. **Not yet opened signed in as an admin on production from here — the account holder's check.** Asked for directly: a page only for admins, opened from the profile drop-down, listing duels from newest to oldest with both players' names, the crowns, a card filter and three windows (30, 60, 90 days) and no others. **The first build listed every native duel; the account holder looked at it live and asked for friendly duels only, and only those played to all three games** — nineteen in twenty had been war duels. `#/all-duels`. One card a duel: the two players and the score in games, then one line a game with each player's eight cards in the forms they were fielded in and that game's crowns between them. It reads the duel index's own table of duel games — **1,169 such duels in thirty days, 2,431 in sixty, 3,046 in ninety** on production — through an admin-gated route, `/api/analytics/admin/duels` (route count 28), and an index on the mode that keeps the walk inside the friendly rows. Staged read-only against production: **every page of thirty days walked, 0 rule breaks**, every player named, 6,828 of 7,014 decks drawn with observed forms. **159/159 in a browser** on those payloads (both themes, 1440, 1100, a 390 touch phone); the door and the refusals were covered by the first build's 205/205 and 10/10 signed out. 94 Python + 55 vitest checks, thirteen rules broken on purpose and each caught. Live: 401 without an admin's token, a page in 11-15 ms, the first ask of a card filter in 28-61 ms. **Each row has a Save duel button** (asked for the same day): it writes the duel into Royal Duels' saved Versus groups, the left player's decks as Blue and the right player's as Red, and the row then reads `Saved as Duel Deck n` — from the library, so it still does after a reload. 36/36 in a browser, from the click to the set in the builder. See [All Duels — friendly duels that went to three games](#all-duels--friendly-duels-that-went-to-three-games-2026-10-05) |
+| **Decks — every deck a player is using** | **LIVE 2026-10-04 as `68ae88d`**, server deployed first (backups `*.bak-20261004-163517-predecks`); `/api/health` reported the commit about 54 s after the push, then **14/14 in a real browser against the live site**, signed out (1440 dark and a 390 touch phone light). Asked for directly: an option called Decks beside a player's other sections, listing the decks they are using in descending order, over 7, 14 or 30 days and nothing else, modelled on a pasted reference deck list. `#/player/<tag>/decks`, directly under Recent Battles in the rail, open to everyone (confirmed by the account holder). One row a deck: name, average elixir, four-card cycle, the share of their games (`55.1% · 189 / 343 games`), the eight cards in their forms with the copy, picture and Open in Game buttons, and two records — the **Player's** battles, wins, draws and losses with it, and the **Community's**: the same exact list across every player held. Games are own-deck 1v1 battles plus native duel games counted one by one from the duel index, so a duel never counts twice. New route `/api/analytics/decks/<tag>` (route count 27). Staged read-only against production data for five real players over all three windows: **0 rule breaks, 0.06-0.61 s a read with the community cache empty and 0.02-0.12 s with it warm**, a community record for 95-100% of each player's decks. Live after the server deploy: the route answers the production origin with the same figures the staged run gave, in about 1.3 s end to end. **54/54 in a browser** on those payloads (both themes, 1440, 1100, a 390 touch phone), the PDF exported and looked at. 46 Python + 20 vitest checks, proven red three ways. See [Decks — every deck a player is using](#decks--every-deck-a-player-is-using-2026-10-04) |
 | **Hide a duel deck to reuse its cards** | **2026-10-03, client only; corrected the same day.** Asked for directly: an eye button in duel mode — with three decks built, hide one and use its cards again in a slot below. Every deck in Royal Duels (Solo and both Versus players) has an eye at the end of its action rail. A hidden deck **stays on the board, grey and read-only**, and **keeps its eight cards but holds none of them**: they are free for the rest of the collection, so a second version of a deck can be built in a new slot while looking at the first. When both decks are in play again and hold the same card, **the newer deck's copy is the one drawn black and white**; which copy is newer is recorded when the card arrives (`Deck.newerCopies`), so hiding and showing never flips it. The first version, live for an hour, folded the hidden deck to its header and greyed the OLDER deck — both changed on request. One optional field on the deck (`hidden`), so it saves, syncs and undoes like any edit and the persist version did not move. Hidden decks are left out of the card counters and the PDF, and are drawn grey in the saved-group preview. Not offered in Deck's Home or Counter Palette, whose decks share nothing. **55/55 in a browser** (both themes, 1440, 390, a touch phone), 28 unit checks proven red two ways. See [Hide a duel deck to reuse its cards](#hide-a-duel-deck-to-reuse-its-cards-2026-10-03) |
 | **PDFs print Japanese and Cyrillic names** | **2026-10-03, client only.** Reported against a seven-player scouting report: four players whose names are kana printed as their tags, because the report fonts were Latin only. A name now prints as written, and where a report lists its players the Latin form and the tag follow it — `こっとん (Kotton)`, `Kotton · #ABC002`. Two Noto Sans JP files (kana 49 kB, kanji 2.0 MB) are fetched only when a document needs them; Cyrillic went into the Inter subsets. Kanji names print without a Latin form; Korean still prints as the tag. Exported in a real browser on production data and looked at; 1,265 vitest across 57 files. See [Names in Japanese and Cyrillic](#names-in-japanese-and-cyrillic-2026-10-03) |
 | **The scroll rail — one scroller on every screen** | **2026-10-03, client only.** Asked for directly: a scroller on every screen that is not the ordinary one — look at what exists online, make it interactive, make it match the site. The native vertical scrollbar is gone everywhere and one component replaces it: a rail of ticks standing for the whole content, the lit violet run being the part on screen. Ticks rise toward the pointer like a dock, the lit run drags, a press goes there, and the longer ticks are the page's own sections — point at one for its name, press it to jump. Ported from Ruixen UI's Chapter Scrubber (MIT), eight deviations listed in the file. **Mounted once** (`ui/scroll-rail.tsx`): it attaches itself to anything that scrolls, so no screen was rewired, and scrolling itself stays the browser's. A page gets the full rail in the shell's gutter, where it covers no content; a pane, a dialog list or a textarea gets a slim one. On a phone it is an indicator that shows while the page moves. **79/79 in a browser on production data** (both themes, 1440/1280/390, reduced motion), 53 unit checks, no animation loop at rest. Main bundle +6.50 kB gzip. See [The scroll rail](#the-scroll-rail--one-scroller-on-every-screen-2026-10-03) |
@@ -1046,6 +1046,11 @@ with its own URL, so a refresh or a pasted link lands where it was:
 | Rollup | `#/admin/rollup` | aggregate coverage as a gauge, the watermark and the last full rebuild |
 | Site & domain | `#/admin/site` | deployment, analytics API, card data, recruiter and integrations, each with a status word |
 | Accounts | `#/admin/accounts` | accounts over time (a step line off `created_at`), by tier, last sign-in, and the table with role, coach and End trial |
+
+Under the views the sidebar has a Tools group that links out: Coach Roster,
+**All Duels** (`#/all-duels`, since 2026-10-05 — a screen in the main shell, not
+a console view, because it is what people played and not how the service is
+doing) and Back to Deckkies.
 
 **THE SIDEBAR CARRIES THE VERDICTS.** A section in trouble shows a dot beside
 its name — Collection when the newest battle is past three hours, Storage when
@@ -14222,6 +14227,25 @@ window when it is one of the three, the longest otherwise).
   malformed tag is a 400; an unknown tag is an empty list. On the VPS:
   `test_player_decks` 46/46, `test_enrol_routes` 29/29, `test_api_security`
   94 tests OK. The player and battle-log routes answer as before.
+- **In a browser against the live site, after the push** (`68ae88d`;
+  `/api/health` reported it about 54 s later): 14/14 signed out — the screen
+  is free — at 1440 in the dark theme and on a 390 touch phone in the light
+  one. Written down a day late: it came after the push, and a docs-only push
+  had not been asked for.
+
+### A deck is its exact eight cards — variants are not merged
+
+Reported the day it shipped: "repeating decks" on one player's list —
+seventeen rows, ten of them one Hog Rider list with a card or two swapped.
+They were looked at on the live service: **17, 31 and 43 rows at 7, 14 and 30
+days, and no two rows the same eight cards.** The account holder's answer
+settled the rule: *"if it's not repeating then leave"*, and *"even if one card
+changes don't remove it, it's a new deck"*.
+
+So this screen does NOT fold near-copies together the way the meta board does
+(six shared cards of eight). A list of one-card variants looks repetitive and
+is correct: it is what the player actually fielded, and the swap is the
+information. Do not add a merge here.
 
 ### What it does not do
 
@@ -14252,8 +14276,10 @@ admin is shown, directly above Console; the command palette and the console's
 sidebar carry the same link, also for admins only. It is not in the dock, the
 rail or the landing strip — those are what every visitor sees.
 
-**Shipped 2026-10-05, the server first, twice** (backups
-`*.bak-20261005-075221-preallduels`, then `*.bak-20261005-082423-prefriendly`).
+**Shipped 2026-10-05 in three commits, the server first each time it changed**:
+`03ecdeb` (the page, every native duel), `c1523a3` (friendly duels that went
+to three games) and `7b4eb52` (Save duel, client only). Server backups
+`*.bak-20261005-075221-preallduels`, then `*.bak-20261005-082423-prefriendly`.
 
 ### Which duels
 
@@ -14473,6 +14499,20 @@ restarted with the card catalogue (123) and the duel index as before.
   `test_player_decks` 46/46.
 - The first build's figures, for the record: with every mode listed and no
   index, the first read of the live file took 8.0 s.
+- **The site, after each push**: `/api/health` and the page's
+  `deckkies-build` meta reported the commit — `03ecdeb` about two minutes
+  after its push, `c1523a3` about 75 s, `7b4eb52` about 60 s. The served main
+  bundle carries the route, the profile-menu row, the palette command and the
+  refusal; the lazy `AllDuels` chunk and its stylesheet serve 200 and carry
+  the count line, the Save duel button and its note, and no mode label.
+- **Between the second server deploy and its frontend, about seven minutes,**
+  the old page drew the new payload: an empty mode chip and a broken games
+  count. The server half has to land first, so a change to the SHAPE of a
+  payload opens that window and the push closes it. Keeping the old fields
+  for one deploy would have avoided it.
+- **Not done on production**: the page has not been opened signed in as an
+  admin from here, and Save duel has not been clicked there. Both take the
+  account holder's session; everything above was checked from outside it.
 
 ### What it does not do
 
@@ -14485,7 +14525,8 @@ restarted with the card catalogue (123) and the duel index as before.
 - The window, filter and page are not in the URL: a refresh opens on 30 days,
   page 1.
 - Signed in as an admin against production it has not been seen from here:
-  that takes the account holder's session, and is their check.
+  that takes the account holder's session, and is their check. They saw the
+  first build live and asked for the two changes that followed it.
 
 ---
 
@@ -16369,7 +16410,8 @@ src/
                               hashed in a production build
     Profile/ProfileMenu.tsx   the account dropdown: identity, the tier row with
                               the live TierBadge on it, two figures that OPEN the
-                              screens they count, three groups, theme, log out
+                              screens they count, three groups (All Duels and
+                              Console only for an admin), theme, log out
     TierBadge/                the ADMIN / PRO / MEMBER badge as a WebGL button
       TactileButton.tsx       the port of ThreeUI's Tactile Fluidics. Raw WebGL,
                               one context, released on unmount
@@ -16478,7 +16520,7 @@ src/
   data/cardMeta.json          can_evolve / can_be_hero / is_champion / is_win_condition
 
 server/
-  app.py                      stdlib HTTP API; 27 routes, pinned by test_api_security
+  app.py                      stdlib HTTP API; 28 routes, pinned by test_api_security
   admin_auth.py               the admin gate — asked of Supabase, never decided here
   clash_data.py               read-only DB access, tier resolution, CR API; the slot
                               rule (arrange_deck) and the suggestion seating

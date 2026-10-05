@@ -1833,6 +1833,11 @@ record of what it counts; this is how it is drawn.
   for the first read only, so the chips stay under the pointer.
 - **Same-named decks** are told apart with `distinctDeckLabels`, as on the
   trend charts: a generated name is not an identity.
+- **One row per exact eight cards; near-copies are never folded together.** A
+  player's list of one-card variants looks repetitive and is what they fielded
+  — asked for by name after "repeating decks" was reported and none of the
+  rows turned out to repeat. The meta board's six-of-eight merge does not
+  belong here. README "A deck is its exact eight cards".
 - The rail icon is `DeckRankIcon` (three strips, longest first). The stacked
   pair is Cards and the upright bars are the meta board.
 
