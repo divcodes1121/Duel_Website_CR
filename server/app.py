@@ -33,6 +33,8 @@ Endpoints
                                            whether the bot has them (admin)
     GET /api/analytics/admin/retention     what the retention and backup jobs
                                            did, day by day (admin)
+    GET /api/analytics/admin/duels         every duel stored, newest first,
+                                           filtered by card (admin)
 
 Every handler answers 200 with a useful body or a JSON error; the drive being
 unplugged is a normal state, not a failure.
@@ -69,6 +71,7 @@ import admin_auth  # noqa: E402
 import coach_intel  # noqa: E402
 import data_ledger  # noqa: E402
 import retention  # noqa: E402
+import duel_feed  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
@@ -1100,6 +1103,38 @@ class Handler(BaseHTTPRequestHandler):
                     "bot": retention.bot_settings(),
                 }
                 return self._send(out)
+
+            # ALL DUELS — every native duel the duel index holds, newest first:
+            # both players, the score in games, each game's two decks and its
+            # crowns, narrowed by card over 30, 60 or 90 days (`duel_feed.py`).
+            #
+            # ADMIN-GATED, the same second gate as tracking: it lists every
+            # player's tag, name and decks in time order, which is a log of
+            # people and not something the injected key should hand to anyone.
+            #
+            # NO `_note_tag`. Every other route that takes a tag queues it for
+            # collection; this one takes none, and reading a list of 160,000
+            # duels must not enrol the strangers in it.
+            #
+            # Its own route (the tripwire moves to 28): a paged, filterable
+            # read of the duel index's own file, nothing like what the other
+            # two admin routes return. `days` is one of three and anything else
+            # is the default; `cards` are checked against the catalogue inside
+            # `duel_feed.report` and reach the SQL only as bound parameters.
+            if path == "/api/analytics/admin/duels":
+                verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
+                if verdict != "ok":
+                    self._outcome = "auth_failed"
+                    return self._send({"error": verdict}, admin_auth.STATUS[verdict])
+                q = parse_qs(parsed.query)
+                raw_page = (q.get("page") or [""])[0]
+                raw_per = (q.get("per") or [""])[0]
+                return self._send(duel_feed.report(
+                    days=duel_feed.valid_days((q.get("days") or [""])[0]),
+                    cards=[c for c in (q.get("cards") or [""])[0].split(",") if c],
+                    page=int(raw_page) if raw_page.isdigit() else 1,
+                    per=int(raw_per) if raw_per.isdigit() else duel_feed.PER_PAGE,
+                ))
 
             if path.startswith("/api/analytics/admin/coach/intel/"):
                 verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))

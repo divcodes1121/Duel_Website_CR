@@ -748,7 +748,13 @@ class RoutingUnchanged(unittest.TestCase):
         # 27 on 4 Oct 2026: `/api/analytics/decks/<tag>` (the Decks screen —
         # every deck a player fielded in 7, 14 or 30 days, most played first,
         # each beside the same list's record across all players).
-        self.assertEqual(len(routes), 27)
+        #
+        # 28 on 5 Oct 2026: `/api/analytics/admin/duels` (All Duels — every
+        # native duel stored, newest first, both players and each game's decks
+        # and crowns, filtered by card over 30, 60 or 90 days). Admin-gated: it
+        # is a time-ordered list of every player's tag, name and decks.
+        # `DuelFeedAdminGate` below pins the gate.
+        self.assertEqual(len(routes), 28)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]
@@ -900,6 +906,38 @@ class RetentionAdminGate(CoachRosterAdminGate):
         mod.data_ledger.report = lambda days=120: {"purges": [], "probe": "#Y022GRCJQ"}
         mod.retention.bot_settings = lambda path=None: {"retentionDays": 304, "external": True}
         return serving(mod)
+
+
+
+class DuelFeedAdminGate(CoachRosterAdminGate):
+    """All Duels lists every player's duels, so it sits behind the same check."""
+
+    PATH = "/api/analytics/admin/duels"
+
+    def _serve(self, mod):
+        mod.duel_feed.report = lambda days=30, cards=(), page=1, per=10: {
+            "days": days, "cards": list(cards), "page": page, "perPage": per,
+            "duels": [], "probe": "#Y022GRCJQ"}
+        return serving(mod)
+
+    def test_the_query_is_validated_before_it_reaches_the_reader(self):
+        """`days` is one of three, and a page or a size that is not a number
+        is the default rather than an error."""
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                admin = {**keyed(), "X-Coach-Token": "a.b.admin"}
+                _, _, body = fetch(
+                    base, self.PATH + "?days=7&page=abc&per=-3&cards=hog-rider,,fireball",
+                    headers=admin)
+                got = json.loads(body)
+                self.assertEqual(got["days"], 30)
+                self.assertEqual(got["page"], 1)
+                self.assertEqual(got["perPage"], mod.duel_feed.PER_PAGE)
+                self.assertEqual(got["cards"], ["hog-rider", "fireball"])
+                _, _, body = fetch(base, self.PATH + "?days=90&page=4&per=50", headers=admin)
+                got = json.loads(body)
+                self.assertEqual((got["days"], got["page"], got["perPage"]), (90, 4, 50))
 
 
 if __name__ == "__main__":

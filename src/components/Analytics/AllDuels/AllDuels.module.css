@@ -1,0 +1,621 @@
+/* All Duels — every duel stored, newest first.
+ *
+ * THIS SCREEN OWNS ITS SCROLL, the shell's standard arrangement: `.tool` is
+ * `flex: 1; min-height: 0; overflow: hidden`, a card that fills the leftover
+ * height and CLIPS, so whatever it hosts runs a scroller inside it. Below
+ * 62rem `.tool` grows instead and `.main` is the one scroller, so this hands
+ * the scroll back (the block at the end).
+ *
+ * A DUEL LAYS ITSELF OUT AGAINST THE LIST, NOT THE WINDOW. The list is as wide
+ * as whatever the rail leaves it, so every breakpoint here is a container
+ * query on `.list`.
+ */
+
+.page {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.page::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ── Heading ─────────────────────────────────────────────────────────────── */
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+}
+
+.headText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.count {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.busy {
+  margin-left: 0.6rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 5px;
+  border: 1px solid var(--accent-select-edge);
+  background: var(--accent-select-fill);
+  color: var(--accent-select);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* THREE WINDOWS IN ONE TRACK. A segmented group, so the three read as one
+   control with one choice in force. */
+.range {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.rangeChip {
+  min-width: 3.1rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.rangeChip:hover {
+  background: var(--neutral-wash);
+}
+
+.rangeChip[aria-pressed='true'],
+.rangeChip[aria-pressed='true']:hover {
+  background: var(--accent-select-fill);
+  border-color: var(--accent-select-edge);
+  color: var(--accent-select);
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  /* The filter's panel hangs out of this row, and every duel below it is a
+     positioned card: without a level of its own the panel opens underneath
+     them. */
+  position: relative;
+  z-index: 30;
+}
+
+.error {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--red-edge);
+  background: var(--red-wash);
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.empty {
+  margin: 0;
+  padding: 2.25rem 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+/* ── The list ────────────────────────────────────────────────────────────── */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  container: duels / inline-size;
+  /* Dimmed in place while a newer page, pick or window is read. Opacity
+     only, one-shot. */
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.list[data-busy] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ONE BOX A DUEL, AND NO BOXES INSIDE IT. The games are lines of the card,
+   separated by hairlines, not cards of their own. */
+.duel {
+  --a-hue: var(--hue-blue);
+  --b-hue: var(--hue-red);
+  border-radius: 14px;
+  border: 1px solid var(--glass-stroke);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+/* A slim bar: what kind of duel, and when. */
+.duelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.45rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.mode {
+  padding: 0.16rem 0.45rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--neutral-wash);
+  color: var(--text);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.when {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Who, and the score in games ─────────────────────────────────────────── */
+
+/* `minmax(0, 1fr) auto minmax(0, 1fr)`, never a bare `1fr`: that is
+   `minmax(auto, 1fr)`, and a long name would push the grid wider than the
+   card without anything inside appearing to overflow. The same three tracks
+   as a game line below, so a name sits over its own decks. */
+.players {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.player {
+  --side-hue: var(--a-hue);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.player[data-side='b'] {
+  --side-hue: var(--b-hue);
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+/* Initials, because the game has no player pictures. The ring is the side's
+   hue; the letters are plain ink. */
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--side-hue) 60%, transparent);
+  background: color-mix(in srgb, var(--side-hue) 12%, var(--surface-sunken));
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  user-select: none;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.player[data-side='b'] .who {
+  align-items: flex-end;
+}
+
+/* The second line: the tag, and the Winner mark for whoever won.
+
+   IT WRAPS. A tag and the mark are ~155px together and a phone's column is
+   115px; held on one line the mark slid out of its column and under the
+   score (seen in a screenshot — every box check passed, because the column
+   itself was where it should be). Wrapped, the mark takes a line of its own
+   and the tag stays whole: a tag cut to "#Y8LC…" cannot be copied. */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.player[data-side='b'] .meta {
+  flex-direction: row-reverse;
+}
+
+/* A name ellipsises inside the column it is given; the title carries it whole. */
+.name {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.tag {
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* WHO WON THE DUEL, said once, in the one colour that means winning. */
+.winner {
+  flex: none;
+  padding: 0.12rem 0.42rem;
+  border-radius: 5px;
+  border: 1px solid var(--green-edge);
+  background: var(--green-wash);
+  color: var(--hue-green);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* GAMES WON. The larger figure on the card, because it is the duel's result.
+   Both digits are full ink — the winner's is heavier, never the loser's
+   greyer. */
+.score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.scoreNum {
+  font-size: 1.7rem;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.scoreNum[data-won] {
+  font-weight: 800;
+}
+
+.scoreDash {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* ── The games ───────────────────────────────────────────────────────────── */
+
+.games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* STACKED IS THE BASE; ABREAST IS THE CONTAINER QUERY BELOW. One column here,
+   so a phone gets deck / crowns / deck. */
+.game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.gameMid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.gameNo {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.gameScore {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* A GAME'S CROWNS, one pill a player. The crown wears the player's hue; the
+   pill of whoever took the game is filled green. */
+.crowns {
+  --side-hue: var(--a-hue);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  min-width: 2.55rem;
+  justify-content: center;
+  padding: 0.2rem 0.45rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.crowns[data-side='b'] {
+  --side-hue: var(--b-hue);
+  flex-direction: row-reverse;
+}
+
+.crowns svg {
+  color: var(--side-hue);
+}
+
+.crowns[data-won] {
+  border-color: var(--green-edge);
+  background: var(--green-fill);
+  font-weight: 800;
+}
+
+/* ── One deck ────────────────────────────────────────────────────────────── */
+
+.deck {
+  --side-hue: var(--a-hue);
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.3rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.deck[data-side='b'] {
+  --side-hue: var(--b-hue);
+}
+
+/* THE DECK THE FILTER MATCHED. The duel is on this page because of it. */
+.deck[data-match] {
+  border-color: var(--accent-select-edge);
+  background: var(--accent-select-fill);
+}
+
+/* Name, elixir, then the actions pushed to the far end. */
+.deckHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.5rem;
+  min-width: 0;
+}
+
+.deckName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.elixir {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The app's line drop, filled: at 12px an outline drop reads as a map pin. */
+.elixir svg {
+  color: var(--hue-violet);
+  fill: currentColor;
+}
+
+/* `DeckActions` is built to trail a card strip and centres ITSELF. Here it is
+   the end of a head line. Doubled so it wins whichever stylesheet loads last. */
+.deckActions.deckActions {
+  margin-left: auto;
+  align-self: center;
+}
+
+/* EIGHT ACROSS, in the order the server seated them. Fractional tracks rather
+   than fixed ones, so the strip fills the column it is given. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+/* The first three slots are the special ones — evolution, hero, wild — and a
+   deck is recognised by them, so they sit on the player's tint. */
+.card {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.cards > :nth-child(-n + 3) {
+  background: color-mix(in srgb, var(--side-hue) 12%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--side-hue) 30%, transparent);
+}
+
+/* ── Abreast ─────────────────────────────────────────────────────────────── */
+
+/* FROM 46rem OF LIST each game is one line: a deck at each edge and the crowns
+   between them, the right-hand deck mirrored so the pair reads outward from
+   the middle. Each deck is capped — past ~60px a card stops being a deck and
+   starts being wallpaper — and pinned to its OUTER edge, so on a wide screen
+   the room opens in the middle. */
+@container duels (min-width: 46rem) {
+  .game {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.9rem;
+  }
+
+  .gameMid {
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .deck {
+    max-width: 31rem;
+  }
+
+  .deck[data-side='a'] {
+    justify-self: start;
+  }
+
+  .deck[data-side='b'] {
+    justify-self: end;
+  }
+
+  .deck[data-side='b'] .deckHead {
+    flex-direction: row-reverse;
+  }
+
+  .deck[data-side='b'] .deckActions.deckActions {
+    margin-left: 0;
+    margin-right: auto;
+  }
+}
+
+/* ── A narrow list ───────────────────────────────────────────────────────── */
+
+/* A phone leaves ~330px. The avatars go — two discs cost a fifth of the row
+   the two names need — and the score shrinks a step. */
+@container duels (max-width: 30rem) {
+  .avatar {
+    display: none;
+  }
+
+  .name {
+    font-size: 0.95rem;
+  }
+
+  .scoreNum {
+    font-size: 1.35rem;
+  }
+
+  .game,
+  .players,
+  .duelHead {
+    padding-left: 0.65rem;
+    padding-right: 0.65rem;
+  }
+
+  .cards {
+    gap: 0.2rem;
+  }
+
+  /* The three actions grow to touch size here and leave a deck's name about
+     140px, which cut "Royal Hogs Royal Recruits" mid-word. It may take a
+     second line instead. */
+  .deckName {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    line-height: 1.2;
+  }
+}
+
+/* ── Foot ────────────────────────────────────────────────────────────────── */
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.2rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+/* The pager sizes itself from its own width (a container query), so it takes
+   a full row and the count sits under it. */
+.pager {
+  flex: 1 1 100%;
+}
+
+.pageCount {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Below the shell's breakpoint ────────────────────────────────────────── */
+
+/* `.tool` stops clipping at 62rem and `.main` becomes the only scroller, so
+   this stops being one: a scroller inside a scroller is a coin toss about
+   which one a flick moves. */
+@media (max-width: 62rem) {
+  .page {
+    height: auto;
+    overflow: visible;
+    padding: 1rem;
+  }
+}

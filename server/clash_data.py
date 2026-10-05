@@ -483,6 +483,40 @@ def player_name(tag: str) -> str | None:
     return None
 
 
+def player_names(tags) -> dict[str, str]:
+    """`{tag: name}` for many tags at once — `player_name`, batched.
+
+    A page of the duel feed names forty players; forty calls to `player_name`
+    are forty connections. This is one connection per tier and one query per
+    400 tags. A tag nobody has a name for is ABSENT, for the reason
+    `player_name` returns None: the caller decides what an unnamed player
+    shows as. Never raises — a list of duels with tags is still a list.
+    """
+    want = sorted({t for t in (tags or ()) if t})
+    out: dict[str, str] = {}
+    for path, _lo, _hi in _tier_paths_all():
+        missing = [t for t in want if t not in out]
+        if not missing:
+            break
+        try:
+            con = connect(path)
+        except Exception:
+            continue
+        try:
+            for i in range(0, len(missing), 400):
+                chunk = missing[i:i + 400]
+                for row in con.execute(
+                        "SELECT tag, name FROM player_names WHERE tag IN (%s)"
+                        % ",".join("?" * len(chunk)), chunk):
+                    if row["name"]:
+                        out[row["tag"]] = row["name"]
+        except Exception:
+            pass
+        finally:
+            con.close()
+    return out
+
+
 def _tier_paths_all() -> list[tuple[str, str, str]]:
     """Every storage tier, unbounded — for lookups that are not time-scoped."""
     return [(p, "", "￿") for p in _tier_paths()]

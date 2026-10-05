@@ -62,6 +62,10 @@ const ALL_SECTIONS = [
      takes Team Analysis's arrangement exactly: seen by everyone, opened from
      the trial up, gated for anon and free. */
   '2v2 Decks',
+  /* ADMIN ONLY, added 5 Oct 2026: every stored duel, newest first, with both
+     players' names and tags. The first section to sit on the admin shelf for
+     good rather than while it is being verified. */
+  'All Duels',
 ] as const;
 
 const PAID: Access[] = ['trial', 'pro', 'admin'];
@@ -182,34 +186,45 @@ describe('a trial opens everything EXCEPT the pro-only areas', () => {
   });
 });
 
-describe('the admin shelf is empty, and still closes what it holds', () => {
+describe('the admin shelf holds All Duels, and closes it to everyone else', () => {
   /* A TRIPWIRE, exactly like FREE_SECTIONS below. It fired as designed: Team
      Analysis sat here while it was verified against real data, and the day it
      came off, this test failed and the decision was made in a commit rather
-     than inherited. It is empty now and that is the shelf working, not the
-     shelf being unused — anything added to it must be a deliberate act. */
-  it('nothing is admin-only', () => {
-    expect([...ADMIN_ONLY_SECTIONS]).toEqual([]);
+     than inherited. It was empty from then until 5 Oct 2026, when All Duels
+     went on it to stay — a list of every player's duels by name and tag is an
+     admin's page, not a paid one. Anything else added here must be a
+     deliberate act. */
+  it('exactly one section is admin-only', () => {
+    expect([...ADMIN_ONLY_SECTIONS]).toEqual(['All Duels']);
   });
 
-  /* WHAT AN EMPTY LIST CAN AND CANNOT BE TESTED FOR.
-     It can be tested that nothing is on the shelf: no section any tier asks
-     about takes the admin branch, so no screen is invisible by accident.
-     It CANNOT be tested that the branch still refuses correctly — with the
-     list empty that branch is unreachable, and a fabricated section name does
-     not reach it either (it is not in the list, so the lookup misses and the
-     ordinary rules answer instead). That was the first version of this test
-     and it asserted nothing; the honest statement is that the mechanism's
-     coverage comes back with the next screen that uses the shelf. */
-  it('no section is admin-gated', () => {
-    for (const section of ALL_SECTIONS) {
+  /* THE BRANCH IS REACHABLE AGAIN, so it is tested. While the list was empty
+     this could only assert that nothing took the admin branch; a fabricated
+     section name does not reach it (it is not in the list, so the lookup
+     misses and the ordinary rules answer instead). */
+  it('an admin opens it', () => {
+    expect(sectionAllowed('admin', 'All Duels')).toBe(true);
+    expect(canOpenSection('admin', 'All Duels')).toBe(true);
+  });
+
+  it('nobody below admin does — including paid Pro', () => {
+    for (const a of ['anon', 'free', 'trial', 'pro'] as Access[]) {
+      expect(sectionAllowed(a, 'All Duels'), a).toBe(false);
+    }
+    for (const t of ['free', 'trial', 'pro'] as Tier[]) {
+      expect(canOpenSection(t, 'All Duels'), t).toBe(false);
+    }
+  });
+
+  it('the sections only an admin can open are exactly the shelf', () => {
+    const adminOnlyNow = ALL_SECTIONS.filter((section) => {
       const anyoneBelowAdmin = (['anon', 'free', 'trial', 'pro'] as Access[]).some((a) =>
         sectionAllowed(a, section),
       );
-      const adminOnlyNow = sectionAllowed('admin', section) && !anyoneBelowAdmin;
       // Coach Assist is pro-only, not admin-only: `pro` opens it.
-      expect(adminOnlyNow, section).toBe(false);
-    }
+      return sectionAllowed('admin', section) && !anyoneBelowAdmin;
+    });
+    expect(adminOnlyNow).toEqual([...ADMIN_ONLY_SECTIONS]);
   });
 
   /* TEAM ANALYSIS IS AN ORDINARY GATED AREA NOW: not free, open from the trial

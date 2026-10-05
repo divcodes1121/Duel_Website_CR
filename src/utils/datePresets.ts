@@ -32,7 +32,7 @@ export const DEFAULT_DAYS: DayPreset = 30;
  *
  * Asked for by name (2026-10-04): 7, 14 and 30 days, "that's all" — the windows
  * a deck list is read over on the reference it was modelled on. It lives here
- * so there are still exactly two lists in the app and both are in one file.
+ * so every list of windows in the app is in one file.
  * The server accepts these three and nothing else (`player_decks.DAYS`), and a
  * test holds the two equal.
  */
@@ -42,6 +42,20 @@ export type DeckDayPreset = (typeof DECK_DAY_PRESETS)[number];
 
 /** The Decks screen opens on the shortest: it answers "what are they playing". */
 export const DECK_DEFAULT_DAYS: DeckDayPreset = 7;
+
+/**
+ * ALL DUELS' WINDOWS — the third list, and the last one that should exist.
+ *
+ * Asked for by name (2026-10-05): "only 30 days, 60 days and 90 days". The
+ * screen lists every duel stored, which is ~2,600 a day, so a 7-day chip would
+ * answer nothing a page of the 30-day one does not. The server accepts these
+ * three and nothing else (`duel_feed.DAYS`), and a test holds the two equal.
+ */
+export const DUEL_FEED_DAY_PRESETS = [30, 60, 90] as const;
+
+export type DuelFeedDayPreset = (typeof DUEL_FEED_DAY_PRESETS)[number];
+
+export const DUEL_FEED_DEFAULT_DAYS: DuelFeedDayPreset = 30;
 
 /** "Last 15 Days" — the long form the analytics screens' menus print. */
 export function dayLabel(days: number): string {

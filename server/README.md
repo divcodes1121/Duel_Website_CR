@@ -365,7 +365,7 @@ and deliberately carry nothing per-player: a counter keyed by route would carry
 the tag in the path, and a tally of who was looked up is not a metric, it is a
 log of people. `metrics_snapshot()` exists; nothing surfaces it yet.
 
-`server/test_api_security.py` (87 tests) drives all of this over real HTTP
+`server/test_api_security.py` (102 tests) drives all of this over real HTTP
 against a server on an ephemeral port, because these controls are header- and
 status-level and a unit test calling `check_auth` directly would pass just as
 happily against a server that never called it.
@@ -396,6 +396,7 @@ happily against a server that never called it.
 | `GET /api/analytics/duo-pairs?page=&per=&sort=&cards=` | **the unique DECK PAIRS played in 2v2** (`duo_pairs.py`) — 1,483,672 of them then; since 2026-09-17 bounded to the top 50 per win condition (736). One record per combination of two teammate decks, with an occurrence count, distinct participants, and first/last seen. Reads a LOCAL collection, not `battle_raw` — the migration is a full scan of a 44.7 GB table and is a job. `sort` is a KEY into a closed vocabulary (`played` / `recent` / `first`), never a column, and all three are index reads at 9-15 ms. `cards` is comma-separated card keys, checked against the catalog, ANDed within ONE deck and matched WHOLE — the column is a JSON array so `%"giant"%` has boundaries a bare `%giant%` does not (605,447 pairs against the real Giant's 45,360). An unknown key is dropped rather than refused and the accepted list is echoed back. `q` is the older free-text search over the same columns plus the fingerprints; `cards` wins when both are given |
 | `GET /api/analytics/admin/tracking?days=` | **The console's Tracking view, ADMIN ONLY** (`tracking.activity`). Every tag requested in the window — from the queue AND `tag_history`, the rows a prune used to delete — with its source, state (`waiting` / `collecting`), when the bot added it (`tracked_players.added_at`) and the wait; the bot's additions per day by the source that queued them (`direct` when no queue row exists); counts by source; the median wait; `botRead` false when the bot's table could not be read. Whole UTC days, 1-120, the list capped at 300 with `truncated`. The same second gate as the intel route, because it lists tags people looked up. Route count 25 |
 | `GET /api/analytics/admin/retention?days=` | **The console's Data lifecycle view, ADMIN ONLY** (`data_ledger.report`). Every battle-day `retention.py` deleted, the daily snapshots of the database (size, freelist, intake, oldest battle, battles by month, the next 30 days due to expire, raw rows and an estimated size), the last 30 job runs (retention, ladder raw window, backup) and every backup with when an off-box copy was confirmed, plus `settings` (the window, the per-run cap, and what the bot's own env says). Drawn entirely from `server/.data_ledger.db` — it never reads the bot's database. Same second gate as tracking (`admin_auth.verify`); `RetentionAdminGate` pins it. Route **26** |
+| `GET /api/analytics/admin/duels?days=&cards=&page=&per=` | **All Duels, ADMIN ONLY** (`duel_feed.report`). Every native duel the duel index holds, newest first: both players (`a` / `b`, tag and name, games won, crowns), the duel's `winner`, and each game's two decks — seated, with the forms they were fielded in — and its crowns. `days` is 30, 60 or 90 (anything else is 30) and counts back from the newest duel stored; `cards` is comma-separated card keys that ONE deck must all hold (unknown keys dropped, the accepted list echoed); `per` defaults to 10 and is capped at 50; a page past the end is clamped. Answers `available: false` with no usable index. Reads the index's own file plus one indexed `battles` lookup a duel for the forms; 10-50 ms a page once the window's count is remembered. Same second gate as tracking (`admin_auth.verify`; `DuelFeedAdminGate` pins it), and the one tag-bearing route that enrols nobody. Route **28** |
 | `GET /api/analytics/admin/coach/intel/<tag>?days=` | **Coach Roster's player intelligence, ADMIN ONLY** (`coach_intel.py`). One pass over the Recent Battles reader (`recent_battles._read_rows`), so only OWN-DECK 1v1 is counted and 2v2/drafts/events are reported as `hidden` / `hiddenByMode` exactly as the battle log reports them: a zero-filled daily timeline, the last ten results, modes, the player's archetypes and the ones they face, their decks (8 distinct cards, sorted-key identity, top 25 of `decksTotal`) and their opponents (top 50 by meetings of `opponentsTotal`, `opponentsRepeat` met twice or more). **This is the one route with a SECOND gate**: Caddy injects `X-Analytics-Key` on every path, so the key makes every route public; `admin_auth.verify` takes the caller's Supabase access token from `X-Coach-Token` and asks Supabase's own `coach_is_admin()` (migration 004) whether it belongs to an admin — 401 unauthorized, 403 forbidden, 503 not_configured / unavailable, and every failure closes. Verdicts are cached 60 s by token hash, 256 entries. Needs `SUPABASE_URL` + `SUPABASE_ANON_KEY` in the service's environment |
 
 Both `player` and `duels` take the same window: `?days=N`, or `?from=&to=` as
@@ -2166,6 +2167,56 @@ key); membership is then checked on the split key, because `%giant%` also matche
 `royal-giant`, `goblin-giant` and `giant-skeleton` — a test pins that asking for `giant`
 does not return a Royal Giant list. 0.05-0.11 s measured (Graveyard, Hog Rider). Like every
 reader here it answers `[]` when the index is missing or was built from another database.
+
+### Duels as duels — the feed behind All Duels (`duel_feed.py`, 2026-10-05)
+
+Every reader above counts DECKS. `duel_index.duel_feed(days, cards, page, per)` lists the
+duels themselves, newest first, for the admin screen at `#/all-duels`; `duel_feed.report`
+shapes its answer (names, seating, labels) and is what `/api/analytics/admin/duels` returns.
+
+**A duel is its games.** `games` has one row a game and there is no duel table, so a duel
+is the rows sharing `(battle_time, a_tag, b_tag)` and a page of duels is a `GROUP BY` on
+them, `ORDER BY` all three `DESC`. `_ensure` now creates **`games_duel(battle_time, a_tag,
+b_tag)`**: with it the grouping is a backward walk of a covering index that stops at the
+page's last row, without it every page sorts the window in a temp B-tree. Measured on the
+live table (388,908 games in 90 days): 0.55-0.64 s a page without, 0.0001-0.096 s with;
+the count of 160,626 duels is one index pass, 0.08 s. (Those are warm figures. On the
+live file at deploy, before the index existed, the first count took 8.0 s; it was
+created by hand, 0.66 s, rather than left to the next build.) `test_duel_feed.py` checks the plan.
+
+**`days` counts back from the newest game stored**, not from today. **`cards` means one
+deck holds every card**: `instr(',' || deck || ',', ',key,')` on each side, so `giant` is
+not `royal-giant`; the keys are checked against the catalogue by `duo_pairs.valid_cards`
+before they get here and reach the SQL only as bound parameters. The decks are not in the
+index, so the first ask of a filter reads the window once (~0.8 s warm) — and that one pass
+answers both how many and which.
+
+**What is remembered, and for how long.** Counts are kept under `(since, cards)` in a
+48-entry LRU and dropped the moment `MAX(rowid)` of `games` moves, i.e. as soon as a poll's
+duels are ingested — not when the build's meta is stamped a minute later. A filtered answer
+of up to `FEED_KEEP_IDS` (2,000) duels keeps its id list, so paging it reads nothing; a
+larger one keeps its count and pages with LIMIT/OFFSET.
+
+The count, the page and its games are read in ONE transaction. With no usable index it
+returns None and `duel_feed.report` answers `available: false`.
+
+**`duel_feed.py`** adds, per page: both players' names in one read
+(`clash_data.player_names`, the batched `player_name`; a tag with no stored name comes back
+as `name: null`, never as the tag), and the forms each deck was fielded in — the bot's own
+`battles` row for the duel carries `player_evo` / `opponent_evo`, looked up by
+`battle_time` with `+player_tag` so the plan stays on `idx_battles_time` (6 ms for sixty
+duels). A player's own row answers for their own side; the other player's row
+(`opponent_evo`) is used when there is none; a row for the same second with a different
+opponent is ignored. Each deck is then seated by `duel_zone._arranged`, the Duel Zone's own
+path, so the two screens cannot draw one duel two ways. Staged on production: 1,426 of
+1,444 decks carried observed forms.
+
+Side `a` is the lexically first tag (`games_of`'s rule) and means nothing, so the payload
+carries `winner` for the duel and for each game. `days` is one of `DAYS = (30, 60, 90)`,
+`per` is capped at `MAX_PER_PAGE` 50 and a page past the end is clamped; the page answered
+is in the payload. **No tag is enrolled** — the route takes none.
+
+`test_duel_feed.py`: 75 checks on a synthetic bot database and an index built from it.
 
 ## Safety
 

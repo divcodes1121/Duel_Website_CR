@@ -215,18 +215,23 @@ export const PRO_ONLY_SECTIONS = [
  * screen against real data is to ship it and then be the only person who can
  * reach it.
  *
- * **EMPTY, and that is the shelf working rather than the shelf being unused.**
- * Team Analysis sat here while it was verified against real data. It has been:
- * the parser, the saves, the dossier and the layout were all checked against a
- * live database and in a browser, so it has come off. The mechanism stays,
- * because the next screen will want it.
+ * Team Analysis sat here while it was verified against real data, and came
+ * off once it had been. The mechanism stayed, because the next screen would
+ * want it.
+ *
+ * **ALL DUELS IS HERE TO STAY (2026-10-05), which is the other use of the
+ * shelf.** It lists every stored duel newest first — both players by name and
+ * tag, each game's decks and crowns. That is a log of people, asked for as an
+ * admin page by name, and its route is refused by the analytics service for
+ * anybody who is not one (`/api/analytics/admin/duels`, `admin_auth.verify`).
+ * It is not waiting to be released.
  *
  * A section listed here is HIDDEN rather than locked — there is no point
  * drawing a gate card that says "become an admin" — and that is the reason
  * this list is not a substitute for the pro carve-out. Anything here is
  * invisible, so nobody can want it.
  */
-export const ADMIN_ONLY_SECTIONS = [] as const;
+export const ADMIN_ONLY_SECTIONS = ['All Duels'] as const;
 
 function adminOnly(section: string): boolean {
   return (ADMIN_ONLY_SECTIONS as readonly string[]).includes(section);

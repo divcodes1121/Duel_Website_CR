@@ -72,6 +72,10 @@ const SEEDS: Record<string, number> = {
   'teams-chunk': 1_200,
   'duo-chunk': 1_200,
   'duo-pairs': 6_000,
+  // All Duels (admin): a page is 10-50 ms on the server once the window's
+  // count is remembered, ~1 s the first time a card filter is asked.
+  'all-duels-chunk': 1_200,
+  'all-duels': 2_500,
 };
 
 const DEFAULT_SEED = 12_000;

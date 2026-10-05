@@ -21,7 +21,7 @@ import {
 import { DashShell, ShellButton, type ShellGroup, type ShellItem } from '../ui/dash-shell';
 import { ArchiveIcon, DatabaseIcon, DiskIcon, GridIcon, LayersIcon, RadarIcon, RefreshIcon, UsersIcon } from '../ui/dash-icons';
 import { lastRun, latestPulled, latestVerified } from '../../state/dataLifecycle';
-import { CoachIcon, GlobeIcon, HomeIcon } from '../Dashboard/icons';
+import { CoachIcon, GlobeIcon, HomeIcon, SwordsIcon } from '../Dashboard/icons';
 import { AccountsView } from './AccountsView';
 import { CollectionView, RollupView, SiteView, StorageView, VPS_DISK_BYTES } from './ConsoleSections';
 import { ConsoleSummary } from './ConsoleSummary';
@@ -187,6 +187,10 @@ export function AdminConsole() {
       label: 'Tools',
       items: [
         { id: 'coach', label: 'Coach Roster', icon: <CoachIcon size={18} />, href: '#/admin/coach' },
+        /* Every stored duel, newest first. A screen of its own in the main
+           shell, not a console view: it is what people played, not how the
+           service is doing. */
+        { id: 'all-duels', label: 'All Duels', icon: <SwordsIcon size={18} />, href: '#/all-duels' },
         { id: 'home', label: 'Back to Deckkies', icon: <HomeIcon size={18} />, href: '#/' },
       ],
     },

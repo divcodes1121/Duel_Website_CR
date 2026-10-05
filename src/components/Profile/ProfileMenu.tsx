@@ -46,6 +46,9 @@ const ICON = {
   /* A padlock, for the row that changes the password. Single shackle plus body,
      drawn in the same 24x24 / 1.7 stroke as the rest so it sits level with them. */
   lock: <path d="M6 11V8a6 6 0 0 1 12 0v3M5 11h14a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM12 15v2" />,
+  /* A crown over a rule: the duel log, where every game is scored in crowns.
+     Not the swords — those are Royal Duels, the builder, two rows up. */
+  crown: <path d="M4 16 3 8l5 3.5L12 5l4 6.5L21 8l-1 8zM4 20h16" />,
 };
 
 function Glyph({ d }: { d: keyof typeof ICON }) {
@@ -445,6 +448,22 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                   <a className={styles.item} role="menuitem" href="#/my" onClick={() => setPos(null)}>
                     <Glyph d="console" />
                     My coaching
+                  </a>
+                )}
+                {/* ALL DUELS, ADMINS ONLY (2026-10-05): every stored duel,
+                    newest first. Asked for here by name. Drawn only for an
+                    admin, like the console under it — the screen refuses
+                    everyone else and the analytics service refuses the data,
+                    so this just avoids showing a door that does not open. */}
+                {tier === 'admin' && (
+                  <a
+                    className={styles.item}
+                    role="menuitem"
+                    href="#/all-duels"
+                    onClick={() => setPos(null)}
+                  >
+                    <Glyph d="crown" />
+                    All Duels
                   </a>
                 )}
                 {tier === 'admin' && (

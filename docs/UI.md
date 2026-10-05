@@ -1842,6 +1842,64 @@ near its centre into `innerText`, so read `textContent` to find a card's
 title; a "runs past the list" check must compare each element with its own
 ROW, not with the list.
 
+## All Duels (2026-10-05)
+
+`components/Analytics/AllDuels/AllDuels.tsx` + `.module.css`, at `#/all-duels`.
+**Admin only** — the profile menu's row is its door. README "All Duels — every
+stored duel, newest first" is the record of what it lists and how it is gated;
+this is how it is drawn. The small decisions (stamps, labels, the count line,
+which deck matched, the wording of a refusal) are in `utils/duelFeed.ts`, which
+has no imports.
+
+- **One card a duel, read across.** Three tracks, `minmax(0, 1fr) auto
+  minmax(0, 1fr)`, used twice: the players with the score between them, and
+  each game with its crowns between the two decks. The same tracks, so a name
+  sits over its own decks.
+- **A game is one line from 46rem of LIST** (a container query on `.list`,
+  never the window — the rail opens and closes). Each deck is capped at 31rem
+  and pinned to its own player's edge, the right-hand one mirrored, so the
+  room opens in the middle. Below 46rem a game stacks: deck, crowns, deck.
+  Eight cards to a line at every width, measured: 54px at 1440, 33px at 1100
+  (rail open, still abreast) and 33px on a 390 phone.
+- **Colour says who, never who won.** `--a-hue` blue, `--b-hue` red: the
+  avatar ring, the crown glyph and the tint under a deck's first three slots.
+  Green means winning and appears twice — the Winner mark, and the filled
+  crown pill of whoever took a game.
+- **Nothing is greyed.** The loser's score is weight 400 against the winner's
+  800, both full ink.
+- **The Winner mark is on the tag's line and that line wraps.** Beside the
+  name it took 60px from the one line that cannot spare it (a phone cut the
+  winner's name to three letters); unwrapped, tag plus mark is ~155px in a
+  115px column and the mark slid under the score. Every box check passed on
+  both — the column was where it should be. Both were seen in screenshots.
+- **The tag is printed under a name, never twice.** With no stored name the
+  tag is the label.
+- **The matched deck takes a ring** (`data-match`, the selection hue) on a
+  filtered page. Marked from `report.cards` — what the server accepted — never
+  from what was picked.
+- **Three windows as one segmented group** (`aria-pressed`), not a dropdown:
+  three choices fit, and the one in force stays on screen.
+- **No prose.** One line of counts under the title; the only sentences are the
+  empty states and a refusal.
+- **A newer page dims the list in place** (`data-busy`) and a small `Reading…`
+  mark joins the count line — the first ask of a card filter can take a few
+  seconds, and a dimmed list alone does not say anything is happening. The
+  loader is for the first read only.
+- **Every control goes back to page 1**; only the pager carries another page.
+- **A non-admin gets "Admins only"**, not a `GateCard`: nothing they could buy
+  opens it. Nobody is judged until the account has arrived (`accountResolved`
+  in `Dashboard.tsx`), or an admin is refused for a beat.
+- On a phone a deck's name may take two lines; the three actions grow to touch
+  size there and left it ~140px.
+
+Probe notes: duel cards carry `data-duel-id`; the windows are
+`[role="group"][aria-label="Time window"]`; the count line is `[data-count]`;
+the pager is `nav[aria-label="Duel pages"]`. `revealListTop` scrolls smoothly,
+so measure the list's top ~1 s after a page turn. The pager's `cp-sheen` is a
+decoration clipped inside its own button and will trip a "runs past the edge"
+sweep. A name's own width says nothing about the room it was given — measure
+its column. `aria-pressed` chips are `button`s inside the group.
+
 ## Working on this
 
 ```bash

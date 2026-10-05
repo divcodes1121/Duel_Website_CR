@@ -2577,6 +2577,109 @@ export function fetchDuoPairs(
   return get<DuoReport>(`/api/analytics/duo-pairs?${q.toString()}`);
 }
 
+/* ── All Duels: every stored duel, newest first (ADMIN ONLY) ───────────────
+ *
+ * `server/duel_feed.py`, over the duel index's own table of duel GAMES. One
+ * row a duel: both players, the score in games, and each game's two decks
+ * with its crowns.
+ */
+
+/** One player's deck in one game of a duel. */
+export interface DuelFeedDeck {
+  /** SEATED by the server (`arrange_deck`): evolution, hero, wild first. */
+  cards: string[];
+  /** The forms this deck went in with, read from the bot's own row for the
+   *  duel. Absent when the deck fielded nothing special. */
+  art?: Record<string, 'evolution' | 'hero'>;
+  /** The forms were read from what the cards can be, because no marks were
+   *  stored for this duel. Rare — 18 of 1,444 decks when measured. */
+  artInferred?: boolean;
+  avgElixir: number;
+  archetype: string;
+  deckName: string;
+  /** Crowns this player took in this game. */
+  crowns: number;
+}
+
+export interface DuelFeedGame {
+  /** The payload's own round number, from 1. */
+  game: number;
+  winner: 'a' | 'b' | null;
+  a: DuelFeedDeck;
+  b: DuelFeedDeck;
+}
+
+export interface DuelFeedPlayer {
+  tag: string;
+  /** Null when no name was ever stored. The screen then shows the tag once,
+   *  as the name — never a tag passed off as a name by the server. */
+  name: string | null;
+  /** Games won in this duel. */
+  wins: number;
+  /** Crowns across the duel's games. */
+  crowns: number;
+}
+
+export interface DuelFeedDuel {
+  id: string;
+  /** Supercell's stamp: `20261005T024430.000Z`. */
+  battleTime: string;
+  /** The raw stored mode, kept so a reader can check the label. */
+  mode: string;
+  modeLabel: string;
+  /** By games won. SIDE `a` IS NOBODY IN PARTICULAR — it is the lexically
+   *  first tag, the order the duel index stores a duel in — so the winner is
+   *  named here rather than implied by which side is on the left. */
+  winner: 'a' | 'b' | null;
+  a: DuelFeedPlayer;
+  b: DuelFeedPlayer;
+  games: DuelFeedGame[];
+}
+
+export interface DuelFeedReport {
+  /** False when the duel index is missing or was built from another
+   *  database: a state the screen words, not an error. */
+  available: boolean;
+  /** The window the SERVER used — one of `windows`, whatever was asked. */
+  days: number;
+  windows: number[];
+  /** The card keys the server accepted. An unknown key is dropped, so the
+   *  screen quotes this and never what it sent. */
+  cards: string[];
+  /** Counted back from the newest duel stored, not from today. */
+  window: { from: string | null; to: string | null };
+  newest: string | null;
+  builtAt: string | null;
+  page: number;
+  pages: number;
+  perPage: number;
+  /** Duels matching `cards`. */
+  total: number;
+  /** Every duel, and every game, in the window. */
+  windowDuels: number;
+  windowGames: number;
+  duels: DuelFeedDuel[];
+}
+
+/** ADMIN-ONLY, behind the same second gate as the console's tracking view:
+ *  the Supabase access token rides in `X-Coach-Token` and the server asks
+ *  Supabase whether it is an admin's. A refusal arrives as a `server` error
+ *  whose message is the reason code (`utils/duelFeed.ts` words it). */
+export function fetchDuelFeed(
+  days: number,
+  cards: readonly string[],
+  page: number,
+  per: number,
+  token: string | null,
+): Promise<DuelFeedReport> {
+  const q = new URLSearchParams({ days: String(days), page: String(page), per: String(per) });
+  if (cards.length) q.set('cards', cards.join(','));
+  return get<DuelFeedReport>(
+    `/api/analytics/admin/duels?${q.toString()}`,
+    token ? { 'X-Coach-Token': token } : undefined,
+  );
+}
+
 /* ── The field plan: what to play with no opponent ────────────────────────
  *
  * `server/coach_daily.py`. The meta board becomes a threat projection, that

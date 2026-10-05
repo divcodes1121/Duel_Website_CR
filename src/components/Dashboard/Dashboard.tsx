@@ -44,6 +44,11 @@ const TeamAnalysis = lazy(() =>
 const DuoDecks = lazy(() =>
   import('../Analytics/DuoDecks/DuoDecks').then((m) => ({ default: m.DuoDecks })),
 );
+/* Lazy, and for the strongest version of that reason: it is ADMIN ONLY, so
+   nobody else's page load should carry a line of it. */
+const AllDuels = lazy(() =>
+  import('../Analytics/AllDuels/AllDuels').then((m) => ({ default: m.AllDuels })),
+);
 import { ReadingState } from '../Analytics/ReadingState';
 import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
 import { DuelAnalysis } from '../Analytics/DuelAnalysis';
@@ -117,7 +122,7 @@ import { GateCard } from '../Auth/GateCard';
 import { sectionAllowed, useAccess } from '../../state/gate';
 import { useMyCoach } from '../../state/myCoach';
 import { useAccountStore } from '../../state/accountStore';
-import { trialDaysLeft } from '../../state/supabase';
+import { isSupabaseConfigured, trialDaysLeft } from '../../state/supabase';
 import { clearRecent, useRecentPlayers } from '../../state/recentPlayers';
 
 /* The post-login shell: top bar, a sidebar of analytics sections, and a panel
@@ -135,6 +140,7 @@ export type DashboardView =
   | 'palette'
   | 'teams'
   | 'duo'
+  | 'allduels'
   | 'player';
 
 /* The home route is `#/`, not the empty string.
@@ -401,13 +407,23 @@ function go(hash: string) {
    but they own identity hues too, on their landing-page panels. Same colours,
    so the backdrop keeps meaning something on all eleven screens rather than
    falling back to ambient on three of them. */
-const TOOL_HUE: Record<'builder' | 'decks' | 'palette' | 'teams' | 'duo', FireflyHue> = {
+const TOOL_HUE: Record<
+  'builder' | 'decks' | 'palette' | 'teams' | 'duo' | 'allduels',
+  FireflyHue
+> = {
   builder: 'violet',
   decks: 'green',
   palette: 'blue',
   teams: 'pink',
   duo: 'green',
+  allduels: 'blue',
 };
+
+/* ALL DUELS IS NOT IN `TOP_NAV`, `SIDE_NAV` OR THE LANDING STRIP, ON PURPOSE.
+   It is an admin's page and those three are what every visitor sees. Its door
+   is the profile menu (asked for there by name), with a row in the command
+   palette and a link in the console's sidebar — each drawn for admins only. */
+const ALL_DUELS_HASH = '#/all-duels';
 
 export function Dashboard({
   view = 'home',
@@ -459,6 +475,13 @@ export function Dashboard({
   /* Anon, free, trial, pro or admin — decides which areas open. */
   const access = useAccess();
   const trialLeft = trialDaysLeft(useAccountStore((st) => st.profile));
+  /* WHETHER THE ACCOUNT HAS FINISHED ARRIVING. `ready` turns true as soon as
+     the session is read, before the profile lands, and the tier is `free`
+     until it does — so an admin-only route judged in that beat tells an admin
+     it is not theirs. The console and the roster wait the same way. */
+  const accountResolved = useAccountStore(
+    (st) => !isSupabaseConfigured || (st.ready && (!st.userId || st.profile !== null)),
+  );
   const [tag, setTag] = useState('');
   // The analysis screen carries the query in the top bar, seeded from the URL.
   const [topTag, setTopTag] = useState(playerTag);
@@ -768,7 +791,10 @@ export function Dashboard({
       : []),
     { id: 'tool-guide', group: 'Tools', label: 'The field book', sub: 'What the site is, and what each account gets', icon: <InfoIcon size={15} />, keys: keysFor('guide'), run: () => goTo('guide') },
     ...(access === 'admin'
-      ? [{ id: 'tool-admin', group: 'Tools', label: 'Admin console', sub: 'Accounts, storage, collection', icon: <ShieldIcon size={15} />, run: () => go('#/admin') }]
+      ? [
+          { id: 'tool-all-duels', group: 'Tools', label: 'All Duels', sub: 'Every stored duel, newest first', icon: <SwordsIcon size={15} />, hue: 'blue', keywords: 'duel feed log war battles admin', run: () => go(ALL_DUELS_HASH) },
+          { id: 'tool-admin', group: 'Tools', label: 'Admin console', sub: 'Accounts, storage, collection', icon: <ShieldIcon size={15} />, run: () => go('#/admin') },
+        ]
       : []),
     { id: 'act-theme', group: 'Actions', label: theme === 'dark' ? 'Switch to the light theme' : 'Switch to the dark theme', icon: theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />, keys: ['T'], keywords: 'theme dark light mode', run: toggleTheme },
     ...(!landing
@@ -1273,6 +1299,39 @@ export function Dashboard({
                   </Suspense>
                 ) : (
                   <GateCard access={access} section="2v2 Decks" />
+                ))}
+              {/* ALL DUELS — ADMIN ONLY, AND REFUSED RATHER THAN GATED. Every
+                  other closed area draws a `GateCard`, because there is
+                  something to do about it: sign in, or subscribe. Nobody can
+                  buy their way to this one, so a card offering to would be a
+                  lie; a non-admin who types the URL is told what the page is
+                  and shown the way back.
+
+                  The analytics service refuses the data regardless
+                  (`admin_auth.verify` on `/api/analytics/admin/duels`), so this
+                  is the courtesy and that is the boundary.
+
+                  Nothing is judged until the account has arrived — see
+                  `accountResolved`. */}
+              {view === 'allduels' &&
+                (!accountResolved ? (
+                  <p className={styles.adminOnly}>Checking your account…</p>
+                ) : sectionAllowed(access, 'All Duels') ? (
+                  <Suspense
+                    fallback={
+                      <ReadingState k="all-duels-chunk" hue="blue">
+                        <p>Opening All Duels…</p>
+                      </ReadingState>
+                    }
+                  >
+                    <AllDuels />
+                  </Suspense>
+                ) : (
+                  <div className={styles.adminOnly}>
+                    <h2>Admins only</h2>
+                    <p>All Duels is a page for the people who run Deckkies.</p>
+                    <a href={HOME}>Back to Deckkies</a>
+                  </div>
                 ))}
             </section>
           ) : section === 'Search Player' ? (

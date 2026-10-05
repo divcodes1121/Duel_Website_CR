@@ -40,6 +40,9 @@ function viewFor(hash: string): DashboardView {
   if (hash.startsWith('#/palette')) return 'palette';
   if (hash.startsWith('#/teams')) return 'teams';
   if (hash.startsWith('#/duo')) return 'duo';
+  /* ADMIN ONLY. The Dashboard refuses anyone else and the analytics service
+     refuses the data underneath; resolving the route is not what opens it. */
+  if (hash.startsWith('#/all-duels')) return 'allduels';
   if (hash.startsWith('#/player/')) return 'player';
   return 'home';
 }
