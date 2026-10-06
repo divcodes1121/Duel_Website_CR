@@ -71,9 +71,10 @@ const TABS: { id: Tab; label: string }[] = [
  * are the card's whole record across both forms, so drawing one form's art
  * against a combined number would be a claim the data does not make.
  *
- * `CardArt` falls back to the base image if a PNG is missing, but nothing here
- * relies on that — the metadata and the files agree exactly, 42 evolutions and
- * 16 heroes, checked against `public/assets/`. */
+ * `CardArt` falls back to the base image if a file is missing, but nothing here
+ * relies on that — the metadata and the files agree exactly, 43 evolutions and
+ * 18 heroes as of 2026-10-06, and `tests/deckLink.test.ts` holds the two lists
+ * equal against `public/assets/` in both directions. */
 const TAB_ART: Partial<Record<Tab, ArtVariant>> = {
   evolutions: 'evolution',
   heroes: 'hero',

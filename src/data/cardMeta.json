@@ -325,7 +325,7 @@
   },
   "electro-wizard": {
     "can_evolve": false,
-    "can_be_hero": false,
+    "can_be_hero": true,
     "is_champion": false,
     "is_win_condition": false
   },
@@ -516,7 +516,7 @@
     "is_win_condition": false
   },
   "electro-giant": {
-    "can_evolve": false,
+    "can_evolve": true,
     "can_be_hero": false,
     "is_champion": false,
     "is_win_condition": true

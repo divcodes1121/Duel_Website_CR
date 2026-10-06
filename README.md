@@ -48,11 +48,12 @@ bot's SQLite files read-only.
 
 ---
 
-## Status — 2026-10-05
+## Status — 2026-10-06
 
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Hero Electro Wizard and Evolution Electro Giant** | **2026-10-06; server half deployed first** (`cardMeta.json` and `test_deck_tuner.py` copied after both VPS copies matched `HEAD` by md5, backups `*.bak-20261006-042932-preelectro`; the live `deck` route went from drawing the two cards plain to evolution and hero). Two new FORMS, no new card: one flag each in `cardMeta.json` and one file of art each, making 43 evolutions and 18 heroes over the same 123 cards. The evolution render is the existing template to the pixel. **The hero render arrived without the gold gem every other hero carries**; it is on the identical template as the Magic Archer master (alpha agrees exactly, mean difference 0.00), so `scripts/add-hero-gem.py` restores the gem from it and refuses to run on a render that does not match. `tests/fixtures/seating.json` was re-run through the server's own `arrange_deck` (control first: 95 of 95 with the flags off; one live deck changes with them on; three constructed decks added), and a new test holds the flags and the art files equal in both directions. **The server reads the same file**: `src/data/cardMeta.json` has to be copied to the VPS for the suggestion engines to treat the two cards as able to fill a slot. See [October 2026: two more forms](#october-2026-two-more-forms-and-a-hero-that-arrived-without-its-gem) |
 | **All Duels — friendly duels that went to three games (admin)** | **LIVE 2026-10-05 as `7b4eb52`** — three commits the same day (`03ecdeb` the page, `c1523a3` friendly three-game duels only, `7b4eb52` Save duel), the server half deployed first each time it changed (backups `*.bak-20261005-075221-preallduels`, then `*.bak-20261005-082423-prefriendly`); `/api/health` reported each commit one to two minutes after its push and the served bundle was read each time. **Not yet opened signed in as an admin on production from here — the account holder's check.** Asked for directly: a page only for admins, opened from the profile drop-down, listing duels from newest to oldest with both players' names, the crowns, a card filter and three windows (30, 60, 90 days) and no others. **The first build listed every native duel; the account holder looked at it live and asked for friendly duels only, and only those played to all three games** — nineteen in twenty had been war duels. `#/all-duels`. One card a duel: the two players and the score in games, then one line a game with each player's eight cards in the forms they were fielded in and that game's crowns between them. It reads the duel index's own table of duel games — **1,169 such duels in thirty days, 2,431 in sixty, 3,046 in ninety** on production — through an admin-gated route, `/api/analytics/admin/duels` (route count 28), and an index on the mode that keeps the walk inside the friendly rows. Staged read-only against production: **every page of thirty days walked, 0 rule breaks**, every player named, 6,828 of 7,014 decks drawn with observed forms. **159/159 in a browser** on those payloads (both themes, 1440, 1100, a 390 touch phone); the door and the refusals were covered by the first build's 205/205 and 10/10 signed out. 94 Python + 55 vitest checks, thirteen rules broken on purpose and each caught. Live: 401 without an admin's token, a page in 11-15 ms, the first ask of a card filter in 28-61 ms. **Each row has a Save duel button** (asked for the same day): it writes the duel into Royal Duels' saved Versus groups, the left player's decks as Blue and the right player's as Red, and the row then reads `Saved as Duel Deck n` — from the library, so it still does after a reload. 36/36 in a browser, from the click to the set in the builder. See [All Duels — friendly duels that went to three games](#all-duels--friendly-duels-that-went-to-three-games-2026-10-05) |
 | **Decks — every deck a player is using** | **LIVE 2026-10-04 as `68ae88d`**, server deployed first (backups `*.bak-20261004-163517-predecks`); `/api/health` reported the commit about 54 s after the push, then **14/14 in a real browser against the live site**, signed out (1440 dark and a 390 touch phone light). Asked for directly: an option called Decks beside a player's other sections, listing the decks they are using in descending order, over 7, 14 or 30 days and nothing else, modelled on a pasted reference deck list. `#/player/<tag>/decks`, directly under Recent Battles in the rail, open to everyone (confirmed by the account holder). One row a deck: name, average elixir, four-card cycle, the share of their games (`55.1% · 189 / 343 games`), the eight cards in their forms with the copy, picture and Open in Game buttons, and two records — the **Player's** battles, wins, draws and losses with it, and the **Community's**: the same exact list across every player held. Games are own-deck 1v1 battles plus native duel games counted one by one from the duel index, so a duel never counts twice. New route `/api/analytics/decks/<tag>` (route count 27). Staged read-only against production data for five real players over all three windows: **0 rule breaks, 0.06-0.61 s a read with the community cache empty and 0.02-0.12 s with it warm**, a community record for 95-100% of each player's decks. Live after the server deploy: the route answers the production origin with the same figures the staged run gave, in about 1.3 s end to end. **54/54 in a browser** on those payloads (both themes, 1440, 1100, a 390 touch phone), the PDF exported and looked at. 46 Python + 20 vitest checks, proven red three ways. See [Decks — every deck a player is using](#decks--every-deck-a-player-is-using-2026-10-04) |
 | **Hide a duel deck to reuse its cards** | **2026-10-03, client only; corrected the same day.** Asked for directly: an eye button in duel mode — with three decks built, hide one and use its cards again in a slot below. Every deck in Royal Duels (Solo and both Versus players) has an eye at the end of its action rail. A hidden deck **stays on the board, grey and read-only**, and **keeps its eight cards but holds none of them**: they are free for the rest of the collection, so a second version of a deck can be built in a new slot while looking at the first. When both decks are in play again and hold the same card, **the newer deck's copy is the one drawn black and white**; which copy is newer is recorded when the card arrives (`Deck.newerCopies`), so hiding and showing never flips it. The first version, live for an hour, folded the hidden deck to its header and greyed the OLDER deck — both changed on request. One optional field on the deck (`hidden`), so it saves, syncs and undoes like any edit and the persist version did not move. Hidden decks are left out of the card counters and the PDF, and are drawn grey in the saved-group preview. Not offered in Deck's Home or Counter Palette, whose decks share nothing. **55/55 in a browser** (both themes, 1440, 390, a touch phone), 28 unit checks proven red two ways. See [Hide a duel deck to reuse its cards](#hide-a-duel-deck-to-reuse-its-cards-2026-10-03) |
@@ -126,7 +127,7 @@ bot's SQLite files read-only.
 | Coach Assist — Suggestion | **reads real duels (2026-09-27, live)** — the fused ladder+duel rate on every pairing and one option held for duel proof; see the row at the top. Before that, **personal and archetype-by-archetype (2026-09-25, live).** "Or bring one of these" is chosen per player from their playstyle (12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition), and every deck shows its rate against **five** archetypes — their likely ones, their other win conditions, then the meta — on one line |
 | R3 prediction sampler | **STOPPED 2026-09-19 21:05 UTC** by its own stop condition (a royalweb restart during a deploy), ~8 h into 7 days; found 2026-09-25, not restarted per protocol. Re-running needs a deploy freeze or an amendment — the account holder's call. See `server/README.md` |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **4,039 Python checks** across **72 suites** and **1,382 vitest** across 60 files as of 2026-10-05 (All Duels added `server/test_duel_feed.py`, 94, eight to `test_api_security.py` for the admin gate on its route, `tests/allDuels.test.ts`, 67, and two to `entitlement.test.ts`; before it 3,937 across 71 and 1,313 across 59 as of 2026-10-04, when the Decks screen added `server/test_player_decks.py`, 46, one check to `test_enrol_routes.py`, and `playerDecks.test.ts`, 20; before it 3,890 across 70 and 1,293 across 58 as of 2026-10-03, when `deckHidden.test.ts`, 28, came with the eye button on duel decks — 18 at first, 28 once a hidden deck stayed on the board and the newer copy became the grey one; before it 1,265 across 57, when `reportNames.test.ts`, 19, came with the PDF names fix) — the scroll rail added `scrollRail.test.ts` (53: the tick arithmetic, the section marks, the springs, and twelve contracts read off the stylesheets and the mount); before it 1,192 across 55 as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **4,040 Python checks** across **72 suites** and **1,393 vitest** across 60 files as of 2026-10-06, both by a full run (the two new card forms added one check to `server/test_deck_tuner.py`, three constructed decks to the seating fixture — six tests — and five tests to `tests/deckLink.test.ts`; before it 4,039 and 1,382 as of 2026-10-05, when All Duels added `server/test_duel_feed.py`, 94, eight to `test_api_security.py` for the admin gate on its route, `tests/allDuels.test.ts`, 67, and two to `entitlement.test.ts`; before it 3,937 across 71 and 1,313 across 59 as of 2026-10-04, when the Decks screen added `server/test_player_decks.py`, 46, one check to `test_enrol_routes.py`, and `playerDecks.test.ts`, 20; before it 3,890 across 70 and 1,293 across 58 as of 2026-10-03, when `deckHidden.test.ts`, 28, came with the eye button on duel decks — 18 at first, 28 once a hidden deck stayed on the board and the newer copy became the grey one; before it 1,265 across 57, when `reportNames.test.ts`, 19, came with the PDF names fix) — the scroll rail added `scrollRail.test.ts` (53: the tick arithmetic, the section marks, the springs, and twelve contracts read off the stylesheets and the mount); before it 1,192 across 55 as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -260,7 +261,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 1,382 tests in 60 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
+npm run test                      # 1,393 tests in 60 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
 python server/test_team_analysis.py # 163 checks over both tabs of the squad board, incl. the fused rate's wiring
 python server/test_team_scout.py  # 160 checks over the coaching brain: projection, scoring, squad plan
 python server/test_matchup_fusion.py # 34 checks over the fused ladder+duel rate, against literals
@@ -304,8 +305,8 @@ npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
 ```
 
-That is 38 of the **72** Python suites; all of them total **4,039** checks
-(counted by a full run on 2026-10-05), and the only failure is `test_ml_21a`'s `123 != 122` (the card count moved when
+That is 38 of the **72** Python suites; all of them total **4,040** checks
+(counted by a full run on 2026-10-06), and the only failure is `test_ml_21a`'s `123 != 122` (the card count moved when
 Minion Giant shipped; accepted). A script totalling them has to read BOTH
 result lines — the homegrown `check()` suites print `N passed, M failed`, the
 `test_ml_*` ones and `test_api_security` print `Ran N tests` — or it scores
@@ -1966,6 +1967,178 @@ Ice Wizard is hero-only — `can_be_hero` without `can_evolve` — which is the
 thirteenth such card and an existing case. The wild-slot form picker's "both
 forms" set stays at exactly the four it has always been.
 
+### October 2026: two more forms, and a hero that arrived without its gem
+
+Two renders arrived on 2026-10-06: **Hero Electro Wizard** and **Evolution
+Electro Giant**. Neither is a new card. Each is one boolean in
+`src/data/cardMeta.json` and one file of art, exactly as Hero Ice Wizard was:
+
+| | flag | served art |
+|---|---|---|
+| Electro Wizard | `can_be_hero: true` | `public/assets/heroes/electro-wizard.webp` (302x384) |
+| Electro Giant | `can_evolve: true` | `public/assets/evolutions/electro-giant.webp` (302x383) |
+
+That makes **43 evolutions and 18 heroes** over the same 123 cards. Electro
+Wizard is hero-only (the fourteenth such card) and Electro Giant evolution-only,
+so the cards with *both* forms are still knight, valkyrie, musketeer and wizard,
+and the Wild-slot picker is untouched. `cards.json` does not change, and neither
+does any deck link: a form is a slot position, not an id.
+
+**These two did not go through `import-card-art.py`, and that was checked
+rather than assumed.** That script exists for a picture on a background. Both
+of these arrived as real RGBA cutouts — the corona is partial alpha, 6.7% and
+9.3% of the canvas fully transparent, no ICC profile — and it starts by
+converting to RGB, which would have thrown the alpha away and then tried to
+re-derive it from a background that is not there. Already-cut art goes straight
+to `build-card-art.py`.
+
+**The evolution is the existing template to the pixel.** Scaled to the 302px
+frame it is 302x383 with its opaque box at (26, 15, 275, 357), 6.8% transparent
+and 65.9% opaque — the same four figures as `evolutions/goblin-giant.webp`, and
+the size twelve evolutions already have. Copied to `assets/Evolutions/` and
+encoded; nothing else was done to it.
+
+#### The hero had no gem, and putting it back is a restoration, not a drawing
+
+Every hero in `public/assets/heroes/` carries the gold gem on the top edge of
+its frame. It is what says "hero" at 40px, the way the violet gem says
+"evolution". This render arrived without one, while the evolution downloaded in
+the same minute had its own. Shipped as it came, one hero in eighteen would have
+been a different kind of object on the Heroes tab and in every hero slot.
+
+What makes it safe to fix is a measurement. The render is on the **same
+template as `assets/Heroes/magic-archer.png`**: 615x781 against 615x782, and
+with the new file moved down one row the alpha of the two agrees **exactly** —
+mean difference **0.00** over the glow on both flanks, against 0.59 one row
+either side of that offset. Same frame, same glow, same canvas. So the Magic
+Archer master is not a similar picture to borrow from; outside the painting it
+is *this* picture with the gem on.
+
+`scripts/add-hero-gem.py` does it in three regions, and only one is an estimate:
+
+1. **Everything that is not painting** — the outer glow, the gem's own halo
+   above the frame, the pale frame band — is template, identical in both files
+   apart from the gem. Copied from the donor verbatim. Exact.
+2. **The gem's body** is opaque, so what is behind it does not matter. Verbatim.
+3. **The ring where the gem's halo falls across the painting** is the one place
+   the donor's pixels carry somebody else's picture. There the donor is
+   feathered out over 18px. Measured along 24 rays from the gem's centre, the
+   halo just outside the rim sits at luminance 219–237 the whole way round —
+   saturated yellow whatever is under it — which is why the inner part of that
+   ring can be taken as it is.
+
+31,096 pixels came from the template and 4,593 were blended. The gem itself was
+measured rather than drawn: its dark rim is at 57–58px on the four flats and
+69–70px at the four tips, i.e. a rounded square on its corner with half-side
+57.5 and corner radius 28.5.
+
+The script **refuses to run** unless the template match holds, so aimed at a
+render on the *other* frame — the fifteen rectangular 598x730 heroes — it stops
+instead of pasting a gem at the wrong place on the wrong edge. It also checks
+its own seam (the two files must already agree on the rim of the box it edits:
+worst difference 8 of 255) and locates the band's inner edge instead of assuming
+it, shaving 2px off, because a band pixel treated as painting is merely blended
+while a painting pixel treated as band is a sliver of the wrong picture.
+
+After it, the served file measures **302x384 with its opaque box at
+(36, 15, 266, 356)** — `heroes/magic-archer.webp`'s figures exactly.
+
+**The first seam check failed, and the fault was the check.** It compared raw
+channels and read 255 between two pixels that are both nothing: a fully
+transparent pixel still stores a colour, and the two files store different ones.
+Weighting each colour by its own alpha — comparing what is actually drawn — is
+the fix, and it is the same trap as measuring an image by `naturalWidth` when it
+is sitting at 0x0.
+
+**What is archived is the restored hero, not the raw download.**
+`assets/Heroes/electro-wizard.png` carries the gem, so re-encoding from the
+archive reproduces what is served. If the gem is ever unwanted, run
+`build-card-art.py` over the original render instead.
+
+**It was judged by looking, on both grounds.** Both forms were composited beside
+their neighbours at 150, 96 and 54px on the dark and the light theme
+(`testing/new-forms-electro.png`, gitignored) — the rule the Season 87 import
+arrived at.
+
+**Then in the real builder, 24 of 24 in a browser, both themes.** The Heroes
+filter lists 18 cards and the Evos filter 43; Electro Wizard's tile and the hero
+slot both draw `heroes/electro-wizard.webp`, Electro Giant's tile and the
+evolution slot `evolutions/electro-giant.webp`; in a normal slot Electro Wizard
+draws its base card; in the Wild slot Electro Giant draws its evolution and no
+Evolution/Hero picker opens, because it is not a both-form card. Read off the
+image URL each `<img>` settled on, its decoded size and its drawn box — not off
+a prop — with no failed art request and no page error. Local dev server with no
+Supabase, so the deck tools only: **the analytics screens were not looked at**,
+and they draw these forms from the server's seating.
+
+Main bundle 379.39 -> **379.56 kB gzip** (+0.17, the release note), CSS
+unchanged at 57.13. The two art files are 28 kB and 21 kB served.
+
+#### What a flag moves that is not the art
+
+**`tests/fixtures/seating.json` is the server's output and was re-run, not
+edited.** `seatDeck` is a second copy of `clash_data.arrange_deck`'s
+no-evidence branch, pinned against that function's own answers, and both read
+the same flags. The control came first: with the two flags forced back off,
+this machine's `arrange_deck` reproduced the fixture **95 of 95** — which is
+what says it is the function the fixture was made with. With the flags on,
+**one** live deck changes: a Mega Knight list where Electro Wizard now takes
+the hero slot ahead of Mini P.E.K.K.A, because the no-evidence rule takes the
+first hero-capable card in stored order. Three constructed decks were added,
+since no deck in the fixture held Electro Giant at all and its evolution would
+otherwise have been pinned by nothing. 98 cases.
+
+**A flag without its file is a broken image on a live screen and fails
+nothing** — not the build, not the typecheck, because `public/` is copied and
+never imported. `tests/deckLink.test.ts` now holds the two lists equal in both
+directions (every flagged card has a file in `evolutions/` or `heroes/`, and
+every file there has a flag), and it was proven able to fail by hiding the new
+hero's file first.
+
+**The server reads the same file, for what it infers rather than what it
+observes.** `duel_combos._load_cards()` takes `cardMeta.json` from
+`<repo>/src/data`. A form a player was actually seen fielding is drawn from the
+battle's own marks and needs no flag — `arrange_deck` honours a mark without
+asking what the card is capable of. What the flags decide is everything
+*inferred*: the seating of a deck nobody was observed fielding
+(`arrange_deck(cards, {})`), the forms `complete_seating` fills in on a
+suggestion, and `fillable_slots` — which lists Deckkies may suggest at all,
+since a suggestion has to be able to field all three special slots. So until
+the VPS copy is replaced, a list whose only hero-capable card is Electro Wizard,
+or whose second evolution is Electro Giant, is still skipped by Team Analysis,
+Coach Assist and the field plan as unable to fill three. The client and the
+server halves ship separately; `cardData` on `/api/analytics/status` stays 123
+either way, because the card count did not move, so that field cannot confirm
+this deploy — compare the file itself.
+
+#### Deploying it
+
+**The server half went first, the same day**, so the gap above was minutes.
+Both VPS copies were compared with `HEAD` before anything was overwritten
+(`src/data/cardMeta.json` and `server/test_deck_tuner.py`, md5 with line endings
+stripped: both matched, no drift). The new files were copied beside the old
+ones under a `.new` name and **gated before the swap**: the JSON must parse,
+hold 123 cards, carry the two flags, and differ from the deployed file in
+exactly those two cards and nothing else. Backups
+`{cardMeta.json,test_deck_tuner.py}.bak-20261006-042932-preelectro`; only
+`royalweb` was restarted.
+
+What proved it, since `cardData` cannot:
+
+| | before | after |
+|---|---|---|
+| VPS `cardMeta.json` md5 (CR stripped) | `8fb2090b…` = `HEAD` | `96d725d0…` = the new file |
+| `slot_kind('electro-wizard')` / `('electro-giant')` on the box | `''` / `''` | `'hero'` / `'evolution'` |
+| `fillable_slots` of the 2026-09-27 screenshot's Bridge Spam list | 2 | **3** |
+| live `GET /api/analytics/deck?cards=electro-giant,electro-wizard,…` | `art: {}` | `art: {electro-giant: evolution, electro-wizard: hero}` |
+
+The last row is the one that counts: it is the production origin answering, not
+a module imported in a fresh process on the box. On the VPS `test_deck_tuner`
+is 153/153 and `test_coach` 118/118 against the deployed modules.
+`test_suggested_seating` and `test_team_analysis` cannot run there — they read
+`tests/fixtures/seating.json` and `src/utils/squadParse.ts`, which are not
+deployed. Environmental, not a regression.
+
 ### The Vercel storage warning was card art, not code
 
 Vercel mailed to say the free team had used 100% of its 10 GB **Deployment
@@ -3068,7 +3241,8 @@ the card, zero of them marked as evolved, so a tab whose entire job is to list
 the evolutions dropped it. The reason it is wrong is coverage. `player_evo`
 records the form for about a quarter of battles, so "no evolved record" mostly
 means *not observed*, not *never evolved*; absence of a mark is not evidence of
-absence. All 42 evolutions and all 16 heroes are listed, and a card with no
+absence. All 43 evolutions and all 18 heroes are listed (42 and 16 when this
+was written; the lists follow `cardMeta.json`), and a card with no
 per-form record says "no evolution data" on its tile — the honest version of
 the same fact.
 
@@ -8827,8 +9001,8 @@ push.
 
 ## Testing and verification
 
-**4,039 Python checks across 72 suites** and **1,382 vitest tests across 60
-files** as of 2026-10-05, both counted by a full run; the only failure
+**4,040 Python checks across 72 suites** and **1,393 vitest tests across 60
+files** as of 2026-10-06, both counted by a full run; the only failure
 is the known, accepted `test_ml_21a` `123 != 122`. (It was 1,386 across 38 and
 378 vitest on 2026-08-30; the status table's `tests` row carries the history.)
 None needs the bot's database to pass. Seventeen write temp files of their own,
@@ -16586,7 +16760,7 @@ server/
   live_player.py              the live CR battlelog, analysed for a new tag
   recruit.py                  how a tag gets collected without anyone searching for it
   tracking.py                 the tag-enrolment queue — ours, not the bot's
-  test_*.py                   72 suites, 4,039 checks (2026-10-05); none needs the
+  test_*.py                   72 suites, 4,040 checks (2026-10-06); none needs the
                               bot's database. See Running it for the counts
   README.md                   API and storage detail
 
@@ -16629,6 +16803,12 @@ scripts/
                               decontaminates it; floor measured per image, ramp
                               width per kind of edge. Runs BEFORE the script
                               below, which assumes art that is already cut out.
+                              NOT for a render that already has alpha.
+  add-hero-gem.py             a hero render that arrived WITHOUT its gem ->
+                              the same render with it, for assets/Heroes/.
+                              Lifts the gem off a donor master on the identical
+                              template and refuses to run if the two do not
+                              match to the pixel.
   build-card-art.py           card/evolution/hero art -> WebP, capped at the
                               302px card frame (46.1 MB -> 3.27 MB, q88).
                               THE ONLY ART SCRIPT THAT READS public/ RATHER

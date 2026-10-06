@@ -1,3 +1,6 @@
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 import { getClashRoyaleDeckLink, getDeckLinkFromKeys, parseClashRoyaleDeckLink } from '../src/utils/deckLink';
 import { CARDS, CARDS_BY_KEY } from '../src/data/cards';
@@ -160,5 +163,48 @@ describe('season 87 cards', () => {
      Wizard that already existed, so it is a flag plus a file in `heroes/`. */
   it('Ice Wizard can now be brought as a hero', () => {
     expect(CARDS_BY_KEY.get('ice-wizard')!.canBeHero).toBe(true);
+  });
+});
+
+/*
+ * 2026-10-06: two more FORMS, no new card. Hero Electro Wizard and Evolution
+ * Electro Giant are each a flag in `cardMeta.json` plus one file of art, and
+ * the copyDeck link does not change for either — a form is a slot position,
+ * not an id.
+ *
+ * Neither card gained its SECOND form, which is the part worth pinning: the
+ * Wild-slot picker offers a choice only for a card that owns both, and that
+ * list is four cards the builder, the server and the docs all name.
+ */
+describe('october 2026 forms', () => {
+  it('Electro Wizard can be brought as a hero, and only as a hero', () => {
+    const c = CARDS_BY_KEY.get('electro-wizard')!;
+    expect({ hero: c.canBeHero, evo: c.canEvolve }).toEqual({ hero: true, evo: false });
+  });
+
+  it('Electro Giant can evolve, and only evolve', () => {
+    const c = CARDS_BY_KEY.get('electro-giant')!;
+    expect({ hero: c.canBeHero, evo: c.canEvolve }).toEqual({ hero: false, evo: true });
+  });
+
+  it('the cards with BOTH forms are still exactly the four the Wild picker knows', () => {
+    const both = CARDS.filter((c) => c.canEvolve && c.canBeHero).map((c) => c.key).sort();
+    expect(both).toEqual(['knight', 'musketeer', 'valkyrie', 'wizard']);
+  });
+
+  /* A flag without its file is a broken image on a live screen, and nothing
+     else fails: not the build, not the typecheck — `public/` is copied, never
+     imported. So the two lists are held equal here, in BOTH directions; art
+     nobody can reach is the other half of the same drift. */
+  it.each([
+    ['evolutions', (k: string) => !!CARDS_BY_KEY.get(k)?.canEvolve],
+    ['heroes', (k: string) => !!CARDS_BY_KEY.get(k)?.canBeHero],
+  ] as const)('every flagged card has art in %s/, and every file there has a flag', (dir, flagged) => {
+    const files = readdirSync(join(process.cwd(), 'public', 'assets', dir))
+      .filter((f) => f.endsWith('.webp'))
+      .map((f) => f.slice(0, -'.webp'.length))
+      .sort();
+    const want = CARDS.map((c) => c.key).filter(flagged).sort();
+    expect(files).toEqual(want);
   });
 });

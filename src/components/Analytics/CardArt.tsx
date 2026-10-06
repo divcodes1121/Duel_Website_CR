@@ -21,8 +21,8 @@ import styles from './CardArt.module.css';
  * rendered in payload order, not in deck-hash order — the hash is alphabetical
  * and would scatter the special slots through the row.
  *
- * Only 42 evolutions and 16 heroes have art, and a card can be marked without a
- * PNG existing, so a failed load falls back to the base card rather than
+ * Only 43 evolutions and 18 heroes have art, and a card can be marked without a
+ * file existing, so a failed load falls back to the base card rather than
  * leaving a hole.
  */
 export type ArtVariant = 'evolution' | 'hero';

@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-06-electro-forms',
+    date: '2026-10-06',
+    kind: 'new',
+    title: 'Hero Electro Wizard and Evolution Electro Giant are in the deck tools',
+    body: [
+      'Two cards gained a new form. Electro Wizard can now go in the Hero slot and Electro Giant in the Evolution slot, in Royal Duels, Deck’s Home and the Counter Palette, and each is drawn in its new art there.',
+      'You will find them under the Heroes and Evos filters in the card library, and on the Heroes and Evolutions tabs of the Cards screens.',
+    ],
+    href: '#/builder',
+    hrefLabel: 'Open Royal Duels',
+  },
+  {
     id: '2026-10-04-player-decks',
     date: '2026-10-04',
     kind: 'new',

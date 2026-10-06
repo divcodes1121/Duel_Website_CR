@@ -472,7 +472,20 @@ def main() -> int:
     # passes the composition veto and is given the best numbers in the pool,
     # so only the slot rule can keep it out (proven: with `_full_loadout`
     # removed from `compose`, the first check below fails).
-    NO_HERO = ["battle-ram", "bandit", "pekka", "electro-wizard",
+    #
+    # THE FIXTURE IS NO LONGER THE SCREENSHOT'S EXACT EIGHT, AND THAT IS THE
+    # RULE WORKING. That list held Electro Wizard, which gained a hero form on
+    # 2026-10-06 — so the very deck that was reported as skipping a hero can
+    # field one now, and is correctly offered. Mother Witch stands in for it
+    # here (plain, and the veto still passes the list), because what this block
+    # tests is a list with NO hero-capable card, not that one list. The check
+    # below pins the other half so the swap cannot quietly stop meaning that.
+    SCREENSHOT = ["battle-ram", "bandit", "pekka", "electro-wizard",
+                  "fireball", "royal-ghost", "skeleton-dragons", "zap"]
+    check("the screenshot's own list fields three now that Electro Wizard can be a hero",
+          cd.fillable_slots(SCREENSHOT) == 3 and cd.slot_kind("electro-wizard") == "hero",
+          f"{cd.fillable_slots(SCREENSHOT)} {cd.slot_kind('electro-wizard')!r}")
+    NO_HERO = ["battle-ram", "bandit", "pekka", "mother-witch",
                "fireball", "royal-ghost", "skeleton-dragons", "zap"]
     check("the fixture really cannot field a hero, and the veto passes it",
           cd.fillable_slots(NO_HERO) == 2 and harmony.veto(NO_HERO) is None)

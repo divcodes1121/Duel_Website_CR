@@ -72,6 +72,28 @@ one that does not is a conversation, not a `scp`.
 service that starts fine and cannot see `../src/data/` answers every request
 with plausible, empty data.
 
+**A new FORM is a server deploy too, and `cardData` cannot confirm it.** When a
+card gains an evolution or a hero form (2026-10-06: Electro Giant's evolution,
+Electro Wizard's hero) the only file that changes is `src/data/cardMeta.json`,
+which lives outside `server/` and is read once per process. Copy it to
+`/opt/royalweb/src/data/` and restart, as in step 3. The card COUNT does not
+move, so step 4's `cardData` reads 123 before and after; compare the file's md5
+against `git show HEAD:src/data/cardMeta.json` instead (normalising line
+endings — the tree here is CRLF and `git show` is LF).
+
+What the flags decide on this side is what the service INFERS, not what it
+observes. `arrange_deck` draws a form a player was seen fielding straight off
+the battle's marks without asking what the card can be. The flags feed
+`slot_kind`, and through it the no-evidence seating, the forms
+`complete_seating` fills in on a suggested deck, and `fillable_slots` — which
+lists Team Analysis, Coach Assist, the tuner and the field plan are allowed to
+suggest, since a suggestion must be able to field all three special slots. A
+stale copy therefore keeps skipping lists whose only hero-capable card is
+Electro Wizard. `test_deck_tuner.py` shows the size of it: its "cannot field a
+hero" fixture was the exact Bridge Spam list from a 2026-09-27 screenshot, and
+that list holds Electro Wizard, so it fields three now and the fixture had to
+change card.
+
 The rest of this file describes the model, which did not change with the move.
 
 ## Storage tiers
