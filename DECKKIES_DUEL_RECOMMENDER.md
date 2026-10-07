@@ -118,7 +118,7 @@ otherwise (today's read 52.2 / 50.7; a perfect read 54.2 / 49.7; noise about
 | 2 | **What they have left** — win conditions, spells, buildings and support cards still unspent after each game | **LIVE 2026-10-07** |
 | 3 | **Pick for the duel, not the game** — look-ahead over their likely order; the result of each game moves the next one | **LIVE 2026-10-07** |
 | 4 | **The set composer** — three or four card-disjoint decks from duel-proven decks, key spells and win conditions spread so no deck is starved; harmony checklist and duel-pairing gate on every deck; at most two human swaps | **LIVE 2026-10-07**: the set from the player's own decks as they are (`duel_set.py`) and the gate on constructed decks (`deck_packages.py`). Swaps inside a set: built, measured, OFF |
-| 5 | **Keep learning** — retrain after every poll; this scorecard re-run before any step ships; a CRL cohort line in it | not started |
+| 5 | **Keep learning** — retrain after every poll; this scorecard re-run before any step ships; a CRL cohort line in it | **partly LIVE 2026-10-07**: everything is refitted after each poll and the read's holdout carries a CRL line on the status route. The look-ahead and set scorecards are still lab scripts |
 
 ## Rules for this work
 
@@ -480,25 +480,46 @@ be limited to decks the player has played (their card levels and practice) or
 may include decks new to them. *(Asked; answer "continue" to the default: their
 own decks, new ones only as separate options.)*
 
+### 2026-10-07 — step 5, the part that needed nobody: a CRL line in the automatic holdout
+
+`duel_read_train.py` reports its holdout for named groups of players as well
+as for everyone and for friendly duels. The groups are read from
+`server/.duel_cohorts.json` — **gitignored, player tags, on the server only**
+(mode 600): one group, `crl`, the 455 tags resolved from the list, 194 with
+duels stored. Backups `{duel_read_train,test_duel_read}.py.bak-20261007-185354-precohort`.
+No restart: the service does not import the trainer.
+
+**Seen under the updater's own timer** (19:03 UTC run, every step exit 0: duel
+index 217 s, duel model 143 s, duel read 201 s, deck synergy 12 s, **deck
+packages 25 s** — its first automatic run, the item left to watch).
+`duelRead.holdout.crl` on the live status, exact deck first / top three:
+game 1 **43.9 / 62.9** (the count 25.3 / 45.5; 569 decisions), game 2
+**43.6 / 71.4** (33.0 / 58.2), game 3 **48.5 / 63.9** (34.5 / 57.2; 194).
+No tag is in the published report (a test asserts it; checked on the live
+route).
+
+`test_duel_read.py` 55 -> 67. Full run: 4,367 Python checks across 76 suites
+(only the known `test_ml_21a`).
+
 ## Next action
 
-**Step 5 — keep learning, and gate on the scorecard.** What exists: the read,
-the win model, the pairing table, the package table and the swap graph are all
-rebuilt after every poll (`after_poll.py`). What does not:
+Steps 1 to 4 are live and the part of step 5 that needed nobody is too. What
+is left, in the order I would take it:
 
-1. **The scorecard is not re-run automatically.** `replay_predict.py`,
-   `replay_plan.py` and `replay_set.py` are lab scripts on a local export.
-   Move the three headline measurements into one server-side command (a
-   walk-forward holdout over the duel index: the read's first-pick and
-   top-three, the look-ahead against the next-game pick, the composed set
-   against the real one), write the result beside the artifacts, and put it
-   on `/api/analytics/status` so a regression is visible.
-2. **A CRL cohort line** in that scorecard (the resolved tags are in the
-   evidence folder, which is gitignored: the server needs its own list, kept
-   out of the repository).
-3. **The 526 unresolved CRL names** — ask the account holder for tags.
-4. **Decks from outside for players with fewer than three duel decks** (see
-   the last log entry) — the first real use of the composer's swaps.
-
-Also still to watch from earlier steps: the after-poll updater's first
-`deck packages` step (`grep "deck packages" /var/log/clashbot/after-poll.log`).
+1. **The look-ahead's and the set's scorecards on the server.** They are lab
+   scripts on a local export (`replay_plan.py`, `replay_set.py`), each needing
+   a win model fitted BEFORE the test window and a judge fitted after it. A
+   server-side command would refit both on a schedule (weekly is enough: 8
+   minutes of CPU) and write the three figures beside the artifacts and onto
+   the status route.
+2. **Decks from outside for players with fewer than three duel decks** (about
+   one in four): a ladder favourite or a vetted meta list brought into the set,
+   which is the first real use of the composer's switched-off swaps (two decks
+   wanting the same Log). It needs its own blind test — those are decks new to
+   the player, and the account holder's default was "their own decks first".
+3. **The 526 CRL names with no tag.** Ask the account holder; a tag added to
+   `.duel_cohorts.json` on the server is in the next poll's report.
+4. **Friendly duels.** The read is weakest there (26% first pick at game 1
+   against 68% for everyone) and the look-ahead showed no gain there. More
+   friendly duels stored is the only thing that will move it; the 51 queued
+   CRL tags help.

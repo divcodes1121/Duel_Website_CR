@@ -1513,6 +1513,17 @@ any other word is "not told"). `/api/analytics/status` carries `duelRead`
 (`fitted`, `trainedAt`, `duels`, `holdout`): `fitted: false` means the built-in
 weights are in use — a stopped trainer, not a broken read. No new route.
 
+**Named groups in the holdout** (`duel_read_train.load_cohorts`, 2026-10-07).
+`holdout` has `all` and `friendly` always, and one entry per group in the
+cohort file: `CLASH_DUEL_COHORTS`, default `server/.duel_cohorts.json`,
+`{"crl": ["#TAG", ...]}`. The file is gitignored and must stay out of the
+repository — it is player tags, on the server only, mode 600. Names are
+lower-cased identifiers (never `all` or `friendly`), tags upper-cased; a
+missing, unreadable or malformed file is no group and never an error.
+`score(players, model, lo, hi, cohorts)` counts a group's decisions by the
+PLAYER (`tagged_decisions`), whatever the kind of duel, and the report holds
+counts and rates only — a test asserts no tag is in it.
+
 Tests: `test_duel_read.py` (55, no database: the rules against literals, the
 artifact, the trainer's blindness on hand-built duels), `test_coach.py`
 (143), `test_duel_index.py` (71). Deployed 2026-10-07 12:09 UTC, backups

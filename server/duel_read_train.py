@@ -64,6 +64,36 @@ REPORT_SPLIT = 0.8
 #: The friendly-duel mode, lower-cased (`duel_combos.NATIVE_DUEL_MODES`).
 FRIENDLY_MODE = "duel_1v1_friendly"
 
+#: NAMED GROUPS OF PLAYERS THE HOLDOUT IS ALSO REPORTED FOR — `{"crl": ["#TAG",
+#: ...]}` in a file that is NOT in the repository (it holds player tags; the
+#: repository is public). The read is fitted on every duel and was asked to be
+#: judged on the players with coaches, so the fit says how it does on them
+#: after every poll. Only counts and rates are ever written out, never a tag.
+COHORTS_PATH = os.environ.get("CLASH_DUEL_COHORTS") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), ".duel_cohorts.json")
+#: Names the two built-in groups own.
+RESERVED_COHORTS = ("all", "friendly")
+
+
+def load_cohorts(path: str = COHORTS_PATH) -> dict:
+    """`{name: set of tags}` from the cohort file, or `{}`. A missing or
+    unreadable file is no cohort, never an error: the fit must not depend on
+    a list somebody keeps by hand."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for name, tags in (raw.items() if isinstance(raw, dict) else []):
+        name = str(name).strip().lower()
+        if not name.isidentifier() or name in RESERVED_COHORTS or not isinstance(tags, list):
+            continue
+        found = {str(t).strip().upper() for t in tags if str(t).strip()}
+        if found:
+            out[name] = found
+    return out
+
 
 def _epoch(bt: str) -> float:
     return float(calendar.timegm(time.strptime(bt[:15], "%Y%m%dT%H%M%S")))
@@ -100,10 +130,9 @@ def players_of(games) -> dict:
     return out
 
 
-def decisions(players: dict, lo: float, hi: float):
-    """Every `(stage, history, revealed, truth, now, lost, friendly duel)` with
-    `lo <= now < hi`, for a player who has any history in the window."""
-    for ds in players.values():
+def tagged_decisions(players: dict, lo: float, hi: float):
+    """`(tag, decision)` for every decision of `decisions`, in its order."""
+    for tag, ds in players.items():
         for j, cur in enumerate(ds):
             now = cur["t"]
             if now < lo or now >= hi:
@@ -113,8 +142,15 @@ def decisions(players: dict, lo: float, hi: float):
                 continue
             for stage in range(len(cur["decks"])):
                 lost = bool(stage) and not cur["won"][stage - 1]
-                yield (min(stage, 2), hist, cur["decks"][:stage], frozenset(cur["decks"][stage]),
-                       now, lost, cur["friendly"])
+                yield tag, (min(stage, 2), hist, cur["decks"][:stage], frozenset(cur["decks"][stage]),
+                            now, lost, cur["friendly"])
+
+
+def decisions(players: dict, lo: float, hi: float):
+    """Every `(stage, history, revealed, truth, now, lost, friendly duel)` with
+    `lo <= now < hi`, for a player who has any history in the window."""
+    for _tag, d in tagged_decisions(players, lo, hi):
+        yield d
 
 
 def _fit_logit(rows, nf: int, seed: int = 7) -> list[float]:
@@ -249,15 +285,20 @@ def _counts_top(hist, revealed) -> list[frozenset]:
     return out
 
 
-def score(players: dict, model: dict, lo: float, hi: float) -> dict:
-    """Blind accuracy of `model` on decisions in `[lo, hi)`, for everyone and
-    for friendly duels (the format coached players prepare for)."""
+def score(players: dict, model: dict, lo: float, hi: float, cohorts: dict | None = None) -> dict:
+    """Blind accuracy of `model` on decisions in `[lo, hi)`, for everyone, for
+    friendly duels (the format coached players prepare for) and for each named
+    group in `cohorts` (`{name: set of tags}`) — the decisions of THOSE
+    players, whatever the kind of duel. The report holds counts and rates."""
     def blank():
         return {"n": 0, "first": 0, "top3": 0, "countsFirst": 0, "countsTop3": 0, "new": 0, "newSaid": 0.0}
 
-    acc = {(c, s): blank() for c in ("all", "friendly") for s in (0, 1, 2)}
+    groups = {str(k): {str(t).upper() for t in v} for k, v in (cohorts or {}).items()
+              if str(k) not in RESERVED_COHORTS}
+    names = ("all", "friendly") + tuple(sorted(groups))
+    acc = {(c, s): blank() for c in names for s in (0, 1, 2)}
     bins: dict[tuple, list] = {}
-    for stage, hist, revealed, truth, now, lost, friendly in decisions(players, lo, hi):
+    for tag, (stage, hist, revealed, truth, now, lost, friendly) in tagged_decisions(players, lo, hi):
         rows = dr.read(hist, revealed, now, lost_prev=lost, friendly_now=friendly,
                        weights=model["weights"][stage],
                        novelty_weights=model["novelty"][stage],
@@ -266,7 +307,8 @@ def score(players: dict, model: dict, lo: float, hi: float) -> dict:
         base = _counts_top(hist, revealed)
         seen = {frozenset(d) for h in hist for d in h["decks"]}
         said = dr.novelty(hist, revealed, now, weights=model["novelty"][stage], friendly_now=friendly)
-        for c in (("all", "friendly") if friendly else ("all",)):
+        mine = [g for g, tags in groups.items() if str(tag).upper() in tags]
+        for c in (("all", "friendly") if friendly else ("all",)) + tuple(mine):
             a = acc[(c, stage)]
             a["n"] += 1
             if sets:
@@ -282,7 +324,7 @@ def score(players: dict, model: dict, lo: float, hi: float) -> dict:
             a["new"] += truth not in seen
             a["newSaid"] += said
     rep: dict = {}
-    for c in ("all", "friendly"):
+    for c in names:
         part = {}
         for s in (0, 1, 2):
             a = acc[(c, s)]
@@ -299,9 +341,11 @@ def score(players: dict, model: dict, lo: float, hi: float) -> dict:
     return rep
 
 
-def run(games, report_only: bool = False, path: str = dr.PATH) -> dict:
+def run(games, report_only: bool = False, path: str = dr.PATH, cohorts: dict | None = None) -> dict:
     t0 = time.time()
     players = players_of(games)
+    if cohorts is None:
+        cohorts = load_cohorts()
     times = sorted(d["t"] for ds in players.values() for d in ds)
     if len(times) < 2000:
         print(f"only {len(times) // 2} duels — not fitting")
@@ -309,7 +353,7 @@ def run(games, report_only: bool = False, path: str = dr.PATH) -> dict:
     lo, hi = times[0], times[-1] + 1
     cut = times[int(len(times) * REPORT_SPLIT)]
     part = fit(players, lo, cut)
-    holdout = score(players, part, cut, hi)
+    holdout = score(players, part, cut, hi, cohorts)
     meta = {
         "duels": len(times) // 2,
         "from": time.strftime("%Y-%m-%d", time.gmtime(lo)),

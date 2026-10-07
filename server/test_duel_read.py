@@ -290,6 +290,41 @@ check("the read names the opener", rep["all"]["0"]["first"] > 90, str(rep["all"]
 check("every stage reports its count beside the read",
       all(k in rep["all"][s] for s in ("0", "1", "2") for k in ("first", "top3", "countsFirst", "countsTop3")))
 check("friendly duels are reported on their own", rep["friendly"]["0"]["n"] == 0)
+check("with no cohort there are the two built-in groups and no other", sorted(rep) == ["all", "friendly"])
+
+print("\na named group of players is reported beside everyone")
+import json as _json  # noqa: E402
+import tempfile as _tempfile  # noqa: E402
+
+players_s = T.players_of(games(synth))
+rep_c = T.score(players_s, model, 0, 10 ** 12, {"crl": {"#S0", "#S1", "#S2"}, "empty": {"#NOBODY"}})
+want = sum(1 for tag, d in T.tagged_decisions(players_s, 0, 10 ** 12) if tag in ("#S0", "#S1", "#S2") and d[0] == 0)
+check("the group is the decisions of ITS players, and only those",
+      rep_c["crl"]["0"]["n"] == want and 0 < want < rep_c["all"]["0"]["n"], f"{rep_c['crl']['0']['n']} {want}")
+check("everyone is unchanged by adding a group", rep_c["all"] == rep["all"] and rep_c["friendly"] == rep["friendly"])
+check("a group nobody in the data belongs to is reported as empty, not left out",
+      rep_c["empty"]["0"]["n"] == 0 and rep_c["empty"]["calibration"] == [])
+check("tags are matched whatever their case", T.score(players_s, model, 0, 10 ** 12, {"crl": {"#s0"}})["crl"]["0"]["n"] > 0)
+check("a group cannot take a built-in name",
+      T.score(players_s, model, 0, 10 ** 12, {"all": {"#S0"}})["all"] == rep["all"])
+check("THE REPORT HOLDS NO TAG", "#S" not in _json.dumps(rep_c))
+check("tagged_decisions is decisions with the player beside each",
+      [d for _t, d in T.tagged_decisions(players_s, 0, 10 ** 12)] == list(T.decisions(players_s, 0, 10 ** 12)))
+
+_tmp = _tempfile.mkdtemp()
+_cp = os.path.join(_tmp, "cohorts.json")
+with open(_cp, "w", encoding="utf-8") as _f:
+    _json.dump({"CRL": ["#s0", " #S1 ", ""], "all": ["#S2"], "bad name": ["#S3"], "notalist": "#S4", "none": []}, _f)
+got = T.load_cohorts(_cp)
+check("the cohort file is read: names lower-cased, tags upper-cased and trimmed",
+      got == {"crl": {"#S0", "#S1"}}, str(got))
+check("a missing cohort file is no cohort, not an error", T.load_cohorts(os.path.join(_tmp, "absent.json")) == {})
+with open(_cp, "w", encoding="utf-8") as _f:
+    _f.write("not json")
+check("an unreadable cohort file is no cohort", T.load_cohorts(_cp) == {})
+with open(_cp, "w", encoding="utf-8") as _f:
+    _json.dump(["#S0"], _f)
+check("a cohort file that is not a table of groups is no cohort", T.load_cohorts(_cp) == {})
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
