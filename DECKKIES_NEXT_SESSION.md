@@ -38,7 +38,8 @@ carries the full reasoning; this is the short version plus what to do next.
 | Migration 007 | **APPLIED.** `is_coach` + `admin_set_coach` + `admin_list_users` v2; coach is a per-account flag, not a role |
 | Linked today | CAPTAIN FROZE and the account holder's own admin email |
 | Player's own screen | **`#/my`**, visible in the top bar and profile menu only when the account is on somebody's roster |
-| Tests | **1,393 vitest** (60 files), **4,040 Python checks** across 72 suites (one known failure, `test_ml_21a`), route count **28** — counted by a full run on 2026-10-06 |
+| Tests | **1,402 vitest** (61 files), **4,123 Python checks** across 73 suites (one known failure, `test_ml_21a`), route count **28** — counted by a full run on 2026-10-07 |
+| Duel recommender rebuild | **STEPS 1-2 OF 5 LIVE 2026-10-07** (`DECKKIES_DUEL_RECOMMENDER.md` is its own record — read that first for anything about Coach Assist's suggestion). The opponent read is a fitted model over the order and recency of a player's duels (`server/duel_read.py`, refitted after each poll): blind on the CRL-list players it names the exact opening deck first 42.8% of the time against the count's 20.3%. The screen shows what they have spent and what they have left by role, a `new deck` figure and a Clan war / Friendly switch. Next: step 3, picking for the duel instead of the game |
 | Card forms | **SHIPPED 2026-10-06, live as `cb8174c`**, server first (backups `*.bak-20261006-042932-preelectro`). Hero Electro Wizard and Evolution Electro Giant: one flag each in `cardMeta.json` and one art file each — **43 evolutions, 18 heroes, 123 cards**. The hero render arrived without its gem and `scripts/add-hero-gem.py` restored it from the Magic Archer master (same template to the pixel). **Adding the next form:** check whether the render already has alpha (then `build-card-art.py`, NOT `import-card-art.py`), re-run `tests/fixtures/seating.json` through the server's `arrange_deck`, and copy `src/data/cardMeta.json` to the VPS — `cardData` stays 123 and cannot confirm it. README "October 2026: two more forms" |
 | All Duels (admin) | **SHIPPED 2026-10-05, live as `7b4eb52`** (`03ecdeb` the page, `c1523a3` friendly three-game duels only, `7b4eb52` Save duel), server first, twice (backups `*.bak-20261005-075221-preallduels`, `*.bak-20261005-082423-prefriendly`): the first build listed every native duel, and the account holder asked for **friendly duels only, and only those played to all three games** (1,169 / 2,431 / 3,046 at 30 / 60 / 90 days). `#/all-duels`, opened from the profile menu by admins only: those duels newest first, both players, the score in games, each game's decks and crowns, a card filter, 30 / 60 / 90 days. Route `/api/analytics/admin/duels` behind the admin gate; new index `games_mode_duel` on the duel index (swapped in by hand at deploy). Each row has **Save duel**: it writes a Versus set to Royal Duels (Blue = the left player, Red = the right), and reads whether it is saved from the library. The signed-in admin view on production is the account holder's check. See the README's "All Duels — friendly duels that went to three games" |
 | Decks screen | **SHIPPED 2026-10-04**, server first (backups `*.bak-20261004-163517-predecks`). `#/player/<tag>/decks`: a player's decks, most played first, 7/14/30 days, their record beside the community's; free for everyone (confirmed). Route `/api/analytics/decks/<tag>`. README "Decks — every deck a player is using" |
@@ -242,16 +243,14 @@ real architectural decision rather than a feature.
 
 None was asked for; each is a real behaviour, read off the code.
 
-- **The opponent's rank and percentage can disagree.** `duel_zone.
-  rank_companions_by_series` orders their likely decks by `3 x co-occurrence
-  + count`, but `coach.next_decks` / `opponent_next` take `prob` from the
-  count alone. The first row can show a lower percentage than the second,
-  and "The read" quotes the first row's.
-- **Native duel game order is unused for prediction.** `duel_index.games`
-  stores `round` for every native duel game, but `coach._history` reads
-  native duels as unordered loadouts (`duel_combos.read_duel_rows`), so
-  "what do they open with" comes only from friendly series. The known
-  loadout-reuse signal (65.7%) does not narrow the opponent's decks either.
+- ~~**The opponent's rank and percentage can disagree.**~~ **Fixed 2026-10-07
+  on the read's path**: `duel_read` orders its rows by the probability it
+  prints. The count (now the fallback) still has it.
+- ~~**Native duel game order is unused for prediction.**~~ **Fixed
+  2026-10-07.** A native row's blocks are in game order (15,578 of 15,578
+  sides against the stored rounds), `coach._history` reads every series'
+  opener, and the duel read uses the position, what followed a reveal and
+  the per-game results from the duel index.
 - **"Switch a card" targets are not vetted.** `deck_tuner.compose` draws
   from the vetted seeds; `rank` draws from every sibling in
   `pair_matchup_agg`, guarded only by the 60-game `thin` flag. A one-pilot

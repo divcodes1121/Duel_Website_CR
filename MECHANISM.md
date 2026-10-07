@@ -53,6 +53,16 @@ end, at the level of individual functions and constants.
 >   them (a shell's core, the open slots chosen against the opponent).
 > * **`server/coach_session.py`** (2026-09-30) — the Coach Roster's daily
 >   practice session.
+> * **`server/duel_read.py`** (2026-10-07) — **the opponent read itself
+>   changed.** Sections 5 and 6 below describe the count of plays; since this
+>   date that is the FALLBACK. The read is a conditional logit over the decks
+>   a player has been seen bringing — game order (a native duel's blocks are
+>   in game order, measured 15,578 of 15,578), recency, what followed the same
+>   reveal — scaled by how much the player rotates and by the chance of a
+>   deck not seen, fitted on every stored duel and refitted after each poll.
+>   Blind, on the CRL-list players: exact opening deck first 42.8% against
+>   20.3%. Candidates share NO card with a reveal (the count's tolerance of
+>   two is gone from that path). `DECKKIES_DUEL_RECOMMENDER.md` is its record.
 >
 > **"None of them trains or calls a model" stopped being true on 2026-09-30.**
 > The duel brain's shrinkage and the fused rate's five weights are still

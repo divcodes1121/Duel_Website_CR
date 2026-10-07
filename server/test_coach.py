@@ -797,5 +797,164 @@ try:
 finally:
     _dev.known = _saved
 
+
+# ── THE FITTED READ (`duel_read`, 2026-10-07) ──────────────────────────────
+#
+# Which deck they bring next, from the ORDER and recency of their own duels.
+# The model is `test_duel_read.py`'s; what is pinned here is the wiring: that
+# Coach Assist uses it when it can, says so, and falls back when it cannot.
+
+print("\nthe fitted read leads, and the counts stand behind it")
+
+_T = 1_000_000_000.0
+_DAY = 86400.0
+_real_now = coach._now
+coach._now = lambda: _T
+RA, RB, RC, RD = deck("ra-open"), deck("rb-second"), deck("rc-third"), deck("rd-old")
+
+
+def _rh(days_ago, decks, won=None, friendly=False):
+    return {"t": _T - days_ago * _DAY, "decks": decks, "friendly": friendly,
+            "won": won if won is not None else [True] * len(decks)}
+
+
+def RH(read, firsts=None, all_decks=None):
+    """A history with the read's rows beside the counted ones."""
+    flat = all_decks if all_decks is not None else [d for h in read for d in h["decks"]]
+    return {"firsts": firsts if firsts is not None else [h["decks"][0] for h in read],
+            "allDecks": flat, "series": [],
+            "seriesDecks": [h["decks"] for h in read],
+            "arch": lambda c: "hog", "marks": lambda c: {}, "archiveUsed": False, "read": read}
+
+
+# RB is in every duel and RD was played most of all, long ago; RA is what they
+# OPEN with now. A count says RD or RB; the read says RA.
+habit = ([_rh(d, [RD, RB]) for d in (29, 28, 27, 26, 25)]
+         + [_rh(d, [RA, RB, RC]) for d in (4, 3, 2, 1)])
+try:
+    r = coach.opening_decks("#T", RH(habit))
+    check("the read answers and says which engine did", r.get("engine") == coach._dr.BRAIN, str(r.get("engine")))
+    check("the opener of their recent duels leads, not the most-played list",
+          set(r["decks"][0]["cards"]) == set(RA), r["decks"][0]["cards"][0])
+    check("every row is marked as the read's", all(d.get("read") for d in r["decks"]))
+    seen = sum(d["prob"] for d in r["decks"])
+    check("the figures leave room for a deck not seen",
+          0 < seen < 1 and abs(r["newDeck"] - round(1 - seen, 4)) < 1e-3, f"{seen} {r.get('newDeck')}")
+    check("the basis is still stated", r["basis"] == "first-game history")
+    check("what they have left is filed by role",
+          set(r["left"]["left"]) == {"wincon", "spell", "building", "support"}
+          and r["left"]["spent"] == {"wincon": [], "spell": [], "building": [], "support": []})
+
+    plain = RH(habit)
+    del plain["read"]
+    r0 = coach.opening_decks("#T", plain)
+    check("a history without the read's rows is counted as before",
+          "engine" not in r0 and not any(d.get("read") for d in r0["decks"]))
+
+    r = coach.next_decks("#T", [RA], RH(habit))
+    check("after the opener, what followed it leads", set(r["decks"][0]["cards"]) == set(RB))
+    check("nothing offered shares a card with the reveal",
+          all(not (set(d["cards"]) & set(RA)) for d in r["decks"]))
+    top = r["decks"][0]
+    odds = {c["card"]: c["prob"] for c in r["cards"]}
+    check("a card's chance is the chance of the decks holding it, not a share of the list",
+          abs(odds[top["cards"][0]] - round(top["prob"], 4)) < 1e-3 and odds[top["cards"][0]] < 1,
+          str(odds.get(top["cards"][0])))
+    check("the revealed deck is what is spent", sum(len(v) for v in r["left"]["spent"].values()) == 8)
+
+    # Never seen with a deck that shares NO card with the reveal: the read has
+    # nothing, and the tolerant count still shows what is near.
+    NEAR = deck("near", "ra-open")                      # shares one card with RA
+    only_near = [_rh(d, [RA, NEAR]) for d in (3, 2, 1)]
+    r = coach.next_decks("#T", [RA], RH(only_near))
+    check("with nothing strictly legal the tolerant count answers",
+          "engine" not in r and len(r["decks"]) == 1 and set(r["decks"][0]["cards"]) == set(NEAR))
+
+    wide = coach.opening_decks("#T", RH(habit), kind=True)["newDeck"]
+    war = coach.opening_decks("#T", RH(habit), kind=False)["newDeck"]
+    check("told the duel is friendly, a new deck is likelier", wide > war, f"{wide} vs {war}")
+
+    o = coach.opponent_next("#O", [RA], RH(habit))
+    check("the opponent's read carries what they have left",
+          o.get("engine") == coach._dr.BRAIN and "left" in o and "newDeck" in o)
+    shares = [d["prob"] for d in o["decks"] if d.get("read")]
+    own = [d["p"] for d in o["decks"] if d.get("read")]
+    check("their decks keep the read's proportions",
+          len(shares) >= 2 and abs(shares[0] / shares[1] - own[0] / own[1]) < 1e-2, f"{shares} {own}")
+    check("and the shares the win rate is weighted by sum to one",
+          abs(sum(d["prob"] for d in o["decks"]) - 1.0) < 1e-9)
+
+    # A PLAYER WHO ROTATES: seven decks, so the three likeliest hold well under
+    # half of what may come. The recommendation is weighed against five.
+    many = [deck(f"m{i}") for i in range(7)]
+    rota = [_rh(7 - i, [many[i], many[(i + 3) % 7]]) for i in range(7)]
+    o = coach.opponent_next("#O", [], RH(rota))
+    check("a flat read is scored against five decks, not three",
+          len(o["decks"]) == coach.OPP_READ_DECKS == 5, str(len(o["decks"])))
+    check("every one of them is worth scoring against",
+          all(d["p"] >= coach.OPP_READ_MIN_P for d in o["decks"]))
+    counted = RH(rota)
+    del counted["read"]
+    check("a counted read still lists three",
+          len(coach.opponent_next("#O", [], counted)["decks"]) == coach.OPP_TOP_DECKS == 3)
+
+    _real_read = coach._dr.read
+
+    def _boom(*a, **k):
+        raise RuntimeError("the read broke")
+
+    coach._dr.read = _boom
+    try:
+        r = coach.opening_decks("#T", RH(habit))
+        check("a read that raises costs nothing: the counts answer", "engine" not in r and len(r["decks"]) >= 1)
+    finally:
+        coach._dr.read = _real_read
+finally:
+    coach._now = _real_now
+
+print("\na native duel is read in game order, with its games' results")
+import types as _types  # noqa: E402
+
+_fake_index = _types.ModuleType("duel_index")
+N1, N2, N3 = deck("n-one"), deck("n-two"), deck("n-three")
+_stamp = "20260901T120000.000Z"
+_fake_index.iso_to_stamp = lambda iso, end=False: iso
+_fake_index.player_results = lambda tag, lo, hi: {
+    (_stamp, ",".join(sorted(N1))): True, (_stamp, ",".join(sorted(N2))): False}
+_saved_index = sys.modules.get("duel_index")
+sys.modules["duel_index"] = _fake_index
+_rows = [{"battle_time": _stamp, "mode": "Duel_1v1_Friendly", "opponent_tag": "#OPP",
+          "opponent_name": "Rival", "result": "win", "cards": N1 + N2 + N3, "opp_cards": [],
+          "archetype": "hog", "opp_archetype": "", "crowns": 3, "opp_crowns": 1, "evo": None, "opp_evo": None},
+         {"battle_time": "20260902T120000.000Z", "mode": "CW_Duel_1v1", "opponent_tag": "#OPP",
+          "opponent_name": "Rival", "result": "loss", "cards": N2 + N1, "opp_cards": [],
+          "archetype": "hog", "opp_archetype": "", "crowns": 0, "opp_crowns": 2, "evo": None, "opp_evo": None}]
+_real_rows = coach.dx.read_duel_rows
+coach.dx.read_duel_rows = lambda tag, since, until: (_rows, False)
+coach._HISTORY_CACHE.clear()
+try:
+    h = coach._history("#NATIVE", "2026-08-25", "2026-09-05")
+    check("a native duel's first block is its opener",
+          sorted(map(sorted, h["firsts"])) == sorted([sorted(N1), sorted(N2)]), str(len(h["firsts"])))
+    rd = h["read"]
+    check("the read's history is oldest first, decks in game order",
+          len(rd) == 2 and rd[0]["t"] < rd[1]["t"] and [sorted(d) for d in rd[0]["decks"]]
+          == [sorted(N1), sorted(N2), sorted(N3)])
+    check("each game's result comes from the duel index; one it does not hold is unknown, not a loss",
+          rd[0]["won"] == [True, False, None], str(rd[0]["won"]))
+    check("a friendly duel is marked, a clan-war duel is not",
+          rd[0]["friendly"] is True and rd[1]["friendly"] is False)
+finally:
+    coach.dx.read_duel_rows = _real_rows
+    coach._HISTORY_CACHE.clear()
+    if _saved_index is not None:
+        sys.modules["duel_index"] = _saved_index
+    else:
+        del sys.modules["duel_index"]
+
+check("real cards are filed under the four roles",
+      [coach._role_of(c) for c in ("hog-rider", "fireball", "cannon", "musketeer")]
+      == ["wincon", "spell", "building", "support"])
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

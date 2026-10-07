@@ -226,6 +226,18 @@ try:
           str(di.player_wcs("#O00")))
     check("a stranger has none", di.player_decks("#NOBODY") == [])
 
+    # PER-GAME RESULTS (`player_results`) — what a `battles` row cannot say
+    # about a native duel, and what the duel read's record with a deck is
+    # counted from. Keyed by the duel's own stamp and the deck.
+    res = di.player_results("#P0")
+    won = [v for (_bt, k), v in res.items() if k == di.deck_key(MORTAR)]
+    check("each of a player's duel games has its own result, by duel and deck",
+          len(won) == decks[di.deck_key(MORTAR)]["games"]
+          and sum(won) == decks[di.deck_key(MORTAR)]["wins"], f"{len(won)} {sum(won)}")
+    check("...inside a window, only that window",
+          len(di.player_results("#P0", since=di.iso_to_stamp("2026-09-01"))) < len(res))
+    check("a stranger has no results", di.player_results("#NOBODY") == {})
+
     # EVERY LIST HOLDING A CARD (`decks_holding`) — the deck architect's
     # evidence. The whole `deck` table, which is far more than the catalogue.
     holding = di.decks_holding(["hog-rider"], min_games=1)

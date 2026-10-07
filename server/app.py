@@ -397,6 +397,19 @@ def _squad(q: dict, side: str) -> tuple[list[str], list[str]]:
     return tags, bad
 
 
+def _duel_kind(q: dict):
+    """`kind=friendly` -> True, `kind=war` -> False, anything else -> None.
+
+    What sort of duel Coach Assist is being asked about. The duel read
+    (`duel_read.py`) is flatter for a friendly duel, where players rotate
+    decks; not told, it uses the share of the player's own duels that are
+    friendly. A closed vocabulary: an unknown word is "not told", never an
+    error.
+    """
+    v = (q.get("kind") or [""])[0].strip().lower()
+    return True if v == "friendly" else False if v == "war" else None
+
+
 def _decks(q: dict, keys: tuple) -> list[list[str]]:
     """The decks already played this duel, in order, from `r1`/`r2`-style params.
 
@@ -565,6 +578,14 @@ class Handler(BaseHTTPRequestHandler):
                     out["deckSynergy"] = deck_synergy.status()
                 except Exception:  # noqa: BLE001
                     out["deckSynergy"] = None
+                # THE DUEL READ's FIT (which deck a player brings next). Refitted
+                # after every poll; `fitted: false` = the built-in weights are in
+                # use, which is a stopped trainer, not a broken read.
+                try:
+                    import duel_read
+                    out["duelRead"] = duel_read.status()
+                except Exception:  # noqa: BLE001
+                    out["duelRead"] = None
                 # HOW MANY DAYS OF META HISTORY EXIST. Same reason again: if
                 # the snapshot timer stops, nothing breaks and no trend is ever
                 # wrong — the span just silently stops growing, which is
@@ -866,7 +887,7 @@ class Handler(BaseHTTPRequestHandler):
                 # last stored battle rather than from today, and one convention
                 # covers the whole API.
                 since, until = _window(q, cd.coverage(tag))
-                out = coach.predict(tag, revealed, since, until)
+                out = coach.predict(tag, revealed, since, until, kind=_duel_kind(q))
                 out["sources"] = _sources()
                 return self._send(out)
 
@@ -932,7 +953,7 @@ class Handler(BaseHTTPRequestHandler):
                 out = coach.suggest(me, opp, _decks(q, ("m1", "m2")),
                                     _decks(q, ("o1", "o2")),
                                     my_since, my_until, opp_since, opp_until,
-                                    swaps=swaps)
+                                    swaps=swaps, kind=_duel_kind(q))
                 out["sources"] = _sources()
                 return self._send(out)
 

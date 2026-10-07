@@ -84,6 +84,8 @@ server/.deck_evidence.json
 server/.deck_evidence.json.tmp
 server/.duel_model.json
 server/.duel_model.json.tmp
+server/.duel_read.json
+server/.duel_read.json.tmp
 
 # Phase 2 feature cache — derived data, regenerable via `--dump` (8.7 MB)
 server/ml/results/*.jsonl.gz

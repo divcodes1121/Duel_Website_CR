@@ -15,6 +15,9 @@ import {
   type CoachChosen,
   type CoachChoiceDeck,
   type CoachDeck,
+  type CoachLeft,
+  type CoachRole,
+  type DuelKind,
   type CoachVs,
   type CoachHistory,
   type CoachPrediction,
@@ -460,7 +463,11 @@ function DeckRow({
         </div>
       ) : showProb && deck.prob !== undefined ? (
         <div className={styles.figure}>
-          <span className={styles.figureValue}>{pct(deck.prob)}</span>
+          {/* The fitted read's OWN figure when there is one (`p`). `prob` on an
+              opponent row is its share of the decks listed, which sums to
+              100% across three rows and overstates each: a real pair printed
+              53 / 29 / 18 where the read said 22 / 12 / 8. */}
+          <span className={styles.figureValue}>{pct(deck.p ?? deck.prob)}</span>
           <span className={styles.figureLabel}>likely</span>
         </div>
       ) : showProb ? (
@@ -693,7 +700,63 @@ type PredictStep =
   | { kind: 'paste'; game: 1 | 2; want: 1 | 2 }
   | { kind: 'result' };
 
-function DuelPrediction({ tag, days }: { tag: string; days: number }) {
+/* WHAT THEY HAVE SPENT AND WHAT THEY HAVE LEFT, BY ROLE (2026-10-07).
+ *
+ * A duel cannot repeat a card, so every deck they show takes eight cards out of
+ * what can still come. This files both halves under the four things a coach
+ * plays around — win conditions, spells, buildings, support:
+ *
+ *   spent   the cards of the decks already shown. A fact, drawn grey.
+ *   left    the fitted read: a card's figure is the chance their next deck
+ *           holds it (the sum of the likely decks it is in). The figures leave
+ *           room for a deck not seen in the window, which is printed once.
+ *
+ * Figures and card art only — this screen says what to play around, not how
+ * the number was reached. */
+const LEFT_ROLES: { id: CoachRole; label: string }[] = [
+  { id: 'wincon', label: 'Win conditions' },
+  { id: 'spell', label: 'Spells' },
+  { id: 'building', label: 'Buildings' },
+  { id: 'support', label: 'Support' },
+];
+
+function LeftPanel({ left, newDeck, stage }: { left: CoachLeft; newDeck?: number; stage: number }) {
+  const rows = LEFT_ROLES.filter((r) => left.left[r.id]?.length || left.spent[r.id]?.length);
+  if (!rows.length) return null;
+  return (
+    <section className={styles.block} data-hue="blue" data-left-panel="">
+      <h4 className={styles.blockTitle}>
+        {stage === 0 ? 'What they bring' : 'What they have left'}
+        {newDeck != null && newDeck >= 0.005 && (
+          <span className={styles.blockNote} data-new-deck="">new deck {pct(newDeck)}</span>
+        )}
+      </h4>
+      <ul className={styles.leftRows}>
+        {rows.map((r) => (
+          <li key={r.id} className={styles.leftRow} data-role={r.id}>
+            <span className={styles.leftRole}>{r.label}</span>
+            <ul className={styles.leftCards}>
+              {(left.left[r.id] ?? []).map((c) => (
+                <li key={c.card} className={styles.oddsCard}>
+                  <CardArt card={c.card} />
+                  <span className={styles.oddsValue}>{pct(c.prob)}</span>
+                </li>
+              ))}
+              {(left.spent[r.id] ?? []).map((c) => (
+                <li key={`spent-${c}`} className={`${styles.oddsCard} ${styles.leftSpent}`} data-spent="">
+                  <CardArt card={c} />
+                  <span className={styles.oddsValue}>spent</span>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function DuelPrediction({ tag, days, kind }: { tag: string; days: number; kind: DuelKind }) {
   const [step, setStep] = useState<PredictStep>({ kind: 'started' });
   const [revealed, setRevealed] = useState<string[][]>([]);
   const [data, setData] = useState<CoachPrediction | null>(null);
@@ -710,7 +773,7 @@ function DuelPrediction({ tag, days }: { tag: string; days: number }) {
     (decks: string[][]) => {
       setBusy(true);
       setError(null);
-      fetchCoachPrediction(tag, decks, { days })
+      fetchCoachPrediction(tag, decks, { days }, kind)
         .then((d) => {
           setData(d);
           setRevealed(decks);
@@ -719,7 +782,7 @@ function DuelPrediction({ tag, days }: { tag: string; days: number }) {
         .catch((e) => setError(e as AnalyticsError))
         .finally(() => setBusy(false));
     },
-    [tag, days],
+    [tag, days, kind],
   );
 
   /* CHANGING THE WINDOW REFRESHES THE ANSWER, it does not restart the
@@ -732,7 +795,7 @@ function DuelPrediction({ tag, days }: { tag: string; days: number }) {
     // `revealed` is deliberately absent: it changes only via `run`, and
     // including it would re-fetch immediately after every answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days]);
+  }, [days, kind]);
 
   const reset = () => {
     setStep({ kind: 'started' });
@@ -891,7 +954,13 @@ function DuelPrediction({ tag, days }: { tag: string; days: number }) {
             </ul>
           </section>
 
-          {!!data.cards?.length && (
+          {/* SPENT AND LEFT, BY ROLE — the fitted read's own block. When it is
+              here it replaces "Cards to expect": the same odds, filed under
+              win conditions, spells, buildings and support, beside what the
+              rules say cannot come back. */}
+          {data.left && <LeftPanel left={data.left} newDeck={data.newDeck} stage={stage} />}
+
+          {!!data.cards?.length && !data.left && (
             <div className={styles.two}>
               <section className={styles.block} data-hue="blue">
                 <h4 className={styles.blockTitle}>
@@ -925,6 +994,23 @@ function DuelPrediction({ tag, days }: { tag: string; days: number }) {
                 </ul>
               </section>
             </div>
+          )}
+
+          {data.left && !!data.archetypes?.length && (
+            <section className={styles.block} data-hue="pink">
+              <h4 className={styles.blockTitle}>Shape of the game</h4>
+              <ul className={styles.barList}>
+                {data.archetypes.map((a) => (
+                  <li key={a.archetype} className={styles.barRow}>
+                    <span className={styles.barName}>{a.name}</span>
+                    <span className={styles.bar}>
+                      <span className={styles.barFill} style={{ width: `${a.prob * 100}%` }} />
+                    </span>
+                    <span className={styles.barValue}>{pct(a.prob)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
 
           {/* Their real log, below the ranking rather than instead of it. */}
@@ -1682,7 +1768,7 @@ type SuggestStep =
   | { kind: 'paste'; side: 'mine' | 'theirs'; game: 1 | 2 }
   | { kind: 'result' };
 
-function Suggestion({ tag, days }: { tag: string; days: number }) {
+function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: DuelKind }) {
   // The tag already in the analysis IS the opponent — that is who the coach
   // has been studying. The player being coached is the one we still need.
   const [me, setMe] = useState('');
@@ -1738,7 +1824,7 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
       setError(null);
       /* The flag gates the REQUEST, not just the render. A reader who will
          never be shown the block must not pay the sibling scan for it. */
-      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs, { days }, tunerAllowed)
+      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs, { days }, tunerAllowed, kind)
         .then((d) => {
           setData(d);
           setStep({ kind: 'result' });
@@ -1746,7 +1832,7 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
         .catch((e) => setError(e as AnalyticsError))
         .finally(() => setBusy(false));
     },
-    [me, opp, days, tunerAllowed],
+    [me, opp, days, tunerAllowed, kind],
   );
 
   /* As in Window 1: refresh the answer, keep the interview. */
@@ -1754,7 +1840,7 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
   useEffect(() => {
     if (answered) run(myPlayed, oppPlayed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days]);
+  }, [days, kind]);
 
   const reset = () => {
     setStep({ kind: 'tags' });
@@ -2026,6 +2112,10 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
         </ul>
       </section>
 
+      {data.opponent.left && (
+        <LeftPanel left={data.opponent.left} newDeck={data.opponent.newDeck} stage={data.stage} />
+      )}
+
       <section className={styles.block} data-hue="blue">
         <h4 className={styles.blockTitle}>Your options, ranked</h4>
         <ul className={styles.deckList}>
@@ -2138,9 +2228,20 @@ function Suggestion({ tag, days }: { tag: string; days: number }) {
    7 and 90 need nothing on its side. */
 const HISTORY_DAYS = DAY_PRESETS;
 
+/* WHAT SORT OF DUEL THIS IS. Players rotate decks far more in a friendly duel
+ * (a scrim, a tournament match) than in a clan-war duel, where one set is
+ * reused for weeks, and the read is flatter for it. Neither chosen is a real
+ * answer: the server then uses the share of that player's own duels that are
+ * friendly. Pressing the chosen one again clears it. */
+const DUEL_KINDS: { id: Exclude<DuelKind, null>; label: string }[] = [
+  { id: 'war', label: 'Clan war' },
+  { id: 'friendly', label: 'Friendly' },
+];
+
 export function CoachAssist({ tag }: { tag: string }) {
   const [win, setWin] = useState<'predict' | 'suggest'>('predict');
   const [days, setDays] = useState<number>(30);
+  const [kind, setKind] = useState<DuelKind>(null);
   const blurb = useMemo(() => WINDOWS.find((w) => w.id === win)?.blurb ?? '', [win]);
 
   return (
@@ -2169,6 +2270,21 @@ export function CoachAssist({ tag }: { tag: string }) {
             </button>
           ))}
         </div>
+
+        <div className={styles.daysRow} role="group" aria-label="Kind of duel" data-duel-kind="">
+          <span className={styles.daysLabel}>Duel</span>
+          {DUEL_KINDS.map((k) => (
+            <button
+              key={k.id}
+              type="button"
+              className={`${styles.dayChip} ${kind === k.id ? styles.dayChipOn : ''}`}
+              aria-pressed={kind === k.id}
+              onClick={() => setKind(kind === k.id ? null : k.id)}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
       </header>
 
       <Tabs label="Coach Assist" items={WINDOWS.map((w) => ({ id: w.id, label: w.label, title: w.blurb }))} value={win} onChange={setWin} />
@@ -2179,9 +2295,9 @@ export function CoachAssist({ tag }: { tag: string }) {
           not throw away the interview the reader has already sat through —
           each child re-runs its own fetch instead. */}
       {win === 'predict' ? (
-        <DuelPrediction key={`p-${tag}`} tag={tag} days={days} />
+        <DuelPrediction key={`p-${tag}`} tag={tag} days={days} kind={kind} />
       ) : (
-        <Suggestion key={`s-${tag}`} tag={tag} days={days} />
+        <Suggestion key={`s-${tag}`} tag={tag} days={days} kind={kind} />
       )}
     </section>
   );

@@ -66,6 +66,7 @@ So this narrates evidence and never invents a tendency to read.
 
 from __future__ import annotations
 
+import calendar
 import os
 import sys
 import threading
@@ -89,6 +90,17 @@ except Exception:  # noqa: BLE001 - deployment shape
     traceback.print_exc()
     _ta = None
 
+#: THE DUEL READ (2026-10-07, `duel_read.py`): which deck they bring next, from
+#: the ORDER and recency of their own duels, by a model fitted on every stored
+#: duel and refitted after each poll. Replayed blind on the CRL-list players it
+#: names the exact opening deck first 42.8% of the time against 20.3% for the
+#: counts below, which remain the fallback. Imported softly, like `_ta`.
+try:
+    import duel_read as _dr
+except Exception:  # noqa: BLE001 - deployment shape
+    traceback.print_exc()
+    _dr = None
+
 # ── PORTED CONSTANTS ───────────────────────────────────────────────────────
 # Names match the bot's so the two can be diffed. Where a value is ours it says
 # so and says why.
@@ -111,6 +123,15 @@ TOP_DECKS = 3
 #: (bot.SUGGEST_OPP_TOP_DECKS / SUGGEST_MY_TOP_DECKS)
 OPP_TOP_DECKS = 3
 MY_TOP_DECKS = 3
+
+#: ...and how many of the opponent's decks are scored when the FITTED READ
+#: answered (`duel_read`, 2026-10-07). Its probabilities are honest, and for a
+#: player who rotates they are flat: on one real pair the three likeliest
+#: openers held 41% between them. Scoring only those would rate my decks
+#: against less than half of what may come, so the list runs to five, and a
+#: deck past the third is kept only while it is worth `OPP_READ_MIN_P`.
+OPP_READ_DECKS = 5
+OPP_READ_MIN_P = 0.03
 
 #: Options held for a DUEL-PROVEN deck (2026-09-27). Team Analysis holds two of
 #: seven; three options hold one, so the ranking by expected win rate still
@@ -212,8 +233,13 @@ def _history(tag: str, since: str | None = None, until: str | None = None) -> di
     series = dz.build_series(rows, arch)
     series_decks = [[g["cards"] for g in s["games"]] for s in series]
     all_decks = [g["cards"] for s in series for g in s["games"]]
-    firsts = [s["games"][0]["cards"] for s in series
-              if s["source"] == "reconstructed" and s["games"]]
+    # A NATIVE DUEL'S BLOCKS ARE IN GAME ORDER (measured 2026-10-07: the 8-card
+    # blocks of `player_card_keys` against the rounds stored in `battle_raw`,
+    # 15,578 of 15,578 sides, June to October, both modes). The docstring
+    # above records the caution this replaced; with it, native duels were left
+    # out of the opening read and 75 of 120 busy duellists fell back to their
+    # overall play rate.
+    firsts = [s["games"][0]["cards"] for s in series if s["games"]]
 
     out = {
         "series": series,
@@ -223,11 +249,116 @@ def _history(tag: str, since: str | None = None, until: str | None = None) -> di
         "arch": arch,
         "marks": marks,
         "archiveUsed": archive_used,
+        # The same duels in `duel_read`'s shape (oldest first, with times and
+        # per-game results), for the fitted read.
+        "read": _read_history(tag, series, rows, since, until),
     }
     if len(_HISTORY_CACHE) >= _HISTORY_MAX:
         _HISTORY_CACHE.clear()
     _HISTORY_CACHE[key] = (now, out)
     return out
+
+
+def _read_history(tag: str, series: list[dict], rows: list[dict],
+                  since: str | None, until: str | None) -> list[dict]:
+    """A player's duels as `duel_read` takes them: oldest first, each
+    `{"t", "decks", "won", "friendly"}`.
+
+    PER-GAME RESULTS. A reconstructed series carries each game's result. A
+    native row carries only the duel's, so its games are looked up in the duel
+    index (`duel_index.player_results`); a game it does not hold stays None,
+    which the read counts as half a win rather than as a loss.
+
+    `friendly` is the kind of duel: a friendly duel or friendly practice, as
+    against a clan-war duel. Players rotate decks far more in the first.
+    """
+    mode_at = {r["battle_time"]: (r.get("mode") or "") for r in rows}
+    results: dict = {}
+    try:
+        import duel_index
+        results = duel_index.player_results(tag, duel_index.iso_to_stamp(since),
+                                            duel_index.iso_to_stamp(until, end=True))
+    except Exception:  # noqa: BLE001 - the index is never required
+        results = {}
+    out = []
+    for s in series:
+        games = s.get("games") or []
+        if not games:
+            continue
+        stamp = (s.get("id") or "").split("|")[0]
+        try:
+            t = float(calendar.timegm(dx._parse_ts(stamp).timetuple()))
+        except Exception:  # noqa: BLE001 - a series with no readable time is skipped
+            continue
+        native = s.get("source") == "native"
+        won = []
+        for g in games:
+            if native:
+                won.append(results.get((stamp, ",".join(sorted(g["cards"])))))
+            else:
+                won.append(True if g.get("result") == "win"
+                           else False if g.get("result") == "loss" else None)
+        out.append({"t": t, "decks": [list(g["cards"]) for g in games], "won": won, "native": native,
+                    "friendly": (not native) or mode_at.get(stamp, "").lower() == "duel_1v1_friendly"})
+    out.sort(key=lambda h: h["t"])
+    return out
+
+
+def _now() -> float:
+    """The moment a read is made for. A function so a test can pin it."""
+    return time.time()
+
+
+def _role_of(card: str) -> str:
+    """`wincon` / `spell` / `building` / `support` — the four shelves the
+    "what they have left" block files a card under."""
+    info = dx.card_info(card)
+    if info.get("is_win_condition"):
+        return "wincon"
+    if info.get("is_spell"):
+        return "spell"
+    if info.get("is_building"):
+        return "building"
+    return "support"
+
+
+def _read_rows(hist: dict | None, revealed: list[list[str]], kind=None) -> list[dict] | None:
+    """`duel_read`'s answer as the deck rows every screen draws, most likely
+    first — or None, and the caller falls back to the counts.
+
+    `kind` is what sort of duel this is (True friendly, False clan war, None
+    not known). `prob` is the read's own figure: the rows sum to LESS than one,
+    and the rest is the chance of a deck not seen in the window.
+    """
+    if _dr is None or not hist or not hist.get("read"):
+        return None
+    try:
+        rows = _dr.read(hist["read"], revealed, _now(), friendly_now=kind)
+    except Exception:  # noqa: BLE001 - the read must never take the screen down
+        traceback.print_exc()
+        return None
+    if not rows:
+        return None
+    out = []
+    for r in rows:
+        cards = r["cards"]
+        a = hist["arch"](cards)
+        row = {"count": r["plays"], "prob": r["p"], "archetype": a,
+               "deckName": dz.deck_label(cards, a), "read": True, "variants": r["variants"]}
+        row.update(dz._arranged(cards, hist["marks"](cards)))
+        out.append(row)
+    return out
+
+
+def _read_extras(rows: list[dict], revealed: list[list[str]]) -> dict:
+    """What a screen needs beside the decks when the read answered: which
+    engine, the chance of an unseen deck, and what is spent and left by role."""
+    seen = sum(r["prob"] for r in rows)
+    return {
+        "engine": _dr.BRAIN,
+        "newDeck": round(max(0.0, 1.0 - seen), 4),
+        "left": _dr.left([{"cards": r["cards"], "p": r["prob"]} for r in rows], revealed, _role_of),
+    }
 
 
 def _player_name(tag: str) -> str:
@@ -243,7 +374,7 @@ def _player_name(tag: str) -> str:
 
 # ── WINDOW 1a: THE OPENING (!predict) ──────────────────────────────────────
 
-def opening_decks(tag: str, hist: dict | None = None) -> dict:
+def opening_decks(tag: str, hist: dict | None = None, kind=None) -> dict:
     """Which decks this player is likely to OPEN a duel with, ranked.
 
     Prefers their real game-1 picks; falls back to overall duel play rate when
@@ -262,9 +393,11 @@ def opening_decks(tag: str, hist: dict | None = None) -> dict:
     else:
         obs, basis = h["allDecks"], "overall play rate"
 
-    decks = dz.cluster_player_decks(obs, FIRST_MAX_DECKS, len(obs),
-                                    h["arch"], h["marks"])
-    return {
+    # THE FITTED READ FIRST (`duel_read`), the counts when it has nothing.
+    rows = _read_rows(h, [], kind)
+    decks = (rows[:FIRST_MAX_DECKS] if rows is not None
+             else dz.cluster_player_decks(obs, FIRST_MAX_DECKS, len(obs), h["arch"], h["marks"]))
+    out = {
         "decks": decks,
         "basis": basis,
         "nObs": len(obs),
@@ -274,11 +407,14 @@ def opening_decks(tag: str, hist: dict | None = None) -> dict:
         # Two separate reasons to distrust the answer, and the UI says which.
         "lowConfidence": len(obs) < 4 or basis == "overall play rate",
     }
+    if rows is not None:
+        out.update(_read_extras(rows, []))
+    return out
 
 
 # ── WINDOW 1b: WHAT IS LEFT (!predict2 / !predict3) ────────────────────────
 
-def _card_odds(decks: list[dict], limit: int = TOP_CARDS) -> list[dict]:
+def _card_odds(decks: list[dict], limit: int = TOP_CARDS, total: float | None = None) -> list[dict]:
     """Which individual cards are most likely to appear next.
 
     Probability-weighted across the candidate decks rather than counted, so a
@@ -286,8 +422,13 @@ def _card_odds(decks: list[dict], limit: int = TOP_CARDS) -> list[dict]:
     bot's `!predict2` card table, which `duel_zone` deliberately left out of the
     sequence board — that board answers "which decks", this screen answers
     "what will I be facing", and a card is the thing you actually play around.
+
+    `total` is what the probabilities are shares OF. The counts are shares of
+    the decks listed, so they are renormalised (the default). The fitted read's
+    are already probabilities — pass 1.0 and a card's figure is the chance
+    their next deck holds it, with no claim made for a deck it has not seen.
     """
-    total = sum(d.get("prob") or 0 for d in decks) or 1.0
+    total = total or (sum(d.get("prob") or 0 for d in decks) or 1.0)
     per: dict[str, float] = {}
     for d in decks:
         p = (d.get("prob") or 0) / total
@@ -300,9 +441,10 @@ def _card_odds(decks: list[dict], limit: int = TOP_CARDS) -> list[dict]:
     return rows[:limit]
 
 
-def _archetype_odds(decks: list[dict], limit: int = TOP_ARCHETYPES) -> list[dict]:
+def _archetype_odds(decks: list[dict], limit: int = TOP_ARCHETYPES,
+                    total: float | None = None) -> list[dict]:
     """The same, grouped by archetype — the shape of the game they will play."""
-    total = sum(d.get("prob") or 0 for d in decks) or 1.0
+    total = total or (sum(d.get("prob") or 0 for d in decks) or 1.0)
     per: dict[str, float] = {}
     for d in decks:
         a = d.get("archetype") or "other"
@@ -534,7 +676,7 @@ def _cluster_loadouts(hits: list[dict], hist: dict, limit: int) -> list[dict]:
 
 
 def next_decks(tag: str, revealed: list[list[str]],
-               hist: dict | None = None) -> dict:
+               hist: dict | None = None, kind=None) -> dict:
     """What this player can still bring, given the decks they have shown.
 
     `revealed` is the decks already played this duel, in order. One entry
@@ -557,16 +699,29 @@ def next_decks(tag: str, revealed: list[list[str]],
         return {"decks": [], "cards": [], "archetypes": [], "observedLoadout": None,
                 "nGames": 0, "lowConfidence": True, "revealed": []}
 
-    decks = dz.predict_companions(h["allDecks"], h["seriesDecks"], revealed,
-                                  h["arch"], h["marks"])
-    # Renormalised over the candidates, not over all their duel decks: the
-    # question is "which of these", and a column that sums to 23% reads as an
-    # error even when each figure is individually defensible.
-    total = sum(d.get("count") or 0 for d in decks) or 1
-    for d in decks:
-        d["prob"] = (d.get("count") or 0) / total
-
-    shown = decks[:TOP_DECKS]
+    # THE FITTED READ FIRST (`duel_read`): strictly legal decks, ranked by what
+    # followed this reveal, how recently and how they did with it. It answers
+    # nothing when they have never been seen with a deck that shares no card
+    # with the reveal — then the tolerant count below still shows what is
+    # NEAR (a list one or two cards off what they must now change).
+    rows = _read_rows(h, revealed, kind)
+    if rows is not None:
+        decks = rows
+        shown = decks[:TOP_DECKS]
+        card_odds = _card_odds(decks, total=1.0)
+        archetype_odds = _archetype_odds(decks, total=1.0)
+    else:
+        decks = dz.predict_companions(h["allDecks"], h["seriesDecks"], revealed,
+                                      h["arch"], h["marks"])
+        # Renormalised over the candidates, not over all their duel decks: the
+        # question is "which of these", and a column that sums to 23% reads as
+        # an error even when each figure is individually defensible.
+        total = sum(d.get("count") or 0 for d in decks) or 1
+        for d in decks:
+            d["prob"] = (d.get("count") or 0) / total
+        shown = decks[:TOP_DECKS]
+        card_odds = _card_odds(shown)
+        archetype_odds = _archetype_odds(shown)
     observed = None
     if revealed:
         seen = dz.observed_duel_loadout(h["seriesDecks"], revealed[0])
@@ -581,9 +736,13 @@ def next_decks(tag: str, revealed: list[list[str]],
             }
 
     return {
+        **(_read_extras(rows, revealed) if rows is not None else {}),
+        # More of the read than the three this window lists, for the caller
+        # that weighs a recommendation against it (`opponent_next`).
+        **({"pool": decks[:OPP_READ_DECKS]} if rows is not None else {}),
         "decks": shown,
-        "cards": _card_odds(shown),
-        "archetypes": _archetype_odds(shown),
+        "cards": card_odds,
+        "archetypes": archetype_odds,
         "observedLoadout": observed,
         # What they REALLY played after this, in game order, from the duel log.
         "history": observed_sequences(revealed, h),
@@ -683,7 +842,7 @@ def _fills(existing: list[dict], used: set, need: int, *,
 
 
 def opponent_next(opp_tag: str, opp_played: list[list[str]],
-                  hist: dict | None = None) -> dict:
+                  hist: dict | None = None, kind=None) -> dict:
     """The opponent's likely next deck, as a distribution over legal decks.
 
     Their own history when there is any, meta decks otherwise, and a labelled
@@ -694,20 +853,25 @@ def opponent_next(opp_tag: str, opp_played: list[list[str]],
     used = set().union(*[set(d) for d in opp_played]) if opp_played else set()
     candidates: list[dict] = []
     source = "population"
+    extras: dict = {}
 
     if opp_tag:
         h = hist or _history(opp_tag)
         if h["allDecks"]:
-            pool = (next_decks(opp_tag, opp_played, h)["decks"] if opp_played
-                    else opening_decks(opp_tag, h)["decks"])
-            legal = _legal(pool, used)
+            res = (next_decks(opp_tag, opp_played, h, kind) if opp_played
+                   else opening_decks(opp_tag, h, kind))
+            legal = _legal(res.get("pool") or res["decks"], used)
             if legal:
                 candidates, source = legal, "opponent-history"
+                extras = {k: res[k] for k in ("engine", "newDeck", "left") if k in res}
 
     if not candidates:
         candidates = _legal(_population_decks(), used)
 
     top = [dict(d) for d in candidates[:OPP_TOP_DECKS]]
+    # The read's fourth and fifth, while they are still worth scoring against.
+    top += [dict(d) for d in candidates[OPP_TOP_DECKS:OPP_READ_DECKS]
+            if d.get("read") and (d.get("prob") or 0.0) >= OPP_READ_MIN_P]
     fills = []
     if source == "opponent-history" and len(top) < OPP_TOP_DECKS:
         fills = _fills(top, used, OPP_TOP_DECKS - len(top))
@@ -715,15 +879,25 @@ def opponent_next(opp_tag: str, opp_played: list[list[str]],
             source = "opponent-history+population"
 
     mass = OPP_HISTORY_MASS if fills else 1.0
-    total = sum(d.get("count") or 1 for d in top) or 1
+
+    # THE SHARE EACH DECK GETS in the expected win rate. A row from the fitted
+    # read carries its own probability and keeps that proportion (`p` is the
+    # read's figure, kept for the screen); a counted row is a share of plays.
+    def weight(d: dict) -> float:
+        return (d.get("prob") or 0.0) if d.get("read") else float(d.get("count") or 1)
+
+    total = sum(weight(d) for d in top) or 1
     for d in top:
-        d["prob"] = mass * (d.get("count") or 1) / total
+        w = weight(d)
+        if d.get("read"):
+            d["p"] = round(d["prob"], 4)
+        d["prob"] = mass * w / total
     ftotal = sum(d.get("count") or 1 for d in fills) or 1
     for d in fills:
         d["prob"] = (1.0 - mass) * (d.get("count") or 1) / ftotal
 
     return {"decks": top + fills, "source": source,
-            "nCandidates": len(candidates) + len(fills)}
+            "nCandidates": len(candidates) + len(fills), **extras}
 
 
 def win_prob(mine: list[str], theirs: list[str], snap) -> dict | None:
@@ -1654,7 +1828,7 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
             opp_played: list[list[str]],
             my_since: str | None = None, my_until: str | None = None,
             opp_since: str | None = None, opp_until: str | None = None,
-            swaps: bool = False) -> dict:
+            swaps: bool = False, kind=None) -> dict:
     """What to play next, and why.
 
     `my_played` / `opp_played` are the decks already used this duel, in order.
@@ -1678,8 +1852,9 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     mine_hist = _history(my_tag, my_since, my_until) if my_tag else None
     opp_hist = _history(opp_tag, opp_since, opp_until) if opp_tag else None
 
-    # What they will bring.
-    opp = opponent_next(opp_tag, opp_played, opp_hist)
+    # What they will bring. `kind` is what sort of duel this is (friendly /
+    # clan war / not told) — the read is flatter for a friendly one.
+    opp = opponent_next(opp_tag, opp_played, opp_hist, kind)
 
     # What I can still bring. Their history-shaped pool, then the legality
     # filter, then meta fills if my own list runs short.
@@ -2325,7 +2500,7 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
 # ── THE TWO ENTRY POINTS THE API CALLS ─────────────────────────────────────
 
 def predict(tag: str, revealed: list[list[str]],
-            since: str | None = None, until: str | None = None) -> dict:
+            since: str | None = None, until: str | None = None, kind=None) -> dict:
     """Window 1. No reveals = the opening; one or two = what is left.
 
     THE HISTORY IS WINDOWED. It used to read everything stored for the player,
@@ -2357,9 +2532,9 @@ def predict(tag: str, revealed: list[list[str]],
         },
     }
     if revealed:
-        out.update(next_decks(tag, revealed, hist))
+        out.update(next_decks(tag, revealed, hist, kind))
     else:
-        out.update(opening_decks(tag, hist))
+        out.update(opening_decks(tag, hist, kind))
         out["revealed"] = []
 
     _observe_opponent(tag)

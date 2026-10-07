@@ -381,7 +381,12 @@ export function coachSuggestionDoc(sg: CoachSuggestion): ReportDoc {
       ...(sg.opponent.decks.length ? [{
         kind: 'decks' as const,
         heading: 'What they are likely to bring',
-        decks: sg.opponent.decks.map((d) => coachDeck(d, d.prob != null ? pct(d.prob * 100, 0) : undefined, 'likelihood')),
+        // `p` is the fitted read's own figure; `prob` is the row's share of the
+        // decks listed (it sums to 100% over them). Print the first when it is there.
+        decks: sg.opponent.decks.map((d) => {
+          const likely = d.p ?? d.prob;
+          return coachDeck(d, likely != null ? pct(likely * 100, 0) : undefined, 'likelihood');
+        }),
       }] : []),
       ...(sg.myPlayed.length || sg.oppPlayed.length ? [{
         kind: 'versus' as const,

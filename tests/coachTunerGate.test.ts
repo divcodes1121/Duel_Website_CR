@@ -24,7 +24,7 @@ describe('the Coach Assist tuner is Pro, not Members', () => {
   });
 
   it('gates the REQUEST as well as the render, so nobody else pays the swap scan', () => {
-    expect(SRC).toMatch(/\{ days \}, tunerAllowed\)/);
+    expect(SRC).toMatch(/\{ days \}, tunerAllowed, kind\)/);
     expect(SRC).toMatch(/\{tunerAllowed && data\.tuner && <TunerPanel/);
   });
 

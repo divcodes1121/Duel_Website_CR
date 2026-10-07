@@ -1180,6 +1180,23 @@ def player_decks(tag: str, since: str | None = None, until: str | None = None) -
     return out
 
 
+def player_results(tag: str, since: str | None = None, until: str | None = None) -> dict:
+    """`{(battle_time, deck key): won}` for one player's duel games in a window.
+
+    THE PER-GAME RESULT A `battles` ROW DOES NOT HOLD. A native duel sits there
+    as one loadout with the duel's result only; the games are here. The duel
+    read (`duel_read.py`) uses it for a player's record with each deck. Stamps
+    as `player_decks`; `{}` with no usable index, like every reader here.
+    """
+    if not tag or _current() is None:
+        return {}
+    try:
+        rows = _player_rows(tag, since, until)
+    except sqlite3.Error:
+        return {}
+    return {(bt, deck): bool(won) for deck, won, bt in rows}
+
+
 def player_record(tag: str) -> tuple[int, int]:
     """`(games, wins)` over every duel game of theirs the index holds — the
     running record `duel_model.strength` turns into a player's strength."""

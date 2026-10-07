@@ -1204,7 +1204,32 @@ export interface CoachDeck {
   duelPick?: 'own' | 'duel';
   /** Its duel record clears the strength gate — the two brains agree. */
   duelProven?: boolean;
+  /** This row came from the fitted duel read (`server/duel_read.py`), not from
+   *  a count of plays. */
+  read?: boolean;
+  /** The read's own probability for this deck. Unlike `prob` on an opponent
+   *  row (a share of the decks listed), these do NOT sum to one: the rest is
+   *  the chance of a deck not seen in the window (`newDeck`). */
+  p?: number;
+  /** Other seen lists within two cards, counted into this row. */
+  variants?: number;
 }
+
+/** The four shelves a card is filed under in "what they have left". */
+export type CoachRole = 'wincon' | 'spell' | 'building' | 'support';
+
+/** What the opponent has SPENT this duel and what they may still bring, by
+ *  role (`duel_read.left`). `spent` is a fact — a duel cannot repeat a card.
+ *  `left` is the read: a card's `prob` is the chance their next deck holds it. */
+export interface CoachLeft {
+  spent: Record<CoachRole, string[]>;
+  left: Record<CoachRole, { card: string; prob: number }[]>;
+}
+
+/** What sort of duel is being asked about. The duel read is flatter for a
+ *  friendly duel, where players rotate decks; `null` = not told, and the server
+ *  uses the share of the player's own duels that are friendly. */
+export type DuelKind = 'friendly' | 'war' | null;
 
 export interface CoachMatchup {
   winRate: number;
@@ -1307,6 +1332,12 @@ export interface CoachPrediction {
   history?: CoachHistory | null;
   nCandidates?: number;
   revealed?: CoachDeck[];
+  /** Set when the fitted duel read answered (`duel-read-1.0`); absent when the
+   *  count of plays did, and on a server from before 2026-10-07. */
+  engine?: string;
+  /** The chance their next deck is one NOT seen in the window. */
+  newDeck?: number;
+  left?: CoachLeft;
 }
 
 export interface CoachSuggestion {
@@ -1322,7 +1353,11 @@ export interface CoachSuggestion {
   };
   /** How much play each window actually held — a thin cap must look thin. */
   evidence?: { mySeries: number; myGames: number; oppSeries: number; oppGames: number };
-  opponent: { decks: CoachDeck[]; source: string; nCandidates: number };
+  opponent: {
+    decks: CoachDeck[]; source: string; nCandidates: number;
+    /** As on `CoachPrediction`: present when the fitted duel read answered. */
+    engine?: string; newDeck?: number; left?: CoachLeft;
+  };
   recommendations: CoachDeck[];
   best: CoachDeck | null;
   /** 'expected win rate' | 'how much you play it' — which ranking was used. */
@@ -1627,7 +1662,7 @@ export interface DeckTuner {
 /** Window 1 — which decks this player will bring. No revealed decks asks about
  *  the opening; one or two asks what is left for game 2 or 3. */
 export function fetchCoachPrediction(
-  tag: string, revealed: string[][], win?: DateWindow,
+  tag: string, revealed: string[][], win?: DateWindow, kind?: DuelKind,
 ): Promise<CoachPrediction> {
   /* WINDOWED. This read the player's whole stored history, which answers a
      different question from the one a duel asks: what someone ran daily six
@@ -1636,6 +1671,7 @@ export function fetchCoachPrediction(
      to 30 days, the same as every other player screen. */
   const q = new URLSearchParams(win ? windowQuery(win) : undefined);
   revealed.forEach((d, i) => q.set(`r${i + 1}`, d.join(',')));
+  if (kind) q.set('kind', kind);
   const qs = q.toString();
   return get<CoachPrediction>(
     `/api/analytics/coach/predict/${encodeURIComponent(tag)}${qs ? `?${qs}` : ''}`,
@@ -1646,7 +1682,7 @@ export function fetchCoachPrediction(
  *  to meta decks and says so, which is a weaker answer rather than none. */
 export function fetchCoachSuggestion(
   me: string, opp: string, myPlayed: string[][], oppPlayed: string[][],
-  win?: DateWindow, swaps?: boolean,
+  win?: DateWindow, swaps?: boolean, kind?: DuelKind,
 ): Promise<CoachSuggestion> {
   /* ONE `days` covers BOTH players, and the server resolves it separately
      against each one's own coverage — so this is thirty days of each player's
@@ -1663,6 +1699,7 @@ export function fetchCoachSuggestion(
      for a reader who will not see the block. The caller decides; nothing here
      infers it. */
   if (swaps) q.set('swaps', '1');
+  if (kind) q.set('kind', kind);
   return get<CoachSuggestion>(`/api/analytics/coach/suggest?${q.toString()}`);
 }
 

@@ -1676,6 +1676,36 @@ Probe notes: the card chips' accessible name is the image alt ("Graveyard"), the
 is "Graveyard decks" — select by `button[title=...]`. The deck buttons are icon-only; count
 `button[title], button[aria-label]`, not text.
 
+## Coach Assist: what they have left, and the Duel switch (2026-10-07)
+
+- **The block** (`LeftPanel` in `CoachAssist.tsx`, `data-left-panel`). Titled
+  **What they bring** before game 1 and **What they have left** after a
+  reveal. One line a role — Win conditions, Spells, Buildings, Support — each a
+  row of card art with the chance under it, then the cards already spent this
+  duel with the word `spent`. It is drawn in both windows: under the likely
+  decks in Duel Prediction, under "What they are likely to bring" in
+  Suggestion. When it is there the old "Cards to expect" table is not drawn,
+  and "Shape of the game" takes the full width.
+- **Spent art is greyed with a filter on the image** (`grayscale(1)
+  brightness(0.82)`, the builder's own duplicate treatment). The type under it
+  is full ink: a figure at half opacity is a figure nobody reads.
+- **`new deck N%`** sits in the block's title as its note, once. It is the
+  chance of a deck not seen in the window; the card figures leave room for it.
+- **No sentence.** The words on the block are its title, four role labels,
+  `new deck` and `spent`. `tests/coachDuelRead.test.ts` holds that.
+- **The Duel switch** is a second group in the header beside History, built
+  from the same chips: `Clan war` | `Friendly`. Neither pressed is a real state
+  (the server then uses the player's own share of friendly duels); pressing the
+  chosen one again clears it. It refreshes the answer in place — `kind` is in
+  each window's fetch dependencies and NOT in its key, so the interview is not
+  restarted.
+- **Their decks' figure** is `deck.p ?? deck.prob`: the read's own probability
+  when the row came from the read, the share of the list otherwise. The PDF
+  prints the same.
+- **Layout.** The role label is a 7.2rem column beside the cards; under 640px
+  it moves above them. Cards are 3.4rem tiles that wrap. Measured in a
+  browser: nothing past the block's edge at 1440 and 390, both themes.
+
 ## The Recent Battles row (2026-10-02)
 
 One card per battle: a slim header (mode, score, result, time), then two tinted halves with

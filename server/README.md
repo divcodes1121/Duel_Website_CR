@@ -410,7 +410,7 @@ happily against a server that never called it.
 | `GET /api/analytics/matchup?a=&b=` | head-to-head for two decks (comma-separated keys) |
 | `GET /api/analytics/counters?deck=` | what beats a deck |
 | `GET /api/analytics/teams?blue=&red=` | **squad vs squad, or one roster scouted** — one folder per opponent: their decks, their archetype spread, **the projected threat space (`threats`), and 5–7 decks that answer it**. With `blue` those come from the squad's own lists; **omit `blue` entirely** and they come from the snapshot's seed pool (~200 real decks), plus an `overall` block ranking the same pool against the whole roster's pooled projection. `mode` says which, and `brain` says which reasoning produced it (`team-scout-2.1`: a match plan's per-teammate lists are chosen as a squad, with `squadCover` on each folder). See `DECKKIES_TEAM_SCOUT.md`. The most expensive route on the service: up to twenty player resolutions, enrolment for the untracked ones, and a profile of every candidate deck. `days` as everywhere else |
-| `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen |
+| `GET /api/analytics/coach/predict/<tag>` | which decks they open with, or what is left after `r1`/`r2`. Takes `?days=` (15/30/45/60, default 30) like every player screen. Since 2026-10-07 answered by the fitted duel read (`duel_read.py`) when it can — `engine`, `newDeck` and `left` (spent and left, by role) say so — and by the count of plays otherwise; **`kind=friendly`** or **`kind=war`** says what sort of duel it is |
 | `GET /api/analytics/coach/field/<tag>` | **what to play with NO OPPONENT** (`coach_daily.py`) — the meta board becomes a threat projection, that projection is reweighted by where this player measurably loses, and `team_scout.score()` ranks ~204 real decks against it. Works because `score()` takes the threat space as an INJECTED parameter and does not know where it came from, so there is no second scorer and no model. `basis` is `weighted` / `unweighted` / `no_history` / `none` and a client must say which. `tailoredPicks` reports how many picks the weighting actually put there, measured by ranking the unweighted projection too — live it is 0-1 of 7, and that is the correct answer rather than a weak one. Costs no database read per candidate; 1.4 s warm. `days` as everywhere else. Returns `families` / `closest` / `learn` / `repertoire` on the full read (not `brief`). **`compare=1`** adds `progress` — this window against the one of the same length before it, recomputed from the rows rather than read from a snapshot table (+~60 ms) |
 | `GET /api/analytics/coach/suggest?me=&opp=` | what to play next, given `m1`/`m2` and `o1`/`o2`. One `?days=` resolves to TWO windows, one per tag, each counted from that player's own last battle. **`swaps=1`** (the client sends it for Pro and admin) adds `tuner` (card swaps, "Or bring one of these", the loadout) and `built` (decks built by human swaps). **`want=<up to 4 card keys>`** (2026-10-02; the client sends it for admin only) answers with `coach.chosen` INSTEAD — decks holding those cards, in sections duel / yours / meta / built — and nothing else |
 | `GET /api/analytics/meta` | the global meta leaderboard (snapshot) |
@@ -1442,6 +1442,83 @@ ranges are `Last 30d vs previous 30d` with the dates in a `title`. **The
 noise band, the counts and every floor still print** — they are what stop a
 coach acting on noise. Units are stated once per card rather than on each of
 68 rows.
+
+## The duel read (`duel_read.py`, `duel_read_train.py`, 2026-10-07)
+
+Which deck a player brings next. The main README's
+["The duel read"](../README.md#the-duel-read-game-order-recency-and-what-they-have-left-2026-10-07)
+has the measurements; `DECKKIES_DUEL_RECOMMENDER.md` has the blind replay
+every change to this has to pass. This is how it runs.
+
+**`duel_read.py` is pure** (no imports beyond the standard library, no clock:
+the caller passes `now`). `read(history, revealed, now, *, lost_prev,
+friendly_now, ...)` takes a player's earlier duels, oldest first — `{"t",
+"decks" (in the order played), "won" (True / False / None), "friendly"}` —
+and returns rows `{"cards", "p", "plays", "lastPlayed", "variants"}`, most
+likely first.
+
+- **Candidates** are the exact lists seen in the history that share NO card
+  with a revealed deck.
+- **Score** = twelve `FEATURES` x the stage's weights. **Probability** =
+  `softmax(sharpness x score) x (1 - novelty)`: `sharpness` is `exp` of three
+  weights x `SHARPNESS_FEATURES` (bias, own new-deck rate, friendly share,
+  friendly now), `novelty` a logistic over `NOVELTY_FEATURES`. The rows sum to
+  `1 - novelty`.
+- **One row a deck**: lists within two cards fold into the best-scored variant
+  and carry their probability; rows are ordered by that sum, so the order and
+  the printed figure cannot disagree.
+- `friendly_now=None` (not told) uses the player's friendly share.
+- `left(rows, revealed, role_of)` -> `{"spent": {role: [cards]}, "left":
+  {role: [{"card", "prob"}]}}` for `wincon` / `spell` / `building` /
+  `support` (`ROLE_LIMITS` 4 / 6 / 4 / 8, `LEFT_MIN_P` 0.05).
+- **The artifact** is `server/.duel_read.json` (gitignored, weights only — no
+  tag). `load()` REFUSES one whose `features` differ from this module's (a
+  reordered list invalidates every weight); a missing sharpness or new-deck
+  table falls back to the defaults for that part. With no file the
+  `DEFAULT_*` tables (the 2026-10-07 fit) are used.
+
+**`duel_read_train.py`** reads the duel index's `games` (read-only, its own
+file), builds every player's duels, and fits the three parts per stage by
+Adagrad (`WINDOW_DAYS` 30, `MAX_ROWS` 100,000 a stage, `EPOCHS` 5). Every
+training row is blind by construction: a decision's features are counted from
+that player's duels that started before it. It reports a fit on the first 80%
+of duels by time scored on the rest — first pick and top three beside a count
+of plays, for everyone and for friendly duels, and the printed probability
+against what happened — stores that in the artifact, then refits on
+everything. 197 s on the server. `after_poll.py` runs it after the duel index
+is updated; `--report` fits and prints without writing.
+
+**In `coach.py`** (imported softly, like `team_analysis`):
+
+- `_history` gains `read` — the same series in the read's shape. Native
+  duels are in game order (their blocks are; measured 15,578 of 15,578), so
+  `firsts` now holds every series' opener, not only reconstructed ones. A
+  native row has no per-game result: `duel_index.player_results(tag, since,
+  until)` -> `{(battle_time, deck key): won}` supplies it, and a game it does
+  not hold stays None (half a win to the read, never a loss).
+- `opening_decks` / `next_decks` / `opponent_next` take `kind` and ask
+  `_read_rows` first. When it answers, the payload carries `engine`
+  (`duel-read-1.0`), `newDeck` and `left`; rows carry `read: true`, and an
+  opponent row `p` (the read's figure) beside `prob` (its share of the decks
+  scored, which is what the expected win rate is weighted by). The card and
+  archetype odds are sums of `p`, not renormalised over the list.
+- `opponent_next` scores up to `OPP_READ_DECKS` (5) of the read's decks while
+  each is worth `OPP_READ_MIN_P` (0.03); a counted read still lists three.
+- **Fallbacks**: no module, no history rows, a read that raises, or no
+  strictly legal deck -> the count (`cluster_player_decks` /
+  `predict_companions`) exactly as before, and no `engine` key.
+
+`kind=friendly|war` on `/coach/predict` and `/coach/suggest` (`app._duel_kind`;
+any other word is "not told"). `/api/analytics/status` carries `duelRead`
+(`fitted`, `trainedAt`, `duels`, `holdout`): `fitted: false` means the built-in
+weights are in use — a stopped trainer, not a broken read. No new route.
+
+Tests: `test_duel_read.py` (55, no database: the rules against literals, the
+artifact, the trainer's blindness on hand-built duels), `test_coach.py`
+(143), `test_duel_index.py` (71). Deployed 2026-10-07 12:09 UTC, backups
+`{coach,duel_index,app,after_poll,test_coach,test_duel_index}.py.bak-20261007-120910-preduelread`;
+rollback is those six files, removing `duel_read.py`, `duel_read_train.py`,
+`test_duel_read.py` and `.duel_read.json`, and a restart.
 
 ## The duel win model (`duel_model.py`, 2026-09-30)
 

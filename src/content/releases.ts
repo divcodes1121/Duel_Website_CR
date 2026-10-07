@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-07-duel-read',
+    date: '2026-10-07',
+    kind: 'improved',
+    title: 'Coach Assist reads the order of a duel, and shows what they have left',
+    body: [
+      'The decks Coach Assist expects your opponent to bring now come from the order they play their duels in and how recently they played each deck, not from a count of plays. On duels it had never seen, it named the exact opening deck first about twice as often as before.',
+      'Under their likely decks there is a new block: the win conditions, spells, buildings and support cards they may still bring, with the chance of each, and the cards they have already spent this duel in grey. The figure beside each of their decks is now the real chance, and a “new deck” figure says how likely they are to bring something not seen in the window.',
+      'Next to the History days there is a Duel switch. Choose Clan war or Friendly if you know which it is — players change decks far more in friendly duels, and the read allows for it.',
+    ],
+    needs: 'pro',
+  },
+  {
     id: '2026-10-06-electro-forms',
     date: '2026-10-06',
     kind: 'new',

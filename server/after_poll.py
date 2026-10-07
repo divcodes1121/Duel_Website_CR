@@ -13,7 +13,8 @@ with it after any restart. This triggers on DATA instead:
      `QUIET_S` (the poll has finished — never update from half a poll),
   3. update the duel index (new duel payloads, records, player strength),
      retrain the duel model incrementally (only games stored since its own
-     watermark), rebuild the card-pairing table (`deck_synergy`, the gate on
+     watermark), refit the duel read (which deck a player brings next, on
+     every stored duel), rebuild the card-pairing table (`deck_synergy`, the gate on
      "Or bring one of these"), rebuild the swap graph (the deck builder's move
      set), and remember the stored_at it acted on.
 
@@ -94,6 +95,9 @@ def main(argv: list[str]) -> int:
     steps = [
         ("duel index", [sys.executable, "-u", os.path.join(HERE, "duel_index.py"), "--build"]),
         ("duel model", [sys.executable, "-u", os.path.join(HERE, "duel_model_train.py")]),
+        # Which deck a player brings next (`duel_read`): refitted on every
+        # stored duel, so each poll's duels shape the next read.
+        ("duel read", [sys.executable, "-u", os.path.join(HERE, "duel_read_train.py")]),
         # Which cards duel players put together: the gate on "Or bring one of
         # these" (a deck whose cards they do not pair is skipped).
         ("deck synergy", [sys.executable, "-u", os.path.join(HERE, "deck_synergy.py"), "--build"]),
