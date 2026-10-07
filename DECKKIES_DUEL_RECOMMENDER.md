@@ -427,6 +427,20 @@ three), none sharing a card, every follow-up in the set; "Play this" changed
 on 8 (6 because the old pick was outside the player's own set). Median
 1.19 s -> 1.33 s.
 
+**Live as `bfb4fd0`.** `/api/health` reported it about 70 s after the push; 7
+of 7 in a real browser on https://deckkies.com signed in (a set of four, 32
+different cards, "Play this" and the follow-ups all in the set, the figures as
+the server sent them). Staging directories removed; playwright uninstalled,
+package files as committed. Full local run: 4,355 Python checks across 76
+suites (only the known `test_ml_21a`), 1,425 vitest across 62 files.
+
+**The package table's rebuild**: the updater's own command was run by hand in
+place, with the timer unit's working directory and environment
+(`python3 -u deck_packages.py --build`, 56.6 s, 705,652 deck-games), and the
+running service picked the new file up without a restart
+(`deckPackages.builtAt` 18:43:36Z). The timer's first run of that step was
+still to come (a bot poll was in progress).
+
 **Known and left:**
 
 - About a quarter of players have fewer than three duel decks in the window

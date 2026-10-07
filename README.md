@@ -3924,6 +3924,18 @@ found for the deck the brain ranked first; when the look-ahead led with a
 different deck they were still drawn against "Play this". They are dropped
 when the pick changes.
 
+**Confirmed live (2026-10-07, `bfb4fd0`).** The four server files running are
+byte for byte the committed ones. `/api/health` reported the commit about 70 s
+after the push; the served bundle carries the heading, its figures and the
+release note. Then **7 of 7 in a real browser on https://deckkies.com, signed
+in as the account holder** (1440, dark): the live opening answer carries a set
+of four, the block is headed "Your set for this duel" with `4 decks · 51.5%`
+exactly as the server sent it, one row a deck, 32 different cards across the
+four, "Play this" is a deck of the set at the set's own figure, and the decks
+to bring next are decks of the set. Not looked at on the live URL: light theme,
+a phone width, and the "your last set" state (the live pair has none) — those
+were checked locally on replayed payloads.
+
 **Checked.** `server/test_duel_set.py` 46 and `test_coach.py` 181 -> 211
 (twenty-one planted faults across the composer and its wiring, all caught);
 `tests/coachDuelPlan.test.ts` 19 -> 23. Browser, real staged payloads
