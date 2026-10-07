@@ -1706,6 +1706,38 @@ is "Graveyard decks" — select by `button[title=...]`. The deck buttons are ico
   it moves above them. Cards are 3.4rem tiles that wrap. Measured in a
   browser: nothing past the block's edge at 1440 and 390, both themes.
 
+## The duel plan on the Suggestion (2026-10-07)
+
+`CoachAssist.tsx`, the Suggestion window only. README "Pick for the duel, not
+the game" has the measurement.
+
+- **One question.** `SuggestStep` gained `{ kind: 'won' }`: after BOTH game-1
+  decks are pasted, "Who won game 1?" with two answers, "You won it" /
+  "They won it" (`won1`, a `GameResult`). Game 2 is never asked about: a duel
+  still being played after two games is 1-1, so `utils/duelResults.ts`
+  (`duelResults(won1, games)`, no imports) derives `wl` / `lw`. Back from the
+  question returns to their game-1 deck; Back from "your game 2 deck" returns
+  to the question. Starting over, or choosing "Nothing played yet", forgets it.
+- **Every run carries it**: `run(mine, theirs, results)`, including the refresh
+  when the History days or the Duel switch change (`duelResults(won1,
+  myPlayed.length)`). `fetchCoachSuggestion(..., kind, results)` sends `res`
+  only when there is one.
+- **"Play this"** leads with `best.plan.duel` — "to win the duel · this game
+  N%" (`data-duel-figure`) — when the plan ran; the brain's figure stands
+  exactly as before when it did not. The title carries the score
+  (`data-duel-score`, "1–0") once a game has been played and the result told.
+- **`ThenRow`** (`data-then`) under the pick's chips: "If you win" / "If you
+  lose" with the deck's name and a small strip each (`data-branch`), or ONE
+  "Next game" strip when both branches name the same deck; nothing when
+  neither result leaves a deck to name. No sentence, no note.
+- **Each ranked option** shows `plan.duel` labelled "win the duel", this
+  game's figure and the per-deck rates in its tooltip.
+- **The PDF** (`coachSuggestionDoc`) prints the duel figure with "duel · this
+  game N%" leading the note, and a "Then bring" block for the pick.
+- **Layout.** `.thenRow` is `repeat(auto-fit, minmax(min(18rem, 100%), 1fr))`:
+  two decks side by side at 1440, stacked on a phone. Measured in a browser:
+  inside the page at 1440 and 390, both themes.
+
 ## The Recent Battles row (2026-10-02)
 
 One card per battle: a slim header (mode, score, result, time), then two tinted halves with

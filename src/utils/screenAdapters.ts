@@ -375,9 +375,28 @@ export function coachSuggestionDoc(sg: CoachSuggestion): ReportDoc {
       {
         kind: 'decks',
         heading: 'Play this',
-        decks: sg.recommendations.map((d) => coachDeck(d, d.expected ? pct(d.expected.winRate) : undefined,
-          d.expected?.vs?.length ? d.expected.vs.slice(0, 3).map((v) => `${v.name} ${Math.round(v.winRate)}%`).join(' · ') : 'expected')),
+        // WHEN THE DUEL PLAN RANKED THE LIST the figure is the duel's, as on the
+        // screen — "Ranked by" above says so — and this game's leads the note.
+        decks: sg.recommendations.map((d) => {
+          const vs = d.expected?.vs?.length
+            ? d.expected.vs.slice(0, 3).map((v) => `${v.name} ${Math.round(v.winRate)}%`).join(' · ')
+            : '';
+          if (d.plan)
+            return coachDeck(d, pct(d.plan.duel), [`duel · this game ${Math.round(d.plan.game)}%`, vs].filter(Boolean).join(' · '));
+          return coachDeck(d, d.expected ? pct(d.expected.winRate) : undefined, vs || 'expected');
+        }),
       },
+      ...(sg.best?.plan && (sg.best.plan.then.won || sg.best.plan.then.lost) ? [{
+        kind: 'decks' as const,
+        heading: 'Then bring',
+        decks: (['won', 'lost'] as const)
+          .filter((b) => sg.best!.plan!.then[b])
+          .map((b) => {
+            const d = sg.best!.plan!.then[b]!;
+            return coachDeck({ ...d, art: d.art ?? {}, archetype: d.archetype ?? '', deckName: d.deckName ?? '' },
+              undefined, b === 'won' ? 'if you win this game' : 'if you lose this game');
+          }),
+      }] : []),
       ...(sg.opponent.decks.length ? [{
         kind: 'decks' as const,
         heading: 'What they are likely to bring',

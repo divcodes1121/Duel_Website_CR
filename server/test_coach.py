@@ -969,6 +969,155 @@ finally:
     else:
         del sys.modules["duel_index"]
 
+print("\npick for the duel, not the game (2026-10-07)")
+import duel_plan as _plan_oracle  # noqa: E402
+
+_PA, _PB, _PC, _PD = deck("pa"), deck("pb"), deck("pc"), deck("pd")
+_PX, _PY, _PZ = deck("px"), deck("py"), deck("pz")
+# They bring X, then Y, then Z. A is my best deck against X and my only answer
+# to Y — the case `test_duel_plan.py` works by hand: open B, keep A.
+_PM = {("pa", "px"): 0.60, ("pb", "px"): 0.55, ("pc", "px"): 0.50,
+       ("pa", "py"): 0.90, ("pb", "py"): 0.30, ("pc", "py"): 0.30}
+
+
+def _tagof(cards):
+    """The one named card of a `deck(...)`; the rest is filler."""
+    return next(c for c in cards if not c.startswith("filler"))
+
+
+def _fake_pair(model, rates, a, b, **kw):
+    return _PM.get((_tagof(a), _tagof(b)), 0.5), "combined"
+
+
+class _FakeRead:
+    BRAIN = "duel-read-1.0"
+
+    def __init__(self):
+        self.calls = []
+
+    def read(self, hist, rev, now, friendly_now=None, **kw):
+        self.calls.append(([list(r) for r in rev], friendly_now, kw))
+        nxt = {0: _PX, 1: _PY, 2: _PZ}.get(len(rev))
+        return [{"cards": list(nxt), "p": 1.0}] if nxt else []
+
+
+def _prow(cards, name):
+    return {"cards": list(cards), "deckName": name, "archetype": "x", "art": {}, "brain": {"winRate": 1.0}}
+
+
+_saved_plan = (coach._dr, coach._combined_pair, coach._dp)
+_fr = _FakeRead()
+coach._dr, coach._combined_pair = _fr, _fake_pair
+try:
+    P_TOP = [_prow(_PA, "A"), _prow(_PB, "B"), _prow(_PC, "C")]
+    P_OPP = {"engine": "duel-read-1.0", "decks": []}
+    P_HIST = {"read": [{"t": _T - _DAY, "decks": [_PX, _PY, _PZ]}]}
+    P_CTX = {"model": {"weights": {}}, "kw": dict(my_def=None, opp_def=None, my_str=0.5, opp_str=0.5)}
+    rows, info = coach._duel_plan(P_TOP, P_TOP, [], [], "", P_OPP, P_HIST, None, P_CTX, None)
+    want = _plan_oracle.plan(
+        [_PA, _PB, _PC],
+        lambda rev, lost: [({0: _PX, 1: _PY, 2: _PZ}[len(rev)], 1.0)] if len(rev) < 3 else [],
+        lambda a, b: _PM.get((_tagof(a) if a else "", _tagof(b) if b else ""), 0.5))
+    wby = {o["deck"]: o for o in want["options"]}
+    check("the options are re-ordered by the chance of winning the DUEL: B leads, A was best now",
+          [r["deckName"] for r in rows] == ["B", "C", "A"], str([r["deckName"] for r in rows]))
+    check("each row carries this game and the duel, in percent, as the plan computed them",
+          rows[0]["plan"]["duel"] == round(100 * wby[1]["duel"], 1)
+          and rows[0]["plan"]["game"] == 55.0 and rows[2]["plan"]["game"] == 60.0, str(rows[0]["plan"]))
+    check("...and the deck to bring next, as a row the screen can draw",
+          rows[0]["plan"]["then"]["won"]["deckName"] == "A"
+          and sorted(rows[0]["plan"]["then"]["lost"]["cards"]) == sorted(_PA)
+          and "brain" not in rows[0]["plan"]["then"]["won"])
+    check("the summary says it ranked, that it changed the pick, and where the duel stands",
+          info == {"brain": _plan_oracle.BRAIN, "games": 3, "finished": 0, "score": [0, 0], "results": "",
+                   "ranked": True, "changed": True, "pool": 3}, str(info))
+    check("the caller's rows are not mutated", "plan" not in P_TOP[0])
+    check("the read is asked as the screen's own read is — the kind of duel, and never who lost",
+          all(k == {} for _r, _f, k in _fr.calls) and _fr.calls and _fr.calls[0][1] is None)
+
+    _fr.calls.clear()
+    rows1, info1 = coach._duel_plan([_prow(_PB, "B"), _prow(_PC, "C")], [], [_PA], [_PX], "w", P_OPP, P_HIST,
+                                    True, P_CTX, None)
+    check("told who won game 1, the plan starts from 1-0",
+          info1["score"] == [1, 0] and info1["results"] == "w" and info1["finished"] == 1)
+    check("a win that ends the duel leaves nothing to bring after it",
+          rows1[0]["plan"]["then"]["won"] is None and rows1[0]["plan"]["then"]["lost"] is not None)
+    check("the kind of duel reaches the read", _fr.calls[0][1] is True)
+    check("a result moves the chance of the next game: 30% after a win is more than 30%",
+          rows1[0]["plan"]["game"] > 30.0, str(rows1[0]["plan"]))
+    _r, info_u = coach._duel_plan([_prow(_PB, "B")], [], [_PA], [_PX], "", P_OPP, P_HIST, None, P_CTX, None)
+    check("not told, the score is not claimed", info_u["score"] is None and info_u["results"] == "")
+    _r, info_j = coach._duel_plan([_prow(_PB, "B")], [], [_PA], [_PX], "zzw!", P_OPP, P_HIST, None, P_CTX, None)
+    check("anything that is not a result is dropped", info_j["results"] == "w")
+
+    _fr.calls.clear()
+    coach._duel_plan([_prow(_PB, "B")], [], [_PA], [], "w", P_OPP, P_HIST, None, P_CTX, None)
+    check("a game of theirs whose deck is not known is handed to the read as a reveal that rules nothing out",
+          _fr.calls[0][0] == [["?"]], str(_fr.calls[0][0]))
+
+    rows2, info2 = coach._duel_plan([_prow(_PB, "B"), _prow(_PC, "C")], [_prow(_PA, "A"), _prow(_PD, "D")],
+                                    [], [], "", P_OPP, P_HIST, None, P_CTX, None)
+    check("the rest of my legal pool is planned with, but only the options are listed",
+          info2["pool"] == 4 and [r["deckName"] for r in rows2] == ["B", "C"]
+          and rows2[0]["plan"]["then"]["won"]["deckName"] == "A")
+    many = [_prow(deck(f"m{i}"), f"M{i}") for i in range(12)]
+    _r, info_m = coach._duel_plan(many[:3], many, [], [], "", P_OPP, P_HIST, None, P_CTX, None)
+    check("the pool is capped", info_m["pool"] == coach.PLAN_POOL)
+    short = [_prow(_PA, "A"), {"cards": _PB[:7], "deckName": "seven"}]
+    rows3, info3 = coach._duel_plan(short, [], [], [], "", P_OPP, P_HIST, None, P_CTX, None)
+    check("a row that could not be valued leaves the order alone",
+          [r["deckName"] for r in rows3] == ["A", "seven"] and not info3["ranked"] and not info3["changed"]
+          and "plan" in rows3[0] and "plan" not in rows3[1])
+
+    check("no fitted read for the opponent: the list stands",
+          coach._duel_plan(P_TOP, P_TOP, [], [], "", {"decks": []}, P_HIST, None, P_CTX, None) == (P_TOP, None))
+    check("no history to read: the list stands",
+          coach._duel_plan(P_TOP, P_TOP, [], [], "", P_OPP, {"read": []}, None, P_CTX, None) == (P_TOP, None))
+    check("no win model: the list stands",
+          coach._duel_plan(P_TOP, P_TOP, [], [], "", P_OPP, P_HIST, None, {}, None) == (P_TOP, None))
+    check("two games played and decided, or three played: nothing to plan",
+          coach._duel_plan(P_TOP, P_TOP, [_PD, _PD], [_PX, _PY], "ww", P_OPP, P_HIST, None, P_CTX, None)[1] is None
+          and coach._duel_plan(P_TOP, P_TOP, [_PA, _PB, _PC], [_PX, _PY, _PZ], "", P_OPP, P_HIST, None, P_CTX,
+                               None) == (P_TOP, None))
+
+    # A DECK THEY HAVE NOT SHOWN IS PLAYED AT THEIR LEVELS, not maxed. The read
+    # names X at 50%; the other half is unseen. Their known decks are two
+    # levels down on every card and the model's only weight is the level term.
+    class _Half(_FakeRead):
+        def read(self, hist, rev, now, friendly_now=None, **kw):
+            return [{"cards": list(_PX), "p": 0.5}]
+
+    coach._dr = _Half()
+    lv_ctx = {"model": {"weights": {"level": 1.0}},
+              "kw": dict(my_def=None, opp_def={c: 2.0 for c in _PX + _PY + _PZ}, my_str=0.5, opp_str=0.5)}
+    rows_lv, _i = coach._duel_plan([_prow(_PA, "A")], [], [_PB, _PC], [_PY, _PZ], "", P_OPP, P_HIST, None,
+                                   lv_ctx, None)
+    # 0.5 * 0.60 (A against X) + 0.5 * sigmoid(2 - 0) = 0.30 + 0.4404
+    check("a deck they have not shown is rated at their own levels, not as a maxed deck",
+          rows_lv[0]["plan"]["game"] == 74.0, str(rows_lv[0]["plan"]))
+    coach._dr = _fr
+
+    class _Boom(_FakeRead):
+        def read(self, *a, **k):
+            raise RuntimeError("read gone")
+
+    coach._dr = _Boom()
+    check("a read that raises returns the rows untouched, never an error",
+          coach._duel_plan(P_TOP, P_TOP, [], [], "", P_OPP, P_HIST, None, P_CTX, None) == (P_TOP, None))
+    coach._dr = _fr
+    coach._dp = None
+    check("no plan module: the list stands",
+          coach._duel_plan(P_TOP, P_TOP, [], [], "", P_OPP, P_HIST, None, P_CTX, None) == (P_TOP, None))
+finally:
+    coach._dr, coach._combined_pair, coach._dp = _saved_plan
+
+_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "coach.py"), encoding="utf-8").read()
+_sug = _src[_src.index("def suggest("):_src.index("def mine_hist_pool(")]
+check("suggest plans AFTER the brain has ranked and BEFORE it names the best deck",
+      _sug.index("_brain(top, opp") < _sug.index("_duel_plan(top, mine, my_played, opp_played, results")
+      < _sug.index("best = top[0] if top else None"))
+check("...and the answer carries the plan", '"duelPlan": duel_plan' in _sug)
+
 print("\na constructed deck must make sense as a deck (2026-10-07)")
 _PK_BAD = deck("pk-odd")
 _PK_OK = deck("pk-fine")

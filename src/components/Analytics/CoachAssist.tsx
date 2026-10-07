@@ -16,6 +16,8 @@ import {
   type CoachChoiceDeck,
   type CoachDeck,
   type CoachLeft,
+  type CoachPlanDeck,
+  type CoachPlanRow,
   type CoachRole,
   type DuelKind,
   type CoachVs,
@@ -40,6 +42,7 @@ import { useHeldLoading } from '../../hooks/useHeldLoading';
 import { useReportRegistration } from '../../state/reportExport';
 import { isPaid, useAccess } from '../../state/gate';
 import { DAY_PRESETS } from '../../utils/datePresets';
+import { duelResults, scoreLabel, type GameResult } from '../../utils/duelResults';
 import { WinConFilter, filterCardName } from '../WinConFilter/WinConFilter';
 
 /* Coach Assist — two windows over `server/coach.py`.
@@ -438,7 +441,22 @@ function DeckRow({
         name={deck.deckName}
         size="sm"
       />
-      {deck.brain ? (
+      {deck.plan ? (
+        /* THE LIST IS ORDERED BY THE DUEL when the look-ahead ran, so the
+           figure in the row is the duel's — this game's is in the tooltip. */
+        <div
+          className={styles.figure}
+          title={[
+            `this game ${deck.plan.game.toFixed(1)}%`,
+            ...(deck.brain?.vs ?? []).map((v) => `${v.name}: ${v.winRate.toFixed(1)}%`),
+          ].join(' · ')}
+        >
+          <span className={styles.figureValue} data-good={deck.plan.duel >= 50 ? '' : undefined}>
+            {deck.plan.duel.toFixed(1)}%
+          </span>
+          <span className={styles.figureLabel}>win the duel</span>
+        </div>
+      ) : deck.brain ? (
         /* THE DUEL BRAIN'S WIN CHANCE LEADS when it exists: on held-out
            duels its choices won 55.8% against 43.0%. The ladder+duel rate it
            replaced stays in the tooltip, so nothing is hidden. */
@@ -1766,7 +1784,43 @@ type SuggestStep =
   | { kind: 'tags' }
   | { kind: 'stage' }
   | { kind: 'paste'; side: 'mine' | 'theirs'; game: 1 | 2 }
+  /* Who won game 1 — asked once, right after its two decks. */
+  | { kind: 'won' }
   | { kind: 'result' };
+
+/** What to bring NEXT, if this game is won and if it is lost — the duel plan's
+ *  follow-ups for the deck being recommended. One strip when both branches
+ *  name the same deck. */
+function ThenRow({ then }: { then: CoachPlanRow['then'] }) {
+  const { won, lost } = then;
+  if (!won && !lost) return null;
+  const key = (d: CoachPlanDeck) => [...d.cards].sort().join(',');
+  const items: { label: string; branch: string; deck: CoachPlanDeck }[] =
+    won && lost && key(won) === key(lost)
+      ? [{ label: 'Next game', branch: 'both', deck: won }]
+      : [
+          ...(won ? [{ label: 'If you win', branch: 'won', deck: won }] : []),
+          ...(lost ? [{ label: 'If you lose', branch: 'lost', deck: lost }] : []),
+        ];
+  return (
+    <div className={styles.thenRow} data-then>
+      {items.map((it) => (
+        <div key={it.branch} className={styles.thenItem} data-branch={it.branch}>
+          <span className={styles.thenLabel}>{it.label}</span>
+          <span className={styles.thenName}>{it.deck.deckName || it.deck.archetype}</span>
+          <Strip
+            cards={it.deck.cards}
+            art={it.deck.art}
+            inferred={it.deck.inferredArt}
+            filled={it.deck.artFilled}
+            name={it.deck.deckName}
+            size="sm"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: DuelKind }) {
   // The tag already in the analysis IS the opponent — that is who the coach
@@ -1777,6 +1831,9 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
   const [games, setGames] = useState(0);
   const [myPlayed, setMyPlayed] = useState<string[][]>([]);
   const [oppPlayed, setOppPlayed] = useState<string[][]>([]);
+  /* Who won game 1, from the coached player's side. The only result ever
+     asked: after two games a duel still being played is 1-1. */
+  const [won1, setWon1] = useState<GameResult | null>(null);
   const [data, setData] = useState<CoachSuggestion | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1819,12 +1876,12 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
   useEffect(() => setOpp(tag), [tag]);
 
   const run = useCallback(
-    (mine: string[][], theirs: string[][]) => {
+    (mine: string[][], theirs: string[][], results: string) => {
       setBusy(true);
       setError(null);
       /* The flag gates the REQUEST, not just the render. A reader who will
          never be shown the block must not pay the sibling scan for it. */
-      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs, { days }, tunerAllowed, kind)
+      fetchCoachSuggestion(me.trim(), opp.trim(), mine, theirs, { days }, tunerAllowed, kind, results)
         .then((d) => {
           setData(d);
           setStep({ kind: 'result' });
@@ -1838,7 +1895,7 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
   /* As in Window 1: refresh the answer, keep the interview. */
   const answered = step.kind === 'result';
   useEffect(() => {
-    if (answered) run(myPlayed, oppPlayed);
+    if (answered) run(myPlayed, oppPlayed, duelResults(won1, myPlayed.length));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days, kind]);
 
@@ -1847,6 +1904,7 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
     setGames(0);
     setMyPlayed([]);
     setOppPlayed([]);
+    setWon1(null);
     setData(null);
     setError(null);
     setChoiceWant([]);
@@ -1931,7 +1989,8 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
           hue="green"
           onClick={() => {
             setGames(0);
-            run([], []);
+            setWon1(null);
+            run([], [], '');
           }}
         >
           Nothing played yet — pick game 1
@@ -1983,7 +2042,7 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
              (game 1) — both discarding a result that is still in hand, which
              is the thing the button exists to avoid. */
           if (data && game === data.stage + 1) return setStep({ kind: 'result' });
-          if (game === 2) return setStep({ kind: 'paste', side: 'theirs', game: 1 });
+          if (game === 2) return setStep({ kind: 'won' });
           return setStep({ kind: 'stage' });
         }}
         onConfirm={(cards) => {
@@ -1994,10 +2053,35 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
           }
           const theirs = [...oppPlayed.slice(0, game - 1), cards];
           setOppPlayed(theirs);
-          if (game < games) return setStep({ kind: 'paste', side: 'mine', game: 2 });
-          return run(myPlayed, theirs);
+          /* GAME 1's RESULT IS ASKED HERE, once, with both of its decks in
+             hand. Game 2's is never asked: the duel is still being played, so
+             it went the other way. */
+          if (game === 1) return setStep({ kind: 'won' });
+          return run(myPlayed, theirs, duelResults(won1, 2));
         }}
       />
+    );
+  }
+
+  if (step.kind === 'won') {
+    const answer = (r: GameResult) => {
+      setWon1(r);
+      if (games >= 2) return setStep({ kind: 'paste', side: 'mine', game: 2 });
+      return run(myPlayed, oppPlayed, duelResults(r, 1));
+    };
+    return (
+      <Ask
+        step="Game 1"
+        question="Who won game 1?"
+        onBack={() => setStep({ kind: 'paste', side: 'theirs', game: 1 })}
+      >
+        <Choice hue="green" onClick={() => answer('w')}>
+          You won it
+        </Choice>
+        <Choice hue="pink" onClick={() => answer('l')}>
+          They won it
+        </Choice>
+      </Ask>
     );
   }
 
@@ -2010,6 +2094,9 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
         <div>
           <h3 className={styles.resultTitle}>
             {data.myName} vs {data.oppName} · game {data.stage + 1}
+            {data.duelPlan?.score && data.stage > 0 && (
+              <span data-duel-score> · {scoreLabel(data.duelPlan.score)}</span>
+            )}
           </h3>
           <p className={styles.resultSub}>
             Your still-legal decks ranked by {data.basis}. A duel loadout cannot repeat a
@@ -2026,7 +2113,16 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
           <span className={styles.verdictLabel}>Play this</span>
           <div className={styles.verdictBody}>
             <span className={styles.verdictName}>{best.deckName || best.archetype}</span>
-            {best.brain ? (
+            {best.plan ? (
+              /* THE DUEL, NOT THE GAME, when the look-ahead ran: this deck now
+                 is what leaves the best chance of taking two of three. */
+              <span className={styles.verdictFigure} data-duel-figure>
+                {best.plan.duel.toFixed(1)}%
+                <span className={styles.verdictFigureLabel}>
+                  to win the duel · this game {best.plan.game.toFixed(1)}%
+                </span>
+              </span>
+            ) : best.brain ? (
               <span className={styles.verdictFigure}>
                 {best.brain.winRate.toFixed(1)}%
                 <span className={styles.verdictFigureLabel}>
@@ -2060,6 +2156,7 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
             name={best.deckName}
           />
           <VsChips vs={best.expected?.vs} />
+          {best.plan && <ThenRow then={best.plan.then} />}
         </section>
       )}
 

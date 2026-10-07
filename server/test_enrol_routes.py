@@ -157,5 +157,13 @@ try:
 finally:
     app.tracking.status, app.tracking.request = orig_status, orig_request
 
+# WHO WON EACH GAME (`res=`), for the duel plan: a closed vocabulary.
+check("res=wl is two results, in order", app._duel_results({"res": ["wl"]}) == "wl")
+check("res is case-blind and anything else is dropped",
+      app._duel_results({"res": [" W?x"]}) == "w" and app._duel_results({"res": ["draw"]}) == "w")
+check("no res is not told", app._duel_results({}) == "" and app._duel_results({"res": [""]}) == "")
+check("a third result is not a duel state", app._duel_results({"res": ["wlw"]}) == "wl")
+check("the suggestion route hands the results to the coach", "results=_duel_results(q)" in suggest)
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

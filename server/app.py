@@ -410,6 +410,15 @@ def _duel_kind(q: dict):
     return True if v == "friendly" else False if v == "war" else None
 
 
+def _duel_results(q: dict) -> str:
+    """`res=w`, `res=l`, `res=wl`: who won each finished game of the duel, in
+    order, from the side of the player being coached. Anything else is "not
+    told" — the duel plan then weighs both results. Two games at most: a third
+    one ends the duel."""
+    v = (q.get("res") or [""])[0].strip().lower()
+    return "".join(c for c in v if c in "wl")[:2]
+
+
 def _decks(q: dict, keys: tuple) -> list[list[str]]:
     """The decks already played this duel, in order, from `r1`/`r2`-style params.
 
@@ -961,7 +970,8 @@ class Handler(BaseHTTPRequestHandler):
                 out = coach.suggest(me, opp, _decks(q, ("m1", "m2")),
                                     _decks(q, ("o1", "o2")),
                                     my_since, my_until, opp_since, opp_until,
-                                    swaps=swaps, kind=_duel_kind(q))
+                                    swaps=swaps, kind=_duel_kind(q),
+                                    results=_duel_results(q))
                 out["sources"] = _sources()
                 return self._send(out)
 

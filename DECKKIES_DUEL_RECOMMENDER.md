@@ -116,7 +116,7 @@ otherwise (today's read 52.2 / 50.7; a perfect read 54.2 / 49.7; noise about
 |---|---|---|
 | 1 | **The new opponent read** — game order, recency, strictly legal decks, a fitted next-deck model, on any window; retrained after every poll | **LIVE 2026-10-07** |
 | 2 | **What they have left** — win conditions, spells, buildings and support cards still unspent after each game | **LIVE 2026-10-07** |
-| 3 | **Pick for the duel, not the game** — look-ahead over their likely order; the result of each game updates the next read | **in progress** — `duel_plan.py` written and measured in quick mode; not wired |
+| 3 | **Pick for the duel, not the game** — look-ahead over their likely order; the result of each game moves the next one | **LIVE 2026-10-07** |
 | 4 | **The set composer** — three or four card-disjoint decks from duel-proven decks, key spells and win conditions spread so no deck is starved; harmony checklist and duel-pairing gate on every deck; at most two human swaps | **the gate is LIVE 2026-10-07** (`deck_packages.py`, asked for early); the composer is not started |
 | 5 | **Keep learning** — retrain after every poll; this scorecard re-run before any step ships; a CRL cohort line in it | not started |
 
@@ -305,8 +305,7 @@ timer (14:58 UTC run, `duel read: exit 0 in 176s`; `duelRead.trainedAt`
 
 ### 2026-10-07 — step 3, in progress (nothing wired, nothing deployed)
 
-`server/duel_plan.py` is written (in the working tree, NOT committed until it
-is wired and has its suite): a pure look-ahead that values every legal
+`server/duel_plan.py` is written: a pure look-ahead that values every legal
 deck by the chance of winning the DUEL, given a `read(revealed, lost_prev)` and
 a `win(mine, theirs)`; it returns the pick, the best-for-this-game pick, and
 what to bring next if this game is won or lost. `replay_plan.py` in the
@@ -340,14 +339,67 @@ production trainer -> `duel_read_pre0910.json`; rated by the judge fitted from
   there, ship the result question and the shift (honest duel and game
   figures) and keep the next-game pick.
 
+### 2026-10-07 — step 3 shipped: pick for the duel, not the game
+
+**The open question was settled by the full replay** (`replay_plan.py`, not
+quick; 10,168 player-duels). Rated by the independent judge with the in-duel
+shift: the order players used 49.00%, the best deck for the next game 50.82%,
+look-ahead 51.36%, look-ahead told each result **51.44%**, the perfect pairing
+58.77%. On real outcomes (6,016 chosen without looking at the score) players
+who followed the look-ahead in BOTH games 1 and 2 won 52.9% against 49.3% in
+neither; the next-game pick 51.9% against 50.3%. The earlier worry (the
+look-ahead's OPENER alone showing a smaller gap) did not survive the production
+read: opened as it says 53.3% against 50.2%, the next-game pick 53.0 / 50.3.
+So the look-ahead clears the bar (50.28% / 53.2%) on both, by a little.
+
+**Not shown, and said on the page:** no gain in friendly duels (630: 49.35%
+next game, 48.85% look-ahead); best-of-five is untested on data.
+
+**Server, deployed 16:58 UTC** (backups
+`{coach,app,test_coach,test_enrol_routes}.py.bak-20261007-165859-preduelplan`):
+`duel_plan.py`, `coach._duel_plan`, `res=` on the suggest route. **Client:** the
+"Who won game 1?" step, the duel figure on "Play this" and on every option, the
+next-deck strips, the PDF, release note `2026-10-07-duel-plan`.
+
+**Staged, 14 real pairs, 56 answers:** a plan on 48, "Play this" changed in 11,
+0 illegal (follow-ups included), median 1.28 s -> 1.26 s. It caught one fault —
+an unseen deck of theirs rated as maxed (the game figure 2.2 points low) — now
+rated at their known decks' mean level (1.0 low, the unseen share itself).
+
+**Known and left:**
+
+- The follow-up decks come from the player's OWN pool (their history, topped
+  up from the meta). When that pool has no third card-disjoint deck the plan
+  values game 3 with "a deck of mine I cannot name" and shows no strip. Step 4
+  (the set composer) is what gives every player three or four disjoint decks
+  that make sense together.
+- Only the options listed (three) are candidates for NOW; the rest of the pool
+  is only planned with.
+- The Prediction window does not ask who won: the read does not use it.
+- `coach.chosen` ("Build around your cards") is still ranked for the game.
+
 ## Next action
 
-**Finish step 3's measurement, then wire it.** In
-`brain-evidence/duel_replay_20261007/replay_plan.py`: add the judge with the
-in-duel shift to part A, and replace part B with "followed the policy on both
-picks" (and the subset where the look-ahead and the next-game pick disagree);
-run it in full (not `quick`). Then, by what it shows: wire `duel_plan.plan`
-into `coach.suggest` for the options it lists (`res=` on the route, one more
-question in the interview — "Who won game 1?"), with the fitted shift, the duel
-figure beside the game figure and the follow-up decks; or ship the question
-and the shift alone. `test_duel_plan.py` is not written yet.
+**Step 4 — the set composer.** Three or four card-disjoint decks for the whole
+duel, composed from duel-proven decks so that no deck is starved of a spell or
+a win condition it needs:
+
+1. Candidates: the player's own duel decks, the duel catalogue, vetted ladder
+   seeds — each already a real deck. A changed deck goes through
+   `coach._constructed_ok` (at most two human swaps).
+2. A set is card-disjoint by construction (32 cards for four decks). Score a
+   set by `duel_plan.plan` over it against the opponent's read — the same
+   look-ahead that now picks the order — not by summing game rates.
+3. Spread the key cards: use `deck_packages` (which spell packages and support
+   a win condition carries, and how they do) so that two decks do not both
+   need The Log or Fireball; measure first how real sets split them
+   (`loadout_census.py` in the evidence folder has the first reading).
+4. Blind test before it ships, on the same replay: compose a set for a player
+   from what was known before the duel, and rate it against what the opponent
+   really brought, beside the set the player really used.
+5. The screen: "Your set for this duel" above "Play this", only when the
+   composer beats the player's own set by the judge.
+
+Before starting, check with the account holder whether a composed set should
+be limited to decks the player has played (their card levels and practice) or
+may include decks new to them.

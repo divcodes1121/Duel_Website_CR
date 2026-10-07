@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-07-duel-plan',
+    date: '2026-10-07',
+    kind: 'improved',
+    title: 'Coach Assist picks for the duel, not just the next game',
+    body: [
+      'A duel is the first to two of three and no card is played twice, so the deck with the best matchup now is not always the one to bring now. The Suggestion now values each of your decks by the chance of winning the duel: what it leaves you for the games after, against what your opponent is then likely to bring. On ten thousand duels it had never seen, that order won a little more often than taking the best deck for each game (51.4% against 50.8%; the order players really used won 49.0%).',
+      'After game 1 it asks one question: who won it. One up you need one of the next two, one down you need both, and a player who has just won a game wins the next one more often than the matchups alone say. “Play this” shows the chance of winning the duel, with this game’s beside it.',
+      'Under the pick is the deck to bring next if you win and if you lose, so the next choice is ready before the game ends.',
+    ],
+    needs: 'pro',
+  },
+  {
     id: '2026-10-07-built-decks-make-sense',
     date: '2026-10-07',
     kind: 'fixed',

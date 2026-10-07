@@ -20,7 +20,7 @@ const ADAPTERS = norm('src/utils/screenAdapters.ts');
 describe('the kind of duel', () => {
   it('is sent by both windows, and only when chosen', () => {
     expect(SCREEN).toMatch(/fetchCoachPrediction\(tag, decks, \{ days \}, kind\)/);
-    expect(SCREEN).toMatch(/\{ days \}, tunerAllowed, kind\)/);
+    expect(SCREEN).toMatch(/\{ days \}, tunerAllowed, kind, results\)/);
     expect(CLIENT.match(/if \(kind\) q\.set\('kind', kind\);/g)?.length).toBe(2);
   });
 

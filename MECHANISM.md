@@ -63,6 +63,12 @@ end, at the level of individual functions and constants.
 >   Blind, on the CRL-list players: exact opening deck first 42.8% against
 >   20.3%. Candidates share NO card with a reveal (the count's tolerance of
 >   two is gone from that path). `DECKKIES_DUEL_RECOMMENDER.md` is its record.
+> * **`server/duel_plan.py`** (2026-10-07) — **the Suggestion's ORDER is for the
+>   duel, not the game.** Section 8's "rank the legal decks by expected win
+>   rate" is now the first pass; the options are then valued by the chance of
+>   winning the duel (a look-ahead over this document's own opponent read, the
+>   result of each game moving the next) and re-ordered by it. Blind: 51.4%
+>   against 50.8% for the best deck each game. README "Pick for the duel".
 >
 > **"None of them trains or calls a model" stopped being true on 2026-09-30.**
 > The duel brain's shrinkage and the fused rate's five weights are still

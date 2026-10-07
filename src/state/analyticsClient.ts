@@ -1168,6 +1168,44 @@ export function fetchSources(): Promise<ApiSources> {
  *  evolution or hero art — same `arrange_deck` every other screen goes
  *  through, so a deck here renders identically to the same deck on the meta
  *  board. */
+/** A deck the duel plan says to bring NEXT — enough to draw it. */
+export interface CoachPlanDeck {
+  cards: string[];
+  art?: Record<string, WildForm>;
+  inferredArt?: boolean;
+  artFilled?: string[];
+  deckName?: string;
+  archetype?: string;
+}
+
+/** One option as the duel plan values it (`server/duel_plan.py`, 2026-10-07):
+ *  the look-ahead over what they are likely to bring in each later game. */
+export interface CoachPlanRow {
+  /** Chance of winning THIS game, percent. The result of the game before has
+   *  moved it, which is why it can differ from `brain.winRate`. */
+  game: number;
+  /** Chance of winning the DUEL from here, bringing this deck now. */
+  duel: number;
+  /** What to bring next if this game is won / lost. Null when that result ends
+   *  the duel, or no deck of theirs is left to name. */
+  then: { won: CoachPlanDeck | null; lost: CoachPlanDeck | null };
+}
+
+/** Where the duel stands and what the look-ahead did to the list. */
+export interface CoachDuelPlan {
+  brain: string;
+  games: number;
+  finished: number;
+  /** `[mine, theirs]` when who won each game was told; null when it was not. */
+  score: [number, number] | null;
+  results: string;
+  /** Every option was valued, so the list is ordered by `plan.duel`. */
+  ranked: boolean;
+  /** The look-ahead put a different deck first than this game alone did. */
+  changed: boolean;
+  pool: number;
+}
+
 export interface CoachDeck {
   cards: string[];
   art: Record<string, WildForm>;
@@ -1191,6 +1229,8 @@ export interface CoachDeck {
   fill?: boolean;
   /** Only on recommendations. */
   expected?: CoachExpected | null;
+  /** Only on recommendations, and only when the duel plan ran. */
+  plan?: CoachPlanRow;
   /** The duel win model's chance for this deck against their likely decks
    *  (`server/duel_model.py`): player strength, card levels, cards and learned
    *  card-vs-card counters. Only on recommendations; absent with no model. */
@@ -1381,6 +1421,10 @@ export interface CoachSuggestion {
   /** The duel win model: what it was trained on, its measured holdout, and
    *  whether it ordered this list. Absent/null with no trained model. */
   brainModel?: CoachBrainModel | null;
+  /** The look-ahead over the whole duel. Null when the list is ranked for this
+   *  game alone (no fitted read for the opponent, or no win model); absent
+   *  from a server older than 2026-10-07. */
+  duelPlan?: CoachDuelPlan | null;
   /** One-card changes real duel players made to "Play this" that raise its
    *  win chance against this opponent. */
   brainSwaps?: CoachBrainSwap[];
@@ -1682,7 +1726,7 @@ export function fetchCoachPrediction(
  *  to meta decks and says so, which is a weaker answer rather than none. */
 export function fetchCoachSuggestion(
   me: string, opp: string, myPlayed: string[][], oppPlayed: string[][],
-  win?: DateWindow, swaps?: boolean, kind?: DuelKind,
+  win?: DateWindow, swaps?: boolean, kind?: DuelKind, results?: string,
 ): Promise<CoachSuggestion> {
   /* ONE `days` covers BOTH players, and the server resolves it separately
      against each one's own coverage — so this is thirty days of each player's
@@ -1700,6 +1744,10 @@ export function fetchCoachSuggestion(
      infers it. */
   if (swaps) q.set('swaps', '1');
   if (kind) q.set('kind', kind);
+  /* WHO WON EACH FINISHED GAME ('w' / 'l' from the coached player's side, in
+     order — `utils/duelResults`). It sets the score the duel plan starts from
+     and moves the chance of the next game. Left out, the server weighs both. */
+  if (results) q.set('res', results);
   return get<CoachSuggestion>(`/api/analytics/coach/suggest?${q.toString()}`);
 }
 

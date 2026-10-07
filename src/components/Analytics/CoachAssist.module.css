@@ -1470,6 +1470,37 @@
   filter: grayscale(1) brightness(0.82);
 }
 
+/* What to bring next, under "Play this": one or two small decks side by side. */
+.thenRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  gap: 0.8rem 1.4rem;
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--glass-stroke);
+}
+
+.thenItem {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.thenLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.thenName {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 640px) {
   .leftRow {
     grid-template-columns: minmax(0, 1fr);

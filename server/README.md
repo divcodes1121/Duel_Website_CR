@@ -1607,6 +1607,49 @@ docstring. Backups `*.bak-20260930-153444-presynergy`.
 `coach._build_for_duel` no longer calls `plan_loadout` ("Planned for the whole
 duel" removed on request); `LOADOUT_EXTRA` is gone and `built` has no `loadout`.
 
+## The duel plan (`duel_plan.py`, 2026-10-07)
+
+Pure: `itertools` and `math`. It knows no card, no history and no model.
+
+    plan(mine, read, win, *, my_played=(), opp_played=(), results="",
+         games=3, keep=(5, 3, 2), shift=None, unseen=True)
+
+    mine      decks I could bring (8 keys each; duplicates and empties ignored,
+              indices in the answer are the caller's)
+    read      read(revealed, lost) -> [(deck, p)]; `revealed` is a tuple, an
+              entry is None for a game whose deck is not known; `lost` is
+              whether they lost the game before (True / False / None)
+    win       win(mine | None, theirs | None) -> chance I win that game
+    results   'w' / 'l' from my side for the finished games, as far as known
+
+-> `{brain, games, finished, over, score, options, pick, gamePick}`; an option
+is `{deck, game, duel, then: {won, lost}}`, best duel first. `completions`
+enumerates what is consistent with a duel still being played (two games of
+three finished are 1-1), each weighed equally. `shifted(p, last, game)` applies
+`SHIFT = {2: 0.3288, 3: 0.0406}` in log-odds, up after a win and down after a
+loss. Decks beyond `keep` at a depth, and whatever the read's probabilities
+leave under one, go to `None` — a deck they have not shown — unless
+`unseen=False` spreads it over the decks named.
+
+**In `coach.py`**: `_duel_plan(top, mine, my_played, opp_played, results, opp,
+opp_hist, kind, ctx, rates)` -> `(rows, info)`. Pool = `top` then `mine`,
+`PLAN_POOL` 8. The read is `duel_read.read(opp_hist["read"], revealed, now,
+friendly_now=kind)` with `("?",)` standing for an unknown reveal (it counts as
+a game and rules no card out); it is not told `lost_prev` (measured: no gain).
+`win` is `_combined_pair`, or the win model with the unknown side's cards
+empty and that player's mean level deficit over their known decks. Rates are
+prepared for the pool against their `PLAN_THEIR` 12 newest distinct decks.
+Rows gain `plan` (percent, one decimal; `then` rows are `cards`, `art`,
+`deckName`, `archetype`), are re-ordered by `duel` when every one was valued,
+and `suggest` returns `duelPlan` = `{brain, games, finished, score, results,
+ranked, changed, pool}` and `basis` "the chance of winning the duel". Anything
+missing — no `duel_plan`, no fitted read (`opponent.engine`), no win model, a
+decided duel, an exception — returns the rows untouched and `duelPlan: null`.
+
+**The route**: `res=` on `/api/analytics/coach/suggest` (`app._duel_results`:
+only `w` and `l` are kept, two at most; anything else is "not told"). No new
+route. `want=` (`chosen`) does not take it.
+
 ## The package table (`deck_packages.py`, 2026-10-07)
 
 `deck_packages.build` (after every poll, 42 s on production;
