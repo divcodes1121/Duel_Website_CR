@@ -3916,6 +3916,23 @@ game's beside it, the score in the title; under it the deck to bring next ("If
 you win" / "If you lose", or one "Next game" strip when both are the same
 deck); each ranked option shows the duel figure. The PDF prints the same.
 
+**Confirmed live (2026-10-07, `ed4a76e`).** The six server files running are
+byte for byte the committed ones. `/api/health` and the build meta reported the
+commit about 80 s after the push; the served bundle carries the question, the
+duel figure, the next-deck row and the release note. Then **10 of 10 in a real
+browser on https://deckkies.com, signed in as the account holder** (1440,
+dark): the live answer carries a plan that ranked the list, "Play this" prints
+the duel's and this game's figures exactly as the server sent them, the next
+deck is drawn and shares no card with the pick; after both game-1 decks the
+question appears, "You won it" reaches the API as `res=w`, the answer starts
+from 1-0 with the score in the title and a higher duel figure, and no option
+holds a card already played. The same session's two answers held six decks
+under "Deckkies built for this duel"; all six pass the package check on the
+server (spell packages in 1.9% to 24.5% of their win condition's games). The
+sign-in claimed the account's phone slot. Not looked at on the live URL: light
+theme, a phone width, "They won it", and game 3 (checked locally on replayed
+payloads).
+
 **Checked.** `server/test_duel_plan.py` 54, every figure worked by hand in the
 comment beside it (sixteen planted faults, all caught); `test_coach.py` 156 ->
 181 and `test_enrol_routes.py` 29 -> 34 (thirteen planted in the wiring, all

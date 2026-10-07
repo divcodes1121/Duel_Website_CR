@@ -366,6 +366,20 @@ next-deck strips, the PDF, release note `2026-10-07-duel-plan`.
 an unseen deck of theirs rated as maxed (the game figure 2.2 points low) — now
 rated at their known decks' mean level (1.0 low, the unseen share itself).
 
+**Live as `ed4a76e`** (the package fix before it as `1d5ef21`). `/api/health`
+reported it about 80 s after the push; 10 of 10 in a real browser on
+https://deckkies.com signed in: the plan on the opening answer, the question,
+`res=w` reaching the API, the score and the higher duel figure, no spent card
+offered; the six decks the live site built in that session all pass the
+package check. Staging directories removed; playwright uninstalled, package
+files as committed. Full local run: 4,279 Python checks across 75 suites (only
+the known `test_ml_21a`), 1,421 vitest across 62 files.
+
+**To watch:** the after-poll updater's first `deck packages` step (the table in
+use was built by hand at 15:57 UTC; the next poll was due about 18:50 UTC).
+`grep "deck packages" /var/log/clashbot/after-poll.log`, and
+`deckPackages.builtAt` on `/api/analytics/status`.
+
 **Known and left:**
 
 - The follow-up decks come from the player's OWN pool (their history, topped
