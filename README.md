@@ -3792,6 +3792,25 @@ phone. The count stays as the fallback: with no fitted file the built-in
 weights are used, and a read that raises, or has no strictly legal deck to
 name, hands back to it.
 
+**Confirmed live (2026-10-07, `365a852`).** The nine server files running on
+the server are byte for byte the committed ones (md5, line endings stripped).
+`/api/health` and the `deckkies-build` meta reported the commit about 70 s
+after the push; the served bundle carries the release note, the block and the
+`kind` parameter. Then **16 of 16 in a real browser against
+https://deckkies.com, signed in as the account holder** (1440, dark): Coach
+Assist opens, the Duel switch is in the header, the opening read draws four
+roles and a `new deck` figure, after pasting a real game-1 deck eight cards are
+spent and nothing spent is offered again in the block or in any likely deck,
+Friendly re-asks the live API with `kind=friendly` and the new-deck figure
+rises, and the Suggestion lists their decks at the read's own figures with a
+pick. The sign-in claimed the account's phone slot. Light theme and a phone
+width were checked locally on replayed payloads, not on the live URL.
+
+**Not yet seen:** the after-poll updater refitting the read under its timer.
+No battle had arrived between the deploy and this note (the next bot poll was
+due about 13:07 UTC); the artifact in use is the one fitted by hand at
+deploy.
+
 **Not in this step:** the order to play your own decks in (the replay puts it
 at about ten points of duel-win chance with a perfect read, and the look-ahead
 at +2.3 by an independent judge), the result of each game updating the next

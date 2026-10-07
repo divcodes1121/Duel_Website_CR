@@ -240,6 +240,19 @@ the suggestion scored against five of their decks.
 `test_duel_index.py` 71, `tests/coachDuelRead.test.ts` 9. Browser, production
 data with real staged payloads replayed: 66 of 66 (both themes, 390 px).
 
+**Live as `365a852`.** `/api/health` reported it about 70 s after the push;
+the served bundle carries the release note and the block. 16 of 16 in a real
+browser on https://deckkies.com signed in as the account holder (dark, 1440):
+the opening read, a pasted game 1, the Friendly switch re-asking with
+`kind=friendly`, and the Suggestion. The staging directories on the server are
+removed. Full local run: 4,123 Python checks across 73 suites (only the known
+`test_ml_21a`), 1,402 vitest across 61 files.
+
+**Still to watch:** the first refit of the read by `after_poll.py` under its
+timer (no battle had arrived since the deploy when this was written). Check
+`/var/log/clashbot/after-poll.log` for a `duel read: exit 0` line and
+`duelRead.trainedAt` on `/api/analytics/status`.
+
 **Known and left for later steps:**
 
 - The kind of duel is only as good as the switch. Not told, a friendly duel is
