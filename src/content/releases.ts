@@ -82,6 +82,17 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-07-duel-set',
+    date: '2026-10-07',
+    kind: 'improved',
+    title: 'Coach Assist tells you which decks to load for the duel',
+    body: [
+      'A duel is played from decks that share no card, so before it starts the first question is which of your decks to load together. Asked before game 1, the Suggestion now answers with a set: three or four of your own duel decks, exactly as you play them, chosen by the chance of winning the duel against what your opponent is likely to bring. “Play this” is the deck of that set to open with, and the decks to bring next come from it.',
+      'When the set is not the one you brought last time, your last set’s chance is printed beside it. Rated on duels it had never seen, a set chosen this way came out about two points ahead of the set players really brought, and four where they had a real choice; the real results of those duels are too few to confirm it yet, so treat it as a recommendation, not a promise.',
+    ],
+    needs: 'pro',
+  },
+  {
     id: '2026-10-07-duel-plan',
     date: '2026-10-07',
     kind: 'improved',

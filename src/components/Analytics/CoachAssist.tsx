@@ -2214,7 +2214,18 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
       )}
 
       <section className={styles.block} data-hue="blue">
-        <h4 className={styles.blockTitle}>Your options, ranked</h4>
+        {/* BEFORE A DUEL THE OPTIONS ARE A SET: the player's own decks that
+            share no card, in the order to prefer opening with. Figures only —
+            how many, the set's chance, and their last set's when it differs. */}
+        <h4 className={styles.blockTitle}>
+          {data.duelSet ? 'Your set for this duel' : 'Your options, ranked'}
+          {data.duelSet && (
+            <span className={styles.blockNote} data-duel-set>
+              {data.duelSet.size} decks · {data.duelSet.duel.toFixed(1)}%
+              {data.duelSet.last ? ` · your last set ${data.duelSet.last.duel.toFixed(1)}%` : ''}
+            </span>
+          )}
+        </h4>
         <ul className={styles.deckList}>
           {data.recommendations.map((d, i) => (
             <DeckRow key={i} deck={d} rank={i + 1} hue="blue" />

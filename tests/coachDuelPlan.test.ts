@@ -131,6 +131,29 @@ describe('the answer', () => {
   });
 });
 
+describe('the set to load before a duel', () => {
+  it('renames the options when the answer carries a set, and only then', () => {
+    expect(SCREEN).toMatch(/\{data\.duelSet \? 'Your set for this duel' : 'Your options, ranked'\}/);
+  });
+
+  it('prints figures and nothing else: how many, its chance, their last set when it differs', () => {
+    expect(SCREEN).toMatch(/data-duel-set>\n\s+\{data\.duelSet\.size\} decks · \{data\.duelSet\.duel\.toFixed\(1\)\}%/);
+    expect(SCREEN).toMatch(/\{data\.duelSet\.last \? ` · your last set \$\{data\.duelSet\.last\.duel\.toFixed\(1\)\}%` : ''\}/);
+  });
+
+  it('is typed as the server sends it', () => {
+    expect(CLIENT).toMatch(/export interface CoachDuelSet \{/);
+    expect(CLIENT).toMatch(/last: \{ duel: number; size: number \} \| null;/);
+    expect(CLIENT).toMatch(/duelSet\?: CoachDuelSet \| null;/);
+  });
+
+  it('heads the PDF block the same way', () => {
+    const ADAPTERS = norm('src/utils/screenAdapters.ts');
+    expect(ADAPTERS).toMatch(/heading: sg\.duelSet\n\s+\? `Your set for this duel · \$\{sg\.duelSet\.size\} decks · \$\{pct\(sg\.duelSet\.duel\)\}`/);
+    expect(ADAPTERS).toMatch(/: 'Play this',/);
+  });
+});
+
 describe('the types', () => {
   it('describe the plan row, the summary and where they ride', () => {
     expect(CLIENT).toMatch(/export interface CoachPlanRow \{/);

@@ -1706,6 +1706,22 @@ is "Graveyard decks" — select by `button[title=...]`. The deck buttons are ico
   it moves above them. Cards are 3.4rem tiles that wrap. Measured in a
   browser: nothing past the block's edge at 1440 and 390, both themes.
 
+## The set heading on the Suggestion (2026-10-07)
+
+`CoachAssist.tsx`. README "The set to load before a duel" has the measurement.
+
+- When the answer carries `duelSet` (the opening answer, and only when their
+  own decks make a set) the options block is headed **"Your set for this
+  duel"** instead of "Your options, ranked", and its rows ARE the set, in the
+  order to prefer opening with — three or four decks that share no card.
+- The note beside the heading is figures only (`data-duel-set`): `4 decks ·
+  52.2%`, and `· your last set 46.8%` when `duelSet.last` is there. The set's
+  figure is the first row's and "Play this"'s — one ruler.
+- Nothing else is new on the screen: "Play this" is the set's opener, the
+  "If you win / If you lose" strips are decks of the set, each row shows "win
+  the duel". After game 1 the heading is "Your options, ranked" again.
+- The PDF's block is headed `Your set for this duel · 4 decks · 52.2%`.
+
 ## The duel plan on the Suggestion (2026-10-07)
 
 `CoachAssist.tsx`, the Suggestion window only. README "Pick for the duel, not

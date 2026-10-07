@@ -1191,6 +1191,24 @@ export interface CoachPlanRow {
   then: { won: CoachPlanDeck | null; lost: CoachPlanDeck | null };
 }
 
+/** The set to load BEFORE a duel (`server/duel_set.py`, 2026-10-07): the
+ *  player's own duel decks that share no card, chosen by the chance of winning
+ *  the duel with them. Present only on the opening answer — and then
+ *  `recommendations` ARE the set, in the order to prefer opening with. */
+export interface CoachDuelSet {
+  brain: string;
+  /** Decks in the set: four when four of theirs fit together, else three. */
+  size: number;
+  /** Chance of winning the duel with this set, percent. */
+  duel: number;
+  /** How many of their own decks it was chosen from. */
+  pool: number;
+  valued: number;
+  /** The same figure for the decks of their most recent duel, when that is a
+   *  different set. Null when it is this one, or there is none to compare. */
+  last: { duel: number; size: number } | null;
+}
+
 /** Where the duel stands and what the look-ahead did to the list. */
 export interface CoachDuelPlan {
   brain: string;
@@ -1425,6 +1443,9 @@ export interface CoachSuggestion {
    *  game alone (no fitted read for the opponent, or no win model); absent
    *  from a server older than 2026-10-07. */
   duelPlan?: CoachDuelPlan | null;
+  /** The set to load, on the opening answer only. Null when their own decks
+   *  do not make one (the options are then the usual ranked list). */
+  duelSet?: CoachDuelSet | null;
   /** One-card changes real duel players made to "Play this" that raise its
    *  win chance against this opponent. */
   brainSwaps?: CoachBrainSwap[];

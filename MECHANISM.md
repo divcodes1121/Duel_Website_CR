@@ -69,6 +69,11 @@ end, at the level of individual functions and constants.
 >   winning the duel (a look-ahead over this document's own opponent read, the
 >   result of each game moving the next) and re-ordered by it. Blind: 51.4%
 >   against 50.8% for the best deck each game. README "Pick for the duel".
+> * **`server/duel_set.py`** (2026-10-07) — **before a duel the options are a
+>   SET.** On the opening answer the three ranked options are replaced by
+>   three or four of the player's own duel decks that share no card, chosen by
+>   the same look-ahead; section 8's ranking still produces the list whenever
+>   their own decks do not make a set. README "The set to load before a duel".
 >
 > **"None of them trains or calls a model" stopped being true on 2026-09-30.**
 > The duel brain's shrinkage and the fused rate's five weights are still

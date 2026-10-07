@@ -1607,6 +1607,39 @@ docstring. Backups `*.bak-20260930-153444-presynergy`.
 `coach._build_for_duel` no longer calls `plan_loadout` ("Planned for the whole
 duel" removed on request); `LOADOUT_EXTRA` is gone and `built` has no `loadout`.
 
+## The set composer (`duel_set.py`, 2026-10-07)
+
+Pure: `itertools`. `compose(decks, value, *, size=4, min_size=3,
+substitutes=None, allow=None, must=(), pool=8, max_clashes=3,
+swap_cost=0.005)` -> `{brain, size, value, decks: [{index, cards, swaps}],
+swaps, valued}` or None.
+
+- Candidates are the first `pool` distinct eight-card decks, in the caller's
+  order. Sizes are tried largest first and the first size with any set wins;
+  within a size, the best `value(set)` less `swap_cost` a changed card, then
+  fewer changes, then the earlier candidates.
+- `must` indices are in every set and never change.
+- With `substitutes(card) -> [(card, pairs)]` a card two decks share may be
+  given up by one of them (`resolve`): at most `MAX_SWAPS_PER_DECK` 2 changes
+  to a deck, `MAX_CLASHES` 3 shared cards in a set, a substitute never one
+  already in the set, and every changed deck passing `allow(new, seed)`.
+  **Coach Assist passes none** — see README "The set to load before a duel"
+  for the measurement.
+
+**In `coach.py`**: `_own_duel_decks(hist, used)` (rows from `hist["read"]`,
+newest first, `MIN_OVERLAP` folding, `count` = plays), `_plan_tools(pool,
+opp_hist, kind, ctx, rates)` -> `(read, win)` shared by the plan and the
+composer (reads and pairings remembered for the life of the pair),
+`_duel_set(mine_hist, used, opp, opp_hist, kind, ctx, rates, chips, snap)` ->
+`(rows, info)` or None, and `_duel_figures` (the duel brain's chip on each
+row). `suggest` calls `_duel_set` at stage 0 between `_duel_merge` and
+`_brain`; when it answers, `top` and `mine` are the set, `_brain` is handed the
+context already read (`ctx=`), and `_duel_plan` runs over the set alone.
+`SET_MARGIN` 0.01: the decks of their most recent duel are `must` unless the
+free set is at least that much better, in which case `info.last` =
+`{duel, size}` for the best set that keeps them. `duelSet` is null when there
+is no set; nothing else about the answer changes then.
+
 ## The duel plan (`duel_plan.py`, 2026-10-07)
 
 Pure: `itertools` and `math`. It knows no card, no history and no model.

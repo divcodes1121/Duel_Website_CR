@@ -374,7 +374,11 @@ export function coachSuggestionDoc(sg: CoachSuggestion): ReportDoc {
     blocks: [
       {
         kind: 'decks',
-        heading: 'Play this',
+        // Before a duel the options are the SET to load (`duelSet`), first deck first.
+        heading: sg.duelSet
+          ? `Your set for this duel · ${sg.duelSet.size} decks · ${pct(sg.duelSet.duel)}`
+            + (sg.duelSet.last ? ` · your last set ${pct(sg.duelSet.last.duel)}` : '')
+          : 'Play this',
         // WHEN THE DUEL PLAN RANKED THE LIST the figure is the duel's, as on the
         // screen — "Ranked by" above says so — and this game's leads the note.
         decks: sg.recommendations.map((d) => {

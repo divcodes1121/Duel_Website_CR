@@ -1118,6 +1118,168 @@ check("suggest plans AFTER the brain has ranked and BEFORE it names the best dec
       < _sug.index("best = top[0] if top else None"))
 check("...and the answer carries the plan", '"duelPlan": duel_plan' in _sug)
 
+print("\nthe set to load before a duel (2026-10-07)")
+_PE, _PF, _PG = deck("pe"), deck("pf"), deck("pg")
+_PM2 = dict(_PM)
+for _o in ("px", "py", "pz"):
+    _PM2[("pe", _o)] = 0.10                       # E and F lose to everything they bring
+    _PM2[("pf", _o)] = 0.10
+_PM2[("pc", "px")] = 0.56                         # C is the best opener against X ...
+_PM2[("pg", "pz")] = 0.51                         # ... and G a hair better than the rest in game 3
+
+
+def _fake_pair2(model, rates, a, b, **kw):
+    return _PM2.get((_tagof(a), _tagof(b)), 0.5), "combined"
+
+
+def _MH(*duels):
+    """My history, oldest first, in the read's shape."""
+    return {"read": [{"t": _T - (len(duels) - i) * _DAY, "decks": [list(d) for d in duel]}
+                     for i, duel in enumerate(duels)],
+            "arch": lambda c: "x", "marks": lambda c: {}}
+
+
+_saved_set = (coach._dr, coach._combined_pair, coach._rec, coach._drop_event_decks, coach._ds)
+coach._dr, coach._combined_pair = _FakeRead(), _fake_pair2
+coach._rec = lambda md, opp, chips, snap, rates, extra=None: {**md, "expected": {"winRate": 50.0}}
+coach._drop_event_decks = lambda decks: (list(decks), 0)
+try:
+    own = coach._own_duel_decks(_MH([_PA, _PB, _PC], [_PA, _PB, _PD]), set())
+    check("my own duel decks, newest first, each once with all its plays",
+          [_tagof(r["cards"]) for r in own] == ["pa", "pb", "pd", "pc"]
+          and [r["count"] for r in own] == [2, 2, 1, 1], str([(_tagof(r["cards"]), r["count"]) for r in own]))
+    check("each is a row the screen can draw", all({"cards", "deckName", "archetype"} <= set(r) for r in own))
+    near = _PA[:6] + ["tech-1", "tech-2"]         # six cards shared with A
+    own_v = coach._own_duel_decks(_MH([near, _PB, _PC], [_PA, _PB, _PC]), set())
+    check("a list within two cards of a newer one is the same deck, not a second",
+          [_tagof(r["cards"]) for r in own_v] == ["pa", "pb", "pc"] and own_v[0]["count"] == 2
+          and "tech-1" not in own_v[0]["cards"])
+    check("a deck holding a card already played is left out",
+          [_tagof(r["cards"]) for r in coach._own_duel_decks(_MH([_PA, _PB, _PC]), {_PB[3]})] == ["pa", "pc"])
+    check("no history is no decks", coach._own_duel_decks(None, set()) == [] and coach._own_duel_decks({}, set()) == [])
+
+    S_OPP = {"engine": "duel-read-1.0", "decks": []}
+    S_HIST = {"read": [{"t": _T - _DAY, "decks": [_PX, _PY, _PZ]}]}
+    S_CTX = {"model": {"weights": {}}, "kw": dict(my_def=None, opp_def=None, my_str=0.5, opp_str=0.5)}
+    asked = {}
+    real_compose = coach._ds.compose
+
+    def spy(decks, value, **kw):
+        asked.update(kw)
+        asked["n"] = len(decks)
+        return real_compose(decks, value, **kw)
+
+    coach._ds.compose = spy
+    try:
+        # The last duel was C, E, F — two of them decks that lose to everything they
+        # bring; before it A, B, D. Six decks that share nothing.
+        mh = _MH([_PA, _PB, _PD], [_PC, _PE, _PF])
+        rows, info = coach._duel_set(mh, set(), S_OPP, S_HIST, None, S_CTX, None, [], None)
+    finally:
+        coach._ds.compose = real_compose
+    names = sorted(_tagof(r["cards"]) for r in rows)
+    oracle_read = lambda rev, lost: [({0: _PX, 1: _PY, 2: _PZ}[len(rev)], 1.0)] if len(rev) < 3 else []  # noqa: E731
+    oracle_win = lambda a, b: _PM2.get((_tagof(a) if a else "", _tagof(b) if b else ""), 0.5)  # noqa: E731
+    oracle_value = lambda g: _plan_oracle.plan(g, oracle_read, oracle_win)["options"][0]["duel"]  # noqa: E731
+    # Their decks newest first: C, E, F, then A, B, D.
+    OWN6 = [list(d) for d in (_PC, _PE, _PF, _PA, _PB, _PD)]
+    best6 = real_compose(OWN6, oracle_value)
+    check("FOUR OF THEIR OWN DECKS, the four the look-ahead rates best — A, B and C among them",
+          info["size"] == 4 and names == sorted(_tagof(d["cards"]) for d in best6["decks"])
+          and {"pa", "pb", "pc"} <= set(names) and "pf" not in names, str(names))
+    check("NO DECK IS CHANGED: the composer is given no substitutes",
+          not asked.get("substitutes") and asked["n"] == 6
+          and all(sorted(r["cards"]) in [sorted(d) for d in OWN6] for r in rows), str(asked))
+    check("each row is scored like any option", all(r["expected"] == {"winRate": 50.0} for r in rows))
+    check("the set's figure is the look-ahead's own, in percent",
+          info["duel"] == round(100 * best6["value"], 1) and info["brain"] == "duel-set-1.0" and info["pool"] == 6,
+          str(info))
+    # The best set that KEEPS all of their last duel's decks: C, E, F and A beside them.
+    want_last = _plan_oracle.plan([_PC, _PE, _PF, _PA], oracle_read, oracle_win)["options"][0]["duel"]
+    check("leaving out a deck of their last duel is shown against the best set that keeps them all",
+          info["last"] == {"duel": round(100 * want_last, 1), "size": 4}
+          and info["duel"] - info["last"]["duel"] >= 100 * coach.SET_MARGIN, str(info))
+    # A, B, D last time; C and G are each a hair better than D. Not a point's worth.
+    rows_k, info_k = coach._duel_set(_MH([_PC, _PG], [_PA, _PB, _PD]), set(), S_OPP, S_HIST, None, S_CTX,
+                                     None, [], None)
+    OWN5 = [list(r) for r in (_PA, _PB, _PD, _PC, _PG)]
+    free = real_compose(OWN5, oracle_value)
+    kept = real_compose(OWN5, oracle_value, must=[0, 1, 2])
+    check("(the composer alone would have left D out, for less than a point)",
+          "pd" not in [_tagof(d["cards"]) for d in free["decks"]]
+          and 0 < free["value"] - kept["value"] < coach.SET_MARGIN,
+          f"{[_tagof(d['cards']) for d in free['decks']]} {free['value'] - kept['value']:.4f}")
+    check("THEIR LAST DUEL'S DECKS STAY when leaving one out buys less than a point",
+          {"pa", "pb", "pd"} <= {_tagof(r["cards"]) for r in rows_k} and info_k["last"] is None
+          and info_k["size"] == 4, str([_tagof(r["cards"]) for r in rows_k]))
+    rows_s, info_s = coach._duel_set(_MH([_PA, _PB, _PC], [_PA, _PB, _PD]), set(), S_OPP, S_HIST, None, S_CTX,
+                                     None, [], None)
+    check("when their last duel's decks are all in the set there is nothing to compare",
+          info_s["last"] is None and info_s["size"] == 4)
+    rows3, info3 = coach._duel_set(_MH([_PA, _PB, _PC]), set(), S_OPP, S_HIST, None, S_CTX, None, [], None)
+    check("three decks are a set of three", info3["size"] == 3 and len(rows3) == 3 and info3["last"] is None)
+    shared = _PB[:7] + [_PA[5]]                   # shares one card with A
+    check("decks that share a card are not loaded together, and nothing is swapped to make them fit",
+          coach._duel_set(_MH([_PA, shared, _PC]), set(), S_OPP, S_HIST, None, S_CTX, None, [], None) is None)
+    check("two decks are not a set", coach._duel_set(_MH([_PA, _PB]), set(), S_OPP, S_HIST, None, S_CTX, None, [],
+                                                     None) is None)
+    check("a deck with a spent card cannot be in it",
+          coach._duel_set(_MH([_PA, _PB, _PC]), {_PC[2]}, S_OPP, S_HIST, None, S_CTX, None, [], None) is None)
+    check("no fitted read for the opponent: no set",
+          coach._duel_set(mh, set(), {"decks": []}, S_HIST, None, S_CTX, None, [], None) is None)
+    check("no win model: no set", coach._duel_set(mh, set(), S_OPP, S_HIST, None, None, None, [], None) is None)
+    check("(A is in the set as it stands)", "pa" in names)
+    coach._drop_event_decks = lambda decks: ([d for d in decks if _tagof(d["cards"]) != "pa"], 1)
+    rows_e, _ie = coach._duel_set(mh, set(), S_OPP, S_HIST, None, S_CTX, None, [], None)
+    check("an event deck from their history is never loaded, and the set is made without it",
+          "pa" not in [_tagof(r["cards"]) for r in rows_e] and len(rows_e) == 4, str([_tagof(r["cards"]) for r in rows_e]))
+    coach._drop_event_decks = lambda decks: (list(decks), 0)
+
+    def _raise(*a, **k):
+        raise RuntimeError("composer gone")
+
+    coach._ds.compose = _raise
+    try:
+        check("a composer that raises is no set, never an error",
+              coach._duel_set(mh, set(), S_OPP, S_HIST, None, S_CTX, None, [], None) is None)
+    finally:
+        coach._ds.compose = real_compose
+    coach._ds = None
+    check("no composer module: no set", coach._duel_set(mh, set(), S_OPP, S_HIST, None, S_CTX, None, [], None) is None)
+finally:
+    coach._dr, coach._combined_pair, coach._rec, coach._drop_event_decks, coach._ds = _saved_set
+
+# The duel brain's chip on a set row.
+from types import SimpleNamespace  # noqa: E402
+
+_saved_fig = (coach._ta, coach._duel_projection)
+try:
+    figs = [{"cards": list(_PA)}, {"cards": list(_PB)}]
+    coach._duel_figures(figs, None, {}, "#OPP", (None, None))
+    check("no duel brain: the rows stand as they are", all("duel" not in r for r in figs))
+    coach._ta = SimpleNamespace(_duel=object())
+    coach._duel_projection = lambda rates, opp, tag, win: ({"hog": 1.0}, 0.0)
+    fr = SimpleNamespace(duel=SimpleNamespace(on=True, figures=lambda cards, proj: {"n": len(cards), "for": sorted(proj)}))
+    coach._duel_figures(figs, fr, {}, "#OPP", (None, None))
+    check("each row carries its record in real duels against what they bring",
+          all(r["duel"] == {"n": 8, "for": ["hog"]} for r in figs), str(figs[0].get("duel")))
+    coach._duel_projection = lambda rates, opp, tag, win: ({}, 0.0)
+    blank = [{"cards": list(_PA)}]
+    coach._duel_figures(blank, fr, {}, "#OPP", (None, None))
+    check("nothing to project against: no chip, not an empty one", "duel" not in blank[0])
+finally:
+    coach._ta, coach._duel_projection = _saved_fig
+
+_sug2 = _src[_src.index("def suggest("):_src.index("def mine_hist_pool(")]
+check("the set is composed only before a duel, and before the brain ranks",
+      "    if stage == 0:\n        got = _duel_set(" in _sug2.replace("\r\n", "\n")
+      and _sug2.index("_duel_set(mine_hist") < _sug2.index("_brain(top, opp"))
+check("...its decks become the options AND the pool the plan draws on",
+      "top, duel_set = got" in _sug2 and "mine = list(top)" in _sug2 and '"duelSet": duel_set' in _sug2)
+check("the brain is handed the context already read", "ctx_out=brain_ctx, ctx=ctx0)" in _sug2)
+check("one-card changes found for another deck are not shown against the pick",
+      'if duel_plan and duel_plan.get("changed"):\n        brain_swaps = []' in _sug2.replace("\r\n", "\n"))
+
 print("\na constructed deck must make sense as a deck (2026-10-07)")
 _PK_BAD = deck("pk-odd")
 _PK_OK = deck("pk-fine")

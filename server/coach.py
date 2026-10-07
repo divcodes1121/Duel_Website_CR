@@ -113,6 +113,16 @@ except Exception:  # noqa: BLE001 - deployment shape
     traceback.print_exc()
     _dp = None
 
+#: WHICH DECKS TO LOAD (2026-10-07, `duel_set`). Before a duel starts the answer
+#: to "what do I do" is a SET — decks that share no card — and then which of
+#: them to open with. Composed from the player's OWN duel decks, as they are.
+#: Imported softly.
+try:
+    import duel_set as _ds
+except Exception:  # noqa: BLE001 - deployment shape
+    traceback.print_exc()
+    _ds = None
+
 # ── PORTED CONSTANTS ───────────────────────────────────────────────────────
 # Names match the bot's so the two can be diffed. Where a value is ours it says
 # so and says why.
@@ -144,6 +154,13 @@ MY_TOP_DECKS = 3
 #: deck past the third is kept only while it is worth `OPP_READ_MIN_P`.
 OPP_READ_DECKS = 5
 OPP_READ_MIN_P = 0.03
+
+#: What dropping a deck of the player's LAST duel from the set must buy, in
+#: duel-win chance: one point. They played those decks days ago; a set that is
+#: a third of a point better on a model is not a reason to bring another
+#: (staged, the composer proposed exactly that). Under it their last decks
+#: stay and the composer only chooses what goes beside them.
+SET_MARGIN = 0.01
 
 #: How many of my decks the duel plan looks over: the options shown first, then
 #: the rest of my legal pool, which is what the games after this one draw on.
@@ -1362,7 +1379,7 @@ def _brain_ctx(opp: dict, my_tag: str, opp_tag: str) -> dict | None:
 
 
 def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
-           used: set, rates=None, ctx_out: dict | None = None
+           used: set, rates=None, ctx_out: dict | None = None, ctx: dict | None = None
            ) -> tuple[list[dict], dict | None, list[dict]]:
     """The combined brain over the final options: `(rows, info, swaps)`.
 
@@ -1379,7 +1396,10 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
     try:
         import duel_model as dm
         import duel_index as di
-        ctx = _brain_ctx(opp, my_tag, opp_tag) if rows else None
+        # `ctx` when the caller has already read it (the set composer needs
+        # it first): the two profile reads are not made twice.
+        if ctx is None:
+            ctx = _brain_ctx(opp, my_tag, opp_tag) if rows else None
         if ctx is None:
             return rows, None, []
         model, decks, kw = ctx["model"], ctx["decks"], ctx["kw"]
@@ -1589,6 +1609,187 @@ def _deck_key(cards) -> str:
     return ",".join(sorted(set(cards or [])))
 
 
+def _plan_tools(pool_cards: list[list[str]], opp_hist: dict, kind, ctx: dict, rates):
+    """`(read, win)` for `duel_plan.plan` and `duel_set.compose`: THEIR next deck
+    from `duel_read` given the decks they would then have shown, and each
+    pairing rated by the combined brain. One pair of functions, so the plan,
+    the set and every figure on the screen come from one ruler.
+
+    The read is NOT told who lost the game before (measured: no gain). Reads
+    are remembered for the life of the pair — composing a set asks the same
+    questions of every candidate.
+    """
+    import duel_model as dm
+    model, kw = ctx["model"], ctx["kw"]
+    weights = model.get("weights") or {}
+    hist, now = opp_hist["read"], _now()
+    reads: dict = {}
+
+    def read(revealed, _lost):
+        got = reads.get(revealed)
+        if got is None:
+            rev = [sorted(r) if r else list(_UNKNOWN_DECK) for r in revealed]
+            got = reads[revealed] = [(r["cards"], r["p"])
+                                     for r in _dr.read(hist, rev, now, friendly_now=kind)]
+        return got
+
+    their, seen = [], set()
+    for h in reversed(hist):
+        for d in h.get("decks") or []:
+            k = _deck_key(d)
+            if k.count(",") == 7 and k not in seen:
+                seen.add(k)
+                their.append(list(d))
+    their = their[:PLAN_THEIR]
+
+    def mean_deficit(decks, deficits) -> float:
+        vals = [dm.deck_deficit(d, deficits) for d in decks] if deficits else []
+        return sum(vals) / len(vals) if vals else 0.0
+
+    # A DECK NOBODY CAN NAME IS STILL PLAYED AT ITS OWNER'S LEVELS. Rated at
+    # a deficit of zero it is a maxed deck: staged, that put the plan's
+    # figure for a game 2.2 points under the brain's on average. It takes
+    # the mean deficit of the decks that player is known to field.
+    my_unknown = mean_deficit(pool_cards, kw.get("my_def"))
+    opp_unknown = mean_deficit(their, kw.get("opp_def"))
+    wins: dict = {}
+
+    def win(my, their_deck):
+        key = (my, their_deck)
+        got = wins.get(key)
+        if got is not None:
+            return got
+        a, b = sorted(my) if my else [], sorted(their_deck) if their_deck else []
+        p = None
+        if a and b:
+            pair = _combined_pair(model, rates, a, b, **kw)
+            if pair is not None:
+                p = pair[0]
+        if p is None:
+            # A deck they have not shown (or none of mine left to name): the
+            # win model with that side's cards unknown — the two players'
+            # strength, levels, and what the known deck's cards are worth.
+            p = dm.score(weights, dm.features(
+                a, b, dm.deck_deficit(a, kw.get("my_def")) if a else my_unknown,
+                dm.deck_deficit(b, kw.get("opp_def")) if b else opp_unknown,
+                kw["my_str"], kw["opp_str"]))
+        wins[key] = p
+        return p
+
+    if rates is not None and rates.on:
+        rates.prepare(pool_cards, their)
+    return read, win
+
+
+def _duel_figures(rows: list[dict], rates, opp: dict, opp_tag: str, opp_win: tuple) -> None:
+    """Each row's record in real duels against what they bring — the duel
+    brain's figures, as `_duel_merge` puts them on an option — written in
+    place. Nothing when the duel brain is off or has nothing to project."""
+    duel = getattr(_ta, "_duel", None) if _ta is not None else None
+    if duel is None or rates is None or rates.duel is None or not rates.duel.on:
+        return
+    try:
+        projection, _weight = _duel_projection(rates, opp, opp_tag, opp_win)
+        if projection:
+            for r in rows:
+                r["duel"] = rates.duel.figures(r["cards"], projection)
+    except Exception:  # noqa: BLE001 - the rows stand without the chip
+        traceback.print_exc()
+
+
+def _own_duel_decks(hist: dict | None, used: set) -> list[dict]:
+    """The player's OWN duel decks in the window, newest first, as rows the
+    screen can draw. Lists within two cards of each other are one deck (the
+    newest stands for them, `count` is all of their plays); a deck holding a
+    card already played this duel is left out."""
+    out: list[dict] = []
+    for h in reversed((hist or {}).get("read") or []):
+        for cards in h.get("decks") or []:
+            cards = list(cards)
+            if len(set(cards)) != 8 or (set(cards) & used):
+                continue
+            home = next((r for r in out if len(set(r["cards"]) & set(cards)) >= MIN_OVERLAP), None)
+            if home is not None:
+                home["count"] += 1
+                continue
+            a = hist["arch"](cards)
+            row = {"count": 1, "archetype": a, "deckName": dz.deck_label(cards, a)}
+            row.update(dz._arranged(cards, hist["marks"](cards)))
+            out.append(row)
+    return out
+
+
+def _duel_set(mine_hist: dict | None, used: set, opp: dict, opp_hist: dict | None, kind,
+              ctx: dict | None, rates, chips: list[dict], snap) -> tuple[list[dict], dict] | None:
+    """THE SET TO LOAD before the duel: `(rows, info)`, or None.
+
+    Decks that share no card, chosen from the player's OWN duel decks as they
+    are (`duel_set.compose`) by the chance of winning the duel with them — the
+    same look-ahead that then picks the order (`_duel_plan` is run over these
+    rows by the caller). Four when four fit, else three.
+
+    NO DECK IS CHANGED. Swaps to resolve shared cards were measured and left
+    off: 98.6% of players with three duel decks can field a set as it stands,
+    and where a swap did change the set the gain was two points by a model, on
+    decks nobody has played (`DECKKIES_DUEL_RECOMMENDER.md`).
+
+    THE DECKS OF THEIR LAST DUEL STAY IN IT unless leaving one out is worth
+    `SET_MARGIN` (a point of duel-win chance): the composer then only chooses
+    what goes beside them.
+
+    `info`: `{brain, size, duel, pool, valued, last}` — the set's chance of
+    winning the duel in percent, and `last` = the same figure for the best set
+    that keeps every deck of their most recent duel, when the set shown leaves
+    one out (None when it keeps them all).
+
+    None without the composer, the fitted read, the win model, or three of
+    their own decks that fit together: the list then stands as it was.
+    """
+    if _ds is None or _dp is None or _dr is None or not ctx or not ctx.get("model"):
+        return None
+    if not opp.get("engine") or not opp_hist or not opp_hist.get("read"):
+        return None
+    try:
+        own, _dropped = _drop_event_decks(_own_duel_decks(mine_hist, used))
+        own = own[:_ds.POOL]
+        if len(own) < _ds.MIN_SIZE:
+            return None
+        cards = [r["cards"] for r in own]
+        read, win = _plan_tools(cards, opp_hist, kind, ctx, rates)
+
+        def value(group) -> float:
+            out = _dp.plan(group, read, win)
+            return out["options"][0]["duel"] if out.get("options") else 0.0
+
+        res = _ds.compose(cards, value)
+        if res is None:
+            return None
+        # THEIR LAST DUEL'S DECKS STAY unless leaving one out buys `SET_MARGIN`.
+        # Each of those decks as the row it was folded into; a duel is at
+        # least two games, so fewer than two is no set to keep.
+        last = None
+        recent = next((h["decks"] for h in reversed(mine_hist["read"]) if len(h.get("decks") or []) >= 2), None)
+        prev: list[int] = []
+        for d in recent or []:
+            i = next((i for i, r in enumerate(own) if len(set(r["cards"]) & set(d)) >= MIN_OVERLAP), None)
+            if i is not None and i not in prev:
+                prev.append(i)
+        if len(prev) >= 2 and not set(prev) <= {d["index"] for d in res["decks"]}:
+            kept = _ds.compose(cards, value, must=prev)
+            if kept is not None:
+                if res["value"] - kept["value"] < SET_MARGIN:
+                    res = kept
+                else:
+                    last = {"duel": round(100 * kept["value"], 1), "size": kept["size"]}
+        rows = [_rec(own[d["index"]], opp, chips, snap, rates) for d in res["decks"]]
+        info = {"brain": _ds.BRAIN, "size": res["size"], "duel": round(100 * res["value"], 1),
+                "pool": len(own), "valued": res["valued"], "last": last}
+        return rows, info
+    except Exception as exc:  # noqa: BLE001 - the options as they were still answer
+        print("coach._duel_set: %r" % (exc,), file=sys.stderr)
+        return None
+
+
 def _duel_plan(top: list[dict], mine: list[dict], my_played: list[list[str]],
                opp_played: list[list[str]], results: str, opp: dict,
                opp_hist: dict | None, kind, ctx: dict | None, rates) -> tuple[list[dict], dict | None]:
@@ -1621,57 +1822,13 @@ def _duel_plan(top: list[dict], mine: list[dict], my_played: list[list[str]],
     if stage >= DUEL_GAMES:
         return top, None
     try:
-        import duel_model as dm
-        model, kw = ctx["model"], ctx["kw"]
-        weights = model.get("weights") or {}
         pool, index = [], {}
         for r in list(top) + list(mine):
             k = _deck_key(r.get("cards"))
             if k.count(",") == 7 and k not in index and len(pool) < PLAN_POOL:
                 index[k] = len(pool)
                 pool.append(r)
-        hist, now = opp_hist["read"], _now()
-
-        def read(revealed, _lost):
-            rev = [sorted(r) if r else list(_UNKNOWN_DECK) for r in revealed]
-            return [(r["cards"], r["p"]) for r in _dr.read(hist, rev, now, friendly_now=kind)]
-
-        their, seen = [], set()
-        for h in reversed(hist):
-            for d in h.get("decks") or []:
-                k = _deck_key(d)
-                if k.count(",") == 7 and k not in seen:
-                    seen.add(k)
-                    their.append(list(d))
-        their = their[:PLAN_THEIR]
-
-        def mean_deficit(decks, deficits) -> float:
-            vals = [dm.deck_deficit(d, deficits) for d in decks] if deficits else []
-            return sum(vals) / len(vals) if vals else 0.0
-
-        # A DECK NOBODY CAN NAME IS STILL PLAYED AT ITS OWNER'S LEVELS. Rated at
-        # a deficit of zero it is a maxed deck: staged, that put the plan's
-        # figure for a game 2.2 points under the brain's on average. It takes
-        # the mean deficit of the decks that player is known to field.
-        my_unknown = mean_deficit([r["cards"] for r in pool], kw.get("my_def"))
-        opp_unknown = mean_deficit(their, kw.get("opp_def"))
-
-        def win(my, their_deck):
-            a, b = sorted(my) if my else [], sorted(their_deck) if their_deck else []
-            if a and b:
-                got = _combined_pair(model, rates, a, b, **kw)
-                if got is not None:
-                    return got[0]
-            # A deck they have not shown (or none of mine left to name): the
-            # win model with that side's cards unknown — the two players'
-            # strength, levels, and what the known deck's cards are worth.
-            return dm.score(weights, dm.features(
-                a, b, dm.deck_deficit(a, kw.get("my_def")) if a else my_unknown,
-                dm.deck_deficit(b, kw.get("opp_def")) if b else opp_unknown,
-                kw["my_str"], kw["opp_str"]))
-
-        if rates is not None and rates.on:
-            rates.prepare([r["cards"] for r in pool], their)
+        read, win = _plan_tools([r["cards"] for r in pool], opp_hist, kind, ctx, rates)
 
         out = _dp.plan([r["cards"] for r in pool], read, win, my_played=my_played,
                        opp_played=opp_played, results=results)
@@ -2123,8 +2280,29 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     # 55.8% against 43.0%; the ranking above split the same choices 51.4/48.5.
     # Absent model or evidence: the list stands exactly as ranked above.
     brain_ctx: dict = {}
+    try:
+        ctx0 = _brain_ctx(opp, my_tag, opp_tag) if top else None
+    except Exception as exc:  # noqa: BLE001 - `_brain` reports its own failure the same way
+        print("coach.suggest: brain context: %r" % (exc,), file=sys.stderr)
+        ctx0 = None
+
+    # THE SET TO LOAD (2026-10-07, `duel_set.py`), before a duel only. A duel is
+    # played from decks that share no card, so the first answer is which of the
+    # player's OWN decks to load together; the options below are then those
+    # decks, and the look-ahead picks which of them to open with.
+    duel_set = None
+    if stage == 0:
+        got = _duel_set(mine_hist, used_mine, opp, opp_hist, kind, ctx0, rates, chips, snap)
+        if got:
+            top, duel_set = got
+            mine = list(top)
+            _duel_figures(top, rates, opp, opp_tag, (opp_since, opp_until))
+            # The list is the set now: no slot in it is a held duel pick.
+            if duel_brain:
+                duel_brain = {**duel_brain, "picked": 0}
+
     top, brain_info, brain_swaps = _brain(top, opp, my_tag, opp_tag, used_mine, rates,
-                                          ctx_out=brain_ctx)
+                                          ctx_out=brain_ctx, ctx=ctx0)
     if brain_info and brain_info.get("ranked"):
         basis = "the combined brain's win chance"
 
@@ -2136,6 +2314,11 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
                                 kind, brain_ctx, rates)
     if duel_plan and duel_plan.get("ranked"):
         basis = "the chance of winning the duel"
+    # THE ONE-CARD CHANGES WERE FOUND FOR THE DECK THE BRAIN PUT FIRST. When
+    # the look-ahead leads with another deck they are changes to a deck that
+    # is no longer "Play this", and the screen draws them against "Play this".
+    if duel_plan and duel_plan.get("changed"):
+        brain_swaps = []
 
     best = top[0] if top else None
     observed = None
@@ -2205,6 +2388,10 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         # Each option carries its own `plan`. None = the list is ranked for
         # this game alone.
         "duelPlan": duel_plan,
+        # The set to load, before a duel: when present, `recommendations` ARE
+        # the set (the player's own decks, sharing no card). None = the
+        # options are the usual ranked list.
+        "duelSet": duel_set,
         # One-card changes real duel players made to "Play this", that help here.
         "brainSwaps": brain_swaps,
         "observedLoadout": observed,

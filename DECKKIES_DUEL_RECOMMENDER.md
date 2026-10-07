@@ -117,7 +117,7 @@ otherwise (today's read 52.2 / 50.7; a perfect read 54.2 / 49.7; noise about
 | 1 | **The new opponent read** — game order, recency, strictly legal decks, a fitted next-deck model, on any window; retrained after every poll | **LIVE 2026-10-07** |
 | 2 | **What they have left** — win conditions, spells, buildings and support cards still unspent after each game | **LIVE 2026-10-07** |
 | 3 | **Pick for the duel, not the game** — look-ahead over their likely order; the result of each game moves the next one | **LIVE 2026-10-07** |
-| 4 | **The set composer** — three or four card-disjoint decks from duel-proven decks, key spells and win conditions spread so no deck is starved; harmony checklist and duel-pairing gate on every deck; at most two human swaps | **the gate is LIVE 2026-10-07** (`deck_packages.py`, asked for early); the composer is not started |
+| 4 | **The set composer** — three or four card-disjoint decks from duel-proven decks, key spells and win conditions spread so no deck is starved; harmony checklist and duel-pairing gate on every deck; at most two human swaps | **LIVE 2026-10-07**: the set from the player's own decks as they are (`duel_set.py`) and the gate on constructed decks (`deck_packages.py`). Swaps inside a set: built, measured, OFF |
 | 5 | **Keep learning** — retrain after every poll; this scorecard re-run before any step ships; a CRL cohort line in it | not started |
 
 ## Rules for this work
@@ -392,7 +392,54 @@ use was built by hand at 15:57 UTC; the next poll was due about 18:50 UTC).
 - The Prediction window does not ask who won: the read does not use it.
 - `coach.chosen` ("Build around your cards") is still ranked for the game.
 
-## Next action
+### 2026-10-07 — step 4 shipped: the set to load, from their own decks
+
+The account holder said "continue" to the default I had put to them: the
+player's own decks first, decks new to them only as separate options.
+
+**Measured first, and two of my assumptions were wrong.**
+
+1. *I first tested on three-game duels only* — the selection trap in this
+   file's own rules (they are the duels that stood 1-1 with the REAL set). The
+   numbers looked the same afterwards, but the test that counts is the one on
+   duels where both full sets are known whatever the score: 672 player-duels,
+   real set 52.78%, composed from their own decks **54.58%**; with a choice
+   (277) 60.20% -> **64.21%**. Real outcomes cannot confirm it (83 against
+   194 player-duels).
+2. *I expected players' favourite decks to clash* (the same Log in two decks)
+   and built the composer to resolve that with human swaps. They do not:
+   98.6% of players with three duel decks can field a set as it stands,
+   because duel decks come from duels. Where a swap changed the set (7.6%) a
+   model rated it +2.0, on decks nobody has played; overall +0.15. **Built,
+   tested, switched off.** (A lab flaw on the way: a changed deck was read as
+   max-level by the planner and every changed set looked better; with it the
+   swaps looked 8 points WORSE by the judge. Fixed before the conclusion.)
+
+**Server, deployed 18:31 UTC** (backups
+`{coach,test_coach}.py.bak-20261007-183108-preduelset`): `duel_set.py`,
+`coach._own_duel_decks` / `_plan_tools` / `_duel_set` / `_duel_figures`,
+`SET_MARGIN` (their last duel's decks stay unless leaving one out gains a
+point — staged, it had proposed a change for 0.3). **Client:** the heading
+and its figures, the PDF, release note `2026-10-07-duel-set`.
+
+**Staged, 14 real pairs:** a set on 20 of 28 opening answers (12 of four, 8 of
+three), none sharing a card, every follow-up in the set; "Play this" changed
+on 8 (6 because the old pick was outside the player's own set). Median
+1.19 s -> 1.33 s.
+
+**Known and left:**
+
+- About a quarter of players have fewer than three duel decks in the window
+  and get no set. Decks from outside (ladder favourites, vetted meta lists,
+  the duel catalogue) are where the switched-off swap resolution belongs: a
+  set of "your two decks and this one, with Log -> Barbarian Barrel in it".
+  Not built; it needs its own blind test because those are decks new to the
+  player.
+- The fourth deck is chosen by the look-ahead but no stored duel shows a
+  fourth deck, so it is not separately measured.
+- "Build around your cards" and the Prediction window are unchanged.
+
+## Superseded next action (kept for the record)
 
 **Step 4 — the set composer.** Three or four card-disjoint decks for the whole
 duel, composed from duel-proven decks so that no deck is starved of a spell or
@@ -416,4 +463,28 @@ a win condition it needs:
 
 Before starting, check with the account holder whether a composed set should
 be limited to decks the player has played (their card levels and practice) or
-may include decks new to them.
+may include decks new to them. *(Asked; answer "continue" to the default: their
+own decks, new ones only as separate options.)*
+
+## Next action
+
+**Step 5 — keep learning, and gate on the scorecard.** What exists: the read,
+the win model, the pairing table, the package table and the swap graph are all
+rebuilt after every poll (`after_poll.py`). What does not:
+
+1. **The scorecard is not re-run automatically.** `replay_predict.py`,
+   `replay_plan.py` and `replay_set.py` are lab scripts on a local export.
+   Move the three headline measurements into one server-side command (a
+   walk-forward holdout over the duel index: the read's first-pick and
+   top-three, the look-ahead against the next-game pick, the composed set
+   against the real one), write the result beside the artifacts, and put it
+   on `/api/analytics/status` so a regression is visible.
+2. **A CRL cohort line** in that scorecard (the resolved tags are in the
+   evidence folder, which is gitignored: the server needs its own list, kept
+   out of the repository).
+3. **The 526 unresolved CRL names** — ask the account holder for tags.
+4. **Decks from outside for players with fewer than three duel decks** (see
+   the last log entry) — the first real use of the composer's swaps.
+
+Also still to watch from earlier steps: the after-poll updater's first
+`deck packages` step (`grep "deck packages" /var/log/clashbot/after-poll.log`).
