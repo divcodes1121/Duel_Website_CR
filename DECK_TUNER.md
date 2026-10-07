@@ -513,6 +513,15 @@ Three risks worth naming:
   draws from `compose`. `rank`'s BASE deck is the player's own list and keeps
   `_view`. Staged over 10 real pairs: 7 of 170 offered decks were short before,
   0 after; live 85 decks, 0 short. `test_deck_tuner.py` 111 -> 119.
+- **A SWAP IS CHECKED AS THE DECK IT MAKES (2026-10-07).** `coach.tune` hands
+  `rank` a veto that is the role checklist and then
+  `coach._constructed_ok(deck, seed = the deck being tuned)`: the spell
+  package, buildings and least-run card against what duel players field with
+  the win condition (`deck_packages.py`), and the duel-pairing gate, each
+  passing when it is no worse than the deck being changed. Staged on 12 real
+  pairs, 98 of 331 offered swaps failed before and 0 of 302 after. The
+  composer's lists are real decks and are not held to it. README "A built deck
+  has to make sense".
 - **NO NEW ROUTE.** It rides on `/api/analytics/coach/suggest` behind an
   opt-in `swaps=1` parameter, returning a `tuner` field — the arrangement
   `ops_snapshot` uses on `/coverage`, for the same three reasons: the

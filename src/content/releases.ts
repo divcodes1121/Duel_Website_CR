@@ -82,6 +82,17 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-07-built-decks-make-sense',
+    date: '2026-10-07',
+    kind: 'fixed',
+    title: 'Decks Deckkies builds have to make sense as decks',
+    body: [
+      'Under a Coach Assist suggestion, “Deckkies built for this duel” could change two cards in a real deck and end up with something nobody would play — a bait deck with Freeze and Arrows and no Log. Each change was one real players make; the deck after both was never checked.',
+      'Now every deck Deckkies builds or changes is checked whole: its spell package, its buildings and each support card against what duel players actually field with that win condition, and how well its cards go together. A change may not leave a deck stranger than it found it. On real pairs, three in four of the decks it used to build failed that check; none do now.',
+    ],
+    needs: 'pro',
+  },
+  {
     id: '2026-10-07-duel-read',
     date: '2026-10-07',
     kind: 'improved',

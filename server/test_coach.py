@@ -739,6 +739,23 @@ try:
     out = coach.tune(BEST, [{"cards": BEST}], used=SPENT, games_left=1)
     check("with one game left there is no loadout (it would repeat the composer)",
           "loadout" not in calls and out["loadout"] is None)
+
+    # A SWAP IS A DECK WE TELL THEM TO PLAY: the tuner's veto is the checklist
+    # and then the package gate, measured against the deck being changed.
+    veto = calls["rank"].get("veto")
+    saved_ok = coach._constructed_ok
+    seen = []
+    try:
+        coach._constructed_ok = lambda cards, seed=None: bool(seen.append(seed)) or "freeze" not in cards
+        check("the tuner's veto passes a swap the package gate passes", callable(veto) and veto(BEST) is None)
+        check("...refuses one it does not, with a reason",
+              isinstance(veto(BEST[:7] + ["freeze"]), str))
+        check("...and judges it against the deck being tuned", seen and all(s == BEST for s in seen), str(seen[:1]))
+        fake_harmony.veto = lambda cards: "no air answer"
+        check("the checklist's own reason still comes first", veto(BEST) == "no air answer")
+    finally:
+        fake_harmony.veto = lambda cards: None
+        coach._constructed_ok = saved_ok
 finally:
     coach._spread = saved_spread
     for k, v in saved_mods.items():
@@ -951,6 +968,53 @@ finally:
         sys.modules["duel_index"] = _saved_index
     else:
         del sys.modules["duel_index"]
+
+print("\na constructed deck must make sense as a deck (2026-10-07)")
+_PK_BAD = deck("pk-odd")
+_PK_OK = deck("pk-fine")
+_PK_SEED = deck("pk-seed")
+fake_pk = types.ModuleType("deck_packages")
+pk_calls: list = []
+
+
+def _pk_passes(cards, table=None, role_of=None, seed=None):
+    pk_calls.append(seed)
+    return set(cards) != set(_PK_BAD)
+
+
+fake_pk.passes = _pk_passes
+_saved_pk = sys.modules.get("deck_packages")
+_saved_gate = coach._synergy_gate
+sys.modules["deck_packages"] = fake_pk
+try:
+    pct = {",".join(sorted(_PK_OK)): 60, ",".join(sorted(_PK_SEED)): 4, ",".join(sorted(_PK_BAD)): 80}
+    coach._synergy_gate = lambda: (lambda cards: (pct.get(",".join(sorted(cards)), 2) >= 10,
+                                                  pct.get(",".join(sorted(cards)), 2), None))
+    check("a deck both gates pass is fine", coach._constructed_ok(_PK_OK))
+    check("the package gate alone stops a deck, whatever its pairing score", not coach._constructed_ok(_PK_BAD))
+    check("...and is told the seed", coach._constructed_ok(_PK_OK, _PK_SEED) and pk_calls[-1] == _PK_SEED)
+    low = deck("pk-low")                                   # pairing percentile 2
+    check("the pairing gate stops a constructed deck with no seed", not coach._constructed_ok(low))
+    check("...and one that pairs worse than the deck it was built from",
+          not coach._constructed_ok(low, _PK_SEED))
+    pct[",".join(sorted(low))] = 4
+    check("a deck no worse than its own odd seed passes", coach._constructed_ok(low, _PK_SEED))
+    check("...but not against a seed that pairs well", not coach._constructed_ok(low, _PK_OK))
+    coach._synergy_gate = lambda: None
+    check("no pairing table: the package gate still decides",
+          coach._constructed_ok(_PK_OK) and not coach._constructed_ok(_PK_BAD))
+
+    def _pk_boom(cards, table=None, role_of=None, seed=None):
+        raise RuntimeError("table unreadable")
+
+    fake_pk.passes = _pk_boom
+    check("a package table that raises is no gate, never an error", coach._constructed_ok(_PK_BAD))
+finally:
+    coach._synergy_gate = _saved_gate
+    if _saved_pk is None:
+        sys.modules.pop("deck_packages", None)
+    else:
+        sys.modules["deck_packages"] = _saved_pk
 
 check("real cards are filed under the four roles",
       [coach._role_of(c) for c in ("hog-rider", "fireball", "cannon", "musketeer")]

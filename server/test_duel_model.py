@@ -120,6 +120,11 @@ check("no file is None", dm.load(tmp + ".missing") is None)
 print("\nCoach Assist: ordering only when every option is scored")
 import coach  # noqa: E402
 import duel_index as di  # noqa: E402
+# THE PACKAGE GATE HAS ITS OWN SUITE (`test_deck_packages.py`). A host with real
+# tables — the server has them — must not decide whether these invented
+# variants are offered.
+_real_constructed_ok = coach._constructed_ok
+coach._constructed_ok = lambda cards, seed=None: True
 saved = (dm.load, di.available, di.player_record, di.near_variants, coach.cd.cr_profile)
 try:
     dm.load = lambda path=dm.PATH: {"weights": W2, "meta": {"games": 9, "holdout": {"accuracy": 63.2}}}
@@ -139,6 +144,12 @@ try:
     check("the stronger player's strength is reported", info["strength"]["mine"] > info["strength"]["theirs"])
     check("swaps are for the NEW top deck", swaps and swaps[0]["in"] == "inferno-dragon", swaps)
     check("the caller's rows are not mutated", "brain" not in rows[0])
+    seen_seed: list = []
+    coach._constructed_ok = lambda cards, seed=None: bool(seen_seed.append(seed))
+    _o, _i, sw_gate = coach._brain(rows, opp, "#ME", "#OPP", set())
+    check("a variant the package gate refuses is not offered, and it is judged against the deck it changes",
+          sw_gate == [] and seen_seed and set(seen_seed[0]) == set(A), str(seen_seed[:1]))
+    coach._constructed_ok = lambda cards, seed=None: True
     dm.load = lambda path=dm.PATH: None
     out2, info2, sw2 = coach._brain(rows, opp, "#ME", "#OPP", set())
     check("no trained model: the list stands exactly as ranked", out2 is rows and info2 is None and sw2 == [])

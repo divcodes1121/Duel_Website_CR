@@ -15,7 +15,8 @@ with it after any restart. This triggers on DATA instead:
      retrain the duel model incrementally (only games stored since its own
      watermark), refit the duel read (which deck a player brings next, on
      every stored duel), rebuild the card-pairing table (`deck_synergy`, the gate on
-     "Or bring one of these"), rebuild the swap graph (the deck builder's move
+     "Or bring one of these") and the package table (`deck_packages`, what is
+     fielded around each win condition), rebuild the swap graph (the deck builder's move
      set), and remember the stored_at it acted on.
 
 A split duel across two polls needs nothing special: native duels are only in
@@ -101,6 +102,10 @@ def main(argv: list[str]) -> int:
         # Which cards duel players put together: the gate on "Or bring one of
         # these" (a deck whose cards they do not pair is skipped).
         ("deck synergy", [sys.executable, "-u", os.path.join(HERE, "deck_synergy.py"), "--build"]),
+        # What duel players put around each win condition — spell packages,
+        # buildings, support (`deck_packages`): the gate on every deck Deckkies
+        # constructs, and the rankings.
+        ("deck packages", [sys.executable, "-u", os.path.join(HERE, "deck_packages.py"), "--build"]),
         # The deck builder's move set: which cards humans interchange.
         ("swap graph", [sys.executable, "-u", os.path.join(HERE, "swap_graph.py"), "--build"]),
     ]

@@ -257,7 +257,8 @@ DUEL_LISTS = [lst(HOG, 300, 160), lst(HOG_K, 100, 50), lst(HOG_V, 60, 30),
 
 saved = {n: getattr(coach, n) for n in
          ("_history", "opponent_next", "_Rates", "_own_decks", "_archetype", "_brain_ctx",
-          "_drop_event_decks", "_synergy_gate", "_duel_projection", "_build_for_duel", "_duel_lists")}
+          "_drop_event_decks", "_synergy_gate", "_duel_projection", "_build_for_duel", "_duel_lists",
+          "_constructed_ok")}
 saved_seeds, saved_snap, saved_seater = coach.counter.seeds, coach.counter._snap, coach.counter.seater
 built_calls: list = []
 asked_lists: list = []
@@ -272,6 +273,8 @@ try:
     coach._brain_ctx = lambda opp, me, them: None          # the fused rate answers
     coach._drop_event_decks = lambda decks: (list(decks), 0)
     coach._synergy_gate = lambda: None
+    # The package gate has its own suite; a host's real tables must not decide these.
+    coach._constructed_ok = lambda cards, seed=None: True
     coach._duel_projection = lambda rates, opp, tag, win: ({"golem": 0.6, "bait": 0.4}, 0.0)
     coach.counter._snap = lambda: None
     coach.counter.seater = lambda: (lambda cards: (list(cards), {}, True))
@@ -448,6 +451,8 @@ try:
     fake_sg.load = lambda: {"graph": {"cannon": [["tesla", 0.5, 800]]}, "decks": 1}
     saved_sg = sys.modules.get("swap_graph")
     sys.modules["swap_graph"] = fake_sg
+    saved_ok = coach._constructed_ok
+    coach._constructed_ok = lambda cards, seed=None: True
     try:
         ctx = {"model": {"weights": {"pilot": 1.0}}, "decks": OPP["decks"],
                "kw": dict(my_def=None, opp_def=None, my_str=0.5, opp_str=0.5)}
@@ -464,7 +469,23 @@ try:
                               keep_win_conditions=True)
         check("asked to, it never trades the deck's own win condition away (Hog -> Ram Rider)",
               seen_allow == [(False, True)], str(seen_allow))
+        # THE DECK THAT RESULTS is checked, against the deck it was built from.
+        seen_allow.clear()
+        gate_calls: list = []
+
+        def gate(cards, seed=None):
+            gate_calls.append((list(cards), list(seed) if seed else None))
+            return "tesla" not in cards
+
+        coach._constructed_ok = gate
+        coach._build_for_duel(ctx, [{"cards": HOG, "source": "yours"}], None, set(), 0)
+        check("a built deck the package gate refuses is not allowed; one it passes is",
+              seen_allow == [(True, False)], str(seen_allow))
+        check("the gate is handed the finished deck and its seed",
+              gate_calls and all(s == HOG for _c, s in gate_calls)
+              and any("tesla" in c for c, _s in gate_calls), str(gate_calls[:1]))
     finally:
+        coach._constructed_ok = saved_ok
         dbl.build = real_build
         if saved_sg is None:
             sys.modules.pop("swap_graph", None)

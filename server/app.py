@@ -578,6 +578,14 @@ class Handler(BaseHTTPRequestHandler):
                     out["deckSynergy"] = deck_synergy.status()
                 except Exception:  # noqa: BLE001
                     out["deckSynergy"] = None
+                # WHAT IS FIELDED AROUND EACH WIN CONDITION (spell packages,
+                # buildings, support): the gate on every deck Deckkies builds.
+                # Null before the first build (= that gate is off).
+                try:
+                    import deck_packages
+                    out["deckPackages"] = deck_packages.status()
+                except Exception:  # noqa: BLE001
+                    out["deckPackages"] = None
                 # THE DUEL READ's FIT (which deck a player brings next). Refitted
                 # after every poll; `fitted: false` = the built-in weights are in
                 # use, which is a stopped trainer, not a broken read.

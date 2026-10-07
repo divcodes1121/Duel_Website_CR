@@ -1395,6 +1395,10 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
                 # the old brain judged -- two different rulers.
                 if not e or e["sources"] != top["brain"]["sources"] or e["winRate"] - base < 0.5:
                     continue
+                # A real variant somebody fielded a few times can still be a
+                # stranger deck than the one it is offered as a change to.
+                if not _constructed_ok(s["cards"], top["cards"]):
+                    continue
                 ordered, art, inferred = seat(s["cards"])
                 swaps.append({**s, "winRate": e["winRate"], "gain": round(e["winRate"] - base, 1),
                               "cards": ordered, "art": art, "inferredArt": inferred})
@@ -1485,7 +1489,9 @@ def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int,
                 return False
             return (held <= set(new)
                     and cd.fillable_slots(new) >= cd.SPECIAL_SLOTS
-                    and issues(new) <= issues(seed))
+                    and issues(new) <= issues(seed)
+                    # THE DECK THAT RESULTS, not each swap on its own.
+                    and _constructed_ok(new, seed))
 
         seeds = seeds[:BUILD_SEEDS]
         built = dbl.build(seeds, fast, graph, used=used, allow=allow, limit=BUILD_FINALISTS)
@@ -1729,6 +1735,43 @@ def _synergy_gate():
                           syn.duel_record(cards, table))
 
 
+def _constructed_ok(cards, seed=None) -> bool:
+    """Does a deck Deckkies CONSTRUCTED make sense as a deck?
+
+    Asked for (2026-10-07), looking at a built Log Bait with Rocket -> Freeze
+    and The Log -> Arrows: "at least check the synergy of the spells in the
+    deck, the buildings, the support cards". Each of those swaps is one real
+    players make; nothing looked at the deck that RESULTS. Two checks on it:
+
+      * `deck_packages` — its spell SET, its buildings and its least-run card,
+        each against what duel players field with its win condition;
+      * `deck_synergy` — the duel-pairing gate "Or bring one of these" already
+        passes, which the builder never applied (that Log Bait is at its 0th
+        percentile).
+
+    `seed` is the real deck it was built from. A measure that is under its gate
+    still passes when it is no worse than the seed's: a swap may not make a
+    deck stranger than it found it, and a player's own odd list is theirs.
+    A missing table is no gate — a host without the file keeps what it had.
+    """
+    try:
+        import deck_packages as pk
+        if not pk.passes(cards, seed=seed):
+            return False
+    except Exception:  # noqa: BLE001 - deployment shape; the other gate stands
+        pass
+    gate = _synergy_gate()
+    if gate is not None:
+        ok, pct, _rec = gate(cards)
+        if not ok:
+            if seed is None:
+                return False
+            _sok, spct, _srec = gate(seed)
+            if pct is None or spct is None or pct < spct:
+                return False
+    return True
+
+
 def tune(my_deck: list[str], opp_decks: list[dict],
          used: set | None = None, hist: dict | None = None,
          profile: dict | None = None,
@@ -1772,10 +1815,18 @@ def tune(my_deck: list[str], opp_decks: list[dict],
         for d in hist["allDecks"]:
             comfort.update(d)
 
+    def swap_veto(cards):
+        """The checklist's reason, or the package gate's: a swap is a deck we
+        tell them to play, measured against the deck it changes."""
+        why = harmony.veto(cards)
+        if why:
+            return why
+        return None if _constructed_ok(cards, my_deck) else "spell package or support not played with this win condition"
+
     try:
         out = tuner.rank(my_deck, archetypes, weights=weights,
                          used=used or set(), comfort=comfort,
-                         veto=harmony.veto)
+                         veto=swap_veto)
     except Exception as exc:  # pragma: no cover - degradation
         print("coach.tune: %r" % (exc,), file=sys.stderr)
         return None
@@ -2329,7 +2380,8 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
             return (len(set(cards)) == 8 and cc.legal(cards, used)
                     and cd.fillable_slots(cards) >= cd.SPECIAL_SLOTS
                     and not issues(cards)
-                    and (synergy is None or synergy(cards)[0]))
+                    and (synergy is None or synergy(cards)[0])
+                    and _constructed_ok(cards))
 
         try:
             builds = arch.build(corpus, want, score=fast, allow=allow, used=used)

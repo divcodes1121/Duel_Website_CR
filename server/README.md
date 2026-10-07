@@ -1607,6 +1607,58 @@ docstring. Backups `*.bak-20260930-153444-presynergy`.
 `coach._build_for_duel` no longer calls `plan_loadout` ("Planned for the whole
 duel" removed on request); `LOADOUT_EXTRA` is gone and `built` has no `loadout`.
 
+## The package table (`deck_packages.py`, 2026-10-07)
+
+`deck_packages.build` (after every poll, 42 s on production;
+`.deck_packages.json`, gitignored, counts only — no tags, 483 kB) reads the
+duel index's `games` table read-only, OLDEST FIRST, every game: each game moves
+the two pilots' running records (`PILOT_PRIOR_GAMES` 20), and games in the last
+`WINDOW_DAYS` 60 are counted. For each win condition (`duel_combos.card_info`:
+`wincon` / `spell` / `building` / `support`) it keeps
+
+    spells      {sorted spell set: [games, wins, expected wins, pilots]}
+    buildings   {sorted building set: [...]}
+    cards       {card: [games, wins, expected wins]}
+
+under two populations, `all` and `friendly` (`duel_1v1_friendly`). A deck with
+two win conditions is counted under each (and each lists the other as a card);
+one with none under `""`. Sets under `MIN_ROW_GAMES` 3 are not stored.
+`table_from(games, role_of, since)` is pure — no card knowledge, no I/O.
+
+    fit(cards)                 the deck's three shares with its win condition
+                               (the lower of the two when it has two)
+    check(cards, seed=None)    {"ok", "problems", "fit", "seedFit"}
+    passes(cards, seed=None)
+    rank_wincons / rank_sets / rank_cards    most played first, with `edge`
+
+**The gates** are shares of the win condition's deck-games:
+`SPELL_MIN_SHARE` 0.012, `BUILDING_MIN_SHARE` 0.02, `CARD_MIN_SHARE` 0.03. A
+measure under its gate is a problem unless a `seed` is given and the deck is no
+worse than it on that measure. No table, or a deck the table cannot place, is
+`ok` with `fit: None`.
+
+**Who calls it**: `coach._constructed_ok(cards, seed)` — the package check, then
+the duel-pairing gate with the same seed rule (passes, or its percentile is not
+below the seed's). It is the last term of `_build_for_duel`'s `allow`, of
+`chosen`'s architect `allow` (no seed), of the tuner's veto in `tune` (seed =
+the deck being tuned) and of `_brain`'s swap loop (seed = the top deck).
+`compose` / `loadout` / "Play this" do NOT call it: a real deck offered whole
+is its own evidence (217 of the 669 vetted seeds would fail).
+
+`/api/analytics/status` carries `deckPackages`: `{brain, builtAt, deckGames,
+friendlyDeckGames, winConditions, gates}`; null before the first build, which
+means that gate is off and nothing else changes.
+
+    python3 deck_packages.py --build
+    python3 deck_packages.py --report                      # win conditions
+    python3 deck_packages.py --report mortar               # its packages and cards
+    python3 deck_packages.py --report mortar friendly
+
+**The cache is keyed by path and time.** By time alone, two files written in
+the same instant handed one table back for both — found by running the suite
+on the server, where the clock is coarser. `test_deck_packages.py` forces the
+two times equal.
+
 ## Vetting the candidate pool (`deck_evidence.py`, 2026-09-30)
 
 `pair_matchup_agg` has no player and no mode column, so the seed pool that

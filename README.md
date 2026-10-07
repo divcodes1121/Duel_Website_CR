@@ -54,6 +54,7 @@ bot's SQLite files read-only.
 |---|---|
 | deck tools + analytics screens | shipped |
 | **Coach Assist: the duel read, and what they have left** | **2026-10-07, server deployed first** (backups `*.bak-20261007-120910-preduelread`). The first two steps of a rebuild of the duel suggestion asked for that day, each proved on a BLIND replay of every stored duel (`DECKKIES_DUEL_RECOMMENDER.md`). The decks an opponent is expected to bring now come from a model fitted on the order and recency of their own duels (`server/duel_read.py`, refitted after every poll), not from a count of plays: on the CRL-list players it names the exact opening deck first **42.8%** of the time against **20.3%**, and within three 60.6% against 40.8%. A native duel's blocks were measured to be in game order (15,578 of 15,578 sides), so every duel now says what a player opens with. The screen gains a block of the win conditions, spells, buildings and support cards they may still bring with the chance of each and the cards already spent in grey, a `new deck` figure, a Clan war / Friendly switch, and each of their decks printed at its real chance. See [The duel read](#the-duel-read-game-order-recency-and-what-they-have-left-2026-10-07) |
+| **A deck Deckkies builds has to make sense** | **2026-10-07, server only, deployed 16:07 UTC** (backups `*.bak-20261007-160744-prepackages`). Reported from the live screen the same day: "Deckkies built for this duel" offered a Log Bait list with Rocket -> Freeze and The Log -> Arrows — *"these decks don't make sense, at least check the synergy of the spells in the deck, the buildings, the support cards"*. Each swap was one real players make; nothing looked at the deck that RESULTED. `server/deck_packages.py` counts, for every win condition, the spell packages, buildings and cards duel players field with it (706,638 deck-games in 60 days; friendly duels kept apart), and every deck Deckkies constructs must pass it and the duel-pairing gate, or be no worse than the deck it was built from. Staged on 12 real pairs: **95 of 123** built decks failed before, **0 of 131** after; tuner swaps 98 of 331 -> 0 of 302; "Play this" the same in 48 of 48; timing unchanged. The same table ranks spell packages, support cards and win conditions by use and by results. See [A built deck has to make sense](#a-built-deck-has-to-make-sense-spell-packages-buildings-and-support-2026-10-07) |
 | **Hero Electro Wizard and Evolution Electro Giant** | **LIVE 2026-10-06 as `cb8174c`; server half deployed first** (`cardMeta.json` and `test_deck_tuner.py` copied after both VPS copies matched `HEAD` by md5, backups `*.bak-20261006-042932-preelectro`; the live `deck` route went from drawing the two cards plain to evolution and hero). `/api/health` and the `deckkies-build` meta reported the commit **62 s** after the push; both art files are served byte-identical to the repo's, and the served bundle carries the release note and both flags. **Not opened in a browser on the live URL** — the browser pass was local. Two new FORMS, no new card: one flag each in `cardMeta.json` and one file of art each, making 43 evolutions and 18 heroes over the same 123 cards. The evolution render is the existing template to the pixel. **The hero render arrived without the gold gem every other hero carries**; it is on the identical template as the Magic Archer master (alpha agrees exactly, mean difference 0.00), so `scripts/add-hero-gem.py` restores the gem from it and refuses to run on a render that does not match. `tests/fixtures/seating.json` was re-run through the server's own `arrange_deck` (control first: 95 of 95 with the flags off; one live deck changes with them on; three constructed decks added), and a new test holds the flags and the art files equal in both directions. **The server reads the same file**: `src/data/cardMeta.json` has to be copied to the VPS for the suggestion engines to treat the two cards as able to fill a slot. See [October 2026: two more forms](#october-2026-two-more-forms-and-a-hero-that-arrived-without-its-gem) |
 | **All Duels — friendly duels that went to three games (admin)** | **LIVE 2026-10-05 as `7b4eb52`** — three commits the same day (`03ecdeb` the page, `c1523a3` friendly three-game duels only, `7b4eb52` Save duel), the server half deployed first each time it changed (backups `*.bak-20261005-075221-preallduels`, then `*.bak-20261005-082423-prefriendly`); `/api/health` reported each commit one to two minutes after its push and the served bundle was read each time. **Not yet opened signed in as an admin on production from here — the account holder's check.** Asked for directly: a page only for admins, opened from the profile drop-down, listing duels from newest to oldest with both players' names, the crowns, a card filter and three windows (30, 60, 90 days) and no others. **The first build listed every native duel; the account holder looked at it live and asked for friendly duels only, and only those played to all three games** — nineteen in twenty had been war duels. `#/all-duels`. One card a duel: the two players and the score in games, then one line a game with each player's eight cards in the forms they were fielded in and that game's crowns between them. It reads the duel index's own table of duel games — **1,169 such duels in thirty days, 2,431 in sixty, 3,046 in ninety** on production — through an admin-gated route, `/api/analytics/admin/duels` (route count 28), and an index on the mode that keeps the walk inside the friendly rows. Staged read-only against production: **every page of thirty days walked, 0 rule breaks**, every player named, 6,828 of 7,014 decks drawn with observed forms. **159/159 in a browser** on those payloads (both themes, 1440, 1100, a 390 touch phone); the door and the refusals were covered by the first build's 205/205 and 10/10 signed out. 94 Python + 55 vitest checks, thirteen rules broken on purpose and each caught. Live: 401 without an admin's token, a page in 11-15 ms, the first ask of a card filter in 28-61 ms. **Each row has a Save duel button** (asked for the same day): it writes the duel into Royal Duels' saved Versus groups, the left player's decks as Blue and the right player's as Red, and the row then reads `Saved as Duel Deck n` — from the library, so it still does after a reload. 36/36 in a browser, from the click to the set in the builder. See [All Duels — friendly duels that went to three games](#all-duels--friendly-duels-that-went-to-three-games-2026-10-05) |
 | **Decks — every deck a player is using** | **LIVE 2026-10-04 as `68ae88d`**, server deployed first (backups `*.bak-20261004-163517-predecks`); `/api/health` reported the commit about 54 s after the push, then **14/14 in a real browser against the live site**, signed out (1440 dark and a 390 touch phone light). Asked for directly: an option called Decks beside a player's other sections, listing the decks they are using in descending order, over 7, 14 or 30 days and nothing else, modelled on a pasted reference deck list. `#/player/<tag>/decks`, directly under Recent Battles in the rail, open to everyone (confirmed by the account holder). One row a deck: name, average elixir, four-card cycle, the share of their games (`55.1% · 189 / 343 games`), the eight cards in their forms with the copy, picture and Open in Game buttons, and two records — the **Player's** battles, wins, draws and losses with it, and the **Community's**: the same exact list across every player held. Games are own-deck 1v1 battles plus native duel games counted one by one from the duel index, so a duel never counts twice. New route `/api/analytics/decks/<tag>` (route count 27). Staged read-only against production data for five real players over all three windows: **0 rule breaks, 0.06-0.61 s a read with the community cache empty and 0.02-0.12 s with it warm**, a community record for 95-100% of each player's decks. Live after the server deploy: the route answers the production origin with the same figures the staged run gave, in about 1.3 s end to end. **54/54 in a browser** on those payloads (both themes, 1440, 1100, a 390 touch phone), the PDF exported and looked at. 46 Python + 20 vitest checks, proven red three ways. See [Decks — every deck a player is using](#decks--every-deck-a-player-is-using-2026-10-04) |
@@ -128,7 +129,7 @@ bot's SQLite files read-only.
 | Coach Assist — Suggestion | **reads real duels (2026-09-27, live)** — the fused ladder+duel rate on every pairing and one option held for duel proof; see the row at the top. Before that, **personal and archetype-by-archetype (2026-09-25, live).** "Or bring one of these" is chosen per player from their playstyle (12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition), and every deck shows its rate against **five** archetypes — their likely ones, their other win conditions, then the meta — on one line |
 | R3 prediction sampler | **STOPPED 2026-09-19 21:05 UTC** by its own stop condition (a royalweb restart during a deploy), ~8 h into 7 days; found 2026-09-25, not restarted per protocol. Re-running needs a deploy freeze or an amendment — the account holder's call. See `server/README.md` |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **4,123 Python checks** across **73 suites** and **1,402 vitest** across 61 files as of 2026-10-07, both by a full run (the duel read added `server/test_duel_read.py`, 55, 25 to `test_coach.py`, 118 -> 143, 3 to `test_duel_index.py`, 68 -> 71, and `tests/coachDuelRead.test.ts`, 9; before it 4,040 across 72 and 1,393 across 60 as of 2026-10-06, when the two new card forms added one check to `server/test_deck_tuner.py`, three constructed decks to the seating fixture — six tests — and five tests to `tests/deckLink.test.ts`; before it 4,039 and 1,382 as of 2026-10-05, when All Duels added `server/test_duel_feed.py`, 94, eight to `test_api_security.py` for the admin gate on its route, `tests/allDuels.test.ts`, 67, and two to `entitlement.test.ts`; before it 3,937 across 71 and 1,313 across 59 as of 2026-10-04, when the Decks screen added `server/test_player_decks.py`, 46, one check to `test_enrol_routes.py`, and `playerDecks.test.ts`, 20; before it 3,890 across 70 and 1,293 across 58 as of 2026-10-03, when `deckHidden.test.ts`, 28, came with the eye button on duel decks — 18 at first, 28 once a hidden deck stayed on the board and the newer copy became the grey one; before it 1,265 across 57, when `reportNames.test.ts`, 19, came with the PDF names fix) — the scroll rail added `scrollRail.test.ts` (53: the tick arithmetic, the section marks, the springs, and twelve contracts read off the stylesheets and the mount); before it 1,192 across 55 as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **4,195 Python checks** across **74 suites** and **1,402 vitest** across 61 files as of 2026-10-07 evening, both by a full run (the package table added `server/test_deck_packages.py`, 56, 13 to `test_coach.py`, 143 -> 156, 2 to `test_coach_choice.py`, 77 -> 79, and 1 to `test_duel_model.py`, 45 -> 46; before it 4,123 across 73 that morning, when the duel read added `server/test_duel_read.py`, 55, 25 to `test_coach.py`, 118 -> 143, 3 to `test_duel_index.py`, 68 -> 71, and `tests/coachDuelRead.test.ts`, 9; before it 4,040 across 72 and 1,393 across 60 as of 2026-10-06, when the two new card forms added one check to `server/test_deck_tuner.py`, three constructed decks to the seating fixture — six tests — and five tests to `tests/deckLink.test.ts`; before it 4,039 and 1,382 as of 2026-10-05, when All Duels added `server/test_duel_feed.py`, 94, eight to `test_api_security.py` for the admin gate on its route, `tests/allDuels.test.ts`, 67, and two to `entitlement.test.ts`; before it 3,937 across 71 and 1,313 across 59 as of 2026-10-04, when the Decks screen added `server/test_player_decks.py`, 46, one check to `test_enrol_routes.py`, and `playerDecks.test.ts`, 20; before it 3,890 across 70 and 1,293 across 58 as of 2026-10-03, when `deckHidden.test.ts`, 28, came with the eye button on duel decks — 18 at first, 28 once a hidden deck stayed on the board and the newer copy became the grey one; before it 1,265 across 57, when `reportNames.test.ts`, 19, came with the PDF names fix) — the scroll rail added `scrollRail.test.ts` (53: the tick arithmetic, the section marks, the springs, and twelve contracts read off the stylesheets and the mount); before it 1,192 across 55 as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -271,13 +272,14 @@ python server/test_duel_read.py   # 55 checks over the duel read: legal candidat
 python server/test_duel_brain.py  # 83 checks over the duel brain's figures and picks
 python server/test_suggested_seating.py # 49 checks: a suggested deck fields every slot its cards can fill
 python server/test_coach_daily.py # 204 checks over the plan against the field
-python server/test_coach.py       # 143 checks over the Coach Assist rules, incl. its duel wiring and the duel read's
-python server/test_coach_choice.py # 77 checks: decks around the cards a reader names — which lists are rated, the order, the sections
+python server/test_coach.py       # 156 checks over the Coach Assist rules, incl. its duel wiring, the duel read's and the gate on built decks
+python server/test_coach_choice.py # 79 checks: decks around the cards a reader names — which lists are rated, the order, the sections
 python server/test_deck_architect.py # 51 checks: building around a card from how duel players build (shells, core, open slots)
 python server/test_deck_tuner.py  # 152 checks over the swap brain, incl. the three-slot rule and the player-first lists
 python server/test_deck_builder.py # 28 checks: human swaps out from a real deck, and the series arithmetic
-python server/test_duel_model.py  # 45 checks over the duel win model and the combined brain's arithmetic
+python server/test_duel_model.py  # 46 checks over the duel win model and the combined brain's arithmetic
 python server/test_deck_synergy.py # 22 checks over the duel-pairing gate
+python server/test_deck_packages.py # 56 checks: spell packages, buildings and support around a win condition, and the gate on built decks
 python server/test_deck_evidence.py # 48 checks: who played a deck and in what mode — the vetting every offered deck passes
 python server/test_coach_session.py # 48 checks over today's practice session
 python server/test_after_poll.py  # 13 checks: the duel evidence updates when a bot poll finishes, never mid-poll
@@ -307,7 +309,7 @@ npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
 ```
 
-That is 39 of the **73** Python suites; all of them total **4,123** checks
+That is 40 of the **74** Python suites; all of them total **4,195** checks
 (counted by a full run on 2026-10-07), and the only failure is `test_ml_21a`'s `123 != 122` (the card count moved when
 Minion Giant shipped; accepted). A script totalling them has to read BOTH
 result lines — the homegrown `check()` suites print `N passed, M failed`, the
@@ -3806,15 +3808,152 @@ rises, and the Suggestion lists their decks at the read's own figures with a
 pick. The sign-in claimed the account's phone slot. Light theme and a phone
 width were checked locally on replayed payloads, not on the live URL.
 
-**Not yet seen:** the after-poll updater refitting the read under its timer.
-No battle had arrived between the deploy and this note (the next bot poll was
-due about 13:07 UTC); the artifact in use is the one fitted by hand at
-deploy.
+**The after-poll refit was seen the same day**: the updater's 14:58 UTC run
+logged `duel read: exit 0 in 176s`, and `/api/analytics/status` reported
+`duelRead.trainedAt` 15:14:21Z on 171,401 duels.
 
 **Not in this step:** the order to play your own decks in (the replay puts it
 at about ten points of duel-win chance with a perfect read, and the look-ahead
 at +2.3 by an independent judge), the result of each game updating the next
 read, and composing a whole set. Those are steps 3 and 4.
+
+### A built deck has to make sense: spell packages, buildings and support (2026-10-07)
+
+**Reported from the live screen**, hours after the duel read shipped: under
+"Deckkies built for this duel" a Log Bait list had Rocket swapped for Freeze
+and The Log for Arrows. *"These decks don't make sense — at least check the
+synergy of the spells in the deck, the buildings in the deck, the support
+cards."* And then: *"from the duels data check what all spells are combined
+with win cons and rank them, in competitive [friendly duels], which support
+cards are best, which win cons are best."*
+
+**What was wrong.** The builder (`deck_builder.py`, 2026-09-30) walks swaps
+real players make, at most two. Rocket -> Freeze is seen in 38 pairs of real
+decks and The Log -> Arrows in 401, so each step was "human". The deck after
+both is a bait deck with no Log and no big spell — its spell set is in 0.24%
+of Goblin Barrel deck-games — and the only checks on a finished deck were the
+three special slots and the role checklist. The duel-pairing gate
+(`deck_synergy`), which "Or bring one of these" has passed since 30 September,
+was never applied to built decks; that Log Bait is at its 0th percentile.
+
+**What it is now** (`server/deck_packages.py`, rebuilt after every poll by
+`after_poll.py`, 42 s; `.deck_packages.json`, counts only). For every win
+condition, over every deck fielded in a native duel game in the last 60 days:
+
+- the exact **set of spells** in the deck — a package, not a card;
+- the exact set of **buildings**;
+- every other card, one at a time;
+
+each with games, wins, the wins the two pilots' own duel records predicted, and
+distinct pilots. Two populations: every duel (706,638 deck-games), and
+**friendly duels alone** (30,296) — scrims and tournament matches.
+
+**The check on a constructed deck** is three shares of its win condition's
+deck-games: its spell set (gate **1.2%**), its building set (**2%**) and its
+least-run other card (**3%**). The spell and card gates are the tenth
+percentile, by games, of the decks duel players repeatedly field (10+ games,
+3+ pilots) — the pairing gate's own convention; the building gate is where the
+held-out signal stops (a Goblin Barrel deck with Tombstone, 2.7%, is a deck).
+A measure under its gate still passes when it is **no worse than the deck it
+was built from**: a swap may not make a deck stranger than it found it, and a
+player's own odd list stays theirs.
+
+**It predicts duel results, and that was measured before it was used.**
+Packages counted on the first 75% of duels by time, results on the last 25%,
+decks with under 30 duel games of their own, each pilot's record taken out:
+
+| | deck-games | won | their pilots predicted | |
+|---|---|---|---|---|
+| fails the check | 126,135 | 47.9% | 49.8% | **-1.9** |
+| passes | 50,538 | 51.9% | 50.1% | **+1.8** |
+| friendly duels, fails | 4,074 | 47.0% | 49.4% | -2.4 |
+| friendly duels, passes | 2,718 | 52.2% | 50.3% | +1.8 |
+
+By measure: a least-run card under 0.5% of its win condition's decks costs 6.4
+points, 0.5-2% costs 3.3, 2-5% costs 0.4; a spell set under 0.1% costs 4.6.
+
+**Where it applies** (`coach._constructed_ok(cards, seed)`, the package check
+and then the pairing gate, both relative to the seed):
+
+- "Deckkies built for this duel" and the swap builder under "Build around your
+  cards" (`_build_for_duel`);
+- decks built around named cards (`deck_architect`, no seed);
+- the tuner's swaps (its veto is the role checklist, then this);
+- "What duel players change" — a real one-card variant somebody fielded a few
+  times can still be a stranger deck than the one it is offered as a change to.
+
+**Where it does not, on purpose.** A real deck offered whole — "Play this",
+"Or bring one of these", the meta board — is its own evidence. Checked before
+deciding: 217 of the 669 vetted ladder lists fail the check, among them lists
+with twelve thousand ladder games built on cards the duels have barely seen
+yet (Minion Giant, Vines, Rune Giant). Calling those piles would be wrong.
+
+**Staged on the server, 12 real pairs, 48 answers, one ruler for both runs:**
+
+| decks | live before | new code |
+|---|---|---|
+| built for this duel, failing | **95 of 123** | **0 of 131** |
+| tuner swaps, failing | 98 of 331 | 0 of 302 |
+| one-card variants, failing | 5 of 42 | 0 of 39 |
+
+The builder still finds as many decks — a refused candidate frees its place in
+the search for one that holds up. "Play this" was the same in 48 of 48, the
+median answer 6.61 s -> 6.63 s. After the deploy the live route built three
+decks for a real pair, all passing (spell packages in 5.4%, 10.2% and 1.9% of
+their win condition's games), with 8 tuner swaps, none failing.
+
+**The rankings** come from the same table: `python3 deck_packages.py --report`
+lists the win conditions; add a card key for its spell packages, buildings and
+support cards, and `friendly` for friendly duels alone. `edge` is points won
+over what the pilots' own records predicted, shrunk toward zero (200 games), so
+"best" is not "played by the best players". It is still who chose the package
+and when — a reading of the duels, not a promise. Sixty days to 7 October:
+
+| win condition | all duels: share, edge | friendly duels: share, edge |
+|---|---|---|
+| Hog Rider | 16.9%, -0.2 | 10.4%, -2.7 |
+| Goblin Barrel | 12.4%, +0.7 | 6.9%, -1.8 |
+| Skeleton Barrel | 11.5%, +2.0 | 9.7%, -0.8 |
+| Royal Hogs | 9.3%, -0.6 | 10.6%, 0.0 |
+| Balloon | 9.0%, +0.2 | 5.8%, -0.9 |
+| Battle Ram | 8.1%, +2.3 | **12.2%, +5.5** |
+| Wall Breakers | 6.0%, -1.9 | 6.2%, -1.9 |
+| Mortar | 5.3%, **+3.4** | 10.2%, +1.2 |
+| Royal Giant | 5.2%, **-5.7** | 4.0%, -3.9 |
+| Miner | 4.9%, -3.4 | 5.7%, -4.3 |
+
+Spell packages, by use, with the edge of each (all duels / friendly):
+
+- **Hog Rider** — Fireball + Log 10.2% (+1.9), Earthquake + Log 9.5% (+0.1),
+  Arrows 8.5% (+2.2). Friendly: Earthquake + Log 28.4% (-1.3), Fireball + Log
+  9.6% (-2.4), Barbarian Barrel + Earthquake 7.0% (+2.4).
+- **Goblin Barrel** — Log 13.9% (+3.9), Arrows 11.7% (+2.4), Rocket + Log 9.4%
+  (+3.8). Friendly: no spell 30.7% (+1.7), Log 18.6%, Rocket + Log 12.1% (-3.9).
+- **Mortar** — Barbarian Barrel + Fireball 24.5% (**+9.1**). Friendly: the same
+  package 39.6% (+4.6).
+- **Battle Ram** — Arrows 12.9% (+6.6), Fireball + Zap 9.0% (+5.6), Barbarian
+  Barrel + Vines 6.2% (**+10.4**). Friendly: Arrows 27.5% (+8.0), Barbarian
+  Barrel + Vines 16.4% (+7.4).
+- **Balloon** — Barbarian Barrel + Freeze + Tornado 7.5% (+8.6). Friendly: the
+  same 16.3% (+2.5).
+- **Skeleton Barrel** — Barbarian Barrel + Fireball 9.6% (+8.4).
+
+Support cards with the best edge among those much played with a win condition:
+Skeleton Army with Goblin Barrel (+6.5 over 18,521 games) and Hog Rider (+5.4);
+Rascals and Cannon Cart with Skeleton Barrel (+7.0, +6.9) and with Mortar
+(+6.4, +7.1); Mother Witch, Zappies and Giant Skeleton with Battle Ram (+7.7,
++7.8, +7.1). Running a win condition with **no spell at all** is common and
+loses: Hog Rider -3.9, Balloon -4.3, Royal Hogs -5.7.
+
+**Checked.** `server/test_deck_packages.py` 56 (fourteen planted faults across
+the table and the wiring, all caught); `test_coach.py` 143 -> 156,
+`test_coach_choice.py` 77 -> 79, `test_duel_model.py` 45 -> 46. Running the new
+suite on the server found a real fault before deploy: the table loader cached
+by file time alone, so two files written in the same instant were confused.
+
+**Not in this change:** the screen is untouched (the block shows the decks that
+pass, or nothing); the composer of a whole set (step 4 of
+`DECKKIES_DUEL_RECOMMENDER.md`) will draw on the same table.
 
 ### Build around your cards (2026-10-02)
 
@@ -9151,7 +9290,7 @@ push.
 
 ## Testing and verification
 
-**4,123 Python checks across 73 suites** and **1,402 vitest tests across 61
+**4,195 Python checks across 74 suites** and **1,402 vitest tests across 61
 files** as of 2026-10-07, both counted by a full run; the only failure
 is the known, accepted `test_ml_21a` `123 != 122`. (It was 1,386 across 38 and
 378 vitest on 2026-08-30; the status table's `tests` row carries the history.)
@@ -16868,6 +17007,9 @@ server/
                               offered deck passes (event and one-pilot lists out)
   deck_synergy.py             do these eight cards go together the way duel decks
                               do — the gate on "Or bring one of these"
+  deck_packages.py            what duel players field around each win condition
+                              (spell packages, buildings, support), ranked; the
+                              check on every deck Deckkies constructs
   duel_model.py               the duel win model (cards, card-vs-card, levels,
                               pilot strength); duel_model_train.py fits it
   duel_read.py                which deck a player brings next in a duel, from the
@@ -16914,7 +17056,7 @@ server/
   live_player.py              the live CR battlelog, analysed for a new tag
   recruit.py                  how a tag gets collected without anyone searching for it
   tracking.py                 the tag-enrolment queue — ours, not the bot's
-  test_*.py                   73 suites, 4,123 checks (2026-10-07); none needs the
+  test_*.py                   74 suites, 4,195 checks (2026-10-07); none needs the
                               bot's database. See Running it for the counts
   README.md                   API and storage detail
 

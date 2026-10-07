@@ -116,8 +116,8 @@ otherwise (today's read 52.2 / 50.7; a perfect read 54.2 / 49.7; noise about
 |---|---|---|
 | 1 | **The new opponent read** — game order, recency, strictly legal decks, a fitted next-deck model, on any window; retrained after every poll | **LIVE 2026-10-07** |
 | 2 | **What they have left** — win conditions, spells, buildings and support cards still unspent after each game | **LIVE 2026-10-07** |
-| 3 | **Pick for the duel, not the game** — look-ahead over their likely order; the result of each game updates the next read | not started |
-| 4 | **The set composer** — three or four card-disjoint decks from duel-proven decks, key spells and win conditions spread so no deck is starved; harmony checklist and duel-pairing gate on every deck; at most two human swaps | not started |
+| 3 | **Pick for the duel, not the game** — look-ahead over their likely order; the result of each game updates the next read | **in progress** — `duel_plan.py` written and measured in quick mode; not wired |
+| 4 | **The set composer** — three or four card-disjoint decks from duel-proven decks, key spells and win conditions spread so no deck is starved; harmony checklist and duel-pairing gate on every deck; at most two human swaps | **the gate is LIVE 2026-10-07** (`deck_packages.py`, asked for early); the composer is not started |
 | 5 | **Keep learning** — retrain after every poll; this scorecard re-run before any step ships; a CRL cohort line in it | not started |
 
 ## Rules for this work
@@ -248,10 +248,8 @@ the opening read, a pasted game 1, the Friendly switch re-asking with
 removed. Full local run: 4,123 Python checks across 73 suites (only the known
 `test_ml_21a`), 1,402 vitest across 61 files.
 
-**Still to watch:** the first refit of the read by `after_poll.py` under its
-timer (no battle had arrived since the deploy when this was written). Check
-`/var/log/clashbot/after-poll.log` for a `duel read: exit 0` line and
-`duelRead.trainedAt` on `/api/analytics/status`.
+**The after-poll refit was seen the same day**: the 14:58 UTC run logged
+`duel read: exit 0 in 176s`; `duelRead.trainedAt` 15:14:21Z, 171,401 duels.
 
 **Known and left for later steps:**
 
@@ -268,14 +266,88 @@ timer (no battle had arrived since the deploy when this was written). Check
 - The unseen-deck share is printed, not scored against: the expected win rate
   is over the decks listed.
 
+### 2026-10-07 — the built decks did not make sense: the package table
+
+The account holder, looking at the live Suggestion after the push: the decks
+under "Deckkies built for this duel" *"don't make sense — at least check the
+synergy of the spells in the deck, the buildings, the support cards"* (a Log
+Bait list with Rocket -> Freeze and The Log -> Arrows), and then: *"from the
+duels data check what all spells are combined with win cons and rank them, in
+competitive [friendly], which support cards are best, which win cons are
+best"*.
+
+**Found:** the two-swap builder checked each swap and never the deck that
+results; the duel-pairing gate was never applied to built decks. Staged on 12
+real pairs, **95 of 123** built decks failed.
+
+**Built and deployed (server only, 16:07 UTC, backups
+`*.bak-20261007-160744-prepackages`):** `server/deck_packages.py` — for each win
+condition the spell packages, buildings and cards duel players field with it,
+with pilot-adjusted results, for all duels and for friendly duels; rebuilt by
+`after_poll.py`. `coach._constructed_ok(cards, seed)` puts every constructed
+deck through it and the pairing gate: the builder, the architect, the tuner's
+swaps and the one-card variants. After: **0 of 131** built decks fail, "Play
+this" unchanged in 48 of 48, timing unchanged. Gates and the holdout that
+justifies them are in the module's docstring and README "A built deck has to
+make sense"; the ranked tables are there too
+(`python3 deck_packages.py --report [card] [friendly]`).
+
+**Deliberately not gated:** real decks offered whole. 217 of the 669 vetted
+ladder lists would fail (new cards the duels have barely seen).
+
+**This is the harmony gate of step 4, delivered early.** The set composer will
+draw on the same table (which packages a win condition carries, and how they
+do) instead of inventing its own.
+
+**Also seen today:** the after-poll updater refitted the duel read under its
+timer (14:58 UTC run, `duel read: exit 0 in 176s`; `duelRead.trainedAt`
+15:14:21Z, 171,401 duels). To watch next: its first `deck packages` step.
+
+### 2026-10-07 — step 3, in progress (nothing wired, nothing deployed)
+
+`server/duel_plan.py` is written (in the working tree, NOT committed until it
+is wired and has its suite): a pure look-ahead that values every legal
+deck by the chance of winning the DUEL, given a `read(revealed, lost_prev)` and
+a `win(mine, theirs)`; it returns the pick, the best-for-this-game pick, and
+what to bring next if this game is won or lost. `replay_plan.py` in the
+evidence folder runs it blind (the read refitted on duels before 10 Sep by the
+production trainer -> `duel_read_pre0910.json`; rated by the judge fitted from
+26 Sep). Quick mode, every 4th player-duel (3,617), independent judge:
+
+| | duel-win chance |
+|---|---|
+| the order players really used | 46.56% |
+| best deck for the next game (the read, an unseen-deck share) | 48.00% |
+| look-ahead | 48.98% |
+| the perfect pairing | 56.48% |
+
+- **The result of a game matters for the next one.** After winning game 1 the
+  win model says 54.1% for game 2 and it happens 62.0%; a fitted shift of
+  +0.329 log-odds gives 61.0% (log loss 0.6417 -> 0.6337, held out). For game
+  3 the shift is +0.04 and changes nothing.
+- **Telling the read "they lost the last game" does not help it**: first pick
+  61.9% against 61.5% not told, log-probability a hair worse. The result
+  question earns its place through the score and the shift, not the read.
+- **Renormalising over the listed decks or keeping an unseen-deck share makes
+  no difference** to the pick (49.00 / 48.98).
+- **Open:** on real outcomes, players who OPENED as the look-ahead says did not
+  win more duels than players who opened as the next-game pick says (+1.5
+  against +3.0 points over "otherwise", noise about 1.4 each, earlier full
+  run). The opener alone is a weak test — the look-ahead's opener pays off
+  only if the follow-ups are played too. Before step 3 is wired: rate the
+  policies with a judge that includes the in-duel shift, and compare players
+  who followed a policy on BOTH picks. If the look-ahead does not hold up
+  there, ship the result question and the shift (honest duel and game
+  figures) and keep the next-game pick.
+
 ## Next action
 
-**Step 3 — pick for the duel, not the game.** In `coach.suggest`, value each of
-my decks by the chance of winning the DUEL: look ahead over the read's
-distribution for their games 2 and 3 (`read` with the hypothetical reveals) and
-over my own remaining legal decks, on the combined brain's rates. Ask who won
-each game (one more step in the interview, `res=` on the route), pass
-`lost_prev` to the read, and update the win chance for the games left (after
-winning game 1 a player wins game 2 57.5% where the model says 51.6%). Rate it
-on `replay_series2.py` with the independent judge and on real outcomes before
-it ships; the bar is the myopic pick with the new read (50.28% / 53.2%).
+**Finish step 3's measurement, then wire it.** In
+`brain-evidence/duel_replay_20261007/replay_plan.py`: add the judge with the
+in-duel shift to part A, and replace part B with "followed the policy on both
+picks" (and the subset where the look-ahead and the next-game pick disagree);
+run it in full (not `quick`). Then, by what it shows: wire `duel_plan.plan`
+into `coach.suggest` for the options it lists (`res=` on the route, one more
+question in the interview — "Who won game 1?"), with the fitted shift, the duel
+figure beside the game figure and the follow-up decks; or ship the question
+and the shift alone. `test_duel_plan.py` is not written yet.
