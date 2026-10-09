@@ -512,12 +512,32 @@ describe('saving a duel into the builder', () => {
       ok: false,
       reason: 'duplicate',
       name: 'Duel Deck 1',
+      swapped: false,
     });
     // A different duel takes the next name.
     const other = { games: [{ a: side(9, 2), b: side(10, 1) }] };
     expect(buildDuelImport(duelAsPlayed(other), library).outcome).toMatchObject({
       ok: true,
       name: 'Duel Deck 2',
+    });
+  });
+
+  it('a duel saved from the right-hand player’s Duel Zone is already saved here', () => {
+    /* The Duel Zone puts the SEARCHED player on blue; this list puts side `a`
+       there. Searching the right-hand player and saving writes the same decks
+       the other way round, and that is the same set. */
+    const fromTheirZone = duel.games.map((g) => ({
+      cards: g.b.cards,
+      playerCrowns: g.b.crowns,
+      opponentCrowns: g.a.crowns,
+      opponent: { cards: g.a.cards },
+    }));
+    const first = buildDuelImport(fromTheirZone, []);
+    expect(buildDuelImport(duelAsPlayed(duel), [first.entry as SavedDeckSet]).outcome).toEqual({
+      ok: false,
+      reason: 'duplicate',
+      name: 'Duel Deck 1',
+      swapped: true,
     });
   });
 
@@ -535,8 +555,8 @@ describe('saving a duel into the builder', () => {
 
   it('the screen saves through the store action the Duel Zone uses', () => {
     expect(save).toContain('useBuilderStore((s) => s.saveDuelPlayed)');
-    expect(save).toContain('onClick={() => saveDuelPlayed(games)}');
-    expect(R('src', 'components', 'Analytics', 'DuelZone.tsx')).toContain('saveDuelPlayed(series.games)');
+    expect(save).toContain('onClick={() => saveDuelPlayed(games, limit)}');
+    expect(R('src', 'components', 'Analytics', 'DuelZone.tsx')).toContain('saveDuelPlayed(series.games, limit)');
   });
 
   it('every duel carries the button, in its head', () => {
@@ -547,12 +567,43 @@ describe('saving a duel into the builder', () => {
     /* A flag in the component forgets on the next page turn and the row then
        offers to save a duel that is already in the builder. */
     expect(save).toContain('useBuilderStore((s) => s.library)');
-    expect(save).toContain('buildDuelImport(games, library)');
+    expect(save).toContain('buildDuelImport(games, library, limit)');
     expect(save).not.toContain('useState');
+  });
+
+  it('the Duel Zone asks the library too, so a duel saved elsewhere says so before a press', () => {
+    /* It used to remember only its own press: a duel saved yesterday, or from
+       the other player's Duel Zone, still offered the button. */
+    const zone = block(R('src', 'components', 'Analytics', 'DuelZone.tsx'), 'function SaveDuelButton(');
+    expect(zone).toContain('useBuilderStore((s) => s.library)');
+    expect(zone).toContain('buildDuelImport(series.games, library, limit)');
+    expect(zone).toContain('as {saved.name}');
+  });
+
+  it('both screens pass the reader’s saved-set limit, and say when it is reached', () => {
+    /* 1,000 for everyone, none for an admin (`savedSetLimit`). The limit comes
+       from one hook, and a screen that forgot it would save a set the account
+       then refuses to sync. */
+    const zone = block(R('src', 'components', 'Analytics', 'DuelZone.tsx'), 'function SaveDuelButton(');
+    for (const src of [save, zone]) {
+      expect(src).toContain('const limit = useSavedSetLimit();');
+      expect(src).toContain('savedSetsFull(limit)');
+    }
+    const dialog = R('src', 'components', 'Library', 'SaveDialog.tsx');
+    expect(dialog).toContain('const limit = useSavedSetLimit();');
+    expect(dialog).toContain('saveCurrent(name, limit)');
+    expect(dialog).toContain('disabled={full}');
+  });
+
+  it('both screens say when the saved set is the other way round', () => {
+    const zone = block(R('src', 'components', 'Analytics', 'DuelZone.tsx'), 'function SaveDuelButton(');
+    for (const src of [save, zone]) {
+      expect(src).toContain('title={saved.swapped ? SWAPPED_NOTE : undefined}');
+    }
   });
 
   it('it will not save part of a duel', () => {
     expect(save).toContain('duelPairs(games).length === duel.games.length');
-    expect(save).toContain('disabled={!whole}');
+    expect(save).toContain('disabled={!whole || full}');
   });
 });

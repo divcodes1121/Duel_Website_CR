@@ -18,7 +18,9 @@ import {
   type DuelFeedReport,
 } from '../../../state/analyticsClient';
 import { coachToken } from '../../../state/coachToken';
-import { buildDuelImport, duelPairs } from '../../../state/duelImport';
+import { SWAPPED_NOTE, buildDuelImport, duelPairs } from '../../../state/duelImport';
+import { useSavedSetLimit } from '../../../state/gate';
+import { savedSetsFull } from '../../../state/tiers';
 import { useBuilderStore } from '../../../state/store';
 import {
   DUEL_FEED_DAY_PRESETS,
@@ -205,7 +207,9 @@ function SaveIcon() {
  * this component would forget on the next page turn, and the row would offer
  * to save a duel that is already in the builder. Asking the library — the same
  * duplicate rule the save itself applies — means a duel saved yesterday says
- * so today, and one deleted from the builder can be saved again.
+ * so today, and one deleted from the builder can be saved again. That rule
+ * matches the decks either way round, so a duel saved from the right-hand
+ * player's Duel Zone (their decks as Blue there) says so here too.
  *
  * It is disabled unless EVERY game can be built. The save skips a game holding
  * a card this build of the site does not know yet, and on a list whose whole
@@ -215,15 +219,22 @@ function SaveDuel({ duel }: { duel: DuelFeedDuel }) {
   const saveDuelPlayed = useBuilderStore((s) => s.saveDuelPlayed);
   const games = useMemo(() => duelAsPlayed(duel), [duel]);
   const whole = useMemo(() => duelPairs(games).length === duel.games.length, [games, duel]);
-  const savedAs = useMemo(() => {
-    const { outcome } = buildDuelImport(games, library);
-    return !outcome.ok && outcome.reason === 'duplicate' ? outcome.name : null;
-  }, [games, library]);
+  const limit = useSavedSetLimit();
+  const outcome = useMemo(
+    () => buildDuelImport(games, library, limit).outcome,
+    [games, library, limit],
+  );
+  const saved = !outcome.ok && outcome.reason === 'duplicate' ? outcome : null;
+  const full = !outcome.ok && outcome.reason === 'full';
 
-  if (savedAs) {
+  if (saved) {
     return (
-      <span className={styles.savedNote} role="status">
-        Saved as {savedAs}
+      <span
+        className={styles.savedNote}
+        role="status"
+        title={saved.swapped ? SWAPPED_NOTE : undefined}
+      >
+        Saved as {saved.name}
       </span>
     );
   }
@@ -231,12 +242,14 @@ function SaveDuel({ duel }: { duel: DuelFeedDuel }) {
     <button
       type="button"
       className={styles.saveBtn}
-      disabled={!whole}
-      onClick={() => saveDuelPlayed(games)}
+      disabled={!whole || full}
+      onClick={() => saveDuelPlayed(games, limit)}
       title={
-        whole
-          ? `Save to Royal Duels as a Versus set: ${duel.games.length} decks each side`
-          : 'A deck in this duel holds a card this version of the site does not know yet'
+        full
+          ? savedSetsFull(limit)
+          : whole
+            ? `Save to Royal Duels as a Versus set: ${duel.games.length} decks each side`
+            : 'A deck in this duel holds a card this version of the site does not know yet'
       }
     >
       <SaveIcon />

@@ -1975,7 +1975,35 @@ refusal) are in `utils/duelFeed.ts`, which has no imports.
   a page turn and a reload, and goes when the set is deleted. The bar keeps
   one height either way (`min-height`), so a row does not shift on the click.
   Blue = the left player, Red = the right, as drawn. Disabled unless every
-  game can be built.
+  game can be built. A duel saved the other way round (from the right-hand
+  player's Duel Zone) is the same set and reads as saved here; the note then
+  carries a tooltip saying Blue and Red are swapped in that set.
+- **The Duel Zone's Save duel reads the library too (2026-10-09).** A duel
+  already in the builder shows `Already saved as Duel Deck n` in the button's
+  place before anything is pressed — whichever player's page it was saved
+  from — and `Saved as Duel Deck n` (green) for the press just made. Delete
+  the set in the builder and the button is back.
+- **At the saved-set limit, Save duel is disabled and its tooltip says why**
+  (`1,000 saved sets — delete one to save another`), on both screens. 1,000
+  for everyone, none for an admin (`useSavedSetLimit`). A duel that is already
+  saved still shows its name instead: that is the more useful answer.
+
+### The Saved tab and the saved-set limit (2026-10-09)
+
+- **Twenty groups a page**, with the pager every other list uses, under the
+  list. It drew every group at once and took 6.3 s to open with a thousand
+  sets; it takes 0.4 s. The card filter searches the WHOLE library and pages
+  what is left; the pill beside the title counts every set, whatever page is
+  drawn. Turning a page brings the top of the list back if the reader was past
+  it. Page 1 again when the mode or the filter changes.
+- **`225 of 1,000 saved`** at the far end of the title, for a reader who has a
+  limit — Solo and Versus together, because they share it. Red once it is
+  reached. An admin has no limit and sees no figure.
+- **The Save dialog at the limit**: the hint line becomes `1,000 saved sets —
+  delete one to save another.` (`role="alert"`) and Save is disabled and
+  dimmed. Updating a loaded set is never refused: it is not a new set.
+- **Delete turns red under the pointer.** Its class was referenced by the
+  component and never written, so it looked like Load and Rename.
 - **Three windows as one segmented group** (`aria-pressed`), not a dropdown:
   three choices fit, and the one in force stays on screen.
 - **No prose.** One line under the title; the only sentences are the empty

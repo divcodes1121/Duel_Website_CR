@@ -135,6 +135,13 @@
   transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.4), box-shadow 0.16s ease;
 }
 
+/* Save at the saved-set limit. The dimming is the affordance, as on every
+   other disabled control here; the line above the field says why. */
+.primaryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .ghostButton {
   font-size: 0.78rem;
   font-weight: 600;

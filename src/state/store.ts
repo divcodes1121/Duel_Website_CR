@@ -32,6 +32,7 @@ import {
 import { CARDS, CARDS_BY_KEY } from '../data/cards';
 import { fillDeck as fillDeckUtil } from './deckFill';
 import { buildDuelImport, type DuelSaveOutcome, type PlayedGame } from './duelImport';
+import { browserDeckStorage } from './deckStorage';
 import { pushRemoteDecks, readRemoteDecks, type SyncPayload } from './syncClient';
 import { decideSync } from './syncPolicy';
 import { useAccountStore } from './accountStore';
@@ -47,6 +48,16 @@ import {
 
 /** Duel collections (Deck's Home excluded — it manages its own deck list). */
 export type DuelOwner = 'solo' | 'blue' | 'red';
+
+/** What saving the board as a new set did. `full`: the library is at its limit. */
+export type SaveOutcome = { ok: true } | { ok: false; reason: 'full'; limit: number };
+
+/**
+ * Where the store keeps itself in this browser: the saved library compressed
+ * and in parts (`deckStorage.ts`), everything else as before. One instance,
+ * because the sync code below asks it whether the library it holds is whole.
+ */
+const localDecks = browserDeckStorage<PersistedSlice>('royal-duels-builder');
 
 /** Decks 1-3 are always shown; 4 and 5 unlock via the "Add deck slot" button. */
 export const MIN_DECK_SLOTS = 3;
@@ -163,7 +174,9 @@ interface BuilderState extends PersistedSlice {
   resetCardFilters: () => void;
   resetAll: () => void;
   /** Snapshot the current tab's decks into the library as a NEW entry (stays unattached). */
-  saveCurrent: (name: string) => void;
+  /** `limit`: how many saved sets this account may hold (`savedSetLimit`).
+   *  Required, so a caller cannot forget it and save past what will sync. */
+  saveCurrent: (name: string, limit: number) => SaveOutcome;
   /** Overwrite the active loaded entry with the current decks (in-place update). */
   updateSaved: () => void;
   /** Restore a library entry into its tab (switching tabs if needed); becomes active. */
@@ -173,7 +186,7 @@ interface BuilderState extends PersistedSlice {
    * group: the searched player's decks on blue, their opponent's on red.
    * Refuses when the same decks are already saved — see `duelImport`.
    */
-  saveDuelPlayed: (games: PlayedGame[]) => DuelSaveOutcome;
+  saveDuelPlayed: (games: PlayedGame[], limit: number) => DuelSaveOutcome;
   renameSaved: (id: string, name: string) => void;
   deleteSaved: (id: string) => void;
   /** Reveal the next hidden duel deck slot (up to DUEL_DECK_COUNT). */
@@ -752,7 +765,10 @@ export const useBuilderStore = create<BuilderState>()(
           activeSavedId: null,
         })),
 
-      saveCurrent: (name) =>
+      // Returns rather than only mutating: at the limit nothing is saved, and
+      // the dialog has to say so instead of closing as if it had.
+      saveCurrent: (name, limit) => {
+        if (get().library.length >= limit) return { ok: false, reason: 'full', limit };
         set((state) => {
           const entry: SavedDeckSet = {
             id: crypto.randomUUID(),
@@ -770,7 +786,9 @@ export const useBuilderStore = create<BuilderState>()(
           // update-vs-new prompt only ever appears after loading a saved set
           // (including after "Save as new", which detaches from the original).
           return { library: [entry, ...state.library], activeSavedId: null };
-        }),
+        });
+        return { ok: true };
+      },
 
       updateSaved: () =>
         set((state) => {
@@ -821,8 +839,8 @@ export const useBuilderStore = create<BuilderState>()(
 
       // Returns rather than only mutating, because the answer the caller has to
       // show ("saved as X" / "already saved as Y") is decided here.
-      saveDuelPlayed: (games) => {
-        const { outcome, entry } = buildDuelImport(games, get().library);
+      saveDuelPlayed: (games, limit) => {
+        const { outcome, entry } = buildDuelImport(games, get().library, limit);
         // A new entry is never the "loaded" one: this saves a duel from another
         // screen entirely and must not arm the builder's update-vs-new prompt.
         if (entry) set((state) => ({ library: [entry, ...state.library] }));
@@ -1010,6 +1028,11 @@ export const useBuilderStore = create<BuilderState>()(
     {
       name: 'royal-duels-builder',
       version: 9,
+      /* NOT the default JSON storage: that wrote the whole slice, every saved
+         set included, as one value on every change. `deckStorage.ts` keeps the
+         library in compressed parts and writes one only when it changes. It
+         hands zustand the same slice, so `version` did not move. */
+      storage: localDecks,
       partialize: (state) => ({
         sets: state.sets,
         mode: state.mode,
@@ -1179,9 +1202,21 @@ function markPending() {
 
 function clearPending() {
   try {
-    localStorage.removeItem(PENDING_KEY);
+    /* WRITTEN AS '0', NOT REMOVED. The flag has to be raised when a push fails,
+       and the browser's storage may be full at that moment — an account with
+       no saved-set limit saves until it is. A key that already exists can be
+       changed from one character to another with no room at all; a key that
+       was removed cannot be created. Left absent, a full browser could not
+       record that it held unsynced changes, and the next load would take the
+       account's copy over them. (`deckStorage.ts` keeps its own flag the same
+       way, for the same reason.) */
+    localStorage.setItem(PENDING_KEY, '0');
   } catch {
-    /* As above. */
+    try {
+      localStorage.removeItem(PENDING_KEY);
+    } catch {
+      /* As above. */
+    }
   }
 }
 
@@ -1208,14 +1243,38 @@ function hasPending(): boolean {
  */
 let syncBlocked = false;
 
+/**
+ * ONE PUSH AT A TIME. A push is several requests now (the parts that changed,
+ * then the commit), so it can still be running when the next change's timer
+ * fires. Two at once could land out of order — the older state committed last,
+ * with the pending flag cleared by the newer one's success. A change that
+ * arrives mid-push is sent when that push ends, from the state as it is then.
+ */
+let pushing: Promise<boolean> | null = null;
+let pushAgain = false;
+
 /** Push now, and remember whether it landed. */
-async function pushNow() {
+async function pushNow(): Promise<boolean> {
   if (syncBlocked) {
     /* Still marked pending, so the next successful read pushes it. */
     markPending();
     return false;
   }
-  const ok = await pushRemoteDecks(currentSyncPayload());
+  if (pushing) {
+    pushAgain = true;
+    markPending();
+    return pushing;
+  }
+  pushing = (async () => {
+    let ok = false;
+    do {
+      pushAgain = false;
+      ok = await pushRemoteDecks(currentSyncPayload());
+    } while (pushAgain && !syncBlocked);
+    return ok;
+  })();
+  const ok = await pushing;
+  pushing = null;
   if (ok) clearPending();
   else markPending();
   return ok;
@@ -1289,9 +1348,30 @@ function resetLocalDecks() {
     // Another account's steps are not this one's to undo.
     history: emptyHistory(),
   });
+  /* The safety copies `deckStorage.ts` keeps are this reader's decks too, and
+     they are the one thing the reset above does not reach. */
+  localDecks?.forget();
 }
 
-async function hydrateFromRemote(userId: string) {
+/**
+ * ONE PULL PER SIGN-IN. Restoring a session sets `userId` and `ready` in the
+ * same update, and both subscriptions below answer it — so this used to run
+ * twice at once, reading the account twice. Harmless when a read was one small
+ * request; a library is now many parts, and twice of that is real traffic. A
+ * second call for the account already being pulled joins the first.
+ */
+let hydrating: { userId: string; done: Promise<void> } | null = null;
+
+function hydrateFromRemote(userId: string): Promise<void> {
+  if (hydrating?.userId === userId) return hydrating.done;
+  const done = hydrateOnce(userId).finally(() => {
+    if (hydrating?.done === done) hydrating = null;
+  });
+  hydrating = { userId, done };
+  return done;
+}
+
+async function hydrateOnce(userId: string) {
   /* CLEAR BEFORE FETCHING, not after. The pull is a round trip, and for that
      whole window the previous account's decks are on screen and editable — an
      edit during it would be pushed to the NEW account. */
@@ -1304,10 +1384,17 @@ async function hydrateFromRemote(userId: string) {
   }
 
   const read = await readRemoteDecks();
+  /* A LIBRARY THIS BROWSER COULD NOT STORE IS NOT "LOCAL IS AHEAD". When the
+     browser ran out of room, or a stored part would not read back, what was
+     loaded from it is older or shorter than what the account holds — and the
+     pending flag would have it pushed over the account's copy. Only the
+     account's copy is whole then, so it is the one adopted; the cost is the
+     unsynced edit, which was not stored anywhere to begin with. */
+  const localWhole = !(localDecks?.isStale() ?? false);
   const action = decideSync({
     sameOwner,
     remoteRead: read.status,
-    pendingLocalChanges: hasPending(),
+    pendingLocalChanges: hasPending() && localWhole,
   });
 
   /* COULD NOT READ IT: change nothing, send nothing, try again next load.
@@ -1332,6 +1419,20 @@ async function hydrateFromRemote(userId: string) {
   if (remote && action === 'adopt-remote') {
     // A pull-driven update shouldn't immediately bounce back up as a push.
     suppressNextPush = true;
+    /* KEEP WHAT IS ABOUT TO BE REPLACED, when it is longer than what replaces
+       it — the endpoint's shadow-copy rule, applied here. Sync is last write
+       wins: a tab left open on another device can push an older, shorter
+       library, and this load would then adopt it. The copy does not stop
+       that; it makes it recoverable from this browser for a month
+       (`localDecks.replaced()`). An ordinary delete on another device trips
+       it too, and costs one small key. */
+    const mine = useBuilderStore.getState().library;
+    if (sameOwner && mine.length > (remote.library ?? []).length) {
+      localDecks?.keepReplaced(mine);
+    }
+    // What is about to be in memory is the account's whole library, so
+    // storing it successfully means the browser's copy is whole again.
+    localDecks?.markWhole();
     const paletteFolders = remote.paletteFolders ?? [];
     // Keep the currently-open palette folder open only if the remote data
     // still has it; the workshop entry is rebuilt from the folder either way

@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-09-saved-sets',
+    date: '2026-10-09',
+    kind: 'improved',
+    title: 'Save up to 1,000 duel sets, and a duel is only saved once',
+    body: [
+      'Saved sets in Royal Duels used to stop syncing to your account at about 500, without saying so. You can now keep 1,000, Solo and Versus together, on every device you sign in on. The Saved tab shows how many you have used and lists twenty at a time, so it opens quickly however many there are.',
+      'Save duel in the Duel Zone now knows a duel from either player’s side. If you saved it from your page and then open your opponent’s, it says “Already saved as Duel Deck n” instead of saving the same decks again — and it says so before you press anything.',
+    ],
+    href: '#/builder',
+    hrefLabel: 'Open Royal Duels',
+  },
+  {
     id: '2026-10-07-duel-set',
     date: '2026-10-07',
     kind: 'improved',

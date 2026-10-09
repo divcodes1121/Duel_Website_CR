@@ -1,6 +1,6 @@
 import { useAccountStore } from './accountStore';
 import { isSupabaseConfigured } from './supabase';
-import type { Access } from './tiers';
+import { savedSetLimit, type Access } from './tiers';
 
 /**
  * Who may open what.
@@ -49,6 +49,24 @@ export function useAccess(): Access {
   if (!isSupabaseConfigured) return 'admin';
   if (!ready || !userId) return 'anon';
   return tier;
+}
+
+/**
+ * How many saved sets this reader may hold (`savedSetLimit`).
+ *
+ * NO LIMIT UNTIL THE PROFILE HAS LOADED. `ready` turns true before the profile
+ * arrives and `tier` reads 'free' until it does, so for a moment after a page
+ * load an admin looks like a free account. Applying the limit in that moment
+ * would grey out every Save button of an admin holding more than a thousand
+ * sets, and then un-grey them. The limit is real on the server either way.
+ */
+export function useSavedSetLimit(): number {
+  const access = useAccess();
+  const ready = useAccountStore((s) => s.ready);
+  const userId = useAccountStore((s) => s.userId);
+  const profile = useAccountStore((s) => s.profile);
+  if (isSupabaseConfigured && (!ready || (userId && !profile))) return Number.POSITIVE_INFINITY;
+  return savedSetLimit(access);
 }
 
 /* The pure rules live in `tiers.ts` and are re-exported so every call site

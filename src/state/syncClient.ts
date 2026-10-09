@@ -1,6 +1,7 @@
 import type { DeckOwner, DuelDeckSet, SavedDeckSet } from '../types/deck';
 import { supabase } from './supabase';
 import { canGzip, gunzipText, gzipText } from '../utils/gzipText';
+import { createDeckSync, type DeckTransport } from './deckSync';
 
 export interface SyncPayload {
   sets: Record<DeckOwner, DuelDeckSet>;
@@ -55,24 +56,47 @@ export type RemoteRead =
   | { status: 'empty' }
   | { status: 'failed' };
 
-/** This account's synced decks. Never conflates "none" with "unreachable". */
-export async function readRemoteDecks(): Promise<RemoteRead> {
+/**
+ * One call to `/api/decks`, for `deckSync.ts`.
+ *
+ * `null` for everything that is not an answer from the endpoint: no session
+ * (a request never made is not an empty account), offline, DNS, CORS, an
+ * abort. A status with a body nobody could parse still comes back as that
+ * status — the caller only trusts a 200 it can read.
+ */
+const deckCall: DeckTransport = async (method, query, body) => {
   const token = await bearer();
-  // No session is not an empty account either — it is a request never made.
-  if (!token) return { status: 'failed' };
-  const res = await safeFetch('/api/decks', {
-    headers: { Authorization: `Bearer ${token}` },
+  if (!token) return null;
+  const res = await safeFetch(`/api/decks${query}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  if (!res) return { status: 'failed' };      // offline, DNS, CORS, abort
-  if (!res.ok) return { status: 'failed' };   // 401, 429, 500, 502 ...
+  if (!res) return null;
+  let json: unknown = null;
   try {
-    const json = await res.json();
-    return json?.found
-      ? { status: 'found', data: json.data as SyncPayload }
-      : { status: 'empty' };                  // a 200 that says so
+    json = await res.json();
   } catch {
-    return { status: 'failed' };              // a body we cannot read
+    json = null;
   }
+  return { status: res.status, json };
+};
+
+/**
+ * THE SAVED LIBRARY TRAVELS IN PARTS since 2026-10-09 (`deckSync.ts`,
+ * `api/decks.ts`): the one-document upload stopped at 1 MB, about 500 saved
+ * duels, and said nothing when it did. One session for the tab, because it
+ * remembers which parts the account already holds.
+ */
+const deckSync = createDeckSync<SyncPayload>(deckCall);
+
+/** This account's synced decks. Never conflates "none" with "unreachable",
+ *  and never answers with a library that is missing a part. */
+export function readRemoteDecks(): Promise<RemoteRead> {
+  return deckSync.read();
 }
 
 /**
@@ -87,14 +111,7 @@ export async function readRemoteDecks(): Promise<RemoteRead> {
  * refuses to adopt the remote blob until a push succeeds.
  */
 export async function pushRemoteDecks(payload: SyncPayload): Promise<boolean> {
-  const token = await bearer();
-  if (!token) return false;
-  const res = await safeFetch('/api/decks', {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  return Boolean(res?.ok);
+  return (await deckSync.push(payload)).ok;
 }
 
 /**

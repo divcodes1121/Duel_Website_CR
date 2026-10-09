@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBuilderStore } from '../../state/store';
+import { useSavedSetLimit } from '../../state/gate';
 import { getCardIconUrl } from '../../data/cards';
 /* One implementation, three callers — see the note in the module. */
 import { previewIconFor } from '../../utils/deckPreview';
 import { deckMatchesFilter } from '../WinConFilter/WinConFilter';
+import { ContinuousPagination } from '../ui/continuous-pagination';
+import { revealListTop } from '../../utils/revealListTop';
 import type { BuilderMode, Deck, PlayerId, SavedDeckSet } from '../../types/deck';
 import styles from './SavedGroups.module.css';
 
@@ -226,22 +229,49 @@ function groupDecks(entry: SavedDeckSet): Deck[] {
  * dimming the rest was right; as a library its job is "find me the groups with
  * Hog Rider in them", and a group with no matching deck is not an answer to
  * that. Matching decks are still highlighted inside the groups that survive.
+ *
+ * TWENTY GROUPS A PAGE (2026-10-09). The list drew every saved group at once —
+ * fine at thirty, and measured at 6.3 seconds to open with a thousand (each
+ * group is up to ten decks of eight card images). The saved-set limit went to
+ * 1,000, and to none for an admin, the same day; a list nobody can open is not
+ * a library. The filter still searches ALL of them; only the drawing is paged.
  */
+export const SAVED_GROUPS_PER_PAGE = 20;
+
 export function SavedGroups({ mode, winFilter = [] }: { mode: BuilderMode; winFilter?: string[] }) {
   const library = useBuilderStore((s) => s.library);
+  // Solo and Versus sets share one limit, so it is counted over both — the
+  // pill beside the title counts this tab's alone.
+  const limit = useSavedSetLimit();
   const all = library.filter((e) => e.mode === mode);
   const filtering = winFilter.length > 0;
   const entries = filtering
     ? all.filter((e) => groupDecks(e).some((d) => deckMatchesFilter(d.slots, winFilter)))
     : all;
 
+  /* Page 1 again whenever what is listed changes kind — another tab's mode, or
+     a different filter. Clamped as well, so deleting the last group of the
+     last page lands on the page before it rather than on an empty one. */
+  const [page, setPage] = useState(1);
+  const filterKey = winFilter.join(',');
+  useEffect(() => setPage(1), [mode, filterKey]);
+  const pages = Math.max(1, Math.ceil(entries.length / SAVED_GROUPS_PER_PAGE));
+  const current = Math.min(page, pages);
+  const shown = entries.slice((current - 1) * SAVED_GROUPS_PER_PAGE, current * SAVED_GROUPS_PER_PAGE);
+  const top = useRef<HTMLElement>(null);
+
   return (
-    <section className={styles.section} aria-label="Saved duel deck groups">
+    <section ref={top} className={styles.section} aria-label="Saved duel deck groups">
       <h2 className={styles.sectionTitle}>
         Saved Groups
         <span className={styles.sectionCount}>
           {filtering ? `${entries.length} of ${all.length}` : all.length}
         </span>
+        {Number.isFinite(limit) && (
+          <span className={styles.sectionLimit} data-full={library.length >= limit ? '' : undefined}>
+            {library.length.toLocaleString('en-US')} of {limit.toLocaleString('en-US')} saved
+          </span>
+        )}
       </h2>
 
       {all.length === 0 ? (
@@ -257,9 +287,23 @@ export function SavedGroups({ mode, winFilter = [] }: { mode: BuilderMode; winFi
           cards.
         </p>
       ) : (
-        entries.map((entry) => (
+        shown.map((entry) => (
           <GroupCard key={entry.id} entry={entry} winFilter={winFilter} />
         ))
+      )}
+
+      {pages > 1 && (
+        <ContinuousPagination
+          className={styles.pager}
+          totalPages={pages}
+          page={current}
+          onPageChange={(p) => {
+            setPage(p);
+            // Asked for from the foot of the list: bring its top back.
+            revealListTop(top.current);
+          }}
+          label="Saved group pages"
+        />
       )}
     </section>
   );

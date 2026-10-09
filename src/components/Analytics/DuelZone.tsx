@@ -1,10 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { useScreenExport } from '../Export/ExportButton';
 import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { useBuilderStore } from '../../state/store';
-import { duelPairs, type DuelSaveOutcome } from '../../state/duelImport';
+import { useSavedSetLimit } from '../../state/gate';
+import { savedSetsFull } from '../../state/tiers';
+import {
+  SWAPPED_NOTE,
+  buildDuelImport,
+  duelPairs,
+  type DuelSaveOutcome,
+} from '../../state/duelImport';
 import {
   AnalyticsError,
   fetchDuelZone,
@@ -271,25 +278,39 @@ function GameRow({ game, scoreKnown }: { game: DuelGame; scoreKnown: boolean }) 
  * It is DISABLED, not hidden, when a duel has nothing to save. A native duel
  * row stores one whole 16- or 24-card loadout and no opponent, so there are no
  * per-game pairs to build from — and a button that silently vanishes on some
- * rows reads as a bug, where one that says why does not. */
+ * rows reads as a bug, where one that says why does not.
+ *
+ * WHETHER IT IS SAVED IS READ FROM THE LIBRARY, as All Duels reads it. The row
+ * used to remember only its own press, so a duel saved yesterday — or saved
+ * from the other player's Duel Zone, where the same decks sit on opposite
+ * sides — still offered the button. The library's answer names the set that
+ * holds it, either way round; `savedHere` only decides between "Saved as" and
+ * "Already saved as". */
 function SaveDuelButton({ series }: { series: DuelSeries }) {
+  const library = useBuilderStore((s) => s.library);
   const saveDuelPlayed = useBuilderStore((s) => s.saveDuelPlayed);
-  const [done, setDone] = useState<DuelSaveOutcome | null>(null);
+  const [savedHere, setSavedHere] = useState<string | null>(null);
+  const limit = useSavedSetLimit();
 
-  const pairs = duelPairs(series.games);
-  const can = pairs.length > 0;
+  const pairs = useMemo(() => duelPairs(series.games), [series.games]);
+  const outcome = useMemo(
+    () => buildDuelImport(series.games, library, limit).outcome,
+    [series.games, library, limit],
+  );
+  const saved = !outcome.ok && outcome.reason === 'duplicate' ? outcome : null;
+  const full = !outcome.ok && outcome.reason === 'full';
+  const can = pairs.length > 0 && !full;
 
-  if (done?.ok) {
+  if (saved) {
+    const fresh = savedHere === saved.name;
     return (
-      <span className={styles.savedNote} data-state="new">
-        Saved as {done.name}
-      </span>
-    );
-  }
-  if (done && done.reason === 'duplicate') {
-    return (
-      <span className={styles.savedNote} data-state="dupe">
-        Already saved as {done.name}
+      <span
+        className={styles.savedNote}
+        data-state={fresh ? 'new' : 'dupe'}
+        role="status"
+        title={saved.swapped ? SWAPPED_NOTE : undefined}
+      >
+        {fresh ? 'Saved' : 'Already saved'} as {saved.name}
       </span>
     );
   }
@@ -299,11 +320,16 @@ function SaveDuelButton({ series }: { series: DuelSeries }) {
       type="button"
       className={styles.saveBtn}
       disabled={!can}
-      onClick={() => setDone(saveDuelPlayed(series.games))}
+      onClick={() => {
+        const done: DuelSaveOutcome = saveDuelPlayed(series.games, limit);
+        if (done.ok) setSavedHere(done.name);
+      }}
       title={
         can
           ? `Save as a Versus set: ${pairs.length} decks each side`
-          : 'This duel is stored as one loadout with no per-game opponent, so there is no versus pair to build'
+          : full
+            ? savedSetsFull(limit)
+            : 'This duel is stored as one loadout with no per-game opponent, so there is no versus pair to build'
       }
     >
       {ICONS.save}

@@ -48,11 +48,13 @@ bot's SQLite files read-only.
 
 ---
 
-## Status — 2026-10-07
+## Status — 2026-10-09
 
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Saved sets: 1,000 for everyone, no limit for an admin** | **2026-10-09, client + `api/decks.ts`, built and verified locally — NOT pushed yet.** Asked: *"I already have 225 decks ... unlimited for my account, which is admin, store it in cloud so that I don't have to worry about space ... and try to make 1000 saved decks for everyone."* An account's decks were ONE value capped at 1 MB (about 500 saved duels), and passing it stopped sync with nothing on screen. The saved library now travels and is stored **in parts** of 200 sets, named by their content, so there is no ceiling to hit: saving a duel uploads one part and a small head, and a reload downloads only parts the browser lacks (normally none). In the browser the same parts are kept **compressed** — 225 sets went from 445,301 to 62,326 characters, 1,000 five-deck sets from 2.25 M to 0.31 M. The limit is `SAVED_SET_LIMIT` = 1,000, enforced by the endpoint, with none for an admin (asked of Supabase with the caller's own token). The Saved tab is paged, 20 a page: with 1,000 sets it took **6.3 s to open and takes 0.4 s**. Old tabs keep working (the old calls are still answered) and a load with nothing to change writes nothing. **Nothing replaces a library without a copy being kept** — the account's old value is copied aside for good at the move, the browser keeps its old-format value and any longer library a shorter one replaces for 30 days, and a part is read back before it is relied on. **1,618 vitest**, 33 planted faults all caught, **33/33 + 11/11 in a browser** (the second run wiped the library on purpose and restored it from the copy). **Not exercised against the real database or as a signed-in account** — that needs the deploy and the account holder's session. See [The saved library, in parts](#the-saved-library-in-parts-2026-10-09) |
+| **Save duel knows a duel from either player's side** | **2026-10-09, client only, same pass.** Reported: *"player A vs player B is saved; when I save player B vs player A, same set, it should show that already saved and the duel set number."* The same duel is listed in each player's Duel Zone with the decks on opposite sides, and the duplicate rule compared blue to blue and red to red only, so the second save added a second "Duel Deck n". The rule now matches the decks **either way round** and answers with the name of the set that holds it; the Duel Zone's row **reads the library**, as All Duels did, so it says `Already saved as Duel Deck n` before anything is pressed. **32/32 in a browser on two real duels** found in both players' Duel Zones. See [Saving a duel you actually played](#saving-a-duel-you-actually-played) |
 | **Coach Assist: the duel read, and what they have left** | **2026-10-07, server deployed first** (backups `*.bak-20261007-120910-preduelread`). The first two steps of a rebuild of the duel suggestion asked for that day, each proved on a BLIND replay of every stored duel (`DECKKIES_DUEL_RECOMMENDER.md`). The decks an opponent is expected to bring now come from a model fitted on the order and recency of their own duels (`server/duel_read.py`, refitted after every poll), not from a count of plays: on the CRL-list players it names the exact opening deck first **42.8%** of the time against **20.3%**, and within three 60.6% against 40.8%. A native duel's blocks were measured to be in game order (15,578 of 15,578 sides), so every duel now says what a player opens with. The screen gains a block of the win conditions, spells, buildings and support cards they may still bring with the chance of each and the cards already spent in grey, a `new deck` figure, a Clan war / Friendly switch, and each of their decks printed at its real chance. See [The duel read](#the-duel-read-game-order-recency-and-what-they-have-left-2026-10-07) |
 | **Coach Assist tells you which decks to load** | **2026-10-07, server deployed first 18:31 UTC** (backups `*.bak-20261007-183108-preduelset`). Step 4 of the duel recommender rebuild. Before a duel the first question is which decks to load together — a duel is played from decks that share no card. Asked before game 1, the Suggestion now answers with a SET: three or four of the player's OWN duel decks, exactly as they play them, chosen by the chance of winning the duel (`server/duel_set.py`, valued by the look-ahead); "Play this" is the deck of that set to open with and the decks to bring next come from it. Their last duel's decks stay unless leaving one out gains a full point. Blind, both full sets known whatever the score (672 player-duels), rated by a win model the planner never saw: the set really brought 52.8%, a composed one 54.6%; where the player's decks allow a choice (277) 60.2% against 64.2%. **The real results of those duels are too few to confirm it** (83 against 194). Changing cards to resolve clashes was built, measured and left OFF: 98.6% of players with three duel decks can already field a set. See [The set to load before a duel](#the-set-to-load-before-a-duel-2026-10-07) |
 | **Coach Assist picks for the duel, not the game** | **2026-10-07, server deployed first 16:58 UTC** (backups `*.bak-20261007-165859-preduelplan`). Step 3 of the duel recommender rebuild. A duel is the first to two of three and no card is played twice, so the best deck now is not always the deck to bring now. `server/duel_plan.py` (pure) values every option by the chance of winning the DUEL, looking ahead over what the opponent is then likely to bring (`duel_read`), and the screen asks one question after game 1 — who won it — because the score and the result both move the answer. Blind, 10,168 three-game duels, rated by a win model the planner never saw with the in-duel shift: the order players used **49.0%**, the best deck for the next game **50.8%**, the look-ahead **51.4%**; on real outcomes players who followed it on both picks won 52.9% against 49.3% who followed it on neither. "Play this" shows the duel's figure with this game's beside it, and the deck to bring next if the game is won and if it is lost. See [Pick for the duel, not the game](#pick-for-the-duel-not-the-game-2026-10-07) |
@@ -131,7 +133,7 @@ bot's SQLite files read-only.
 | Coach Assist — Suggestion | **reads real duels (2026-09-27, live)** — the fused ladder+duel rate on every pairing and one option held for duel proof; see the row at the top. Before that, **personal and archetype-by-archetype (2026-09-25, live).** "Or bring one of these" is chosen per player from their playstyle (12 players vs one opponent: 1 -> 7 distinct lists, 10/12 offered their own win condition), and every deck shows its rate against **five** archetypes — their likely ones, their other win conditions, then the meta — on one line |
 | R3 prediction sampler | **STOPPED 2026-09-19 21:05 UTC** by its own stop condition (a royalweb restart during a deploy), ~8 h into 7 days; found 2026-09-25, not restarted per protocol. Re-running needs a deploy freeze or an amendment — the account holder's call. See `server/README.md` |
 | Coach Assist | **the Suggestion window advances the duel, 2026-09-01.** Window 1 had a "narrow it down" row from the start and Window 2 did not, so the only way on from an answer was Start over — discarding both tags and every deck pasted, mid-duel. **No browser pass:** pro-only, and `/api/analytics` is unreachable locally |
-| tests | **4,367 Python checks** across **76 suites** and **1,425 vitest** across 62 files as of 2026-10-07 late night, both by a full run (the cohort line added 12 to `server/test_duel_read.py`, 55 -> 67; before it 4,355, when the set composer added `server/test_duel_set.py`, 46, 30 to `test_coach.py`, 181 -> 211, and 4 to `tests/coachDuelPlan.test.ts`, 19 -> 23; before it 4,279 across 75 and 1,421 that night, when the duel plan added `server/test_duel_plan.py`, 54, 25 to `test_coach.py`, 156 -> 181, 5 to `test_enrol_routes.py`, 29 -> 34, and `tests/coachDuelPlan.test.ts`, 19; before it 4,195 across 74 and 1,402 across 61 that evening, when the package table added `server/test_deck_packages.py`, 56, 13 to `test_coach.py`, 143 -> 156, 2 to `test_coach_choice.py`, 77 -> 79, and 1 to `test_duel_model.py`, 45 -> 46; before it 4,123 across 73 that morning, when the duel read added `server/test_duel_read.py`, 55, 25 to `test_coach.py`, 118 -> 143, 3 to `test_duel_index.py`, 68 -> 71, and `tests/coachDuelRead.test.ts`, 9; before it 4,040 across 72 and 1,393 across 60 as of 2026-10-06, when the two new card forms added one check to `server/test_deck_tuner.py`, three constructed decks to the seating fixture — six tests — and five tests to `tests/deckLink.test.ts`; before it 4,039 and 1,382 as of 2026-10-05, when All Duels added `server/test_duel_feed.py`, 94, eight to `test_api_security.py` for the admin gate on its route, `tests/allDuels.test.ts`, 67, and two to `entitlement.test.ts`; before it 3,937 across 71 and 1,313 across 59 as of 2026-10-04, when the Decks screen added `server/test_player_decks.py`, 46, one check to `test_enrol_routes.py`, and `playerDecks.test.ts`, 20; before it 3,890 across 70 and 1,293 across 58 as of 2026-10-03, when `deckHidden.test.ts`, 28, came with the eye button on duel decks — 18 at first, 28 once a hidden deck stayed on the board and the newer copy became the grey one; before it 1,265 across 57, when `reportNames.test.ts`, 19, came with the PDF names fix) — the scroll rail added `scrollRail.test.ts` (53: the tick arithmetic, the section marks, the springs, and twelve contracts read off the stylesheets and the mount); before it 1,192 across 55 as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
+| tests | **4,367 Python checks** across **76 suites** and **1,618 vitest** across 68 files as of 2026-10-09 (the saved library in parts added `tests/libraryParts.test.ts`, 24, `tests/deckStorage.test.ts`, 44, `tests/deckSyncV2.test.ts`, 66, `tests/deckStoreSync.test.ts`, 25, and `tests/savedGroups.test.ts`, 6; the duel-save fix before it that day added `tests/duelSaveStore.test.ts`, 12 with the limit, and took `tests/duelImport.test.ts` 18 -> 30 and `tests/allDuels.test.ts` 67 -> 71; vitest was 1,425 across 62 and Python is as counted on 2026-10-07 late night, both by a full run) (the cohort line added 12 to `server/test_duel_read.py`, 55 -> 67; before it 4,355, when the set composer added `server/test_duel_set.py`, 46, 30 to `test_coach.py`, 181 -> 211, and 4 to `tests/coachDuelPlan.test.ts`, 19 -> 23; before it 4,279 across 75 and 1,421 that night, when the duel plan added `server/test_duel_plan.py`, 54, 25 to `test_coach.py`, 156 -> 181, 5 to `test_enrol_routes.py`, 29 -> 34, and `tests/coachDuelPlan.test.ts`, 19; before it 4,195 across 74 and 1,402 across 61 that evening, when the package table added `server/test_deck_packages.py`, 56, 13 to `test_coach.py`, 143 -> 156, 2 to `test_coach_choice.py`, 77 -> 79, and 1 to `test_duel_model.py`, 45 -> 46; before it 4,123 across 73 that morning, when the duel read added `server/test_duel_read.py`, 55, 25 to `test_coach.py`, 118 -> 143, 3 to `test_duel_index.py`, 68 -> 71, and `tests/coachDuelRead.test.ts`, 9; before it 4,040 across 72 and 1,393 across 60 as of 2026-10-06, when the two new card forms added one check to `server/test_deck_tuner.py`, three constructed decks to the seating fixture — six tests — and five tests to `tests/deckLink.test.ts`; before it 4,039 and 1,382 as of 2026-10-05, when All Duels added `server/test_duel_feed.py`, 94, eight to `test_api_security.py` for the admin gate on its route, `tests/allDuels.test.ts`, 67, and two to `entitlement.test.ts`; before it 3,937 across 71 and 1,313 across 59 as of 2026-10-04, when the Decks screen added `server/test_player_decks.py`, 46, one check to `test_enrol_routes.py`, and `playerDecks.test.ts`, 20; before it 3,890 across 70 and 1,293 across 58 as of 2026-10-03, when `deckHidden.test.ts`, 28, came with the eye button on duel decks — 18 at first, 28 once a hidden deck stayed on the board and the newer copy became the grey one; before it 1,265 across 57, when `reportNames.test.ts`, 19, came with the PDF names fix) — the scroll rail added `scrollRail.test.ts` (53: the tick arithmetic, the section marks, the springs, and twelve contracts read off the stylesheets and the mount); before it 1,192 across 55 as of 2026-10-02 evening — releasing "Build around your cards" to Pro added 2 to `coachChoiceGate.test.ts` (11 -> 13: who the gate opens for, and that it matches the Coach Assist section), and the Recent Battles row added `recentBattlesRow.test.ts` (9); before those 1,181 across 54 — cutting the text from "Build around your cards" added 4 to `coachChoiceGate.test.ts` (7 -> 11), which bans the removed strings; before it 1,177 — the deck architect added `test_deck_architect.py` (51) and 8 to `test_duel_index` (60 -> 68), and the rewrite of Coach Assist's "Build around your cards" took `test_coach_choice.py` from 85 to 77 (the one-card substitution's checks went with it); earlier that day the first cut added `test_coach_choice.py` (85) and `coachChoiceGate.test.ts` (7), 3,839 across 69; before it 3,754 across 68 and 1,170 across 53 on 2026-09-30 evening — the idle-connection fix added `test_db_keeper.py` (11); before it 3,743 across 67, when the duel-pairing gate added `test_deck_synergy.py` (22), 8 to `test_deck_tuner` (144 -> 152) and 3 to `test_coach` (115 -> 118), one failing, the known `test_ml_21a`; before it 3,710 across 66, when the deck builder added `test_deck_builder.py` (28), the after-poll updater `test_after_poll.py` (13), the combined brain 9 to `test_duel_model` and the list fill 2 to `test_deck_tuner`; before it 3,658 across 64, when the duel win model added `test_duel_model.py` (36); before it 3,622 across 63, when observed seating and the player-first tuner added 11 to `test_deck_evidence` (37 -> 48) and 19 to `test_deck_tuner` (123 -> 142); before it 3,592, when the pool vetting added `test_deck_evidence.py` (37), 31 to `test_battle_modes` (135 -> 166) and 11 to `test_coach` (104 -> 115); before it 3,513 across 62, when today's session added `test_coach_session.py` (48), 9 to `coachToday.test.ts` and `fieldTrendContract.test.ts` (2); counted by running every suite, one failing, the known `test_ml_21a`. Before it, 3,457 across 61 and 1,159 across 52 on 2026-09-29 — the Coach Assist loadout fix added 5 to `test_coach` (99 -> 104) and 4 to `test_deck_tuner` (119 -> 123); before it, 3,448 — the storage work added `test_data_lifecycle.py` (42 here, 46 on the VPS where `dbstream` is built), `test_ladder_raw_purge.py` (15), 7 to `test_api_security` (87 -> 94) and `dataLifecycle.test.ts` (18). Before that, 3,384 across 59 and 1,141 across 51 on 2026-09-28 — Batch D added `batchD.test.ts` (16); before that 1,125 across 50, when the deck fill and meta movement added `deckFill.test.ts` (8) and `metaMovement.test.ts` (6); before that 1,111 across 48, when the palette and undo added `commandPalette.test.ts` (19) and `deckUndo.test.ts` (13); before that 1,079 across 46, when the trend, recent-players, form-strip and gate-preview work added `test_player_trends.py` (10) and four vitest files (43); before that, 3,374 across 58 and 1,036 across 42 on 2026-09-27 night — the tuner's three-slot rule added 8 to `test_deck_tuner` (111 -> 119) and its Pro gate `coachTunerGate.test.ts` (4); before that, 3,366 and 1,032 across 41, when Coach Assist's duel wiring added 15 to `test_coach` (84 -> 99, including a legality check proven red with the filter removed) and Deck vs Deck on the home route added `deckVersus.test.ts` (3). Before that, 3,351 and 1,029 across 40 (the last two, `teamAnalysisRun.test.ts`, pin a stale-window bug the README sweep's lint read found), **one failing** — the known, accepted `test_ml_21a` `123 != 122` — counted by running every suite and reading both result lines. The fused, version-level matchup rate added `test_matchup_fusion.py` (34), 19 version-cell checks to `test_duel_index` (41 → 60), 5 to `test_team_scout` (155 → 160) and 13 to `test_team_analysis` (150 → 163), plus 1 vitest for the PDF's per-archetype table. Before it, **3,280** across **57** and **1,026** vitest. The three-slot rule for suggestions added `test_suggested_seating.py` (49, including every observation subset of the 95 fixture decks) and 8 wiring and filter checks to `test_team_analysis` (142 → 150), plus 2 vitest for the per-card tooltip. Earlier that evening, **3,223 Python checks** across **56 suites** and **1,024 vitest** across 39 files. The duel brain added `test_duel_brain.py` (83), `test_duel_index.py` (41, on a synthetic `battle_raw`) and 23 wiring checks to `test_team_analysis` (119 → 142), plus `duelFigures.test.ts` (5) and 2 PDF checks. Earlier that day, **3,076 Python checks** across **54 suites** and **1,017 vitest** across 38 files — the dashboard shell added `consoleHealth.test.ts` (17), `trackingSources.test.ts` (11) and a chart-rules tripwire, `dashCharts.test.ts` (8, proven by bridging a gap on purpose and watching it go red), and retired the 8 sparkline-geometry checks with the geometry itself; the tracking history added 22 to `test_tracking` and the admin route 7 to `test_api_security`. Before that, **3,047 Python checks** across **54 suites** and **985 vitest** across 35 files as of 2026-09-26 night — tag enrolment added `test_enrol_routes.py` (28) and 4 drain-headroom checks to `test_recruit`; the stale-tab fix and the Team Scout option lists added 9 vitest. Earlier that evening: **3,015 Python checks** across **53 suites** and **976 vitest** across 34 files — the PDF rebuild rewrote `reportLayout.test.ts` (51 old-engine checks -> 41 on the new pure modules, including a tripwire that fails on any transparency state in the engine) and added `screenAdapters.test.ts` (16, on anonymised real payloads); earlier that day it was 970 vitest across 33 files (the dashboard kit added `tests/dashGeometry.test.ts`, 19 checks; no server code changed, so the Python count stands), **one failing** — the known, accepted `test_ml_21a` `123 != 122`. On 2026-09-25 evening it was 951 vitest across 32 files. Today's Team Scout squad plan, Coach Assist personalisation and five-chip rows added 24 + 15 + 15 Python checks. Earlier the same day it was **2,960 Python checks** across **53 suites** and **950 vitest** across 31 files, **one failing** — the known, accepted `test_ml_21a` `123 != 122` (the card count moved when Minion Giant shipped). Counted by running every suite and reading BOTH result lines; the coach's field plan alone went 45 -> **204** checks over the same fortnight, and the three newest vitest are a tripwire that sweeps two coach screens for a re-introduced floor literal — proven by putting the literal back and watching it go red. **Six suites fail on the VPS and pass in the repo**, which is environmental rather than a regression: `test_card_art` needs `public/assets/` (131 here, 108/2 there), `test_duo_pairs` reads the live collection (468 here, 407/5 there), and `test_recruit` needs a CR API token. Check a VPS failure in the repo before believing it. It was **2,727 Python checks** across **51 suites** and **929 vitest** as of 2026-09-21 (the deck-seating fix added 20 card-art checks, 43 2v2 checks and 197 vitest, 95 of them cross-checking the client's seating against the server's own output) — all green except the known, accepted `test_ml_21a` `123 != 122`; `tsc -b` and `npm run build` clean. As of 2026-09-11 it was **2,194 Python checks** across **43 suites** and **500 vitest** across 18 files, **every suite green**, which it was not the day before. Two suites were quietly broken and the audit is what found them. `test_card_art` globbed `.png` after the art became WebP, so its three dictionaries came back EMPTY: two checks failed loudly and **five more passed vacuously**, because a set comparison and a no-duplicates scan are both trivially true of nothing. It reads the extension off the directory now and refuses a directory it cannot read a file from. `test_deck_harmony` reported `minion-giant` missing from `cardRoles.json` — a real gap, and not a code one: that file is GENERATED from the card manual, the manual covers Minion Giant only in prose, and inventing its counters and synergies would put unsourced analysis into a file the deck checker trusts. The gap is named in the assertion so a SECOND uncovered card still fails. The 2026-09-11 2v2 screen added 13 Python checks and 14 vitest (`duoRoute.test.ts`, a source contract — the suite runs in `node` with no jsdom); the 2026-09-06 layout engine added 51 vitest over the three import-free modules that decide what a page looks like, and NOT over the drawing, which is checked by rendering pages and looking at them |
 | shipped from | `main` at **`920c5ee`**, deployed 2026-09-03 and **confirmed live by reading `/api/health`**, which reports the deployed commit. **Both halves shipped this time:** `server/clash_data.py` and `server/app.py` went to the VPS first (md5-checked against `HEAD~1` for drift — clean — backed up as `*.bak-20260903-preops`, `royalweb` restarted, `cardData` still 122), then Vercel. `CLASH_RETENTION_DAYS=304` was added to `/etc/royalweb.env`; it is **display-only**, read by nothing but the console's runway tile, and must be kept in step with the bot's own window or the console will report a boundary the bot is not enforcing. **Read the endpoint, do not trust this row** — it stood five commits stale once, and the only reason it is right now is that it was checked against a response rather than against memory |
 
 **The engine's conclusion is a small one, and that is the result.** Recent is
@@ -235,6 +237,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 40c. [Decks — every deck a player is using](#decks--every-deck-a-player-is-using-2026-10-04)
 40d. [All Duels — friendly duels that went to three games](#all-duels--friendly-duels-that-went-to-three-games-2026-10-05)
 41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
+41a. [The saved library, in parts](#the-saved-library-in-parts-2026-10-09)
 42. [Two filters and a heading](#two-filters-and-a-heading)
 42a. [One pager, everywhere](#one-pager-everywhere)
 42b. [The footer](#the-footer)
@@ -265,7 +268,7 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 1,425 tests in 62 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
+npm run test                      # 1,618 tests in 68 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
 python server/test_team_analysis.py # 163 checks over both tabs of the squad board, incl. the fused rate's wiring
 python server/test_team_scout.py  # 160 checks over the coaching brain: projection, scoring, squad plan
 python server/test_matchup_fusion.py # 34 checks over the fused ladder+duel rate, against literals
@@ -9557,8 +9560,8 @@ push.
 
 ## Testing and verification
 
-**4,367 Python checks across 76 suites** and **1,425 vitest tests across 62
-files** as of 2026-10-07, both counted by a full run; the only failure
+**4,367 Python checks across 76 suites** (2026-10-07) and **1,618 vitest tests
+across 68 files** (2026-10-09), both counted by a full run; the only failure
 is the known, accepted `test_ml_21a` `123 != 122`. (It was 1,386 across 38 and
 378 vitest on 2026-08-30; the status table's `tests` row carries the history.)
 None needs the bot's database to pass. Seventeen write temp files of their own,
@@ -15086,7 +15089,9 @@ player took in that game. It syncs across devices like any saved set.
   to save a duel that is already in the builder. Asking the library with the
   save's own duplicate rule means the row says `Saved as Duel Deck 3` after a
   reload, on another device once it has synced, and tomorrow — and offers the
-  button again if the set is deleted from the builder.
+  button again if the set is deleted from the builder. Since 2026-10-09 that
+  rule matches the decks either way round, so a duel saved from the right-hand
+  player's Duel Zone (their decks as Blue there) reads as saved here too.
 - **It will not save part of a duel.** The save skips a game holding a card
   this build of the site does not know, and on a list whose point is that all
   three games were played, two of them is not the duel. The button is disabled
@@ -15313,12 +15318,80 @@ Three consequences, all deliberate:
   decks whether or not G1 and G2 come out in the same order.
 * **Padding does not matter.** Three real decks in a five-slot collection
   compare equal to three real decks, so a slot count cannot change the answer.
-* **The sides are not interchangeable.** The same eight decks with blue and red
-  swapped is a different duel — two different people — not a re-save of this
-  one.
+* **Which side a deck sits on does not matter (since 2026-10-09).** The same
+  decks with blue and red exchanged are the same set. See below — this was
+  the opposite until it was reported.
 
 The refusal names the group that already holds it ("Already saved as Duel Deck
 2"), because "it already exists" without saying where is a dead end.
+
+### The same duel from the other player's side
+
+Reported 2026-10-09: *"player A vs player B is saved; when I save player B vs
+player A, same set, it should show that already saved and the duel set
+number."*
+
+A duel is listed more than once on this site, and not the same way round. The
+Duel Zone puts the **searched** player on blue, so player A's page shows A
+against B and player B's page shows the same games as B against A. All Duels
+seats whichever tag sorts first on the left. The duplicate rule compared blue
+with blue and red with red, on the reasoning that "blue and red are different
+people" — so the second save was a new `Duel Deck n` holding the decks already
+in the library. A saved set stores **decks, not people** (its sides are called
+Blue Player and Red Player whoever played), so the side cannot be what makes
+two sets different.
+
+- `findDuplicateSet` compares the two side signatures both ways and returns
+  the entry with `swapped`. **A set saved the same way round is preferred** to
+  a mirrored one: a library from before this change can hold a duel twice, and
+  each row then names its own copy. Those older pairs are not merged or
+  deleted.
+- The outcome carries `swapped: boolean`. The screens print the same note
+  either way; a mirrored match adds one tooltip (`SWAPPED_NOTE`), because
+  opening that set shows the two players exchanged.
+- **The Duel Zone reads the library now**, as All Duels did from the start. Its
+  row used to remember only its own press, so a duel saved yesterday, or from
+  the opponent's page, still offered the button and said so only after it was
+  pressed. It prints `Saved as Duel Deck n` for the press just made and
+  `Already saved as Duel Deck n` otherwise, and the button comes back when the
+  set is deleted from the builder.
+- **A side's signature is computed once per saved set** (a `WeakMap` on the set
+  object). Every row asks the whole library, the Duel Zone lists every duel in
+  the window, and sorting each deck of each saved set per row measured ~16 µs a
+  set: 8 ms a row against 500 saved sets. Cached, 300 rows against 500 sets is
+  81 ms in total. It is sound because the store never edits a saved set in
+  place.
+
+Verified in a browser on production data with two real duels that both
+players' Duel Zones list: save from A (`Saved as Duel Deck 1`), open B and the
+same duel reads `Already saved as Duel Deck 1` with no press and no second
+set, through a reload too; a second duel takes `Duel Deck 2` and B's page names
+that number; deleting the set in the builder brings the button back, and saving
+from B then marks A's row. **32/32.** All Duels takes the same rule through the
+same function and was not opened in a browser (its route needs an admin
+session).
+
+### How big a saved set is
+
+Measured 2026-10-09 with random real decks through the save itself:
+
+| | characters of JSON |
+|---|---|
+| a saved three-game duel (3 decks a side + 2 empty slots a side) | 1,904 – 2,046, mean **1,976** |
+| a saved five-game duel, or a hand-built five-deck Versus set | 2,171 – 2,338, mean **2,249** |
+| an account with nothing saved (the five working boards) | ~2,700 |
+| one filled deck / one empty deck slot | 179 / 111 |
+
+**Until that day these sizes were also the ceiling.** Everything an account
+held in the deck tools was one JSON document, `/api/decks` refused it past
+`SYNC_MAX_BYTES` (1,000,000) — 504 three-game duels, about 440 five-deck sets —
+and past it nothing on screen said so: the save showed, the upload answered
+413, and the sets lived in that one browser until a sign-out cleared them. The
+same question that produced these figures produced the fix, the same day:
+[The saved library, in parts](#the-saved-library-in-parts-2026-10-09).
+
+`tests/duelSaveStore.test.ts` holds the sizes to the real store, so they move
+if a saved set's shape does.
 
 ### Naming
 
@@ -15330,11 +15403,262 @@ sequence.
 
 ### Where the logic lives
 
-`src/state/duelImport.ts`, pure, with `tests/duelImport.test.ts` (18 checks)
-over it. The store action is four lines and does nothing but call it and
-prepend the result. Both rules that carry the feature — what a real deck is,
+`src/state/duelImport.ts`, pure, with `tests/duelImport.test.ts` (30 checks)
+over it and `tests/duelSaveStore.test.ts` (12) driving the real store action.
+The store action is four lines and does nothing but call it and prepend the
+result. Both rules that carry the feature — what a real deck is,
 and what the same duel twice is — fail *quietly* when they are wrong, which is
 the argument for testing them away from a component.
+
+---
+
+## The saved library, in parts (2026-10-09)
+
+Asked, with 225 sets saved: *"fix the saved one as I already have 225 decks now
+on browser, I want to have like unlimited: for my account, which is admin,
+store it in cloud so that I don't have to worry about space; rest all browser
+is fine, and try to make 1000 saved decks for everyone on the browser one."*
+
+**Built and verified locally; not pushed.** `api/decks.ts` and the client ship
+in the same push (the function is Vercel's, not the VPS's).
+
+### What was in the way
+
+| | before | why it stopped |
+|---|---|---|
+| the account | ONE Redis value, capped at 1 MB | ~500 saved duels, then every upload answered 413 and nothing on screen said so |
+| the browser | ONE `localStorage` value, all of it rewritten on every change | 2.25 MB at 1,000 five-deck sets, in ~5 MB shared with up to 3 MB of saved team analyses — and a write that fails there throws out of the click that caused it |
+| the Saved tab | every group drawn at once | **6.3 s to open** with 1,000 sets (measured) |
+
+One document cannot have no ceiling: a request has a size limit however it is
+compressed. So the library is no longer inside the document.
+
+### The library is a list of parts
+
+`src/state/libraryParts.ts` (no imports). Two properties carry everything:
+
+- **Cut from the back.** A saved set goes on the FRONT of the library, so the
+  parts are 200 sets each counted from the END: every part is full except the
+  first. 225 sets are `[25, 200]`; the 226th makes it `[26, 200]` and the second
+  part is untouched. Cut from the front, each save would shift every boundary
+  and rewrite all of it.
+- **Named by content.** A part's id is a 64-bit hash of its JSON plus its
+  length (`partId`, duplicated in `api/decks.ts` and held equal by a test). So
+  "is this part already stored" is a lookup, an unchanged part is never written
+  or sent twice, and a part read back is checked against the name it was asked
+  for by.
+
+Both stores use the same parts.
+
+### On the account (`api/decks.ts`, `src/state/deckSync.ts`)
+
+```
+deck-data:user:<id>:v2          the head: boards, Deck's Home, palette, and the
+                                ordered list of part ids
+deck-part:user:<id>:<part id>   one part, gzipped (~120-140 kB for 200 sets)
+deck-parts:user:<id>            hash: part id -> sets in it
+deck-data:user:<id>:v2:prev     the previous head when a commit shrank the
+                                library, 30 days (the shadow copy's job)
+deck-data:user:<id>             the old single value: read until the account's
+                                first push in parts, then kept 90 days
+```
+
+`?v=2` on `/api/decks`: `PUT ...&part=<id>` uploads a part, `PUT` commits the
+head, `GET` reads the head (with as many parts as fit in 3 MB riding along,
+unless the caller says `bare=1`), `GET ...&part=<id>` reads one part.
+
+**What a save costs now:** the one part that changed and the head. Before, at
+225 sets, every card moved in the builder re-uploaded ~0.5 MB.
+**What a reload costs:** the head. The browser stores the same parts, so the
+head's list of names says exactly which ones are new here — on an ordinary
+reload, none; after a save on another device, one.
+
+The rules that keep it whole, each a named test in `tests/deckSyncV2.test.ts`:
+
+1. **A head never names a part that is not stored.** The commit checks and
+   answers 409 with the missing ids; the client uploads them and asks again.
+2. **Commits and their clean-up run one at a time per account** (a 15-second
+   lock). Without it, one device's clean-up could delete a part another
+   device's commit had just named.
+3. **A part is checked against its name** on upload, and by the client again
+   on the way back.
+4. **A read is whole or it failed.** A library missing one part is not "found
+   with fewer sets" — the store would adopt it and the next save would push the
+   loss back up. `failed` changes nothing and sends nothing.
+5. **Parts the shadow head names are kept** for as long as it lives.
+
+What did NOT change, deliberately: a push still replaces the whole document
+and the last one wins. `syncPolicy.ts`, the pending flag and the shadow copy
+were each written after a real loss and none needed to move.
+
+### In the browser (`src/state/deckStorage.ts`, `src/state/deckCodec.ts`)
+
+```
+royal-duels-builder        everything except the library, plus the part ids
+royal-duels-lib:<part id>  one part: deflate, packed 15 bits to a character
+royal-duels-library-stale  '0' or '1'
+royal-duels-before-parts   the old-format value from before the first rewrite
+royal-duels-replaced       a longer library a shorter one replaced (packed)
+```
+
+| | as one JSON value | in parts |
+|---|---|---|
+| 225 three-game sets (measured in Chromium) | 445,301 characters | **62,326** |
+| 1,000 five-deck sets | 2,251,091 | **307,570** |
+
+A part is written when it changes: saving a duel rewrites the first part,
+moving a card rewrites none (it used to re-serialise every saved set). zustand
+is handed the same slice, so the persist `version` did not move and no
+migration runs. A value in the old format is read as it is and rewritten in
+parts on the first change; **a load with nothing to change writes nothing**.
+
+`fflate`, not the browser's `CompressionStream`: the store is written inside a
+store update and read before first render, and neither can wait for a promise.
+It was already in the tree (jsPDF). Measured against `lz-string` on a 200-set
+part: the same number of characters, 13-27 ms against 131-140 ms.
+
+**It never throws, and it says when it could not keep the library.** Out of
+room, the last list of parts stays (stale, but whole and consistent), the rest
+of the store is still written, and the stale flag is raised. On the next load
+`store.ts` reads it: **a stale local library is never pushed over the
+account's copy**, which the "local has unsynced changes" flag would otherwise
+do. The account's copy is the record; this is a cache of it.
+
+Both flags — that one and the pending flag — are now kept permanently as `'0'`
+or `'1'` instead of being created when needed. They are raised at the exact
+moment storage is full, when a key that does not exist cannot be created;
+changing one character to another needs no room. A test that filled storage
+to the last character found the first cut could not set its flag in the one
+situation it existed for.
+
+### Nothing replaces a library without a copy being kept
+
+Asked once the rest was built and before any of it shipped: *"I don't want to
+lose my saved sets which are right now in my admin account, make sure of
+that."* So the move does not rest on the new code being right. Five copies or
+checks, none of which anything has to remember to make:
+
+| | where | kept |
+|---|---|---|
+| the old single value, as it was when the account first moved | account, `deck-backup:user:<id>:before-parts` | **for good** — written once, never read or rewritten by the code |
+| the same value under its old key (what a rollback reads) | account, `deck-data:user:<id>` | 90 days |
+| the previous head and every part it names, when a commit shrinks the library | account, `...:v2:prev` | 30 days |
+| the old-format value, byte for byte, from the moment before the browser first rewrote it in parts | browser, `royal-duels-before-parts` | 30 days |
+| the library that was in the browser before a SHORTER one from the account replaced it | browser, `royal-duels-replaced` (packed) | 30 days |
+
+And three checks before anything is relied on:
+
+- **A part is read back before the main value names it.** Unpacked and
+  compared with what was packed, written, and read out of storage again. Any
+  difference is a failed write and the last good value stays. A value still in
+  the old format stays in the old format.
+- **A library is counted.** The head records how many sets each part holds and
+  how many there are in all; a read that comes out any other length is
+  `failed`, on top of every part being checked against its name.
+- **A load with nothing to change writes nothing.**
+
+**The first copy wins.** Both "as it was when it first moved" copies are
+written once. The old format can come back — a tab still running the old
+client writes it — and the move then happens again; the copy worth having is
+what was there before the new code ever touched it. This one was found by a
+real browser: the library was emptied in the old format on purpose, the page
+moved that to parts, and the copy that should have brought 225 sets back held
+the empty library. It holds the 225 now, and a test replays it.
+
+**Recovering in the browser is one assignment**, because the copy is the old
+format and the old format is still read:
+`localStorage['royal-duels-builder'] = localStorage['royal-duels-before-parts']`,
+then reload. Done in Chromium as part of the check: wiped, restored, 225 back.
+
+**What these do not do** is stop last-write-wins. A tab left open on another
+device can still push an older, shorter library, and the next load adopts it —
+that is how sync has always worked. What changed is that the longer library is
+now kept on both sides when that happens, instead of on the account alone.
+
+All of the browser's copies are the signed-out reader's decks to the next
+person at that browser, so signing out removes them with everything else
+(`localDecks.forget()` in `resetLocalDecks`).
+
+### How many
+
+| | saved sets, Solo and Versus together |
+|---|---|
+| an admin | no limit (`savedSetLimit('admin')`) |
+| everyone else, signed out included | **1,000** (`SAVED_SET_LIMIT`) |
+
+Enforced by the endpoint — it is what stops one account filling the database —
+and only checked against Supabase when a request is over a limit
+(`effective_tier`, the caller's own token and the publishable key; fails
+closed). On screen: the Saved tab prints `225 of 1,000 saved` for a reader who
+has a limit, Save in the builder's dialog and Save duel on both screens are
+disabled at it with `1,000 saved sets — delete one to save another`, and a
+duel already saved still answers with its name.
+
+"No limit" is the account's. The database is Upstash's free plan, 256 MB in
+all; a five-deck set is ~0.7 kB stored, so that is on the order of 300,000
+sets across every account. The browser holds ~17,000 sets in a 5 M-character
+allowance before the stale-flag path takes over.
+
+### The Saved tab is paged
+
+Twenty groups a page (`SAVED_GROUPS_PER_PAGE`), the pager every other list
+uses. With 1,000 five-deck sets: **6,337 ms to open before, 393 ms after**
+(Chromium, this machine). The card filter still searches the whole library and
+pages what is left; the pill still counts every set.
+
+`tests/savedGroups.test.ts` also found the Delete button's
+`styles.groupButtonDanger` had never been written — referenced by the
+component since it was built, so Delete looked like Load. It turns red under
+the pointer now.
+
+### A tab still running the old client
+
+A tab opened before the deploy runs the old code until it is reloaded.
+
+- Its GET is answered with the document in the old shape, assembled from the
+  parts — or refused (409) when that would be over ~3.5 MB or a part is
+  missing. That client reads anything but a 200 as "could not read" and
+  changes nothing.
+- Its PUT is stored the old way and becomes the account's document again; the
+  next push in parts moves it back. A PUT that loses sets leaves the previous
+  head, and its parts, recoverable for 30 days.
+
+**Rolling back the client is not seamless.** The old code reads
+`royal-duels-builder` and finds no `library` in it; it would show no saved sets
+until it re-read them from the account (which works up to ~3.5 MB). Nothing is
+lost — the parts are in the browser and on the account — but do not roll back
+without knowing that.
+
+### Verified, and not
+
+- **1,618 vitest across 68 files**: `libraryParts.test.ts` 24,
+  `deckStorage.test.ts` 44, `deckSyncV2.test.ts` 66 (the REAL client against
+  the REAL route over an in-memory store) and `deckStoreSync.test.ts` 25 — the
+  real store, storage, policy, client and route through page loads, starting
+  with the account this was built for: 225 sets in the old format, then 226
+  here, on the account, after a reload and on a second device.
+- **33 planted faults, all caught**: a stale local library counted as "ahead",
+  a missing part read as empty, a commit naming an unstored part, no lock, no
+  limit, clean-up ignoring the shadow, parts cut from the front, a failed write
+  that throws, a part not read back, no copy kept, a copy overwritten by a
+  later move, and the rest. Four tests were too weak on the first pass (one
+  could not see two pushes crossing; one efficiency rule had no test; two
+  overlapping guards were only ever exercised together) and were fixed until
+  each could fail on its own.
+- **33/33 in a browser** (Chromium, two dev servers — one with no accounts,
+  one signed out): 225 old-format sets read, rewritten in parts and read back;
+  a real duel saved from the Duel Zone as number 226; 1,000 sets in five parts;
+  an admin saving the 1,001st; a signed-out reader stopped at 1,000 with the
+  dialog saying why. Then **11/11** on the safety copies: the old value kept
+  byte for byte, the library wiped on purpose, and all 225 sets restored from
+  the copy.
+- **NOT exercised:** the endpoint against the real Upstash database, the admin
+  check answering "admin" for a real session, and any signed-in path — `/api/*`
+  does not run under `vite dev` and there is no session on this machine. The
+  account holder's check after deploy: open the builder (the Saved count should
+  read 225), save one duel, reload, and open the site on the phone.
+- Main JS **382.21 -> 391.80 kB gzip** (+9.59: `fflate` in the main chunk and
+  the new modules), CSS 57.41 -> 57.55.
 
 ---
 
@@ -17080,8 +17404,18 @@ src/
                               from the export button, so it rides beside jspdf
                               rather than in the main chunk
   state/duelImport.ts         a played duel -> a Versus group. What counts as a
-                              real deck, and what counts as the same set twice.
-                              Pure, so both can be tested without a store
+                              real deck, and what counts as the same set twice
+                              (the same decks either way round). Pure, so both
+                              can be tested without a store
+  state/libraryParts.ts       the saved library cut into parts of 200, from the
+                              back, each named by its content. NO IMPORTS
+  state/deckCodec.ts          a part made small: gzip for the account, deflate
+                              packed 15 bits a character for the browser (fflate)
+  state/deckStorage.ts        where the deck store keeps itself in the browser:
+                              a small main value + one compressed key a part.
+                              Never throws; flags a library it could not keep
+  state/deckSync.ts           reading and pushing an account's decks in parts.
+                              A read is whole or it failed. Transport injected
   utils/pageWindow.ts         which page numbers a pager draws. NO IMPORTS. A
                               FIXED number of slots, so the arrows never move
   utils/revealListTop.ts      after a page turn, scroll the list's top into

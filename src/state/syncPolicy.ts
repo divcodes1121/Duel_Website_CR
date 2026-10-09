@@ -39,6 +39,13 @@
  * inside the most restrictive documented Upstash REST request limit (1 MB) and
  * well inside Vercel's 4.5 MB body limit.
  *
+ * SINCE 2026-10-09 THIS IS NO LONGER HOW MANY SETS AN ACCOUNT CAN HOLD. The
+ * saved library is sent and stored in parts (`libraryParts.ts`, `deckSync.ts`),
+ * so it is not inside the capped request any more; the limit on saved sets is
+ * `SAVED_SET_LIMIT` in `tiers.ts` (1,000, none for an admin). This number is
+ * still the endpoint's cap on ONE request — the document without its library,
+ * and the whole document from a tab running the client from before that day.
+ *
  * **THIS NUMBER IS DUPLICATED IN `api/decks.ts`.** It cannot be imported there:
  * package.json is `"type": "module"`, Vercel runs `api/` as ESM, and Node ESM
  * does not resolve extensionless relative imports — importing across that

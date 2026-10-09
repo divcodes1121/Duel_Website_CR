@@ -296,6 +296,31 @@ export function isPaid(access: Access): boolean {
 }
 
 /**
+ * How many saved sets — Solo and Versus together — an account may hold.
+ *
+ * Asked for on 2026-10-09 in these words: "unlimited for my account, which is
+ * admin ... 1000 saved decks for everyone". Before it there was no number at
+ * all, only the size of the synced document (~500 saved duels), and passing
+ * that stopped sync without a word on screen.
+ *
+ * **MIRRORED AS `SAVED_SET_LIMIT` IN `api/decks.ts`**, which is where it is
+ * actually enforced — it is what stops one account filling the database. It
+ * cannot be imported there; `tests/deckSyncV2.test.ts` holds the two equal.
+ */
+export const SAVED_SET_LIMIT = 1000;
+
+/** The limit for this reader: none for an admin, `SAVED_SET_LIMIT` otherwise
+ *  (signed out included — those sets live in the browser alone). */
+export function savedSetLimit(access: Access): number {
+  return access === 'admin' ? Number.POSITIVE_INFINITY : SAVED_SET_LIMIT;
+}
+
+/** `1,000 saved sets — delete one to save another`, wherever a save is refused. */
+export function savedSetsFull(limit: number): string {
+  return `${limit.toLocaleString('en-US')} saved sets — delete one to save another`;
+}
+
+/**
  * Why a section is closed, which decides what the gate card offers.
  *
  * The two are genuinely different asks — "make an account, it is free for three

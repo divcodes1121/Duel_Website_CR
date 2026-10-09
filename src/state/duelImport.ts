@@ -41,7 +41,16 @@ export interface DuelPair {
 export type DuelSaveOutcome =
   | { ok: true; name: string; games: number }
   | { ok: false; reason: 'empty' }
-  | { ok: false; reason: 'duplicate'; name: string };
+  /** `swapped`: the saved set holds this duel from the other player's side —
+   *  its Blue is this duel's opponent and its Red this duel's player. */
+  | { ok: false; reason: 'duplicate'; name: string; swapped: boolean }
+  /** The library is at its limit (`savedSetLimit`). A duel that is already
+   *  saved still answers `duplicate`: that is the more useful thing to know. */
+  | { ok: false; reason: 'full'; limit: number };
+
+/** The tooltip on an "already saved" note whose set was saved from the other
+ *  side — the one case where opening it shows the two players exchanged. */
+export const SWAPPED_NOTE = 'Saved from the other player’s side: Blue and Red are swapped in that set';
 
 /**
  * Exactly eight cards, every one of them known.
@@ -144,6 +153,17 @@ function deckSignature(slots: readonly DeckSlot[]): string {
     .join(',');
 }
 
+/* A SIDE'S SIGNATURE IS WORKED OUT ONCE PER SET. Every row of the Duel Zone and
+ * of All Duels asks the whole library whether its duel is saved, and sorting
+ * every deck of every saved set for each row measured ~16 µs a saved set: 8 ms
+ * a ROW against a library of 500, on a list that can run to hundreds of rows.
+ *
+ * Keyed on the set object, which is sound only because a saved set is never
+ * edited in place — the store replaces it (`structuredClone` on save and on
+ * update, a fresh array on rename and delete). Code that mutated a
+ * `DuelDeckSet` it had already asked about would get the old answer. */
+const SIGNATURES = new WeakMap<DuelDeckSet, string>();
+
 /**
  * A whole side as one string.
  *
@@ -151,31 +171,52 @@ function deckSignature(slots: readonly DeckSlot[]): string {
  * decks, and whether G1 and G2 happen to be listed the other way round does
  * not make it a second thing worth keeping. Padded empty decks contribute
  * nothing, so a three-game duel and the same three decks in a five-slot
- * collection compare equal.
+ * collection compare equal. Which SIDE these decks sit on is not part of it
+ * either — `findDuplicateSet` compares the two signatures both ways round.
  */
 export function sideSignature(set: DuelDeckSet | undefined): string {
   if (!set) return '';
-  return set.decks
+  const known = SIGNATURES.get(set);
+  if (known !== undefined) return known;
+  const signature = set.decks
     .map((d) => deckSignature(d.slots))
     .filter(Boolean)
     .sort()
     .join('|');
+  SIGNATURES.set(set, signature);
+  return signature;
 }
 
-/** The saved versus group holding exactly these decks, if one already does. */
+/**
+ * The saved versus group holding exactly these decks, if one already does.
+ *
+ * EITHER WAY ROUND. A duel is one duel whoever it is looked at from: player A's
+ * Duel Zone lists it as A against B, player B's as B against A, and All Duels
+ * seats whichever tag sorts first on the left. Those are the same decks with
+ * blue and red exchanged, and before 2026-10-09 the second one was saved as a
+ * new "Duel Deck n" beside the first. A saved set records decks, not people, so
+ * which side a deck sits on cannot make it a different set.
+ *
+ * A set saved the same way round is preferred over a mirrored one: a library
+ * from before this rule can hold both, and each row should then name its own.
+ */
 export function findDuplicateSet(
   library: readonly SavedDeckSet[],
   blue: DuelDeckSet,
   red: DuelDeckSet,
-): SavedDeckSet | null {
+): { entry: SavedDeckSet; swapped: boolean } | null {
   const b = sideSignature(blue);
   const r = sideSignature(red);
   if (!b && !r) return null;
-  return (
-    library.find(
-      (e) => e.mode === 'versus' && sideSignature(e.blue) === b && sideSignature(e.red) === r,
-    ) ?? null
-  );
+  let mirrored: SavedDeckSet | null = null;
+  for (const e of library) {
+    if (e.mode !== 'versus') continue;
+    const eb = sideSignature(e.blue);
+    const er = sideSignature(e.red);
+    if (eb === b && er === r) return { entry: e, swapped: false };
+    if (!mirrored && eb === r && er === b) mirrored = e;
+  }
+  return mirrored ? { entry: mirrored, swapped: true } : null;
 }
 
 /**
@@ -205,6 +246,8 @@ export function nextDuelDeckName(library: readonly SavedDeckSet[]): string {
 export function buildDuelImport(
   games: PlayedGame[],
   library: readonly SavedDeckSet[],
+  /** How many saved sets the library may hold. Absent: no limit. */
+  limit: number = Number.POSITIVE_INFINITY,
 ): { outcome: DuelSaveOutcome; entry?: SavedDeckSet } {
   const pairs = duelPairs(games);
   if (pairs.length === 0) return { outcome: { ok: false, reason: 'empty' } };
@@ -221,7 +264,13 @@ export function buildDuelImport(
   }));
 
   const dup = findDuplicateSet(library, blue, red);
-  if (dup) return { outcome: { ok: false, reason: 'duplicate', name: dup.name } };
+  if (dup) {
+    return {
+      outcome: { ok: false, reason: 'duplicate', name: dup.entry.name, swapped: dup.swapped },
+    };
+  }
+
+  if (library.length >= limit) return { outcome: { ok: false, reason: 'full', limit } };
 
   const name = nextDuelDeckName(library);
   return {

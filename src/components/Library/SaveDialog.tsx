@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useBuilderStore } from '../../state/store';
+import { useSavedSetLimit } from '../../state/gate';
+import { savedSetsFull } from '../../state/tiers';
 import styles from './Library.module.css';
 
 interface SaveDialogProps {
@@ -14,6 +16,9 @@ export function SaveDialog({ onClose, onSaved }: SaveDialogProps) {
   const activeSavedId = useBuilderStore((s) => s.activeSavedId);
   const saveCurrent = useBuilderStore((s) => s.saveCurrent);
   const updateSaved = useBuilderStore((s) => s.updateSaved);
+  // A NEW set is what the limit counts; updating a loaded one is always open.
+  const limit = useSavedSetLimit();
+  const full = library.length >= limit;
 
   // The loaded set we could update in place — only if it still exists and
   // belongs to the current tab's mode.
@@ -34,7 +39,8 @@ export function SaveDialog({ onClose, onSaved }: SaveDialogProps) {
   }
 
   function handleSaveNew() {
-    saveCurrent(name);
+    // Nothing was saved at the limit, so the dialog stays and says why.
+    if (!saveCurrent(name, limit).ok) return;
     onSaved();
     onClose();
   }
@@ -63,8 +69,10 @@ export function SaveDialog({ onClose, onSaved }: SaveDialogProps) {
         ) : (
           <>
             <h2 className={styles.dialogTitle}>{activeEntry ? 'Save as new set' : 'Save deck set'}</h2>
-            <p className={styles.dialogHint}>
-              Saving your current {mode === 'solo' ? 'Solo decks' : 'Blue & Red decks'} as a new set.
+            <p className={styles.dialogHint} role={full ? 'alert' : undefined}>
+              {full
+                ? `${savedSetsFull(limit)}.`
+                : `Saving your current ${mode === 'solo' ? 'Solo decks' : 'Blue & Red decks'} as a new set.`}
             </p>
             <input
               className={styles.nameInput}
@@ -86,7 +94,12 @@ export function SaveDialog({ onClose, onSaved }: SaveDialogProps) {
               >
                 {activeEntry ? 'Back' : 'Cancel'}
               </button>
-              <button type="button" className={styles.primaryButton} onClick={handleSaveNew}>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={handleSaveNew}
+                disabled={full}
+              >
                 Save
               </button>
             </div>
