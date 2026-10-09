@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-09-export-last-sets',
+    date: '2026-10-09',
+    kind: 'improved',
+    title: 'The deck report can start from your newest sets',
+    body: [
+      'Export PDF in Royal Duels let you take all your sets or the first few — the earliest ones you built. There is now a Last option beside First: type a number and you get that many of your most recent sets, newest first.',
+      'Each set keeps its own number either way, so the last three of 259 print as Duel Deck 259, 258 and 257. Deck’s Home has the same option, counted in decks.',
+    ],
+    href: '#/builder',
+    hrefLabel: 'Open Royal Duels',
+    needs: 'trial',
+  },
+  {
     id: '2026-10-09-saved-sets',
     date: '2026-10-09',
     kind: 'improved',

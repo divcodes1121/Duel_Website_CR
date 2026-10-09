@@ -1988,6 +1988,23 @@ refusal) are in `utils/duelFeed.ts`, which has no imports.
   for everyone, none for an admin (`useSavedSetLimit`). A duel that is already
   saved still shows its name instead: that is the more useful answer.
 
+### The export dialog's count: All, First, Last (2026-10-09)
+
+- **Three chips and one number**: `All 259`, `First`, `Last`, a box, `of 259`.
+  One chip is pressed at a time (`aria-pressed`, the filled chip). The box is
+  off for `All` and live for the other two; empty or over the total means
+  every set.
+- **`First N`** is the N earliest sets, oldest first — the report's own order.
+  **`Last N`** is the N most recent, **newest first**. The list above the
+  count redraws in that order as the number is typed, and it is the same list
+  the PDF is built from.
+- **A set keeps its number.** `Last 3` of 259 lists `Duel Deck 259`, `258`,
+  `257`: the numbers `All` gives those sets, not 1, 2, 3 again. The board on
+  screen is still set 1, so it is in `Last` only when everything is.
+- The chips say which way each one runs in their `title` ("The most recent
+  duel sets, newest first"); nothing is added to the dialog's text.
+- Deck's Home has the same three chips, counted in decks.
+
 ### The Saved tab and the saved-set limit (2026-10-09)
 
 - **Twenty groups a page**, with the pager every other list uses, under the

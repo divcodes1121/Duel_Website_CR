@@ -164,6 +164,55 @@ export function limitSetCount(sections: ExportSection[], limit: number | null): 
 }
 
 /**
+ * The LAST `limit` sets, NEWEST FIRST.
+ *
+ * Asked for on 2026-10-09, with 259 sets in the dialog and only "First": "add
+ * an option beside First, 'Last', which will give descending order, and naming
+ * and numbers will be correct". The report lists sets oldest first, so the
+ * first N are the earliest built — and the ones a reader usually wants are the
+ * ones just saved, at the far end of a list of hundreds.
+ *
+ * THE NUMBERS ARE NOT REDONE. The builders title a set by its place in the
+ * whole report ("Duel Deck 259") before anything is cut, so the last three of
+ * 259 print as Duel Deck 259, 258, 257 — the same set carries the same number
+ * whichever end it was picked from, and the order on the page is what says
+ * "descending". Numbering them 1, 2, 3 again would give the newest set the
+ * name the oldest one has in the other direction.
+ *
+ * A set is still never cut in half, and the decks inside one keep their order:
+ * only the order of the sets is reversed.
+ */
+export function lastSetCount(sections: ExportSection[], limit: number | null): ExportSection[] {
+  const n = limit === null ? sections.length : Math.max(0, Math.floor(limit));
+  // `slice(-0)` is the whole array, which is the opposite of "none".
+  if (n === 0) return [];
+  return sections.slice(-n).reverse();
+}
+
+/**
+ * The same, counted in rows, for a report that is not picked in sets (Deck's
+ * Home, where a row is a deck and a new deck goes on the END of the list): the
+ * last `limit` rows overall, newest first. A section is cut where the count
+ * runs out, from its end, and its rows are reversed like the sections are.
+ */
+export function lastSections(sections: ExportSection[], limit: number | null): ExportSection[] {
+  let left = limit === null ? countEntries(sections) : Math.max(0, Math.floor(limit));
+  const out: ExportSection[] = [];
+  for (let i = sections.length - 1; i >= 0 && left > 0; i--) {
+    const section = sections[i];
+    const take = Math.min(left, section.entries.length);
+    if (take === 0) continue;
+    out.push(
+      section.kind === 'decks'
+        ? { kind: 'decks', heading: section.heading, entries: section.entries.slice(-take).reverse() }
+        : { kind: 'pairs', heading: section.heading, entries: section.entries.slice(-take).reverse() },
+    );
+    left -= take;
+  }
+  return out;
+}
+
+/**
  * Keep only the first `limit` rows overall, walking sections in order: a
  * section is truncated when the budget runs out mid-way and dropped once it
  * is exhausted. `null` (or a limit at/above the total) exports everything.

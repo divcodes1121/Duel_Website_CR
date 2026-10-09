@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   DECKS_PER_PAGE,
   countDecks,
   sectionRows,
+  lastSections,
+  lastSetCount,
   limitSetCount,
   buildHomeSections,
   buildSoloSections,
@@ -263,6 +267,198 @@ describe('limitSetCount', () => {
     expect(limitSetCount(all, null)).toBe(all);
     expect(limitSetCount(all, 9)).toHaveLength(2);
     expect(limitSetCount(all, 0)).toEqual([]);
+  });
+});
+
+describe('lastSetCount — the other end of the report, newest first', () => {
+  /* Asked for on 2026-10-09 with 259 sets in the dialog and only "First":
+     "add an option beside First, 'Last', which will give descending order,
+     and naming and numbers will be correct". */
+  const empty = setOf('Live', []);
+  const group = (name: string, deck: string, offset: number): SavedDeckSet => ({
+    id: name,
+    name,
+    mode: 'versus',
+    blue: setOf(name, [filledDeck(deck, offset)]),
+    red: setOf(name, [filledDeck(`${deck}r`, offset + 8)]),
+    savedAt: '',
+  });
+  // The library, newest first — as the store keeps it.
+  const library = [
+    group('Duel Deck 5', 'E', 0),
+    group('Duel Deck 4', 'D', 16),
+    group('Duel Deck 3', 'C', 32),
+    group('Duel Deck 2', 'B', 48),
+    group('Duel Deck 1', 'A', 64),
+  ];
+  const firstDeckOf = (s: ExportSection) => sectionRows(s)[0].deck.name;
+
+  it('takes the most recent sets, in descending order', () => {
+    const report = buildVersusSections(empty, empty, 0, 0, library);
+    const last = lastSetCount(report, 3);
+    expect(last.map(firstDeckOf)).toEqual(['E', 'D', 'C']);
+  });
+
+  it('keeps the number each set has in the whole report — it does not start again at 1', () => {
+    const report = buildVersusSections(empty, empty, 0, 0, library);
+    expect(lastSetCount(report, 3).map((s) => s.heading)).toEqual([
+      'Duel Deck 5',
+      'Duel Deck 4',
+      'Duel Deck 3',
+    ]);
+    // The same set has the same number from either end.
+    const byName = (list: ExportSection[]) => Object.fromEntries(list.map((s) => [firstDeckOf(s), s.heading]));
+    expect(byName(lastSetCount(report, 5))).toEqual(byName(limitSetCount(report, 5)));
+  });
+
+  it('numbers them as the report does when the board on screen is set 1', () => {
+    /* The live board is always the report's first set, so the saved groups sit
+       one number on from where they would without it. "Last" must agree with
+       "First" and with "All" about that, not invent a third numbering. */
+    const blue = setOf('Blue', [filledDeck('LIVE')]);
+    const red = setOf('Red', [filledDeck('LIVEr', 8)]);
+    const report = buildVersusSections(blue, red, 1, 1, library);
+    expect(report).toHaveLength(6);
+    const last = lastSetCount(report, 2);
+    expect(last.map((s) => s.heading)).toEqual(['Duel Deck 6', 'Duel Deck 5']);
+    expect(last.map(firstDeckOf)).toEqual(['E', 'D']);
+    // The board is the FIRST set: it is in "Last" only when everything is.
+    expect(lastSetCount(report, 5).map(firstDeckOf)).not.toContain('LIVE');
+    expect(lastSetCount(report, 6).map(firstDeckOf)).toEqual(['E', 'D', 'C', 'B', 'A', 'LIVE']);
+  });
+
+  it('with every set asked for, it is the whole report backwards', () => {
+    const report = buildVersusSections(empty, empty, 0, 0, library);
+    const all = lastSetCount(report, 99);
+    expect(all.map((s) => s.heading)).toEqual([...report].reverse().map((s) => s.heading));
+    expect(lastSetCount(report, null)).toEqual(all);
+  });
+
+  it('none is none — not the whole report', () => {
+    // `slice(-0)` is everything.
+    const report = buildVersusSections(empty, empty, 0, 0, library);
+    expect(lastSetCount(report, 0)).toEqual([]);
+    expect(lastSetCount(report, -3)).toEqual([]);
+    expect(lastSetCount([], 4)).toEqual([]);
+  });
+
+  it('keeps a set whole and its own decks in their own order', () => {
+    const three = (name: string, offset: number): SavedDeckSet => ({
+      id: name,
+      name,
+      mode: 'versus',
+      blue: setOf(name, [filledDeck('G1', offset), filledDeck('G2', offset + 8), filledDeck('G3', offset + 16)]),
+      red: setOf(name, [filledDeck('G1r', offset + 24), filledDeck('G2r', offset + 32), filledDeck('G3r', offset + 40)]),
+      savedAt: '',
+    });
+    const report = buildVersusSections(empty, empty, 0, 0, [three('newest', 0), three('oldest', 60)]);
+    const [newest] = lastSetCount(report, 1);
+    expect(newest.entries).toHaveLength(3);
+    expect(sectionRows(newest).map((r) => r.deck.name)).toEqual(['G1', 'G1r', 'G2', 'G2r', 'G3', 'G3r']);
+  });
+
+  it('leaves the report it was cut from alone', () => {
+    const report = buildVersusSections(empty, empty, 0, 0, library);
+    const before = report.map((s) => s.heading);
+    lastSetCount(report, 3);
+    expect(report.map((s) => s.heading)).toEqual(before);
+  });
+
+  it('works the same for Solo sets', () => {
+    const solo = (name: string, deck: string, offset: number): SavedDeckSet => ({
+      id: name,
+      name,
+      mode: 'solo',
+      solo: setOf(name, [filledDeck(deck, offset)]),
+      savedAt: '',
+    });
+    const report = buildSoloSections(setOf('Live', []), 0, [solo('c', 'C', 0), solo('b', 'B', 16), solo('a', 'A', 32)]);
+    const last = lastSetCount(report, 2);
+    expect(last.map((s) => s.heading)).toEqual(['Deck Set 3', 'Deck Set 2']);
+    expect(last.map(firstDeckOf)).toEqual(['C', 'B']);
+  });
+
+  it('pages in the order it was asked for', () => {
+    const report = buildVersusSections(empty, empty, 0, 0, library);
+    expect(paginate(lastSetCount(report, 2)).map((p) => p.heading)).toEqual(['Duel Deck 5', 'Duel Deck 4']);
+  });
+});
+
+describe('lastSections — the same, counted in decks (Deck’s Home)', () => {
+  const home = (n: number) =>
+    buildHomeSections(Array.from({ length: n }, (_, i) => filledDeck(`Deck ${i + 1}`, i * 3)));
+  const names = (list: ExportSection[]) => list.flatMap((s) => sectionRows(s).map((r) => r.deck.name));
+
+  it('takes the decks added last, newest first', () => {
+    // A new deck goes on the END of the Deck's Home list.
+    expect(names(lastSections(home(6), 3))).toEqual(['Deck 6', 'Deck 5', 'Deck 4']);
+  });
+
+  it('with every deck asked for, it is the whole list backwards', () => {
+    expect(names(lastSections(home(4), 99))).toEqual(['Deck 4', 'Deck 3', 'Deck 2', 'Deck 1']);
+    expect(names(lastSections(home(4), null))).toEqual(['Deck 4', 'Deck 3', 'Deck 2', 'Deck 1']);
+  });
+
+  it('none is none', () => {
+    expect(lastSections(home(4), 0)).toEqual([]);
+    expect(lastSections(home(4), -1)).toEqual([]);
+  });
+
+  it('keeps the section’s heading and kind', () => {
+    const [section] = lastSections(home(4), 2);
+    expect(section.kind).toBe('decks');
+    expect(section.heading).toBe('My Decks');
+  });
+
+  it('runs back through more than one section, cutting the one the count ends in', () => {
+    const many: ExportSection[] = [
+      { kind: 'decks', heading: 'A', entries: [{ deck: filledDeck('a1') }, { deck: filledDeck('a2', 8) }] },
+      { kind: 'decks', heading: 'B', entries: [{ deck: filledDeck('b1', 16) }, { deck: filledDeck('b2', 24) }] },
+    ];
+    const last = lastSections(many, 3);
+    expect(last.map((s) => s.heading)).toEqual(['B', 'A']);
+    expect(names(last)).toEqual(['b2', 'b1', 'a2']);
+    expect(countEntries(last)).toBe(3);
+  });
+
+  it('leaves the list it was cut from alone', () => {
+    const all = home(5);
+    lastSections(all, 2);
+    expect(names(all)).toEqual(['Deck 1', 'Deck 2', 'Deck 3', 'Deck 4', 'Deck 5']);
+  });
+});
+
+describe('the export dialog’s count picker', () => {
+  /* Read off the source — this suite runs in node with no DOM. */
+  const dialog = readFileSync(
+    join(process.cwd(), 'src', 'components', 'Export', 'ExportDialog.tsx'),
+    'utf8',
+  ).replace(/\r\n/g, '\n');
+
+  it('offers All, First and Last, in that order', () => {
+    const at = (needle: string) => dialog.indexOf(needle);
+    expect(at("onClick={() => setPick('all')}")).toBeGreaterThan(0);
+    expect(at("onClick={() => setPick('first')}")).toBeGreaterThan(at("onClick={() => setPick('all')}"));
+    expect(at("onClick={() => setPick('last')}")).toBeGreaterThan(at("onClick={() => setPick('first')}"));
+  });
+
+  it('Last takes from the end, in sets for Royal Duels and in decks for Deck’s Home', () => {
+    expect(dialog).toContain('bySet ? lastSetCount(allSections, limit) : lastSections(allSections, limit)');
+    expect(dialog).toContain('bySet ? limitSetCount(allSections, limit) : limitSections(allSections, limit)');
+  });
+
+  it('the number box is live for First and for Last, and off for All', () => {
+    expect(dialog).toContain("disabled={busy || pick === 'all'}");
+  });
+
+  it('what is listed in the dialog is what is downloaded', () => {
+    // One `sections` value feeds the preview list and the PDF request.
+    expect(dialog).toContain('{sections.map((section, i) => (');
+    const from = dialog.indexOf('const request: ExportRequest = {');
+    const to = dialog.indexOf('fileName: exportFileName(scope)');
+    expect(from).toBeGreaterThan(0);
+    expect(to).toBeGreaterThan(from);
+    expect(dialog.slice(from, to)).toContain('\n      sections,\n');
   });
 });
 

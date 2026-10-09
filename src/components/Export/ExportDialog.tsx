@@ -8,6 +8,8 @@ import {
   buildVersusSections,
   countEntries,
   exportFileName,
+  lastSections,
+  lastSetCount,
   limitSections,
   limitSetCount,
   sectionRows,
@@ -24,6 +26,13 @@ interface ExportDialogProps {
   source: ExportSource;
   onClose: () => void;
 }
+
+/**
+ * Which sets go in the report: all of them, the first N (the earliest built,
+ * oldest first — the report's own order) or the last N (the most recent,
+ * NEWEST FIRST). Either way a set keeps the number it has in the whole report.
+ */
+type Take = 'all' | 'first' | 'last';
 
 /** Rows a section prints — a three-duel set is six decks. */
 function sectionCount(section: ExportSection): number {
@@ -44,7 +53,7 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
 
   const [handle, setHandle] = useState(`@${handleName ?? 'royal'}`);
   const [includeSaved, setIncludeSaved] = useState(true);
-  const [exportAll, setExportAll] = useState(true);
+  const [pick, setPick] = useState<Take>('all');
   /** Kept as text so the field can be cleared mid-typing without snapping back. */
   const [limitText, setLimitText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -79,9 +88,12 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
     : available;
 
   const sections = useMemo(() => {
-    if (exportAll) return allSections;
+    if (pick === 'all') return allSections;
+    if (pick === 'last') {
+      return bySet ? lastSetCount(allSections, limit) : lastSections(allSections, limit);
+    }
     return bySet ? limitSetCount(allSections, limit) : limitSections(allSections, limit);
-  }, [allSections, bySet, exportAll, limit]);
+  }, [allSections, bySet, pick, limit]);
 
   const empty = sections.length === 0;
 
@@ -166,20 +178,36 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
               <button
                 type="button"
                 className={styles.limitChip}
-                data-active={exportAll}
+                data-active={pick === 'all'}
+                aria-pressed={pick === 'all'}
                 disabled={busy}
-                onClick={() => setExportAll(true)}
+                onClick={() => setPick('all')}
               >
                 All {available}
               </button>
               <button
                 type="button"
                 className={styles.limitChip}
-                data-active={!exportAll}
+                data-active={pick === 'first'}
+                aria-pressed={pick === 'first'}
                 disabled={busy}
-                onClick={() => setExportAll(false)}
+                title={`The earliest ${unit}, oldest first`}
+                onClick={() => setPick('first')}
               >
                 First
+              </button>
+              {/* The other end of the same list: the ones just saved, newest
+                  first, each under the number it has in the whole report. */}
+              <button
+                type="button"
+                className={styles.limitChip}
+                data-active={pick === 'last'}
+                aria-pressed={pick === 'last'}
+                disabled={busy}
+                title={`The most recent ${unit}, newest first`}
+                onClick={() => setPick('last')}
+              >
+                Last
               </button>
               <input
                 className={styles.limitInput}
@@ -187,12 +215,11 @@ export function ExportDialog({ source, onClose }: ExportDialogProps) {
                 min={1}
                 max={available}
                 inputMode="numeric"
-                value={exportAll ? '' : limitText}
+                value={pick === 'all' ? '' : limitText}
                 placeholder={String(available)}
-                disabled={busy || exportAll}
+                disabled={busy || pick === 'all'}
+                aria-label={`How many ${unit}`}
                 onChange={(e) => setLimitText(e.target.value)}
-                // Typing a number is the intent — switch off "All" for them.
-                onFocus={() => setExportAll(false)}
               />
               <span className={styles.limitSuffix}>of {available}</span>
             </div>
