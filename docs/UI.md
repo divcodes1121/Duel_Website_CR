@@ -2046,6 +2046,10 @@ saved duel in the builder a probe must click the `Versus` tab and then
 
 ## Bring this against them, and the chips under a suggested deck (2026-10-10)
 
+> **Brain 4.1, the same evening:** every list is up to TEN decks. Nothing was
+> added to a row: which deck is the one all-round pick and how specific each
+> counter is are in the payload (`allRound`, `lift`) and not on the screen.
+>
 > **Later the same day (brain 4.0):** the strip above the list reads **Likely to
 > bring**, not "They play". Its percentages are the chance a deck of that
 > archetype is what they bring (flatter than their play, duel decks first);

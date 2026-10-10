@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Ten decks, specific to the opponent; duel decks from CRL players only (`team-scout-4.1`)** | **LIVE SINCE 2026-10-10 12:38 UTC.** Reported: the same decks under every opponent, duel decks from random players. Measured: one list was on 56% of all lists and the named duel list had no CRL game. Now one all-round deck at most per list, the rest must gain clearly more against that opponent than the typical deck does, duel lists only from the CRL group (1,706 -> 130), ten rows. Replay: distinct decks 316 -> 490, the most repeated list on 38% -> 25% of opponents, at -0.49 points on the top three. See [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10) |
 | **Counters for what they are likely to bring — the wide read, the living card manual, a CRL-only read for Coach Assist** | **LIVE SINCE 2026-10-10 AS `668d623`. Server by scp first, 11:42 UTC (the deployed files matched the last commit; backups `*.bak-20261010-114257-prewide`; only `royalweb` restarted; eight suites green there), the client about a minute after the push (`/api/health` and the served bundle). The trainer change went 11:54 UTC (`*.bak-20261010-115402-precrlfit`).** Reported the day 3.0 shipped: *"it's not good, because the opponent also counter-snipes"*. Measured on 700 friendly duels: an opponent brings their most played archetype one time in five, and is not counter-picking from their own lists — so brain `team-scout-4.0` reads their duel decks first, flattens the weights and scores against twenty of their lists. Old against new through the production path on 600 duels: top three **+1.55 points**, rows under 50% against what really came **10.6% → 4.7%**, the printed figure's gap to what happened **7.6 → 2.1 points**. The card manual (`All_Cards_stats.md`) is now pushed as data with one command; its balance log is applied (a nerf measured at −1.4 points). Coach Assist's read is fitted on the CRL group's duels only. See [Counters for what they are likely to bring](#counters-for-what-they-are-likely-to-bring-2026-10-10) |
 | **Counters to what they actually play — Deck Counter and Team Scout** | **LIVE SINCE 2026-10-10 AS `c1a1a0f` (superseded the same day by 4.0, the row above). Server by scp first, 06:49 UTC (the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; only `royalweb` restarted), the client 52 s after the push (06:54 UTC, `/api/health` and the build meta). Checked on production: the live API for three players (brain `team-scout-3.0`, pool 2,341, every list ordered, nothing under 50%, every family at 10%+ answered at 55%+, every suggested deck fielding three special slots), six suites green on the VPS, and 42/42 in a real browser SIGNED IN on https://deckkies.com — the Deck Counter's three views in both themes and at 390px, a scouting report and a match plan, the figures on screen equal to the API's. Built and verified on staged code against production data first.** Reported: *"the decks given for counter are very generic and rely on the meta — we need decks which counter their archetypes, whatever they play, at least at a good percentage"*. Both lists are now one engine's: what a player PLAYS (own-deck and duel games, the Decks screen's count), every vetted ladder list and every duel list as candidates (2,341, was 204), the strongest counters in the order of their percentage, no deck expected to lose, and an answer held for every archetype they play a tenth of the time. Every deck shows its win rate against each archetype they play; Deck Counter also reads the same decks per archetype and per counter card (the card manual says which cards answer which — the battle data ranks the decks). On 20 real opponents the weakest of the seven went from a median **52.3% to 63.6%**, lists out of order **18 → 0**, rows under 50% **6 → 0**; one opponent answers in 0.56 s (was 0.85). See [Counters to what they play](#counters-to-what-they-play-2026-10-10) |
 | **Deck report: the last N sets, newest first** | **LIVE 2026-10-09 as `ea2193b`, client only** (`/api/health` reported it 53 s after the push; the served bundle carries both chips' tooltips and the release note). Asked, with 259 sets in the export dialog and only `First` beside the number: *"add an option beside First, 'Last', which will give descending order, and naming and numbers will be correct."* The report lists sets oldest first, so `First 3` were the three earliest ever built; the ones just saved were at the far end. **`Last`** takes the N most recent, newest first, and **each set keeps the number it has in the whole report** — the last three of 259 print as Duel Deck 259, 258, 257, the same numbers `All` and `First` give those sets. Same option in Solo and in Deck's Home (counted in decks). 17/17 in a browser, and the downloaded PDF read back: pages in the order 30, 29, 28, each heading over its own set's decks. See [The deck report: first N or last N](#the-deck-report-first-n-or-last-n-2026-10-09) |
@@ -220,6 +221,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27b. [A render loop that starves Suspense](#a-render-loop-that-starves-suspense)
 27c. [Counters to what they play](#counters-to-what-they-play-2026-10-10)
 27d. [Counters for what they are likely to bring](#counters-for-what-they-are-likely-to-bring-2026-10-10)
+27e. [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10)
 28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
 29. [The layout engine — measure, then commit](#the-layout-engine--measure-then-commit)
 29a. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
@@ -12505,6 +12507,81 @@ the `.js` and the `.css`) and then never committed. See
 import is eager until that is fixed, and the reason is written at the import.
 
 ---
+
+## Ten decks, specific to the opponent (2026-10-10)
+
+Reported hours after 4.0: *"I can still see the same decks ... Hog Earthquake with
+Musketeer and Giant Skeleton I saw against many opponents, I don't think it can be
+the same"*, *"whatever duel deck you suggest, make sure it's from the top CRL
+player and not from some random players"*, *"we can suggest 10 decks max"*.
+
+**Measured first, and it was worse than reported.** Over 952 opponents one list
+was on 56% of the lists of seven; on 30 live answers three lists were on 16 each,
+and the Hog / Earthquake / Giant Skeleton duel list had **no game by a CRL
+player**. A list that rates well against nearly everything is the answer to no
+opponent in particular, and part of what makes it rate well is who pilots it:
+the ladder record behind a rate is not adjusted for its pilots.
+
+What changed (brain `team-scout-4.1`):
+
+- **Duel lists come from the named group only.** `team_analysis.duel_catalogue()`
+  narrows the duel catalogue to lists the `crl` group (`CLASH_DUEL_POOL_COHORT`,
+  the server's `.duel_cohorts.json`) fielded in at least 3 duel games: 1,706
+  lists -> **130**. One function for the counter pool and for the duel context
+  Coach Assist reads. No group = the whole catalogue, and the pool's stats say
+  `duelFrom`.
+- **A counter is specific to the opponent.** Each pool list carries `fieldRate`,
+  its rate against the average opponent (every archetype duel players field,
+  weighted by players, at the archetype level). Per opponent, `scout.pool_lift`
+  stamps `lift` (how much MORE the list gains against them than the typical
+  list does) and `edge` (its general strength). `scout.counters` allows **one**
+  all-round row (lift under 5), chooses every row as though weaker by half its
+  edge, and fills with all-round decks only when too few counters exist. None
+  of it changes the figure printed or the order shown.
+- **Ten rows** on every Team Analysis list and the Deck Counter (`TOP_N`,
+  `PER_PLAYER_TOP_N`, `SCOUT_TOP_N`); `team_scout`'s own default stays seven for
+  `coach_daily`.
+
+Staged on 30 real opponents four times before it held: a field of popular
+friendly-duel LISTS, then of every family's top lists (both are rated from the
+version cells — a different evidence level from an opponent's own lists — and
+the same two ladder lists stayed on 19-21 of 30 answers), the raw difference
+without the pool's median (a weak opponent made every strong list "a counter"),
+and lower lift thresholds (more repetition, not less).
+
+| Old rules against new, production path, 300 friendly duels / 426 sides, ten rows | Before | After |
+|---|---|---|
+| Distinct decks suggested (of 4,260 rows) | 316 | **490** |
+| The most repeated list is on | 38% of lists | **25%** |
+| The next two | 29%, 29% | 15%, 13% |
+| Top three against what was really brought | 59.17 | 58.69 (**-0.49** [-0.67, -0.31]) |
+| All ten | 58.19 | 57.47 (-0.73) |
+| Rows under 50% against what came | 6.7% | 10.9% |
+
+**The cost is real and was accepted for what was asked:** half a point on the
+top three by the same fused rate (which itself carries the pilot effect, so the
+true cost is smaller), and a weaker tail — a specific counter is a specialist,
+and on the live check one opponent's list held two rows at 32% and 36% against
+an archetype they are 5%+ likely to bring (the chips under the deck show it).
+
+Live 12:38 UTC (backups `*.bak-20261010-123855-prespecific`): three real players
+got three different lists of ten, pool 781 (651 ladder + 130 duel), one
+all-round row each; a scouting report and a 1v2 plan answer in 4-6 s cold.
+Staged: 12 players' lists held 86 distinct decks in 120 rows (4.0: 60 in 112),
+one opponent 0.27 s, 12v12 2.3 s warm. `test_counters` 96 -> 116,
+`test_team_analysis` 228 -> 241, `test_duel_index` 71 -> 76; **19 planted
+faults caught** (one test too weak first). 4,647 Python checks / 78 suites
+(only `test_ml_21a`), 1,673 vitest / 69.
+
+**"The scouting report is still stale":** the server answers a scouting report
+with the same engine as a match plan (checked: brain 4.1, ten rows). What made
+it look unchanged was the content — the same few all-round decks under every
+opponent — which is what this change removes. A report opened from **Saved** is
+a snapshot of the day it was saved; run it again for today's lists.
+
+**Not done:** no browser pass after 4.1 (the markup did not change; the API was
+probed); Coach Assist's own-deck suggestions are untouched, only its population
+duel picks narrowed to the group; the win model still learns from every duel.
 
 ## Counters for what they are likely to bring (2026-10-10)
 

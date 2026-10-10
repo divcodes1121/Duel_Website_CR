@@ -505,16 +505,15 @@ check("a scout folder has no per-player board",
 # BOTH SQUAD-WIDE LISTS ARE PORTFOLIOS NOW, so the two counts converged — see
 # the note on SCOUT_TOP_N. What is still worth pinning is that the scouting
 # report is not silently capped below the portfolio it is meant to be.
-check("a scout folder recommends up to the portfolio size",
-      len(scout_folder["recommended"]) <= ta.SCOUT_TOP_N
-      and ta.SCOUT_TOP_N == ts.MAX_RECOMMENDATIONS,
+check("a scout folder recommends up to the list size",
+      len(scout_folder["recommended"]) <= ta.SCOUT_TOP_N,
       f"{len(scout_folder['recommended'])} of {ta.SCOUT_TOP_N}")
-# SEVEN ON BOTH BOARDS NOW (was 5 per teammate), on the account holder's call.
-# The per-teammate list is what the Coach Roster's What-to-play tab reads, so
-# this is the number a coach actually sees there.
-check("the per-teammate board shows seven, like the squad-wide portfolio",
-      ta.PER_PLAYER_TOP_N == 7 and ta.TOP_N == 7,
-      f"{ta.PER_PLAYER_TOP_N} / {ta.TOP_N}")
+# TEN ON EVERY LIST (2026-10-10, "we can suggest 10 decks max to the players";
+# seven before, five per teammate before that). `team_scout`'s own default
+# stays seven: `coach_daily` builds its field plan with it.
+check("every Team Analysis list is ten rows at most, and the field plan's seven is untouched",
+      ta.PER_PLAYER_TOP_N == ta.TOP_N == ta.SCOUT_TOP_N == 10 and ts.MAX_RECOMMENDATIONS == 7,
+      f"{ta.PER_PLAYER_TOP_N} / {ta.TOP_N} / {ta.SCOUT_TOP_N} / {ts.MAX_RECOMMENDATIONS}")
 # A TEAMMATE WITH A SHORT LIST IS TOPPED UP, NOT LEFT WITH A REASON.
 #
 # `coach._fills` has answered this since Coach Assist was written: when a
@@ -987,7 +986,78 @@ finally:
 
 print(NL + "counters to what they play")
 
-check("the brain is 4.0", ts.BRAIN_VERSION == "team-scout-4.0" and folder["brain"] == ts.BRAIN_VERSION)
+check("the brain is 4.1", ts.BRAIN_VERSION == "team-scout-4.1" and folder["brain"] == ts.BRAIN_VERSION)
+
+# DUEL LISTS COME FROM THE NAMED GROUP ONLY, and every pool list knows its own
+# rate against the field.
+_GA, _GB, _GC = cards("grpA"), cards("grpB"), cards("grpC")
+_cat = [{"key": _k(c), "cards": list(c), "archetype": "hog", "games": 50, "wins": 30,
+         "players": 9, "records": None} for c in (_GA, _GB, _GC)]
+_saved_g = (ta._duel_index, ta._load_cohorts, ta._COHORTS_PATH, ta.DUEL_POOL_COHORT)
+ta._GROUP_LISTS.update(key=None, lists=None)
+ta._duel_index = types.SimpleNamespace(
+    catalogue=lambda: _cat, status=lambda: {"buildId": "b1"},
+    lists_of=lambda tags: {_k(_GA): [7, 3], _k(_GB): [2, 1]} if "#TOP1" in tags else {})
+ta._load_cohorts = lambda: {"crl": {"#TOP1", "#TOP2"}}
+ta._COHORTS_PATH = None
+try:
+    _kept, _whose = ta.duel_catalogue()
+    check("a duel list is offered only when the group fielded it enough",
+          [d["key"] for d in _kept] == [_k(_GA)] and _whose == "crl" and ta.DUEL_POOL_MIN_GAMES == 3,
+          f"{[d['key'][:8] for d in _kept]} {_whose}")
+    ta._load_cohorts = lambda: {}
+    ta._GROUP_LISTS.update(key=None, lists=None)
+    check("with no such group every catalogue list is offered, and it says whose",
+          ta.duel_catalogue() == (_cat, "everyone"))
+    ta._load_cohorts = lambda: (_ for _ in ()).throw(RuntimeError("file gone"))
+    ta._GROUP_LISTS.update(key=None, lists=None)
+    check("a failing group file costs the narrowing and nothing else",
+          ta.duel_catalogue() == (_cat, "everyone"))
+    ta.DUEL_POOL_COHORT = ""
+    check("an empty setting is everyone", ta.duel_catalogue() == (_cat, "everyone"))
+finally:
+    ta._duel_index, ta._load_cohorts, ta._COHORTS_PATH, ta.DUEL_POOL_COHORT = _saved_g
+    ta._GROUP_LISTS.update(key=None, lists=None)
+
+_fc = ta._Candidate({"cards": HOG, "winCondition": "hog", "origin": "ladder"}, None,
+                    ta._DeckProfile(HOG, "hog"))
+check("a candidate knows nothing general about itself until the pool is rated", _fc.field is None)
+_plain = ta._score(_fc, _proj_threats := ta._plays([deck("Golem", GOLEM, matches=30, wc="golem")])["threats"],
+                   None, None, dress=False)
+check("...and its row carries no field rate", _plain is not None and "fieldRate" not in _plain)
+_fc.field = 51.2
+_with = ta._score(_fc, _proj_threats, None, None, dress=False)
+_full = ta._score(_fc, _proj_threats, None, None)
+check("a rated pool list carries its field rate on the rated row and the dressed one",
+      _with["fieldRate"] == 51.2 and _full["fieldRate"] == 51.2)
+_sel = ts.counters([_with], [{"family": "golem", "share": 1.0}])
+check("...which is what the list tells a counter from an all-round deck by",
+      _sel[0]["lift"] == round(_with["expectedWinRate"] - 51.2, 1))
+_saved_di2 = ta._duel_index
+ta._duel_index = types.SimpleNamespace(deck_players=lambda: [
+    ("a," * 7 + "a8", "hog", 60), ("b," * 7 + "b8", "hog", 20),
+    ("c," * 7 + "c8", "golem", 19), ("d," * 7 + "d8", "xbow", 1), ("e," * 7 + "e8", "lava", 0)])
+try:
+    _ft = ta._field_threats()
+    check("the average opponent is every archetype players field, by PLAYERS",
+          [(t["archetype"], round(t["likelihood"], 3)) for t in _ft]
+          == [("hog", round(80 / 100, 3)), ("golem", round(19 / 100, 3)), ("xbow", round(1 / 100, 3))],
+          str([(t["archetype"], t["likelihood"]) for t in _ft]))
+    check("...at the archetype level: no list, so no version cell is read",
+          all(t["cards"] == [] for t in _ft) and abs(sum(t["likelihood"] for t in _ft) - 1.0) < 1e-9)
+    ta.FIELD_MIN_SHARE, _keep = 0.05, ta.FIELD_MIN_SHARE
+    check("...an archetype almost nobody fields is left out, and the rest still sums to one",
+          [t["archetype"] for t in ta._field_threats()] == ["hog", "golem"]
+          and abs(sum(t["likelihood"] for t in ta._field_threats()) - 1.0) < 1e-9)
+    ta.FIELD_MIN_SHARE = _keep
+finally:
+    ta._duel_index = _saved_di2
+_saved_ft = ta._field_threats
+ta._field_threats = lambda: (_ for _ in ()).throw(RuntimeError("no field"))
+try:
+    check("a field that cannot be read rates nothing and breaks nothing", ta._set_field_rates([_fc]) == 0)
+finally:
+    ta._field_threats = _saved_ft
 
 _fam = ta._family("hog", HOG)
 check("a named archetype is its own family", _fam == ("hog", ta.dcx._label("hog")), str(_fam))
@@ -1073,6 +1143,12 @@ try:
     _c0 = _rich_pool[0]
     check("the archetype half of a rate is worked once and remembered on the candidate",
           len(_c0.memo) >= 1 and _fx_ctx.fx.arch_half(_c0, "golem") is _fx_ctx.fx.arch_half(_c0, "golem"))
+    _hog_tl = next(c for c in _rich_pool if c.key == _k(HOG))
+    _hog_tl.field = 48.5
+    _tl = ta._score(_hog_tl, _proj["threats"], None, _fx_ctx, dress=False, table=_table)
+    check("a pool row rated in the TIGHT LOOP carries its field rate too",
+          _tl is not None and _tl.get("fieldRate") == 48.5, str(_tl and _tl.get("fieldRate")))
+    _hog_tl.field = None
 
     # THE BALANCE LOG, ON BOTH SIDES OF A RATE. A stand-in for `card_balance`
     # whose drags the cases set: the Hog candidate's list, the Golem threat's.

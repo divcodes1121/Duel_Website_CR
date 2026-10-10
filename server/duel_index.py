@@ -1180,6 +1180,57 @@ def player_decks(tag: str, since: str | None = None, until: str | None = None) -
     return out
 
 
+def lists_of(tags) -> dict[str, list[int]]:
+    """`{deck key: [games, pilots]}` over every stored duel game of `tags` —
+    the lists a NAMED GROUP of players fielded in duels (Team Analysis offers
+    duel lists only from the players it was told to learn from). `{}` with no
+    usable index. Tags are matched as stored (upper case, with the `#`)."""
+    tags = sorted({str(t).strip().upper() for t in (tags or ()) if str(t).strip()})
+    if not tags or _current() is None:
+        return {}
+    per: dict[str, list] = {}
+    try:
+        con = _ro(PATH)
+        try:
+            for i in range(0, len(tags), 400):
+                chunk = tags[i:i + 400]
+                marks = ",".join("?" * len(chunk))
+                for side in ("a", "b"):
+                    for tag, deck in con.execute(
+                            f"SELECT {side}_tag, {side}_deck FROM games WHERE {side}_tag IN ({marks})",
+                            chunk):
+                        e = per.get(deck)
+                        if e is None:
+                            e = per[deck] = [0, set()]
+                        e[0] += 1
+                        e[1].add(tag)
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+    return {",".join(sorted(k.split(","))): [n, len(who)] for k, (n, who) in per.items()}
+
+
+def deck_players(limit: int = 4000) -> list[tuple[str, str, int]]:
+    """`[(deck key, win condition, players)]`, the lists most PLAYERS field
+    first, over every duel game in the index — the raw material of the
+    AVERAGE OPPONENT a list's general strength is measured against
+    (`team_analysis._field_threats`). `[]` with no usable index."""
+    if _current() is None:
+        return []
+    try:
+        con = _ro(PATH)
+        try:
+            rows = con.execute(
+                "SELECT key, wc, players FROM deck ORDER BY players DESC, key LIMIT ?",
+                (int(limit),)).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+    return [(",".join(sorted(k.split(","))), wc or "other", int(p)) for k, wc, p in rows]
+
+
 def player_results(tag: str, since: str | None = None, until: str | None = None) -> dict:
     """`{(battle_time, deck key): won}` for one player's duel games in a window.
 

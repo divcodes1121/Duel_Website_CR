@@ -196,6 +196,57 @@ printed figure something other than a rate); a counter term on their lists
 
 `plays[].share` is the PROJECTION now — the chance a deck of that family is
 what they bring — and `played` beside it is the share of their games.
+
+────────────────────────────────────────────────────────────────────────────
+4.1 (2026-10-10): A COUNTER IS SPECIFIC TO THE OPPONENT
+────────────────────────────────────────────────────────────────────────────
+
+Reported hours after 4.0: "I can still see the same decks ... Hog Earthquake
+with Musketeer and Giant Skeleton I saw against many opponents, I don't think
+it can be the same". Measured, and it was worse than reported: over 952
+opponents ONE list was on 56% of the lists of seven (63% of lists of ten), and
+three lists were on 16 of 30 live answers. A list that rates well against
+nearly everything is the answer to no opponent in particular — and part of
+what makes it rate well is who pilots it (the ladder record behind a rate is
+not adjusted for its pilots; the duel record is).
+
+Three rules, all in the CHOOSING and none in the figure printed:
+
+  * `fieldRate` — each pool list's own rate against THE AVERAGE OPPONENT
+    (every archetype duel players field, weighted by how many players field
+    it), worked once when the pool is built, at the archetype level: the same
+    evidence an opponent's own lists are rated from.
+  * `pool_lift` — per opponent, over the whole rated pool: `lift` is how much
+    MORE a list gains against them than the typical list does (a weak opponent
+    lifts every deck, so the pool's median is taken out) and `edge` is the
+    list's general strength over the typical list's.
+  * `counters` allows `ALL_ROUND` (one) row whose lift is under `MIN_LIFT`
+    (five points), and chooses every row as though it were weaker by
+    `GENERIC_WEIGHT` (half) of its edge. When too few specific counters exist
+    the list is filled with all-round decks rather than left short; a row with
+    no field rate (a teammate's own deck) is judged by none of it.
+
+WHAT WAS TRIED ON THE WAY, staged on 30 real opponents each time: a field of
+the twenty most played friendly-duel lists, then of every family's three most
+fielded lists (both rated from the version cells, a different evidence level
+from an opponent's own lists — the same two ladder lists stayed on 19-21 of 30
+answers), the raw difference without the pool's median (called nearly every
+strong list a counter to a weak opponent), and lift thresholds of 2 and 3
+(more repetition, not less).
+
+MEASURED through the production path, old rules against new, 300 friendly
+duels / 426 sides, lists of ten, the same pool for both: distinct decks
+suggested 316 -> 490, the most repeated list on 38% of opponents -> 25% (the
+next two 29% -> 15% and 13%); the cost, by the same fused rate that carries the
+pilot effect: top three -0.49 points [-0.67, -0.31], all ten -0.73, rows under
+50% against what really came 6.7% -> 10.9%. That cost is what "not the same
+decks for everybody" is worth, and it was asked for.
+
+DUEL LISTS come from the named group only (`team_analysis.duel_catalogue`):
+the list that prompted this — Hog, Earthquake, Giant Skeleton — had no game by
+a CRL player.
+
+Lists are TEN rows on Team Analysis and the Deck Counter (asked for by name).
 """
 
 from __future__ import annotations
@@ -208,7 +259,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-4.0"
+BRAIN_VERSION = "team-scout-4.1"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -1501,9 +1552,71 @@ WORST_FLOOR = 45.0
 WORST_SHARE = 0.05
 HOLE_COST = 3.0
 
+#: A row is a counter to THIS opponent when its rate against them is at least
+#: this many points above the list's own rate against the field (`fieldRate`).
+#: Under it the deck is ALL-ROUND: good against them the way it is good
+#: against everybody. See the module docstring (4.1) for the measurement.
+MIN_LIFT = 5.0
+
+#: All-round rows a list may hold. One: the strongest deck there is belongs on
+#: the list even when it is everybody's answer, and it leads it.
+ALL_ROUND = 1
+
+#: HOW MUCH OF A LIST'S GENERAL EDGE IS DISCOUNTED WHEN CHOOSING (not in the
+#: figure printed). A list's `edge` is its rate against the average opponent
+#: over the pool's typical one; part of it is the deck and part is who pilots
+#: it — the ladder record behind a rate is not adjusted for its pilots. Half.
+GENERIC_WEIGHT = 0.5
+
 
 def _rate(row) -> float:
     return float(row.get("expectedWinRate") or 0.0)
+
+
+def lift_of(row) -> float | None:
+    """Points a row's rate against this opponent is above its own rate against
+    the field. None when the row carries no field rate (a teammate's own
+    deck): nothing is known about how it does in general."""
+    if row.get("lift") is not None:
+        # Worked by the caller against the whole pool (`pool_lift`).
+        return float(row["lift"])
+    f = row.get("fieldRate")
+    if f is None:
+        return None
+    return round(_rate(row) - float(f), 1)
+
+
+#: Rows with a field rate a pool needs before its typical lift is trusted.
+POOL_LIFT_MIN = 30
+
+
+def pool_lift(rows) -> float | None:
+    """Stamp `lift` on every row of a rated POOL, relative to the pool.
+
+    A weak opponent lifts EVERY deck over its field rate, and a strong one
+    lowers every deck — staged on 30 real opponents (mostly clan-war players,
+    weaker than the friendly-duel field), the raw difference called nearly
+    every strong list a counter and the same two lists sat on 20 of 30
+    answers. What makes a deck a counter to THIS opponent is how much MORE it
+    gains against them than the typical deck does, so the pool's median
+    difference is taken out. Returns that median, or None when fewer than
+    `POOL_LIFT_MIN` rows carry a field rate (then no row is stamped).
+    """
+    diffs = sorted(_rate(r) - float(r["fieldRate"]) for r in rows or []
+                   if r.get("fieldRate") is not None)
+    if len(diffs) < POOL_LIFT_MIN:
+        return None
+    mid = len(diffs) // 2
+    shift = diffs[mid] if len(diffs) % 2 else (diffs[mid - 1] + diffs[mid]) / 2.0
+    fields = sorted(float(r["fieldRate"]) for r in rows if r.get("fieldRate") is not None)
+    mid_f = fields[len(fields) // 2] if len(fields) % 2 else (
+        fields[len(fields) // 2 - 1] + fields[len(fields) // 2]) / 2.0
+    for r in rows:
+        if r.get("fieldRate") is not None:
+            r["lift"] = round(_rate(r) - float(r["fieldRate"]) - shift, 1)
+            # The list's GENERAL edge: its field rate over the typical list's.
+            r["edge"] = round(float(r["fieldRate"]) - mid_f, 1)
+    return round(shift, 2)
 
 
 def worst_case(vs, plays, *, share=WORST_SHARE):
@@ -1560,6 +1673,13 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         c["worst"] = worst_case(c["vs"], plays)
         if c["worst"] is not None and c["worst"]["rate"] < WORST_FLOOR:
             c["_v"] -= HOLE_COST
+        lift = lift_of(c)
+        if lift is not None:
+            c["lift"] = round(lift, 1)
+        if c.get("edge") is not None and c["edge"] > 0:
+            c["_v"] -= GENERIC_WEIGHT * float(c["edge"])
+        # ALL-ROUND: rated, and not specifically better against them.
+        c["_round"] = lift is not None and lift < MIN_LIFT
         pool.append(c)
     if not pool:
         return []
@@ -1568,6 +1688,7 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     chosen: list[dict] = []
     subs: set[frozenset] = set()
     count: dict[str, int] = {}
+    relaxed = [False]
 
     def fits(r, skip=None) -> bool:
         """Whether `r` may join the list (ignoring the row `skip`, about to go)."""
@@ -1575,6 +1696,10 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         n = count.get(a, 0) - (1 if skip is not None and (skip.get("archetype") or "") == a else 0)
         if n >= PER_ARCHETYPE:
             return False
+        if r["_round"] and not relaxed[0]:
+            held = sum(1 for c in chosen if c["_round"] and c is not skip)
+            if held >= ALL_ROUND:
+                return False
         mine = _subsets(frozenset(r.get("cards") or []), SAME_DECK_OVERLAP)
         if skip is None:
             return not any(s in subs for s in mine)
@@ -1610,6 +1735,18 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         if r is lead or _rate(r) < FLOOR_RATE or not fits(r):
             continue
         take(r)
+    if len(chosen) < limit:
+        # TOO FEW SPECIFIC COUNTERS EXIST. The list is filled with the
+        # strongest all-round decks rather than left short: the rule is there
+        # to make room for counters, not to withhold good decks.
+        relaxed[0] = True
+        listed = {id(c) for c in chosen}
+        for r in pool:
+            if len(chosen) >= limit:
+                break
+            if id(r) in listed or r is lead or _rate(r) < FLOOR_RATE or not fits(r):
+                continue
+            take(r)
     if not chosen:
         # Nothing clears the floor. One row, at its own figure, says so better
         # than an empty board that reads as "no data".
@@ -1664,6 +1801,8 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     out = head + tail
     for c in out:
         del c["_v"]
+        if c.pop("_round"):
+            c["allRound"] = True
     return out
 
 

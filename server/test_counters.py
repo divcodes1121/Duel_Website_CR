@@ -350,6 +350,91 @@ check("the cost is not written onto the row", all("_v" not in r for r in two)
       and two[0]["recommendationScore"] == holed["recommendationScore"])
 
 
+# ── 2b. A counter is SPECIFIC to the opponent (4.1) ────────────────────────
+
+print(NL + "one all-round deck at most; every other row has to beat THIS opponent")
+
+FP = [{"family": "giant", "share": 1.0}]
+
+
+def frow(name, arch, rate, field):
+    r = row(name, arch, {"giant": rate}, {"giant": 1.0})
+    if field is not None:
+        r["fieldRate"] = field
+    return r
+
+
+check("lift is the rate against them over the list's own rate against the field",
+      ts.lift_of(frow("a", "x", 62.0, 55.5)) == 6.5 and ts.lift_of(frow("a", "x", 62.0, None)) is None)
+generic = [frow("g1", "a1", 66, 64), frow("g2", "a2", 65, 63), frow("g3", "a3", 64, 62)]
+specific = [frow("s1", "b1", 61, 52), frow("s2", "b2", 60, 50), frow("s3", "b3", 59, 54)]
+weak = [frow("w1", "c1", 58, 55)]                                   # lift 3: all-round too
+pick = ts.counters(generic + specific + weak, FP, limit=4)
+check("the strongest all-round deck is on the list, and only that one",
+      [r["name"] for r in pick] == ["g1", "s1", "s2", "s3"], str([r["name"] for r in pick]))
+check("it is marked, with every row's lift published",
+      [bool(r.get("allRound")) for r in pick] == [True, False, False, False]
+      and [r["lift"] for r in pick] == [2.0, 9.0, 10.0, 5.0], str([(r.get("allRound"), r.get("lift")) for r in pick]))
+check("exactly at the lift is a counter", ts.MIN_LIFT == 5.0 and not pick[3].get("allRound"))
+check("the list still reads in the order of the figure",
+      [r["expectedWinRate"] for r in pick] == sorted((r["expectedWinRate"] for r in pick), reverse=True))
+fill = ts.counters(generic + specific[:1], FP, limit=4)
+check("with too few specific counters the list is FILLED with all-round decks, not left short",
+      sorted(r["name"] for r in fill) == ["g1", "g2", "g3", "s1"], str([r["name"] for r in fill]))
+own = [frow("mine1", "d1", 66, None), frow("mine2", "d2", 65, None)]
+mix = ts.counters(own + generic, FP, limit=3)
+check("a row with no field rate (a teammate's own deck) is not judged by it",
+      [r["name"] for r in mix] == ["mine1", "g1", "mine2"] or
+      sorted(r["name"] for r in mix) == ["g1", "mine1", "mine2"], str([r["name"] for r in mix]))
+check("...and is neither marked nor given a lift",
+      all("allRound" not in r and "lift" not in r for r in mix if r["name"].startswith("mine")))
+led = ts.counters(generic + specific, FP, limit=3, first=generic[2])
+check("a squad's pick leads even when it is all-round, and uses the one place",
+      led[0]["name"] == "g3" and [r["name"] for r in led[1:]] == ["s1", "s2"], str([r["name"] for r in led]))
+check("no private field leaks, and the caller's rows are untouched",
+      all("_round" not in r and "_v" not in r for r in pick)
+      and all("allRound" not in r and "lift" not in r for r in generic + specific))
+check("one all-round row is the rule", ts.ALL_ROUND == 1)
+
+# RELATIVE TO THE POOL: a weak opponent lifts every deck.
+big = [frow(f"p{i}", f"z{i}", 60 + (i % 5), 50) for i in range(40)]     # rate - field: 10..14
+big += [frow("counter", "zz", 70, 50), frow("plain", "zy", 61, 55)]
+shift = ts.pool_lift(big)
+by_name = {r["name"]: r for r in big}
+check("the pool's typical gain is taken out of every list's lift",
+      shift == 12.0 and by_name["counter"]["lift"] == 8.0 and by_name["p0"]["lift"] == -2.0
+      and by_name["plain"]["lift"] == -6.0, f"{shift} {by_name['counter']['lift']}")
+check("a list's general edge is its field rate over the typical list's",
+      by_name["plain"]["edge"] == 5.0 and by_name["counter"]["edge"] == 0.0)
+check("the stamped lift is the one the list is chosen by",
+      ts.lift_of(by_name["counter"]) == 8.0 and ts.lift_of(by_name["p0"]) == -2.0)
+small = [frow("a", "x", 60, 50), frow("b", "y", 61, 50)]
+check("a pool too small to have a typical list is left alone",
+      ts.pool_lift(small) is None and all("lift" not in r and "edge" not in r for r in small)
+      and ts.POOL_LIFT_MIN == 30)
+mixed_pool = [frow(f"q{i}", f"y{i}", 60, 50) for i in range(30)] + [frow("own", "o", 66, None)]
+ts.pool_lift(mixed_pool)
+check("a row with no field rate is not stamped, and does not move the pool's typical gain",
+      "lift" not in mixed_pool[-1] and "edge" not in mixed_pool[-1] and mixed_pool[0]["lift"] == 0.0)
+
+# A LIST'S GENERAL EDGE IS DISCOUNTED WHEN CHOOSING, never in the figure.
+strong = dict(frow("generic", "g", 64, 60), lift=9.0, edge=8.0)      # chosen as 64 - 4 = 60
+sharp = dict(frow("sharp", "s", 62, 50), lift=9.0, edge=0.0)         # chosen as 62
+one = ts.counters([strong, sharp], FP, limit=1)
+check("a generally strong list is chosen as though weaker by half its edge",
+      one[0]["name"] == "sharp" and ts.GENERIC_WEIGHT == 0.5, one[0]["name"])
+far = dict(frow("generic", "g", 70, 60), lift=9.0, edge=8.0)         # 70 - 4 = 66
+check("...which a big enough margin still beats",
+      ts.counters([far, sharp], FP, limit=1)[0]["name"] == "generic")
+weak_edge = dict(frow("under", "u", 61.5, 50), lift=9.0, edge=-6.0)
+check("a list weaker than typical in general is not rewarded for it",
+      ts.counters([weak_edge, sharp], FP, limit=1)[0]["name"] == "sharp")
+both = ts.counters([strong, sharp], FP)
+check("the figure, the score and the order shown are untouched by the discount",
+      [r["name"] for r in both] == ["generic", "sharp"]
+      and both[0]["expectedWinRate"] == 64.0 and both[0]["recommendationScore"] == strong["recommendationScore"])
+
+
 # ── 3. The same rows, per family ────────────────────────────────────────────
 
 print(NL + "the best counters to each family they play")

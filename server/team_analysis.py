@@ -154,6 +154,16 @@ try:
 except Exception:  # noqa: BLE001 - deployment shape
     _balance = None
 
+#: THE NAMED GROUPS OF PLAYERS (`duel_read_train.load_cohorts`, a file of
+#: player tags kept on the server only). Team Analysis and Coach Assist offer
+#: DUEL lists only from the group named in `DUEL_POOL_COHORT`. Soft: without
+#: the reader, or without the group, the whole duel catalogue is the pool and
+#: the pool's stats say so.
+try:
+    from duel_read_train import COHORTS_PATH as _COHORTS_PATH, load_cohorts as _load_cohorts
+except Exception:  # noqa: BLE001 - deployment shape
+    _COHORTS_PATH, _load_cohorts = None, None
+
 #: The composition veto, if the deployment has it. IMPORTED SOFTLY, the same
 #: rule `coach.tune` follows: `deck_harmony` loads three JSON files at import
 #: and a deployment missing `cardRoles.json` must cost the variant filter and
@@ -238,7 +248,35 @@ COMFORT_WEIGHT = 1.5
 #: not shown. `scout.diversify` decides the actual count between
 #: `MIN_RECOMMENDATIONS` and this; it is allowed to come back short rather than
 #: pad the list with decks nobody should prepare.
-TOP_N = scout.MAX_RECOMMENDATIONS
+TOP_N = 10
+
+#: WHOSE DUEL LISTS MAY BE SUGGESTED (2026-10-10, asked for by name: "whatever
+#: duel deck you suggest, make sure it's from the top CRL player and not from
+#: some random players"). A duel-catalogue list is offered only when players
+#: of this group fielded it in at least `DUEL_POOL_MIN_GAMES` duel games.
+#: Measured when it was set: 1,706 catalogue lists, 265 ever fielded by the
+#: group, 130 at three games or more — and the Hog / Earthquake / Giant
+#: Skeleton list that sat on 16 of 30 opponents' lists had none.
+DUEL_POOL_COHORT = (os.environ.get("CLASH_DUEL_POOL_COHORT") or "crl").strip().lower()
+DUEL_POOL_MIN_GAMES = 3
+
+#: THE FIELD a list's general strength is measured against (`fieldRate`) is
+#: THE AVERAGE OPPONENT, AT THE ARCHETYPE LEVEL: every win condition duel
+#: players field, weighted by how many PLAYERS field it. By players, not
+#: games: a projection is tempered and summed to one for each player, so an
+#: archetype counts once for everybody who owns it.
+#:
+#: AT THE ARCHETYPE LEVEL ON PURPOSE, and two other fields were staged on 30
+#: real opponents first. (1) The twenty most played friendly-duel lists, then
+#: (2) every family's three most fielded lists: both left the same two ladder
+#: lists on 19-21 of 30 answers. A field of popular LISTS is rated from the
+#: version cells — list against list, duel games pilot-adjusted — while most
+#: of an opponent's own lists are in no cell and are rated from the list's
+#: record against the ARCHETYPE, which is where a list piloted by strong
+#: players reads high against everything. A baseline has to be made of the
+#: same evidence as the rate it is taken from, or the difference measures the
+#: evidence and not the matchup.
+FIELD_MIN_SHARE = 0.01
 
 #: Per teammate, on the match-plan board — AND the Coach Roster's What-to-play
 #: tab, which reads `perPlayer[0]` and is where this number is actually felt.
@@ -247,7 +285,7 @@ TOP_N = scout.MAX_RECOMMENDATIONS
 #: the account holder's request (2026-09-21). The board stays readable at ten
 #: teammates because every row is COLLAPSED until opened — the seven decks are
 #: behind one row per player, not seven rows each on screen at once.
-PER_PLAYER_TOP_N = 7
+PER_PLAYER_TOP_N = 10
 
 #: How many decks a SCOUT folder recommends.
 #:
@@ -262,7 +300,7 @@ PER_PLAYER_TOP_N = 7
 #:
 #: The per-teammate board keeps its own, smaller number — see
 #: `PER_PLAYER_TOP_N`, whose argument was about the board and not the model.
-SCOUT_TOP_N = scout.MAX_RECOMMENDATIONS
+SCOUT_TOP_N = 10
 
 #: Opponent decks shown on the left of a folder, and the spread they weight.
 #: Their long tail is noise for this purpose: a deck played once tells you
@@ -977,9 +1015,14 @@ class _Candidate:
     """
 
     __slots__ = ("cards", "key", "archetype", "name", "art", "inferred", "owner",
-                 "games", "wins", "win_rate", "use_rate", "profile", "origin", "memo")
+                 "games", "wins", "win_rate", "use_rate", "profile", "origin", "memo",
+                 "field")
 
     def __init__(self, deck: dict, owner: dict | None, profile: "_DeckProfile"):
+        # THE LIST'S OWN RATE AGAINST THE FIELD, for a pool candidate
+        # (`_set_field_rates`); None for a teammate's deck, about which
+        # nothing general is known.
+        self.field = None
         # WHERE THE LIST COMES FROM, for a population candidate: "duel" (the
         # duel catalogue) or "ladder" (a vetted seed). None for a teammate's.
         self.origin = deck.get("origin")
@@ -1234,7 +1277,105 @@ def _counter_key() -> tuple | None:
                 _duel_index.status() or {}).get("builtAt")
     except Exception:  # noqa: BLE001
         build = None
-    return (stamp, build)
+    return (stamp, build, _cohort_stamp())
+
+
+def _cohort_stamp():
+    """When the group file last changed: a new list of players is a new pool."""
+    try:
+        return os.path.getmtime(_COHORTS_PATH) if _COHORTS_PATH else None
+    except OSError:
+        return None
+
+
+_GROUP_LISTS: dict = {"key": None, "lists": None}
+
+
+def _group_lists() -> dict | None:
+    """`{deck key: [games, pilots]}` for the duel lists of `DUEL_POOL_COHORT`,
+    or None when there is no such group (then every catalogue list is offered).
+    Read once per duel build and per change of the group file."""
+    if _load_cohorts is None or _duel_index is None or not DUEL_POOL_COHORT:
+        return None
+    try:
+        key = ((_duel_index.status() or {}).get("buildId"), _cohort_stamp(), DUEL_POOL_COHORT)
+        if _GROUP_LISTS["key"] == key:
+            return _GROUP_LISTS["lists"]
+        tags = (_load_cohorts() or {}).get(DUEL_POOL_COHORT)
+        lists = _duel_index.lists_of(tags) if tags else None
+        _GROUP_LISTS.update(key=key, lists=lists or None)
+        return _GROUP_LISTS["lists"]
+    except Exception:  # noqa: BLE001 - the whole catalogue is the fallback
+        traceback.print_exc()
+        return None
+
+
+def duel_catalogue() -> tuple[list[dict], str]:
+    """`(the duel lists that may be suggested, whose they are)`.
+
+    The duel catalogue narrowed to the lists the named group fielded
+    (`DUEL_POOL_MIN_GAMES`), labelled with the group's name — or the whole
+    catalogue, labelled `everyone`, when there is no group to narrow by. ONE
+    function for the counter pool and for the duel context Coach Assist reads,
+    so the two cannot offer different players' decks.
+    """
+    try:
+        catalogue = _duel_index.catalogue() if _duel_index is not None else []
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        catalogue = []
+    group = _group_lists()
+    if not group:
+        return catalogue, "everyone"
+    kept = [d for d in catalogue
+            if (group.get(d.get("key")) or [0])[0] >= DUEL_POOL_MIN_GAMES]
+    return kept, DUEL_POOL_COHORT
+
+
+def _field_threats() -> list[dict]:
+    """The average opponent as a projection over archetypes (sums to 1)."""
+    if _duel_index is None:
+        return []
+    mass: dict[str, float] = {}
+    for _key, wc, players in _duel_index.deck_players():
+        if players > 0:
+            arch = wc or "other"
+            mass[arch] = mass.get(arch, 0.0) + players
+    total = sum(mass.values()) or 1.0
+    out = [{"cards": [], "archetype": arch, "family": arch, "likelihood": m / total,
+            "key": "archetype:" + arch}
+           for arch, m in mass.items() if m / total >= FIELD_MIN_SHARE]
+    kept = sum(t["likelihood"] for t in out) or 1.0
+    for t in out:
+        t["likelihood"] /= kept
+    out.sort(key=lambda t: (-t["likelihood"], t["key"]))
+    return out
+
+
+def _set_field_rates(cands: list["_Candidate"]) -> int:
+    """Put each pool candidate's rate against the field on it (`field`).
+    Returns how many were rated. Any failure leaves them None, and a list of
+    rows with no field rate is chosen exactly as before 4.1."""
+    try:
+        threats = _field_threats()
+        if not threats or _fusion is None:
+            return 0
+        ctx = _DuelContext()
+        ctx.fx = _FusionContext(ctx, dcx._snap())
+        if ctx.on:
+            ctx.prefetch([c.cards for c in cands])
+        table = ctx.fx.threat_table(threats)
+        done = 0
+        for c in cands:
+            row = scout.score_rates(ctx.fx.lean_rates(c, table), cards=c.cards,
+                                    archetype=c.archetype, key=c.key)
+            if row and row["threatCovered"] >= 0.5:
+                c.field = row["expectedWinRate"]
+                done += 1
+        return done
+    except Exception:  # noqa: BLE001 - a baseline is extra; the pool stands
+        traceback.print_exc()
+        return 0
 
 
 def _build_counter_pool(key: tuple) -> dict:
@@ -1284,10 +1425,11 @@ def _build_counter_pool(key: tuple) -> dict:
                 out.append(c)
     n_seeds = len(out)
 
-    catalogue = []
+    catalogue, duel_from = [], "everyone"
     try:
         if _duel_index is not None and _duel_index.available():
-            catalogue = _duel_index.catalogue()
+            # ONLY THE NAMED GROUP'S DUEL LISTS (`duel_catalogue`).
+            catalogue, duel_from = duel_catalogue()
     except Exception:  # noqa: BLE001
         traceback.print_exc()
     todo = []
@@ -1326,8 +1468,12 @@ def _build_counter_pool(key: tuple) -> dict:
         # mid-upgrade still has something to suggest.
         out = list(_scout_candidates())
         n_seeds = len(out)
+    # EACH LIST'S OWN RATE AGAINST THE FIELD, once a pool: what `counters`
+    # tells a counter to THIS opponent from an all-round deck by.
+    rated = _set_field_rates(out)
     return {"key": key, "cands": out, "building": False,
-            "stats": {"ladder": n_seeds, "duel": len(out) - n_seeds, "slotGaps": gaps}}
+            "stats": {"ladder": n_seeds, "duel": len(out) - n_seeds, "slotGaps": gaps,
+                      "duelFrom": duel_from, "fieldRated": rated}}
 
 
 def _counter_candidates() -> list["_Candidate"]:
@@ -1447,6 +1593,8 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None,
                          if card.owner else None)
         if card.origin:
             base["origin"] = card.origin
+        if card.field is not None:
+            base["fieldRate"] = card.field
         return base
     base = scout.score(
         lambda arch: card.against(arch, snap),
@@ -1486,6 +1634,8 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None,
                     if card.owner else None)
     if card.origin:
         out["origin"] = card.origin
+    if card.field is not None:
+        out["fieldRate"] = card.field
     if not dress:
         return out
     return _dress(out, card, threats)
@@ -1579,7 +1729,9 @@ class _DuelContext:
 
     def __init__(self):
         self.on = bool(_duel and _duel_index and _duel_index.available())
-        catalogue = _duel_index.catalogue() if self.on else []
+        # ONLY THE NAMED GROUP'S DUEL LISTS are offered (`duel_catalogue`) —
+        # here for the duel picks Coach Assist draws from this context.
+        catalogue, self.duel_from = duel_catalogue() if self.on else ([], "everyone")
         # A DUEL PICK IS A SUGGESTION TOO, so it is drawn from lists that can
         # field all three special slots — the rule `_scout_candidates` applies
         # to the ladder pool. Measured: 99 of 1,972 catalogue lists cannot.
@@ -2115,7 +2267,7 @@ def _own_duel_rows(mate: dict, ctx: _DuelContext | None, projection: dict,
 #: What the SELECTION wrote on a row, carried over when the row is rated in
 #: full for the screen.
 _CHOSEN_KEYS = ("answers", "fill", "squadPick", "covers", "known", "personalScore", "rate",
-                "worst")
+                "worst", "lift", "allRound")
 
 
 def _finish(rows: list[dict], by_key: dict, threats: list[dict],
@@ -2318,6 +2470,9 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             if row:
                 rows.append(row)
                 by_key.setdefault(card.key, card)
+        # HOW MUCH MORE each list gains against THIS opponent than the typical
+        # list does (`scout.pool_lift`), on the whole pool before any cut.
+        scout.pool_lift(rows)
         rows.sort(key=lambda r: (-r["score"], r["key"]))
         return _distinct(rows)
 
@@ -2596,6 +2751,7 @@ def _combined(red: list[dict], cards: list[_Candidate],
         if row:
             scored.append(row)
             by_key.setdefault(c.key, c)
+    scout.pool_lift(scored)
     scored.sort(key=lambda r: (-r["score"], r["key"]))
     recommended = scout.counters(_distinct(scored), plays, limit=SCOUT_TOP_N)
 

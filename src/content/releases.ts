@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-10-specific-counters',
+    date: '2026-10-10',
+    kind: 'improved',
+    title: 'Ten decks, chosen for that opponent',
+    body: [
+      'Deck Counter and Team Analysis now list up to ten decks, and they are no longer the same few for everybody. One deck that is strong against anyone may lead a list; every other deck has to do clearly better against that opponent than it does in general. Replayed on 300 real duels, the deck that used to appear on 38% of all lists now appears on 25%, and half again as many different decks are suggested.',
+      'Decks marked “Duel deck” now come only from lists that top competitive players have used in their own duels.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-10-likely-to-bring',
     date: '2026-10-10',
     kind: 'improved',

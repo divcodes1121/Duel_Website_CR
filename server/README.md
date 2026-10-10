@@ -2028,6 +2028,81 @@ twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
 
 
+## Ten decks, specific to the opponent (`team_scout` 4.1, 2026-10-10)
+
+Reported hours after 4.0: *"I can still see the same decks ... Hog Earthquake with
+Musketeer and Giant Skeleton I saw against many opponents, I don't think it can be
+the same"*, *"whatever duel deck you suggest, make sure it's from the top CRL
+player and not from some random players"*, *"we can suggest 10 decks max"*.
+
+**Measured first, and it was worse than reported.** Over 952 opponents one list
+was on 56% of the lists of seven; on 30 live answers three lists were on 16 each,
+and the Hog / Earthquake / Giant Skeleton duel list had **no game by a CRL
+player**. A list that rates well against nearly everything is the answer to no
+opponent in particular, and part of what makes it rate well is who pilots it:
+the ladder record behind a rate is not adjusted for its pilots.
+
+What changed (brain `team-scout-4.1`):
+
+- **Duel lists come from the named group only.** `team_analysis.duel_catalogue()`
+  narrows the duel catalogue to lists the `crl` group (`CLASH_DUEL_POOL_COHORT`,
+  the server's `.duel_cohorts.json`) fielded in at least 3 duel games: 1,706
+  lists -> **130**. One function for the counter pool and for the duel context
+  Coach Assist reads. No group = the whole catalogue, and the pool's stats say
+  `duelFrom`.
+- **A counter is specific to the opponent.** Each pool list carries `fieldRate`,
+  its rate against the average opponent (every archetype duel players field,
+  weighted by players, at the archetype level). Per opponent, `scout.pool_lift`
+  stamps `lift` (how much MORE the list gains against them than the typical
+  list does) and `edge` (its general strength). `scout.counters` allows **one**
+  all-round row (lift under 5), chooses every row as though weaker by half its
+  edge, and fills with all-round decks only when too few counters exist. None
+  of it changes the figure printed or the order shown.
+- **Ten rows** on every Team Analysis list and the Deck Counter (`TOP_N`,
+  `PER_PLAYER_TOP_N`, `SCOUT_TOP_N`); `team_scout`'s own default stays seven for
+  `coach_daily`.
+
+Staged on 30 real opponents four times before it held: a field of popular
+friendly-duel LISTS, then of every family's top lists (both are rated from the
+version cells — a different evidence level from an opponent's own lists — and
+the same two ladder lists stayed on 19-21 of 30 answers), the raw difference
+without the pool's median (a weak opponent made every strong list "a counter"),
+and lower lift thresholds (more repetition, not less).
+
+| Old rules against new, production path, 300 friendly duels / 426 sides, ten rows | Before | After |
+|---|---|---|
+| Distinct decks suggested (of 4,260 rows) | 316 | **490** |
+| The most repeated list is on | 38% of lists | **25%** |
+| The next two | 29%, 29% | 15%, 13% |
+| Top three against what was really brought | 59.17 | 58.69 (**-0.49** [-0.67, -0.31]) |
+| All ten | 58.19 | 57.47 (-0.73) |
+| Rows under 50% against what came | 6.7% | 10.9% |
+
+**The cost is real and was accepted for what was asked:** half a point on the
+top three by the same fused rate (which itself carries the pilot effect, so the
+true cost is smaller), and a weaker tail — a specific counter is a specialist,
+and on the live check one opponent's list held two rows at 32% and 36% against
+an archetype they are 5%+ likely to bring (the chips under the deck show it).
+
+Live 12:38 UTC (backups `*.bak-20261010-123855-prespecific`): three real players
+got three different lists of ten, pool 781 (651 ladder + 130 duel), one
+all-round row each; a scouting report and a 1v2 plan answer in 4-6 s cold.
+Staged: 12 players' lists held 86 distinct decks in 120 rows (4.0: 60 in 112),
+one opponent 0.27 s, 12v12 2.3 s warm. `test_counters` 96 -> 116,
+`test_team_analysis` 228 -> 241, `test_duel_index` 71 -> 76; **19 planted
+faults caught** (one test too weak first). 4,647 Python checks / 78 suites
+(only `test_ml_21a`), 1,673 vitest / 69.
+
+**"The scouting report is still stale":** the server answers a scouting report
+with the same engine as a match plan (checked: brain 4.1, ten rows). What made
+it look unchanged was the content — the same few all-round decks under every
+opponent — which is what this change removes. A report opened from **Saved** is
+a snapshot of the day it was saved; run it again for today's lists.
+
+**Not done:** no browser pass after 4.1 (the markup did not change; the API was
+probed); Coach Assist's own-deck suggestions are untouched, only its population
+duel picks narrowed to the group; the win model still learns from every duel.
+
 ## The wide read, the balance log and the living card manual (`team_scout` 4.0, `card_balance.py`, 2026-10-10)
 
 Measured read-only on the server the same day, before anything was built. 700

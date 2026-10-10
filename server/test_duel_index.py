@@ -226,6 +226,22 @@ try:
           str(di.player_wcs("#O00")))
     check("a stranger has none", di.player_decks("#NOBODY") == [])
 
+    # THE LISTS A NAMED GROUP FIELDED, and the field one mode plays.
+    grp = di.lists_of(["#P0", " #p9 ", "#NOBODY"])
+    check("a group's duel lists: games and how many of the group fielded each",
+          grp[di.deck_key(MORTAR)][0] >= 4 and grp[di.deck_key(MORTAR)][1] == 1
+          and di.deck_key(HOG_N) in grp, str({k[:14]: v for k, v in grp.items()}))
+    check("...only theirs", di.deck_key(HOG_X) not in grp)
+    check("...and nobody is nothing", di.lists_of([]) == {} and di.lists_of(["#NOBODY"]) == {})
+    fld = di.deck_players()
+    by = {k: (wc, p) for k, wc, p in fld}
+    check("the lists most players field come first, with their win condition",
+          [p for _k, _wc, p in fld] == sorted((p for _k, _wc, p in fld), reverse=True)
+          and by[di.deck_key(MORTAR)][0] == "mortar" and by[di.deck_key(MORTAR)][1] >= 3,
+          str(fld[:3]))
+    check("...every list of the index, capped by the limit",
+          len(di.deck_players(limit=2)) == 2 and len(fld) > 2)
+
     # PER-GAME RESULTS (`player_results`) — what a `battles` row cannot say
     # about a native duel, and what the duel read's record with a deck is
     # counted from. Keyed by the duel's own stamp and the deck.
