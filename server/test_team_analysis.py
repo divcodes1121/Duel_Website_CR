@@ -841,6 +841,24 @@ try:
     check("a catalogue list that cannot fill all three special slots is skipped, and counted",
           ctx.slot_gaps == 1 and all(d["key"] != _k(DUEL_SHORT) for d in ctx.catalogue),
           str(ctx.slot_gaps))
+    # THE DUEL CATALOGUE IS IN THE COUNTER POOL (3.0). It was a separate list
+    # of "picks" pinned under the #1 whatever the list's own figure said; the
+    # account holder asked for the duel decks to be used ("they have so many
+    # good decks"), and for decks at a good percentage — so a duel list is a
+    # candidate like any other and earns its row on the one figure.
+    ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 1000.0}
+    ta._SCOUT_POOL = None
+    ta._reset_counter_pool()
+    _pool_now = ta._counter_candidates()
+    check("the duel catalogue's lists are in the counter pool, marked by source",
+          {c.key for c in _pool_now if c.origin == "duel"} == {_k(DUEL_A), _k(DUEL_B), _k(DUEL_C)},
+          str(sorted(c.origin or "-" for c in _pool_now)))
+    check("the list that cannot fill three slots is not in it",
+          all(c.key != _k(DUEL_SHORT) for c in _pool_now))
+    check("the pool is kept between requests", ta._counter_candidates() is _pool_now)
+    check("and says how many lists it holds from each source",
+          ta.counter_pool_stats().get("duel") == 3, str(ta.counter_pool_stats()))
+
     base = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, None)
     duel_f = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, ctx)
     d = duel_f["duel"]
@@ -851,16 +869,20 @@ try:
           d["weight"] == 0.0 and d["theirGames"] == 0, str(d))
 
     rows = {r["owner"]["tag"]: r for r in duel_f["perPlayer"]}
-    base_rows = {r["owner"]["tag"]: r for r in base["perPlayer"]}
-    check("every list keeps its #1 — the squad plan's pick is a squad decision",
-          all(rows[t]["decks"][0]["key"] == base_rows[t]["decks"][0]["key"] for t in rows))
+    check("every list leads with the squad's pick for that teammate",
+          all(r["decks"] and r["decks"][0].get("squadPick") for r in rows.values()))
     check("no list grows past seven", all(len(r["decks"]) <= ta.PER_PLAYER_TOP_N for r in rows.values()))
+    # THE ORDER IS THE FIGURE PRINTED. A list used to run 66.8, 43.8, 57.5,
+    # 63.3 on the live service: a duel pick held at #2 whatever it scored.
+    check("below the #1 every list reads in the order of the figure printed",
+          all(all(a["expectedWinRate"] >= b["expectedWinRate"]
+                  for a, b in zip(r["decks"][1:], r["decks"][2:]))
+              for r in rows.values()),
+          str({t: [x["expectedWinRate"] for x in r["decks"]] for t, r in rows.items()}))
+    check("below the #1 nobody is offered a deck expected to lose",
+          all(x["expectedWinRate"] >= ts.FLOOR_RATE
+              for r in rows.values() for x in r["decks"][1:]))
     picked = {t: [x for x in r["decks"] if x.get("duelPick")] for t, r in rows.items()}
-    check("every teammate is offered duel-proven decks", all(picked[t] for t in rows),
-          str({t: len(v) for t, v in picked.items()}))
-    check("picks sit directly under the #1",
-          all(all(i in (1, 2) for i, x in enumerate(r["decks"]) if x.get("duelPick"))
-              for r in rows.values()))
     own = [x for x in picked["#B2"] if x["duelPick"] == dbr.PICK_OWN]
     check("a teammate's own proven duel deck comes back as THEIRS",
           own and own[0]["owner"]["tag"] == "#B2" and own[0]["key"] == _k(OWN_D),
@@ -868,25 +890,28 @@ try:
     check("with their duel games as the practice line",
           own and own[0]["comfort"]["games"] == 10 and not own[0].get("fill"))
     pops = [x for v in picked.values() for x in v if x["duelPick"] == dbr.PICK_POPULATION]
-    check("a population pick is marked, ownerless, with the cards they play counted",
-          pops and all(x.get("fill") and x["owner"] is None and "known" in x for x in pops))
-    check("every pick carries figures that clear the gate",
-          all(x["duel"]["strong"] and x["duel"]["brain"] == dbr.DUEL_BRAIN_VERSION
-              for v in picked.values() for x in v))
-    check("every pick was scored by the ladder brain too",
+    check("a duel-catalogue row is marked, ownerless, with the cards they play counted",
+          pops and all(x.get("fill") and x["owner"] is None and "known" in x
+                       and x.get("origin") == "duel" for x in pops),
+          str([(x.get("fill"), x.get("origin")) for x in pops]))
+    check("a row the duels call strong is marked proven, and only such a row",
+          all(bool(x.get("duelProven")) == bool((x.get("duel") or {}).get("strong"))
+              for r in rows.values() for x in r["decks"]))
+    check("every duel row was rated on the list's own figure too",
           all(isinstance(x.get("expectedWinRate"), (int, float)) and "vs" in x
               for v in picked.values() for x in v))
-    sets = {t: frozenset(x["key"] for x in v if x["duelPick"] == dbr.PICK_POPULATION)
-            for t, v in picked.items()}
-    check("the population's answers are shared out, not handed to all alike",
-          len(set(sets.values())) > 1, str({t: sorted(s) for t, s in sets.items()}))
-    hog_row = next(x for x in rows["#B1"]["decks"] if x["key"] == _k(HOG))
+    hog_row = next((x for x in rows["#B1"]["decks"] if x["key"] == _k(HOG)), None)
     check("a ladder row with duel evidence carries its figures",
-          hog_row.get("duel") and not hog_row["duel"]["strong"], str(hog_row.get("duel")))
-    check("and one with none carries None, not 50%",
-          any(x.get("duel") is None for r in rows.values() for x in r["decks"]))
-    check("the squad-wide list gets its reserved slots too",
-          any(x.get("duelPick") for x in duel_f["recommended"]) and len(duel_f["recommended"]) <= ta.TOP_N)
+          hog_row is None or (hog_row.get("duel") and not hog_row["duel"]["strong"]),
+          str(hog_row and hog_row.get("duel")))
+    check("every row carries its rate against each family they play",
+          all(isinstance(x.get("vs"), dict) and x["vs"]
+              for r in rows.values() for x in r["decks"]))
+    check("the squad-wide list is in the order of its figure, and no longer than seven",
+          all(a["expectedWinRate"] >= b["expectedWinRate"]
+              for a, b in zip(duel_f["recommended"], duel_f["recommended"][1:]))
+          and len(duel_f["recommended"]) <= ta.TOP_N,
+          str([x["expectedWinRate"] for x in duel_f["recommended"]]))
     check("the short list, strongest of all, is offered to nobody",
           all(x["key"] != _k(DUEL_SHORT) for r in rows.values() for x in r["decks"])
           and all(x["key"] != _k(DUEL_SHORT) for x in duel_f["recommended"]))
@@ -909,19 +934,37 @@ try:
     check("a scouting report's picks are population picks and are not fills",
           all(not x.get("fill") for x in scout_duel["recommended"] if x.get("duelPick")))
 
+    # A SOURCE THAT CHANGES DOES NOT MAKE A BOARD WAIT: the pool in hand keeps
+    # answering while the next one is built behind it.
+    import time as _time  # noqa: E402
     ta._duel_index = types.SimpleNamespace(**{**vars(_fake_index), "available": lambda: False})
+    _stale = ta._counter_candidates()
+    check("when a source is rebuilt the pool in hand still answers", _stale is _pool_now)
+    for _ in range(200):
+        if ta._counter_candidates() is not _pool_now:
+            break
+        _time.sleep(0.01)
+    check("and the next pool replaces it, without the duel lists",
+          ta._counter_candidates() is not _pool_now
+          and all(c.origin != "duel" for c in ta._counter_candidates()),
+          str(ta.counter_pool_stats()))
+
     off_ctx = ta._DuelContext()
+    plain = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, None)
     off = ta._folder(opp, blue_roster, pool, None, ta.TOP_N, None, off_ctx)
     check("with no index the brain is off and says so", not off_ctx.on
           and off["duel"] == {"available": False})
     check("and every list is exactly the ladder brain's",
           [[x["key"] for x in r["decks"]] for r in off["perPlayer"]]
-          == [[x["key"] for x in r["decks"]] for r in base["perPlayer"]]
+          == [[x["key"] for x in r["decks"]] for r in plain["perPlayer"]]
           and all("duel" not in x for r in off["perPlayer"] for x in r["decks"]))
     ta._duel = None
     check("and with the module missing, the same", not ta._DuelContext().on)
 finally:
     ta._duel_index, ta._duel = _saved_index, _saved_brain
+    ta.dcx._snap = lambda: None
+    ta._SCOUT_POOL = None
+    ta._reset_counter_pool()
 
 
 # ── the fused rate (`matchup_fusion`) ───────────────────────────────────────
@@ -930,6 +973,213 @@ finally:
 # hub candidate reads the version cells, a teammate's own list reads its own
 # ladder history, two lists of ONE archetype can score differently, and with
 # the module missing every rate is the ladder rung exactly as before.
+
+# ── counters to what they play (brain 3.0) ─────────────────────────────────
+#
+# `team_scout` decides and `test_counters.py` holds its rules; this checks the
+# WIRING: the projection is the player's own decks, a deck filed under `other`
+# is grouped by what it is, the Deck Counter's list is a scouting report of
+# one player, and the tight rating loop gives the figure the full scorer gives.
+
+print(NL + "counters to what they play")
+
+check("the brain is 3.0", ts.BRAIN_VERSION == "team-scout-3.0" and folder["brain"] == ts.BRAIN_VERSION)
+
+_fam = ta._family("hog", HOG)
+check("a named archetype is its own family", _fam == ("hog", ta.dcx._label("hog")), str(_fam))
+_other = ta._family("other", ["minion-giant", "a", "b", "c", "d", "e", "f", "g"])
+check("a deck filed under `other` is grouped by the win condition it plays",
+      _other[0].startswith("other:") and _other[1] and _other[1] != "Mixed", str(_other))
+
+_proj = ta._plays([
+    deck("Hog", HOG, matches=60, wc="hog"),
+    deck("Golem", GOLEM, matches=30, wc="golem"),
+    deck("Lava", LAVA, matches=10, wc="lava"),
+])
+check("the projection holds their own decks and nothing else",
+      {t["key"] for t in _proj["threats"]} == {_k(HOG), _k(GOLEM), _k(LAVA)}
+      and all(t["evidence"] == ts.OBSERVED for t in _proj["threats"]))
+check("every family they play is labelled and styled",
+      all(p["name"] and p.get("style") for p in _proj["plays"]), str(_proj["plays"]))
+check("every threat says which family it is", all(t.get("family") for t in _proj["threats"]))
+_bars = ta._spread_of(_proj["plays"])
+check("the bars on the left are the shares the list was scored against",
+      [(b["archetype"], b["share"]) for b in _bars]
+      == [(p["family"], round(100 * p["share"], 1)) for p in _proj["plays"]])
+
+check("a folder publishes what they play, by family",
+      folder.get("plays") and all({"family", "name", "share", "games", "decks"} <= set(p)
+                                  for p in folder["plays"]), str(folder.get("plays")))
+check("its threats are all decks they were seen playing",
+      folder["threats"] and all(t["evidence"] == ts.OBSERVED for t in folder["threats"]))
+check("every suggested row carries its rate against each family they play",
+      all(isinstance(r.get("vs"), dict) and r["vs"] for r in folder["recommended"])
+      and all(isinstance(r.get("vs"), dict) for row in folder["perPlayer"] for r in row["decks"]))
+check("the squad-wide list reads in the order of its figure",
+      [r["expectedWinRate"] for r in folder["recommended"]]
+      == sorted((r["expectedWinRate"] for r in folder["recommended"]), reverse=True))
+check("a matchup's share is a percentage of the projection, on every row",
+      all(abs(m["share"] - round(100 * m["likelihood"], 1)) < 1e-9
+          for r in folder["recommended"] for m in (r.get("matchups") or [])))
+
+# RECORDS THE FUSED RATE CAN READ. The fixtures above carry a rate and a game
+# count, which is all the ladder rung reads; the fused rate reads WINS and
+# LOSSES, so without them it rates nothing and every check below would pass
+# on an empty list.
+def _rich_profile(cs):
+    recs = {}
+    for a, r in PROFILES.get(_k(cs), {}).items():
+        wins = int(round(r["winRate"] * r["games"] / 100.0))
+        recs[a] = {**r, "wins": wins, "losses": r["games"] - wins}
+    return {"archetypes": recs, "overall": {"winRate": 52.0, "games": 900}, "battles": 0}
+
+
+dcx.deck_profile = _rich_profile
+
+# THE TIGHT LOOP AND THE FULL SCORER AGREE, on the real rater.
+import matchup_fusion as _mf  # noqa: E402
+_saved_fusion = ta._fusion
+ta._fusion = _mf
+try:
+    _rich_pool = ta._candidates(blue_roster)
+    _fx_ctx = types.SimpleNamespace(on=False, fx=None, records=lambda cs: None)
+    _fx_ctx.fx = ta._FusionContext(None, None)
+    _table = _fx_ctx.fx.threat_table(_proj["threats"])
+    _agree, _rated = True, 0
+    for _c in _rich_pool:
+        _lean = ta._score(_c, _proj["threats"], None, _fx_ctx, dress=False, table=_table)
+        _full = ta._score(_c, _proj["threats"], None, _fx_ctx)
+        if (_lean is None) != (_full is None):
+            _agree = False
+        elif _lean is not None:
+            _rated += 1
+            _agree = _agree and all(_lean[k] == _full[k] for k in
+                                    ("expectedWinRate", "score", "vs", "threatCovered",
+                                     "evidenceStrength", "key", "name"))
+            _agree = _agree and "matchups" not in _lean and "art" not in _lean
+    check("a pool row rated in the tight loop has the full scorer's figures",
+          _agree and _rated >= 2, f"rated {_rated}")
+    _c0 = _rich_pool[0]
+    check("the archetype half of a rate is worked once and remembered on the candidate",
+          len(_c0.memo) >= 1 and _fx_ctx.fx.arch_half(_c0, "golem") is _fx_ctx.fx.arch_half(_c0, "golem"))
+finally:
+    ta._fusion = _saved_fusion
+
+# WHAT A PLAYER PLAYS IS THEIR OWN-DECK GAMES AND THEIR DUEL GAMES — the Decks
+# screen's count — not everything stored under their tag.
+_EVENT = cards("event")
+_saved_report, _saved_cov = ta.cd.player_report, ta.cd.coverage
+_saved_played = ta._pdecks.played
+ta.cd.coverage = lambda tag=None: {"start": "2026-07-01", "end": "2026-08-20", "days": 51}
+ta.cd.player_report = lambda tag, since=None, until=None: ({
+    "player": {"name": "Mohamed", "battles": 400, "wins": 220},
+    # Every mode: an event deck leads it.
+    "decks": [deck("Event", _EVENT, matches=300, wc="hog"),
+              deck("Golem", GOLEM, matches=90, wc="golem"),
+              deck("Xbow", XBOW, matches=10, wc="xbow")],
+} if tag == "#R1" else None)
+ta._pdecks.played = lambda tag, since=None, until=None: {
+    "per": ({_k(GOLEM): [50, 38, 2, "20260820T120000.000Z", list(GOLEM), "golem"],
+             _k(XBOW): [6, 4, 0, "20260819T120000.000Z", list(XBOW), "xbow"]}
+            if tag == "#R1" else {}),
+    "marks": {}, "loadouts": 0, "duelGames": 12, "duelIndex": True,
+    "archiveUsed": False, "hidden": {"Challenge_AllCards_EventDeck_NoSet": 300},
+}
+_me = ta._resolve("#R1", 30)
+check("a stored player's decks are the ones they PLAY: the event deck is not one",
+      [d["deckHash"] for d in _me["decks"]] == [_k(GOLEM), _k(XBOW)],
+      str([d["deckHash"] for d in _me["decks"]]))
+check("...most played first, with their record and their share on each",
+      _me["decks"][0]["matches"] == 90 and _me["decks"][0]["wins"] == 50
+      and _me["decks"][0]["useRate"] == 90.0 and _me["decks"][0]["winCondition"] == "golem")
+check("...and a family and a name on every one",
+      all(d.get("family") and d.get("familyName") and d.get("name") for d in _me["decks"]))
+check("the header counts the same games the deck list does",
+      _me["battles"] == 100 and _me["winRate"] == 56.0, f"{_me['battles']} {_me['winRate']}")
+check("...and says how many were duel games and how many were left out",
+      _me["played"] == {"source": "own_deck", "duelGames": 12, "hidden": 300}, str(_me.get("played")))
+_real = ta._pdecks.played
+ta._pdecks.played = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no reader"))
+check("without the reader the every-mode list still answers",
+      len(ta._resolve("#R1", 30)["decks"]) == 3)
+ta._pdecks.played = _real
+
+# THE DECK COUNTER'S LIST IS A SCOUTING REPORT OF ONE PLAYER.
+ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 1000.0}
+ta._SCOUT_POOL = None
+ta._reset_counter_pool()
+_bring = ta.bring("#R1")
+check("bring() answers with what they play and the decks to bring",
+      _bring["plays"] and _bring["decks"] and _bring["brain"] == ts.BRAIN_VERSION, str(_bring.get("reason")))
+check("...the same decks a scouting report of that player lists",
+      [d["key"] for d in _bring["decks"]]
+      == [d["key"] for d in ta.analyze([], ["#R1"], days=30)["folders"][0]["recommended"]])
+check("...in the order of their figure",
+      [d["expectedWinRate"] for d in _bring["decks"]]
+      == sorted((d["expectedWinRate"] for d in _bring["decks"]), reverse=True))
+check("...with a group for every family they play",
+      [g["family"] for g in _bring["byFamily"]] == [p["family"] for p in _bring["plays"]][:ts.ANSWER_FAMILIES])
+check("...each deck in a group carrying its rate against THAT family",
+      all(d["rate"] == d["vs"][g["family"]] and d["rate"] >= ts.GOOD_RATE
+          for g in _bring["byFamily"] for d in g["decks"]))
+check("...no per-threat table on the grouped rows",
+      all("matchups" not in d for g in _bring["byFamily"] for d in g["decks"]))
+check("...and how many lists it was chosen from",
+      _bring["pool"]["decks"] == len(ta._counter_candidates()))
+check("an explicit window is the window", ta.bring("#R1", "2026-08-01", "2026-08-20")["window"]
+      == {"from": "2026-08-01", "to": "2026-08-20"})
+_none = ta.bring("#NOBODY")
+check("nobody stored is no_history, with no decks invented",
+      _none["reason"] == "no_history" and _none["decks"] == [] and _none["byFamily"] == [])
+
+# THE CARD VIEW: the manual names the cards, the rated pool ranks the decks.
+import card_counters as _ccx  # noqa: E402
+
+_cvs = [cards(f"cv{i}") for i in range(8)]
+for _i, _cs in enumerate(_cvs):
+    _cs[0] = "ronin" if _i < 6 else f"plain-{_i}"          # six lists hold Ronin
+_card_rows = [
+    {"key": _k(cs), "cards": cs, "archetype": f"a{i}", "name": f"deck {i}",
+     "expectedWinRate": 70.0 - i if i < 6 else 40.0, "recommendationScore": 70.0 - i,
+     "vs": {"hog": 70.0 - i}, "art": {}}
+    for i, cs in enumerate(_cvs)
+]
+_their = [{"cards": ["pekka", "mega-knight", "c", "d", "e", "f", "g", "h"], "likelihood": 1.0}]
+_saved_cc = (_ccx.ROLES, _ccx.BEATS)
+_ccx.ROLES = {"ronin": {"counters": ["pekka", "mega-knight"]}, "pekka": {}, "mega-knight": {}}
+_ccx.BEATS = _ccx._relations(_ccx.ROLES)
+try:
+    _view = ta._by_card(_card_rows, _their, lambda rows: rows)
+    check("their cards are listed with the share of their games each is in",
+          _view and _view["theirCards"][0]["share"] == 1.0)
+    _ronin = next((c for c in _view["cards"] if c["card"] == "ronin"), None)
+    check("a card that answers what they play is searched", _ronin is not None, str(_view["cards"]))
+    check("...its decks ranked by the measured figure, three at most",
+          _ronin and [d["expectedWinRate"] for d in _ronin["decks"]] == [70.0, 69.0, 68.0])
+    check("...with the cards of theirs it answers",
+          _ronin and {a["card"] for a in _ronin["answers"]} == {"pekka", "mega-knight"})
+    check("...and a lift that is a difference of measured rates",
+          _ronin and abs(_ronin["lift"] - round((sum(70.0 - i for i in range(6)) / 6)
+                                                 - (sum(r["expectedWinRate"] for r in _card_rows) / 8), 1)) < 1e-9,
+          str(_ronin and _ronin["lift"]))
+    check("a card the manual has no relation for is not listed, however its decks do",
+          all(c["card"] == "ronin" for c in _view["cards"]))
+    # Three lists hold it and do far better than the two that do not — a real
+    # lift, and still too few lists to call the CARD the reason.
+    _few = ta._by_card(_card_rows[:3] + _card_rows[6:], _their, lambda rows: rows)
+    check("a card in too few lists is not called a counter", _few["cards"] == [])
+    _flat = [dict(r, expectedWinRate=50.0) for r in _card_rows]
+    check("a card whose decks do no better than the pool is not listed, whatever the manual says",
+          ta._by_card(_flat, _their, lambda rows: rows)["cards"] == [])
+finally:
+    _ccx.ROLES, _ccx.BEATS = _saved_cc
+ta.cd.player_report, ta.cd.coverage = _saved_report, _saved_cov
+ta._pdecks.played = _saved_played
+dcx.deck_profile = fake_deck_profile
+ta.dcx._snap = lambda: None
+ta._SCOUT_POOL = None
+ta._reset_counter_pool()
+
 
 print(NL + "the fused rate")
 import matchup_fusion as mf  # noqa: E402

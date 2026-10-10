@@ -370,10 +370,11 @@ describe('teamAnalysisReport — what the page will look like', () => {
     );
     const [first, second] = lists[0].decks;
     expect(first.badge?.text).toBe('Squad pick');
-    // On a row the ladder brain chose, the duel figure is information: it trails.
-    expect(first.meta?.endsWith('Duel 49%')).toBe(true);
-    // On a row the duel brain chose, it is the reason: it leads, and the badge says so.
-    expect(second.badge?.text).toBe('Duel pick');
+    // The duels' own figure is printed only where it AGREES with the row: a
+    // "Duel 49%" beside a deck suggested at 56% is not drawn.
+    expect(first.meta ?? '').not.toContain('Duel');
+    // On a duel list it leads the line, and the badge says where the list is from.
+    expect(second.badge?.text).toBe('Duel deck');
     expect(second.meta?.startsWith('Duel 61%')).toBe(true);
   });
 

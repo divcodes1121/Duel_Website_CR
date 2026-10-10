@@ -106,6 +106,43 @@ told to prepare for over the ones they do.
 
 `neighbours()` remains available for an opt-in deep path. It is deliberately
 not called from here.
+
+────────────────────────────────────────────────────────────────────────────
+3.0 (2026-10-10): COUNTERS TO WHAT THEY PLAY, NOT A PORTFOLIO AGAINST THE META
+────────────────────────────────────────────────────────────────────────────
+
+Reported by the account holder, twice in one day: "the decks given for counter
+are very generic and rely on meta — we need decks which counter their
+archetypes, whatever they play, at least at a good percentage".
+
+Measured on the live service before anything changed, and all three causes
+were in the two functions above:
+
+  * THE PROJECTION WAS PARTLY THE META. Up to 45% of the mass was moved off
+    what they play onto seed variants and onto archetypes "their behaviour
+    implies" — for an opponent on Minion Giant and Giant, Hog Rider, Royal Hogs
+    and Balloon lists were scored against. A counter to a deck they do not
+    play is the generic answer by definition.
+  * `diversify` IS A PORTFOLIO PICKER. Its archetype-repeat penalty exists to
+    spread a list over many archetypes, so rows four to seven were "the best
+    deck of some other archetype" at 59-63% while lists at 70%+ against what
+    they actually bring were left out.
+  * DUEL PICKS WERE PINNED UNDER THE #1 whatever the list's own figure said:
+    ten of ten checked sat 5-20 points under the rows below them, one at 40.9%.
+
+`played_space()` is the projection now: their own decks and nothing else, with
+every family they play keeping its whole share. `counters()` is the selection:
+the strongest decks against that, in the order of the figure printed, no deck
+expected to lose, near-copies folded, at most two lists of one win condition,
+and a real answer held for every family they play a tenth of the time or more.
+`answers()` is the same rows read per family.
+
+On fourteen real opponents (every vetted seed scored against what they play)
+the WEAKEST of the seven rose from 48.9-66.1% to 59.5-75.6%.
+
+`threat_space`, `diversify` and `suggest` are unchanged and still used:
+`coach_daily` ranks a field plan with `diversify`, and its 204 checks mean what
+they meant.
 """
 
 from __future__ import annotations
@@ -118,7 +155,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-2.1"
+BRAIN_VERSION = "team-scout-3.0"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -727,12 +764,143 @@ def _threat_confidence(t: dict) -> str:
     return POSSIBLE if t.get("why") == "own_archetype" else SPECULATIVE
 
 
+# ── 2b. What they PLAY — the projection since 3.0 ───────────────────────────
+
+#: A family they play at least this much of the time is NAMED on the screen
+#: (a chip, a group of counters) and always keeps one of the projection's
+#: lists. Five percent: one game in twenty is a deck they may bring; under it
+#: the list is an experiment and is counted in the shares without being named.
+PLAYS_MIN_SHARE = 0.05
+
+
+def family_of(row) -> str:
+    """What a deck is GROUPED under: its archetype, or the family its caller
+    named for it.
+
+    The bot files several unrelated win conditions under one `other` key
+    (Minion Giant, Goblin Giant, Skeleton Barrel…), so "they play Mixed 83%"
+    names nothing a counter can be chosen against. The caller, which owns the
+    card vocabulary, puts `family` on such a deck; everything else groups by
+    archetype exactly as before.
+    """
+    return row.get("family") or row.get("archetype") or ""
+
+
+def played_space(decks, *, now=None, limit=None) -> dict:
+    """What this opponent PLAYS — their own decks, as a distribution — and
+    nothing they have not played.
+
+    `decks` is `threat_space`'s input, each row optionally carrying `family`
+    and `familyName`. Two rows of one list (a roster pooled, a list two
+    opponents share) are folded into one.
+
+    Returns `threats` (at most `limit` lists, likelihoods summing to 1.0),
+    `plays` (one row a family: `family`, `archetype`, `name`, `share`, `games`,
+    `wins`, `decks`; every family, most played first) and `churn`.
+
+    EVERY FAMILY KEEPS ITS WHOLE SHARE. Only the most likely lists are scored
+    against — a cost bound — and a player with eight hundred variants has most
+    of their games outside any twelve of them. So the lists kept for a family
+    are scaled up to carry everything the family was worth: cutting the tail
+    must not hand a Miner player's Miner games to Royal Giant because the
+    Royal Giant games sat in fewer lists. A family worth naming
+    (`PLAYS_MIN_SHARE`) always keeps its most played list.
+
+    Recency is `threat_space`'s own (`_observed`): a deck dropped three weeks
+    ago weighs half of one played yesterday.
+    """
+    limit = MAX_THREATS if limit is None else limit
+    merged: dict[str, dict] = {}
+    for d in decks or []:
+        cards = list(d.get("cards") or [])
+        if len(set(cards)) != 8 or int(d.get("matches") or 0) <= 0:
+            continue
+        key = deck_key(cards)
+        hit = merged.get(key)
+        if hit is None:
+            merged[key] = dict(d)
+            continue
+        hit["matches"] = int(hit.get("matches") or 0) + int(d.get("matches") or 0)
+        hit["wins"] = int(hit.get("wins") or 0) + int(d.get("wins") or 0)
+        if (d.get("lastSeen") or "") > (hit.get("lastSeen") or ""):
+            hit["lastSeen"] = d.get("lastSeen")
+    rows = list(merged.values())
+    for d in rows:
+        games = int(d.get("matches") or 0)
+        d["winRate"] = round(100.0 * int(d.get("wins") or 0) / games, 1) if games else None
+
+    observed = _observed(rows, now=now)
+    ch = churn(rows)
+    if not observed:
+        return {"threats": [], "plays": [], "churn": ch, "reason": "no_history",
+                "brain": BRAIN_VERSION}
+
+    per: dict[str, dict] = {}
+    for t in observed:
+        d = merged[t["key"]]
+        fam = d.get("family") or t["archetype"]
+        t["family"] = fam
+        e = per.get(fam)
+        if e is None:
+            e = per[fam] = {"family": fam, "archetype": t["archetype"],
+                            "name": d.get("familyName") or "",
+                            "share": 0.0, "games": 0, "wins": 0, "decks": 0}
+        e["share"] += t["share"]
+        e["games"] += t["observedCount"]
+        e["wins"] += t["wins"]
+        e["decks"] += 1
+
+    observed.sort(key=lambda t: (-t["share"], t["key"]))
+    lead: list[dict] = []
+    seen: set[str] = set()
+    for t in observed:
+        if t["family"] in seen:
+            continue
+        seen.add(t["family"])
+        if per[t["family"]]["share"] >= PLAYS_MIN_SHARE:
+            lead.append(t)
+    lead = lead[:max(1, limit)]
+    held = {t["key"] for t in lead}
+    keep = lead + [t for t in observed if t["key"] not in held][:max(0, limit - len(lead))]
+
+    kept: dict[str, float] = {}
+    for t in keep:
+        kept[t["family"]] = kept.get(t["family"], 0.0) + t["share"]
+    total = sum(per[f]["share"] for f in kept) or 1.0
+    for t in keep:
+        t["likelihood"] = round(
+            per[t["family"]]["share"] * t["share"] / kept[t["family"]] / total, 4)
+        t["confidence"] = _threat_confidence(t)
+    keep.sort(key=lambda t: (-t["likelihood"], t["key"]))
+
+    plays = sorted(per.values(), key=lambda e: (-e["share"], e["family"]))
+    for e in plays:
+        e["share"] = round(e["share"], 4)
+    return {
+        "threats": keep,
+        "plays": plays,
+        "churn": ch,
+        "reason": None,
+        "brain": BRAIN_VERSION,
+        # All of it is what they were seen playing. Published in the old shape
+        # so a reader of `mass` needs no second branch.
+        "mass": {"observed": 1.0, "variant": 0.0, "inferred": 0.0},
+    }
+
+
 # ── 3. Scoring one of OUR decks against the projection ──────────────────────
 
 
 def score(rate_for, threats, *, cards, archetype, fit_games=None,
-          rate_for_threat=None) -> dict | None:
+          rate_for_threat=None, lean=False) -> dict | None:
     """One candidate deck against the whole projected threat space.
+
+    `lean=True` returns the same figures WITHOUT the per-threat table — `vs`
+    (the rate against each family) is computed here instead. The counter pool
+    is two thousand lists and seven are shown; a dozen row dicts for each of
+    the rest is most of the cost of rating them. The arithmetic is this
+    function's one loop either way, so a lean row and a full row of one deck
+    cannot disagree.
 
     `rate_for(archetype) -> {winRate, source, games, ...} | None` is
     `deck_counter.matchup_ladder`'s answer, handed in rather than imported —
@@ -763,10 +931,24 @@ def score(rate_for, threats, *, cards, archetype, fit_games=None,
     answered = 0.0
     weighted_win = 0.0
     weighted_strength = 0.0
+    fam_num: dict[str, float] = {}
+    fam_den: dict[str, float] = {}
 
     for t in threats:
         m = rate_for_threat(t) if rate_for_threat is not None else rate_for(t["archetype"])
         like = float(t.get("likelihood") or 0.0)
+        if lean:
+            if not m or m.get("winRate") is None:
+                continue
+            rate = float(m["winRate"])
+            answered += like
+            weighted_win += like * rate
+            weighted_strength += like * SOURCE_STRENGTH.get(m.get("source"), 0.25)
+            fam = t.get("family") or t.get("archetype") or ""
+            if fam and like > 0:
+                fam_num[fam] = fam_num.get(fam, 0.0) + like * rate
+                fam_den[fam] = fam_den.get(fam, 0.0) + like
+            continue
         if not m or m.get("winRate") is None:
             rows.append({
                 "threat": t["key"], "archetype": t["archetype"],
@@ -774,6 +956,8 @@ def score(rate_for, threats, *, cards, archetype, fit_games=None,
                 "likelihood": like, "winRate": None, "source": None,
                 "games": 0, "tier": None,
             })
+            if t.get("family"):
+                rows[-1]["family"] = t["family"]
             continue
         answered += like
         weighted_win += like * float(m["winRate"])
@@ -785,7 +969,30 @@ def score(rate_for, threats, *, cards, archetype, fit_games=None,
             "source": m.get("source"), "games": m.get("games") or 0,
             "tier": m.get("tier"), "interval": m.get("interval"),
         })
+        # WHICH FAMILY THE THREAT IS, when the projection names one
+        # (`played_space`). Absent otherwise, so a projection built without
+        # families — `coach_daily`'s, `threat_space`'s — reads exactly as it did.
+        if t.get("family"):
+            rows[-1]["family"] = t["family"]
 
+    out = _row(answered, weighted_win, weighted_strength,
+               cards=cards, archetype=archetype, fit_games=fit_games)
+    if out is None:
+        return None
+    if lean:
+        out["vs"] = {a: round(fam_num[a] / fam_den[a], 1) for a in fam_num if fam_den[a] > 0}
+    else:
+        out["matchups"] = rows
+    return out
+
+
+def _row(answered: float, weighted_win: float, weighted_strength: float, *,
+         cards, archetype, fit_games=None) -> dict | None:
+    """A scored row from the three sums `score` and `score_rates` both build.
+
+    ONE PLACE for what a recommendation is worth, so the tight loop over the
+    counter pool and the full row drawn on the screen cannot drift apart.
+    """
     if answered <= 0:
         return None
 
@@ -815,10 +1022,39 @@ def score(rate_for, threats, *, cards, archetype, fit_games=None,
         "playerFit": round(fit, 3) if fit_games is not None else None,
         "recommendationScore": round(recommendation_score, 3),
         "score": round(recommendation_score, 3),
-        "matchups": rows,
         "confidence": _rec_confidence(strength, answered),
         "brain": BRAIN_VERSION,
     }
+
+
+def score_rates(rates, *, cards, archetype, fit_games=None, key=None) -> dict | None:
+    """`score(lean=True)` for a caller that already holds the rates.
+
+    `rates` yields `(likelihood, family, win rate, source)` for each threat the
+    candidate could be rated against — nothing for one it could not. The
+    counter pool's loop (`team_analysis`) reads its evidence straight out of
+    the version cells and hands the figures here, instead of building a
+    closure and a dictionary per threat for two thousand lists. `key` is the
+    candidate's deck key when the caller has it.
+    """
+    answered = weighted_win = weighted_strength = 0.0
+    fam_num: dict[str, float] = {}
+    fam_den: dict[str, float] = {}
+    for like, fam, rate, source in rates:
+        answered += like
+        weighted_win += like * rate
+        weighted_strength += like * SOURCE_STRENGTH.get(source, 0.25)
+        if fam and like > 0:
+            fam_num[fam] = fam_num.get(fam, 0.0) + like * rate
+            fam_den[fam] = fam_den.get(fam, 0.0) + like
+    out = _row(answered, weighted_win, weighted_strength,
+               cards=cards, archetype=archetype, fit_games=fit_games)
+    if out is None:
+        return None
+    if key:
+        out["key"] = key
+    out["vs"] = {a: round(fam_num[a] / fam_den[a], 1) for a in fam_num if fam_den[a] > 0}
+    return out
 
 
 def _fit(games) -> float:
@@ -1076,6 +1312,227 @@ def suggest(own, pool, *, limit: int = MAX_RECOMMENDATIONS):
     return diversify(own + extra, limit=limit, minimum=limit)
 
 
+# ── 4b'. Counters — the list since 3.0 ──────────────────────────────────────
+
+#: A deck is a COUNTER to a family at or above this rate against it. The
+#: figure that names a row as the answer to something they play, and the floor
+#: of the per-family lists (`answers`). Five points clear of level: under it a
+#: fused rate's own interval usually reaches 50.
+GOOD_RATE = 55.0
+
+#: A deck expected to LOSE to what they play is never suggested. Before 3.0 a
+#: row was listed at 40.9% because the duels rated it against the win condition
+#: in general; whatever else is true of such a deck, it is not what to bring.
+FLOOR_RATE = 50.0
+
+#: Lists of ONE win condition on a list of seven. A cap, not a penalty: the
+#: order stays the order of the figure printed, and the reader still gets more
+#: than one kind of answer. Without it the seven best counters to a Log Bait
+#: player were seven Royal Hogs lists a card or two apart.
+PER_ARCHETYPE = 2
+
+#: A family they play at least this much of the time gets a real answer on the
+#: list — the best deck against IT, when one clears `GOOD_RATE` — even if the
+#: strongest all-round decks do not beat it. "Whatever they play."
+ANSWER_SHARE = 0.10
+
+#: Counters listed per family by `answers`, and families it covers.
+ANSWERS_PER_FAMILY = 3
+ANSWER_FAMILIES = 5
+
+
+def _rate(row) -> float:
+    return float(row.get("expectedWinRate") or 0.0)
+
+
+def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
+             score_key="recommendationScore", first=None, adjust=None):
+    """The decks to bring: the strongest counters to what they play.
+
+    `rows` are scored candidates (`score()`'s rows — each is copied, nothing
+    the caller holds is written). `plays` is `played_space()["plays"]`.
+
+      1. STRONGEST FIRST, on `score_key` (plus `adjust(row)`, in the same
+         points — the squad planner's cost for a deck a teammate already has).
+      2. NO DECK EXPECTED TO LOSE (`FLOOR_RATE`), no near-copy of a deck
+         already on the list (`SAME_DECK_OVERLAP`), at most `PER_ARCHETYPE`
+         lists of one win condition.
+      3. AN ANSWER FOR EVERY FAMILY THEY REALLY PLAY (`ANSWER_SHARE`). Where
+         nothing on the list beats a family at `GOOD_RATE`, the best deck that
+         does takes the place of the weakest row that is not itself the only
+         answer to something. A specialist — 88% against the Royal Hogs they
+         bring one game in ten, level against the rest — is exactly the deck a
+         duel needs and a single weighted figure never shows.
+      4. READ IN THE ORDER OF THE FIGURE PRINTED. Before 3.0 a list ran 66.8,
+         43.8, 57.5, 63.3: pick order, with nothing on the screen to say why.
+
+    `first` is a row (matched by `key`) that leads whatever its figure — the
+    #1 a squad assigned this teammate. Each row comes back with `vs` (its rate
+    against each family) and `answers` (the families it is the list's best
+    counter to). Fewer than `limit` rows come back when fewer clear the floor;
+    one row always does when anything was scored at all.
+    """
+    pool = []
+    for r in rows or []:
+        c = dict(r)
+        if "vs" not in c:
+            c["vs"] = vs_archetypes(c)
+        c["_v"] = float(c.get(score_key) or 0.0) + (float(adjust(c)) if adjust else 0.0)
+        pool.append(c)
+    if not pool:
+        return []
+    pool.sort(key=lambda r: (-r["_v"], r["key"]))
+
+    chosen: list[dict] = []
+    subs: set[frozenset] = set()
+    count: dict[str, int] = {}
+
+    def fits(r, skip=None) -> bool:
+        """Whether `r` may join the list (ignoring the row `skip`, about to go)."""
+        a = r.get("archetype") or ""
+        n = count.get(a, 0) - (1 if skip is not None and (skip.get("archetype") or "") == a else 0)
+        if n >= PER_ARCHETYPE:
+            return False
+        mine = _subsets(frozenset(r.get("cards") or []), SAME_DECK_OVERLAP)
+        if skip is None:
+            return not any(s in subs for s in mine)
+        others: set[frozenset] = set()
+        for c in chosen:
+            if c is not skip:
+                others.update(_subsets(frozenset(c.get("cards") or []), SAME_DECK_OVERLAP))
+        return not any(s in others for s in mine)
+
+    def take(r) -> None:
+        chosen.append(r)
+        subs.update(_subsets(frozenset(r.get("cards") or []), SAME_DECK_OVERLAP))
+        a = r.get("archetype") or ""
+        count[a] = count.get(a, 0) + 1
+
+    def drop(r) -> None:
+        chosen.remove(r)
+        subs.clear()
+        for c in chosen:
+            subs.update(_subsets(frozenset(c.get("cards") or []), SAME_DECK_OVERLAP))
+        a = r.get("archetype") or ""
+        count[a] = count.get(a, 0) - 1
+
+    lead = None
+    if first is not None:
+        lead = next((r for r in pool if r["key"] == first["key"]), None)
+        if lead is not None:
+            take(lead)
+
+    for r in pool:
+        if len(chosen) >= limit:
+            break
+        if r is lead or _rate(r) < FLOOR_RATE or not fits(r):
+            continue
+        take(r)
+    if not chosen:
+        # Nothing clears the floor. One row, at its own figure, says so better
+        # than an empty board that reads as "no data".
+        take(pool[0])
+
+    main = [p["family"] for p in (plays or [])
+            if float(p.get("share") or 0.0) >= ANSWER_SHARE]
+
+    def best_on_list(fam):
+        got = [c for c in chosen if c["vs"].get(fam) is not None]
+        return max(got, key=lambda c: (c["vs"][fam], c["_v"])) if got else None
+
+    protected: set[str] = set()
+    for fam in main:
+        held = best_on_list(fam)
+        if held is not None and held["vs"][fam] >= GOOD_RATE:
+            protected.add(held["key"])
+            continue
+        listed = {c["key"] for c in chosen}
+        cands = [r for r in pool
+                 if r["key"] not in listed and r["vs"].get(fam) is not None
+                 and r["vs"][fam] >= GOOD_RATE and _rate(r) >= FLOOR_RATE]
+        cands.sort(key=lambda r: (-r["vs"][fam], -r["_v"], r["key"]))
+        for cand in cands:
+            if len(chosen) < limit:
+                if fits(cand):
+                    take(cand)
+                    protected.add(cand["key"])
+                    break
+                continue
+            victims = [c for c in chosen
+                       if c is not lead and c["key"] not in protected]
+            if not victims:
+                break
+            victim = min(victims, key=lambda c: (c["_v"], c["key"]))
+            if fits(cand, skip=victim):
+                drop(victim)
+                take(cand)
+                protected.add(cand["key"])
+                break
+
+    for c in chosen:
+        c["answers"] = []
+    for fam in main:
+        held = best_on_list(fam)
+        if held is not None and held["vs"][fam] >= GOOD_RATE:
+            held["answers"].append(fam)
+
+    head = [lead] if lead is not None else []
+    tail = [c for c in chosen if c is not lead]
+    tail.sort(key=lambda r: (-_rate(r), -r["_v"], r["key"]))
+    out = head + tail
+    for c in out:
+        del c["_v"]
+    return out
+
+
+def answers(rows, plays, *, per=ANSWERS_PER_FAMILY, families=ANSWER_FAMILIES):
+    """The same rows read PER FAMILY: for each family they play, the decks
+    with the best rate against it.
+
+    One entry a family worth naming (`PLAYS_MIN_SHARE`), most played first, at
+    most `families` of them: the `plays` row plus `decks`, each a copy of a
+    scored row carrying `rate` (its rate against THIS family) beside its
+    figure against everything they play. Only counters are listed
+    (`GOOD_RATE`); a family nothing beats comes back with an empty list, which
+    is a real answer and the screen says it. Near-copies are folded and one
+    win condition appears at most `PER_ARCHETYPE` times, as on `counters`.
+    """
+    scored = []
+    for r in rows or []:
+        c = dict(r)
+        if "vs" not in c:
+            c["vs"] = vs_archetypes(c)
+        scored.append(c)
+    out = []
+    named = [p for p in (plays or [])
+             if float(p.get("share") or 0.0) >= PLAYS_MIN_SHARE][:families]
+    for p in named:
+        fam = p["family"]
+        cands = [r for r in scored
+                 if r["vs"].get(fam) is not None and r["vs"][fam] >= GOOD_RATE]
+        cands.sort(key=lambda r: (-r["vs"][fam],
+                                  -float(r.get("recommendationScore") or 0.0), r["key"]))
+        picked: list[dict] = []
+        subs: set[frozenset] = set()
+        count: dict[str, int] = {}
+        for r in cands:
+            if len(picked) >= per:
+                break
+            a = r.get("archetype") or ""
+            if count.get(a, 0) >= PER_ARCHETYPE:
+                continue
+            mine = _subsets(frozenset(r.get("cards") or []), SAME_DECK_OVERLAP)
+            if any(s in subs for s in mine):
+                continue
+            row = dict(r)
+            row["rate"] = r["vs"][fam]
+            picked.append(row)
+            subs.update(mine)
+            count[a] = count.get(a, 0) + 1
+        out.append({**p, "decks": picked})
+    return out
+
+
 # ── 4c. The squad — who brings what ─────────────────────────────────────────
 #
 # `suggest()` ANSWERS ONE TEAMMATE AT A TIME, AND THAT IS WHY A MATCH PLAN READ
@@ -1155,7 +1612,9 @@ def archetype_weights(threats) -> dict[str, float]:
     """
     out: dict[str, float] = {}
     for t in threats or []:
-        a = t.get("archetype") or ""
+        # The FAMILY when the projection names one (`played_space`), so the
+        # decks the bot files under `other` are counted as what they are.
+        a = family_of(t)
         if a:
             out[a] = out.get(a, 0.0) + float(t.get("likelihood") or 0.0)
     return out
@@ -1173,7 +1632,7 @@ def vs_archetypes(row) -> dict[str, float]:
     for m in row.get("matchups") or []:
         if m.get("winRate") is None:
             continue
-        a = m.get("archetype") or ""
+        a = family_of(m)
         like = float(m.get("likelihood") or 0.0)
         if not a or like <= 0:
             continue
@@ -1234,6 +1693,9 @@ def squad_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS):
     with nothing scored gets an empty list, and the caller says why.
     """
     weight = archetype_weights(threats)
+    # What they play, as `counters` reads it: one row a family.
+    plays = [{"family": a, "share": w}
+             for a, w in sorted(weight.items(), key=lambda kv: (-kv[1], kv[0]))]
 
     # ── Each teammate's candidates, scored for THEM ──────────────────────
     cand: dict[str, list[dict]] = {}
@@ -1300,24 +1762,24 @@ def squad_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS):
         mine = primary[tag]
         others = {r["key"] for t, r in primary.items() if t != tag}
 
-        def bonus(c, chosen, _others=others):
-            gain = cover_gain(c["vs"], _held(chosen), weight)
+        def cost(c, _others=others):
+            # A deck that is somebody else's #1, or that teammates earlier in
+            # the roster already list, gives way to a comparable other one.
             if c["key"] in _others:
-                cost = TAKEN_PENALTY
-            else:
-                cost = min(TAKEN_PENALTY, SHARED_PENALTY * listed.get(c["key"], 0))
-            return COVER_WEIGHT * gain - cost
+                return -TAKEN_PENALTY
+            return -min(TAKEN_PENALTY, SHARED_PENALTY * listed.get(c["key"], 0))
 
-        picked = diversify(rows, limit=limit, minimum=limit,
-                           score_key="personalScore", bonus=bonus, first=mine)
-        head, tail = picked[0], picked[1:]
-        # READING ORDER IS STRENGTH. `diversify` decides WHO is on the list;
-        # below the #1 the reader is comparing options, and a list ordered by
-        # pick sequence would put a coverage pick above a stronger deck with
-        # no way to see why.
-        tail.sort(key=lambda r: (-r["personalScore"], r["key"]))
+        # THE REST OF THE LIST IS COUNTERS TOO (3.0): the strongest decks
+        # against what this opponent plays, an answer for every family they
+        # play, in the order of the figure printed. It was a portfolio
+        # (`diversify`), whose archetype-repeat penalty filled the tail with
+        # one deck of each of several archetypes at 60% while stronger answers
+        # to what they actually bring were left out.
+        picked = counters(rows, plays, limit=limit, score_key="personalScore",
+                          first=mine, adjust=cost)
+        head = picked[0]
         head["squadPick"] = True
-        lists[tag] = [head] + tail
+        lists[tag] = picked
         for r in lists[tag]:
             listed[r["key"]] = listed.get(r["key"], 0) + 1
 

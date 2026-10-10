@@ -48,11 +48,12 @@ bot's SQLite files read-only.
 
 ---
 
-## Status — 2026-10-09
+## Status — 2026-10-10
 
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Counters to what they actually play — Deck Counter and Team Scout** | **BUILT AND VERIFIED ON STAGED CODE AGAINST PRODUCTION DATA, 2026-10-10. THE SERVER HALF IS LIVE SINCE 2026-10-10 06:49 UTC (scp first, after the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; live API checked: brain `team-scout-3.0`, pool 2,341, lists ordered, nothing under 50%). The client ships with this commit.** Reported: *"the decks given for counter are very generic and rely on the meta — we need decks which counter their archetypes, whatever they play, at least at a good percentage"*. Both lists are now one engine's: what a player PLAYS (own-deck and duel games, the Decks screen's count), every vetted ladder list and every duel list as candidates (2,341, was 204), the strongest counters in the order of their percentage, no deck expected to lose, and an answer held for every archetype they play a tenth of the time. Every deck shows its win rate against each archetype they play; Deck Counter also reads the same decks per archetype and per counter card (the card manual says which cards answer which — the battle data ranks the decks). On 20 real opponents the weakest of the seven went from a median **52.3% to 63.6%**, lists out of order **18 → 0**, rows under 50% **6 → 0**; one opponent answers in 0.56 s (was 0.85). See [Counters to what they play](#counters-to-what-they-play-2026-10-10) |
 | **Deck report: the last N sets, newest first** | **LIVE 2026-10-09 as `ea2193b`, client only** (`/api/health` reported it 53 s after the push; the served bundle carries both chips' tooltips and the release note). Asked, with 259 sets in the export dialog and only `First` beside the number: *"add an option beside First, 'Last', which will give descending order, and naming and numbers will be correct."* The report lists sets oldest first, so `First 3` were the three earliest ever built; the ones just saved were at the far end. **`Last`** takes the N most recent, newest first, and **each set keeps the number it has in the whole report** — the last three of 259 print as Duel Deck 259, 258, 257, the same numbers `All` and `First` give those sets. Same option in Solo and in Deck's Home (counted in decks). 17/17 in a browser, and the downloaded PDF read back: pages in the order 30, 29, 28, each heading over its own set's decks. See [The deck report: first N or last N](#the-deck-report-first-n-or-last-n-2026-10-09) |
 | **Saved sets: 1,000 for everyone, no limit for an admin** | **LIVE 2026-10-09 as `668e83a`** (client + `api/decks.ts`, one push; `/api/health` reported the commit 52 s later). Asked: *"I already have 225 decks ... unlimited for my account, which is admin, store it in cloud so that I don't have to worry about space ... and try to make 1000 saved decks for everyone."* An account's decks were ONE value capped at 1 MB (about 500 saved duels), and passing it stopped sync with nothing on screen. The saved library now travels and is stored **in parts** of 200 sets, named by their content, so there is no ceiling to hit: saving a duel uploads one part and a small head, and a reload downloads only parts the browser lacks (normally none). In the browser the same parts are kept **compressed** — 225 sets went from 445,301 to 62,326 characters, 1,000 five-deck sets from 2.25 M to 0.31 M. The limit is `SAVED_SET_LIMIT` = 1,000, enforced by the endpoint, with none for an admin (asked of Supabase with the caller's own token). The Saved tab is paged, 20 a page: with 1,000 sets it took **6.3 s to open and takes 0.4 s**. Old tabs keep working (the old calls are still answered) and a load with nothing to change writes nothing. **Nothing replaces a library without a copy being kept** — the account's old value is copied aside for good at the move, the browser keeps its old-format value and any longer library a shorter one replaces for 30 days, and a part is read back before it is relied on. **1,618 vitest**, 33 planted faults all caught, **33/33 + 11/11 in a browser** (the second run wiped the library on purpose and restored it from the copy). **On production, without a session, 26/26**: every new path of the endpoint answers 401 with its own JSON (so the function loads), the page reports the commit and the served bundle carries the new code. **Not exercised: the real database with a signed-in account** — the account holder's check (Saved should read 225; save one duel; reload; open on the phone). See [The saved library, in parts](#the-saved-library-in-parts-2026-10-09) |
 | **Save duel knows a duel from either player's side** | **LIVE 2026-10-09 as `668e83a`, client only, same push.** Reported: *"player A vs player B is saved; when I save player B vs player A, same set, it should show that already saved and the duel set number."* The same duel is listed in each player's Duel Zone with the decks on opposite sides, and the duplicate rule compared blue to blue and red to red only, so the second save added a second "Duel Deck n". The rule now matches the decks **either way round** and answers with the name of the set that holds it; the Duel Zone's row **reads the library**, as All Duels did, so it says `Already saved as Duel Deck n` before anything is pressed. **32/32 in a browser on two real duels** found in both players' Duel Zones. See [Saving a duel you actually played](#saving-a-duel-you-actually-played) |
@@ -216,6 +217,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27. [Duel Insights](#duel-insights)
 27a. [Team Analysis — a squad against a squad](#team-analysis--a-squad-against-a-squad)
 27b. [A render loop that starves Suspense](#a-render-loop-that-starves-suspense)
+27c. [Counters to what they play](#counters-to-what-they-play-2026-10-10)
 28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
 29. [The layout engine — measure, then commit](#the-layout-engine--measure-then-commit)
 29a. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
@@ -270,8 +272,9 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 1,637 tests in 68 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
-python server/test_team_analysis.py # 163 checks over both tabs of the squad board, incl. the fused rate's wiring
+npm run test                      # 1,662 tests in 69 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
+python server/test_team_analysis.py # 205 checks over both tabs of the squad board, incl. the fused rate's wiring and the counters wiring
+python server/test_counters.py    # 69 checks: counters to what they play — the projection, the selection, the card manual, one arithmetic three ways
 python server/test_team_scout.py  # 160 checks over the coaching brain: projection, scoring, squad plan
 python server/test_matchup_fusion.py # 34 checks over the fused ladder+duel rate, against literals
 python server/test_duel_index.py  # 71 checks over the duel index, its version cells and its readers, on synthetic data
@@ -298,13 +301,13 @@ python server/test_duel_combos.py # 55 checks over the duel logic, no DB needed
 python server/test_meta.py        # 41 checks over the meta board and card rules
 python server/test_duel_zone.py   # 88 checks over the series and sequence rules
 python server/test_player_cards.py # 60 checks over the card board
-python server/test_deck_counter.py # 58 checks over the matchup engine
+python server/test_deck_counter.py # 66 checks over the matchup engine, incl. the mode filter on a player's matchup table
 python server/test_live_player.py # 23 checks over the live battlelog reader
 python server/test_recruit.py     # 39 checks over the tag recruiter
 python server/test_battle_modes.py # 166 checks over which game modes go where
 python server/test_duo_pairs.py   # 468 checks over the 2v2 partnership collection
 python server/test_recent_battles.py # 40 checks over the battle log and its mode router
-python server/test_player_decks.py # 46 checks over the Decks list: one row a deck, duel games counted once, both records
+python server/test_player_decks.py # 54 checks over the Decks list: one row a deck, duel games counted once, both records, the lean reader
 python server/test_duel_feed.py   # 94 checks over All Duels: friendly three-game duels only, newest first, the card filter, the fielded forms, paging
 python server/test_player_trends.py # 10 checks: the daily series carries games per day
 python server/test_api_security.py # 102 checks over auth, CORS, the rate limit, the admin gates and the route count (28)
@@ -318,8 +321,8 @@ npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
 ```
 
-That is 42 of the **76** Python suites; all of them total **4,367** checks
-(counted by a full run on 2026-10-07), and the only failure is `test_ml_21a`'s `123 != 122` (the card count moved when
+That is 43 of the **77** Python suites; all of them total **4,494** checks
+(counted by a full run on 2026-10-10), and the only failure is `test_ml_21a`'s `123 != 122` (the card count moved when
 Minion Giant shipped; accepted). A script totalling them has to read BOTH
 result lines — the homegrown `check()` suites print `N passed, M failed`, the
 `test_ml_*` ones and `test_api_security` print `Ran N tests` — or it scores
@@ -12498,6 +12501,204 @@ not render**, in dev or in a production build where the chunk was fetched (both
 the `.js` and the `.css`) and then never committed. See
 [A render loop that starves Suspense](#a-render-loop-that-starves-suspense). The
 import is eager until that is fixed, and the reason is written at the import.
+
+---
+
+## Counters to what they play (2026-10-10)
+
+**BUILT AND VERIFIED ON STAGED CODE AGAINST PRODUCTION DATA, 2026-10-10. THE SERVER HALF IS LIVE SINCE 2026-10-10 06:49 UTC (scp first, after the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; live API checked: brain `team-scout-3.0`, pool 2,341, lists ordered, nothing under 50%). The client ships with this commit.**
+
+Reported by the account holder in one sitting, each message narrowing the last:
+
+1. *"Bring this against them in Deck Counter posts similar decks for all and is
+   very inconsistent, the Team Scout deck suggestion needs to be fixed, and the
+   matchup percentage in both of these against different archetypes."*
+2. *"The decks given for counter are very generic and rely on the meta — we
+   need decks which counter their archetypes, whatever they play, at least at a
+   good percentage."*
+3. *"For every tag we now have the Decks option — refer to that while
+   suggesting, prioritising the frequency, then variations. Don't omit the duel
+   battles: they have so many good decks."*
+4. *"There is a readme that says what each card is good against — the opponent
+   plays a lot of P.E.K.K.A, Mega Knight, high-dps decks, suggest decks with
+   Ronin; fewer Tornado decks, go Balloon, Hog, hyper bait. We need a structure
+   like that for every card."*
+5. *"Figure 'this card counters most of their archetypes', search decks for
+   that card, use ranking to find the top decks of that card, then compare each
+   deck by matchup percentage against the opponent's decks — multiple brains, so
+   it is faster."*
+
+### What was wrong, measured before anything changed
+
+**Deck Counter's "Bring this against them"** was the player's own worst
+matchups restated from "your" side, with one deck drawn beside each.
+
+- On 437 held-out players, **35.5% of the rows it told a reader to bring (1,088
+  of 3,065) had a rate under 50% by its own figure.** For a player winning
+  69.6% of their games, all nine rows read between 30.6% and 50.0%.
+- The deck beside a row was the list of that archetype the player had **met**
+  most — the meta's commonest list — so six different players were shown the
+  same eight cards for Giant, Bridge Spam and Royal Giant. The percentage
+  beside it was the archetype's, not that deck's.
+- It counted every game mode: 2v2, drafts and event decks were "matchups".
+
+**Team Scout** (Team Analysis, and the Coach Roster's Opponent tab):
+
+- **The projection was partly the meta.** Up to 45% of the mass was moved off
+  what an opponent plays onto seed variants and archetypes "their behaviour
+  implies": for a player on Minion Giant and Giant, the list was scored against
+  Hog Rider, Royal Hogs and Balloon lists too.
+- **The list was a portfolio.** `diversify`'s archetype-repeat penalty spreads
+  seven slots over as many archetypes as it can, so rows four to seven were
+  "the best deck of some other archetype" at 59-63%.
+- **Duel picks were pinned at #2 and #3 whatever they scored.** Ten of ten
+  checked sat 5-20 points under the rows beneath them; one was suggested at
+  40.9%. 18 of 20 lists were not in the order of their own percentage.
+- **The pool was the meta's lists by construction**: the twelve most played
+  seeds of each archetype, 204 in all.
+- **What they play counted every mode and only their 25 most played lists.**
+  On 30 real players, event games moved 42-46% of the archetype mix for two of
+  them, and a player with 882 variants in the window had the wrong archetype
+  named as their most played.
+
+### What it is now
+
+One engine answers both screens, so they cannot disagree about a deck.
+
+| step | what | where |
+|---|---|---|
+| what they play | every deck they fielded in the window — own-deck 1v1 games **and native duel games**, most played first, a recent deck weighing more than a dropped one, each variation its own list. The Decks screen's own count | `player_decks.played`, `team_analysis._own_decks` |
+| the projection | those decks and nothing else. Every family keeps its whole share when the tail of its lists is cut; a deck the collector files under one `other` key is grouped by the win condition it plays, so "Mixed 83%" reads "Minion Giant 83%" | `team_scout.played_space`, `team_analysis._plays` |
+| the pool | **every** vetted ladder list (651) and **every** duel-catalogue list (1,690) that can field three special slots — 2,341, up from 204 | `team_analysis._counter_candidates` |
+| the rate | the fused ladder-and-duel rate, per list they play, unchanged | `matchup_fusion`, `_FusionContext` |
+| the list | the strongest counters, **in the order of the figure printed**; no deck expected to lose; near-copies folded; one win condition twice at most; and a real answer (55%+) held for every family they play a tenth of the time | `team_scout.counters` |
+| per archetype | the same rows read by family: the best counters to each archetype they play | `team_scout.answers` |
+| per card | their cards by share of play; the cards that answer them; the best decks holding each | `card_counters`, `team_analysis._by_card` |
+| Deck Counter | `bring` on `/api/analytics/counter/<tag>` — a scouting report of that one player | `team_analysis.bring` |
+
+Every suggested deck carries `vs`: its rate against each family they play. The
+screens draw it as chips, in the opponent's order of play, a matchup won in
+green and one lost in red, and the chip of the family a deck is the list's
+answer to outlined.
+
+**The duels are inside the one figure, not a second list.** A duel-catalogue
+list is a candidate like any other and earns its row on the fused rate — which
+already weighs a duel game as four ladder games. With the catalogue in the pool
+its lists took **38 of 140** slots on 20 real opponents. The duels' separate
+win-condition figure is printed only where it is strong (it agrees with the
+row); "Duel 48%" under a deck suggested at 66% is no longer drawn. A list from
+duel play is labelled **Duel deck**.
+
+### The card structure: the manual names, the database ranks
+
+`src/data/cardRoles.json` (generated from the hand-written card manual) says,
+for 122 of 123 cards, which cards it counters and which counter it. Before it
+was used it was checked against the future:
+
+> 236,036 own-deck 1v1 games of 700 players, held out by time. Past a baseline
+> of the player's own strength and the archetype matchup, the manual's counter
+> relations between the two decks improved log loss by **0.0003**; one net
+> relation was worth **0.23 points** of win rate, and the realised win rate ran
+> 57.5% to 59.4% across the whole range of -6 to +6.
+
+So a count of counter relations cannot rank a deck, and it does not. The
+manual decides **which cards are searched** — a card that answers something
+they really play (in a fifth of their games or more), or a win condition they
+carry little against ("fewer Tornado decks → Balloon") — and says, in card
+art, why. **Which of those counter them is measured**: a card is listed only
+when the pool's decks holding it do better against what they play than the
+pool does (`lift`, over six lists or more), and the decks under it are ranked
+on the same figure as every other list. For a Giant-Sparky player the cards
+that came out were Tombstone, Inferno Tower, Rocket and Barbarians.
+
+### Measured after, on staged code against production data
+
+Twenty real opponents, a scouting report each, old engine and new side by side:
+
+| | before | after |
+|---|---|---|
+| weakest of the seven (median) | 52.3% | **63.6%** |
+| weakest of the seven (worst list) | 43.3% | **58.7%** |
+| mean of the seven (median) | 62.3% | **66.2%** |
+| lists not in the order of their figure | 18 of 20 | **0** |
+| rows under 50% | 6 | **0** |
+| distinct decks in 140 slots | 88 | 102 |
+| families played 10%+ with a 55%+ answer on the list | — | 37 of 37 |
+| per-archetype lists: rate against that archetype | — | median 74.0% (63.8-88.5) |
+
+A 12-a-side match plan: rows under 50% below the #1 **55 of 1,008 → 0**; lists
+out of order **133 → 0**; every-#1-distinct 1 of 12 → 3 of 12.
+
+**Time** (warm, same machine, same players): one opponent 0.85 → **0.56 s**;
+the Deck Counter's list **0.38 s**; 3v2 0.60 → 0.80 s; 5v5 1.49 → 2.61 s; 12v12
+5.02 → 5.35 s warm and 12.57 → **8.68 s** cold. The first request after either
+source is rebuilt builds the pool, about 4 s once; later rebuilds happen behind
+the pool in hand. Rating eleven times as many lists is paid for by three
+things: the archetype half of a fused rate is worked once a candidate and
+remembered (`matchup_fusion.arch_level`), the pool is rated in a tight loop
+that builds no table per threat (`team_scout.score_rates`) and only the rows
+chosen are rated in full and seated, and a player's decks are read without
+parsing a deck string twice (`player_decks._own_rows`).
+
+"Multiple brains" is three readings — overall, per archetype, per card — of one
+rated pool, with the per-card searches and every database read side by side on
+the thread pool. The arithmetic is not parallel (Python threads do not speed
+it up); it is done once and shared.
+
+### Two things measured and NOT built
+
+- **The opponent's own record against an archetype.** On 900 players (270,454
+  held-out games) adding it to the game prediction gained 0.0007 log loss at
+  its best weight. As a way to choose which archetype to bring it did better:
+  the archetype named first went on to beat the player 5.5 points more often
+  than their average, against 3.8 for the population matchup alone and 3.6 for
+  their own record alone. It is a real, small signal; it changes what the
+  number means (a matchup rate becomes a prediction about one person) and was
+  left for a decision.
+- **List-level evidence against a list of theirs that is not a popular one.**
+  A candidate is rated against such a list at the level of its archetype. The
+  candidates' own ladder histories hold the list-level record (Coach Assist
+  reads them for its handful of options); reading them for a pool this size
+  was not done.
+
+### What changed that is worth a second look
+
+- **The two duel slots are gone.** The 2026-09-27 rule held two of every seven
+  for decks proven in duels. Those rows are what sat at 40-58% above 62-66%
+  rows. Duel lists are now in the pool and ranked on the one figure.
+- **Deck Counter is free and Team Analysis is not**, and the Deck Counter's
+  list is now the scouting engine's answer for one player.
+- **The Deck Counter's matchup tables count own-deck 1v1 games only** — the
+  rule Recent Battles, the Decks list and the coach already share — so their
+  totals moved for anyone with 2v2 or event games in the window.
+- The older list is still sent as `recommended` for one deploy, for a tab
+  opened before it.
+
+### Verification
+
+`server/test_counters.py` (69 checks: the projection, the selection, the
+per-family read, one arithmetic three ways in, the fused rate in two halves,
+the card manual), `test_team_analysis.py` 168 → 205, `test_deck_counter.py`
+58 → 66, `test_player_decks.py` 46 → 54, `tests/bringAgainst.test.ts` 18.
+**27 planted faults, 27 caught** (two tests were too weak first: a fixture in
+which the small family kept a list anyway, and one in which a card's lift was
+zero for another reason). **4,494 Python checks across 77 suites
+(only the known `test_ml_21a`), 1,662 vitest across 69 files.**
+
+**122 of 122 in a real browser** — the local site against the staged API on
+production data: the Deck Counter in both themes at 1440 and on a 390 touch
+phone (all three tabs: figures equal to the payload's and in order, eight
+cards drawn on every deck with a special form in slot 1, chips, the tabs
+fitting the phone, no sideways scroll), Team Analysis's scouting report and a
+3v2 match plan in both themes. Screenshots in `testing/`. Main JS 392.19 →
+394.53 kB gzip, CSS 57.55 → 58.29.
+
+**A mistake on the way, recorded because it will happen again:** a patch
+script wrote `open(path, "w").write(apply(path, edits))`, which truncates the
+file before `apply` reads it, and `server/team_scout.py` was emptied. It was
+restored from the committed file plus the earlier patch and compared byte for
+byte with the copy already staged on the VPS. Patch scripts here now read and
+validate every file before writing any.
 
 ---
 

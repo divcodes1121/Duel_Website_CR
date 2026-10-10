@@ -370,5 +370,91 @@ check("and an 8-card duel deck classifies exactly like a ladder one",
       dc._archetype_of_hash("cannon,fireball,hog-rider,ice-golem,ice-spirit,"
                             "musketeer,skeletons,the-log") == "hog")
 
+# ── the player's matchup table is their OWN-DECK 1v1 games ──────────────────
+#
+# `player_counter` read `battles` with no mode filter, so a 2v2 game, an
+# event's handed-out deck and a native duel's loadout row were all "matchups":
+# 872 battles on one real player where the coach's screen, over the same
+# window, counted 710. It reads through the mode router now, the rule Recent
+# Battles, the Decks list and the coach already share.
+
+print("the player's matchup table")
+
+import json  # noqa: E402
+import sqlite3  # noqa: E402
+import tempfile  # noqa: E402
+
+import clash_data as cd  # noqa: E402
+
+_TMP = tempfile.mkdtemp(prefix="deck-counter-test-")
+_DB = os.path.join(_TMP, "battles.db")
+_MINE = ["hog-rider", "musketeer", "cannon", "ice-golem", "skeletons", "the-log", "fireball", "ice-spirit"]
+_GOLEM = ["golem", "night-witch", "baby-dragon", "lumberjack", "tornado", "lightning", "mega-minion", "barbarian-barrel"]
+_GOLEM2 = _GOLEM[:7] + ["zap"]
+_XBOW = ["x-bow", "tesla", "archers", "knight", "skeletons", "the-log", "fireball", "ice-spirit"]
+
+
+def _b(i, opp, wc, result="win", mode="Ranked1v1_NewArena2", mine=None, crowns=1, opp_crowns=0):
+    return ("#P", "202609%02dT%02d0000.000Z" % (1 + i // 20, i % 20), mode, "#O", "Opp", result,
+            json.dumps(mine or _MINE), json.dumps(opp), "hog", wc, crowns, opp_crowns, None, None)
+
+
+_rows = (
+    # Ten real games against Golem: six lost. Their own deck, ranked.
+    [_b(i, _GOLEM, "golem", "loss", crowns=0, opp_crowns=1) for i in range(5)]
+    + [_b(5, _GOLEM2, "golem", "loss", crowns=0, opp_crowns=1)]
+    + [_b(i, _GOLEM, "golem") for i in range(6, 10)]
+    # Eight against X-Bow: seven won, one level.
+    + [_b(i, _XBOW, "xbow") for i in range(10, 17)]
+    + [_b(17, _XBOW, "xbow", "", crowns=1, opp_crowns=1)]
+    # NOT their matchups: 2v2 (a partner's game), an event deck, a draft.
+    + [_b(i, _GOLEM, "golem", "loss", mode="TeamVsTeam") for i in range(20, 32)]
+    + [_b(i, _GOLEM, "golem", "loss", mode="Challenge_AllCards_EventDeck_NoSet") for i in range(32, 40)]
+    + [_b(40, _XBOW, "xbow", "loss", mode="PickMode")]
+    # A native duel: a 24-card loadout against a 24-card loadout, one result.
+    + [_b(41, _GOLEM + _XBOW + _GOLEM2, "golem", "loss", mode="CW_Duel_1v1",
+          mine=_MINE + _XBOW + _GOLEM)]
+)
+_con = sqlite3.connect(_DB)
+_con.execute(
+    "CREATE TABLE battles (player_tag TEXT, battle_time TEXT, game_mode TEXT, opponent_tag TEXT,"
+    " opponent_name TEXT, result TEXT, player_card_keys TEXT, opponent_card_keys TEXT,"
+    " player_win_condition TEXT, opponent_win_condition TEXT, player_crowns INT,"
+    " opponent_crowns INT, player_evo TEXT, opponent_evo TEXT)")
+_con.executemany("INSERT INTO battles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", _rows)
+_con.commit()
+_con.close()
+
+_saved_tw, _saved_reps, _saved_art = cd.tier_windows, dc._representatives, dc._board_art
+cd.tier_windows = lambda tag, since, until: [(_DB, since or "0", until or "9")]
+dc._representatives = lambda: {}
+dc._board_art = lambda: {}
+try:
+    pc = dc.player_counter("#P")
+    by = {m["archetype"]: m for m in pc["worst"] + pc["best"]}
+    check("only own-deck 1v1 games are counted: 18, not 40",
+          pc["player"]["battles"] == 18, str(pc["player"]["battles"]))
+    check("the win rate is over those games", pc["player"]["wins"] == 11
+          and pc["player"]["winRate"] == round(100 * 11 / 18, 1), str(pc["player"]))
+    check("the 2v2 and event losses to Golem are not in the Golem row",
+          by["golem"]["battles"] == 10 and by["golem"]["wins"] == 4, str(by.get("golem")))
+    check("a level game is not a win", by["xbow"]["battles"] == 8 and by["xbow"]["wins"] == 7)
+    check("the deck beside a row is the list they met most, among those games",
+          sorted(by["golem"]["deck"]["cards"]) == sorted(_GOLEM)
+          and by["golem"]["deckBasis"] == "faced" and by["golem"]["deckSeen"] == 9,
+          str((by["golem"].get("deckBasis"), by["golem"].get("deckSeen"))))
+    check("the two lists still partition the archetypes",
+          {m["archetype"] for m in pc["worst"]} == {"golem"}
+          and {m["archetype"] for m in pc["best"]} == {"xbow"})
+    check("the old list is still sent for a tab opened before the deploy",
+          [m["archetype"] for m in pc["recommended"]] == ["golem"]
+          and pc["recommended"][0]["yourWinRate"] == 60.0)
+    cd.tier_windows = lambda tag, since, until: []
+    empty = dc.player_counter("#P")
+    check("no storage is an answer, not an error",
+          empty["player"]["battles"] == 0 and empty["worst"] == [] and empty["best"] == [])
+finally:
+    cd.tier_windows, dc._representatives, dc._board_art = _saved_tw, _saved_reps, _saved_art
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)

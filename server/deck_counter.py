@@ -1651,50 +1651,35 @@ def player_counter(tag: str, since: str | None = None,
     # again, and it is the thing the win rate above it was actually measured on.
     faced: dict[str, dict[str, list]] = {}
     total = wins = 0
-    archive_used = False
 
-    for idx, (path, lo, hi) in enumerate(cd.tier_windows(tag, since, until)):
-        try:
-            con = cd.connect(path)
-        except Exception:
+    # OWN-DECK 1v1 GAMES ONLY (2026-10-10). This read `battles` with no mode
+    # filter, so a 2v2 game (a partner's deck against one of two opponents), a
+    # draft and an event's handed-out deck were all "matchups" — 872 battles on
+    # one player where the coach's screen, counting the same window, said 710.
+    # `recent_battles._read_rows` runs the mode router first, the rule Recent
+    # Battles, the Decks list and the coach already share.
+    #
+    # A NATIVE DUEL ROW IS LEFT OUT TOO: it holds a 16- or 24-card loadout and
+    # the DUEL's result, so its `opponent_win_condition` is one label for three
+    # decks and its outcome is not a game against any of them.
+    import recent_battles as _rb          # imported here: it loads the card files
+
+    rows, archive_used, _hidden = _rb._read_rows(tag, since, until)
+    for r in rows:
+        if len(r["cards"]) != 8 or len(r["opp_cards"]) != 8:
             continue
-        try:
-            rows = con.execute(
-                "SELECT opponent_win_condition wc, result, player_crowns, "
-                "       opponent_crowns, opponent_card_keys "
-                "FROM battles "
-                "WHERE player_tag = ? AND battle_time >= ? AND battle_time <= ?",
-                (tag, lo, hi),
-            ).fetchall()
-        except Exception:
-            rows = []
-        finally:
-            con.close()
-        if rows and idx > 0:
-            archive_used = True
-        for r in rows:
-            wc = (r["wc"] or "").strip() or "other"
-            e = per.setdefault(wc, [0, 0, 0, 0])
-            e[0] += 1
-            total += 1
-            if r["result"] == "win":
-                e[1] += 1
-                wins += 1
-            e[2] += r["player_crowns"] or 0
-            e[3] += r["opponent_crowns"] or 0
-
-            # EXACTLY EIGHT CARDS. A 16- or 24-card duel loadout is three decks
-            # end to end; counting it as "a deck they faced" would draw a deck
-            # that never existed. Same guard as everywhere else.
-            try:
-                opp = json.loads(r["opponent_card_keys"] or "[]")
-            except Exception:
-                continue
-            if len(opp) != 8:
-                continue
-            seen = faced.setdefault(wc, {})
-            slot = seen.setdefault(",".join(sorted(opp)), [0, opp])
-            slot[0] += 1
+        wc = (r["opp_archetype"] or "").strip() or "other"
+        e = per.setdefault(wc, [0, 0, 0, 0])
+        e[0] += 1
+        total += 1
+        if _rb._outcome(r["result"], r["crowns"], r["opp_crowns"]) == "win":
+            e[1] += 1
+            wins += 1
+        e[2] += r["crowns"] or 0
+        e[3] += r["opp_crowns"] or 0
+        seen = faced.setdefault(wc, {})
+        slot = seen.setdefault(",".join(sorted(r["opp_cards"])), [0, r["opp_cards"]])
+        slot[0] += 1
 
     overall = round(100 * wins / total, 1) if total else 0.0
     reps = _representatives()

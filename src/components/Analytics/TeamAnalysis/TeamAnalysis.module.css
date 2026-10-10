@@ -1315,6 +1315,13 @@
   color: var(--success);
 }
 
+/* The list's best counter to that archetype of theirs — outlined in the
+   selection hue, the mark the Deck Counter's list draws for the same thing. */
+.recVsItem[data-answer] {
+  border-color: var(--accent-select);
+  box-shadow: inset 0 0 0 1px var(--accent-select);
+}
+
 .mateCovers {
   display: flex;
   flex-wrap: wrap;

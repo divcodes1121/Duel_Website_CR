@@ -17,7 +17,8 @@ import {
   type TableRow,
 } from './analyticsReport';
 import { drawnDeck } from './deckSeating';
-import { duelShort } from './duelFigures';
+import { duelDeckLabel, duelShort } from './duelFigures';
+import { chipLabels } from './bringAgainst';
 
 /**
  * A whole team analysis as a printable dossier.
@@ -232,8 +233,9 @@ const NO_OPTION: Record<string, string> = {
  *  squad plan sends no `squadCover`; the spread (what they HAVE played) is the
  *  honest fallback. */
 function archetypeLabels(folder: TeamFolder): [string, string][] {
-  if (folder.squadCover?.length) return folder.squadCover.map((c) => [c.archetype, c.name]);
-  return folder.spread.map((r) => [r.archetype, r.name]);
+  // What they play, by family (brain 3.0) — the screen's own chips, in both
+  // modes — then a squad plan's cover from an older server, then the spread.
+  return chipLabels(folder) ?? folder.spread.map((r) => [r.archetype, r.name]);
 }
 
 /**
@@ -250,9 +252,12 @@ function archetypeLabels(folder: TeamFolder): [string, string][] {
 function optionLine(r: TeamRecommendation, rank: number, labels: [string, string][]): DeckLine {
   const deckkies = !!r.fill || !r.owner;
   const meta: string[] = [];
-  // THE DUEL FIGURE LEADS THE LINE when the duel brain chose the row — it is
-  // the reason the row is there — and trails it otherwise, as information.
-  const duel = duelShort(r.duel);
+  // THE DUELS' OWN FIGURE, ONLY WHERE IT AGREES — the screen's rule (brain
+  // 3.0). The headline already holds the duel games; a second figure that says
+  // otherwise ("Duel 49%" on a row suggested at 56%) is the inconsistency this
+  // list was rebuilt to remove. On a duel list it leads the line; elsewhere it
+  // trails.
+  const duel = r.duel?.strong ? duelShort(r.duel) : null;
   if (duel && r.duelPick) meta.push(duel);
   if (deckkies && r.squadPick) meta.push('Deckkies pick');
   if (!deckkies && r.comfort) meta.push(`${int(r.comfort.games)} games at ${pct(r.comfort.winRate)}`);
@@ -269,7 +274,7 @@ function optionLine(r: TeamRecommendation, rank: number, labels: [string, string
     name: r.name,
     badge: r.squadPick
       ? { text: 'Squad pick', hue: 'green' }
-      : r.duelPick ? { text: 'Duel pick', hue: 'pink' }
+      : duelDeckLabel(r) ? { text: 'Duel deck', hue: 'pink' }
         : deckkies ? { text: 'Deckkies pick', hue: 'violet' } : undefined,
     meta: meta.join(' · '),
     value: pct(r.expectedWinRate),

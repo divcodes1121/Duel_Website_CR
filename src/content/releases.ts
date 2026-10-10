@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-10-counters',
+    date: '2026-10-10',
+    kind: 'improved',
+    title: 'Counters to what they actually play',
+    body: [
+      'Deck Counter’s “Bring this against them” and the decks Team Analysis suggests are now chosen against the decks a player really plays — their ranked games and their duel games, most played first — instead of a spread of popular lists. Decks from real duels are in the pool beside the ladder’s, the list reads in order of its win rate, and no deck expected to lose is suggested.',
+      'Every suggested deck shows its win rate against each archetype they play. In Deck Counter you can also read the same decks by archetype — the best counters to each one — and by card: the cards that answer what they play, with the best decks holding each.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-09-export-last-sets',
     date: '2026-10-09',
     kind: 'improved',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TeamDuelFigures } from '../src/state/analyticsClient';
-import { duelChip, duelPickLabel, duelShort, duelTitle } from '../src/utils/duelFigures';
+import { duelChip, duelDeckLabel, duelPickLabel, duelShort, duelTitle } from '../src/utils/duelFigures';
 
 /**
  * How the duel brain's figures print, on the screen and in the PDF. One helper
@@ -17,6 +17,11 @@ describe('duelFigures', () => {
   it('labels only the rows the duel brain chose', () => {
     expect(duelPickLabel({ duelPick: 'own' })).toBe('Duel pick');
     expect(duelPickLabel({ duelPick: 'duel' })).toBe('Duel pick');
+    // Team Analysis and the Deck Counter name where the list comes from.
+    expect(duelDeckLabel({ origin: 'duel' })).toBe('Duel deck');
+    expect(duelDeckLabel({ duelPick: 'own' })).toBe('Duel deck');
+    expect(duelDeckLabel({ origin: 'ladder' })).toBeNull();
+    expect(duelDeckLabel({})).toBeNull();
     expect(duelPickLabel({})).toBeNull();
   });
 

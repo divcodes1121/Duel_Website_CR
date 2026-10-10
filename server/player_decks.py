@@ -32,8 +32,10 @@ prints a Draws column, so the denominator has to hold the draws.
 
 from __future__ import annotations
 
+import json
 import time
 
+import battle_modes as bm
 import clash_data as cd
 import duel_combos as dx
 import recent_battles as rb
@@ -174,9 +176,102 @@ def _record(wins: int, losses: int, draws: int) -> dict:
     }
 
 
-def report(tag: str, since: str | None = None, until: str | None = None) -> dict:
-    """Every deck this player fielded in the window, most played first."""
-    rows, archive_used, hidden = rb._read_rows(tag, since, until)
+def _own_rows(tag: str, since: str | None, until: str | None
+              ) -> tuple[list[dict], bool, dict[str, int]]:
+    """`recent_battles._read_rows`, for a caller that only COUNTS DECKS.
+
+    The same tier walk, the same router and the same "a row with no deck on
+    either side is not a battle" rule, row for row — `test_player_decks` holds
+    the two equal — without what a deck count never reads. `_read_rows` parses
+    two JSON decks for every battle, and a player with three thousand battles
+    in the window has perhaps two hundred distinct lists: here a deck string is
+    parsed once however often it was played, a mode is routed once however
+    many rows carry it, and the opponent's deck is not parsed at all (SQL says
+    whether there was one).
+
+    It matters since Team Analysis reads this for every player on both sides:
+    twenty-four players at 0.2 s each was most of a board's wait.
+    """
+    windows = cd.tier_windows(tag, since, until)
+    if not windows:
+        return [], False, {}
+
+    out: list[dict] = []
+    archive_used = False
+    hidden: dict[str, int] = {}
+    parsed: dict[str, list] = {}
+    routed: dict[str, bool] = {}
+    for idx, (path, w_lo, w_hi) in enumerate(windows):
+        try:
+            con = cd.connect(path)
+        except Exception:
+            continue
+        try:
+            rows = con.execute(
+                "SELECT battle_time, game_mode, result, player_card_keys, "
+                "       player_win_condition, player_crowns, opponent_crowns, player_evo, "
+                "       CASE WHEN opponent_card_keys IS NULL "
+                "              OR opponent_card_keys IN ('', '[]') THEN 0 ELSE 1 END "
+                "FROM battles "
+                "WHERE player_tag = ? AND battle_time >= ? AND battle_time <= ? "
+                "ORDER BY battle_time DESC",
+                (tag, w_lo, w_hi),
+            ).fetchall()
+        except Exception:
+            rows = []
+        finally:
+            con.close()
+
+        kept = 0
+        for bt, mode, result, raw, arch, crowns, opp_crowns, evo, has_opp in rows:
+            mode = mode or ""
+            own = routed.get(mode)
+            if own is None:
+                own = routed[mode] = bm.classify(mode) == bm.OWN_DECK_1V1
+            if not own:
+                hidden[mode or "(unrecorded)"] = hidden.get(mode or "(unrecorded)", 0) + 1
+                continue
+            raw = raw or "[]"
+            cards = parsed.get(raw)
+            if cards is None:
+                try:
+                    cards = json.loads(raw)
+                except Exception:
+                    cards = []
+                parsed[raw] = cards
+            if not cards and not has_opp:
+                continue
+            kept += 1
+            out.append({
+                "battle_time": bt or "", "mode": mode, "result": result or "",
+                "cards": cards, "archetype": arch or "",
+                "crowns": crowns or 0, "opp_crowns": opp_crowns or 0, "evo": evo,
+            })
+        if kept and idx > 0:
+            archive_used = True
+
+    out.sort(key=lambda r: r["battle_time"], reverse=True)
+    return out, archive_used, hidden
+
+
+def played(tag: str, since: str | None = None, until: str | None = None) -> dict:
+    """The COUNTING half of `report`: every deck this player fielded in the
+    window, with their record on it, and nothing drawn or looked up.
+
+    It exists on its own because a second reader needs exactly this and none of
+    the rest: Team Analysis and the Deck Counter's "Bring this against them"
+    project what an opponent PLAYS, and that has to be the same list this
+    screen shows — own-deck 1v1 games plus native duel games, with 2v2, drafts
+    and event decks left out by the mode router. Reading it from
+    `player_report` instead (every mode, the top 25 lists) put event decks in
+    the projection and, for a player with hundreds of variants, named the wrong
+    archetype as the one they play most.
+
+    Returns `per` — `{deck key: [wins, losses, draws, last seen, stored-order
+    cards, archetype]}` — the forms each deck was last seen fielded with
+    (`marks`), and the counts `report` publishes in its summary.
+    """
+    rows, archive_used, hidden = _own_rows(tag, since, until)
 
     # key -> [wins, losses, draws, last seen, stored-order cards, archetype]
     per: dict[str, list] = {}
@@ -238,6 +333,21 @@ def report(tag: str, since: str | None = None, until: str | None = None) -> dict
             e[0] += wins
             # A duel game has a winner — a level game takes a tiebreak tower.
             e[1] += games - wins
+
+    return {
+        "per": per, "marks": marks, "loadouts": loadouts,
+        "duelGames": duel_games, "duelIndex": duel_ok,
+        "archiveUsed": archive_used, "hidden": hidden,
+    }
+
+
+def report(tag: str, since: str | None = None, until: str | None = None) -> dict:
+    """Every deck this player fielded in the window, most played first."""
+    got = played(tag, since, until)
+    per, marks, hidden = got["per"], got["marks"], got["hidden"]
+    loadouts, duel_games = got["loadouts"], got["duelGames"]
+    duel_ok, archive_used = got["duelIndex"], got["archiveUsed"]
+    di = _duel_index()
 
     total = sum(e[0] + e[1] + e[2] for e in per.values())
     everyone = community(list(per))

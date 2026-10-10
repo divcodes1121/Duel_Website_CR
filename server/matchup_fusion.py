@@ -137,21 +137,30 @@ def step(prior: float, ladder, duel, k: float, alpha: float = ALPHA) -> tuple[fl
     return (w + k * prior) / (n + k), n
 
 
-def fused(matrix, *, cluster=None, arch_ladder=None, arch_duel=None, fam_ladder=None,
-          fam_duel=None, ver_ladder=None, ver_duel=None) -> dict | None:
-    """The fused rate for ONE candidate list against ONE threat.
+def arch_level(matrix, *, cluster=None, arch_ladder=None, arch_duel=None) -> tuple:
+    """The chain as far as the ARCHETYPE: `(p, n0, n1, have_matrix, matrix games)`.
 
-    `matrix` is `(rate 0..1, games)` for the two archetypes, or None. Every
-    other argument is `(games, wins)` — pilot-adjusted wins for the duel ones —
-    or None when that evidence was not read. KEYWORD-ONLY on purpose: seven
-    arguments of one shape are one transposition away from a plausible wrong
-    number, and this module's own first test made exactly that mistake.
-    Returns None when there is nothing to go on.
+    Everything here depends on the candidate list and the threat's ARCHETYPE
+    alone — not on which list of that archetype the threat is — so a caller
+    rating one candidate against a dozen lists of three archetypes computes it
+    three times, not twelve, and may keep it for as long as the evidence behind
+    it stands (`team_analysis._FusionContext`). `finish` takes it from here.
     """
     have_matrix = bool(matrix) and float(matrix[1] or 0) >= MATRIX_MIN
     p = float(matrix[0]) if have_matrix else 0.5
     p, n0 = step(p, cluster, None, K_CLUSTER)
     p, n1 = step(p, arch_ladder, arch_duel, K_ARCH)
+    return (p, n0, n1, have_matrix, float(matrix[1]) if have_matrix else 0.0)
+
+
+def finish(base: tuple, *, fam_ladder=None, fam_duel=None, ver_ladder=None,
+           ver_duel=None) -> dict | None:
+    """The two VERSION levels on top of `arch_level`, and the answer.
+
+    `fused` is exactly `finish(arch_level(...), ...)`; the split changes no
+    figure, only where the first half may be remembered.
+    """
+    p, n0, n1, have_matrix, matrix_games = base
     p, n2 = step(p, fam_ladder, fam_duel, K_FAMILY)
     p, n3 = step(p, ver_ladder, ver_duel, K_VERSION)
     if not have_matrix and n0 + n1 + n2 + n3 <= 0:
@@ -164,7 +173,7 @@ def fused(matrix, *, cluster=None, arch_ladder=None, arch_duel=None, fam_ladder=
     elif n0 >= SOURCE_MIN:
         source, games = SOURCE_CLUSTER, n0
     else:
-        source, games = SOURCE_ARCHETYPE, float(matrix[1]) if have_matrix else n0 + n1
+        source, games = SOURCE_ARCHETYPE, matrix_games if have_matrix else n0 + n1
     p = min(max(p, 0.0), 1.0)
     return {
         "winRate": round(100.0 * p, 1),
@@ -175,3 +184,46 @@ def fused(matrix, *, cluster=None, arch_ladder=None, arch_duel=None, fam_ladder=
         "brain": FUSION_VERSION,
     }
 
+
+def finish_rate(base: tuple, fam_ladder=None, fam_duel=None, ver_ladder=None,
+                ver_duel=None) -> tuple | None:
+    """`finish` without the dictionary: `(winRate, source)`, or None.
+
+    For a caller rating thousands of lists of which a handful are shown. The
+    same two `step`s and the same naming rule as `finish` — a test holds the
+    two equal on random evidence — so a list rated here and drawn from
+    `finish` shows one number.
+    """
+    p, n0, n1, have_matrix, _matrix_games = base
+    n2 = n3 = 0.0
+    if fam_ladder or fam_duel:
+        p, n2 = step(p, fam_ladder, fam_duel, K_FAMILY)
+    if ver_ladder or ver_duel:
+        p, n3 = step(p, ver_ladder, ver_duel, K_VERSION)
+    if not have_matrix and n0 + n1 + n2 + n3 <= 0:
+        return None
+    if n2 + n3 >= SOURCE_MIN:
+        source = SOURCE_VERSION
+    elif n1 >= SOURCE_MIN:
+        source = SOURCE_DECK
+    elif n0 >= SOURCE_MIN:
+        source = SOURCE_CLUSTER
+    else:
+        source = SOURCE_ARCHETYPE
+    return round(100.0 * min(max(p, 0.0), 1.0), 1), source
+
+
+def fused(matrix, *, cluster=None, arch_ladder=None, arch_duel=None, fam_ladder=None,
+          fam_duel=None, ver_ladder=None, ver_duel=None) -> dict | None:
+    """The fused rate for ONE candidate list against ONE threat.
+
+    `matrix` is `(rate 0..1, games)` for the two archetypes, or None. Every
+    other argument is `(games, wins)` — pilot-adjusted wins for the duel ones —
+    or None when that evidence was not read. KEYWORD-ONLY on purpose: seven
+    arguments of one shape are one transposition away from a plausible wrong
+    number, and this module's own first test made exactly that mistake.
+    Returns None when there is nothing to go on.
+    """
+    return finish(
+        arch_level(matrix, cluster=cluster, arch_ladder=arch_ladder, arch_duel=arch_duel),
+        fam_ladder=fam_ladder, fam_duel=fam_duel, ver_ladder=ver_ladder, ver_duel=ver_duel)

@@ -1,0 +1,366 @@
+/* BRING THIS AGAINST THEM — the Deck Counter's list of what to play.
+ *
+ * Sized by the box it is in (`bring`), not by the window: the block sits in a
+ * panel that is a third narrower whenever the rail is open.
+ *
+ * Every neutral figure is full ink, in both themes. A win rate that is a
+ * matchup won is green ink and one that is lost is red ink — the `--success` /
+ * `--error` steps the Team Analysis chips already use, so one deck's chips read
+ * the same on both screens. Selection is violet. */
+
+.root {
+  container: bring / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+/* ── What they play ─────────────────────────────────────────────────────── */
+
+.plays {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.playsLabel,
+.theirsLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.play {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.14rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  color: var(--text);
+  background: var(--surface-sunken, transparent);
+}
+
+.play strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.empty {
+  margin: 0;
+  padding: 0.6rem 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ── A deck ─────────────────────────────────────────────────────────────── */
+
+.decks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.4rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-sunken, transparent);
+  min-width: 0;
+}
+
+.deckHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  min-width: 0;
+}
+
+.rank {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.deckName {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Where the list comes from. The green FILL step, which carries white — the
+   pill Team Analysis already draws for a duel deck. */
+.duelPill {
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--on-solid);
+  background: var(--solid-green);
+}
+
+.duelFig {
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.duelFig[data-strong] {
+  color: var(--hue-green);
+}
+
+.figure {
+  margin-left: auto;
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* Eight across, whatever the width: the deck is the thing being handed over. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 3px;
+  max-width: 30rem;
+}
+
+.cards img {
+  width: 100%;
+  height: auto;
+}
+
+.deckFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  min-width: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.chip strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--error);
+}
+
+.chip[data-ok] strong {
+  color: var(--success);
+}
+
+/* The list's best counter to that archetype: the chip is outlined in the
+   selection hue, so "this one is the answer to their Giant" is a mark and not
+   a sentence. */
+.chip[data-answer] {
+  border-color: var(--accent-select);
+  box-shadow: inset 0 0 0 1px var(--accent-select);
+}
+
+.actions {
+  margin-left: auto;
+}
+
+/* ── By their archetype ─────────────────────────────────────────────────── */
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.groupHead strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* ── By counter card ────────────────────────────────────────────────────── */
+
+.theirs,
+.cardWhy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.45rem;
+  min-width: 0;
+}
+
+.theirCard {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  width: 2.2rem;
+}
+
+.theirCard img {
+  width: 100%;
+  height: auto;
+}
+
+.theirShare {
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.counterCards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.counterCard {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  width: 4.4rem;
+  padding: 0.35rem 0.25rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color var(--dur-1, 140ms) var(--ease, ease),
+    background-color var(--dur-1, 140ms) var(--ease, ease);
+}
+
+.counterCard img {
+  width: 2.6rem;
+  height: auto;
+}
+
+.counterCard:hover {
+  border-color: var(--text-muted);
+}
+
+.counterCard[aria-pressed='true'] {
+  border-color: var(--accent-select);
+  background: color-mix(in srgb, var(--accent-select) 12%, transparent);
+}
+
+.counterName {
+  max-width: 100%;
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.counterLift {
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--success);
+}
+
+.cardPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  min-width: 0;
+}
+
+/* ── Narrow: a phone, or a panel beside an open rail ────────────────────── */
+
+@container bring (max-width: 30rem) {
+  .deck {
+    padding: 0.5rem 0.55rem;
+  }
+
+  .figure {
+    font-size: 1.02rem;
+  }
+
+  .actions {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .counterCard {
+    width: 3.9rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .counterCard {
+    min-height: 2.75rem;
+  }
+}

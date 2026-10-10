@@ -12,9 +12,26 @@
  */
 import type { TeamDuelFigures, TeamRecommendation } from '../state/analyticsClient';
 
-/** The label a duel-chosen row wears, or null when the ladder brain chose it. */
+/** The label a duel-chosen row wears, or null when the ladder brain chose it.
+ *  Coach Assist's: one of its three options is HELD for a deck proven in duels,
+ *  so "pick" is the right word there. */
 export function duelPickLabel(rec: Pick<TeamRecommendation, 'duelPick'>): string | null {
   return rec.duelPick ? 'Duel pick' : null;
+}
+
+/**
+ * `Duel deck` — the label of a list that comes from DUEL play, on Team
+ * Analysis and on the Deck Counter's "Bring this against them": a list out of
+ * the duel catalogue, or a teammate's own duel deck.
+ *
+ * Not "pick". Since brain 3.0 nothing is picked by a second brain and held
+ * above stronger rows: a duel list is a candidate like any other and is on the
+ * list because of its figure. The label says where the list comes from.
+ */
+export function duelDeckLabel(
+  rec: Pick<TeamRecommendation, 'duelPick' | 'origin'>,
+): string | null {
+  return rec.origin === 'duel' || rec.duelPick ? 'Duel deck' : null;
 }
 
 /**

@@ -230,6 +230,14 @@ inside it.
 
 ### Job 2 — the candidate pool
 
+> **2026-10-10: this job has a second, live use.** `server/card_counters.py`
+> inverts the same `COUNTERS:` / `COUNTERED_BY:` fields to decide which cards
+> are worth SEARCHING decks for against one opponent (Deck Counter, "By
+> card"). It was checked against the future first — 236,036 held-out games,
+> 0.23 points of win rate per counter relation — which is this section's rule
+> confirmed by measurement: the manual names the cards, and a measured matchup
+> rate ranks every deck.
+
 This is what makes generation tractable. Expanding a seed against all 122
 cards is 8 x 122 = 976 one-swap candidates per seed. Against a **targeted
 pool** it is 8 x ~25.

@@ -315,6 +315,52 @@ check("a deck with no marks says its art is inferred",
       not guess.get("art") or guess.get("artInferred") is True, str(guess))
 
 
+# --- the lean reader is the battle log's reader, row for row -------------------
+#
+# `played()` reads through `_own_rows`, which parses a deck string once however
+# often it was played and never parses the opponent's. Team Analysis reads it
+# for every player on both sides, so it has to be fast — and it has to be the
+# SAME rows the battle log's reader would have given, or "what they play" on
+# one screen stops being the Decks list on another.
+
+import recent_battles as rb  # noqa: E402
+
+ODD = os.path.join(TMP, "odd.db")
+make_db(ODD, ROWS + [
+    # No deck on either side: not a battle, on either reader.
+    (TAG, "20260913T120000.000Z", "Ladder", "#RIVAL", "Rival", "win", "[]", "[]", "hog", "golem", 1, 0, None, None),
+    # No deck of theirs, but an opponent's: kept by both (a loadout to `played`).
+    (TAG, "20260913T130000.000Z", "Ladder", "#RIVAL", "Rival", "win", "[]", json.dumps(GOLEM), "hog", "golem", 1, 0, None, None),
+    # A deck string that is not JSON: an empty deck to both.
+    (TAG, "20260913T140000.000Z", "Ladder", "#RIVAL", "Rival", "loss", "{oops", json.dumps(GOLEM), "hog", "golem", 0, 1, None, None),
+    # A mode nobody recorded, and NULLs where a count should be.
+    (TAG, "20260913T150000.000Z", None, "#RIVAL", "Rival", "win", json.dumps(HOG), json.dumps(GOLEM), "hog", "golem", None, None, None, None),
+    (TAG, "20260913T160000.000Z", "Ladder", "#RIVAL", "Rival", None, json.dumps(HOG), None, None, "golem", None, None, None, None),
+])
+cd.tier_windows = lambda tag, since, until: [(ODD, since or "0", until or "9")]
+cd._tier_paths = lambda: [ODD]
+no_indexes()
+_ref, _ref_arch, _ref_hidden = rb._read_rows(TAG, None, None)
+_got, _got_arch, _got_hidden = pd._own_rows(TAG, None, None)
+_keys = ("battle_time", "mode", "result", "cards", "archetype", "crowns", "opp_crowns", "evo")
+check("the lean reader returns the battle log's rows, one for one",
+      len(_got) == len(_ref) and len(_ref) > 10, f"{len(_got)} vs {len(_ref)}")
+check("...the same fields on every row, in the same order",
+      [[r[k] for k in _keys] for r in _got] == [[r[k] for k in _keys] for r in _ref])
+check("...what the router refused, counted the same way", _got_hidden == _ref_hidden and _got_hidden)
+check("...and the same word on the archive", _got_arch == _ref_arch)
+check("a row with no deck on either side is in neither",
+      all(r["battle_time"] != "20260913T120000.000Z" for r in _got))
+
+_p = pd.played(TAG)
+check("played() is report()'s counting half: the same decks",
+      set(_p["per"]) == {d["key"] for d in pd.report(TAG)["decks"]})
+check("...with a record on each", _p["per"][key(HOG)][:3] == [5, 1, 2] or sum(_p["per"][key(HOG)][:3]) >= 5,
+      str(_p["per"][key(HOG)][:3]))
+check("...and the event deck and the 2v2 games are not their decks",
+      sum(_p["hidden"].values()) >= 3)
+
+
 # --- an empty window -----------------------------------------------------------
 
 DB3 = os.path.join(TMP, "empty.db")

@@ -20,6 +20,7 @@ import {
   type RepDeck,
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
+import { BringAgainst } from './BringAgainst';
 import { Tabs } from '../ui/tabs';
 import { useVersusState, type VersusState } from './deckVersusState';
 import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
@@ -809,15 +810,24 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
               </section>
             </div>
 
-            <section className={styles.block}>
+            {/* WHAT TO BRING: the scouting engine's answer for this one player
+                — counters to what THEY play, from the ladder's lists and the
+                duels', on the same figures Team Analysis shows. `bring` is
+                absent from a server that predates it, and the old list (their
+                worst matchups restated from your side) is drawn then, so a
+                deploy never leaves the block empty. */}
+            <section className={styles.block} data-bring-block>
               <h2 className={styles.blockTitle}>
                 Bring this against them
-                <span className={styles.blockCount}>{report.recommended.length}</span>
+                <span className={styles.blockCount}>
+                  {report.bring ? report.bring.decks.length : report.recommended.length}
+                </span>
               </h2>
-              <p className={styles.blockNote}>
-                The archetypes this player does worst against, stated from your side of the board.
-              </p>
-              <MatchupList rows={report.recommended} showYours empty={thinReason} />
+              {report.bring ? (
+                <BringAgainst bring={report.bring} />
+              ) : (
+                <MatchupList rows={report.recommended} showYours empty={thinReason} />
+              )}
             </section>
           </>
         )}

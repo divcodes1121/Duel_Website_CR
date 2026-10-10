@@ -2028,6 +2028,98 @@ twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
 
 
+## Counters to what they play (`team_scout` 3.0, `card_counters.py`, 2026-10-10)
+
+**BUILT AND VERIFIED ON STAGED CODE AGAINST PRODUCTION DATA, 2026-10-10. THE SERVER HALF IS LIVE SINCE 2026-10-10 06:49 UTC (scp first, after the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; live API checked: brain `team-scout-3.0`, pool 2,341, lists ordered, nothing under 50%). The client ships with this commit.**
+
+The decks Team Analysis suggests and the Deck Counter's "Bring this against
+them" are one engine's answer. The reasoning and the measurements are in the
+README ("Counters to what they play"); this is how the modules fit.
+
+```
+player_decks.played(tag, since, until)        what a player PLAYS: own-deck 1v1 games
+        │                                     + native duel games (the Decks list's count)
+team_analysis._own_decks / _resolve           the same rows in player_report's shape,
+        │                                     a `family` on each (`_family`)
+team_scout.played_space(decks)                the projection: their decks only; every
+        │                                     family keeps its whole share
+team_analysis._counter_candidates()           the pool: every vetted seed + every
+        │                                     duel-catalogue list (kept between requests)
+_score(dress=False, table=…)                  rated in a tight loop: fused rate per list
+        │                                     they play (`_FusionContext.lean_rates`)
+team_scout.counters(rows, plays)              the seven        ┐
+team_scout.answers(rows, plays)               per family       ├ one rated pool, three reads
+team_analysis._by_card(rows, threats, …)      per counter card ┘
+_finish                                       the rows CHOSEN are rated in full, seated
+                                              (`complete_seating`) and given duel figures
+```
+
+**`played_space`** replaces `threat_space` as what a board is scored against.
+No seed variants and no inferred archetypes: `mass` is `{observed: 1.0, …}`.
+A family worth naming (5% of their play, `PLAYS_MIN_SHARE`) always keeps its
+most played list among the twelve scored against, and the lists kept for a
+family are scaled to carry everything the family was worth. `threat_space`,
+`diversify` and `suggest` are unchanged and still used by `coach_daily`.
+
+**`counters`** — strongest first on the score; no row under `FLOOR_RATE` (50);
+no near-copy (`SAME_DECK_OVERLAP`, six cards); `PER_ARCHETYPE` (2) lists of one
+win condition; then, for every family at `ANSWER_SHARE` (10%) or more that no
+listed row beats at `GOOD_RATE` (55), the best deck that does replaces the
+weakest row that is not itself the only answer to something. The result is
+sorted by the figure printed. `first=` leads whatever its figure (a squad's
+#1); `adjust=` is the squad planner's cost for a deck a teammate already has.
+`squad_plan`'s #1 assignment is unchanged; the rest of each teammate's list is
+`counters`, where it was `diversify`.
+
+**The pool** (`_counter_candidates`): `_SeedProfile` for seeds, `_ListProfile`
+for duel-catalogue lists — both the exact ladder rung only, no cluster scans
+(3 ms a list, where `_DeckProfile` measured 65 ms). Keyed on the counter
+snapshot's `computedAt` and the duel index's build; when either moves, the
+pool in hand keeps answering and a daemon thread builds the next.
+`_reset_counter_pool()` forgets it. `pool.counters` on a report and `bring.pool`
+say how many lists it holds from each source. A match plan hands its
+teammates a shortlist of it (`SQUAD_POOL` strongest plus the best
+`SQUAD_POOL_PER_FAMILY` against each family they play), not all of it.
+
+**The rate is unchanged** (`matchup_fusion`), split so its first half is
+worked once: `fused == finish(arch_level(...), ...)`, and `finish_rate` is
+`finish` without the dictionary. `arch_level` depends on the candidate and the
+threat's ARCHETYPE only, so it is remembered on the pool candidate
+(`_Candidate.memo`, keyed by archetype, whether duels were read, and the
+snapshot). A rate this request has already worked out in full wins over the
+tight loop's (`lean_rates` reads `_rates` first): a teammate can own the list a
+pool row is, and theirs was rated with a richer profile.
+
+**`card_counters.py`** (no database): `BEATS` from both directions of
+`cardRoles.json` (`counters` and `counteredBy` — 371 relations are written both
+ways and 621 only one way), `usage(threats)`, `read(card, usage)` and
+`worth(card, usage, win_condition=)`. It returns card keys and shares, never a
+rate. `_by_card` lists a card only when `worth` says it is worth searching AND
+the pool's decks holding it (six or more) do better than the pool against what
+they play.
+
+**`bring(tag, since, until)`** resolves the one player over the Deck Counter's
+own window and returns `{plays, decks, byFamily, byCard, reason, pool, brain}`.
+It rides on `/api/analytics/counter/<tag>` as `bring` (no new route; the count
+stays 28) inside a try: a failure costs the list and never the matchup tables.
+`recommended` (the old list) is still sent for one deploy.
+
+**`deck_counter.player_counter`** now reads through
+`recent_battles._read_rows` — the mode router first — and counts a row only
+when both sides are one eight-card deck, so 2v2, drafts, event decks and
+native duel loadouts are not matchups.
+
+**`player_decks._own_rows`** is `_read_rows` for a caller that only counts
+decks: one JSON parse a distinct deck string, one routing a mode, the
+opponent's deck never parsed. `test_player_decks` holds the two equal row for
+row.
+
+**Deploying it** — copy `team_scout.py`, `team_analysis.py`, `matchup_fusion.py`,
+`card_counters.py`, `player_decks.py`, `deck_counter.py`, `app.py`; nothing
+under `src/data/` changes (`cardRoles.json` is already there for
+`deck_harmony`). Coach Assist imports `team_analysis`'s contexts and
+`matchup_fusion.fused`, whose surfaces did not change (211 of 211).
+
 ## Team analysis (`team_analysis.py`) and the coaching brain (`team_scout.py`)
 
 Two rosters in, a folder per opponent out — **or one roster in, on its own.**

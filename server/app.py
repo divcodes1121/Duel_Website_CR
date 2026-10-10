@@ -1035,6 +1035,16 @@ class Handler(BaseHTTPRequestHandler):
                 out["coverage"] = cov
                 out["window"] = {"from": since, "to": until}
                 out["status"] = counter.status()
+                # "BRING THIS AGAINST THEM" is the scouting engine's answer for
+                # this one player (`team_analysis.bring`): the same pool and
+                # the same figures as Team Analysis, so the two screens cannot
+                # disagree about a deck. It is extra — a failure costs the
+                # list, never the matchup table above it.
+                try:
+                    out["bring"] = teams.bring(tag, since, until)
+                except Exception:  # noqa: BLE001
+                    traceback.print_exc()
+                    out["bring"] = None
                 return self._send(out)
 
             if path.startswith("/api/analytics/cards/"):

@@ -12,7 +12,8 @@ import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import { VsMark } from '../../VsMark/VsMark';
-import { duelChip, duelPickLabel, duelTitle } from '../../../utils/duelFigures';
+import { duelChip, duelDeckLabel, duelTitle } from '../../../utils/duelFigures';
+import { chipLabels } from '../../../utils/bringAgainst';
 import styles from './TeamAnalysis.module.css';
 import { Threats } from './Threats';
 import { SuggestHeading } from './SuggestHeading';
@@ -136,7 +137,12 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
             <SuggestHeading />
             <ol className={styles.mateDecks}>
               {overall.recommended.map((r, i) => (
-                <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
+                <Recommendation
+                  key={`${r.archetype}-${i}`}
+                  rec={r}
+                  rank={i + 1}
+                  labels={chipLabels(overall)}
+                />
               ))}
             </ol>
           </div>
@@ -254,12 +260,12 @@ function Recommendation({ rec, rank, labels }: {
       <div className={styles.recHead}>
         {rank !== undefined && <span className={styles.recRank}>{rank}</span>}
         <div className={styles.recWho}>
-          {rec.squadPick && labels && <span className={styles.recSquad}>Squad pick</span>}
+          {rec.squadPick && <span className={styles.recSquad}>Squad pick</span>}
           {/* THE DUEL BRAIN'S SLOTS. Up to two of the seven are held for decks
               proven in real DUEL games against what this opponent brings — the
               teammate's own first — and the label is what says why a deck the
               ladder ranks lower sits this high. */}
-          {duelPickLabel(rec) && <span className={styles.recDuel}>{duelPickLabel(rec)}</span>}
+          {duelDeckLabel(rec) && <span className={styles.recDuel}>{duelDeckLabel(rec)}</span>}
           <span className={styles.recDeck}>{rec.name}</span>
           {/* WHO FLIES IT, OR THAT NOBODY HERE DOES. An owned deck names its
               pilot; a fill says it is a Deckkies pick. A scouting row belongs
@@ -302,11 +308,13 @@ function Recommendation({ rec, rank, labels }: {
               </span>
             ) : null}
           </span>
-          {/* THE SAME DECK IN DUELS, on every row the duels have enough games
-              on — so a coach can see where the two brains agree and where the
-              duels say a ladder answer struggles. Absent, not 50%, when the
-              evidence is thin. */}
-          {rec.duel && (
+          {/* THE SAME DECK IN DUELS, ONLY WHERE THE DUELS AGREE (2026-10-10).
+              The figure above already holds the duel games — four ladder games
+              each, at the level of the list. Printing the duels' separate
+              figure when it said otherwise put "Duel 48%" under a deck
+              suggested at 66%; it is drawn as proof or not at all, the rule the
+              Deck Counter's list follows. */}
+          {rec.duel?.strong && (
             <span
               className={styles.recDuelRate}
               data-strong={rec.duel.strong || undefined}
@@ -335,7 +343,12 @@ function Recommendation({ rec, rank, labels }: {
             .map(([k, name]) => {
               const v = rec.vs![k];
               return (
-                <li key={k} className={styles.recVsItem} data-ok={v >= 50 || undefined}>
+                <li
+                  key={k}
+                  className={styles.recVsItem}
+                  data-ok={v >= 50 || undefined}
+                  data-answer={rec.answers?.includes(k) || undefined}
+                >
                   <span>{name}</span>
                   <strong>{v.toFixed(0)}%</strong>
                 </li>
@@ -526,9 +539,7 @@ export function OpenFolder({
   const [openMate, setOpenMate] = useState<string | null>(null);
   /* Archetype key -> name, most likely first — the squad plan's own order,
      so every per-archetype figure on the board reads in the same order. */
-  const labels: [string, string][] | undefined = folder.squadCover?.length
-    ? folder.squadCover.map((c) => [c.archetype, c.name])
-    : undefined;
+  const labels: [string, string][] | undefined = chipLabels(folder);
   return (
     <div className={styles.open}>
       <div className={styles.openHead}>
@@ -607,7 +618,7 @@ export function OpenFolder({
                 <SuggestHeading />
                 <ol className={styles.mateDecks}>
                   {folder.recommended.map((r, i) => (
-                    <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} />
+                    <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} labels={labels} />
                   ))}
                 </ol>
               </section>

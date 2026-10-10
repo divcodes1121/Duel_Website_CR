@@ -1,4 +1,5 @@
 import type {
+  BringReport,
   CoachDeck,
   CoachPrediction,
   CoachSuggestion,
@@ -10,7 +11,9 @@ import type {
   PlayerCounterReport,
   PlayerDecksReport,
   PlayerMatchup,
+  PlaysFamily,
   RecentBattlesReport,
+  TeamRecommendation,
 } from '../state/analyticsClient';
 import { adaptation, lineup, opponents, performance, verdicts } from '../components/Analytics/duelInsightRules';
 import { CARDS_BY_KEY } from '../data/cards';
@@ -18,6 +21,8 @@ import { frac, int, pct, type DeckLine, type ReportBlock, type ReportDoc } from 
 import { DAY } from './reportAdapters';
 import { printableName } from './report/text';
 import { duelPickLabel, duelShort } from './duelFigures';
+import { familyChips, shareLabel } from './bringAgainst';
+import { drawnDeck } from './deckSeating';
 import { distinctDeckLabels } from './trendSeries';
 
 /* Report models for the screens that had NO export before this module:
@@ -199,6 +204,62 @@ function matchupDeck(m: PlayerMatchup, yours = false, playerRate?: number): Deck
   };
 }
 
+/** One deck of "Bring this against them", as a ranked line: its figure, and
+ *  its rate against each archetype they play — the screen's chips. */
+function bringDeck(
+  d: TeamRecommendation & { rate?: number },
+  plays: PlaysFamily[],
+  rank: number | undefined,
+  skip?: string,
+): DeckLine {
+  const drawn = drawnDeck(d.cards, d.art, d.artInferred, d.artFilled);
+  return {
+    rank,
+    name: d.name,
+    badge: d.origin === 'duel' ? { text: 'Duel deck', hue: 'green' } : undefined,
+    value: pct(d.rate ?? d.expectedWinRate),
+    cards: drawn.cards,
+    art: drawn.art,
+    valueHue: 'green',
+    chips: familyChips(d, plays, skip).map((c) => ({
+      label: c.name, value: `${Math.round(c.rate)}%`, good: c.ok,
+    })),
+  };
+}
+
+/** The three readings of the list, in the order the screen's tabs run. */
+function bringBlocks(b: BringReport): ReportBlock[] {
+  if (b.reason || !b.decks.length) return [];
+  const plays = b.plays.map((p) => `${p.name} ${shareLabel(p.share)}`).join(' · ');
+  const blocks: ReportBlock[] = [{
+    kind: 'decks', layout: 'rows', heading: 'Bring this against them',
+    note: `They play ${plays}`,
+    decks: b.decks.map((d, i) => bringDeck(d, b.plays, i + 1)),
+  }];
+  for (const g of b.byFamily) {
+    if (!g.decks.length) continue;
+    blocks.push({
+      kind: 'decks', layout: 'rows',
+      heading: `Against their ${g.name}`,
+      note: `${shareLabel(g.share)} of their games`,
+      decks: g.decks.map((d, i) => bringDeck(d, b.plays, i + 1, g.family)),
+    });
+  }
+  for (const c of b.byCard?.cards ?? []) {
+    if (!c.decks.length) continue;
+    const name = CARDS_BY_KEY.get(c.card)?.name ?? c.card;
+    const theirs = (c.why === 'answers' ? c.answers : c.open)
+      .map((x) => CARDS_BY_KEY.get(x.card)?.name ?? x.card).join(', ');
+    blocks.push({
+      kind: 'decks', layout: 'rows',
+      heading: `Decks with ${name}`,
+      note: c.why === 'answers' ? `Answers their ${theirs}` : theirs ? `Their only answers: ${theirs}` : 'They carry no answer to it',
+      decks: c.decks.map((d, i) => bringDeck(d, b.plays, i + 1)),
+    });
+  }
+  return blocks;
+}
+
 function counterSide(d: { name: string; cards: string[]; art?: Record<string, 'evolution' | 'hero'>; inferredArt?: boolean; avgElixir: number; archetype: string }): DeckLine {
   return { name: d.name || d.archetype, meta: `${d.avgElixir.toFixed(1)} elixir`, cards: d.cards, art: d.art, inferredArt: d.inferredArt };
 }
@@ -222,7 +283,11 @@ export function deckCounterDoc(
       },
       ...(r.worst.length ? [{ kind: 'decks' as const, heading: 'Worst matchups', note: 'Below this player’s own average', decks: r.worst.map((m) => matchupDeck(m, false, r.player.winRate)) }] : []),
       ...(r.best.length ? [{ kind: 'decks' as const, heading: 'Best matchups', note: 'At or above their own average', decks: r.best.map((m) => matchupDeck(m, false, r.player.winRate)) }] : []),
-      ...(r.recommended.length ? [{ kind: 'decks' as const, heading: 'Bring this against them', note: 'Their worst archetypes, stated from your side', decks: r.recommended.map((m) => matchupDeck(m, true)) }] : []),
+      // The scouting engine's list when the server sends it; the old list
+      // (their worst matchups, from your side) only from a server before it.
+      ...(r.bring
+        ? bringBlocks(r.bring)
+        : r.recommended.length ? [{ kind: 'decks' as const, heading: 'Bring this against them', note: 'Their worst archetypes, stated from your side', decks: r.recommended.map((m) => matchupDeck(m, true)) }] : []),
     );
   }
   const v = extra.versus;

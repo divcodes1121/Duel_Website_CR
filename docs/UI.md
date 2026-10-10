@@ -2044,6 +2044,49 @@ its column. `aria-pressed` chips are `button`s inside the group. To see a
 saved duel in the builder a probe must click the `Versus` tab and then
 `Saved`: it opens on Solo, whose Saved count is its own.
 
+## Bring this against them, and the chips under a suggested deck (2026-10-10)
+
+**BUILT AND VERIFIED ON STAGED CODE AGAINST PRODUCTION DATA, 2026-10-10. THE SERVER HALF IS LIVE SINCE 2026-10-10 06:49 UTC (scp first, after the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; live API checked: brain `team-scout-3.0`, pool 2,341, lists ordered, nothing under 50%). The client ships with this commit.**
+
+`components/Analytics/BringAgainst.tsx` + `.module.css`, arithmetic and labels
+in `utils/bringAgainst.ts` (type imports only), `tests/bringAgainst.test.ts`.
+
+- **One block, three tabs** (`ui/tabs`, `size="sm"`): `Best`, `By archetype`,
+  `By card`. The labels are short on purpose — as "Best counters / By their
+  archetype / By counter card" the strip was wider than the 300px a phone gives
+  the block and the third tab sat cut off inside the strip's own scroller.
+- **Above the tabs: what they play**, as chips with shares. Under them one
+  short line saying what the percentage on that tab is measured against. No
+  other prose — a test bans provenance words in what the component prints.
+- **A deck row**: rank, name, the figure at the right; eight cards across in
+  their forms (`drawnDeck`, the server's seating); then the chips and the
+  copy / picture / open buttons. The chips are the deck's rate against each
+  archetype they play, in THEIR order of play, six at most. A matchup won is
+  green ink and one lost is red (`--success` / `--error`); the chip of the
+  archetype the deck is the list's answer to is outlined in `--accent-select`.
+  An archetype with no measured rate has no chip — it is never drawn as 50.
+- **By archetype**: one group an archetype they play, headed `vs their Giant ·
+  79%`; the figure on a row there is its rate against THAT archetype and its
+  chip is left out. A group nothing beats at 55% says so in one line.
+- **By card**: their ten most used cards with the share of their games each is
+  in; then the counter cards as buttons (card art, name, `+5.2` — how many
+  points better the pool's decks holding it do); the open one shows "Answers
+  their" + the cards of theirs it answers, or "Their only answers" for a win
+  condition they carry little against, then its best decks.
+- **`Duel deck`** (the green fill pill) marks a list from duel play, on this
+  block and on Team Analysis (`duelDeckLabel`). Coach Assist keeps `Duel pick`,
+  where a slot really is held. The duels' own figure (`Duel 57.9% · 266`) is
+  drawn only when it is strong — as proof, never as a second opinion.
+- **Team Analysis** draws the same chips under every suggested deck in BOTH
+  modes now (`chipLabels(folder)` reads `plays`); a scouting row showed one
+  weighted figure and nothing else before. "Squad pick" no longer depends on
+  the chips being present.
+- Layout is a container query on the block (`bring`); below 30rem the buttons
+  take their own line. Measured: nothing past the block at 1440 or on a 390
+  touch phone, all three tabs inside the strip, no sideways scroll.
+- An older server sends no `bring`; the block then draws the old list, so a
+  deploy never leaves it empty.
+
 ## Working on this
 
 ```bash

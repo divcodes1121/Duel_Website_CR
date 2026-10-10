@@ -554,6 +554,47 @@ fused rate separates a clear counter more often — the case the band was
 written to share. See the README section "One matchup rate from the ladder and
 the duels, at the version".
 
+## 4j. Counters to what they play (2026-10-10, brain 3.0)
+
+**BUILT AND VERIFIED ON STAGED CODE AGAINST PRODUCTION DATA, 2026-10-10. THE SERVER HALF IS LIVE SINCE 2026-10-10 06:49 UTC (scp first, after the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; live API checked: brain `team-scout-3.0`, pool 2,341, lists ordered, nothing under 50%). The client ships with this commit.**
+
+The account holder: "the decks given for counter are very generic and rely on
+the meta — we need decks which counter their archetypes, whatever they play, at
+least at a good percentage"; then "refer to the Decks option, prioritising the
+frequency, then variations; don't omit the duel battles"; then the card
+structure and the card-first search. The README's "Counters to what they play"
+has the measurements; this is what changed in the brain.
+
+| was | is |
+|---|---|
+| `threat_space`: observed decks, seed variants, inferred archetypes; up to 45% of the mass off what they play | `played_space`: their decks only; a family keeps its whole share |
+| what they play = `player_report` (every mode, 25 lists) | `player_decks.played` (own-deck 1v1 + native duel games, every list) |
+| pool = 12 most played seeds an archetype (204) | every vetted seed + every duel-catalogue list (2,341) |
+| `diversify`: a portfolio, archetype-repeat penalty | `counters`: strongest first, floor 50, two of one win condition, an answer for every family at 10%+ |
+| two slots held under the #1 for duel picks | duel lists are candidates; ranked on the one figure |
+| per-archetype rates on a match plan's rows only | `vs` on every row of both modes, keyed by family |
+| — | `answers` (per family), `_by_card` (per counter card), `bring` (the Deck Counter) |
+
+**`SWITCH_MAX`, `VARIANT_SHARE` and the seed-variant rules still exist** —
+`threat_space` is unchanged — but no board is scored against it. That is the
+account holder's call ("we need decks which counter what they play"), and it is
+in the direction the research already pointed: observed keeps all the mass.
+
+**`score()` is unchanged and so is its second consumer.** `coach_daily` calls
+`score` and `diversify` and passes no family; its 204 checks pass untouched.
+What `score` gained is optional: `lean=True` (the same figures without the
+per-threat table) and a `family` on a matchup row when the threat carries one.
+`score_rates` is the same arithmetic for a caller that already holds the rates
+(`_row` is the one place a recommendation's worth is computed).
+
+**The squad plan keeps its #1 rule** (`PRIMARY_BAND`, coverage, known cards).
+Below the #1 a teammate's list is `counters` with the shared-deck cost as
+`adjust`. On a real 12v12, rows under 50% below the #1 went 55 of 1,008 → 0.
+
+**Not built, measured:** the opponent's own record against an archetype (top-1
+lift 5.5 points against 3.8 without it, on 437 held-out players) and
+list-level evidence against a list of theirs that no hub covers.
+
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
 Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it

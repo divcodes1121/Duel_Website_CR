@@ -86,6 +86,73 @@ describe('deckCounterDoc', () => {
   });
 });
 
+describe('deckCounterDoc — the list of what to bring', () => {
+  /* The scouting engine's rows (`team_analysis.bring`). The figures have their
+     own suites on the server; this pins what the PDF does with them. */
+  const deck = (name: string, rate: number, vs: Record<string, number>, extra = {}) => ({
+    key: name, name, archetype: 'hog', avgElixir: 3.1, owner: null, comfort: null,
+    cards: ['hog-rider', 'musketeer', 'cannon', 'ice-golem', 'skeletons', 'the-log', 'fireball', 'ice-spirit'],
+    art: {}, expectedWinRate: rate, matchupValue: rate, spreadCovered: 100, vs, ...extra,
+  });
+  const plays = [
+    { family: 'giant', archetype: 'giant', name: 'Giant', share: 0.79, games: 900, decks: 4 },
+    { family: 'bridge-spam', archetype: 'bridge-spam', name: 'Bridge Spam', share: 0.1, games: 110, decks: 2 },
+  ];
+  const bring = {
+    basis: 'stored', battles: 1010, window: { from: null, to: null }, plays, reason: null,
+    pool: { decks: 2341 }, brain: 'team-scout-3.0',
+    decks: [deck('Log Bait', 66, { giant: 67.9, 'bridge-spam': 54.5 }, { origin: 'duel' }),
+            deck('Lava Hound', 64.5, { giant: 65.1 })],
+    byFamily: [
+      { ...plays[0], decks: [{ ...deck('Log Bait', 66, { giant: 67.9, 'bridge-spam': 54.5 }), rate: 67.9 }] },
+      { ...plays[1], decks: [] },
+    ],
+    byCard: {
+      theirCards: [{ card: 'giant', share: 0.85 }],
+      cards: [{ card: 'inferno-tower', why: 'answers', answers: [{ card: 'giant', share: 0.85 }], open: [],
+                exposure: 0.2, lift: 5.2, lists: 132, decks: [deck('Log Bait', 60.3, { giant: 63 })] }],
+    },
+  };
+  const doc = deckCounterDoc({ ...C, bring } as unknown as PlayerCounterReport, '#PQ2LLLLL');
+  const lists = doc.blocks.filter((b): b is DecksBlock => b.kind === 'decks' && b.layout === 'rows');
+
+  it('prints the list, then a block per archetype, then a block per counter card', () => {
+    expect(lists.map((b) => b.heading)).toEqual([
+      'Bring this against them', 'Against their Giant', 'Decks with Inferno Tower',
+    ]);
+  });
+  it('says what they play, as shares', () => {
+    expect(lists[0].note).toBe('They play Giant 79% · Bridge Spam 10%');
+  });
+  it('ranks the decks and prints each one’s rate against their archetypes', () => {
+    const [first, second] = lists[0].decks;
+    expect([first.rank, first.value, second.rank, second.value]).toEqual([1, '66.0%', 2, '64.5%']);
+    expect(first.chips).toEqual([
+      { label: 'Giant', value: '68%', good: true },
+      { label: 'Bridge Spam', value: '55%', good: true },
+    ]);
+    // An unmeasured matchup is left out, never printed as 50.
+    expect(second.chips).toEqual([{ label: 'Giant', value: '65%', good: true }]);
+    expect(first.badge?.text).toBe('Duel deck');
+  });
+  it('a per-archetype block leads with the rate against THAT archetype', () => {
+    expect(lists[1].decks[0].value).toBe('67.9%');
+    expect(lists[1].decks[0].chips?.map((c) => c.label)).toEqual(['Bridge Spam']);
+  });
+  it('an archetype nothing beats prints no block rather than an empty one', () => {
+    expect(lists.some((b) => b.heading === 'Against their Bridge Spam')).toBe(false);
+  });
+  it('a counter card’s block names what of theirs the card answers', () => {
+    expect(lists[2].note).toBe('Answers their Giant');
+  });
+  it('a report from a server before the engine keeps the old list', () => {
+    const old = deckCounterDoc(C, '#PQ2LLLLL');
+    const h = old.blocks.filter((b): b is DecksBlock => b.kind === 'decks').map((b) => b.heading);
+    expect(h).toContain('Bring this against them');
+    expect(h.some((x) => x?.startsWith('Against their'))).toBe(false);
+  });
+});
+
 describe('duelInsightBlocks', () => {
   const blocks = duelInsightBlocks(Z);
 

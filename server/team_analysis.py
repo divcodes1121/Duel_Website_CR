@@ -130,6 +130,23 @@ import live_player as live
 import team_scout as scout
 import tracking
 
+#: WHAT A PLAYER PLAYS is the Decks screen's own count (2026-10-10): own-deck
+#: 1v1 games plus native duel games, game by game. Imported softly — `server/`
+#: is copied by hand, and without it the projection falls back to
+#: `player_report`'s every-mode list exactly as before.
+try:
+    import player_decks as _pdecks
+    from duel_zone import _arranged as _arrange_view
+except Exception:  # noqa: BLE001 - deployment shape
+    _pdecks = _arrange_view = None
+
+#: THE CARD VIEW (2026-10-10): which cards answer the cards they play. Soft for
+#: the same reason; without it the board simply has no "by card" lists.
+try:
+    import card_counters as _cards
+except Exception:  # noqa: BLE001 - deployment shape
+    _cards = None
+
 #: The composition veto, if the deployment has it. IMPORTED SOFTLY, the same
 #: rule `coach.tune` follows: `deck_harmony` loads three JSON files at import
 #: and a deployment missing `cardRoles.json` must cost the variant filter and
@@ -273,6 +290,24 @@ CANDIDATES_PER_PLAYER = 8
 #: Default window, matching every other player screen.
 DEFAULT_DAYS = 30
 
+#: Decks of one player that are arranged into their slots for the screen. The
+#: rest still COUNT — a player with hundreds of one-off variants has most of
+#: their games outside any forty lists, and what they play is every game —
+#: but nothing past the first few is ever drawn.
+RESOLVE_SEATED = 40
+
+#: Pool rows a match plan's teammates are offered from, per opponent: the
+#: strongest this many overall, plus the best few against each family they
+#: play. See `_folder.shortlist`.
+SQUAD_POOL = 80
+SQUAD_POOL_PER_FAMILY = 8
+
+#: Decks holding a card before the card can be called a counter: the mean of
+#: fewer is one list's result wearing a card's name.
+CARD_MIN_DECKS = 6
+#: Decks listed under one counter card.
+CARD_DECKS = 3
+
 
 # ── Resolving a roster ──────────────────────────────────────────────────────
 
@@ -328,8 +363,82 @@ def _live_decks(rep: dict) -> list[dict]:
     return out
 
 
-def _resolve(tag: str, days: int) -> dict:
+def _family(arch: str | None, cards) -> tuple[str, str]:
+    """`(family key, display name)` for one deck.
+
+    The archetype and its label — except for a deck the bot files under
+    `other`, which is Minion Giant, Goblin Giant, Skeleton Barrel and several
+    more in one bucket. "They play Mixed 83%" names nothing a counter can be
+    chosen against, so those are grouped by the win condition they actually
+    play (`cd.deck_title`). The matchup evidence still reads `other`; only the
+    grouping and the label change.
+    """
+    arch = arch or "other"
+    if arch != "other":
+        return arch, dcx._label(arch)
+    name = cd.deck_title("other", list(cards or []))
+    return "other:" + name.lower().replace(" ", "-"), name
+
+
+def _own_decks(tag: str, since: str | None, until: str | None) -> dict | None:
+    """The decks a player PLAYS in a window, in `player_report`'s row shape.
+
+    `player_decks.played`: own-deck 1v1 games plus native duel games, so a
+    2v2 partner's list, a draft and an event's handed-out deck are not "what
+    they play", and their duel decks are. EVERY deck comes back, most played
+    first — the shares are over all of them — and the first `RESOLVE_SEATED`
+    are arranged with the forms they were last seen fielding. None when the
+    reader is not deployed or fails; the caller keeps `player_report`'s list.
+    """
+    if _pdecks is None:
+        return None
+    try:
+        got = _pdecks.played(tag, since, until)
+    except Exception:  # noqa: BLE001 - the old list is the fallback
+        traceback.print_exc()
+        return None
+    per, marks = got["per"], got["marks"]
+    rows = []
+    for key, (w, l, d, last, cards, arch) in per.items():
+        n = w + l + d
+        if n <= 0 or len(set(cards)) != 8:
+            continue
+        arch = arch or dcx._archetype_of_hash(key) or "other"
+        rows.append({
+            "deckHash": key, "cards": list(cards), "matches": n, "wins": w,
+            "losses": l, "draws": d, "winCondition": arch, "lastSeen": last or None,
+        })
+    rows.sort(key=lambda r: r["deckHash"])
+    rows.sort(key=lambda r: r["lastSeen"] or "", reverse=True)
+    rows.sort(key=lambda r: r["matches"], reverse=True)
+    total = sum(r["matches"] for r in rows)
+    wins = sum(r["wins"] for r in rows)
+    for i, r in enumerate(rows):
+        r["rank"] = i + 1
+        r["useRate"] = round(100.0 * r["matches"] / total, 1) if total else 0.0
+        r["winRate"] = round(100.0 * r["wins"] / r["matches"], 1)
+        r["family"], r["familyName"] = _family(r["winCondition"], r["cards"])
+        r["name"] = cd.deck_title(r["winCondition"], r["cards"])
+        r["art"] = {}
+        r["avgElixir"] = None
+        if i < RESOLVE_SEATED and _arrange_view is not None:
+            view = _arrange_view(r["cards"], marks.get(r["deckHash"]))
+            r["cards"] = view["cards"]
+            r["art"] = view.get("art") or {}
+            r["avgElixir"] = view.get("avgElixir")
+            if view.get("artInferred"):
+                r["artInferred"] = True
+    return {
+        "decks": rows, "battles": total, "wins": wins,
+        "duelGames": got["duelGames"], "hidden": sum((got["hidden"] or {}).values()),
+    }
+
+
+def _resolve(tag: str, days: int, window: tuple | None = None) -> dict:
     """One roster entry, from whichever source can actually answer for it.
+
+    `window` is an explicit `(since, until)` — the Deck Counter's own date
+    range — and replaces the `days` count when given.
 
     THREE OUTCOMES, and the screen must be able to tell them apart:
 
@@ -345,7 +454,11 @@ def _resolve(tag: str, days: int) -> dict:
     never to the bot's database — see tracking.py for why that distinction is
     the whole design.
     """
-    since, until, cov = _player_window(tag, days)
+    if window and window[0]:
+        since, until = window[0], window[1]
+        cov = cd.coverage(tag)
+    else:
+        since, until, cov = _player_window(tag, days)
 
     report = None
     try:
@@ -365,7 +478,7 @@ def _resolve(tag: str, days: int) -> dict:
 
     if report and (report.get("decks") or report["player"]["battles"]):
         p = report["player"]
-        return {
+        out = {
             "tag": tag,
             "name": p.get("name") or tag,
             "basis": "stored",
@@ -377,6 +490,22 @@ def _resolve(tag: str, days: int) -> dict:
             "window": {"from": since, "to": until},
             "tracking": st,
         }
+        # WHAT THEY PLAY, NOT WHAT IS STORED UNDER THEIR TAG. `player_report`
+        # counts every mode and keeps the 25 most played lists: measured on 30
+        # real players (2026-10-10), event games moved 42-46% of the archetype
+        # mix for two of them, and a player with 882 variants had the wrong
+        # archetype named as their most played. The header figures move with
+        # the list, so the folder never quotes a win rate over games the deck
+        # list beside it leaves out.
+        own = _own_decks(tag, since, until)
+        if own is not None:
+            out["decks"] = own["decks"]
+            out["battles"] = own["battles"]
+            out["winRate"] = (round(100.0 * own["wins"] / own["battles"], 1)
+                              if own["battles"] else 0.0)
+            out["played"] = {"source": "own_deck", "duelGames": own["duelGames"],
+                             "hidden": own["hidden"]}
+        return out
 
     rep = None
     try:
@@ -463,6 +592,8 @@ def _archetypes_for(decks: list[dict]) -> None:
             d["winCondition"] = wc
         if not d.get("name"):
             d["name"] = cd.deck_title(wc, d.get("cards"))
+        if not d.get("family"):
+            d["family"], d["familyName"] = _family(wc, d.get("cards"))
 
 
 def _spread(decks: list[dict]) -> list[dict]:
@@ -538,6 +669,48 @@ def _threats(decks: list[dict], seeds: dict | None) -> dict:
         if th.get("basis") and not th.get("basisName"):
             th["basisName"] = dcx._label(th.get("archetype") or "other")
     return out
+
+
+def _plays(decks: list[dict]) -> dict:
+    """THE PROJECTION SINCE 3.0: what this opponent PLAYS, and only that.
+
+    `scout.played_space` over every deck they fielded — most played first, a
+    recent deck weighing more than a dropped one, their variations kept as the
+    separate lists they are — with each family keeping its whole share. No
+    seed variants and no archetypes "their behaviour implies": the account
+    holder asked for counters to what they play, "whatever they play", and a
+    counter to a deck they do not play is the generic answer by definition.
+
+    Returns `threats` (the lists scored against, seated and named) and `plays`
+    (one row a family, labelled). `_threats` above is the older projection and
+    is no longer what a board is scored against.
+    """
+    _archetypes_for(decks)
+    out = scout.played_space(decks)
+    _seat_decks(out.get("threats") or [], dcx.seater())
+    for th in out.get("threats") or []:
+        if not th.get("name"):
+            th["name"] = cd.deck_title(th.get("archetype") or "other", th.get("cards"))
+    for p in out.get("plays") or []:
+        if not p.get("name"):
+            p["name"] = dcx._label(p.get("archetype") or "other")
+        p["style"] = dcx.style_of(p.get("archetype") or "other")
+    return out
+
+
+def _spread_of(plays: list[dict]) -> list[dict]:
+    """The archetype bars on the left of a folder, from the SAME shares the
+    list on the right was scored against — so "they play Giant 79%" and the
+    `Giant` chip under a deck are one number's two readings. Families under
+    two percent are counted and not drawn."""
+    return [
+        {"archetype": p["family"], "name": p["name"], "style": p.get("style"),
+         "games": p["games"], "weight": p["share"],
+         "share": round(100.0 * p["share"], 1),
+         "key": f"archetype:{p['family']}", "evidence": scout.OBSERVED,
+         "likelihood": p["share"]}
+        for p in plays if p["share"] >= 0.02
+    ][:8]
 
 
 # ── The candidate pool, profiled once ───────────────────────────────────────
@@ -686,6 +859,45 @@ class _SeedProfile:
         return None
 
 
+class _ListProfile:
+    """A real list's OWN ladder record against each archetype, and nothing else.
+
+    For the duel catalogue (`_counter_candidates`). `_DeckProfile` also reads
+    the two cluster rungs, a sibling scan each — 65 ms a list measured, 110 s
+    for the catalogue. This is the exact rung alone (3 ms a list, the cluster
+    index's own rows), which is what a seed carries too (`_SeedProfile`); the
+    list's duel record and the version cells come in through the fused rate.
+    """
+
+    __slots__ = ("archetype", "_exact", "overall")
+
+    def __init__(self, cards: list[str], archetype: str):
+        self.archetype = archetype
+        exact = dcx.deck_profile(cards)
+        self._exact = exact.get("archetypes") or {}
+        self.overall = exact.get("overall")
+
+    def exact_record(self, other: str) -> tuple[int, int] | None:
+        m = self._exact.get(other)
+        if not m:
+            return None
+        w, l = int(m.get("wins") or 0), int(m.get("losses") or 0)
+        return (w + l, w) if w + l else None
+
+    def cluster_record(self, other: str) -> None:
+        return None
+
+    def against(self, other: str, snap: dict | None) -> dict | None:
+        m = self._exact.get(other)
+        if m:
+            return {"source": dcx.SOURCE_DECK, "decks": 1, **m}
+        if snap:
+            m = dcx._symmetric(snap, self.archetype, other)
+            if m:
+                return {"source": dcx.SOURCE_ARCHETYPE, "decks": None, **m}
+        return None
+
+
 class _Candidate:
     """One deck AS PLAYED BY ONE PLAYER: the profile, plus that player's record.
 
@@ -708,9 +920,16 @@ class _Candidate:
     """
 
     __slots__ = ("cards", "key", "archetype", "name", "art", "inferred", "owner",
-                 "games", "wins", "win_rate", "use_rate", "profile")
+                 "games", "wins", "win_rate", "use_rate", "profile", "origin", "memo")
 
     def __init__(self, deck: dict, owner: dict | None, profile: "_DeckProfile"):
+        # WHERE THE LIST COMES FROM, for a population candidate: "duel" (the
+        # duel catalogue) or "ladder" (a vetted seed). None for a teammate's.
+        self.origin = deck.get("origin")
+        # The archetype half of this list's fused rate against each archetype
+        # (`_FusionContext.rater`). On the candidate because a pool candidate
+        # outlives the request, and is replaced exactly when its evidence is.
+        self.memo: dict = {}
         self.cards = list(deck.get("cards") or [])
         self.key = ",".join(sorted(set(self.cards)))
         self.archetype = deck.get("winCondition") or "other"
@@ -940,6 +1159,183 @@ def _scout_candidates() -> list["_Candidate"]:
     return out
 
 
+#: The counter pool, kept between requests: `{"key", "cands", "stats"}`.
+_COUNTER_POOL: dict = {"key": None, "cands": [], "stats": {}, "building": False}
+_COUNTER_LOCK = threading.Lock()
+_COUNTER_BUILD = threading.Lock()
+
+
+def _counter_key() -> tuple | None:
+    snap = dcx._snap()
+    stamp = (snap or {}).get("computedAt")
+    if stamp is None:
+        return None
+    build = None
+    try:
+        if _duel_index is not None and _duel_index.available():
+            build = (_duel_index.status() or {}).get("buildId") or (
+                _duel_index.status() or {}).get("builtAt")
+    except Exception:  # noqa: BLE001
+        build = None
+    return (stamp, build)
+
+
+def _build_counter_pool(key: tuple) -> dict:
+    """Every list Deckkies may offer as a counter.
+
+    TWO SOURCES, one pool, one ranking:
+
+      * EVERY VETTED SEED, not the twelve most played of each archetype. The
+        scout pool's dozen are the meta's lists by construction; the best
+        answer to one opponent's decks is often a list ranked 20th by games.
+      * EVERY DUEL-CATALOGUE LIST. Asked for by name (2026-10-10): "don't omit
+        the duel battles — they have so many good decks." Measured on 14 real
+        opponents before this shipped: with the catalogue in the pool its
+        lists took 66 of 98 slots ON THE SAME FIGURE as the ladder's, and the
+        weakest of each seven rose again. A catalogue list is 10+ duel games
+        by 3+ pilots, none holding more than half (`duel_index`).
+
+    Both must be able to field all three special slots — the rule every
+    suggestion follows. Profiles are the exact rung (`_SeedProfile`,
+    `_ListProfile`): no cluster scans, so the whole build is a second or two.
+    """
+    out: list["_Candidate"] = []
+    seat = dcx.seater()
+    seen: set[str] = set()
+    gaps = 0
+    for arch, decks in (dcx.seeds() or {}).items():
+        for seed in decks:
+            cards = list(seed.get("cards") or [])
+            if len(set(cards)) != 8:
+                continue
+            if cd.fillable_slots(cards) < cd.SPECIAL_SLOTS:
+                gaps += 1
+                continue
+            try:
+                prof = _SeedProfile(seed, arch)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                continue
+            cards, art, inferred = seat(cards)
+            c = _Candidate({
+                "cards": cards, "art": art, "inferredArt": inferred,
+                "winCondition": arch, "name": cd.deck_title(arch, cards),
+                "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
+                "origin": "ladder"}, None, prof)
+            if c.key not in seen:
+                seen.add(c.key)
+                out.append(c)
+    n_seeds = len(out)
+
+    catalogue = []
+    try:
+        if _duel_index is not None and _duel_index.available():
+            catalogue = _duel_index.catalogue()
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+    todo = []
+    for d in catalogue:
+        cards = list(d.get("cards") or [])
+        if len(set(cards)) != 8 or d.get("key") in seen:
+            continue
+        if cd.fillable_slots(cards) < cd.SPECIAL_SLOTS:
+            gaps += 1
+            continue
+        todo.append(d)
+
+    def make(d):
+        arch = d.get("archetype") or dcx._archetype_of_hash(d["key"])
+        try:
+            return d, arch, _ListProfile(list(d["cards"]), arch)
+        except Exception:  # noqa: BLE001 - one bad list must not sink the pool
+            traceback.print_exc()
+            return d, arch, None
+
+    for d, arch, prof in _POOL.map(make, todo):
+        if prof is None:
+            continue
+        cards, art, inferred = seat(list(d["cards"]))
+        c = _Candidate({
+            "cards": cards, "art": art, "inferredArt": inferred,
+            "winCondition": arch, "name": cd.deck_title(arch, cards),
+            "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
+            "origin": "duel"}, None, prof)
+        if c.key not in seen:
+            seen.add(c.key)
+            out.append(c)
+    if not out:
+        # A snapshot from before the seed pool, and no duel index: the scout
+        # pool's own fallback (the archetype representatives), so a deployment
+        # mid-upgrade still has something to suggest.
+        out = list(_scout_candidates())
+        n_seeds = len(out)
+    return {"key": key, "cands": out, "building": False,
+            "stats": {"ladder": n_seeds, "duel": len(out) - n_seeds, "slotGaps": gaps}}
+
+
+def _counter_candidates() -> list["_Candidate"]:
+    """The counter pool for this snapshot and this duel build.
+
+    Built once and kept. When either source is rebuilt (the snapshot hourly,
+    the duel index after each bot poll) the pool in hand keeps answering while
+    a background thread builds the next one — a board must not wait on it.
+    Falls back to the scout pool when it cannot be built.
+    """
+    global _COUNTER_POOL
+    key = _counter_key()
+    if key is None:
+        return []
+    with _COUNTER_LOCK:
+        pool = _COUNTER_POOL
+        if pool["key"] == key:
+            return pool["cands"]
+        stale = pool["cands"]
+        if stale:
+            if not pool["building"]:
+                pool["building"] = True
+
+                def work():
+                    global _COUNTER_POOL
+                    try:
+                        fresh = _build_counter_pool(key)
+                    except Exception:  # noqa: BLE001
+                        traceback.print_exc()
+                        with _COUNTER_LOCK:
+                            _COUNTER_POOL["building"] = False
+                        return
+                    with _COUNTER_LOCK:
+                        _COUNTER_POOL = fresh
+
+                threading.Thread(target=work, name="counter-pool", daemon=True).start()
+            return stale
+    # Nothing in hand yet: build it now, once, whoever asked first.
+    with _COUNTER_BUILD:
+        with _COUNTER_LOCK:
+            if _COUNTER_POOL["key"] == key or _COUNTER_POOL["cands"]:
+                return _COUNTER_POOL["cands"]
+        try:
+            fresh = _build_counter_pool(key)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            return _scout_candidates()
+        with _COUNTER_LOCK:
+            _COUNTER_POOL = fresh
+        return fresh["cands"]
+
+
+def counter_pool_stats() -> dict:
+    """How many lists the counter pool holds, by source. Published."""
+    return dict(_COUNTER_POOL.get("stats") or {})
+
+
+def _reset_counter_pool() -> None:
+    """Forget the pool in hand, so the next request builds it. For tests, and
+    for a caller that has just replaced one of its two sources by hand."""
+    global _COUNTER_POOL
+    with _COUNTER_LOCK:
+        _COUNTER_POOL = {"key": None, "cands": [], "stats": {}, "building": False}
+
+
 def _comfort(games: int) -> float:
     """The tiebreak, in points. Linear to `COMFORT_FULL`, flat after."""
     if games <= 0:
@@ -948,8 +1344,14 @@ def _comfort(games: int) -> float:
 
 
 def _score(card: _Candidate, threats: list[dict], snap: dict | None,
-           ctx: "_DuelContext | None" = None) -> dict | None:
+           ctx: "_DuelContext | None" = None, *, dress: bool = True,
+           table: list | None = None) -> dict | None:
     """One candidate against a whole projected threat space.
+
+    `dress=False` returns the RATED row only — the figures and the identity —
+    without seating, the practice line or the sentence. The counter pool is
+    two thousand lists and seven are shown, so the pool is rated and only what
+    is chosen is dressed (`_dress`).
 
     `threats` IS EITHER. A `_spread()` row carries `likelihood` and `evidence`
     now, so the displayed archetype breakdown and the real projection from
@@ -974,6 +1376,21 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None,
     # opponent might bring can score differently (`_FusionContext`). Without
     # it the ladder rung `against` walks is the rate, exactly as before.
     fx = getattr(ctx, "fx", None) if ctx is not None else None
+    if not dress and table is not None and fx is not None and fx.on:
+        # THE TIGHT LOOP, for a pool row that is only being rated: the figures
+        # `scout.score` would give, without a closure and a dictionary a
+        # threat. `table` is this opponent's threats prepared once.
+        base = scout.score_rates(
+            fx.lean_rates(card, table), cards=card.cards, archetype=card.archetype,
+            fit_games=card.games if card.owner else None, key=card.key)
+        if base is None:
+            return None
+        base["name"] = card.name
+        base["owner"] = ({"tag": card.owner["tag"], "name": card.owner["name"]}
+                         if card.owner else None)
+        if card.origin:
+            base["origin"] = card.origin
+        return base
     base = scout.score(
         lambda arch: card.against(arch, snap),
         threats,
@@ -984,25 +1401,48 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None,
         # at; publishing a zero would state that somebody has piloted it none
         # of the time, which is a claim about a roster that was never pasted.
         fit_games=card.games if card.owner else None,
-        rate_for_threat=fx.rater(card) if fx is not None and fx.on else None,
+        rate_for_threat=(fx.rater(card, tiers=dress)
+                         if fx is not None and fx.on else None),
+        # A row that is only being RATED carries no per-threat table: the
+        # counter pool is two thousand lists and seven are shown.
+        lean=not dress,
     )
     if base is None:
         return None
 
-    comfort = _comfort(card.games) if card.owner else 0.0
+    for row, t in zip(base.get("matchups") or [], threats):
+        # PERCENT OF THE PROJECTION, always. It read the threat's own `share`
+        # when it had one — a FRACTION of the observed mass on an observed
+        # deck — so one column held 0.285 and 18.6 on adjacent rows.
+        row["share"] = round(100 * float(t.get("likelihood") or 0), 1)
+        row["name"] = t.get("name") or row.get("name") or ""
+        row["sourceText"] = dcx.SOURCE_TEXT.get(row.get("source"))
 
+    out = dict(base)
+    # AGAINST EACH FAMILY THEY PLAY — on every row, in both modes. A weighted
+    # headline alone cannot show a deck that beats their main list and loses to
+    # the one they bring a fifth of the time.
+    if "vs" not in out:
+        out["vs"] = scout.vs_archetypes(base)
+    out["name"] = card.name
+    out["owner"] = ({"tag": card.owner["tag"], "name": card.owner["name"]}
+                    if card.owner else None)
+    if card.origin:
+        out["origin"] = card.origin
+    if not dress:
+        return out
+    return _dress(out, card, threats)
+
+
+def _dress(out: dict, card: _Candidate, threats: list[dict]) -> dict:
+    """Everything a row carries besides its figures. See `_score`."""
+    base = out
     # `scout.score` ranks on `playerFit` in [0, 1] scaled by `FIT_WEIGHT`,
     # which is the same quantity and the same weight `_comfort` produced in
     # points. Publishing the points as well keeps the existing contract: a
     # reader comparing two rows can still see whether the order came from the
     # matchup or from the practice.
-    for row, t in zip(base["matchups"], threats):
-        # The spread fields the client has always drawn, beside the new ones.
-        row["share"] = t.get("share", round(100 * float(t.get("likelihood") or 0), 1))
-        row["name"] = t.get("name") or row.get("name") or ""
-        row["sourceText"] = dcx.SOURCE_TEXT.get(row.get("source"))
-
-    out = dict(base)
+    comfort = _comfort(card.games) if card.owner else 0.0
     if card.art and card.inferred:
         out["artInferred"] = True
     # A SUGGESTION FIELDS EVERY SPECIAL SLOT ITS CARDS CAN FILL. The candidate
@@ -1018,10 +1458,7 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None,
         out["artFilled"] = filled
     out.update({
         "art": art,
-        "name": card.name,
         "avgElixir": dcx._avg_elixir(card.cards),
-        "owner": {"tag": card.owner["tag"], "name": card.owner["name"]}
-        if card.owner else None,
         "comfort": {
             "games": card.games,
             "wins": card.wins,
@@ -1085,7 +1522,11 @@ class _DuelContext:
                           if cd.fillable_slots(d.get("cards")) >= cd.SPECIAL_SLOTS]
         self.slot_gaps = len(catalogue) - len(self.catalogue)
         self.status = _duel_index.status() if self.on else None
-        self._records: dict[str, dict | None] = {}
+        # A CATALOGUE LIST ARRIVES WITH ITS DUEL RECORDS — the same object
+        # `duel_index.records` returns for it (checked on the live index) — so
+        # the two thousand lists of the counter pool cost no read here.
+        self._records: dict[str, dict | None] = {
+            d["key"]: d["records"] for d in catalogue if d.get("records")}
         self._profiles: dict[str, "_DeckProfile | None"] = {}
         self._decks: dict[tuple, list[dict]] = {}
         self._seat = None
@@ -1314,13 +1755,111 @@ class _FusionContext:
             return None
         return self._fam.get(key, {}).get(tkey)
 
-    def rater(self, card: "_Candidate"):
-        """`rate_for_threat` for `team_scout.score`, for one candidate."""
+    def arch_half(self, card: "_Candidate", arch_t: str) -> tuple:
+        """The archetype half of `card`'s fused rate against one archetype,
+        remembered on the candidate (see `rater`)."""
+        duel_on = bool(self.duel is not None and self.duel.on)
+        k = (arch_t, duel_on, id(self.snap))
+        remembered = getattr(card, "memo", None)
+        if remembered is not None:
+            hit = remembered.get(k)
+            if hit is not None:
+                return hit
         prof = card.profile
-        duel_rec = self.duel.records(card.cards) if self.duel is not None and self.duel.on else None
-        hub = self.is_hub(card.key)
         exact_of = getattr(prof, "exact_record", None)
         cluster_of = getattr(prof, "cluster_record", None)
+        arch_duel = None
+        if duel_on:
+            r = (((self.duel.records(card.cards) or {}).get("exact")) or {}).get(arch_t)
+            if r:
+                g, w = float(r[0]), float(r[1])
+                e = float(r[2]) if len(r) > 2 else g / 2
+                arch_duel = (g, g / 2 + w - e)
+        half = _fusion.arch_level(
+            self.matrix(card.archetype, arch_t),
+            cluster=cluster_of(arch_t) if cluster_of else None,
+            arch_ladder=exact_of(arch_t) if exact_of else None,
+            arch_duel=arch_duel)
+        if remembered is not None:
+            remembered[k] = half
+        return half
+
+    def threat_table(self, threats: list[dict]) -> list[tuple]:
+        """One opponent's threats, prepared ONCE for the tight loop:
+        `(likelihood, family, archetype, deck key, version cells)` each."""
+        out = []
+        for t in threats:
+            tcards = t.get("cards") or []
+            tkey = scout.deck_key(tcards) if len(set(tcards)) == 8 else None
+            out.append((float(t.get("likelihood") or 0.0),
+                        t.get("family") or t.get("archetype") or "",
+                        t.get("archetype") or "other", tkey,
+                        self.cells(tkey) if tkey else None))
+        return out
+
+    def lean_rates(self, card: "_Candidate", table: list[tuple]):
+        """`(likelihood, family, win rate, source)` for every threat in `table`
+        this candidate can be rated against — `rater`'s figures, for a caller
+        rating the whole counter pool (`team_scout.score_rates`).
+
+        The same evidence in the same order: the remembered archetype half,
+        then the version cells for a hub, or the candidate's own prepared
+        family level outside them. No closure, no dictionary and no tier per
+        threat, which is most of what rating two thousand lists used to cost.
+        """
+        hub = self.is_hub(card.key)
+        key = card.key
+        finish_rate = _fusion.finish_rate
+        seen = self._rates
+        for like, fam, arch_t, tkey, cells in table:
+            # A RATE THIS REQUEST HAS ALREADY WORKED OUT IN FULL WINS. A
+            # teammate can own the very list a pool row is, and theirs was
+            # rated first with a richer profile (its one-card variants); the
+            # row is drawn from that rate later, so it is ranked on it here.
+            # Staged on a real 12v12 before this: twelve lists came back a
+            # tenth of a point out of order.
+            if seen:
+                hit = seen.get((key, tkey or "archetype:" + arch_t), 0)
+                if hit != 0:
+                    if hit is not None:
+                        yield like, fam, hit["winRate"], hit["source"]
+                    continue
+            fam_l = fam_d = ver_l = ver_d = None
+            if tkey:
+                if hub and cells:
+                    v = cells.get(key)
+                    if v:
+                        fam_l, ver_l = (v[0], v[1]), (v[2], v[3])
+                        fam_d, ver_d = (v[4], v[5]), (v[6], v[7])
+                if fam_l is None:
+                    fam_l = self.family(key, tkey)
+            got = finish_rate(self.arch_half(card, arch_t), fam_l, fam_d, ver_l, ver_d)
+            if got is not None:
+                yield like, fam, got[0], got[1]
+
+    def rater(self, card: "_Candidate", *, tiers: bool = True):
+        """`rate_for_threat` for `team_scout.score`, for one candidate.
+
+        THE ARCHETYPE HALF IS COMPUTED ONCE A CANDIDATE AND AN ARCHETYPE
+        (`matchup_fusion.arch_level`) and remembered on the candidate: it does
+        not depend on which list of that archetype the threat is, and the
+        counter pool's two thousand candidates live as long as the evidence
+        they were built from. Only the two version levels are worked per
+        threat. `tiers=False` leaves the confidence tier off — it is drawn on
+        the handful of rows that reach the screen and costs a Wilson interval
+        on each of the tens of thousands that do not.
+        """
+        hub = self.is_hub(card.key)
+
+        def arch_half(arch_t: str) -> tuple:
+            return self.arch_half(card, arch_t)
+
+        def with_tier(out: dict | None) -> dict | None:
+            if tiers and out is not None and "tier" not in out:
+                games = int(out["games"])
+                out["tier"], out["interval"] = dx.confidence_tier(
+                    int(round(out["winRate"] / 100.0 * games)), games)
+            return out
 
         def rate(t: dict) -> dict | None:
             arch_t = t.get("archetype") or "other"
@@ -1328,13 +1867,7 @@ class _FusionContext:
             tkey = scout.deck_key(tcards) if len(set(tcards)) == 8 else None
             memo = (card.key, tkey or "archetype:" + arch_t)
             if memo in self._rates:
-                return self._rates[memo]
-            arch_duel = None
-            r = ((duel_rec or {}).get("exact") or {}).get(arch_t)
-            if r:
-                g, w = float(r[0]), float(r[1])
-                e = float(r[2]) if len(r) > 2 else g / 2
-                arch_duel = (g, g / 2 + w - e)
+                return with_tier(self._rates[memo])
             fam_l = fam_d = ver_l = ver_d = None
             if tkey:
                 if hub:
@@ -1349,17 +1882,9 @@ class _FusionContext:
                     # caller asked (`prepare(hubs_too=True)`), so on Team
                     # Analysis this reads None for a hub, exactly as before.
                     fam_l = self.family(card.key, tkey)
-            out = _fusion.fused(
-                self.matrix(card.archetype, arch_t),
-                cluster=cluster_of(arch_t) if cluster_of else None,
-                arch_ladder=exact_of(arch_t) if exact_of else None,
-                arch_duel=arch_duel,
-                fam_ladder=fam_l, fam_duel=fam_d, ver_ladder=ver_l, ver_duel=ver_d)
-            if out is not None:
-                games = int(out["games"])
-                tier, interval = dx.confidence_tier(
-                    int(round(out["winRate"] / 100.0 * games)), games)
-                out["tier"], out["interval"] = tier, interval
+            out = with_tier(_fusion.finish(
+                arch_half(arch_t),
+                fam_ladder=fam_l, fam_duel=fam_d, ver_ladder=ver_l, ver_duel=ver_d))
             self.stats[out["source"] if out else "none"] = (
                 self.stats.get(out["source"] if out else "none", 0) + 1)
             self._rates[memo] = out
@@ -1414,69 +1939,6 @@ def _duel_row(pick: dict, owner: dict | None, threats: list[dict], snap: dict | 
     return row
 
 
-def _duel_merge(listing: list[dict], mate: dict | None, ctx: _DuelContext | None,
-                projection: dict, answers: list[dict], threats: list[dict],
-                snap: dict | None, *, taken: dict | None = None, known=(),
-                limit: int, fill: bool) -> tuple[list[dict], int]:
-    """One list with the duel brain's figures on every row and its slots filled.
-
-    `mate` is the teammate the list belongs to — None for a squad-wide or
-    scouting list, which has nobody's own duel decks to offer and no cards to
-    lean on. `taken` counts the population picks already handed to teammates
-    in this folder, so the next teammate is steered to a comparable other one.
-    """
-    if ctx is None or not ctx.on or not projection:
-        return listing, 0
-    for r in listing:
-        r["duel"] = ctx.figures(r.get("cards"), projection)
-    known = set(known or ())
-    own: list[dict] = []
-    if mate is not None:
-        decks = ctx.player_decks(mate)
-        # A duel player's cards are the ones in the decks they DUEL with too.
-        known |= {c for d in decks if d["games"] >= _duel.OWN_MIN_GAMES for c in d["cards"]}
-        own = _duel.own_answers(projection, decks,
-                                records_for=lambda d: ctx.records(d["cards"]))
-    held = [r.get("cards") or [] for r in listing]
-    own = [o for o in own
-           if not any(_duel.same_deck(o["cards"], h) for h in held)][:_duel.DUEL_SLOTS]
-    pop = _duel.personal(answers, known=known, taken=taken,
-                         exclude=held + [o["cards"] for o in own],
-                         slots=_duel.DUEL_SLOTS)
-    rows = []
-    for p in own + pop:
-        row = _duel_row(p, mate if p["pick"] == _duel.PICK_OWN else None,
-                        threats, snap, ctx, fill=fill)
-        if row is not None:
-            rows.append(row)
-    merged, picked = _duel.merge(listing, rows, limit=limit)
-    if taken is not None:
-        for r in merged:
-            if r.get("duelPick") == _duel.PICK_POPULATION:
-                taken[r["key"]] = taken.get(r["key"], 0) + 1
-    return merged, picked
-
-
-def _duel_summary(ctx: _DuelContext | None, projection: dict, weight: float,
-                  their_games: int, answers: list[dict], picked: int) -> dict:
-    """The folder's line about the duel brain: what it projected, from what."""
-    if ctx is None or not ctx.on:
-        return {"available": False}
-    return {
-        "available": True,
-        "brain": _duel.DUEL_BRAIN_VERSION,
-        # How much of the duel projection is the opponent's own duel games.
-        "weight": weight,
-        "theirGames": their_games,
-        "projection": [
-            {"archetype": a, "name": dcx._label(a), "likelihood": round(v, 4)}
-            for a, v in sorted(projection.items(), key=lambda kv: (-kv[1], kv[0]))
-        ],
-        "answers": len(answers),
-        "picked": picked,
-    }
-
-
 # ── The report ──────────────────────────────────────────────────────────────
 
 
@@ -1499,25 +1961,6 @@ def _distinct(rows: list[dict]) -> list[dict]:
     return out
 
 
-def _suggested(own: list[dict], pool, limit: int) -> list[dict]:
-    """WHAT DECKKIES SUGGESTS TO PLAY: `own` and the population, ranked together.
-
-    `scout.suggest` does the work — this only makes it safe to call from the
-    board. `pool` is a callable so the population is scored once per folder,
-    on first use, and never at all in a scouting report (whose candidate pool
-    already IS the population).
-
-    A FAILURE FALLS BACK TO THE OWNED DECKS ALONE, diversified. The population
-    half is the part that reaches into the snapshot, and a snapshot problem
-    must cost the suggestions it adds and not the decks the player already has.
-    """
-    try:
-        return scout.suggest(own, pool(), limit=limit)
-    except Exception:  # noqa: BLE001 - the population half must never take the board down
-        traceback.print_exc()
-        return scout.diversify(own, limit=limit, minimum=limit)
-
-
 def _evidence_on_top(rows: list[dict], keep: int = 1) -> list[dict]:
     """`matchups` stays on the first `keep` rows only, and is dropped from the rest.
 
@@ -1538,9 +1981,184 @@ def _evidence_on_top(rows: list[dict], keep: int = 1) -> list[dict]:
     return rows
 
 
+def _own_duel_rows(mate: dict, ctx: _DuelContext | None, projection: dict,
+                   threats: list[dict], snap: dict | None, held: list[dict]) -> list[dict]:
+    """A teammate's OWN duel decks proven against this opponent, as rows.
+
+    Their duel decks are theirs whether or not the ladder has seen them, and
+    one that duel players win with against what this opponent brings is the
+    most personal answer there is. They join the teammate's own candidates and
+    are ranked on the same figure as everything else — a duel deck is no
+    longer PINNED under the #1 whatever that figure says.
+    """
+    if ctx is None or not ctx.on or not projection:
+        return []
+    try:
+        decks = ctx.player_decks(mate)
+        own = _duel.own_answers(projection, decks,
+                                records_for=lambda d: ctx.records(d["cards"]))
+    except Exception:  # noqa: BLE001 - the ladder list stands on its own
+        traceback.print_exc()
+        return []
+    rows = []
+    for o in own:
+        if any(_duel.same_deck(o["cards"], h.get("cards")) for h in held + rows):
+            continue
+        row = _duel_row(o, mate, threats, snap, ctx, fill=False)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+#: What the SELECTION wrote on a row, carried over when the row is rated in
+#: full for the screen.
+_CHOSEN_KEYS = ("answers", "fill", "squadPick", "covers", "known", "personalScore", "rate")
+
+
+def _finish(rows: list[dict], by_key: dict, threats: list[dict],
+            ctx: _DuelContext | None, projection: dict,
+            snap: dict | None = None) -> list[dict]:
+    """Dress the rows that were chosen, and put the duels' figures on them.
+
+    A pool row was only RATED (`_score(dress=False)`: its figures and its rate
+    against each family, no per-threat table); the handful that made a list
+    are rated in full here — the same rates, remembered — then seated and
+    named. Every row with enough duel games carries its duel figures, and one
+    the duels call strong is marked `duelProven`: the ladder and the duels
+    agreeing, on a row that earned its place on the one figure the list is
+    ordered by.
+    """
+    out = []
+    for r in rows:
+        if "art" not in r:
+            card = by_key.get(r["key"])
+            full = _score(card, threats, snap, ctx) if card is not None else None
+            if full is not None:
+                for k in _CHOSEN_KEYS:
+                    if k in r:
+                        full[k] = r[k]
+                r = full
+        if ctx is not None and ctx.on and projection:
+            try:
+                r["duel"] = ctx.figures(r.get("cards"), projection)
+            except Exception:  # noqa: BLE001
+                r["duel"] = None
+            if (r.get("duel") or {}).get("strong"):
+                r["duelProven"] = True
+        # A LIST FROM THE DUEL CATALOGUE says so — the label the screen already
+        # draws for a duel deck. It is on the list because of its figure, like
+        # every row; the label says where the list comes from.
+        if r.get("origin") == "duel" and not r.get("duelPick"):
+            r["duelPick"] = _duel.PICK_POPULATION if _duel is not None else "duel"
+        out.append(r)
+    return out
+
+
+def _slim(row: dict) -> dict:
+    """A row for a per-family or per-card list: the deck and its figures,
+    without the per-threat table (`_evidence_on_top`'s argument)."""
+    r = dict(row)
+    r.pop("matchups", None)
+    r.pop("explanation", None)
+    return r
+
+
+def _by_card(rows: list[dict], threats: list[dict], finish) -> dict | None:
+    """THE CARD VIEW: the cards that answer what they play, and for each the
+    best decks holding it — ranked by measured matchup rate.
+
+    The pipeline the account holder described (2026-10-10): "figure 'this card
+    counters most of their archetypes', search decks for that card, use
+    ranking to find the top decks of that card, then compare each deck by
+    matchup percentage against the opponent's decks."
+
+      1. THEIR CARDS, by the share of their games each is in.
+      2. WHICH CARDS ARE WORTH SEARCHING is the manual's call
+         (`card_counters.worth`): a card that answers something they really
+         play, or a win condition they carry little against.
+      3. WHICH OF THOSE COUNTER THEM is the database's: `lift` is how much
+         better the pool's decks holding the card do against what they play
+         than the pool does — measured rates, over `CARD_MIN_DECKS` lists or
+         more. A card whose decks do no better than average is not listed,
+         whatever the manual says about it.
+      4. THE DECKS under each card are the best holding it, on the same
+         figure every other list is ordered by.
+
+    None when the card manual is not deployed.
+    """
+    if _cards is None or not _cards.available() or not rows:
+        return None
+    use = _cards.usage(threats)
+    if not use:
+        return None
+    mean_all = sum(float(r["expectedWinRate"]) for r in rows) / len(rows)
+    holding: dict[str, list[dict]] = {}
+    for r in rows:
+        for c in r.get("cards") or []:
+            holding.setdefault(c, []).append(r)
+
+    found = []
+    for card, rs in holding.items():
+        if len(rs) < CARD_MIN_DECKS:
+            continue
+        why = _cards.worth(card, use,
+                           win_condition=bool(dx.card_info(card).get("is_win_condition")))
+        if why is None:
+            continue
+        lift = sum(float(r["expectedWinRate"]) for r in rs) / len(rs) - mean_all
+        if lift <= 0:
+            continue
+        found.append((card, rs, why, lift))
+    found.sort(key=lambda f: (-f[3], f[0]))
+    found = found[:_cards.COUNTER_CARDS]
+
+    def one(item):
+        card, rs, why, lift = item
+        rs = sorted(rs, key=lambda r: (-float(r["expectedWinRate"]),
+                                       -float(r.get("recommendationScore") or 0), r["key"]))
+        picked: list[dict] = []
+        count: dict[str, int] = {}
+        for r in rs:
+            if len(picked) >= CARD_DECKS:
+                break
+            if float(r["expectedWinRate"]) < scout.FLOOR_RATE:
+                break
+            # The rules of every list here: no near-copy of a deck already
+            # shown, and one win condition twice at most — three Log Bait
+            # lists under "Rocket" would be one answer shown three times.
+            a = r.get("archetype") or ""
+            if count.get(a, 0) >= scout.PER_ARCHETYPE:
+                continue
+            if any(len(set(r["cards"]) & set(p["cards"])) >= scout.SAME_DECK_OVERLAP
+                   for p in picked):
+                continue
+            picked.append(r)
+            count[a] = count.get(a, 0) + 1
+        return {
+            "card": card,
+            "why": why["why"],
+            # Their cards this one answers / their cards that answer it, with
+            # the share of their games each is in. Card keys and shares only.
+            "answers": why["answers"][:5],
+            "open": why["open"][:5],
+            "exposure": why["exposure"],
+            "lift": round(lift, 1),
+            "lists": len(rs),
+            # Copies: a deck can be the best under two cards, and two searches
+            # must not dress one shared row at once.
+            "decks": [_slim(r) for r in finish([dict(r) for r in picked])],
+        }
+
+    # ONE SEARCH A CARD, side by side: each reads the same rated pool, so the
+    # searches do not wait on one another.
+    cards = [c for c in _POOL.map(one, found) if c["decks"]]
+    return {"theirCards": _cards.their_cards(use), "cards": cards}
+
+
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             snap: dict | None, top_n: int = TOP_N,
-            seeds: dict | None = None, ctx: _DuelContext | None = None) -> dict:
+            seeds: dict | None = None, ctx: _DuelContext | None = None,
+            *, views: bool = False) -> dict:
     """One opponent, and what should be brought against them.
 
     BOTH MODES COME THROUGH HERE. In a scouting report `blue` is empty, so
@@ -1549,33 +2167,48 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     modes are one function: the left-hand side of a folder (what they play) and
     the ranking of the right-hand side are identical work, and only the pool
     and the row count differ.
+
+    `views` adds the two other readings of the same rated pool — the best
+    counters to each family they play (`byFamily`) and the decks behind each
+    counter card (`byCard`). The Deck Counter asks for them; a board of twelve
+    opponents does not carry them.
     """
     decks = (opponent.get("decks") or [])[:OPPONENT_DECKS]
     _archetypes_for(decks)
-    # WHAT THEY HAVE PLAYED. Still shown, because a coach wants to see the
-    # history as well as the projection, and still an archetype breakdown.
-    spread = _spread(decks)
-    # WHAT THEY ARE LIKELY TO BRING. The whole opponent's deck list goes in,
-    # not the displayed six: the tail is small weight in a projection and it
-    # was never noise, only weak evidence.
-    projection = _threats(opponent.get("decks") or [], seeds)
+    # WHAT THEY PLAY — every deck they fielded in the window, own-deck games
+    # and duel games, most played first — and nothing they have not played.
+    projection = _plays(opponent.get("decks") or [])
     threats = projection["threats"]
+    plays = projection.get("plays") or []
+    spread = _spread_of(plays)
+    names = {p["family"]: p["name"] for p in plays}
 
-    # THE DUEL BRAIN'S PROJECTION: the one above, blended with what this
-    # opponent actually brought to their own DUELS (which no 8-card reader
-    # ever saw), and the population's duel-proven answers to it. Computed once
-    # per folder; every teammate's list reads the same answers.
+    # THE DUELS' OWN PROJECTION, for the duel figures every row carries: the
+    # one above blended with what this opponent brought to their own duels.
     duel_proj: dict = {}
-    duel_weight, their_duels, answers = 0.0, 0, []
+    duel_weight, their_duels = 0.0, 0
     if ctx is not None and ctx.on and threats:
         try:
             opp_wcs = ctx.player_wcs(opponent)
             their_duels = sum(opp_wcs.values())
             duel_proj, duel_weight = _duel.duel_projection(threats, opp_wcs)
-            answers = _duel.population_answers(duel_proj, ctx.catalogue)
         except Exception:  # noqa: BLE001 - the duel half must never take the board down
             traceback.print_exc()
-            duel_proj, answers = {}, []
+            duel_proj = {}
+
+    by_key: dict[str, _Candidate] = {}
+    fx_on = ctx is not None and getattr(ctx, "fx", None) is not None and ctx.fx.on
+    table = ctx.fx.threat_table(threats) if fx_on and threats else None
+
+    def rate_all(pool: list[_Candidate]) -> list[dict]:
+        rows = []
+        for card in pool:
+            row = _score(card, threats, snap, ctx, dress=False, table=table)
+            if row:
+                rows.append(row)
+                by_key.setdefault(card.key, card)
+        rows.sort(key=lambda r: (-r["score"], r["key"]))
+        return _distinct(rows)
 
     scored: list[dict] = []
     if threats:
@@ -1584,76 +2217,56 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             # family evidence comes off their own ladder histories, read once
             # each, on the shared pool, before anything is scored.
             ctx.fx.prepare(cards, threats)
-        for card in cards:
-            row = _score(card, threats, snap, ctx)
-            if row:
-                scored.append(row)
-        # The second key is games piloted, which a scout row does not have —
-        # `comfort` is None there and reading it subscripts a None. Falling
-        # back to 0 keeps ownerless rows ordered by score then by name.
-        scored.sort(key=lambda r: (-r["score"],
-                                   -((r["comfort"] or {}).get("games") or 0),
-                                   r["name"]))
+        if blue:
+            for card in cards:
+                row = _score(card, threats, snap, ctx)
+                if row:
+                    scored.append(row)
+            scored.sort(key=lambda r: (-r["score"],
+                                       -((r["comfort"] or {}).get("games") or 0),
+                                       r["name"]))
+        else:
+            scored = rate_all(cards)
 
-    # EVERY BLUE PLAYER GETS THEIR OWN TOP THREE, in roster order.
-    #
-    # This is the shape the screen is built from. A team format assigns each
-    # player a match, so the question is "what should Ravi bring against this
-    # person", asked once per teammate — not "what are the three best decks on
-    # the squad", which can legitimately all belong to one person and leaves
-    # everyone else with nothing to play.
-    #
-    # A PLAYER WITH NOTHING TO OFFER STILL APPEARS, with a reason. Dropping
-    # them would silently shorten the list and make a roster of five look like
-    # a roster of three — the same failure as a parser that drops a tag.
-    #
-    # A SCOUT ROW HAS NO OWNER TO GROUP BY, and `blue` is empty there anyway,
-    # so the grouping is skipped rather than made to tolerate a null key: a
-    # bucket under `None` would be built and then never read, which is the kind
-    # of dead structure that later reads as an intentional one.
+    # THE POPULATION, RATED ONCE PER FOLDER: every vetted ladder list and every
+    # duel-catalogue list (`_counter_candidates`), against what THIS opponent
+    # plays. In a scouting report `cards` already is that pool.
+    _pool_rows: list[dict] | None = None
+
+    def pool_rows() -> list[dict]:
+        nonlocal _pool_rows
+        if _pool_rows is None:
+            _pool_rows = scored if not blue else (
+                rate_all(_counter_candidates()) if threats else [])
+        return _pool_rows
+
+    def finish(rows: list[dict]) -> list[dict]:
+        return _finish(rows, by_key, threats, ctx, duel_proj, snap)
+
+    def shortlist(rows: list[dict]) -> list[dict]:
+        """The pool rows a squad can actually be offered: the strongest
+        overall, and the best against each family they play. A teammate's list
+        is seven rows chosen within a few points of the top, so handing every
+        teammate two thousand rows to copy and sort is the whole cost of a
+        large board for decks that can never be picked."""
+        if len(rows) <= SQUAD_POOL:
+            return rows
+        keep = {r["key"]: r for r in rows[:SQUAD_POOL]}
+        for p in plays:
+            if p["share"] < scout.ANSWER_SHARE:
+                continue
+            fam = p["family"]
+            best = sorted((r for r in rows if r["vs"].get(fam) is not None),
+                          key=lambda r: (-r["vs"][fam], r["key"]))[:SQUAD_POOL_PER_FAMILY]
+            for r in best:
+                keep.setdefault(r["key"], r)
+        return sorted(keep.values(), key=lambda r: (-r["score"], r["key"]))
+
     by_tag: dict[str, list[dict]] = {}
     for row in scored:
         if row["owner"]:
             by_tag.setdefault(row["owner"]["tag"], []).append(row)
 
-    # THE POPULATION, SCORED ONCE PER FOLDER.
-    #
-    # Real decks out of the snapshot, ranked against THIS opponent's
-    # projection. Not owner-specific — it is "what Deckkies would suggest
-    # against this person" — so the same ranked list serves every teammate
-    # and the squad-wide list. Scoring it per teammate would be ten identical
-    # passes over ~200 candidates.
-    #
-    # LAZY, and never built in a scouting report: there the candidate pool
-    # already IS the population, so `scored` is this list.
-    _fill_pool: list[dict] | None = None
-
-    def fill_pool() -> list[dict]:
-        nonlocal _fill_pool
-        if _fill_pool is None:
-            scored_fills = []
-            # NOT GATED ON `seeds`. That argument is the THREAT projection's
-            # source; the fill CANDIDATES come from `_scout_candidates()`,
-            # which falls back to the archetype representatives when the
-            # snapshot predates the seed pool. Gating on `seeds` silently
-            # switched fills off on exactly the deployment that needs them
-            # most, and `_scout_candidates()` already returns [] when there is
-            # no snapshot at all — which is the right degradation and says so.
-            for card in _scout_candidates():
-                row = _score(card, threats, snap, ctx)
-                if row:
-                    scored_fills.append(row)
-            scored_fills.sort(key=lambda r: (-r["score"], r["name"]))
-            _fill_pool = _distinct(scored_fills)
-        return _fill_pool
-
-    # THE SQUAD'S QUESTION, NOT FIVE COPIES OF ONE PLAYER'S. `scout.squad_plan`
-    # assigns each teammate a different #1 from the options the evidence
-    # cannot separate, chosen so the squad's #1s answer as many of this
-    # opponent's archetypes as they can, leaning on cards each teammate
-    # already plays. Measured before it (2026-09-25, live 5v1): one #1 for
-    # all five, two identical lists, 12 distinct decks in 35 slots.
-    #
     # A TEAMMATE'S CARDS ARE THE ONES IN DECKS THEY ACTUALLY RUN — the same
     # `MIN_COMFORT_GAMES` floor that decides which of their decks are
     # candidates, so "built out of your cards" and "a deck you play" cannot
@@ -1666,30 +2279,47 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
                 pool_cards.update(d.get("cards") or [])
         mate_cards[mate["tag"]] = pool_cards
 
+    # Their own duel decks proven against this opponent join their own rows.
+    duel_picked = 0
+    for mate in blue:
+        if not threats:
+            break
+        mine = by_tag.setdefault(mate["tag"], [])
+        extra = _own_duel_rows(mate, ctx, duel_proj, threats, snap, mine)
+        duel_picked += len(extra)
+        mine.extend(extra)
+
+    # THE SQUAD'S QUESTION, NOT FIVE COPIES OF ONE PLAYER'S. `scout.squad_plan`
+    # assigns each teammate a different #1 from the options the evidence
+    # cannot separate; the rest of each list is the strongest counters to what
+    # this opponent plays (`scout.counters`).
     plan_lists: dict[str, list[dict]] | None = None
     cover: list[dict] = []
     if blue and threats:
         try:
-            squad = []
-            for mate in blue:
-                squad.append({"tag": mate["tag"],
-                              "own": by_tag.get(mate["tag"], []),
-                              "cards": mate_cards[mate["tag"]]})
-            plan_lists, cover = scout.squad_plan(squad, fill_pool(), threats,
+            squad = [{"tag": mate["tag"], "own": by_tag.get(mate["tag"], []),
+                      "cards": mate_cards[mate["tag"]]} for mate in blue]
+            plan_lists, cover = scout.squad_plan(squad, shortlist(pool_rows()), threats,
                                                  limit=PER_PLAYER_TOP_N)
-            names = {m["tag"]: m["name"] for m in blue}
+            who = {m["tag"]: m["name"] for m in blue}
             for c in cover:
-                c["name"] = dcx._label(c["archetype"] or "other")
-                c["player"] = names.get(c["tag"]) if c["tag"] else None
-        except Exception:  # noqa: BLE001 - the old per-teammate lists are the fallback
+                c["name"] = names.get(c["archetype"]) or dcx._label(c["archetype"] or "other")
+                c["player"] = who.get(c["tag"]) if c["tag"] else None
+        except Exception:  # noqa: BLE001 - the per-teammate lists are the fallback
             traceback.print_exc()
             plan_lists, cover = None, []
 
+    def suggested(own: list[dict], limit: int) -> list[dict]:
+        """Own decks and the population's, as one list of counters."""
+        try:
+            short = shortlist(pool_rows())
+            extra = scout.fills(own, short, need=len(short))
+        except Exception:  # noqa: BLE001 - the population half must never take the board down
+            traceback.print_exc()
+            extra = []
+        return scout.counters(list(own) + extra, plays, limit=limit)
+
     per_player = []
-    # Population duel picks already handed to a teammate in THIS folder, so the
-    # next teammate is steered to a comparable other answer.
-    duel_taken: dict[str, int] = {}
-    duel_picked = 0
     for mate in blue:
         rows = by_tag.get(mate["tag"], [])
         # `own`, NOT `decks`. Naming it `decks` rebound the opponent's list
@@ -1698,44 +2328,16 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         own = [d for d in (mate.get("decks") or [])
                if len(set(d.get("cards") or [])) == 8]
         listing = (plan_lists[mate["tag"]] if plan_lists is not None
-                   else _suggested(rows, fill_pool, PER_PLAYER_TOP_N))
-        # THE DUEL BRAIN'S TWO SLOTS, for THIS teammate: their own duel decks
-        # proven against this opponent first, then the population's answers
-        # leaning on their cards. See `duel_brain.merge`.
-        try:
-            listing, n = _duel_merge(listing, mate, ctx, duel_proj, answers, threats,
-                                     snap, taken=duel_taken,
-                                     known=mate_cards.get(mate["tag"]),
-                                     limit=PER_PLAYER_TOP_N, fill=True)
-            duel_picked += n
-        except Exception:  # noqa: BLE001 - the ladder list stands on its own
-            traceback.print_exc()
+                   else suggested(rows, PER_PLAYER_TOP_N))
         per_player.append({
             "owner": {"tag": mate["tag"], "name": mate["name"]},
             "basis": mate["basis"],
             # WHAT DECKKIES SUGGESTS THIS TEAMMATE PLAYS: their own decks and
-            # the population's, RANKED TOGETHER BY STRENGTH.
-            #
-            # That is `coach.suggest`'s sort, and an earlier build got it wrong
-            # the other way: it appended population decks BELOW every owned
-            # one and called that Coach Assist's rule. It was not — Coach
-            # Assist sorts the combined list by expected win rate — and on a
-            # live squad it left a player's own 60.0% deck above 71.7% and
-            # 71.3% answers. The account holder asked for the strongest to
-            # lead, and that is what Coach Assist does.
-            #
-            # THEIR OWN DECKS KEEP A REAL EDGE: `score()` adds up to
-            # `FIT_WEIGHT` (1.5 points) for a deck they pilot, so a population
-            # deck must be genuinely better to pass one of theirs, not merely
-            # level. Near-copies of their own decks are refused outright.
-            #
-            # This module's docstring argues the candidate pool is "exactly
-            # the decks the blue squad has ALREADY PLAYED". That argument is
-            # about knowing who can pilot a deck on the day, and it survives
-            # as the `owner` on every row and the `fill` mark on every row that
-            # has none — the reader is told which is which, rather than the
-            # stronger deck being withheld.
-            "decks": _evidence_on_top(listing, keep=0),
+            # the population's — ladder lists and duel lists — as ONE list of
+            # counters to what this opponent plays, in the order of the figure
+            # printed. Their own decks keep a real edge (`FIT_WEIGHT`, up to
+            # 1.5 points), and a near-copy of one of theirs is refused.
+            "decks": _evidence_on_top(finish(listing), keep=0),
             "considered": len(rows),
             # WHICH empty state this is, said rather than inferred from a
             # missing list. The three are genuinely different problems: nothing
@@ -1750,22 +2352,32 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         })
 
     # The squad-wide list (a match plan's folder face; a scouting report's
-    # whole answer) gets the same two slots, from the population alone — it
-    # belongs to nobody, so there are no own duel decks and no cards to lean on.
-    recommended = (_suggested(_distinct(scored), fill_pool, top_n) if blue
-                   else scout.diversify(_distinct(scored), limit=top_n))
-    top_picked = 0
-    try:
-        recommended, top_picked = _duel_merge(
-            recommended, None, ctx, duel_proj, answers, threats, snap,
-            limit=top_n, fill=bool(blue))
-    except Exception:  # noqa: BLE001
-        traceback.print_exc()
-    duel = _duel_summary(ctx, duel_proj, duel_weight, their_duels, answers, duel_picked)
-    if duel.get("available"):
-        duel["pickedRecommended"] = top_picked
+    # whole answer).
+    if not threats:
+        recommended = []
+    elif blue:
+        recommended = suggested(_distinct(scored), top_n)
+    else:
+        recommended = scout.counters(scored, plays, limit=top_n)
+    recommended = finish(recommended)
+    for r in recommended:
+        if blue and not r.get("owner"):
+            r["fill"] = True
 
-    return {
+    duel = ({"available": False} if ctx is None or not ctx.on else {
+        "available": True,
+        "brain": _duel.DUEL_BRAIN_VERSION,
+        "weight": duel_weight,
+        "theirGames": their_duels,
+        "projection": [
+            {"archetype": a, "name": dcx._label(a), "likelihood": round(v, 4)}
+            for a, v in sorted(duel_proj.items(), key=lambda kv: (-kv[1], kv[0]))
+        ],
+        "picked": duel_picked,
+        "pickedRecommended": sum(1 for r in recommended if r.get("origin") == "duel"),
+    })
+
+    out = {
         "player": {
             "tag": opponent["tag"], "name": opponent["name"],
             "basis": opponent["basis"], "battles": opponent["battles"],
@@ -1775,56 +2387,54 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # LEFT SIDE of the opened folder: what they actually play.
         "theirDecks": decks,
         "spread": spread,
-        # RIGHT SIDE: what to bring, best first.
-        # The squad-wide top 3, deduplicated by DECK so the headline is three
-        # options rather than one option with two co-owners. It is what the
-        # folder card's face shows; the board itself is `perPlayer`.
-        #
-        # IN A SCOUTING REPORT THIS IS THE WHOLE ANSWER, not a headline over a
-        # per-player board, which is why the caller passes a longer `top_n`.
-        # `_distinct` is a no-op there — the representatives are already one
-        # deck per archetype — and is left in the path anyway rather than
-        # branched around, because a pool that ever gained a second deck of an
-        # archetype should still collapse it here.
-        # THE PROJECTION. What they are likely to BRING — their observed decks,
-        # real variants of them, and the archetypes their behaviour implies —
-        # as a distribution summing to 1.0, every entry labelled with which
-        # kind it is and how confident that is. This is what `recommended` was
-        # scored against, and it is published so the reader can check the
-        # reasoning rather than take the ranking on faith.
+        # WHAT THEY PLAY, by family: the shares everything on the right was
+        # scored against, and the names of the chips under each deck.
+        "plays": [{"family": p["family"], "archetype": p["archetype"],
+                   "name": p["name"], "share": p["share"], "games": p["games"],
+                   "decks": p["decks"]}
+                  for p in plays if p["share"] >= scout.PLAYS_MIN_SHARE],
+        # The lists the rates were measured against: their own decks, most
+        # likely first, summing to 1.0.
         "threats": threats,
         "churn": projection["churn"],
         "mass": projection.get("mass"),
-        # RIGHT SIDE: WHAT DECKKIES SUGGESTS TO PLAY, best first.
-        #
-        # SEVEN, DIVERSIFIED, and the diversity is what makes a longer list
-        # worth having: taking the top seven by score returns seven answers to
-        # the same threat, and `scout.diversify` penalises redundancy so the
-        # list covers the observed core, the variants around it and the thing
-        # they have not shown.
-        #
-        # IN A MATCH PLAN THE SQUAD'S DECKS AND THE POPULATION'S ARE RANKED
-        # TOGETHER (`_suggested`), the same sort as each teammate's list. In a
-        # scouting report `scored` already IS the population.
+        # RIGHT SIDE: WHAT DECKKIES SUGGESTS TO PLAY — the strongest counters
+        # to what they play, in the order of the figure printed.
         "recommended": _evidence_on_top(recommended),
         "perPlayer": per_player,
-        # THE DUEL BRAIN'S READ OF THIS OPPONENT: what it projected they bring
-        # to a duel, how much of that is their own duel games, and how many
-        # duel-proven answers it found. `{"available": false}` without an index.
         "duel": duel,
-        # WHICH TEAMMATE'S #1 ANSWERS EACH ARCHETYPE THEY MAY BRING, most
-        # likely first. Empty in a scouting report (nobody to assign) and on
-        # the fallback path; the client draws nothing rather than a strip of
-        # blanks.
+        # WHICH TEAMMATE'S #1 ANSWERS EACH FAMILY THEY PLAY, most played first.
+        # Empty in a scouting report (nobody to assign).
         "squadCover": cover,
         "considered": len(cards),
         "brain": scout.BRAIN_VERSION,
         # Said out loud rather than left to be inferred from an empty list.
         "reason": (
-            None if scored else
+            None if (scored or recommended) else
             "no_history" if not threats else "no_evidence"
         ),
     }
+    if views and threats:
+        # THE SAME RATED POOL, READ TWO MORE WAYS, side by side with nothing
+        # waiting on anything: per family they play, and per counter card.
+        rows = pool_rows()
+        fam_job = _POOL.submit(lambda: [
+            {**{k: v for k, v in g.items() if k != "decks"},
+             "decks": [_slim(r) for r in finish(g["decks"])]}
+            for g in scout.answers(rows, plays)])
+        # The card view runs HERE, not on the pool: its own searches are what
+        # go to the pool, and a pool job that waits on pool jobs can starve.
+        try:
+            out["byCard"] = _by_card(rows, threats, finish)
+        except Exception:  # noqa: BLE001 - a view is extra; the list stands
+            traceback.print_exc()
+            out["byCard"] = None
+        try:
+            out["byFamily"] = fam_job.result()
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            out["byFamily"] = []
+    return out
 
 
 def _combined(red: list[dict], cards: list[_Candidate],
@@ -1839,38 +2449,38 @@ def _combined(red: list[dict], cards: list[_Candidate],
     what should we be practising* — and that is a property of the roster as a
     whole rather than of any player in it.
 
-    WEIGHTED BY GAMES, NOT BY PLAYER. Summing each player's normalised shares
-    would give a roster's least active member the same say as its most active,
-    which is a claim that everyone plays the same amount. Games are what the
-    weights already mean everywhere else in this module, so pooling them is the
-    same arithmetic one player's spread already does — `_spread` is simply
-    handed every considered deck on the roster at once.
+    WEIGHTED BY GAMES, NOT BY PLAYER: every opponent's decks are pooled and
+    projected as one player's would be (`_plays`), so a roster's least active
+    member does not get the same say as its most active.
     """
-    decks: list[dict] = []
     pooled: list[dict] = []
     for opp in red:
-        own = (opp.get("decks") or [])[:OPPONENT_DECKS]
-        _archetypes_for(own)
-        decks.extend(own)
-        # The PROJECTION pools every deck, not the displayed six. See `_folder`.
-        pooled.extend(opp.get("decks") or [])
+        pooled.extend(dict(d) for d in (opp.get("decks") or []))
 
-    spread = _spread(decks)
-    projection = _threats(pooled, seeds)
+    projection = _plays(pooled)
     threats = projection["threats"]
+    plays = projection.get("plays") or []
     if not threats:
-        return {"players": len(red), "spread": [], "threats": [],
+        return {"players": len(red), "spread": [], "threats": [], "plays": [],
                 "recommended": [], "reason": "no_history",
                 "brain": scout.BRAIN_VERSION}
 
-    scored = [row for row in (_score(c, threats, snap, ctx) for c in cards) if row]
-    scored.sort(key=lambda r: (-r["score"], r["name"]))
-    recommended = scout.diversify(_distinct(scored), limit=SCOUT_TOP_N)
+    by_key: dict[str, _Candidate] = {}
+    fx_on = ctx is not None and getattr(ctx, "fx", None) is not None and ctx.fx.on
+    table = ctx.fx.threat_table(threats) if fx_on else None
+    scored = []
+    for c in cards:
+        row = _score(c, threats, snap, ctx, dress=False, table=table)
+        if row:
+            scored.append(row)
+            by_key.setdefault(c.key, c)
+    scored.sort(key=lambda r: (-r["score"], r["key"]))
+    recommended = scout.counters(_distinct(scored), plays, limit=SCOUT_TOP_N)
 
-    # THE DUEL BRAIN, ROSTER-WIDE: every opponent's own duel games pooled,
-    # weighted by games the way the spread above is, and the population's
-    # duel-proven answers to the whole roster in the two reserved slots.
+    # THE DUELS, ROSTER-WIDE: every opponent's own duel games pooled, for the
+    # duel figures on each row.
     duel = {"available": False}
+    proj: dict = {}
     if ctx is not None and ctx.on:
         try:
             pooled_wcs: dict[str, int] = {}
@@ -1878,23 +2488,72 @@ def _combined(red: list[dict], cards: list[_Candidate],
                 for a, n in ctx.player_wcs(opp).items():
                     pooled_wcs[a] = pooled_wcs.get(a, 0) + n
             proj, weight = _duel.duel_projection(threats, pooled_wcs)
-            answers = _duel.population_answers(proj, ctx.catalogue)
-            recommended, picked = _duel_merge(recommended, None, ctx, proj, answers,
-                                              threats, snap, limit=SCOUT_TOP_N,
-                                              fill=False)
-            duel = _duel_summary(ctx, proj, weight, sum(pooled_wcs.values()),
-                                 answers, picked)
+            duel = {
+                "available": True, "brain": _duel.DUEL_BRAIN_VERSION,
+                "weight": weight, "theirGames": sum(pooled_wcs.values()),
+                "projection": [
+                    {"archetype": a, "name": dcx._label(a), "likelihood": round(v, 4)}
+                    for a, v in sorted(proj.items(), key=lambda kv: (-kv[1], kv[0]))],
+            }
         except Exception:  # noqa: BLE001
             traceback.print_exc()
+    recommended = _finish(recommended, by_key, threats, ctx, proj, snap)
+    if duel.get("available"):
+        duel["picked"] = sum(1 for r in recommended if r.get("origin") == "duel")
     return {
         "players": len(red),
-        "spread": spread,
+        "spread": _spread_of(plays),
+        "plays": [{"family": p["family"], "archetype": p["archetype"],
+                   "name": p["name"], "share": p["share"], "games": p["games"],
+                   "decks": p["decks"]}
+                  for p in plays if p["share"] >= scout.PLAYS_MIN_SHARE],
         "threats": threats,
         "churn": projection["churn"],
         "mass": projection.get("mass"),
         "recommended": _evidence_on_top(recommended),
         "duel": duel,
         "reason": None if scored else "no_evidence",
+        "brain": scout.BRAIN_VERSION,
+    }
+
+
+def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
+    """WHAT TO BRING AGAINST ONE PLAYER — the Deck Counter's list.
+
+    The same engine, the same pool and the same figures as a scouting report
+    of that one player, so the two screens cannot disagree about a deck: the
+    seven strongest counters to what they play, the best counters to each
+    family they play, and the decks behind each counter card.
+
+    It replaces a list that restated the player's own worst matchups from
+    "your" side. Measured before it went (2026-10-10, 437 held-out players):
+    35.5% of the rows that list told a reader to bring had a rate UNDER 50% by
+    its own figure, and the deck drawn beside each was the list of that
+    archetype the player had MET most — the meta's list, which is why six
+    players were shown the same eight cards.
+    """
+    opp = _resolve(tag, DEFAULT_DAYS, window=(since, until) if since else None)
+    _seat_decks((opp.get("decks") or [])[:RESOLVE_SEATED], dcx.seater())
+    snap = dcx._snap()
+    cards = _counter_candidates()
+    ctx = _DuelContext()
+    ctx.fx = _FusionContext(ctx, snap)
+    if ctx.on:
+        try:
+            ctx.prefetch([c.cards for c in cards])
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+    folder = _folder(opp, [], cards, snap, SCOUT_TOP_N, None, ctx, views=True)
+    return {
+        "basis": opp["basis"],
+        "battles": opp["battles"],
+        "window": opp["window"],
+        "plays": folder["plays"],
+        "decks": folder["recommended"],
+        "byFamily": folder.get("byFamily") or [],
+        "byCard": folder.get("byCard"),
+        "reason": folder["reason"],
+        "pool": {"decks": len(cards), **counter_pool_stats()},
         "brain": scout.BRAIN_VERSION,
     }
 
@@ -1937,7 +2596,7 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     # seated — the opponent's list is the left half of every folder.
     seat = dcx.seater()
     for p in resolved:
-        _seat_decks(p.get("decks") or [], seat)
+        _seat_decks((p.get("decks") or [])[:RESOLVE_SEATED], seat)
 
     snap = dcx._snap()
     # READ ONCE FOR THE WHOLE RUN. `seeds()` is a dictionary off the snapshot,
@@ -1945,7 +2604,10 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     # per folder would re-enter `_snap()` ten times for an answer that cannot
     # change inside one request.
     seeds = dcx.seeds() or None
-    cards = _scout_candidates() if is_scout else _candidates(blue)
+    # THE COUNTER POOL in a scouting report: every vetted ladder list and
+    # every duel-catalogue list. A match plan's `cards` are the squad's own
+    # decks, and each folder rates the same counter pool beside them.
+    cards = _counter_candidates() if is_scout else _candidates(blue)
     top_n = SCOUT_TOP_N if is_scout else TOP_N
 
     # THE DUEL BRAIN, read once for the request. Every list the board draws
@@ -1957,7 +2619,7 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     if ctx.on:
         try:
             ctx.prefetch([c.cards for c in cards]
-                         + ([] if is_scout else [c.cards for c in _scout_candidates()]))
+                         + ([] if is_scout else [c.cards for c in _counter_candidates()]))
         except Exception:  # noqa: BLE001
             traceback.print_exc()
 
@@ -1989,6 +2651,8 @@ def analyze(blue_tags: list[str], red_tags: list[str],
             "decks": len(cards),
             "reason": pool_reason,
             "minGames": MIN_COMFORT_GAMES,
+            # The lists every folder's counters were chosen from, by source.
+            "counters": counter_pool_stats(),
         },
         "days": days,
         "limits": {

@@ -752,11 +752,85 @@ export interface PlayerMatchup {
   deckSeen?: number;
 }
 
+/** One FAMILY a player plays: an archetype, or — for the decks the collector
+ *  files under one "other" key — the win condition they actually run. */
+export interface PlaysFamily {
+  /** The key every `vs` map on a suggested deck is read by. */
+  family: string;
+  archetype: string;
+  name: string;
+  /** Share of their games in the window, recency-weighted, 0..1. */
+  share: number;
+  games: number;
+  /** How many distinct lists of it they fielded. */
+  decks: number;
+}
+
+/** A card of theirs and the share of their games it is in, 0..1. */
+export interface CardShare {
+  card: string;
+  share: number;
+}
+
+/**
+ * One COUNTER CARD: a card that answers what they play (the card manual says
+ * which), with the best decks holding it. `lift` is how many points better
+ * the pool's decks holding the card do against what they play than the pool
+ * does — a measured figure; the manual never produces one.
+ */
+export interface BringCard {
+  card: string;
+  /** `answers`: it answers cards they really play. `open`: a win condition
+   *  they carry little against. */
+  why: 'answers' | 'open';
+  /** Their cards this one answers, most used first. */
+  answers: CardShare[];
+  /** Their cards that answer THIS card, most used first. */
+  open: CardShare[];
+  exposure: number;
+  lift: number;
+  /** Lists in the pool holding the card. */
+  lists: number;
+  decks: TeamRecommendation[];
+}
+
+/**
+ * WHAT TO BRING AGAINST ONE PLAYER — `server/team_analysis.bring`.
+ *
+ * The scouting engine's answer for this one player: the same pool (every
+ * vetted ladder list and every duel list) and the same figures as Team
+ * Analysis, so the two screens cannot disagree about a deck. Three readings of
+ * one rated pool. Absent from a server that predates it, and `null` when the
+ * engine could not answer — the matchup table above it still stands.
+ */
+export interface BringReport {
+  basis: 'stored' | 'live' | 'unknown';
+  battles: number;
+  window: { from: string | null; to: string | null };
+  /** What they play, most played first — the families a deck's `vs` is read by. */
+  plays: PlaysFamily[];
+  /** The strongest counters to all of it, in the order of the figure printed. */
+  decks: TeamRecommendation[];
+  /** The best counters to each family they play. `rate` on a deck is its rate
+   *  against THAT family. An empty `decks` means nothing beats it at 55%. */
+  byFamily: (PlaysFamily & { decks: (TeamRecommendation & { rate: number })[] })[];
+  /** The card view. Null when the card manual is not deployed. */
+  byCard: { theirCards: CardShare[]; cards: BringCard[] } | null;
+  reason: 'no_history' | 'no_evidence' | null;
+  pool: { decks: number; ladder?: number; duel?: number };
+  brain: string;
+}
+
 export interface PlayerCounterReport {
   player: { tag: string; winRate: number; battles: number; wins: number; archiveUsed: boolean };
   worst: PlayerMatchup[];
   best: PlayerMatchup[];
+  /** @deprecated The old "Bring this against them": the player's own worst
+   *  matchups restated from the other side. Still sent for one deploy so a tab
+   *  opened before it keeps drawing; `bring` replaces it. */
   recommended: PlayerMatchup[];
+  /** What to bring against them. See `BringReport`. */
+  bring?: BringReport | null;
   analyzed: number;
   minBattles: number;
   coverage: ApiCoverage;
@@ -2149,6 +2223,8 @@ export interface TeamMatchupRow {
  * was never pasted. Anything rendering a recommendation has to handle both.
  */
 export interface TeamRecommendation {
+  /** The order-free identity of the list: its eight card keys, sorted. */
+  key?: string;
   /** SEATED: evolution, hero, wild first (`arrange_deck`). */
   cards: string[];
   art: Record<string, WildForm>;
@@ -2254,9 +2330,18 @@ export interface TeamRecommendation {
    * Match-plan rows only, and all optional: a server on brain 2.0 sends none
    * of them and the screen draws the old row. */
 
-  /** Win rate against each archetype of this opponent's projection, keyed by
-   *  archetype. An archetype with no measured record is ABSENT, not 50. */
+  /** Win rate against each FAMILY this opponent plays, keyed by `plays[].family`
+   *  — on every row of both modes since brain 3.0. A family with no measured
+   *  record is ABSENT, not 50. */
   vs?: Record<string, number>;
+  /** Families (`plays[].family`) this row is the list's best counter to, at
+   *  55% or better. */
+  answers?: string[];
+  /** Where a population list comes from: the duel catalogue or the vetted
+   *  ladder seeds. Absent on a teammate's own deck. */
+  origin?: 'ladder' | 'duel';
+  /** On a per-family list only: the rate against THAT family. */
+  rate?: number;
   /** How many of the eight cards this teammate plays in a deck of their own
    *  (8 on a deck they pilot). */
   known?: number;
@@ -2379,6 +2464,10 @@ export interface TeamFolder {
   theirDecks: ApiDeck[];
   /** Their archetype breakdown — what they HAVE played. Still the history. */
   spread: TeamSpreadRow[];
+  /** What they play, by family — the shares every deck on the right was
+   *  scored against, and the names of the chips under each deck. Absent from
+   *  a server before brain 3.0. */
+  plays?: PlaysFamily[];
   /**
    * THE PROJECTION — what they are likely to BRING.
    *
@@ -2443,6 +2532,8 @@ export type TeamMode = 'scout' | 'squads';
 export interface TeamOverall {
   players: number;
   spread: TeamSpreadRow[];
+  /** What the roster plays, pooled, by family. Absent before brain 3.0. */
+  plays?: PlaysFamily[];
   /** The whole roster pooled into ONE projection. Same shape as a folder's. */
   threats?: TeamThreat[];
   churn?: TeamChurn;
