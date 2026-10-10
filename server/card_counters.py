@@ -23,8 +23,8 @@ THE MANUAL NAMES THE CARDS. THE DATABASE RANKS THE DECKS.
 =========================================================
 
 `src/data/cardRoles.json` is generated from the hand-written card manual
-(`scripts/build-card-roles.py`): for 122 of 123 cards, the cards it counters
-and the cards that counter it. `DECK_TUNER.md` §5 already ruled that the
+(`All_Cards_stats.md`, by `scripts/build-card-roles.py`): for every card, the
+cards it counters and the cards that counter it. `DECK_TUNER.md` §5 already ruled that the
 manual decides which cards are worth considering and never produces a number,
 and that rule was checked against the future before this file used it:
 
@@ -40,14 +40,22 @@ record moves ten. Here the relations only (a) pick which cards are searched and
 (b) say, in card art, why a card is on the screen. Every percentage beside
 them is a measured rate.
 
-NO DATABASE. The roles file is read once, softly: without it every function
+NO DATABASE. The roles file is read softly: without it every function
 answers empty and the caller simply has no card view.
+
+THE MANUAL IS LIVING DATA (2026-10-10). The account holder edits it and pushes
+the generated file to the server (`scripts/push-card-data.py`), so the file is
+re-read when it changes on disk — `refresh()`, called by the one caller that
+starts a card view, looks at its modification time at most every
+`CHECK_EVERY_S`. No restart, and a request already running keeps the table it
+started with.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import time
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROLES_PATH = os.path.join(_HERE, "..", "src", "data", "cardRoles.json")
@@ -81,6 +89,19 @@ def _load() -> dict:
 
 ROLES: dict = _load()
 
+#: Seconds between looks at the roles file's modification time.
+CHECK_EVERY_S = 30.0
+
+
+def _mtime() -> float | None:
+    try:
+        return os.path.getmtime(_ROLES_PATH)
+    except OSError:
+        return None
+
+
+_seen = {"mtime": _mtime(), "checked": time.monotonic()}
+
 
 def _relations(roles: dict) -> dict[str, frozenset]:
     """`{card: the cards it answers}`, from BOTH directions of the manual.
@@ -104,6 +125,30 @@ def _relations(roles: dict) -> dict[str, frozenset]:
 
 
 BEATS: dict[str, frozenset] = _relations(ROLES)
+
+
+def refresh(force: bool = False) -> bool:
+    """Re-read the roles file when it has changed on disk. True when it did.
+
+    Both tables are built before either name is rebound, and a table that
+    fails to load or comes back empty leaves the last good one in place — a
+    half-written file must not blank the card view.
+    """
+    global ROLES, BEATS
+    now = time.monotonic()
+    if not force and now - _seen["checked"] < CHECK_EVERY_S:
+        return False
+    _seen["checked"] = now
+    mtime = _mtime()
+    if mtime is None or (mtime == _seen["mtime"] and not force):
+        return False
+    roles = _load()
+    _seen["mtime"] = mtime
+    if not roles:
+        return False
+    beats_ = _relations(roles)
+    ROLES, BEATS = roles, beats_
+    return True
 
 
 def available() -> bool:

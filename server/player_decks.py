@@ -308,6 +308,10 @@ def played(tag: str, since: str | None = None, until: str | None = None) -> dict
         e[0 if outcome == "win" else 1 if outcome == "loss" else 2] += 1
 
     duel_games = 0
+    # key -> how many of the games counted above were DUEL games. The
+    # projection of what somebody brings to a duel weighs these far more than
+    # their ladder games (`team_scout.DUEL_WEIGHT`).
+    duel_per: dict[str, int] = {}
     di = _duel_index()
     duel_ok = False
     if di is not None:
@@ -324,6 +328,7 @@ def played(tag: str, since: str | None = None, until: str | None = None) -> dict
             key = deck_key(cards)
             games, wins = int(d["games"]), int(d["wins"])
             duel_games += games
+            duel_per[key] = duel_per.get(key, 0) + games
             e = per.get(key)
             if e is None:
                 e = per[key] = [0, 0, 0, d.get("lastSeen") or "", cards,
@@ -337,6 +342,7 @@ def played(tag: str, since: str | None = None, until: str | None = None) -> dict
     return {
         "per": per, "marks": marks, "loadouts": loadouts,
         "duelGames": duel_games, "duelIndex": duel_ok,
+        "duel": duel_per,
         "archiveUsed": archive_used, "hidden": hidden,
     }
 

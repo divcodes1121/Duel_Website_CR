@@ -607,9 +607,13 @@ check("a scout recommendation carries no owner",
       all(r["owner"] is None for r in scout_folder["recommended"]))
 check("and no comfort block",
       all(r["comfort"] is None for r in scout_folder["recommended"]))
+# TO THE PUBLISHED ROUNDING: the score is worked on the unrounded matchup value
+# and `matchupValue` is printed to one decimal, so the two may differ by half
+# of that. (They agreed to the bit only while a fixture's weighted mean
+# happened to have one decimal; the tempered shares of 4.0 do not.)
 check("so the practice tiebreak contributes nothing to its rank",
       all(r["playerFit"] is None for r in scout_folder["recommended"])
-      and all(abs(r["score"] - round(_rebuilt(r), 3)) < 1e-9
+      and all(abs(r["score"] - _rebuilt(r)) <= 0.0501
               for r in scout_folder["recommended"]),
       "with no owner there is nothing to be practised at, so the tiebreak "
       "must contribute exactly nothing")
@@ -983,7 +987,7 @@ finally:
 
 print(NL + "counters to what they play")
 
-check("the brain is 3.0", ts.BRAIN_VERSION == "team-scout-3.0" and folder["brain"] == ts.BRAIN_VERSION)
+check("the brain is 4.0", ts.BRAIN_VERSION == "team-scout-4.0" and folder["brain"] == ts.BRAIN_VERSION)
 
 _fam = ta._family("hog", HOG)
 check("a named archetype is its own family", _fam == ("hog", ta.dcx._label("hog")), str(_fam))
@@ -1010,6 +1014,13 @@ check("the bars on the left are the shares the list was scored against",
 check("a folder publishes what they play, by family",
       folder.get("plays") and all({"family", "name", "share", "games", "decks"} <= set(p)
                                   for p in folder["plays"]), str(folder.get("plays")))
+check("...the chance beside the history, and how the history was read",
+      all("played" in p and "duelGames" in p for p in folder["plays"])
+      and folder["read"]["temper"] == ts.TEMPER and folder["read"]["duelWeight"] == ts.DUEL_WEIGHT,
+      str(folder.get("read")))
+check("every suggested row says what it does worst against, by name",
+      all(r.get("worst") and r["worst"].get("name") and r["worst"]["family"] in r["vs"]
+          for r in folder["recommended"]), str([r.get("worst") for r in folder["recommended"]][:2]))
 check("its threats are all decks they were seen playing",
       folder["threats"] and all(t["evidence"] == ts.OBSERVED for t in folder["threats"]))
 check("every suggested row carries its rate against each family they play",
@@ -1062,6 +1073,66 @@ try:
     _c0 = _rich_pool[0]
     check("the archetype half of a rate is worked once and remembered on the candidate",
           len(_c0.memo) >= 1 and _fx_ctx.fx.arch_half(_c0, "golem") is _fx_ctx.fx.arch_half(_c0, "golem"))
+
+    # THE BALANCE LOG, ON BOTH SIDES OF A RATE. A stand-in for `card_balance`
+    # whose drags the cases set: the Hog candidate's list, the Golem threat's.
+    _saved_balance = ta._balance
+    _DRAGS: dict = {}
+
+    class _Bal:
+        @staticmethod
+        def drag(cs, as_of=None):
+            return _DRAGS.get(_k(cs), 0.0)
+
+        @staticmethod
+        def marks(cs, as_of=None):
+            return ([{"card": sorted(cs)[0], "kind": "nerf", "form": "base", "date": "2026-10-06"}]
+                    if _DRAGS.get(_k(cs)) else [])
+
+    ta._balance = _Bal
+    try:
+        _hog_c = next(c for c in _rich_pool if c.key == _k(HOG))
+
+        def _rates(balance, drags):
+            _DRAGS.clear()
+            _DRAGS.update(drags)
+            ctx_ = types.SimpleNamespace(on=False, fx=None, records=lambda cs: None)
+            ctx_.fx = ta._FusionContext(None, None)
+            ctx_.fx.balance = balance
+            tab = ctx_.fx.threat_table(_proj["threats"])
+            lean = ta._score(_hog_c, _proj["threats"], None, ctx_, dress=False, table=tab)
+            full = ta._score(_hog_c, _proj["threats"], None, ctx_)
+            return lean, full
+
+        _base, _base_full = _rates(True, {})
+        _fam = next(iter(_base["vs"]))
+        _off, _ = _rates(False, {_k(HOG): 2.0, _k(GOLEM): 1.0})
+        check("the fixture rates the Hog list against a family of theirs",
+              _base["vs"].get(_fam) is not None, str(_base["vs"]))
+        check("a context that does not ask for the balance log is not moved (Coach Assist)",
+              _off["vs"] == _base["vs"], f"{_off['vs']} {_base['vs']}")
+        _mine, _mine_full = _rates(True, {_k(HOG): 2.0})
+        check("a nerfed list is rated under its record",
+              abs((_base["vs"][_fam] - _mine["vs"][_fam]) - 2.0) < 0.11, f"{_base['vs']} {_mine['vs']}")
+        _theirs, _ = _rates(True, {_k(GOLEM): 1.0})
+        check("a nerfed THREAT is that much easier",
+              abs((_theirs["vs"][_fam] - _base["vs"][_fam]) - 1.0) < 0.11, f"{_base['vs']} {_theirs['vs']}")
+        _both, _both_full = _rates(True, {_k(HOG): 2.0, _k(GOLEM): 1.0})
+        check("both sides apply together",
+              abs((_base["vs"][_fam] - _both["vs"][_fam]) - 1.0) < 0.11, f"{_base['vs']} {_both['vs']}")
+        check("the tight loop and the full scorer still agree with the log applied",
+              all(_both[k] == _both_full[k] for k in ("expectedWinRate", "score", "vs"))
+              and all(_mine[k] == _mine_full[k] for k in ("expectedWinRate", "score", "vs")),
+              f"{_both['expectedWinRate']} {_both_full['expectedWinRate']}")
+        check("the dressed row marks which of its cards changed, and only then",
+              _mine_full.get("balance") and _mine_full["balance"][0]["kind"] == "nerf"
+              and "balance" not in _base_full, str(_mine_full.get("balance")))
+        ta._balance = None
+        _gone, _gone_full = _rates(True, {_k(HOG): 2.0})
+        check("with no balance log deployed nothing is moved and nothing is marked",
+              _gone["vs"] == _base["vs"] and "balance" not in _gone_full)
+    finally:
+        ta._balance = _saved_balance
 finally:
     ta._fusion = _saved_fusion
 
@@ -1083,9 +1154,58 @@ ta._pdecks.played = lambda tag, since=None, until=None: {
              _k(XBOW): [6, 4, 0, "20260819T120000.000Z", list(XBOW), "xbow"]}
             if tag == "#R1" else {}),
     "marks": {}, "loadouts": 0, "duelGames": 12, "duelIndex": True,
+    "duel": ({_k(GOLEM): 12, _k(XBOW): 400} if tag == "#R1" else {}),
     "archiveUsed": False, "hidden": {"Challenge_AllCards_EventDeck_NoSet": 300},
 }
 _me = ta._resolve("#R1", 30)
+check("each deck says how many of its games were duel games, never more than it has",
+      [d["duelMatches"] for d in _me["decks"]] == [12, 10], str([d.get("duelMatches") for d in _me["decks"]]))
+check("with no duel index there are no older duel decks, and the read still answers",
+      _me["older"] == [])
+
+
+class _OlderIndex:
+    asked = None
+
+    @staticmethod
+    def iso_to_stamp(day, end=False):
+        return (day or "") + ("T235959" if end else "T000000")
+
+    @classmethod
+    def player_decks(cls, tag, since=None, until=None):
+        cls.asked = (tag, since, until)
+        return [{"cards": list(LAVA), "games": 5, "wins": 3, "archetype": "lava",
+                 "lastSeen": "20260701T120000.000Z"},
+                {"cards": list(LAVA)[:7], "games": 9, "wins": 1, "archetype": "lava"},
+                {"cards": list(HOG), "games": 0, "wins": 0, "archetype": "hog"}]
+
+
+_saved_di = ta._duel_index
+ta._duel_index = _OlderIndex
+try:
+    _old = ta._older_duel_decks("#R1", "2026-08-01")
+    check("older duel decks are the lists they duelled with BEFORE the window",
+          [d["deckHash"] for d in _old] == [_k(LAVA)] and _old[0]["matches"] == 5
+          and _old[0]["family"] and _old[0]["name"], str(_old))
+    check("...asked of the days just before it, no further back than the constant",
+          _OlderIndex.asked == ("#R1", "2026-06-02T000000", "2026-07-31T235959")
+          and ta.OLDER_DUEL_DAYS == 60, str(_OlderIndex.asked))
+    check("...and of nothing when there is no window", ta._older_duel_decks("#R1", None) == [])
+    _me2 = ta._resolve("#R1", 30)
+    check("a resolved player carries them, apart from the decks they play",
+          [d["deckHash"] for d in _me2["older"]] == [_k(LAVA)]
+          and _k(LAVA) not in [d["deckHash"] for d in _me2["decks"]])
+    _fold = ta._plays(_me2["decks"], _me2["older"])
+    check("...and the projection scores against them",
+          _k(LAVA) in {t["key"] for t in _fold["threats"]}
+          and next(p for p in _fold["plays"] if p["archetype"] == "lava")["played"] == 0)
+    ta._duel_index = types.SimpleNamespace(
+        iso_to_stamp=_OlderIndex.iso_to_stamp,
+        player_decks=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("index gone")))
+    check("a failing duel index costs the older decks and nothing else",
+          ta._older_duel_decks("#R1", "2026-08-01") == [])
+finally:
+    ta._duel_index = _saved_di
 check("a stored player's decks are the ones they PLAY: the event deck is not one",
       [d["deckHash"] for d in _me["decks"]] == [_k(GOLEM), _k(XBOW)],
       str([d["deckHash"] for d in _me["decks"]]))
@@ -1111,6 +1231,33 @@ ta._reset_counter_pool()
 _bring = ta.bring("#R1")
 check("bring() answers with what they play and the decks to bring",
       _bring["plays"] and _bring["decks"] and _bring["brain"] == ts.BRAIN_VERSION, str(_bring.get("reason")))
+check("...and says how their history was read",
+      _bring["read"]["duelGames"] == 22 and _bring["read"]["temper"] == ts.TEMPER, str(_bring.get("read")))
+check("...every pool row that reached the list kept its worst case through the dressing, named",
+      all(d.get("worst") and d["worst"].get("name") and d["worst"]["rate"] == d["vs"][d["worst"]["family"]]
+          for d in _bring["decks"]), str([d.get("worst") for d in _bring["decks"]][:2]))
+
+# BOTH SCREENS ASK FOR THE BALANCE LOG; a context built by anything else does not.
+_asked = []
+_saved_fc = ta._FusionContext
+
+
+class _SpyFC(_saved_fc):
+    def threat_table(self, threats):
+        _asked.append(self.balance)
+        return super().threat_table(threats)
+
+
+ta._FusionContext = _SpyFC
+try:
+    ta.bring("#R1")
+    check("the Deck Counter's list reads the balance log", _asked and all(_asked), str(_asked))
+    del _asked[:]
+    ta.analyze([], ["#R1"], days=30)
+    check("and so does Team Analysis", _asked and all(_asked), str(_asked))
+    check("a context built without asking does not", _saved_fc(None, None).balance is False)
+finally:
+    ta._FusionContext = _saved_fc
 check("...the same decks a scouting report of that player lists",
       [d["key"] for d in _bring["decks"]]
       == [d["key"] for d in ta.analyze([], ["#R1"], days=30)["folders"][0]["recommended"]])

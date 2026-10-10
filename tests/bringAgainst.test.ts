@@ -4,9 +4,13 @@ import { describe, expect, it } from 'vitest';
 import {
   BRING_VIEWS,
   CHIP_OK,
+  MAX_BALANCE_MARKS,
   MAX_CHIPS,
+  balanceChips,
   chipLabels,
   familyChips,
+  patchDay,
+  playsTitle,
   shareLabel,
 } from '../src/utils/bringAgainst';
 
@@ -35,6 +39,90 @@ describe('a share of their games', () => {
   it('is never 0% for something they do play', () => {
     expect(shareLabel(0.004)).toBe('<1%');
     expect(shareLabel(0)).toBe('0%');
+  });
+});
+
+describe('what they are likely to bring (brain 4.0)', () => {
+  it('a family’s tooltip is the history its chance was read from', () => {
+    expect(playsTitle({ games: 400, decks: 3, played: 0.94, duelGames: 0 })).toBe(
+      '94% of their games · 400 games · 3 lists',
+    );
+    expect(playsTitle({ games: 20, decks: 1, played: 0.047, duelGames: 6 })).toBe(
+      '5% of their games · 20 games · 1 list · 6 duel games',
+    );
+  });
+
+  it('a duel deck from before the window is none of their games, and says so', () => {
+    expect(playsTitle({ games: 0, decks: 1, played: 0, duelGames: 1 })).toBe(
+      '0% of their games · 0 games · 1 list · 1 duel game',
+    );
+  });
+
+  it('a server before 4.0 sends no history share and the tooltip still reads', () => {
+    expect(playsTitle({ games: 80, decks: 2 })).toBe('80 games · 2 lists');
+  });
+});
+
+describe('the balance marks on a deck', () => {
+  const nameOf = (k: string) => ({ 'royal-ghost': 'Royal Ghost', wizard: 'Wizard' })[k] ?? k;
+
+  it('a patch day is short and human', () => {
+    expect(patchDay('2026-10-06')).toBe('6 Oct');
+    expect(patchDay('2026-01-31')).toBe('31 Jan');
+    expect(patchDay('soon')).toBe('soon');
+    expect(patchDay('2026-13-01')).toBe('2026-13-01');
+  });
+
+  it('a deck with nothing changed draws nothing', () => {
+    expect(balanceChips({}, nameOf)).toEqual([]);
+    expect(balanceChips({ balance: [] }, nameOf)).toEqual([]);
+  });
+
+  it('a nerf says what, and when', () => {
+    const [m] = balanceChips(
+      { balance: [{ card: 'royal-ghost', kind: 'nerf', form: 'base', date: '2026-10-06' }] },
+      nameOf,
+    );
+    expect(m).toEqual({
+      card: 'royal-ghost',
+      kind: 'nerf',
+      glyph: '▼',
+      title: 'Royal Ghost — Nerfed 6 Oct',
+    });
+  });
+
+  it('a form that is not the base card is named', () => {
+    const [m] = balanceChips(
+      { balance: [{ card: 'wizard', kind: 'buff', form: 'evolution', date: '2026-09-08' }] },
+      nameOf,
+    );
+    expect(m.title).toBe('Wizard (evolution) — Buffed 8 Sep');
+    expect(m.glyph).toBe('▲');
+  });
+
+  it('nerfs lead (they are in the figure), and the row is capped', () => {
+    const marks = balanceChips(
+      {
+        balance: [
+          { card: 'a', kind: 'buff', form: 'base', date: '2026-10-06' },
+          { card: 'b', kind: 'nerf', form: 'base', date: '2026-09-16' },
+          { card: 'c', kind: 'rework', form: 'base', date: '2026-10-06' },
+          { card: 'd', kind: 'nerf', form: 'base', date: '2026-10-06' },
+        ],
+      },
+      nameOf,
+    );
+    expect(marks).toHaveLength(MAX_BALANCE_MARKS);
+    expect(marks.map((m) => m.card)).toEqual(['d', 'b']);
+  });
+
+  it('the caller’s list is not reordered', () => {
+    const balance = [
+      { card: 'a', kind: 'buff' as const, form: 'base' as const, date: '2026-10-06' },
+      { card: 'b', kind: 'nerf' as const, form: 'base' as const, date: '2026-10-06' },
+    ];
+    balanceChips({ balance }, nameOf);
+    expect(balance.map((m) => m.card)).toEqual(['a', 'b']);
   });
 });
 
@@ -109,6 +197,22 @@ describe('the Deck Counter’s list is the scouting engine’s', () => {
 
   it('the card view is offered only when the server sent one', () => {
     expect(block).toMatch(/BRING_VIEWS\.filter\(\(v\) => v\.id !== 'card' \|\| bring\.byCard\)/);
+  });
+
+  it('the strip says what they are LIKELY TO BRING, with the history as its tooltip', () => {
+    expect(block).toContain('<li className={styles.playsLabel}>Likely to bring</li>');
+    expect(block).toMatch(/title=\{playsTitle\(p\)\}/);
+    expect(block).not.toContain('>They play<');
+    // Team Analysis heads the bars the right-hand side was scored against.
+    expect(folders).toContain('<h4 className={styles.boardTitle}>Likely to bring</h4>');
+  });
+
+  it('a balance change is the figure’s tooltip on both screens, never a mark on the row', () => {
+    expect(block).toMatch(/balanceChips\(deck, cardName\)/);
+    expect(folders).toMatch(/balanceChips\(rec, /);
+    expect(block).toMatch(/title=\{\[figureTitle, \.\.\.changed\.map\(\(m\) => m\.title\)\]/);
+    expect(block).not.toContain('styles.balance');
+    expect(folders).not.toContain('styles.recBalance');
   });
 
   it('a group with no counter says so instead of padding the list', () => {

@@ -66,6 +66,48 @@ CARDS = _roster()
 META = _load("cardMeta.json")
 ROLES = _load("cardRoles.json")["cards"]
 
+#: THE ROLES ARE LIVING DATA (2026-10-10): the card manual is edited and its
+#: generated file pushed to the server, so it is re-read when it changes on
+#: disk. `refresh()` is called by `check`, at most one look at the file every
+#: `CHECK_EVERY_S`. The roster and the form flags are NOT re-read: a new card
+#: also changes what the card catalogue and the deck links know, and that is a
+#: restart (`scripts/push-card-data.py` does it when those files moved).
+CHECK_EVERY_S = 30.0
+_ROLES_FILE = os.path.join(_DATA, "cardRoles.json")
+
+
+def _roles_mtime():
+    try:
+        return os.path.getmtime(_ROLES_FILE)
+    except OSError:
+        return None
+
+
+_seen = {"mtime": _roles_mtime(), "checked": 0.0}
+
+
+def refresh(force: bool = False) -> bool:
+    """Re-read `cardRoles.json` when it has changed. True when it did. A file
+    that fails to parse or holds no cards leaves the last good table."""
+    global ROLES
+    import time
+    now = time.monotonic()
+    if not force and now - _seen["checked"] < CHECK_EVERY_S:
+        return False
+    _seen["checked"] = now
+    mtime = _roles_mtime()
+    if mtime is None or (mtime == _seen["mtime"] and not force):
+        return False
+    _seen["mtime"] = mtime
+    try:
+        roles = _load("cardRoles.json")["cards"]
+    except Exception:  # noqa: BLE001 - keep the last good table
+        return False
+    if not roles:
+        return False
+    ROLES = roles
+    return True
+
 DECK_SIZE = 8
 
 # ── Thresholds ──────────────────────────────────────────────────────────────
@@ -198,7 +240,11 @@ def check(cards: list[str]) -> dict:
     classified from a list -- a deck with unknowns is reported as
     INCOMPLETELY CHECKED and `ok` is False, because passing it would assert
     something nothing verified.
+
+    The roles are re-read first when the manual's file has changed
+    (`refresh`), at most one look every `CHECK_EVERY_S`.
     """
+    refresh()
     uniq = list(dict.fromkeys(cards))
     problems: list[str] = []
     unknowns: list[str] = []

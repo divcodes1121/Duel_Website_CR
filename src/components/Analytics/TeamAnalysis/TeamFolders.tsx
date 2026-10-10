@@ -13,7 +13,8 @@ import { DeckActions } from '../../DeckActions/DeckActions';
 import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import { VsMark } from '../../VsMark/VsMark';
 import { duelChip, duelDeckLabel, duelTitle } from '../../../utils/duelFigures';
-import { chipLabels } from '../../../utils/bringAgainst';
+import { balanceChips, chipLabels } from '../../../utils/bringAgainst';
+import { CARDS_BY_KEY } from '../../../data/cards';
 import styles from './TeamAnalysis.module.css';
 import { Threats } from './Threats';
 import { SuggestHeading } from './SuggestHeading';
@@ -285,7 +286,15 @@ function Recommendation({ rec, rank, labels }: {
           )}
         </div>
         <div className={styles.recFigures}>
-          <span className={styles.recRate} title="Expected win rate against this opponent's spread of archetypes, weighted by how much they play each one.">
+          {/* The tooltip also names any card of the deck the game changed
+              lately (the card manual's balance log); a nerf is in the figure. */}
+          <span
+            className={styles.recRate}
+            title={[
+              'Expected win rate against the decks this opponent is likely to bring, weighted by how likely each is.',
+              ...balanceChips(rec, (k) => CARDS_BY_KEY.get(k)?.name ?? k).map((m) => m.title),
+            ].join(' · ')}
+          >
             {pct(rec.expectedWinRate)}
           </span>
           <span className={styles.recSub}>
@@ -586,6 +595,9 @@ export function OpenFolder({
                 ))}
               </ul>
 
+              {/* THE CHANCE, NOT THE HISTORY (brain 4.0): the bars are what the
+                  right-hand side was scored against. */}
+              {folder.spread.length > 0 && <h4 className={styles.boardTitle}>Likely to bring</h4>}
               <ul className={styles.spread}>
                 {folder.spread.map((s) => (
                   <li key={s.archetype} className={styles.spreadRow}>

@@ -68,18 +68,19 @@ def main() -> int:
     roles = doc["cards"]
     check("it says it is generated, not hand-written",
           "build-card-roles" in doc.get("$comment", ""))
-    # THE MANUAL IS THE MASTER AND IT IS ONE CARD BEHIND THE ROSTER.
+    # THE MANUAL IS THE MASTER, AND SINCE 2026-10-10 IT COVERS THE ROSTER.
     #
-    # `cardRoles.json` is GENERATED from `Deckkies_Master_Card_Manual.md` by
-    # `scripts/build-card-roles.py`, and that file must never be hand-edited.
-    # Minion Giant shipped in season 87 (2026-09-07) and the manual mentions it
-    # only in prose — there is no `CARD:minion-giant` block for the parser to
-    # read — so the generated file legitimately holds 122 of 123 cards.
+    # `cardRoles.json` is GENERATED from the card manual (`All_Cards_stats.md`
+    # at the repository root) by `scripts/build-card-roles.py`, and must never
+    # be hand-edited. Minion Giant shipped in season 87 (2026-09-07) and for a
+    # month the manual mentioned it only in prose, so the file held 122 of 123
+    # cards; card #125 closed that. `AWAITING_MANUAL` is kept, EMPTY, as the
+    # place the next uncovered card is named.
     #
-    # WHAT IT COSTS AT RUNTIME IS BOUNDED AND IN THE SAFE DIRECTION.
+    # WHAT A MISSING ENTRY COSTS AT RUNTIME IS BOUNDED AND IN THE SAFE DIRECTION.
     # `ROLES.get(card)` returns None, so `answers_air`, `has_splash` and
     # `is_anti_swarm` all read False: a deck holding it is UNDER-credited, never
-    # over-credited. For this card that is close to free — it is a flying win
+    # over-credited. For Minion Giant that was close to free — it is a flying win
     # condition that targets buildings, so it would answer no air and clear no
     # swarm either way.
     #
@@ -92,15 +93,23 @@ def main() -> int:
     # `python scripts/build-card-roles.py`. It is a content task, not a code
     # one, and inventing the counters and synergies here instead would put
     # unsourced card analysis into a file the deck checker trusts.
-    AWAITING_MANUAL = {"minion-giant"}
+    AWAITING_MANUAL: set = set()
     missing = set(dh.CARDS) - set(roles)
     extra = set(roles) - set(dh.CARDS)
     check("no card has an entry the roster does not have", not extra, str(extra))
     check("the only cards without an entry are the ones the manual has not "
           "covered yet", missing == AWAITING_MANUAL, str(missing))
-    check("which is one card behind a 123-card roster",
-          len(roles) == len(dh.CARDS) - len(AWAITING_MANUAL) == 122,
+    check("which is every card of a 123-card roster",
+          len(roles) == len(dh.CARDS) - len(AWAITING_MANUAL) == 123,
           f"{len(roles)} entries, {len(dh.CARDS)} cards")
+    mg = roles.get("minion-giant") or {}
+    check("Minion Giant is a flying win condition that only a card able to "
+          "hit air answers",
+          mg.get("transport") == "air" and mg.get("targets") == ["buildings"]
+          and "win-condition" in (mg.get("roles") or [])
+          and all((roles.get(c) or {}).get("targets") and
+                  "air" in roles[c]["targets"] for c in mg.get("counteredBy") or []),
+          str({k: mg.get(k) for k in ("transport", "targets", "roles", "counteredBy")}))
 
     VOCAB = {
         "targets": {"air", "ground", "buildings", "area-effect",

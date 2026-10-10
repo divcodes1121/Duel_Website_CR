@@ -168,3 +168,15 @@ server/.deck_packages.json.tmp
 # The Noto Sans JP master (9.6 MB variable font). scripts/build-report-fonts.py
 # downloads it from a pinned commit and checks its SHA-256, so it is never source.
 assets/fonts/noto/
+
+# THE CARD MANUAL (2.5 MB of hand-written card analysis). It is the master the
+# brain's card data is generated from (scripts/build-card-roles.py ->
+# src/data/cardRoles.json + cardBalance.json, which ARE tracked) and it is
+# pushed to the analytics server by scripts/push-card-data.py. This repository
+# is public, so the manual itself stays out of it unless its author says
+# otherwise.
+/All_Cards_stats.md
+
+# The analytics server's address, read by scripts/push-card-data.py. Public
+# repository: the address is never committed.
+/.vps-host

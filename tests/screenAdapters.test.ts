@@ -122,7 +122,7 @@ describe('deckCounterDoc — the list of what to bring', () => {
     ]);
   });
   it('says what they play, as shares', () => {
-    expect(lists[0].note).toBe('They play Giant 79% · Bridge Spam 10%');
+    expect(lists[0].note).toBe('Likely to bring Giant 79% · Bridge Spam 10%');
   });
   it('ranks the decks and prints each one’s rate against their archetypes', () => {
     const [first, second] = lists[0].decks;

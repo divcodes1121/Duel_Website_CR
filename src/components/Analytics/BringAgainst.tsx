@@ -12,7 +12,14 @@ import { DeckActions } from '../DeckActions/DeckActions';
 import { Tabs } from '../ui/tabs';
 import { drawnDeck, formInferred } from '../../utils/deckSeating';
 import { duelChip, duelDeckLabel, duelTitle } from '../../utils/duelFigures';
-import { BRING_VIEWS, familyChips, shareLabel, type BringView } from '../../utils/bringAgainst';
+import {
+  BRING_VIEWS,
+  balanceChips,
+  familyChips,
+  playsTitle,
+  shareLabel,
+  type BringView,
+} from '../../utils/bringAgainst';
 import styles from './BringAgainst.module.css';
 
 /**
@@ -54,7 +61,7 @@ function cardName(key: string): string {
 
 /** What the big figure on each tab is measured against. */
 const VIEW_NOTE: Record<BringView, string> = {
-  best: 'Win rate against everything they play.',
+  best: 'Win rate against what they are likely to bring.',
   family: 'Win rate against that archetype of theirs.',
   card: 'Cards that answer what they play, and the best decks holding each.',
 };
@@ -93,6 +100,7 @@ function BringDeck({
 }) {
   const d = drawnDeck(deck.cards, deck.art, deck.artInferred, deck.artFilled);
   const chips = familyChips(deck, plays, skip);
+  const changed = balanceChips(deck, cardName);
   return (
     <li className={styles.deck}>
       <div className={styles.deckHead}>
@@ -109,7 +117,15 @@ function BringDeck({
             {duelChip(deck.duel)}
           </span>
         )}
-        <span className={styles.figure} title={figureTitle}>
+        {/* WHAT THE GAME CHANGED LATELY in this deck (the card manual's balance
+            log) is the figure's TOOLTIP, not a mark: staged on real players,
+            two rows in three held a card the last patch touched, and a mark on
+            most rows says nothing. A nerf is already in the figure. */}
+        <span
+          className={styles.figure}
+          title={[figureTitle, ...changed.map((m) => m.title)].filter(Boolean).join(' · ') || undefined}
+          data-balance={changed.length ? changed.map((m) => m.kind).join(' ') : undefined}
+        >
           {pct(figure ?? deck.expectedWinRate)}
         </span>
       </div>
@@ -225,10 +241,13 @@ export function BringAgainst({ bring }: { bring: BringReport }) {
 
   return (
     <div className={styles.root} data-bring>
-      <ul className={styles.plays} aria-label="They play">
-        <li className={styles.playsLabel}>They play</li>
+      {/* THE CHANCE, NOT THE HISTORY (brain 4.0): what somebody brings is
+          flatter than what they mostly play, and leans on their duel decks.
+          The history is each chip's tooltip. */}
+      <ul className={styles.plays} aria-label="Likely to bring">
+        <li className={styles.playsLabel}>Likely to bring</li>
         {bring.plays.map((p) => (
-          <li key={p.family} className={styles.play} title={`${p.games} games, ${p.decks} lists`}>
+          <li key={p.family} className={styles.play} title={playsTitle(p)}>
             <span>{p.name}</span>
             <strong>{shareLabel(p.share)}</strong>
           </li>
@@ -252,7 +271,7 @@ export function BringAgainst({ bring }: { bring: BringReport }) {
               deck={d}
               plays={bring.plays}
               rank={i + 1}
-              figureTitle="Expected win rate against everything they play, weighted by how much they play each deck."
+              figureTitle="Expected win rate against the decks they are likely to bring, weighted by how likely each is."
             />
           ))}
         </ol>

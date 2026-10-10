@@ -759,11 +759,28 @@ export interface PlaysFamily {
   family: string;
   archetype: string;
   name: string;
-  /** Share of their games in the window, recency-weighted, 0..1. */
+  /** THE CHANCE a deck of this family is what they bring, 0..1 — what every
+   *  figure on the list is weighted by. Since brain 4.0 it is flatter than
+   *  their play and leans on their duel decks (`team_scout.played_space`);
+   *  before it, it was the share of their games. */
   share: number;
+  /** Share of their games in the window, recency-weighted, 0..1 (brain 4.0). */
+  played?: number;
   games: number;
   /** How many distinct lists of it they fielded. */
   decks: number;
+  /** Duel games behind it, in the window and before it (brain 4.0). */
+  duelGames?: number;
+}
+
+/** A card of a suggested deck the game changed lately, from the card manual's
+ *  balance log. A nerf is already in the deck's figure. */
+export interface BalanceMark {
+  card: string;
+  kind: 'nerf' | 'buff' | 'rework' | 'new';
+  form: 'base' | 'evolution' | 'hero';
+  /** The patch day, `YYYY-MM-DD`. */
+  date: string;
 }
 
 /** A card of theirs and the share of their games it is in, 0..1. */
@@ -818,6 +835,14 @@ export interface BringReport {
   byCard: { theirCards: CardShare[]; cards: BringCard[] } | null;
   reason: 'no_history' | 'no_evidence' | null;
   pool: { decks: number; ladder?: number; duel?: number };
+  /** How their history was read (brain 4.0). */
+  read?: {
+    temper: number;
+    duelWeight: number;
+    duelGames: number;
+    olderDuelGames: number;
+    lists: number;
+  } | null;
   brain: string;
 }
 
@@ -2340,6 +2365,11 @@ export interface TeamRecommendation {
   /** Where a population list comes from: the duel catalogue or the vetted
    *  ladder seeds. Absent on a teammate's own deck. */
   origin?: 'ladder' | 'duel';
+  /** The family they are likely to bring that this deck does WORST against
+   *  (brain 4.0). */
+  worst?: { family: string; name?: string; rate: number } | null;
+  /** Cards of this deck the game changed in the last month. */
+  balance?: BalanceMark[];
   /** On a per-family list only: the rate against THAT family. */
   rate?: number;
   /** How many of the eight cards this teammate plays in a deck of their own

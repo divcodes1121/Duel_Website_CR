@@ -6,7 +6,7 @@
  * TYPE IMPORTS ONLY, so it is testable without React (the rule `tiers.ts`,
  * `duelFigures.ts` and `squadParse.ts` follow).
  */
-import type { PlaysFamily, TeamRecommendation } from '../state/analyticsClient';
+import type { BalanceMark, PlaysFamily, TeamRecommendation } from '../state/analyticsClient';
 
 export type BringView = 'best' | 'family' | 'card';
 
@@ -36,6 +36,73 @@ export function shareLabel(share: number): string {
   const p = share * 100;
   if (p > 0 && p < 1) return '<1%';
   return `${Math.round(p)}%`;
+}
+
+/** The tooltip of one family on the "Likely to bring" strip: the history the
+ *  chance was read from. `played` is absent from a server before brain 4.0. */
+export function playsTitle(
+  p: Pick<PlaysFamily, 'games' | 'decks' | 'played' | 'duelGames'>,
+): string {
+  const bits = [`${p.games} games`, `${p.decks} ${p.decks === 1 ? 'list' : 'lists'}`];
+  if (p.played !== undefined && p.played !== null) {
+    bits.unshift(`${shareLabel(p.played)} of their games`);
+  }
+  if (p.duelGames) bits.push(`${p.duelGames} duel ${p.duelGames === 1 ? 'game' : 'games'}`);
+  return bits.join(' · ');
+}
+
+/** Balance marks drawn on one deck, at most: nerfs first (they are in the
+ *  figure), then the newest. */
+export const MAX_BALANCE_MARKS = 2;
+
+const BALANCE_GLYPH: Record<BalanceMark['kind'], string> = {
+  nerf: '▼',
+  buff: '▲',
+  rework: '↻',
+  new: '★',
+};
+const BALANCE_WORD: Record<BalanceMark['kind'], string> = {
+  nerf: 'Nerfed',
+  buff: 'Buffed',
+  rework: 'Reworked',
+  new: 'New',
+};
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** `6 Oct` from `2026-10-06`; the string itself when it is not a date. */
+export function patchDay(date: string): string {
+  const parts = date.split('-');
+  if (parts.length !== 3 || parts.some((p) => !p || Number.isNaN(Number(p)))) return date;
+  const month = MONTHS[Number(parts[1]) - 1];
+  return month ? `${Number(parts[2])} ${month}` : date;
+}
+
+export interface BalanceChip {
+  card: string;
+  kind: BalanceMark['kind'];
+  glyph: string;
+  /** `Royal Ghost — Nerfed 6 Oct`, with the form when it is not the base card. */
+  title: string;
+}
+
+/** The marks for one deck's row. `nameOf` turns a card key into its name. */
+export function balanceChips(
+  deck: Pick<TeamRecommendation, 'balance'>,
+  nameOf: (key: string) => string,
+): BalanceChip[] {
+  const rows = [...(deck.balance ?? [])];
+  rows.sort(
+    (a, b) =>
+      Number(b.kind === 'nerf') - Number(a.kind === 'nerf') || b.date.localeCompare(a.date),
+  );
+  return rows.slice(0, MAX_BALANCE_MARKS).map((m) => ({
+    card: m.card,
+    kind: m.kind,
+    glyph: BALANCE_GLYPH[m.kind] ?? '•',
+    title:
+      `${nameOf(m.card)}${m.form === 'base' ? '' : ` (${m.form})`} — ` +
+      `${BALANCE_WORD[m.kind] ?? 'Changed'} ${patchDay(m.date)}`,
+  }));
 }
 
 export interface FamilyChip {

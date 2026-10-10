@@ -58,9 +58,15 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_MANUAL = os.path.join(
+# THE MANUAL LIVES IN THE REPOSITORY NOW (2026-10-10), as `All_Cards_stats.md`:
+# it is the file the account holder edits, and everything the brain knows about
+# a card is re-read from it by running this script. The Downloads path is where
+# it was written, and is only the fallback for a checkout that predates that.
+REPO_MANUAL = os.path.join(ROOT, "All_Cards_stats.md")
+DEFAULT_MANUAL = REPO_MANUAL if os.path.exists(REPO_MANUAL) else os.path.join(
     os.path.expanduser("~"), "Downloads", "Deckkies_Master_Card_Manual.md")
 OUT = os.path.join(ROOT, "src", "data", "cardRoles.json")
+BALANCE_OUT = os.path.join(ROOT, "src", "data", "cardBalance.json")
 
 
 # ── Normalisation ───────────────────────────────────────────────────────────
@@ -133,7 +139,100 @@ LIST_FIELDS = {
     "RESISTS": "resists",
     "RESETS": "resets",
     "KITES": "kites",
+    # The relations `COUNTERS` flattens (the manual's Part 3). Carried since
+    # 2026-10-10 so "half the card dies" is not read as either a counter or
+    # nothing.
+    "PARTIALLY_COUNTERED_BY": "partiallyCounteredBy",
+    "SURVIVES": "survives",
+    "KNOCKS_BACK": "knocksBack",
+    "DELAYS": "delays",
+    "CHIPS_ONLY": "chipsOnly",
 }
+
+FORMS = ("base", "evolution", "hero")
+KINDS = ("buff", "nerf", "rework", "fix")
+
+
+def parse_balance(text: str, roster: set) -> list:
+    """Every `BALANCE_PATCH` block of the manual's balance log (Appendix C).
+
+    A block is a dated patch: `CHANGE:<card>|<form>|<kind>|<what moved>` and
+    `NEW:<card>|<form>|<what it is>` lines. A card key the roster does not have,
+    a form or a kind outside the two closed lists, or two blocks with one date
+    is an ERROR, for the same reason an unknown TARGETS value is: a change
+    silently dropped is a card the brain goes on rating on a patch that is gone.
+    """
+    patches = []
+    for body in re.findall(r"```text\s*\n(.*?)```", text, re.S):
+        m = re.search(r"(?m)^BALANCE_PATCH:(\d{4}-\d{2}-\d{2})\s*$", body)
+        if not m:
+            continue
+        patch = {"date": m.group(1), "season": None, "confidence": None,
+                 "new": [], "changes": []}
+        for line in body.splitlines():
+            line = line.strip()
+            if line.startswith("SEASON:"):
+                patch["season"] = line.split(":", 1)[1].strip() or None
+            elif line.startswith("CONFIDENCE:"):
+                patch["confidence"] = line.split(":", 1)[1].strip() or None
+            elif line.startswith("CHANGE:"):
+                parts = [p.strip() for p in line.split(":", 1)[1].split("|", 3)]
+                if len(parts) != 4 or not all(parts):
+                    raise SystemExit("balance %s: malformed CHANGE line %r"
+                                     % (patch["date"], line))
+                card, form, kind, what = parts
+                if card not in roster or form not in FORMS or kind not in KINDS:
+                    raise SystemExit("balance %s: unknown card, form or kind in %r"
+                                     % (patch["date"], line))
+                patch["changes"].append(
+                    {"card": card, "form": form, "kind": kind, "text": what})
+            elif line.startswith("NEW:"):
+                parts = [p.strip() for p in line.split(":", 1)[1].split("|", 2)]
+                if len(parts) != 3 or not all(parts):
+                    raise SystemExit("balance %s: malformed NEW line %r"
+                                     % (patch["date"], line))
+                card, form, what = parts
+                if card not in roster or form not in FORMS:
+                    raise SystemExit("balance %s: unknown card or form in %r"
+                                     % (patch["date"], line))
+                patch["new"].append({"card": card, "form": form, "text": what})
+        patches.append(patch)
+    patches.sort(key=lambda p: p["date"])
+    dates = [p["date"] for p in patches]
+    if len(set(dates)) != len(dates):
+        raise SystemExit("balance: two BALANCE_PATCH blocks share a date")
+    return patches
+
+
+def build_balance(manual: str) -> dict:
+    """`cardBalance.json`: the dated patches, and each card's own history."""
+    text = open(manual, encoding="utf-8").read()
+    cards = json.load(open(os.path.join(ROOT, "src", "data", "cards.json"),
+                           encoding="utf-8"))
+    if isinstance(cards, dict):
+        cards = cards.get("items") or list(cards.values())
+    roster = {c["key"] for c in cards}
+    patches = parse_balance(text, roster)
+    per: dict = {}
+    for p in patches:
+        for n in p["new"]:
+            per.setdefault(n["card"], []).append(
+                {"date": p["date"], "form": n["form"], "kind": "new"})
+        for c in p["changes"]:
+            per.setdefault(c["card"], []).append(
+                {"date": p["date"], "form": c["form"], "kind": c["kind"]})
+    return {
+        "$comment": "GENERATED by scripts/build-card-roles.py from the balance "
+                    "log in the card manual (Appendix C). Do not hand-edit; "
+                    "add a BALANCE_PATCH block to the manual and re-run the "
+                    "script. Figures are dated records of a change, at "
+                    "Tournament Standard, as the manual's sources give them.",
+        "version": 1,
+        "source": os.path.basename(manual),
+        "latest": patches[-1]["date"] if patches else None,
+        "patches": patches,
+        "cards": {k: per[k] for k in sorted(per)},
+    }
 
 
 def parse_blocks(text: str) -> dict[str, dict[str, list[str]]]:
@@ -269,7 +368,7 @@ def build(manual: str) -> dict:
 
     return {
         "$comment": "GENERATED by scripts/build-card-roles.py from "
-                    "Deckkies_Master_Card_Manual.md. Do not hand-edit; re-run "
+                    "the card manual (All_Cards_stats.md). Do not hand-edit; re-run "
                     "the script. Flags (can_evolve / can_be_hero / is_champion "
                     "/ is_win_condition) live in cardMeta.json and are "
                     "deliberately NOT duplicated here. Elixir and rarity are "
@@ -291,20 +390,34 @@ def main() -> int:
 
     data = build(a.manual)
     text = json.dumps(data, indent=2, sort_keys=False, ensure_ascii=False) + "\n"
+    balance = build_balance(a.manual)
+    btext = json.dumps(balance, indent=2, sort_keys=False, ensure_ascii=False) + "\n"
 
     if a.check:
-        if not os.path.exists(OUT):
-            print("cardRoles.json missing — run without --check")
+        stale = 0
+        for path, want, name in ((OUT, text, "cardRoles.json"),
+                                 (BALANCE_OUT, btext, "cardBalance.json")):
+            if not os.path.exists(path):
+                print("%s missing — run without --check" % name)
+                stale = 1
+            elif open(path, encoding="utf-8").read() != want:
+                print("%s is STALE — re-run scripts/build-card-roles.py" % name)
+                stale = 1
+        if stale:
             return 1
-        cur = open(OUT, encoding="utf-8").read()
-        if cur != text:
-            print("cardRoles.json is STALE — re-run scripts/build-card-roles.py")
-            return 1
-        print("cardRoles.json is up to date (%d cards)" % len(data["cards"]))
+        print("cardRoles.json is up to date (%d cards); cardBalance.json is up "
+              "to date (%d patches, latest %s)"
+              % (len(data["cards"]), len(balance["patches"]), balance["latest"]))
         return 0
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    open(OUT, "w", encoding="utf-8").write(text)
+    open(OUT, "w", encoding="utf-8", newline="\n").write(text)
+    open(BALANCE_OUT, "w", encoding="utf-8", newline="\n").write(btext)
+    print("wrote %s" % os.path.relpath(BALANCE_OUT, ROOT))
+    print("  %d patches, %d changes, %d cards touched, latest %s"
+          % (len(balance["patches"]),
+             sum(len(p["changes"]) for p in balance["patches"]),
+             len(balance["cards"]), balance["latest"]))
 
     c = data["cards"]
     print("wrote %s" % os.path.relpath(OUT, ROOT))

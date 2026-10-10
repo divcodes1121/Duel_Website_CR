@@ -1550,7 +1550,7 @@
     "key": "void",
     "name": "Void",
     "sc_key": "Void",
-    "elixir": 3,
+    "elixir": 5,
     "type": "Spell",
     "rarity": "Epic",
     "arena": 0,

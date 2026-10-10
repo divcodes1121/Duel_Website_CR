@@ -147,6 +147,13 @@ try:
 except Exception:  # noqa: BLE001 - deployment shape
     _cards = None
 
+#: THE BALANCE LOG (2026-10-10): the manual's dated nerfs, as points a list's
+#: stored record overstates it by. Soft; without it no rate is moved.
+try:
+    import card_balance as _balance
+except Exception:  # noqa: BLE001 - deployment shape
+    _balance = None
+
 #: The composition veto, if the deployment has it. IMPORTED SOFTLY, the same
 #: rule `coach.tune` follows: `deck_harmony` loads three JSON files at import
 #: and a deployment missing `cardRoles.json` must cost the variant filter and
@@ -290,6 +297,12 @@ CANDIDATES_PER_PLAYER = 8
 #: Default window, matching every other player screen.
 DEFAULT_DAYS = 30
 
+#: HOW FAR BEFORE THE WINDOW a player's duel decks are still read
+#: (`team_scout.DUEL_OLDER_WEIGHT`): a deck they duelled with two months ago
+#: is a deck they own. With a 30-day window that is 90 days of duels, which is
+#: what the weight was measured on.
+OLDER_DUEL_DAYS = 60
+
 #: Decks of one player that are arranged into their slots for the screen. The
 #: rest still COUNT — a player with hundreds of one-off variants has most of
 #: their games outside any forty lists, and what they play is every game —
@@ -398,6 +411,7 @@ def _own_decks(tag: str, since: str | None, until: str | None) -> dict | None:
         traceback.print_exc()
         return None
     per, marks = got["per"], got["marks"]
+    duel_per = got.get("duel") or {}
     rows = []
     for key, (w, l, d, last, cards, arch) in per.items():
         n = w + l + d
@@ -407,6 +421,8 @@ def _own_decks(tag: str, since: str | None, until: str | None) -> dict | None:
         rows.append({
             "deckHash": key, "cards": list(cards), "matches": n, "wins": w,
             "losses": l, "draws": d, "winCondition": arch, "lastSeen": last or None,
+            # How many of those games were duel games (the projection's weight).
+            "duelMatches": min(n, int(duel_per.get(key) or 0)),
         })
     rows.sort(key=lambda r: r["deckHash"])
     rows.sort(key=lambda r: r["lastSeen"] or "", reverse=True)
@@ -431,7 +447,42 @@ def _own_decks(tag: str, since: str | None, until: str | None) -> dict | None:
     return {
         "decks": rows, "battles": total, "wins": wins,
         "duelGames": got["duelGames"], "hidden": sum((got["hidden"] or {}).values()),
+        "older": _older_duel_decks(tag, since),
     }
+
+
+def _older_duel_decks(tag: str, since: str | None) -> list[dict]:
+    """The lists a player DUELLED with in the `OLDER_DUEL_DAYS` before the
+    window, as projection rows (`matches` = duel games). They are not "what
+    they play" — nothing on the left of a folder counts them — but a deck
+    somebody brought to a duel seven weeks ago is one they can bring again.
+    Empty with no window, no duel index, or on any failure."""
+    if not since or _duel_index is None:
+        return []
+    try:
+        day = datetime.date.fromisoformat(since[:10])
+        lo = (day - datetime.timedelta(days=OLDER_DUEL_DAYS)).isoformat()
+        hi = (day - datetime.timedelta(days=1)).isoformat()
+        got = _duel_index.player_decks(tag, _duel_index.iso_to_stamp(lo),
+                                       _duel_index.iso_to_stamp(hi, end=True))
+    except Exception:  # noqa: BLE001 - the window's own decks are the projection
+        traceback.print_exc()
+        return []
+    out = []
+    for d in got or []:
+        cards = list(d.get("cards") or [])
+        if len(set(cards)) != 8 or int(d.get("games") or 0) <= 0:
+            continue
+        key = scout.deck_key(cards)
+        arch = d.get("archetype") or dcx._archetype_of_hash(key) or "other"
+        fam, fam_name = _family(arch, cards)
+        out.append({
+            "deckHash": key, "cards": cards, "matches": int(d["games"]),
+            "wins": int(d.get("wins") or 0), "winCondition": arch,
+            "lastSeen": d.get("lastSeen") or None, "family": fam,
+            "familyName": fam_name, "name": cd.deck_title(arch, cards),
+        })
+    return out
 
 
 def _resolve(tag: str, days: int, window: tuple | None = None) -> dict:
@@ -505,6 +556,7 @@ def _resolve(tag: str, days: int, window: tuple | None = None) -> dict:
                               if own["battles"] else 0.0)
             out["played"] = {"source": "own_deck", "duelGames": own["duelGames"],
                              "hidden": own["hidden"]}
+            out["older"] = own.get("older") or []
         return out
 
     rep = None
@@ -671,8 +723,13 @@ def _threats(decks: list[dict], seeds: dict | None) -> dict:
     return out
 
 
-def _plays(decks: list[dict]) -> dict:
-    """THE PROJECTION SINCE 3.0: what this opponent PLAYS, and only that.
+def _plays(decks: list[dict], older: list[dict] | None = None) -> dict:
+    """THE PROJECTION: what this opponent is likely to BRING, read off what
+    they play and only that. `older` is their duel decks from before the
+    window (`_older_duel_decks`); see `scout.played_space` for how a duel game,
+    an older one and a ladder game are weighed (4.0, the wide read).
+
+    Since 3.0:
 
     `scout.played_space` over every deck they fielded — most played first, a
     recent deck weighing more than a dropped one, their variations kept as the
@@ -686,7 +743,7 @@ def _plays(decks: list[dict]) -> dict:
     is no longer what a board is scored against.
     """
     _archetypes_for(decks)
-    out = scout.played_space(decks)
+    out = scout.played_space(decks, older=older)
     _seat_decks(out.get("threats") or [], dcx.seater())
     for th in out.get("threats") or []:
         if not th.get("name"):
@@ -1480,6 +1537,15 @@ def _dress(out: dict, card: _Candidate, threats: list[dict]) -> dict:
     if overall:
         out["overallWinRate"] = overall.get("winRate")
         out["overallGames"] = overall.get("games")
+    # WHICH OF ITS CARDS THE GAME CHANGED LATELY (the manual's balance log):
+    # the arrow on the row. A nerf is already in the figure beside it.
+    if _balance is not None:
+        try:
+            changed = _balance.marks(card.cards)
+        except Exception:  # noqa: BLE001
+            changed = []
+        if changed:
+            out["balance"] = changed
     return out
 
 
@@ -1674,6 +1740,27 @@ class _FusionContext:
         self._fam_done: dict[str, set] = {}
         self._rates: dict[tuple, dict | None] = {}
         self.stats = {"version": 0, "deck": 0, "cluster7": 0, "archetype": 0, "none": 0}
+        # THE BALANCE LOG, when the caller asks for it (`balance = True`: Team
+        # Analysis and the Deck Counter's bring list). A list holding a card
+        # nerfed since most of its games were played is rated a little under
+        # its record, and a threat holding one a little easier
+        # (`card_balance`). Coach Assist builds this context too and does not
+        # ask, so its figures are exactly what they were.
+        self.balance = False
+        self._drag: dict[str, float] = {}
+
+    def drag(self, key: str | None) -> float:
+        """Points a list's record overstates it by today (`card_balance.drag`)."""
+        if not key or not self.balance or _balance is None:
+            return 0.0
+        v = self._drag.get(key)
+        if v is None:
+            try:
+                v = float(_balance.drag(key.split(",")))
+            except Exception:  # noqa: BLE001 - the balance log never costs a rate
+                v = 0.0
+            self._drag[key] = v
+        return v
 
     def matrix(self, a: str, b: str) -> tuple | None:
         k = (a, b)
@@ -1786,7 +1873,8 @@ class _FusionContext:
 
     def threat_table(self, threats: list[dict]) -> list[tuple]:
         """One opponent's threats, prepared ONCE for the tight loop:
-        `(likelihood, family, archetype, deck key, version cells)` each."""
+        `(likelihood, family, archetype, deck key, version cells, balance
+        drag)` each."""
         out = []
         for t in threats:
             tcards = t.get("cards") or []
@@ -1794,7 +1882,8 @@ class _FusionContext:
             out.append((float(t.get("likelihood") or 0.0),
                         t.get("family") or t.get("archetype") or "",
                         t.get("archetype") or "other", tkey,
-                        self.cells(tkey) if tkey else None))
+                        self.cells(tkey) if tkey else None,
+                        self.drag(tkey)))
         return out
 
     def lean_rates(self, card: "_Candidate", table: list[tuple]):
@@ -1811,7 +1900,8 @@ class _FusionContext:
         key = card.key
         finish_rate = _fusion.finish_rate
         seen = self._rates
-        for like, fam, arch_t, tkey, cells in table:
+        mine = self.drag(key)
+        for like, fam, arch_t, tkey, cells, theirs in table:
             # A RATE THIS REQUEST HAS ALREADY WORKED OUT IN FULL WINS. A
             # teammate can own the very list a pool row is, and theirs was
             # rated first with a richer profile (its one-card variants); the
@@ -1835,7 +1925,10 @@ class _FusionContext:
                     fam_l = self.family(key, tkey)
             got = finish_rate(self.arch_half(card, arch_t), fam_l, fam_d, ver_l, ver_d)
             if got is not None:
-                yield like, fam, got[0], got[1]
+                rate = got[0]
+                if mine or theirs:
+                    rate = round(min(100.0, max(0.0, rate + theirs - mine)), 1)
+                yield like, fam, rate, got[1]
 
     def rater(self, card: "_Candidate", *, tiers: bool = True):
         """`rate_for_threat` for `team_scout.score`, for one candidate.
@@ -1882,9 +1975,18 @@ class _FusionContext:
                     # caller asked (`prepare(hubs_too=True)`), so on Team
                     # Analysis this reads None for a hub, exactly as before.
                     fam_l = self.family(card.key, tkey)
-            out = with_tier(_fusion.finish(
+            out = _fusion.finish(
                 arch_half(arch_t),
-                fam_ladder=fam_l, fam_duel=fam_d, ver_ladder=ver_l, ver_duel=ver_d))
+                fam_ladder=fam_l, fam_duel=fam_d, ver_ladder=ver_l, ver_duel=ver_d)
+            if out is not None and self.balance:
+                # The balance log, on both sides, BEFORE the rate is remembered:
+                # the tight loop reads the remembered figure as it stands.
+                shift = self.drag(tkey) - self.drag(card.key)
+                if shift:
+                    out["winRate"] = round(
+                        min(100.0, max(0.0, float(out["winRate"]) + shift)), 1)
+                    out["balanceShift"] = round(shift, 2)
+            out = with_tier(out)
             self.stats[out["source"] if out else "none"] = (
                 self.stats.get(out["source"] if out else "none", 0) + 1)
             self._rates[memo] = out
@@ -2012,7 +2114,8 @@ def _own_duel_rows(mate: dict, ctx: _DuelContext | None, projection: dict,
 
 #: What the SELECTION wrote on a row, carried over when the row is rated in
 #: full for the screen.
-_CHOSEN_KEYS = ("answers", "fill", "squadPick", "covers", "known", "personalScore", "rate")
+_CHOSEN_KEYS = ("answers", "fill", "squadPick", "covers", "known", "personalScore", "rate",
+                "worst")
 
 
 def _finish(rows: list[dict], by_key: dict, threats: list[dict],
@@ -2086,7 +2189,15 @@ def _by_card(rows: list[dict], threats: list[dict], finish) -> dict | None:
 
     None when the card manual is not deployed.
     """
-    if _cards is None or not _cards.available() or not rows:
+    if _cards is None or not rows:
+        return None
+    # The manual is living data: a roles file pushed since the last look is
+    # read here, at the one place a card view starts.
+    try:
+        _cards.refresh()
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+    if not _cards.available():
         return None
     use = _cards.usage(threats)
     if not use:
@@ -2177,7 +2288,7 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     _archetypes_for(decks)
     # WHAT THEY PLAY — every deck they fielded in the window, own-deck games
     # and duel games, most played first — and nothing they have not played.
-    projection = _plays(opponent.get("decks") or [])
+    projection = _plays(opponent.get("decks") or [], opponent.get("older"))
     threats = projection["threats"]
     plays = projection.get("plays") or []
     spread = _spread_of(plays)
@@ -2241,7 +2352,12 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         return _pool_rows
 
     def finish(rows: list[dict]) -> list[dict]:
-        return _finish(rows, by_key, threats, ctx, duel_proj, snap)
+        out_rows = _finish(rows, by_key, threats, ctx, duel_proj, snap)
+        for r in out_rows:
+            w = r.get("worst")
+            if w and not w.get("name"):
+                w["name"] = names.get(w["family"]) or dcx._label(w["family"] or "other")
+        return out_rows
 
     def shortlist(rows: list[dict]) -> list[dict]:
         """The pool rows a squad can actually be offered: the strongest
@@ -2391,13 +2507,17 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # scored against, and the names of the chips under each deck.
         "plays": [{"family": p["family"], "archetype": p["archetype"],
                    "name": p["name"], "share": p["share"], "games": p["games"],
-                   "decks": p["decks"]}
+                   "decks": p["decks"], "played": p.get("played"),
+                   "duelGames": p.get("duelGames")}
                   for p in plays if p["share"] >= scout.PLAYS_MIN_SHARE],
         # The lists the rates were measured against: their own decks, most
         # likely first, summing to 1.0.
         "threats": threats,
         "churn": projection["churn"],
         "mass": projection.get("mass"),
+        # HOW THEIR HISTORY WAS READ (4.0): the weights, and how many duel
+        # games stood behind the projection.
+        "read": projection.get("read"),
         # RIGHT SIDE: WHAT DECKKIES SUGGESTS TO PLAY — the strongest counters
         # to what they play, in the order of the figure printed.
         "recommended": _evidence_on_top(recommended),
@@ -2454,10 +2574,12 @@ def _combined(red: list[dict], cards: list[_Candidate],
     member does not get the same say as its most active.
     """
     pooled: list[dict] = []
+    pooled_older: list[dict] = []
     for opp in red:
         pooled.extend(dict(d) for d in (opp.get("decks") or []))
+        pooled_older.extend(dict(d) for d in (opp.get("older") or []))
 
-    projection = _plays(pooled)
+    projection = _plays(pooled, pooled_older)
     threats = projection["threats"]
     plays = projection.get("plays") or []
     if not threats:
@@ -2505,11 +2627,13 @@ def _combined(red: list[dict], cards: list[_Candidate],
         "spread": _spread_of(plays),
         "plays": [{"family": p["family"], "archetype": p["archetype"],
                    "name": p["name"], "share": p["share"], "games": p["games"],
-                   "decks": p["decks"]}
+                   "decks": p["decks"], "played": p.get("played"),
+                   "duelGames": p.get("duelGames")}
                   for p in plays if p["share"] >= scout.PLAYS_MIN_SHARE],
         "threats": threats,
         "churn": projection["churn"],
         "mass": projection.get("mass"),
+        "read": projection.get("read"),
         "recommended": _evidence_on_top(recommended),
         "duel": duel,
         "reason": None if scored else "no_evidence",
@@ -2538,6 +2662,7 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
     cards = _counter_candidates()
     ctx = _DuelContext()
     ctx.fx = _FusionContext(ctx, snap)
+    ctx.fx.balance = True
     if ctx.on:
         try:
             ctx.prefetch([c.cards for c in cards])
@@ -2549,6 +2674,7 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
         "battles": opp["battles"],
         "window": opp["window"],
         "plays": folder["plays"],
+        "read": folder.get("read"),
         "decks": folder["recommended"],
         "byFamily": folder.get("byFamily") or [],
         "byCard": folder.get("byCard"),
@@ -2616,6 +2742,7 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     # one at a time inside the folder loop.
     ctx = _DuelContext()
     ctx.fx = _FusionContext(ctx, snap)
+    ctx.fx.balance = True
     if ctx.on:
         try:
             ctx.prefetch([c.cards for c in cards]

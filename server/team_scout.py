@@ -143,6 +143,59 @@ the WEAKEST of the seven rose from 48.9-66.1% to 59.5-75.6%.
 `threat_space`, `diversify` and `suggest` are unchanged and still used:
 `coach_daily` ranks a field plan with `diversify`, and its 204 checks mean what
 they meant.
+
+────────────────────────────────────────────────────────────────────────────
+4.0 (2026-10-10): THE WIDE READ — THEY DO NOT BRING WHAT THEY MOSTLY PLAY
+────────────────────────────────────────────────────────────────────────────
+
+Reported the day 3.0 shipped: "it's not good, because the opponent also
+counter-snipes". Measured the same day, read-only, on 700 friendly duels of
+the last 30 days (952 player-sides, 2,300 decks brought), each replayed with
+only what was stored before the duel:
+
+  * WHAT THEY BRING IS FAR FLATTER THAN WHAT THEY PLAY. The family of the deck
+    brought had 18% of that player's games; it was their most played family
+    21% of the time and one of their top three 50%. 3.0 scored against their
+    play shares as they stood, so it prepared for the one deck and was
+    surprised by the rest.
+  * IT IS NOT A COUNTER-PICK FROM THEIR OWN LISTS. The deck they brought rated
+    +0.03 points [-0.31, +0.37] better against the other player's history
+    than their typical deck did (871 choices), and a counter term in a
+    conditional logit over their lists fitted to nothing (0.0 to 0.2). From
+    the receiving end the two look the same — you prepared for their main
+    deck and met another — and the remedy is the same: do not trust the top
+    of the list so much.
+  * THEIR DUEL DECKS ARE WHAT THEY BRING TO A DUEL. Weighting a duel game of
+    theirs as 30 other games, and keeping duel decks from before the window,
+    took the log loss of "which family" from 2.83 to 2.43 and of "which list"
+    from 3.43 to 2.62 (parameters chosen on one half of the duels, figures
+    from the other).
+
+So `played_space` reads their history three ways differently:
+
+    TEMPER             weights are evidence ** 0.5, a family's and a list's
+    DUEL_WEIGHT        a duel game in the window counts as 30 other games
+    DUEL_OLDER_WEIGHT  a duel game from before it (to 90 days) as 10
+    MAX_PLAYED         twenty of their lists are scored against, not twelve
+
+and `counters` passes over a deck that loses badly (`WORST_FLOOR`) to any
+family they are likely to bring while better-rounded decks remain.
+
+Judged against the decks really brought, by the same fused rate that ranks
+them: the three decks at the top of the list +1.5 points [+1.3, +1.8], the #1
++1.5, and the share of a list of seven that was under 50% against what came
+from 11.6% to 5-6%. For scale: the average pool deck rates 49.9% against what
+came, 3.0's top three 58.0%, and the best deck in hindsight 67.3% — most of
+what is left is not knowable before the duel.
+
+TRIED AND NOT BUILT, with the figure: a share of the weight on the friendly
+duel field for decks they have never shown (+0.03, nothing); a blend of the
+expected rate with the worst case (the same top three, and it would make the
+printed figure something other than a rate); a counter term on their lists
+(made the picks worse at every strength).
+
+`plays[].share` is the PROJECTION now — the chance a deck of that family is
+what they bring — and `played` beside it is the share of their games.
 """
 
 from __future__ import annotations
@@ -155,7 +208,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-3.0"
+BRAIN_VERSION = "team-scout-4.0"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -225,6 +278,30 @@ MAX_INFERRED = 4
 #: Hard cap on the projection. Every candidate is scored against every threat,
 #: so this is the term the request cost is linear in.
 MAX_THREATS = 12
+
+#: The cap for `played_space` (4.0). `MAX_THREATS` is ALSO `coach_daily`'s
+#: field size, so it stays where it is. An opponent's own lists are a longer
+#: tail than a meta board: a third of the decks brought to a duel were among
+#: the twelve most likely lists, and scoring against twenty was worth +0.4
+#: points on the top three (thirty and forty added nothing measurable).
+MAX_PLAYED = 20
+
+#: THE WIDE READ (4.0). A weight is `evidence ** TEMPER`, for a family and for
+#: a list inside it. 1.0 is "they bring what they play, in proportion"; 0.0 is
+#: "every deck they own is as likely as any other". Fitted on which family a
+#: player brought to a friendly duel: log loss 2.84 at 1.0, 2.51 at 0.5 and at
+#: 0.35, 2.74 at 0.0.
+TEMPER = 0.5
+
+#: A DUEL GAME OF THEIRS, in games of anything else. What somebody brings to a
+#: duel is, above all, what they have brought to duels. 10 and 30 and 100 are
+#: within noise of each other on the picks; 30 was the best on both log
+#: losses on the half of the duels the choice was made on.
+DUEL_WEIGHT = 30.0
+
+#: A duel game from BEFORE the window (the caller passes up to 60 further
+#: days). A deck they duelled with two months ago is still a deck they own.
+DUEL_OLDER_WEIGHT = 10.0
 
 #: Games below which an observed deck is evidence of an archetype rather than
 #: of a deck. It is KEPT — see the module docstring on what dropping the tail
@@ -786,71 +863,133 @@ def family_of(row) -> str:
     return row.get("family") or row.get("archetype") or ""
 
 
-def played_space(decks, *, now=None, limit=None) -> dict:
-    """What this opponent PLAYS — their own decks, as a distribution — and
+def played_space(decks, *, now=None, limit=None, older=None) -> dict:
+    """What this opponent is likely to BRING, read off their own decks and
     nothing they have not played.
 
-    `decks` is `threat_space`'s input, each row optionally carrying `family`
-    and `familyName`. Two rows of one list (a roster pooled, a list two
-    opponents share) are folded into one.
+    `decks` is `threat_space`'s input, each row optionally carrying `family`,
+    `familyName` and `duelMatches` (how many of its `matches` were duel
+    games). `older` is the same shape for lists they DUELLED with before the
+    window: `matches` there is duel games, and none of them counts as play in
+    the window. Two rows of one list (a roster pooled, a list two opponents
+    share) are folded into one.
 
     Returns `threats` (at most `limit` lists, likelihoods summing to 1.0),
-    `plays` (one row a family: `family`, `archetype`, `name`, `share`, `games`,
-    `wins`, `decks`; every family, most played first) and `churn`.
+    `plays` (one row a family: `family`, `archetype`, `name`, `share`,
+    `played`, `games`, `wins`, `decks`, `duelGames`; most likely first) and
+    `churn`.
 
-    EVERY FAMILY KEEPS ITS WHOLE SHARE. Only the most likely lists are scored
+    `share` IS THE CHANCE, `played` IS THE HISTORY. A list's evidence is its
+    games in the window, with a duel game counted `DUEL_WEIGHT` times and an
+    older duel game `DUEL_OLDER_WEIGHT` times, times its recency
+    (`_recency`); a family's chance is its evidence to the power `TEMPER`,
+    and a list's within its family the same. See the module docstring for the
+    measurement each of those rests on.
+
+    EVERY FAMILY KEEPS ITS WHOLE CHANCE. Only the most likely lists are scored
     against — a cost bound — and a player with eight hundred variants has most
-    of their games outside any twelve of them. So the lists kept for a family
+    of their games outside any twenty of them. So the lists kept for a family
     are scaled up to carry everything the family was worth: cutting the tail
     must not hand a Miner player's Miner games to Royal Giant because the
     Royal Giant games sat in fewer lists. A family worth naming
-    (`PLAYS_MIN_SHARE`) always keeps its most played list.
-
-    Recency is `threat_space`'s own (`_observed`): a deck dropped three weeks
-    ago weighs half of one played yesterday.
+    (`PLAYS_MIN_SHARE`) always keeps its most likely list.
     """
-    limit = MAX_THREATS if limit is None else limit
+    limit = MAX_PLAYED if limit is None else limit
     merged: dict[str, dict] = {}
-    for d in decks or []:
+
+    def fold(d, *, old: bool) -> None:
         cards = list(d.get("cards") or [])
-        if len(set(cards)) != 8 or int(d.get("matches") or 0) <= 0:
-            continue
+        n = int(d.get("matches") or 0)
+        if len(set(cards)) != 8 or n <= 0:
+            return
         key = deck_key(cards)
         hit = merged.get(key)
         if hit is None:
-            merged[key] = dict(d)
-            continue
-        hit["matches"] = int(hit.get("matches") or 0) + int(d.get("matches") or 0)
-        hit["wins"] = int(hit.get("wins") or 0) + int(d.get("wins") or 0)
+            hit = merged[key] = dict(d)
+            hit.update(matches=0, wins=0, duelMatches=0, duelOlder=0, lastSeen=None)
+        if old:
+            hit["duelOlder"] += n
+        else:
+            hit["matches"] += n
+            hit["wins"] += int(d.get("wins") or 0)
+            hit["duelMatches"] += min(n, max(0, int(d.get("duelMatches") or 0)))
         if (d.get("lastSeen") or "") > (hit.get("lastSeen") or ""):
             hit["lastSeen"] = d.get("lastSeen")
-    rows = list(merged.values())
-    for d in rows:
-        games = int(d.get("matches") or 0)
-        d["winRate"] = round(100.0 * int(d.get("wins") or 0) / games, 1) if games else None
 
-    observed = _observed(rows, now=now)
-    ch = churn(rows)
-    if not observed:
+    for d in decks or []:
+        fold(d, old=False)
+    for d in older or []:
+        fold(d, old=True)
+
+    rows = list(merged.values())
+    played = [d for d in rows if d["matches"] > 0]
+    for d in rows:
+        games = d["matches"]
+        d["winRate"] = round(100.0 * d["wins"] / games, 1) if games else None
+
+    ch = churn(played)
+    if not rows:
         return {"threats": [], "plays": [], "churn": ch, "reason": "no_history",
                 "brain": BRAIN_VERSION}
+
+    if now is None:
+        stamps = [d.get("lastSeen") for d in played if d.get("lastSeen")]
+        now = max(stamps) if stamps else None
+
+    observed: list[dict] = []
+    for d in rows:
+        games = d["matches"]
+        duel = d["duelMatches"]
+        rec = _recency(d.get("lastSeen"), now)
+        observed.append({
+            "key": deck_key(d.get("cards")),
+            "cards": list(d.get("cards") or []),
+            "art": d.get("art") or {},
+            "archetype": d.get("winCondition") or "other",
+            "name": d.get("name") or "",
+            "evidence": OBSERVED,
+            "observedCount": games,
+            "duelCount": duel + d["duelOlder"],
+            "wins": d["wins"],
+            "winRate": d.get("winRate"),
+            "lastSeen": d.get("lastSeen"),
+            "similarityToObserved": 1.0,
+            "basis": None,
+            "family": d.get("family") or d.get("winCondition") or "other",
+            "_played": games * rec,
+            "_raw": ((games - duel) + DUEL_WEIGHT * duel
+                     + DUEL_OLDER_WEIGHT * d["duelOlder"]) * rec,
+        })
+    total_played = sum(t["_played"] for t in observed) or 1.0
 
     per: dict[str, dict] = {}
     for t in observed:
         d = merged[t["key"]]
-        fam = d.get("family") or t["archetype"]
-        t["family"] = fam
+        fam = t["family"]
+        t["share"] = t["_played"] / total_played
         e = per.get(fam)
         if e is None:
             e = per[fam] = {"family": fam, "archetype": t["archetype"],
                             "name": d.get("familyName") or "",
-                            "share": 0.0, "games": 0, "wins": 0, "decks": 0}
-        e["share"] += t["share"]
+                            "share": 0.0, "played": 0.0, "games": 0, "wins": 0,
+                            "decks": 0, "duelGames": 0, "_raw": 0.0, "_in": 0.0}
+        e["played"] += t["share"]
         e["games"] += t["observedCount"]
         e["wins"] += t["wins"]
         e["decks"] += 1
+        e["duelGames"] += t["duelCount"]
+        e["_raw"] += t["_raw"]
+        t["_w"] = t["_raw"] ** TEMPER if t["_raw"] > 0 else 0.0
+        e["_in"] += t["_w"]
 
-    observed.sort(key=lambda t: (-t["share"], t["key"]))
+    fam_total = sum(e["_raw"] ** TEMPER for e in per.values() if e["_raw"] > 0) or 1.0
+    for e in per.values():
+        e["share"] = (e["_raw"] ** TEMPER) / fam_total if e["_raw"] > 0 else 0.0
+    for t in observed:
+        e = per[t["family"]]
+        t["chance"] = e["share"] * t["_w"] / e["_in"] if e["_in"] > 0 else 0.0
+
+    observed.sort(key=lambda t: (-t["chance"], t["key"]))
     lead: list[dict] = []
     seen: set[str] = set()
     for t in observed:
@@ -865,23 +1004,32 @@ def played_space(decks, *, now=None, limit=None) -> dict:
 
     kept: dict[str, float] = {}
     for t in keep:
-        kept[t["family"]] = kept.get(t["family"], 0.0) + t["share"]
+        kept[t["family"]] = kept.get(t["family"], 0.0) + t["chance"]
     total = sum(per[f]["share"] for f in kept) or 1.0
     for t in keep:
         t["likelihood"] = round(
-            per[t["family"]]["share"] * t["share"] / kept[t["family"]] / total, 4)
+            per[t["family"]]["share"] * t["chance"] / kept[t["family"]] / total, 4)
         t["confidence"] = _threat_confidence(t)
+    for t in observed:
+        for k in ("_played", "_raw", "_w", "chance"):
+            t.pop(k, None)
     keep.sort(key=lambda t: (-t["likelihood"], t["key"]))
 
     plays = sorted(per.values(), key=lambda e: (-e["share"], e["family"]))
     for e in plays:
         e["share"] = round(e["share"], 4)
+        e["played"] = round(e["played"], 4)
+        del e["_raw"], e["_in"]
     return {
         "threats": keep,
         "plays": plays,
         "churn": ch,
         "reason": None,
         "brain": BRAIN_VERSION,
+        "read": {"temper": TEMPER, "duelWeight": DUEL_WEIGHT,
+                 "duelGames": sum(d["duelMatches"] for d in rows),
+                 "olderDuelGames": sum(d["duelOlder"] for d in rows),
+                 "lists": len(rows)},
         # All of it is what they were seen playing. Published in the old shape
         # so a reader of `mass` needs no second branch.
         "mass": {"observed": 1.0, "variant": 0.0, "inferred": 0.0},
@@ -1340,9 +1488,38 @@ ANSWER_SHARE = 0.10
 ANSWERS_PER_FAMILY = 3
 ANSWER_FAMILIES = 5
 
+#: A deck under `WORST_FLOOR` against ANY family they are likely to bring
+#: (`WORST_SHARE` of the projection or more) has a HOLE, and is chosen as
+#: though it were `HOLE_COST` points weaker. The deck that beats their main
+#: list and folds to the one they switch to is the pick a switch punishes.
+#: Measured with the wide read: the share of a list of seven under 50%
+#: against what really came 6.2% -> 5.5%, the top three -0.04 points (inside
+#: the noise). A cost and not a ban — passing every such deck over for any
+#: deck without a hole measured the same, and would rank a 51% deck above a
+#: 70% one in a small pool. Costs of 5, 8 and 12 measured no different.
+WORST_FLOOR = 45.0
+WORST_SHARE = 0.05
+HOLE_COST = 3.0
+
 
 def _rate(row) -> float:
     return float(row.get("expectedWinRate") or 0.0)
+
+
+def worst_case(vs, plays, *, share=WORST_SHARE):
+    """`{family, rate}` — the family they are likely to bring that a deck does
+    WORST against, from its per-family rates. None when it was rated against
+    none of them."""
+    worst = None
+    for p in plays or []:
+        if float(p.get("share") or 0.0) < share:
+            continue
+        v = (vs or {}).get(p["family"])
+        if v is None:
+            continue
+        if worst is None or v < worst["rate"]:
+            worst = {"family": p["family"], "rate": v}
+    return worst
 
 
 def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
@@ -1356,7 +1533,9 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
          points — the squad planner's cost for a deck a teammate already has).
       2. NO DECK EXPECTED TO LOSE (`FLOOR_RATE`), no near-copy of a deck
          already on the list (`SAME_DECK_OVERLAP`), at most `PER_ARCHETYPE`
-         lists of one win condition.
+         lists of one win condition. A deck with a HOLE (`WORST_FLOOR`
+         against a family they are likely to bring) is chosen as though it
+         were `HOLE_COST` points weaker.
       3. AN ANSWER FOR EVERY FAMILY THEY REALLY PLAY (`ANSWER_SHARE`). Where
          nothing on the list beats a family at `GOOD_RATE`, the best deck that
          does takes the place of the weakest row that is not itself the only
@@ -1378,6 +1557,9 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         if "vs" not in c:
             c["vs"] = vs_archetypes(c)
         c["_v"] = float(c.get(score_key) or 0.0) + (float(adjust(c)) if adjust else 0.0)
+        c["worst"] = worst_case(c["vs"], plays)
+        if c["worst"] is not None and c["worst"]["rate"] < WORST_FLOOR:
+            c["_v"] -= HOLE_COST
         pool.append(c)
     if not pool:
         return []

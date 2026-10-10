@@ -280,6 +280,10 @@ check("a duel game moves last seen forward, never back",
       by[key(BAIT)]["lastSeen"].startswith("20260912")
       and by[key(HOG)]["lastSeen"].startswith("20260905"))
 check("it says the duel index answered", d3["summary"]["duelIndex"] is True)
+_pd = pd.played(TAG)
+check("played() says which of a deck's games were DUEL games (the projection's weight)",
+      _pd["duel"] == {key(BAIT): 4, key(HOG): 1} and sum(_pd["duel"].values()) == _pd["duelGames"],
+      str(_pd.get("duel")))
 
 
 class BrokenDuel(FakeDuel):

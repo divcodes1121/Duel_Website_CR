@@ -603,6 +603,18 @@ class Handler(BaseHTTPRequestHandler):
                     out["duelRead"] = duel_read.status()
                 except Exception:  # noqa: BLE001
                     out["duelRead"] = None
+                # THE CARD MANUAL the brain is reading: how many cards have an
+                # entry, and the newest patch in its balance log. It is pushed
+                # as data, without a deploy, so this is the only place that
+                # says which copy the service holds.
+                try:
+                    import card_balance
+                    import card_counters
+                    card_counters.refresh()
+                    out["cardManual"] = {"roles": len(card_counters.ROLES),
+                                         **card_balance.status()}
+                except Exception:  # noqa: BLE001
+                    out["cardManual"] = None
                 # HOW MANY DAYS OF META HISTORY EXIST. Same reason again: if
                 # the snapshot timer stops, nothing breaks and no trend is ever
                 # wrong — the span just silently stops growing, which is

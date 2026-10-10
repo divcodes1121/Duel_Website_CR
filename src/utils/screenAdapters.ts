@@ -233,7 +233,7 @@ function bringBlocks(b: BringReport): ReportBlock[] {
   const plays = b.plays.map((p) => `${p.name} ${shareLabel(p.share)}`).join(' · ');
   const blocks: ReportBlock[] = [{
     kind: 'decks', layout: 'rows', heading: 'Bring this against them',
-    note: `They play ${plays}`,
+    note: `Likely to bring ${plays}`,
     decks: b.decks.map((d, i) => bringDeck(d, b.plays, i + 1)),
   }];
   for (const g of b.byFamily) {

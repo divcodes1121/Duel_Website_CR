@@ -80,8 +80,15 @@ plays = {p["family"]: p for p in space["plays"]}
 check("one row a family, most played first",
       [p["family"] for p in space["plays"]] == ["giant", "bridge-spam", "xbow"],
       str([p["family"] for p in space["plays"]]))
-check("a family's share is all of its lists", abs(plays["giant"]["share"] - 0.8) < 1e-6
+check("a family's games are all of its lists'", abs(plays["giant"]["played"] - 0.8) < 1e-4
       and plays["giant"]["games"] == 80 and plays["giant"]["decks"] == 2, str(plays["giant"]))
+_root = lambda *ns: [n ** ts.TEMPER for n in ns]
+_g, _b, _x = _root(80, 15, 5)
+check("its CHANCE is its evidence, tempered: flatter than its share of their games",
+      abs(plays["giant"]["share"] - _g / (_g + _b + _x)) < 1e-4
+      and plays["giant"]["share"] < plays["giant"]["played"]
+      and plays["xbow"]["share"] > plays["xbow"]["played"], str(space["plays"]))
+check("the chances sum to one", abs(sum(p["share"] for p in space["plays"]) - 1.0) < 1e-3)
 
 # SEEDS ARE NOT READ AT ALL: nothing they have not played can enter.
 seeds = {"hog": [{"cards": cards("hogseed"), "games": 5000}],
@@ -104,8 +111,12 @@ for t in cut["threats"]:
 check("only the most likely lists are scored against", len(cut["threats"]) == 12)
 check("Miner is still what they play most, though its lists are small",
       per.get("miner", 0) > per.get("royal-giant", 0), str(per))
-check("and each family carries exactly its share of their games",
-      abs(per["miner"] - 300 / 480) < 2e-3 and abs(per["royal-giant"] - 180 / 480) < 2e-3, str(per))
+_m, _r = _root(300, 180)
+check("and each family carries exactly its own chance, whatever was cut",
+      abs(per["miner"] - _m / (_m + _r)) < 2e-3 and abs(per["royal-giant"] - _r / (_m + _r)) < 2e-3,
+      str(per))
+check("an opponent's own lists are read twenty deep by default, and the field's cap is untouched",
+      len(ts.played_space(many)["threats"]) == ts.MAX_PLAYED == 20 and ts.MAX_THREATS == 12)
 
 # A family worth naming always keeps a list, however small its lists are.
 # Six big Giant lists and thirty two-game Hog lists: the four most likely
@@ -140,6 +151,79 @@ recent = ts.played_space([
 ])
 r = {p["family"]: p["share"] for p in recent["plays"]}
 check("a deck played yesterday outweighs one dropped weeks ago", r["hog"] > r["giant"], str(r))
+
+
+# ── 1b. The wide read (4.0) ─────────────────────────────────────────────────
+
+print(NL + "the wide read: what they bring is flatter than what they play, and duel decks lead")
+
+
+def duelled(prefix, wc, matches, duel, **kw):
+    d = played(prefix, wc, matches, **kw)
+    d["duelMatches"] = duel
+    return d
+
+
+_saved_temper = ts.TEMPER
+ts.TEMPER = 1.0
+try:
+    flat = ts.played_space([played("g1", "giant", 60), played("b1", "bridge-spam", 20)])
+    check("with the temper at 1.0 the projection is the history itself",
+          all(abs(p["share"] - p["played"]) < 1e-4 for p in flat["plays"]), str(flat["plays"]))
+finally:
+    ts.TEMPER = _saved_temper
+
+wide = ts.played_space([played("h", "hog", 400), duelled("m", "miner", 20, 6), played("x", "xbow", 5)])
+wp = {p["family"]: p for p in wide["plays"]}
+_h, _mm, _xx = _root(400, 14 + ts.DUEL_WEIGHT * 6, 5)
+check("a duel game counts as many other games (the weight is the constant)",
+      abs(wp["miner"]["share"] - _mm / (_h + _mm + _xx)) < 1e-4, str(wp["miner"]))
+check("so six duel games put a 5%-of-play deck beside the ladder main",
+      wp["miner"]["played"] < 0.06 and wp["miner"]["share"] > 0.30, str(wp["miner"]))
+check("the history is still reported as it was", abs(wp["hog"]["played"] - 400 / 425) < 1e-3)
+check("each family says how many duel games stand behind it",
+      wp["miner"]["duelGames"] == 6 and wp["hog"]["duelGames"] == 0)
+check("the read says what it weighed",
+      wide["read"] == {"temper": ts.TEMPER, "duelWeight": ts.DUEL_WEIGHT, "duelGames": 6,
+                       "olderDuelGames": 0, "lists": 3}, str(wide["read"]))
+over = ts.played_space([duelled("m", "miner", 4, 99), played("h", "hog", 4)])
+check("a list cannot have more duel games than games",
+      {p["family"]: p["duelGames"] for p in over["plays"]}["miner"] == 4)
+no_duel = ts.played_space([played("h", "hog", 400), played("m", "miner", 20), played("x", "xbow", 5)])
+check("with no duel games the read is their play, tempered, and nothing else",
+      abs({p["family"]: p["share"] for p in no_duel["plays"]}["miner"]
+          - _root(20)[0] / sum(_root(400, 20, 5))) < 1e-4)
+
+# DUEL DECKS FROM BEFORE THE WINDOW: a deck they can bring, not a deck they play.
+old_duel = played("z", "golem", 4, last="20260901T120000.000Z")
+aged = ts.played_space([played("h", "hog", 100)], older=[old_duel])
+ap = {p["family"]: p for p in aged["plays"]}
+check("an older duel deck is in the projection", "golem" in ap and ap["golem"]["share"] > 0, str(aged["plays"]))
+check("...as none of their play in the window",
+      ap["golem"]["played"] == 0 and ap["golem"]["games"] == 0 and ap["golem"]["duelGames"] == 4
+      and abs(ap["hog"]["played"] - 1.0) < 1e-4)
+zt = next(t for t in aged["threats"] if t["family"] == "golem")
+check("...its threat is a deck they were seen with, played zero times in the window",
+      zt["evidence"] == ts.OBSERVED and zt["observedCount"] == 0 and zt["duelCount"] == 4
+      and zt["confidence"] == ts.LIKELY)
+check("...at the older weight, and its age", abs(
+    ap["golem"]["share"]
+    - (ts.DUEL_OLDER_WEIGHT * 4 * ts._recency("20260901T120000.000Z", "20261009T120000.000Z")) ** ts.TEMPER
+    / ((ts.DUEL_OLDER_WEIGHT * 4 * ts._recency("20260901T120000.000Z", "20261009T120000.000Z")) ** ts.TEMPER
+       + 100 ** ts.TEMPER)) < 1e-3, str(ap["golem"]))
+both = ts.played_space([duelled("h", "hog", 10, 2)], older=[played("h", "hog", 5)])
+check("a list in the window AND before it is one threat, both counted",
+      len(both["threats"]) == 1 and both["threats"][0]["observedCount"] == 10
+      and both["threats"][0]["duelCount"] == 7 and both["read"]["olderDuelGames"] == 5)
+only_old = ts.played_space([], older=[old_duel])
+check("older duel decks alone are still a read (no play in the window)",
+      len(only_old["threats"]) == 1 and only_old["reason"] is None
+      and only_old["churn"]["games"] == 0)
+check("the likelihoods still sum to one with older decks in",
+      abs(sum(t["likelihood"] for t in aged["threats"]) - 1.0) < 1e-3)
+check("nothing private leaks onto a threat or a family",
+      not any(k.startswith("_") or k == "chance" for t in aged["threats"] for k in t)
+      and not any(k.startswith("_") for p in aged["plays"] for k in p))
 
 
 # ── 2. Rows, for the selection tests ────────────────────────────────────────
@@ -232,6 +316,38 @@ check("a cost can move a deck off the list (a teammate already has it)",
       "bait-a" not in [r["name"] for r in pushed])
 short = ts.counters(pool, PLAYS, limit=3)
 check("the limit is the limit", len(short) == 3)
+
+# A HOLE: a deck that folds to something they are likely to bring.
+check("every chosen row says what it does worst against",
+      all(r["worst"] and r["worst"]["family"] in SHARE
+          and r["worst"]["rate"] == min(r["vs"].values()) for r in got), str(got[0].get("worst")))
+check("the worst case reads only families they are likely to bring",
+      ts.worst_case({"giant": 70, "xbow": 20}, PLAYS + [{"family": "xbow", "share": 0.02}])
+      == {"family": "giant", "rate": 70}
+      and ts.worst_case({"xbow": 20}, PLAYS) is None and ts.worst_case({}, []) is None)
+HOLE_PLAYS = [{"family": "giant", "share": 0.7}, {"family": "bridge-spam", "share": 0.3}]
+HS = {"giant": 0.7, "bridge-spam": 0.3}
+holed = row("holed", "bait", {"giant": 70, "bridge-spam": ts.WORST_FLOOR - 5}, HS)      # 61.0
+sound = row("sound", "lava", {"giant": 61, "bridge-spam": 55}, HS)                      # 59.2
+check("a deck with a hole loses to a rounder deck within the cost",
+      holed["expectedWinRate"] - sound["expectedWinRate"] < ts.HOLE_COST
+      and ts.counters([holed, sound], HOLE_PLAYS, limit=1)[0]["name"] == "sound")
+strong = row("strong", "bait", {"giant": 80, "bridge-spam": ts.WORST_FLOOR - 5}, HS)     # 68.0
+check("but it is a cost, not a ban: a much stronger deck still leads",
+      ts.counters([strong, sound], HOLE_PLAYS, limit=1)[0]["name"] == "strong")
+edge = row("edge", "bait", {"giant": 67, "bridge-spam": ts.WORST_FLOOR}, HS)             # 60.4
+check("exactly at the floor is not a hole (it would lose by the cost if it were)",
+      0 < edge["expectedWinRate"] - sound["expectedWinRate"] < ts.HOLE_COST
+      and ts.counters([edge, sound], HOLE_PLAYS, limit=1)[0]["name"] == "edge")
+rare = [{"family": "giant", "share": 0.97}, {"family": "bridge-spam", "share": 0.03}]
+check("a hole against a family they almost never bring costs nothing",
+      ts.counters([holed, sound], rare, limit=1)[0]["name"] == "holed")
+two = ts.counters([holed, sound], HOLE_PLAYS)
+check("the list still reads in the order of the figure printed",
+      [r["name"] for r in two] == ["holed", "sound"]
+      and [r["expectedWinRate"] for r in two] == sorted((r["expectedWinRate"] for r in two), reverse=True))
+check("the cost is not written onto the row", all("_v" not in r for r in two)
+      and two[0]["recommendationScore"] == holed["recommendationScore"])
 
 
 # ── 3. The same rows, per family ────────────────────────────────────────────

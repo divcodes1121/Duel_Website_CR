@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-10-likely-to-bring',
+    date: '2026-10-10',
+    kind: 'improved',
+    title: 'Counters for the decks they are likely to bring',
+    body: [
+      'An opponent rarely brings the deck they play most: across 600 recent friendly duels it was their main archetype about one time in five. Deck Counter and Team Analysis now read a player’s duel decks first, spread the weight across everything they own, and score against twenty of their lists instead of twelve. The strip above the list shows what they are likely to bring.',
+      'Replayed on those duels, the three decks at the top of the list did 1.5 points better against what was really brought, half as many suggested decks were under 50%, and the percentage printed is much closer to what happened. It is still a forecast — the best deck in hindsight was about 7 points better again.',
+      'Decks holding a card nerfed in the last two months are rated a little under their record, from the balance changes since August. New in the card data: Minion Giant, Evolved Electro Giant and Hero Electro Wizard.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-10-counters',
     date: '2026-10-10',
     kind: 'improved',
