@@ -556,7 +556,7 @@ the duels, at the version".
 
 ## 4j. Counters to what they play (2026-10-10, brain 3.0)
 
-**BUILT AND VERIFIED ON STAGED CODE AGAINST PRODUCTION DATA, 2026-10-10. THE SERVER HALF IS LIVE SINCE 2026-10-10 06:49 UTC (scp first, after the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; live API checked: brain `team-scout-3.0`, pool 2,341, lists ordered, nothing under 50%). The client ships with this commit.**
+**LIVE SINCE 2026-10-10 AS `c1a1a0f`. Server by scp first, 06:49 UTC (the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; only `royalweb` restarted), the client 52 s after the push (06:54 UTC, `/api/health` and the build meta). Checked on production: the live API for three players (brain `team-scout-3.0`, pool 2,341, every list ordered, nothing under 50%, every family at 10%+ answered at 55%+, every suggested deck fielding three special slots), six suites green on the VPS, and 42/42 in a real browser SIGNED IN on https://deckkies.com — the Deck Counter's three views in both themes and at 390px, a scouting report and a match plan, the figures on screen equal to the API's. Built and verified on staged code against production data first.**
 
 The account holder: "the decks given for counter are very generic and rely on
 the meta — we need decks which counter their archetypes, whatever they play, at
