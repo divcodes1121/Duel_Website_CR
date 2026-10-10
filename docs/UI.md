@@ -2046,6 +2046,16 @@ saved duel in the builder a probe must click the `Versus` tab and then
 
 ## Bring this against them, and the chips under a suggested deck (2026-10-10)
 
+> **Later the same day (brain 4.0):** the strip above the list reads **Likely to
+> bring**, not "They play". Its percentages are the chance a deck of that
+> archetype is what they bring (flatter than their play, duel decks first);
+> each chip's tooltip is the history — `94% of their games · 400 games · 3
+> lists · 6 duel games` (`playsTitle`). Team Analysis heads the bars under an
+> opponent's decks the same way. A card of a suggested deck changed by a
+> recent balance patch is named in the FIGURE'S TOOLTIP (`balanceChips`),
+> never as a mark on the row: staged on real players, two rows in three
+> would have carried one. No other text was added.
+
 **LIVE SINCE 2026-10-10 AS `c1a1a0f`. Server by scp first, 06:49 UTC (the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; only `royalweb` restarted), the client 52 s after the push (06:54 UTC, `/api/health` and the build meta). Checked on production: the live API for three players (brain `team-scout-3.0`, pool 2,341, every list ordered, nothing under 50%, every family at 10%+ answered at 55%+, every suggested deck fielding three special slots), six suites green on the VPS, and 42/42 in a real browser SIGNED IN on https://deckkies.com — the Deck Counter's three views in both themes and at 390px, a scouting report and a match plan, the figures on screen equal to the API's. Built and verified on staged code against production data first.**
 
 `components/Analytics/BringAgainst.tsx` + `.module.css`, arithmetic and labels

@@ -480,6 +480,13 @@ def status(path: str = PATH) -> dict:
     if not art:
         return {"brain": BRAIN, "fitted": False}
     meta = art.get("meta") or {}
-    return {"brain": art.get("brain") or BRAIN, "fitted": True,
-            "trainedAt": meta.get("trainedAt"), "duels": meta.get("duels"),
-            "holdout": meta.get("holdout")}
+    out = {"brain": art.get("brain") or BRAIN, "fitted": True,
+           "trainedAt": meta.get("trainedAt"), "duels": meta.get("duels"),
+           "holdout": meta.get("holdout")}
+    # WHOSE DUELS IT WAS FITTED ON, when the artifact says (`duel_read_train.
+    # TRAIN_COHORT`): `all`, or one named group and how many of its duels.
+    if meta.get("trainedOn"):
+        out["trainedOn"] = meta["trainedOn"]
+        out["trainedDuels"] = meta.get("trainedDuels")
+        out["trainedPlayers"] = meta.get("trainedPlayers")
+    return out

@@ -129,6 +129,18 @@ Backups on the VPS for the last row: `{coach,app}.py.bak-20261002-040707-prechoi
 | `b7e4942` | **PDFs print Japanese and Cyrillic names**, with the Latin form and the tag beside them | the roster exports through the same engine, so a player's name prints as written |
 | `f8dfc02` + `870b838` | **the eye on a duel deck** (Royal Duels): a hidden deck stays on the board in grey and frees its cards for the other decks; when two decks in play hold one card, the newer copy is the grey one (`Deck.hidden`, `Deck.newerCopies`) | none |
 
+## Shipped 2026-10-10 (all live)
+
+| What | Where |
+|---|---|
+| Counters to what they play (brain 3.0), then the wide read the same day (brain 4.0: tempered, duel decks first, twenty lists, a cost for a hole) | README "Counters for what they are likely to bring", `DECKKIES_TEAM_SCOUT.md` §4j-4k |
+| The card manual as pushed data: `All_Cards_stats.md` (git-ignored) -> `scripts/push-card-data.py`; balance log applied (`card_balance.py`) | `server/README.md` |
+| Coach Assist's read fitted on the CRL group only (`CLASH_DUEL_READ_COHORT=crl`) | `DECKKIES_DUEL_RECOMMENDER.md` log |
+
+Open from it: the exact "top 64 of each monthly qualifier" tag list for the
+CRL group (not on this machine); a signed-in browser pass of the 4.0 screens;
+war duels in the replay; whether the manual itself should be committed.
+
 ## Decisions waiting on the account holder
 
 1. **The R3 prediction sampler STOPPED on 2026-09-19 21:05 UTC** (its own stop

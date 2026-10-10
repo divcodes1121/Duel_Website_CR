@@ -218,6 +218,12 @@ check("a saved fit is read back", dr.weights_for(1, path) == tuple(W[1])
 check("a stage past two clamps", dr.weights_for(4, path) == tuple(W[2]))
 check("status says what is in use", dr.status(path) == {"brain": dr.BRAIN, "fitted": True, "trainedAt": "x",
                                                          "duels": 7, "holdout": None})
+dr.save(W, {"duels": 7, "trainedAt": "x", "trainedOn": "crl", "trainedDuels": 3233, "trainedPlayers": 197},
+        path=path, novelty=N, sharpness=S)
+_st = dr.status(path)
+check("...and whose duels the fit learned from, when the artifact says",
+      _st["trainedOn"] == "crl" and _st["trainedDuels"] == 3233 and _st["trainedPlayers"] == 197, str(_st))
+dr.save(W, {"duels": 7, "trainedAt": "x"}, path=path, novelty=N, sharpness=S)
 body = json.load(open(path))
 body["features"] = list(reversed(body["features"]))
 bad = os.path.join(tmp, "reordered.json")
@@ -319,6 +325,33 @@ got = T.load_cohorts(_cp)
 check("the cohort file is read: names lower-cased, tags upper-cased and trimmed",
       got == {"crl": {"#S0", "#S1"}}, str(got))
 check("a missing cohort file is no cohort, not an error", T.load_cohorts(os.path.join(_tmp, "absent.json")) == {})
+
+# WHOSE DUELS THE READ IS FITTED ON.
+_pl = {"#AAA": [{"t": 1.0}] * 900, "#BBB": [{"t": 2.0}] * 700, "#CCC": [{"t": 3.0}] * 5000}
+_co = {"crl": {"#AAA", "#BBB"}, "thin": {"#BBB"}, "empty": set()}
+_pop, _lab = T.train_population(_pl, _co, "")
+check("with no group named the fit is on every player's duels", _pop is _pl and _lab == "all")
+_pop, _lab = T.train_population(_pl, _co, "crl")
+check("a named group with enough duels is fitted on ALONE",
+      set(_pop) == {"#AAA", "#BBB"} and _lab == "crl", f"{sorted(_pop)} {_lab}")
+check("...its players' own duel lists, untouched", _pop["#AAA"] is _pl["#AAA"])
+_pop, _lab = T.train_population(_pl, _co, "thin")
+check("a group under the floor falls back to everybody, and says so",
+      _pop is _pl and _lab == "all" and T.TRAIN_MIN_DUELS == 1500)
+check("a group that does not exist, or is empty, is everybody",
+      T.train_population(_pl, _co, "nobody") == (_pl, "all")
+      and T.train_population(_pl, _co, "empty") == (_pl, "all")
+      and T.train_population(_pl, None, "crl") == (_pl, "all"))
+check("a built-in group's name is not a training group",
+      T.train_population(_pl, {"friendly": {"#AAA", "#BBB", "#CCC"}}, "friendly") == (_pl, "all"))
+check("the name is matched as the file stores it: lower case, tags upper",
+      T.train_population({"#aaa": _pl["#AAA"], "#bbb": _pl["#BBB"]}, _co, " CRL ")[1] == "crl")
+_saved_tc = T.TRAIN_COHORT
+T.TRAIN_COHORT = "crl"
+try:
+    check("the service's setting is the default group", T.train_population(_pl, _co)[1] == "crl")
+finally:
+    T.TRAIN_COHORT = _saved_tc
 with open(_cp, "w", encoding="utf-8") as _f:
     _f.write("not json")
 check("an unreadable cohort file is no cohort", T.load_cohorts(_cp) == {})

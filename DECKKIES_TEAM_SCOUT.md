@@ -595,6 +595,75 @@ Below the #1 a teammate's list is `counters` with the shared-deck cost as
 lift 5.5 points against 3.8 without it, on 437 held-out players) and
 list-level evidence against a list of theirs that no hub covers.
 
+## 4k. The wide read — what they are likely to bring (2026-10-10, brain 4.0)
+
+Measured read-only on the server the same day, before anything was built. 700
+friendly duels of the last 30 days (952 player-sides, 2,300 decks brought), each
+replayed with only what was stored BEFORE the duel:
+
+| What was measured | Result |
+|---|---|
+| The deck brought was one of the 12 lists the engine scored against | 33% (one of ALL their 30-day lists: 54%) |
+| Its archetype was their most played / one of their top three | 21% / 50% |
+| The share of their games that archetype had | 18% |
+| Their deck's rate against the OTHER player's history, minus their typical deck's | **+0.03 points [-0.31, +0.37]** (871 choices) |
+| A counter-pick term fitted over their own lists | 0.0 to 0.2 — nothing |
+| Log loss of "which archetype": shares as played / square root of them / duel games weighted x30 | 2.83 / 2.53 / **2.43** |
+| Log loss of "which exact list" (same three) | 3.43 / 2.98 / **2.62** |
+
+So opponents in friendly duels are not, on average, picking counters out of
+their own lists — they are simply far less predictable than their history, and
+what they bring to a duel is above all what they have brought to duels before.
+From the receiving end that is the same experience ("I prepared for their main
+deck and met another"), and the remedy is the same.
+
+What changed (`server/team_scout.py`, brain `team-scout-4.0`):
+
+- **`TEMPER` 0.5** — a family's chance, and a list's inside it, is its evidence
+  to the power one half.
+- **`DUEL_WEIGHT` 30 / `DUEL_OLDER_WEIGHT` 10** — a duel game in the window
+  counts as 30 other games; a duel deck from the 60 days before the window
+  (`team_analysis._older_duel_decks`) is still in the projection, at 10.
+  `player_decks.played` now says which of a deck's games were duel games.
+- **`MAX_PLAYED` 20** lists scored against (was 12; `MAX_THREATS` stays 12
+  because `coach_daily` reads it).
+- **`HOLE_COST` 3** — a deck under 45% against any family they are 5% likely to
+  bring is chosen as though it were three points weaker (`worst` on every row).
+- `plays[].share` is now THE CHANCE; `plays[].played` is the share of their
+  games. The screen's strip reads "Likely to bring" and the history is each
+  chip's tooltip.
+
+Tried and not built, with the figure: a share of the weight on the friendly
+duel field (+0.03), a blend with the worst case (same top three, and the
+printed figure would stop being a rate), a counter-pick term (worse at every
+strength), 30 or 40 lists (no gain over 20).
+
+**Old engine against new through the production code path**, a fresh sample of
+600 duels / 840 player-sides (`stage_judge.py`, staged modules, the same fused
+rate judging both lists against the decks really brought):
+
+| | 3.0 | 4.0 | difference |
+|---|---|---|---|
+| #1 | 59.07 | 60.56 | **+1.48** [+1.09, +1.87] |
+| Top three | 58.17 | 59.73 | **+1.55** [+1.30, +1.80] |
+| All seven | 57.48 | 58.79 | +1.31 [+1.13, +1.49] |
+| Rows under 50% against what came | 10.6% | **4.7%** | |
+| Printed figure minus what happened (the #1) | 7.6 (9.0) points | **2.1 (2.5)** | |
+| The deck brought: its archetype was one the screen named | 57% | 80% | |
+| The deck brought: its exact list was scored against | 35% | 48% | |
+| Seconds for one opponent's projection and rating | 0.19 | 0.25 | |
+
+Opponents with duel games behind the read (724 of 840): top three +1.71
+[+1.44, +1.99]; without (116): +0.56 [+0.12, +1.01]. For scale: the average
+deck in the pool rates 49.9% against what came and the best deck in hindsight
+67.3% — most of what is left cannot be known before the duel, and nothing here
+makes a list unbeatable.
+
+The balance log (`card_balance.py`) moves a rate on both sides for a card
+nerfed in the last 60 days; see `server/README.md`. **Second consumer
+warning, unchanged:** `coach_daily` calls `score` and `diversify`, neither of
+which was touched, and `MAX_THREATS` is still 12 for it (204/204).
+
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
 Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it

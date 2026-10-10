@@ -74,6 +74,33 @@ COHORTS_PATH = os.environ.get("CLASH_DUEL_COHORTS") or os.path.join(
 #: Names the two built-in groups own.
 RESERVED_COHORTS = ("all", "friendly")
 
+#: WHOSE DUELS THE READ IS FITTED ON (2026-10-10). Empty = every player's, as
+#: it was. A cohort's name (`CLASH_DUEL_READ_COHORT=crl`) fits it on THAT
+#: GROUP'S duels and nobody else's — asked for by the account holder: Coach
+#: Assist is for players coached for competitive duels, and its brain should
+#: learn from the players who qualify for them, not from every clan-war duel.
+#:
+#: Measured before it was switched on (read-only, the 455-tag `crl` group, 197
+#: of them with duels; fitted on their 2,593 duels before 26 September, judged
+#: on their 640 after it — neither fit saw those):
+#:
+#:     exact deck first / in the top three     game 1      game 2      game 3
+#:     fitted on every player (93,214 rows)   45.6/64.7   42.9/70.2   50.0/66.2
+#:     fitted on the group only (1,636 rows)  46.1/64.2   42.1/71.3   50.0/66.2
+#:     a plain count                          25.5/46.1   32.9/56.3   36.6/58.3
+#:
+#: Level on the group itself (620 decisions; the differences are inside the
+#: noise), and on every FRIENDLY duel a little better (game 1 top three 46.5 ->
+#: 48.4, game 2 first 31.3 -> 33.1, n 2,886). What it learns differently is
+#: visible in the weights: how much of their play a deck is hardly matters for
+#: these players (0.10 against 2.59), their record with it matters more.
+TRAIN_COHORT = (os.environ.get("CLASH_DUEL_READ_COHORT") or "").strip().lower()
+
+#: Duels a group must have for a fit on it alone; under it the fit is on every
+#: player and the artifact says so. A fit needs 200 decisions a stage
+#: (`fit`), and game 3 is reached in about one duel in three.
+TRAIN_MIN_DUELS = 1500
+
 
 def load_cohorts(path: str = COHORTS_PATH) -> dict:
     """`{name: set of tags}` from the cohort file, or `{}`. A missing or
@@ -144,6 +171,26 @@ def tagged_decisions(players: dict, lo: float, hi: float):
                 lost = bool(stage) and not cur["won"][stage - 1]
                 yield tag, (min(stage, 2), hist, cur["decks"][:stage], frozenset(cur["decks"][stage]),
                             now, lost, cur["friendly"])
+
+
+def train_population(players: dict, cohorts: dict | None, name: str | None = None):
+    """`(the players to fit on, whose they are)`.
+
+    Everybody, labelled `all`, unless a group is named, exists and has
+    `TRAIN_MIN_DUELS` duels of its own — then that group's players alone. A
+    named group that is missing or thin falls back to everybody and is
+    labelled `all`: a read fitted on forty duels is worse than no preference.
+    """
+    name = TRAIN_COHORT if name is None else str(name or "").strip().lower()
+    if not name or name in RESERVED_COHORTS:
+        return players, "all"
+    tags = {str(t).strip().upper() for t in (cohorts or {}).get(name, ())}
+    if not tags:
+        return players, "all"
+    sub = {t: ds for t, ds in players.items() if str(t).upper() in tags}
+    if sum(len(ds) for ds in sub.values()) < TRAIN_MIN_DUELS:
+        return players, "all"
+    return sub, name
 
 
 def decisions(players: dict, lo: float, hi: float):
@@ -352,9 +399,16 @@ def run(games, report_only: bool = False, path: str = dr.PATH, cohorts: dict | N
         return {}
     lo, hi = times[0], times[-1] + 1
     cut = times[int(len(times) * REPORT_SPLIT)]
-    part = fit(players, lo, cut)
+    # WHOSE DUELS IT LEARNS FROM. The holdout is still everybody's decisions
+    # after the cut, by group — so the artifact shows what the fit does for
+    # the players it was not fitted on as well.
+    pop, trained_on = train_population(players, cohorts)
+    part = fit(pop, lo, cut)
     holdout = score(players, part, cut, hi, cohorts)
     meta = {
+        "trainedOn": trained_on,
+        "trainedPlayers": len(pop),
+        "trainedDuels": sum(len(ds) for ds in pop.values()),
         "duels": len(times) // 2,
         "from": time.strftime("%Y-%m-%d", time.gmtime(lo)),
         "to": time.strftime("%Y-%m-%d", time.gmtime(hi - 1)),
@@ -365,7 +419,7 @@ def run(games, report_only: bool = False, path: str = dr.PATH, cohorts: dict | N
     print(json.dumps(meta, indent=1))
     if report_only:
         return {"meta": meta, "model": part}
-    final = fit(players, lo, hi)
+    final = fit(pop, lo, hi)
     meta["rows"] = {str(s): final["rows"][s] for s in final["rows"]}
     meta["trainedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     meta["seconds"] = round(time.time() - t0)

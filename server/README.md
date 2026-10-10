@@ -2028,6 +2028,145 @@ twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
 
 
+## The wide read, the balance log and the living card manual (`team_scout` 4.0, `card_balance.py`, 2026-10-10)
+
+Measured read-only on the server the same day, before anything was built. 700
+friendly duels of the last 30 days (952 player-sides, 2,300 decks brought), each
+replayed with only what was stored BEFORE the duel:
+
+| What was measured | Result |
+|---|---|
+| The deck brought was one of the 12 lists the engine scored against | 33% (one of ALL their 30-day lists: 54%) |
+| Its archetype was their most played / one of their top three | 21% / 50% |
+| The share of their games that archetype had | 18% |
+| Their deck's rate against the OTHER player's history, minus their typical deck's | **+0.03 points [-0.31, +0.37]** (871 choices) |
+| A counter-pick term fitted over their own lists | 0.0 to 0.2 — nothing |
+| Log loss of "which archetype": shares as played / square root of them / duel games weighted x30 | 2.83 / 2.53 / **2.43** |
+| Log loss of "which exact list" (same three) | 3.43 / 2.98 / **2.62** |
+
+So opponents in friendly duels are not, on average, picking counters out of
+their own lists — they are simply far less predictable than their history, and
+what they bring to a duel is above all what they have brought to duels before.
+From the receiving end that is the same experience ("I prepared for their main
+deck and met another"), and the remedy is the same.
+
+What changed (`server/team_scout.py`, brain `team-scout-4.0`):
+
+- **`TEMPER` 0.5** — a family's chance, and a list's inside it, is its evidence
+  to the power one half.
+- **`DUEL_WEIGHT` 30 / `DUEL_OLDER_WEIGHT` 10** — a duel game in the window
+  counts as 30 other games; a duel deck from the 60 days before the window
+  (`team_analysis._older_duel_decks`) is still in the projection, at 10.
+  `player_decks.played` now says which of a deck's games were duel games.
+- **`MAX_PLAYED` 20** lists scored against (was 12; `MAX_THREATS` stays 12
+  because `coach_daily` reads it).
+- **`HOLE_COST` 3** — a deck under 45% against any family they are 5% likely to
+  bring is chosen as though it were three points weaker (`worst` on every row).
+- `plays[].share` is now THE CHANCE; `plays[].played` is the share of their
+  games. The screen's strip reads "Likely to bring" and the history is each
+  chip's tooltip.
+
+Tried and not built, with the figure: a share of the weight on the friendly
+duel field (+0.03), a blend with the worst case (same top three, and the
+printed figure would stop being a rate), a counter-pick term (worse at every
+strength), 30 or 40 lists (no gain over 20).
+
+**Old engine against new through the production code path**, a fresh sample of
+600 duels / 840 player-sides (`stage_judge.py`, staged modules, the same fused
+rate judging both lists against the decks really brought):
+
+| | 3.0 | 4.0 | difference |
+|---|---|---|---|
+| #1 | 59.07 | 60.56 | **+1.48** [+1.09, +1.87] |
+| Top three | 58.17 | 59.73 | **+1.55** [+1.30, +1.80] |
+| All seven | 57.48 | 58.79 | +1.31 [+1.13, +1.49] |
+| Rows under 50% against what came | 10.6% | **4.7%** | |
+| Printed figure minus what happened (the #1) | 7.6 (9.0) points | **2.1 (2.5)** | |
+| The deck brought: its archetype was one the screen named | 57% | 80% | |
+| The deck brought: its exact list was scored against | 35% | 48% | |
+| Seconds for one opponent's projection and rating | 0.19 | 0.25 | |
+
+Opponents with duel games behind the read (724 of 840): top three +1.71
+[+1.44, +1.99]; without (116): +0.56 [+0.12, +1.01]. For scale: the average
+deck in the pool rates 49.9% against what came and the best deck in hindsight
+67.3% — most of what is left cannot be known before the duel, and nothing here
+makes a list unbeatable.
+
+**The card manual is living data.** `All_Cards_stats.md` at the repository
+root (git-ignored: this repository is public and the manual is 2.5 MB of
+hand-written analysis) is the master. `python scripts/push-card-data.py`
+builds it (`scripts/build-card-roles.py` -> `src/data/cardRoles.json` and
+`src/data/cardBalance.json`), runs the three suites that read those files,
+sends them to the server behind a parse gate with backups, copies the manual
+itself there (`/opt/royalweb/manual/`, last five kept) and waits for
+`/api/analytics/status` -> `cardManual` to report the new card count and
+balance date. `card_counters`, `deck_harmony` and `card_balance` re-read their
+file within 30 seconds of it changing — no restart unless the roster files
+moved. The server's address comes from `--host`, `DECKKIES_VPS` or a
+git-ignored `.vps-host`.
+
+What the manual gained on 2026-10-10: card #125 Minion Giant (the roles file
+covers all 123 cards; `test_deck_harmony`'s `AWAITING_MANUAL` is empty), the
+Electro Giant's evolution and the Electro Wizard's hero form in their cards'
+entries, five more relation fields in the generated file, and **Appendix C, a
+dated balance log** (seven patches from 4 August to 6 October 2026, 92 changes
+on 66 cards, the September and October lists marked `community` because the
+official pages refused automated reads). Void is 5 elixir in `cards.json`.
+
+**What a balance date is worth was measured, not assumed** (`balance_lab.py`,
+the duel index, 14 days before a patch day against 14 after, the side holding
+the card when the other does not):
+
+| Change | Cards | Change in win rate |
+|---|---|---|
+| Base card nerfed | 23 | **-1.37** [-1.74, -1.00] |
+| Evolution nerfed | 10 | **-1.36** [-1.81, -0.90] |
+| Hero nerfed | 5 | -0.75 [-1.31, -0.19] |
+| Base card buffed | 28 | +0.17 [-0.20, +0.55] |
+| Unchanged cards (control, 84-119 a patch) | | within 0.25 of zero |
+
+`server/card_balance.py` applies only the nerf: `drag(cards)` is the points a
+list's stored record overstates it by, fading in a straight line over 60 days,
+a second nerfed card counting half, 2.5 at most. Team Analysis and the Deck
+Counter take it off our list's rate and add a threat's back
+(`_FusionContext.balance`); Coach Assist does not ask and is unmoved. On
+screen it is the figure's tooltip — staged, two rows in three held a card the
+last patch touched, so a visible mark said nothing.
+
+**Coach Assist's read is fitted on the CRL group only** (asked for the same
+day: "for Coach Assist there must be a different brain ... the top CRL duel
+players ... train on that data only"). `duel_read_train.TRAIN_COHORT`
+(`CLASH_DUEL_READ_COHORT=crl` in `/etc/royalweb.env`) fits the duel read on the
+duels of one named group of `.duel_cohorts.json` and nobody else's; the holdout
+is still reported for everyone, friendly duels and each group, and
+`/api/analytics/status` -> `duelRead` says `trainedOn`, `trainedPlayers`,
+`trainedDuels`. Measured before the switch, on the group's own duels after 26
+September (620 decisions neither fit saw; exact deck first / in the top three):
+
+| Fitted on | Game 1 | Game 2 | Game 3 |
+|---|---|---|---|
+| Every player (93,214 rows) | 45.6 / 64.7 | 42.9 / 70.2 | 50.0 / 66.2 |
+| The CRL group only (1,636 rows) | 46.1 / 64.2 | 42.1 / 71.3 | 50.0 / 66.2 |
+| A plain count | 25.5 / 46.1 | 32.9 / 56.3 | 36.6 / 58.3 |
+
+Level on the group (inside the noise) and a little better on every friendly
+duel (game 1 top three 46.5 -> 48.4, n 2,886); on clan-war duels game 2 "first"
+is 1.9 points lower. **What is NOT what was asked for yet:** the group is the
+455 tags resolved from the CRL top-1000 list (197 with duels, 3,233 duels), not
+"the top 64 of each monthly qualifier for six months" — that list of tags is
+not on this machine, and the duel index only reaches back to June 2026. Put the
+tags in `.duel_cohorts.json` under a new name and set the variable to it; a
+group under 1,500 duels falls back to everybody and says so. The WIN model
+(`duel_model`) is still fitted on every duel game: 7,422 games is too few for
+its card-against-card terms, and that was not changed.
+
+Lab scripts (scratchpad, not in the repository; all read-only on the server,
+none writes a tag): `snipe_lab.py` / `snipe_lab2.py` (the dumps),
+`snipe_analyze.py` / `snipe_analyze2.py` (offline, bootstrap over duels),
+`balance_lab.py`, `stage_judge.py` (old against new, production path),
+`stage_run.py` (invariants and timings: 16 players, a 5v5, a 12v12 — no
+problem found; 12v12 3.7 s warm against 3.3), `crl_only_lab.py`.
+
 ## Counters to what they play (`team_scout` 3.0, `card_counters.py`, 2026-10-10)
 
 **LIVE SINCE 2026-10-10 AS `c1a1a0f`. Server by scp first, 06:49 UTC (the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; only `royalweb` restarted), the client 52 s after the push (06:54 UTC, `/api/health` and the build meta). Checked on production: the live API for three players (brain `team-scout-3.0`, pool 2,341, every list ordered, nothing under 50%, every family at 10%+ answered at 55%+, every suggested deck fielding three special slots), six suites green on the VPS, and 42/42 in a real browser SIGNED IN on https://deckkies.com — the Deck Counter's three views in both themes and at 390px, a scouting report and a match plan, the figures on screen equal to the API's. Built and verified on staged code against production data first.**

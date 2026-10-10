@@ -501,6 +501,39 @@ route).
 `test_duel_read.py` 55 -> 67. Full run: 4,367 Python checks across 76 suites
 (only the known `test_ml_21a`).
 
+### 2026-10-10 — the read is fitted on the CRL group only
+
+**Coach Assist's read is fitted on the CRL group only** (asked for the same
+day: "for Coach Assist there must be a different brain ... the top CRL duel
+players ... train on that data only"). `duel_read_train.TRAIN_COHORT`
+(`CLASH_DUEL_READ_COHORT=crl` in `/etc/royalweb.env`) fits the duel read on the
+duels of one named group of `.duel_cohorts.json` and nobody else's; the holdout
+is still reported for everyone, friendly duels and each group, and
+`/api/analytics/status` -> `duelRead` says `trainedOn`, `trainedPlayers`,
+`trainedDuels`. Measured before the switch, on the group's own duels after 26
+September (620 decisions neither fit saw; exact deck first / in the top three):
+
+| Fitted on | Game 1 | Game 2 | Game 3 |
+|---|---|---|---|
+| Every player (93,214 rows) | 45.6 / 64.7 | 42.9 / 70.2 | 50.0 / 66.2 |
+| The CRL group only (1,636 rows) | 46.1 / 64.2 | 42.1 / 71.3 | 50.0 / 66.2 |
+| A plain count | 25.5 / 46.1 | 32.9 / 56.3 | 36.6 / 58.3 |
+
+Level on the group (inside the noise) and a little better on every friendly
+duel (game 1 top three 46.5 -> 48.4, n 2,886); on clan-war duels game 2 "first"
+is 1.9 points lower. **What is NOT what was asked for yet:** the group is the
+455 tags resolved from the CRL top-1000 list (197 with duels, 3,233 duels), not
+"the top 64 of each monthly qualifier for six months" — that list of tags is
+not on this machine, and the duel index only reaches back to June 2026. Put the
+tags in `.duel_cohorts.json` under a new name and set the variable to it; a
+group under 1,500 duels falls back to everybody and says so. The WIN model
+(`duel_model`) is still fitted on every duel game: 7,422 games is too few for
+its card-against-card terms, and that was not changed.
+
+Backups `{duel_read,duel_read_train,test_duel_read}.py.bak-20261010-115402-precrlfit`,
+`.duel_read.json.bak-…`, `/etc/royalweb.env.bak-…`. To go back: remove the
+variable; the next poll refits on everybody. `test_duel_read` 67 → 76.
+
 ## Next action
 
 Steps 1 to 4 are live and the part of step 5 that needed nobody is too. What
