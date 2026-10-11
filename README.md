@@ -12609,6 +12609,52 @@ both the repetition and the value worse, so the rule was left alone), and more
 rows show a weak matchup on their chips — the model sees weaknesses the fused
 rate was blind to.
 
+**On CRL-group opponents only** (asked for when the login was handed over:
+"verify on top players, CRL ones"). The same replay restricted to duels from
+1 October in which the opponent is in the `crl` group: 497 player-sides, 107
+CRL players, every duel mode.
+
+| CRL opponents, neutral judge | Before | Now |
+|---|---|---|
+| The #1 deck against what really came | 52.9 | **60.8** (+7.9 [+7.2, +8.6]) |
+| Top three | 53.4 | 59.7 (+6.4) |
+| All ten | 53.2 | 56.8 (+3.6) |
+| Rows under 50% against what came | 34.3% | **16.4%** |
+| The printed figure minus the judge's, for the #1 | 9.6 | 3.9 |
+| The three most repeated lists are on | 21.3 / 20.9 / 16.5% | 22.3 / 19.7 / 18.3% |
+
+Against this group the repetition did not move, and the gain is larger than on
+the general sample.
+
+**Signed in on https://deckkies.com, in a real browser** (the account holder's
+login; Chromium, the mobile device slot): 62 checks on the first run, 60
+passing and 2 that were faults in the check itself (one read the page before
+it finished loading, one expected a match plan's squad pick to be in figure
+order, which it deliberately is not), then 22 of 22 after the fix below.
+Deck Counter for five CRL players: `cardModel` on, ten decks in the order of
+their figure, none under 50%, the screen's decks, figures and "Likely to bring"
+equal to the API response the page read, eight cards drawn on every row with
+evolution and hero art in the special slots, By archetype and By card open;
+the same in the light theme and at 390 px. Across the five: 39 distinct decks
+in 50 rows, four different #1s, the most repeated deck on four of the five
+lists. Team Analysis: a scouting report of three CRL players (a folder each,
+ten rows, 26 distinct decks in 30 rows, 2 s) and a two-against-two match plan
+(ten rows a teammate, 2.5 s). Screenshots `testing/live-cards-*.png`.
+
+**The live check found a fault that predates this change, and it is fixed.**
+The match plan's Coverage strip read "0/7" with every archetype a gap beside
+lists that answered them. `team_scout.squad_plan` recomputed each row's
+per-archetype rates from its per-threat table, and a pool row rated in the
+tight loop (since `team-scout-3.0`) has no such table — so every pool row's
+rates came out empty inside the planner: no pool deck could cover an archetype,
+answer a family or show a hole there. With the model switched off the strip
+read the same, which is how it was told apart from today's change. One line
+(keep the rates a row already carries, as `counters` and `answers` do), a test
+that fails three ways on the old code, deployed 11:40 UTC (backup
+`team_scout.py.bak-20261011-114031-precover`): the same plans read 7 of 7, 8 of
+8 and 11 of 12 covered, a teammate's own decks reach their list more often, and
+the live screen shows 7 of 7. `test_team_scout` 160 -> 164.
+
 **What was read first:** the FedCSIS 2019 Clash Royale challenge and the AAIA'18
 Hearthstone one (logistic ensembles and boosted trees), game-avatar embeddings
 and factorization machines (pairwise models beat plain logistic regression),
@@ -12627,10 +12673,10 @@ first run under its own timer finished at 11:03 UTC (7m20s, exit 0, the page
 cache intact). Tests:
 `server/test_card_matchup.py` 34 and `test_card_matchup_train.py` 36 (new; the
 second needs numpy and says so where it is missing), `test_team_analysis`
-241 -> 266. **4,742 Python checks across 80 suites** (only the known
+241 -> 266, `test_team_scout` 160 -> 164. **4,746 Python checks across 80 suites** (only the known
 `test_ml_21a`), **1,673 vitest across 69 files**. Main JS 395.96 kB gzip.
 
-**Not done:** the clan-war side of the test is 90% of its games and the friendly
+**Not done:** the PDF exports were not opened after this change; the clan-war side of the test is 90% of its games and the friendly
 result rests on 2,432; the ladder-trained fit reads the ladder table whole, test
 days included, as the fused rate does (the duels-only fit has no such overlap and
 gains -0.0147); Coach Assist's figures are unchanged; nothing on the screens

@@ -2025,7 +2025,15 @@ def squad_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS):
         rows = []
         for r in own + fills(own, pool or [], need=len(pool or [])):
             c = dict(r)
-            c["vs"] = vs_archetypes(c)
+            # KEEP THE RATES A ROW ALREADY CARRIES. A pool row rated in the
+            # tight loop has `vs` and NO per-threat table, so recomputing it
+            # from `matchups` emptied it: no pool row could cover an archetype,
+            # answer a family or show a hole here, and the Coverage strip read
+            # "0 of 7, every archetype a gap" beside lists that answered them
+            # (seen on the live match plan, 2026-10-11; `counters` and
+            # `answers` already asked this way).
+            if "vs" not in c:
+                c["vs"] = vs_archetypes(c)
             c["known"] = 8 if c.get("owner") else known_cards(
                 c.get("cards"), p.get("cards"))
             c["personalScore"] = round(

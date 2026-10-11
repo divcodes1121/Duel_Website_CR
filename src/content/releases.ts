@@ -82,6 +82,17 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-11-match-plan-coverage',
+    date: '2026-10-11',
+    kind: 'fixed',
+    title: 'Match plans: the Coverage strip counts your squad again',
+    body: [
+      'On a match plan the Coverage strip could read 0 of 7 with every archetype marked as a gap, beside lists that plainly answered them. Suggested decks from the shared pool were losing their per-archetype rates inside the squad planner. They keep them now: coverage is counted, the rule that holds an answer for each archetype the opponent is likely to bring applies to those decks too, and a teammate’s own decks reach their list more often.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-11-card-matchups',
     date: '2026-10-11',
     kind: 'improved',

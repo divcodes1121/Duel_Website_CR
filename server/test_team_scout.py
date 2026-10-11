@@ -873,6 +873,34 @@ def property_squad_plan():
           alone["#P1"][0]["name"] == alone["#P2"][0]["name"] == "A",
           str([alone[t][0]["name"] for t in alone]))
 
+    # A POOL ROW RATED IN THE TIGHT LOOP carries `vs` and no per-threat table.
+    # Its rates must survive the plan: recomputed from an absent table they
+    # were empty, and no pool row could cover anything (Coverage 0 of 7 on the
+    # live match plan, 2026-10-11).
+    def lean_row(name, rates):
+        r = ts.score(rate_map(rates), SQ_THREATS, cards=SQ_DECKS[name],
+                     archetype=name.lower(), lean=True)
+        r["name"], r["owner"] = name, None
+        return r
+
+    lean_pool = [lean_row("G", {"hog": 70, "giant": 64, "graveyard": 58}),
+                 lean_row("H", {"hog": 55, "giant": 52, "graveyard": 66})]
+    check("the fixture's pool rows are lean: rates, no per-threat table",
+          all("matchups" not in r and r.get("vs") for r in lean_pool))
+    lean_lists, lean_cover = ts.squad_plan(
+        [{"tag": "#L1", "own": [], "cards": set()}, {"tag": "#L2", "own": [], "cards": set()}],
+        lean_pool, SQ_THREATS)
+    check("a lean pool row keeps its per-archetype rates through the plan",
+          lean_lists["#L1"][0]["vs"] == {"hog": 70.0, "giant": 64.0, "graveyard": 58.0},
+          str(lean_lists["#L1"][0].get("vs")))
+    check("...so the cover rows name who answers each archetype, and all are answered",
+          all(c_["tag"] and c_["answered"] for c_ in lean_cover)
+          and next(c_ for c_ in lean_cover if c_["archetype"] == "graveyard")["winRate"] == 58.0,
+          str(lean_cover))
+    check("...and the #1s list what they cover",
+          sorted(a_ for t_ in lean_lists for a_ in (lean_lists[t_][0].get("covers") or []))
+          == ["giant", "graveyard", "hog"], str([lean_lists[t_][0].get("covers") for t_ in lean_lists]))
+
     # THEIR OWN CARDS DECIDE BETWEEN EQUALS.
     e = sq_row("E", {"hog": 60, "giant": 60, "graveyard": 60})
     f = sq_row("F", {"hog": 60, "giant": 60, "graveyard": 60})

@@ -765,6 +765,14 @@ and rows under 50% against what really came fall from 40.7% to 22.8%.
 - The most repeated list is on 27.6% of opponents' lists (20.9% before).
 - `coach_daily` and Coach Assist are unmoved: neither context asks for the model.
 - The report says which model rated it: `fusion.cardModel`, `bring.cardModel`.
+- **`squad_plan` keeps the rates a row already carries** (fixed the same day,
+  found by the signed-in check). It recomputed `vs` from `matchups`, and a pool
+  row rated in the tight loop has none, so inside the planner every pool row's
+  rates were empty: the Coverage strip read "0/7, every archetype a gap", and
+  the family-answer and hole rules did not apply to pool rows in a match plan.
+  Present since 3.0's tight loop, with or without the card model. Now
+  `if "vs" not in c`, as `counters` and `answers` ask. `test_team_scout`
+  160 -> 164 (three of the new checks fail on the old code).
 
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
