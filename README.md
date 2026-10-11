@@ -12514,8 +12514,11 @@ import is eager until that is fixed, and the reason is written at the import.
 
 ## The day window picks the suggested decks (2026-10-11)
 
-**LIVE SINCE 2026-10-11, server 18:19 UTC** (backups `*.bak-20261011-181159-prewindow`;
-the index was rebuilt by hand with the new stage, then only `royalweb` restarted).
+**LIVE SINCE 2026-10-11, server 18:19 UTC, frontend `0f7217b`** (backups
+`*.bak-20261011-181159-prewindow`; the index was rebuilt by hand with the new stage,
+then only `royalweb` restarted; `/api/health` and the build meta reported the commit
+about a minute after the push, the served bundle carries the release note, and the
+Deck Counter on the live site, signed out in a real browser, showed the 7-day pool: 6/6).
 Asked for: *"the Team Scout, both the scouting report and the match plan — when we
 filter days like 7D, 14D, I want the recommended decks filtered to those same days
 too. Read the battles from those days, see the weight of previous plus the days and
@@ -12645,9 +12648,9 @@ days and All Data, light theme, 390 px. Screenshots `testing/window-*.png`.
 understates them by half a point, but who picks up a rising list is not
 controlled for). Per-archetype rates by window (the version cells hold totals;
 the overall-record version showed no gain). Coach Assist, the daily field plan
-and the meta board are untouched. Not checked signed in on the live site: the
-frontend half is a count line and two tooltips, and was seen locally on
-production data.
+and the meta board are untouched. Team Analysis was not opened signed in on the
+live site (it needs an account): it was seen on production data through the
+local site, and the Deck Counter, which is free, on the live one.
 
 **To undo without a deploy:** set `WINDOW_DROP = ()` in `team_analysis.py` and
 restart `royalweb` — every list is kept, and rows still say how each was played.
