@@ -2028,6 +2028,57 @@ twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
 
 
+## The card matchup model (`card_matchup.py`, `card_matchup_train.py`, 2026-10-11)
+
+The figure on every Deck Counter and Team Analysis row is now the fused rate AND
+a card-level model. Why, and what it measured: the root README, "Counters read
+the cards". This section is how it runs.
+
+| Piece | What |
+|---|---|
+| `card_matchup.py` | Pure Python. `load()` (re-read on mtime), `vector(model, their deck or {card: share})`, `score(vector, my cards)`, `combine(fused rate, logit)`, `status()`. `STACK_FUSED` 0.19 / `STACK_MODEL` 1.0 are constants fitted in the lab, like `matchup_fusion`'s. |
+| `.card_matchup.json` | The artifact beside it (gitignored, ~240 kB): `main[card]`, `pair["a|b"]` with `a < b` and positive = a beats b, `meta` with the trainer's holdout. `CLASH_CARD_MATCHUP` overrides the path. |
+| `card_matchup_train.py` | numpy + scipy. Reads `pair_matchup_agg` (one sequential pass, mode=ro) and `.duel_games.pkl` (kept by `duel_model_train.py`). L-BFGS on a fixed-width sparse design, `L_MAIN` 1, `L_PAIR` 300, a duel game = `DUEL_ALPHA` 10 ladder games, every 2+ game pair and `SINGLE_SAMPLE` 1.5M of the single-game pairs weighted up. Duel games carry a fixed nuisance offset (pilots' running records, card-level gap). `--report` scores only; `--before=YYYYMMDD --out=path` fits a replay model. |
+| The gate | The same recipe without the newest 20% of duel games is scored on them first. Under `MIN_GAIN` 0.005 over "who is playing": **not saved, exit 2**, the model in place stands. Measured at deploy: 0.6539 -> 0.6262 on 89,866 games. |
+| `/opt/royalweb/mlpkgs` | numpy 2.5.4 and scipy 1.18.1, `pip install --target`. The trainer puts it on its own path (`CLASH_ML_PKGS`); **the web service never imports either**. |
+| `royalweb-cardmatchup.timer` | Daily 04:20 UTC (+ up to 15 min). 7m49s, 3.4 GB at its peak, `Nice=15`, idle I/O, `MemoryHigh=4G` so it reclaims its own page cache and not the bot's. Log `/var/log/clashbot/card-matchup.log`. |
+| `/api/analytics/status` -> `cardMatchup` | `available`, `trainedAt`, `ladderGames`, `duelGames`, `holdout`. `available: false` = every rate is the fused rate alone. A stale `trainedAt` = a stopped timer or a refused fit (read the log). |
+
+**Wiring** (`team_analysis.py`): `_FusionContext.use_cards()` loads the model
+(never raises); `threat_table` carries each threat's prepared vector;
+`lean_rates` and `rater` apply `combine` AFTER the fused rate and BEFORE the
+balance log, in that order in both, and a test holds the two equal. `bring`,
+`analyze` and `_set_field_rates` ask; Coach Assist's context does not.
+`_field_threats` rows carry `cardShare` (the share of an archetype's lists
+holding each card, by players) so a list's rate against the field is read
+through the model too. `_counter_key` includes the artifact's mtime: a
+retrained model rebuilds the pool's field rates in the background. A threat
+with no evidence at all stays unanswered — the model does not invent a rate.
+Payload: `bring.cardModel`, `fusion.cardModel`; a rate dict also carries
+`fusedRate`.
+
+**To turn it off:** `mv /opt/royalweb/server/.card_matchup.json{,.off}` — the
+next request is the fused rate alone (the pool rebuilds its field rates), no
+restart. `systemctl disable --now royalweb-cardmatchup.timer` stops the refit.
+Full rollback: restore `team_analysis.py` and `app.py` from
+`*.bak-20261011-105535-precardmodel`, restart `royalweb`.
+
+**Staging it again** (what worked): `/tmp/cmstage/server/` with the staged
+modules, `/tmp/cmstage/src -> /opt/royalweb/src` and `.duel_games.pkl`
+symlinked in (the trainer reads `ROOT/src/data/cards.json` and the cache beside
+itself); the replay script puts the staging directory FIRST on `sys.path`,
+asserts `team_analysis.__file__` and `card_matchup.__file__` are the staged
+ones, points `CLASH_TRACKING_DB` at a scratch copy and stubs `live.report`, so
+nothing is enrolled and nothing leaves the box. Lab and replay scripts:
+`brain-evidence/counter_ml_20261011/`.
+
+**Traps hit:** the first trainer kept three million parsed deck strings in a
+dictionary (1.2 GB) and, with the design, pushed the page cache out — the next
+status call took 6 s; an ssh call that only WAITS on a remote job dies after
+about 25 minutes while the job lives (wait in a remote `until` loop and
+re-attach); a judge that is one arm's own figure prefers that arm by three to
+five points either way, so a replay needs a judge neither arm uses.
+
 ## Ten decks, specific to the opponent (`team_scout` 4.1, 2026-10-10)
 
 Reported hours after 4.0: *"I can still see the same decks ... Hog Earthquake with

@@ -1,0 +1,49 @@
+[Unit]
+# Refits the card matchup model: one weight a card and one a card-against-card,
+# from the ladder pair table and every stored duel game. The Deck Counter's
+# list and Team Analysis rate every deck with it beside the fused rate. See the
+# docstrings of server/card_matchup.py (what it measured) and
+# server/card_matchup_train.py (what it reads).
+#
+# IT DOES NOT WRITE TO battles.db. The bot's database is opened mode=ro; the
+# only file this writes is /opt/royalweb/server/.card_matchup.json, and only
+# when the new fit beats "who is playing" on the newest fifth of duel games.
+# Exit 2 = it did not, and the model in place stands.
+#
+# IT IS AN IMPROVEMENT, NOT A DEPENDENCY. With no model every rate is the
+# fused rate alone, exactly as before. A stopped timer shows up as an old
+# `cardMatchup.trainedAt` on /api/analytics/status.
+#
+# numpy AND scipy ARE THIS UNIT'S ALONE: /opt/royalweb/mlpkgs (pip --target),
+# which the trainer puts on its own path. The web service never imports them.
+Description=Deckkies card matchup model refit
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+Environment=CLASH_ML_PKGS=/opt/royalweb/mlpkgs
+Environment=OMP_NUM_THREADS=2
+Environment=OPENBLAS_NUM_THREADS=2
+ExecStart=/usr/bin/python3 -u card_matchup_train.py
+
+# BEHIND THE BOT AND THE API: ~10 minutes, a sequential read of
+# pair_matchup_agg and ~3.4 GB of memory that nothing is waiting on.
+Nice=15
+IOSchedulingClass=idle
+# Measured 2026-10-11: 3.4 GB at its peak, 7m49s. Above MemoryHigh the unit
+# reclaims its OWN page cache (the sequential read fills it), so the bot's and
+# the API's are not pushed out; MemoryMax is the stop for a runaway.
+MemoryHigh=4G
+MemoryMax=6G
+
+SuccessExitStatus=0
+TimeoutStartSec=3600
+
+StandardOutput=append:/var/log/clashbot/card-matchup.log
+StandardError=append:/var/log/clashbot/card-matchup.log
+
+[Install]
+WantedBy=multi-user.target

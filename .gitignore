@@ -180,3 +180,8 @@ assets/fonts/noto/
 # The analytics server's address, read by scripts/push-card-data.py. Public
 # repository: the address is never committed.
 /.vps-host
+
+# The card matchup model (card_matchup_train.py): fitted on the server from the
+# ladder pair table and the duels, rebuilt daily. An artifact, not source.
+server/.card_matchup.json
+server/.card_matchup.json.tmp

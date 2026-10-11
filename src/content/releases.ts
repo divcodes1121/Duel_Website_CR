@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-11-card-matchups',
+    date: '2026-10-11',
+    kind: 'improved',
+    title: 'Counters now read the cards, not only the archetype',
+    body: [
+      'Deck Counter and Team Analysis used to know an opponent’s archetype well and their actual cards rarely, so every Hog deck they might bring was rated much the same. Every card in a suggested deck is now also weighed against every card in theirs, learned from 10 million ladder games and every stored duel.',
+      'Checked on 24,000 duel games it had never seen: inside a single duel, where both players stay the same, the game a player won was rated above the one they lost 66% of the time, against 58% before. Replayed on 200 recent friendly duels, the deck at the top of the list was 6 points stronger against what the opponent really brought, and suggested decks that were losing matchups fell from 41% to 23%.',
+      'Expect different lists: about eight of every ten suggested decks changed.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-10-specific-counters',
     date: '2026-10-10',
     kind: 'improved',

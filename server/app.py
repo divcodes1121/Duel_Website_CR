@@ -603,6 +603,15 @@ class Handler(BaseHTTPRequestHandler):
                     out["duelRead"] = duel_read.status()
                 except Exception:  # noqa: BLE001
                     out["duelRead"] = None
+                # THE CARD MATCHUP MODEL beside the fused rate (Deck Counter,
+                # Team Analysis). `available: false` = no model trained yet, and
+                # every rate is the fused rate alone; `trainedAt` going stale
+                # is a stopped trainer.
+                try:
+                    import card_matchup
+                    out["cardMatchup"] = card_matchup.status()
+                except Exception:  # noqa: BLE001
+                    out["cardMatchup"] = None
                 # THE CARD MANUAL the brain is reading: how many cards have an
                 # entry, and the newest patch in its balance log. It is pushed
                 # as data, without a deploy, so this is the only place that

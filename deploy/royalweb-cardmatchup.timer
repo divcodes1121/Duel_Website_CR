@@ -1,0 +1,22 @@
+[Unit]
+Description=Refit the Deckkies card matchup model once a day
+Requires=royalweb-cardmatchup.service
+
+[Timer]
+# ONCE A DAY. The fit stands on 10 million ladder games and every duel; a
+# day of new battles moves a card's weight in the third decimal. It costs ~10
+# minutes at idle priority.
+OnCalendar=*-*-* 04:20:00
+
+# OFF THE MARK, and away from the others on the one volume: retention 01:30,
+# backup 02:30, ladder raw 03:30, the cluster index at :40 past every fourth
+# hour.
+RandomizedDelaySec=900
+
+# CATCH UP AFTER A REBOOT. A late fit is identical to an on-time one.
+Persistent=true
+
+Unit=royalweb-cardmatchup.service
+
+[Install]
+WantedBy=timers.target

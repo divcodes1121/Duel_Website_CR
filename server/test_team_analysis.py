@@ -1045,6 +1045,9 @@ try:
           str([(t["archetype"], t["likelihood"]) for t in _ft]))
     check("...at the archetype level: no list, so no version cell is read",
           all(t["cards"] == [] for t in _ft) and abs(sum(t["likelihood"] for t in _ft) - 1.0) < 1e-9)
+    check("...each with the share of its lists holding a card, by players, for the card model",
+          abs(_ft[0]["cardShare"]["a8"] - 60 / 80) < 1e-9 and abs(_ft[0]["cardShare"]["b8"] - 20 / 80) < 1e-9
+          and set(_ft[1]["cardShare"]) == {"c", "c8"}, str(_ft[0].get("cardShare")))
     ta.FIELD_MIN_SHARE, _keep = 0.05, ta.FIELD_MIN_SHARE
     check("...an archetype almost nobody fields is left out, and the rest still sums to one",
           [t["archetype"] for t in ta._field_threats()] == ["hog", "golem"]
@@ -1209,6 +1212,110 @@ try:
               _gone["vs"] == _base["vs"] and "balance" not in _gone_full)
     finally:
         ta._balance = _saved_balance
+
+    # THE CARD MATCHUP MODEL, BESIDE THE FUSED RATE. A model in which the Hog
+    # list's first card is worth 0.3 and every Hog card beats every Golem card
+    # by 0.01: 0.94 against the Golem threat, 0.3 against Lava, 0 against itself.
+    import card_matchup as _cmm  # noqa: E402
+    _saved_cardm, _saved_load = ta._cardm, _cmm.load
+    _MODEL = _cmm.prepare({"brain": "card-matchup-test", "main": {HOG[0]: 0.3}, "pair": {
+        g + "|" + h: -0.01 for g in GOLEM for h in HOG}})
+    check("the stand-in model says what the comment says",
+          abs(_cmm.raw(_MODEL, HOG, GOLEM) - 0.94) < 1e-9 and abs(_cmm.raw(_MODEL, HOG, LAVA) - 0.3) < 1e-9
+          and _cmm.raw(_MODEL, HOG, HOG) == 0.0)
+    try:
+        def _cm_rates(asks, model=_MODEL, balance=False):
+            _cmm.load = lambda path=None: model
+            ctx_ = types.SimpleNamespace(on=False, fx=None, records=lambda cs: None)
+            ctx_.fx = ta._FusionContext(None, None)
+            ctx_.fx.balance = balance
+            if asks:
+                ctx_.fx.use_cards()
+            tab = ctx_.fx.threat_table(_proj["threats"])
+            lean = ta._score(_hog_c, _proj["threats"], None, ctx_, dress=False, table=tab)
+            full = ta._score(_hog_c, _proj["threats"], None, ctx_)
+            return lean, full, ctx_
+
+        _off, _off_full, _ = _cm_rates(False)
+        check("a context that does not ask for the card model is the fused rate (Coach Assist)",
+              _off["vs"] == _base["vs"] and _off["expectedWinRate"] == _base["expectedWinRate"])
+        _on, _on_full, _ctx_on = _cm_rates(True)
+        _by_hand, _n_hand = True, 0
+        for _t in _proj["threats"]:
+            _r = _ctx_on.fx.rater(_hog_c)(_t)
+            if _r is None:      # nothing to go on: unanswered, with or without a model
+                continue
+            _n_hand += 1
+            _want = _cmm.combine(_r["fusedRate"], _cmm.raw(_MODEL, _hog_c.cards, _t["cards"]))
+            _by_hand = _by_hand and _r["winRate"] == _want
+        check("with it, every rate is combine(fused rate, the model on the two lists)",
+              _by_hand and _n_hand >= 1, str(_n_hand))
+        check("a threat nothing is known about stays unanswered: the model does not invent a rate",
+              (_ctx_on.fx.rater(_hog_c)(_proj["threats"][-1]) is None)
+              == (ta._FusionContext(None, None).rater(_hog_c)(_proj["threats"][-1]) is None))
+        _gfam = ta._family("golem", GOLEM)[0]
+        check("the list the model favours against Golem is rated higher against Golem",
+              _on["vs"][_gfam] > _off["vs"][_gfam] + 5, f"{_on['vs']} {_off['vs']}")
+        check("...and the headline moves with it", _on["expectedWinRate"] != _off["expectedWinRate"])
+        check("the tight loop and the full scorer agree with the model on",
+              all(_on[k] == _on_full[k] for k in ("expectedWinRate", "score", "vs", "threatCovered")),
+              f"{_on['expectedWinRate']} {_on_full['expectedWinRate']}")
+        _flip = _cmm.prepare({"main": {}, "pair": {g + "|" + h: 0.01 for g in GOLEM for h in HOG}})
+        check("a model that says the opposite moves the rate the other way",
+              _cm_rates(True, _flip)[0]["vs"][_gfam] < _off["vs"][_gfam])
+        check("no trained model is the fused rate alone",
+              _cm_rates(True, None)[0]["vs"] == _off["vs"])
+        ta._cardm = None
+        check("no card_matchup module is the fused rate alone, and nothing raises",
+              _cm_rates(True)[0]["vs"] == _off["vs"])
+        ta._cardm = _saved_cardm
+
+        def _boom(path=None):
+            raise RuntimeError("unreadable model")
+
+        _cmm.load = _boom
+        _ctx_b = ta._FusionContext(None, None)
+        _ctx_b.use_cards()
+        check("a model that cannot be loaded never costs a rate", _ctx_b.cm is None)
+
+        # THE BALANCE LOG GOES ON TOP OF THE MODEL, in both loops.
+        _saved_balance2 = ta._balance
+        ta._balance = types.SimpleNamespace(
+            drag=lambda cs, as_of=None: 2.0 if _k(cs) == _k(HOG) else 0.0,
+            marks=lambda cs, as_of=None: [])
+        try:
+            _both_l, _both_f, _ = _cm_rates(True, balance=True)
+            check("a nerfed list is rated 2 points under the model's figure, in both loops",
+                  abs((_on["vs"][_gfam] - _both_l["vs"][_gfam]) - 2.0) < 0.11
+                  and _both_l["vs"] == _both_f["vs"], f"{_on['vs']} {_both_l['vs']}")
+        finally:
+            ta._balance = _saved_balance2
+
+        # THE AVERAGE OPPONENT OF AN ARCHETYPE has no list; it has card shares.
+        _cmm.load = lambda path=None: _MODEL
+        _fxv = ta._FusionContext(None, None)
+        _fxv.use_cards()
+        _share = {c: 1.0 for c in GOLEM}
+        _vec = _fxv.card_vector({"cardShare": _share}, None)
+        check("a field threat is read through the shares of cards its lists hold",
+              _vec is not None and abs(_cmm.score(_vec, HOG) - 0.94) < 1e-9)
+        check("a threat with neither a list nor shares gets no model term",
+              _fxv.card_vector({"archetype": "golem"}, None) is None)
+        check("one list is prepared once a request",
+              _fxv.card_vector({}, _k(GOLEM)) is _fxv.card_vector({}, _k(GOLEM)))
+        _field_t = [{"cards": [], "archetype": "golem", "family": "golem", "likelihood": 1.0,
+                     "key": "archetype:golem", "cardShare": _share}]
+        _plain = ta._FusionContext(None, None)
+        _r_plain = _plain.rater(_hog_c)(_field_t[0])
+        _r_model = _fxv.rater(_hog_c)(_field_t[0])
+        check("a list's rate against the FIELD is read through the model too",
+              _r_plain is not None and _r_model["winRate"] == _cmm.combine(_r_plain["winRate"], 0.94),
+              f"{_r_plain} {_r_model}")
+        _lean_field = list(_fxv.lean_rates(_hog_c, _fxv.threat_table(_field_t)))
+        check("...the same figure in the tight loop the pool's field rates use",
+              _lean_field and _lean_field[0][2] == _r_model["winRate"], str(_lean_field))
+    finally:
+        ta._cardm, _cmm.load = _saved_cardm, _saved_load
 finally:
     ta._fusion = _saved_fusion
 
@@ -1334,6 +1441,51 @@ try:
     check("a context built without asking does not", _saved_fc(None, None).balance is False)
 finally:
     ta._FusionContext = _saved_fc
+
+# BOTH SCREENS, AND THE POOL'S FIELD RATES, ASK FOR THE CARD MODEL.
+import card_matchup as _cmm2  # noqa: E402
+_used = []
+_saved_load2, _saved_stamp2 = _cmm2.load, _cmm2.stamp
+
+
+class _SpyCards(_saved_fc):
+    def use_cards(self):
+        _used.append(1)
+        return super().use_cards()
+
+
+ta._FusionContext = _SpyCards
+_cmm2.load = lambda path=None: _cmm2.prepare({"brain": "card-matchup-test", "main": {HOG[0]: 0.2}, "pair": {}})
+try:
+    _b2 = ta.bring("#R1")
+    check("the Deck Counter's list asks for the card model", len(_used) >= 1, str(_used))
+    check("...and says which model rated it", _b2.get("cardModel") == "card-matchup-test", str(_b2.get("cardModel")))
+    del _used[:]
+    _a2 = ta.analyze([], ["#R1"], days=30)
+    check("so does Team Analysis", len(_used) >= 1 and _a2["fusion"].get("cardModel") in ("card-matchup-test", None),
+          str(_a2.get("fusion")))
+    del _used[:]
+    _saved_ft2 = ta._field_threats
+    ta._field_threats = lambda: [{"cards": [], "archetype": "golem", "family": "golem",
+                                  "likelihood": 1.0, "key": "archetype:golem"}]
+    try:
+        ta._set_field_rates([])
+    finally:
+        ta._field_threats = _saved_ft2
+    check("and the pool's rates against the field, or a liked list would look like a counter to everybody",
+          len(_used) == 1 and ta._fusion is not None, str(_used))
+    check("a context built without asking has no model", _saved_fc(None, None).cm is None)
+    _cmm2.load = lambda path=None: None
+    check("before a model is trained the list says so and still answers",
+          ta.bring("#R1").get("cardModel") is None and ta.bring("#R1")["decks"])
+    _cmm2.stamp = lambda path=None: 1.0
+    _k1 = ta._counter_key()
+    _cmm2.stamp = lambda path=None: 2.0
+    check("a retrained model is a new counter pool", _k1 is not None and ta._counter_key() != _k1
+          and ta._counter_key()[:3] == _k1[:3], f"{_k1} {ta._counter_key()}")
+finally:
+    ta._FusionContext = _saved_fc
+    _cmm2.load, _cmm2.stamp = _saved_load2, _saved_stamp2
 check("...the same decks a scouting report of that player lists",
       [d["key"] for d in _bring["decks"]]
       == [d["key"] for d in ta.analyze([], ["#R1"], days=30)["folders"][0]["recommended"]])

@@ -154,6 +154,18 @@ try:
 except Exception:  # noqa: BLE001 - deployment shape
     _balance = None
 
+#: THE CARD MATCHUP MODEL (2026-10-11): what the cards in two decks say about a
+#: game, fitted on the ladder pair table and every duel. The fused rate knows an
+#: opponent's archetype and rarely their cards; together the two scored 0.6123
+#: against the fused rate's 0.6328 on 24,307 unseen duel games, and inside one
+#: duel rated the game a pilot won above the one they lost 66.2% of the time
+#: against 58.4% (`card_matchup`). Soft: without the module, or before the
+#: first model is trained, every rate is the fused rate exactly as before.
+try:
+    import card_matchup as _cardm
+except Exception:  # noqa: BLE001 - deployment shape
+    _cardm = None
+
 #: THE NAMED GROUPS OF PLAYERS (`duel_read_train.load_cohorts`, a file of
 #: player tags kept on the server only). Team Analysis and Coach Assist offer
 #: DUEL lists only from the group named in `DUEL_POOL_COHORT`. Soft: without
@@ -1277,7 +1289,9 @@ def _counter_key() -> tuple | None:
                 _duel_index.status() or {}).get("builtAt")
     except Exception:  # noqa: BLE001
         build = None
-    return (stamp, build, _cohort_stamp())
+    # A retrained card model is a new pool too: each list's rate against the
+    # field is read through it.
+    return (stamp, build, _cohort_stamp(), _cardm.stamp() if _cardm is not None else None)
 
 
 def _cohort_stamp():
@@ -1337,13 +1351,23 @@ def _field_threats() -> list[dict]:
     if _duel_index is None:
         return []
     mass: dict[str, float] = {}
-    for _key, wc, players in _duel_index.deck_players():
+    # WHICH CARDS AN ARCHETYPE'S LISTS HOLD, by players: the average opponent
+    # of that archetype as the card model reads one (`card_matchup.vector`).
+    # Without it a list's rate against the field would be the fused rate while
+    # its rate against a real opponent is the fused rate AND the model, and
+    # every list the model likes would look like a counter to everybody.
+    held: dict[str, dict[str, float]] = {}
+    for key, wc, players in _duel_index.deck_players():
         if players > 0:
             arch = wc or "other"
             mass[arch] = mass.get(arch, 0.0) + players
+            row = held.setdefault(arch, {})
+            for c in key.split(","):
+                row[c] = row.get(c, 0.0) + players
     total = sum(mass.values()) or 1.0
     out = [{"cards": [], "archetype": arch, "family": arch, "likelihood": m / total,
-            "key": "archetype:" + arch}
+            "key": "archetype:" + arch,
+            "cardShare": {c: n / m for c, n in held.get(arch, {}).items()}}
            for arch, m in mass.items() if m / total >= FIELD_MIN_SHARE]
     kept = sum(t["likelihood"] for t in out) or 1.0
     for t in out:
@@ -1362,6 +1386,7 @@ def _set_field_rates(cands: list["_Candidate"]) -> int:
             return 0
         ctx = _DuelContext()
         ctx.fx = _FusionContext(ctx, dcx._snap())
+        ctx.fx.use_cards()
         if ctx.on:
             ctx.prefetch([c.cards for c in cands])
         table = ctx.fx.threat_table(threats)
@@ -1900,6 +1925,39 @@ class _FusionContext:
         # ask, so its figures are exactly what they were.
         self.balance = False
         self._drag: dict[str, float] = {}
+        # THE CARD MODEL, when the caller asks for it (`use_cards()`: Team
+        # Analysis, the Deck Counter's bring list, and the pool's field rates).
+        # None = every rate is the fused rate. Coach Assist builds this context
+        # too and does not ask.
+        self.cm = None
+        self._cmv: dict[str, tuple] = {}
+
+    def use_cards(self) -> None:
+        """Rate with the card matchup model beside the fused rate, if one has
+        been trained. Never raises: no model is the fused rate alone."""
+        try:
+            self.cm = _cardm.load() if _cardm is not None else None
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            self.cm = None
+
+    def card_vector(self, t: dict, tkey: str | None):
+        """One threat prepared for the card model: its exact list when it has
+        one, else the cards its archetype's lists hold (`cardShare`, the field).
+        None when the model is off or the threat is neither."""
+        if self.cm is None:
+            return None
+        try:
+            if tkey:
+                v = self._cmv.get(tkey)
+                if v is None:
+                    v = self._cmv[tkey] = _cardm.vector(self.cm, tkey.split(","))
+                return v
+            share = t.get("cardShare")
+            return _cardm.vector(self.cm, share) if share else None
+        except Exception:  # noqa: BLE001 - the model never costs a rate
+            traceback.print_exc()
+            return None
 
     def drag(self, key: str | None) -> float:
         """Points a list's record overstates it by today (`card_balance.drag`)."""
@@ -2026,7 +2084,7 @@ class _FusionContext:
     def threat_table(self, threats: list[dict]) -> list[tuple]:
         """One opponent's threats, prepared ONCE for the tight loop:
         `(likelihood, family, archetype, deck key, version cells, balance
-        drag)` each."""
+        drag, card-model vector)` each."""
         out = []
         for t in threats:
             tcards = t.get("cards") or []
@@ -2035,7 +2093,8 @@ class _FusionContext:
                         t.get("family") or t.get("archetype") or "",
                         t.get("archetype") or "other", tkey,
                         self.cells(tkey) if tkey else None,
-                        self.drag(tkey)))
+                        self.drag(tkey),
+                        self.card_vector(t, tkey)))
         return out
 
     def lean_rates(self, card: "_Candidate", table: list[tuple]):
@@ -2053,7 +2112,8 @@ class _FusionContext:
         finish_rate = _fusion.finish_rate
         seen = self._rates
         mine = self.drag(key)
-        for like, fam, arch_t, tkey, cells, theirs in table:
+        combine = _cardm.combine if self.cm is not None else None
+        for like, fam, arch_t, tkey, cells, theirs, vec in table:
             # A RATE THIS REQUEST HAS ALREADY WORKED OUT IN FULL WINS. A
             # teammate can own the very list a pool row is, and theirs was
             # rated first with a richer profile (its one-card variants); the
@@ -2078,6 +2138,9 @@ class _FusionContext:
             got = finish_rate(self.arch_half(card, arch_t), fam_l, fam_d, ver_l, ver_d)
             if got is not None:
                 rate = got[0]
+                if vec is not None and combine is not None:
+                    # THE CARDS, beside the counts: `rater` does the same.
+                    rate = combine(rate, vec[0] + sum(vec[1].get(c, 0.0) for c in card.cards))
                 if mine or theirs:
                     rate = round(min(100.0, max(0.0, rate + theirs - mine)), 1)
                 yield like, fam, rate, got[1]
@@ -2130,6 +2193,13 @@ class _FusionContext:
             out = _fusion.finish(
                 arch_half(arch_t),
                 fam_ladder=fam_l, fam_duel=fam_d, ver_ladder=ver_l, ver_duel=ver_d)
+            if out is not None and self.cm is not None:
+                # THE CARD MODEL beside the fused rate, BEFORE the balance log
+                # and before the rate is remembered — the tight loop's order.
+                vec = self.card_vector(t, tkey)
+                if vec is not None:
+                    out["fusedRate"] = out["winRate"]
+                    out["winRate"] = _cardm.combine(out["winRate"], _cardm.score(vec, card.cards))
             if out is not None and self.balance:
                 # The balance log, on both sides, BEFORE the rate is remembered:
                 # the tight loop reads the remembered figure as it stands.
@@ -2819,6 +2889,7 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
     ctx = _DuelContext()
     ctx.fx = _FusionContext(ctx, snap)
     ctx.fx.balance = True
+    ctx.fx.use_cards()
     if ctx.on:
         try:
             ctx.prefetch([c.cards for c in cards])
@@ -2837,6 +2908,8 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
         "reason": folder["reason"],
         "pool": {"decks": len(cards), **counter_pool_stats()},
         "brain": scout.BRAIN_VERSION,
+        # Whether the card model rated these rows beside the fused rate.
+        "cardModel": ctx.fx.cm.get("brain") if ctx.fx.cm is not None else None,
     }
 
 
@@ -2899,6 +2972,7 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     ctx = _DuelContext()
     ctx.fx = _FusionContext(ctx, snap)
     ctx.fx.balance = True
+    ctx.fx.use_cards()
     if ctx.on:
         try:
             ctx.prefetch([c.cards for c in cards]
@@ -2970,6 +3044,9 @@ def analyze(blue_tags: list[str], red_tags: list[str],
             "brain": _fusion.FUSION_VERSION,
             "versionCells": bool(_duel_index and _duel_index.status().get("versionCells")),
             "sources": dict(ctx.fx.stats),
+            # The card matchup model's version when it rated beside the fused
+            # rate, None when every rate is the fused rate alone.
+            "cardModel": ctx.fx.cm.get("brain") if ctx.fx.cm is not None else None,
         } if ctx.fx is not None and ctx.fx.on else {"available": False}),
         # WHAT THE THREE-SLOT RULE SKIPPED: lists Deckkies would otherwise have
         # offered whose cards cannot fill every special slot. Counted, because

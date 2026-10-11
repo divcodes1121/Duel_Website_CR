@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Counters read the cards: a card-against-card model beside the fused rate (`card-matchup-1.0`)** | **LIVE SINCE 2026-10-11 10:56 UTC.** Asked: make the Deck Counter's counters exceptional, and only on proof. Measured: the fused rate knows an opponent's archetype and rarely their cards (94% of ladder deck pairs were played once). A model with one weight a card and one a card-against-card, fitted on 10.6M ladder games and every duel, sits beside it. On 24,307 unseen duel games: log loss 0.6328 -> 0.6123; inside one duel the won game is rated above the lost one 58.4% -> 66.2%. Replayed on 392 player-sides with a neutral judge: the #1 deck 52.2 -> 58.7 against what really came, rows under 50% 40.7% -> 22.8%; the most repeated list is on 27.6% of lists (20.9% before). See [Counters read the cards](#counters-read-the-cards-2026-10-11) |
 | **Ten decks, specific to the opponent; duel decks from CRL players only (`team-scout-4.1`)** | **LIVE SINCE 2026-10-10 12:38 UTC.** Reported: the same decks under every opponent, duel decks from random players. Measured: one list was on 56% of all lists and the named duel list had no CRL game. Now one all-round deck at most per list, the rest must gain clearly more against that opponent than the typical deck does, duel lists only from the CRL group (1,706 -> 130), ten rows. Replay: distinct decks 316 -> 490, the most repeated list on 38% -> 25% of opponents, at -0.49 points on the top three. See [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10) |
 | **Counters for what they are likely to bring — the wide read, the living card manual, a CRL-only read for Coach Assist** | **LIVE SINCE 2026-10-10 AS `668d623`. Server by scp first, 11:42 UTC (the deployed files matched the last commit; backups `*.bak-20261010-114257-prewide`; only `royalweb` restarted; eight suites green there), the client about a minute after the push (`/api/health` and the served bundle). The trainer change went 11:54 UTC (`*.bak-20261010-115402-precrlfit`).** Reported the day 3.0 shipped: *"it's not good, because the opponent also counter-snipes"*. Measured on 700 friendly duels: an opponent brings their most played archetype one time in five, and is not counter-picking from their own lists — so brain `team-scout-4.0` reads their duel decks first, flattens the weights and scores against twenty of their lists. Old against new through the production path on 600 duels: top three **+1.55 points**, rows under 50% against what really came **10.6% → 4.7%**, the printed figure's gap to what happened **7.6 → 2.1 points**. The card manual (`All_Cards_stats.md`) is now pushed as data with one command; its balance log is applied (a nerf measured at −1.4 points). Coach Assist's read is fitted on the CRL group's duels only. See [Counters for what they are likely to bring](#counters-for-what-they-are-likely-to-bring-2026-10-10) |
 | **Counters to what they actually play — Deck Counter and Team Scout** | **LIVE SINCE 2026-10-10 AS `c1a1a0f` (superseded the same day by 4.0, the row above). Server by scp first, 06:49 UTC (the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; only `royalweb` restarted), the client 52 s after the push (06:54 UTC, `/api/health` and the build meta). Checked on production: the live API for three players (brain `team-scout-3.0`, pool 2,341, every list ordered, nothing under 50%, every family at 10%+ answered at 55%+, every suggested deck fielding three special slots), six suites green on the VPS, and 42/42 in a real browser SIGNED IN on https://deckkies.com — the Deck Counter's three views in both themes and at 390px, a scouting report and a match plan, the figures on screen equal to the API's. Built and verified on staged code against production data first.** Reported: *"the decks given for counter are very generic and rely on the meta — we need decks which counter their archetypes, whatever they play, at least at a good percentage"*. Both lists are now one engine's: what a player PLAYS (own-deck and duel games, the Decks screen's count), every vetted ladder list and every duel list as candidates (2,341, was 204), the strongest counters in the order of their percentage, no deck expected to lose, and an answer held for every archetype they play a tenth of the time. Every deck shows its win rate against each archetype they play; Deck Counter also reads the same decks per archetype and per counter card (the card manual says which cards answer which — the battle data ranks the decks). On 20 real opponents the weakest of the seven went from a median **52.3% to 63.6%**, lists out of order **18 → 0**, rows under 50% **6 → 0**; one opponent answers in 0.56 s (was 0.85). See [Counters to what they play](#counters-to-what-they-play-2026-10-10) |
@@ -222,6 +223,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27c. [Counters to what they play](#counters-to-what-they-play-2026-10-10)
 27d. [Counters for what they are likely to bring](#counters-for-what-they-are-likely-to-bring-2026-10-10)
 27e. [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10)
+27f. [Counters read the cards](#counters-read-the-cards-2026-10-11)
 28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
 29. [The layout engine — measure, then commit](#the-layout-engine--measure-then-commit)
 29a. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
@@ -12507,6 +12509,132 @@ the `.js` and the `.css`) and then never committed. See
 import is eager until that is fixed, and the reason is written at the import.
 
 ---
+
+## Counters read the cards (2026-10-11)
+
+**LIVE SINCE 2026-10-11, server 10:56 UTC** (backups `*.bak-20261011-105535-precardmodel`;
+only `royalweb` restarted). Asked for: *"enhance the Deck Counter so it suggests
+counters better — right now is fine, we need exceptional. Check machine learning
+models, compare, and only if proof happens will we do anything."*
+
+**What the fused rate could not see, measured first.** It knows an opponent's
+ARCHETYPE from thousands of games, and their actual CARDS only where list-level
+evidence exists — 22% of held-out games. Counting cannot close that gap: of the
+8.0 million deck pairs the ladder has produced, **94% were played exactly once**.
+Replacing the chain's prior with a model changed nothing (0.6811 against 0.6812):
+its evidence weights swamp any prior, so a model has to sit BESIDE the fused
+rate, not under it.
+
+**The comparison** (`brain-evidence/counter_ml_20261011/`, read-only on the
+server). Settings and stack weights were chosen on duels of 24 September to
+1 October; everything was then refitted and scored ONCE on **24,307 duel games
+from 1 to 11 October** nothing had seen. Who played (their running duel
+records) and the card-level gap are a fixed part of every fit and every score.
+Log loss, lower is better:
+
+| Predictor | Log loss | Against the fused rate |
+|---|---|---|
+| Coin | 0.6439 | |
+| The archetype matrix | 0.6400 | |
+| **The fused rate (production until now)** | **0.6328** | |
+| Logistic, which cards each side holds, no interactions | 0.6342 | no gain |
+| Logistic, card against card, duels only | 0.6181 | -0.0147 |
+| Low-rank (blade-chest / factorization) | the same as the row above | |
+| Logistic, card against card, ladder + duels (**the model**) | 0.6131 | -0.0197 |
+| Gradient-boosted trees (LightGBM), duels only | 0.6127 | -0.0200 |
+| **The fused rate and the model together (what shipped)** | **0.6123** | **-0.0205** [-0.0232, -0.0176] |
+| The fused rate, the model and the trees | 0.6089 | -0.0239 |
+
+For scale, fusing the ladder with the duels gained 0.0080 when it shipped.
+
+**It holds on every control**, and it picks better, which is the point:
+
+| Check | The fused rate | With the model |
+|---|---|---|
+| Inside ONE duel (same two pilots): the game a pilot won rated above the one they lost, 2,892 duels | 58.4% | **66.2%** (+7.8 [+5.9, +9.6]) |
+| The same, friendly duels only (352) | 59.6% | 65.2% |
+| Same opponent archetype: the quarter of lists rated highest, won over the group's average | 5.4 points | **12.4** |
+| Rows it calls 65% or better: how many, said, won | 1,085 / 69.0 / 67.3 | **4,314** / 70.9 / 70.0 |
+| Friendly duels (2,432 rows), log loss | 0.6461 | 0.6255 (-0.0206) |
+| The pilot had never played the list (16,385 rows) | 0.6421 | 0.6183 (-0.0238) |
+
+Where it does NOT help: against the 129 most common exact lists the fused rate
+is already as good (9.7 against 10.5 points, intervals overlap).
+
+**What it is.** `server/card_matchup.py` (pure Python): one weight a card and one
+a card-against-card, antisymmetric, so a deck's chance against another is
+
+    sum(main[mine]) - sum(main[theirs]) + sum(x(i, j) for i in mine, j in theirs)
+
+and the figure on a row is `0.19 * logit(fused rate) + 1.0 * model` (both weights
+fitted on the tuning week). It is linear in the opponent's deck, so one of their
+lists is prepared once and every candidate after that is eight additions; an
+answer took 0.37 s before and 0.42 s now. `server/card_matchup_train.py` fits it
+once a day (`royalweb-cardmatchup.timer`) from the ladder pair table (10.6M games)
+and every stored duel, and refuses to save a fit that does not beat "who is
+playing" on the newest fifth of duels. What it learned reads like the game:
+Ronin over P.E.K.K.A, Goblin Curse over Skeleton Army, Mother Witch over
+Graveyard, Executioner over Lava Hound, Electro Wizard over Inferno Dragon.
+
+**Who reads it.** `team_analysis._FusionContext.use_cards()` — the Deck Counter's
+"Bring this against them", Team Analysis, and each pool list's rate against the
+field (through the share of an archetype's lists holding each card, or a list the
+model likes would look like a counter to everybody). Coach Assist does not ask
+and is unmoved; `team_scout` is untouched and its brain is still 4.1. With no
+model trained every rate is the fused rate exactly as before.
+
+**Old lists against new, through the production code path** (staged modules,
+200 friendly duels from 1 October / 392 player-sides, a model fitted on duels
+BEFORE 1 October; the decks each opponent really brought). Each figure prefers
+its own lists when it is the judge, so the judge that counts is one neither arm
+uses — LightGBM on duels before 1 October:
+
+| | Before | Now |
+|---|---|---|
+| The #1 deck against what really came (neutral judge) | 52.2 | **58.7** (+6.5 [+5.7, +7.2]) |
+| Top three | 52.3 | 57.6 (+5.3) |
+| All ten | 51.9 | 55.3 (+3.4) |
+| Rows under 50% against what came | 40.7% | **22.8%** |
+| The printed figure minus the judge's, for the #1 | 9.8 | 5.8 |
+| Distinct decks suggested (of 3,920 rows) | 401 | 439 |
+| The most repeated list is on | 20.9% of lists | **27.6%** (next: 19.4 -> 25.3) |
+| Rows the engine itself shows a hole in (under 45% against a family they bring) | 13.0% | 23.3% |
+| Decks in both the old list and the new, of ten | | 1.85 (same #1: 5.6%) |
+
+By the old figure as judge the new lists are 3.0 points WORSE at #1, and by the
+new figure 5.5 better; the neutral judge and the held-out games agree with the
+second. **Two costs, stated:** the two most repeated lists are on more opponents
+than before (a stricter all-round discount was tried at 0.75 and 1.0 and made
+both the repetition and the value worse, so the rule was left alone), and more
+rows show a weak matchup on their chips — the model sees weaknesses the fused
+rate was blind to.
+
+**What was read first:** the FedCSIS 2019 Clash Royale challenge and the AAIA'18
+Hearthstone one (logistic ensembles and boosted trees), game-avatar embeddings
+and factorization machines (pairwise models beat plain logistic regression),
+NeuralAC (AAAI 2021: boosted trees beat logistic regression; attention adds
+about 0.02 AUC over them on MOBA data), the blade-chest model, and RoyaleAPI's
+own 7-of-8 and 6-of-8 fuzzy matchups. A neural model and tabular foundation
+models were not tried; the boosted trees stand in for that ceiling, and they
+cannot be scored per request in plain Python.
+
+Checked live after the deploy: `/api/analytics/status` -> `cardMatchup`
+(`available`, trained 10:55 UTC, 10,587,919 ladder games, 449,330 duel games,
+its own holdout 0.6539 -> 0.6262 on 89,866 games), and the Deck Counter's list
+for three real players (`cardModel: card-matchup-1.0`, ten rows in the order of
+their figure, every deck with three special slots, ~2.2 s warm). The trainer's
+first run under its own timer finished at 11:03 UTC (7m20s, exit 0, the page
+cache intact). Tests:
+`server/test_card_matchup.py` 34 and `test_card_matchup_train.py` 36 (new; the
+second needs numpy and says so where it is missing), `test_team_analysis`
+241 -> 266. **4,742 Python checks across 80 suites** (only the known
+`test_ml_21a`), **1,673 vitest across 69 files**. Main JS 395.96 kB gzip.
+
+**Not done:** the clan-war side of the test is 90% of its games and the friendly
+result rests on 2,432; the ladder-trained fit reads the ladder table whole, test
+days included, as the fused rate does (the duels-only fit has no such overlap and
+gains -0.0147); Coach Assist's figures are unchanged; nothing on the screens
+says a model is involved — the row shows the result.
 
 ## Ten decks, specific to the opponent (2026-10-10)
 

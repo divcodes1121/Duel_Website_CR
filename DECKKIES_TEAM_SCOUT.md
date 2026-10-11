@@ -739,6 +739,33 @@ a snapshot of the day it was saved; run it again for today's lists.
 probed); Coach Assist's own-deck suggestions are untouched, only its population
 duel picks narrowed to the group; the win model still learns from every duel.
 
+## 4m. The figure reads the cards (2026-10-11, brain still 4.1)
+
+`team_scout` did not change. What changed is the RATE it is handed: on the Deck
+Counter's list and Team Analysis every `winRate` is now
+`0.19 * logit(fused rate) + card model` (`card_matchup`, wired in
+`team_analysis._FusionContext.use_cards()`), and each pool list's `fieldRate`
+is read the same way, so `lift` still compares like with like.
+
+On 24,307 held-out duel games the pair scored 0.6123 log loss against the fused
+rate's 0.6328, and inside one duel rated the game a pilot won above the one they
+lost 66.2% of the time against 58.4%. Replayed through the production path on
+392 player-sides with a neutral judge, the #1 deck is worth 58.7 against 52.2
+and rows under 50% against what really came fall from 40.7% to 22.8%.
+
+**What a reader of this file needs to know:**
+
+- `FLOOR_RATE`, `GOOD_RATE`, `WORST_FLOOR`, `MIN_LIFT`, `GENERIC_WEIGHT` and
+  `HOLE_COST` were NOT re-tuned. The figure is more spread out than the fused
+  rate (it calls 65%+ four times as often, and those calls hold), so more rows
+  clear `MIN_LIFT` (all-round rows 856 -> 330 of 3,920) and more rows show a
+  hole (13.0% -> 23.3%). `GENERIC_WEIGHT` 0.75 and 1.0 were replayed: more
+  repetition and less value both times. `HOLE_COST` 6 cut the holes to 17.9%
+  for 0.6 points of the #1 — measured, not taken.
+- The most repeated list is on 27.6% of opponents' lists (20.9% before).
+- `coach_daily` and Coach Assist are unmoved: neither context asks for the model.
+- The report says which model rated it: `fusion.cardModel`, `bring.cardModel`.
+
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
 Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it
