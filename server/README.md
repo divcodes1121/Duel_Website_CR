@@ -2028,6 +2028,80 @@ twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
 
 
+## The day window on the suggestions (`duel_index.activity`, `team_analysis._window_pool`, 2026-10-11)
+
+The window a reader picks (`days` on `/api/analytics/teams`, the date range on
+`/api/analytics/counter/<tag>`) used to choose which of the opponent's games were
+read and nothing else. It now also chooses which lists of the counter pool may
+be suggested. No new route; no change to `team_scout`, to a rate, or to
+`coach_daily` / Coach Assist.
+
+**The table.** `duel_index.build` has a stage 3c, `_build_activity`, that writes
+
+    activity(deck, day, lg, lw, lm, dg, dw)      PRIMARY KEY (deck, day)
+
+for every hub list (the catalogue, the seeds and the board: 2,516 lists) over
+`ACTIVITY_DAYS` 160. `lg`/`lw` are ladder games and wins of pairs that met ONCE
+(`pair_matchup_agg.last_seen` is then the game's day); `lm` is pairs that met
+more than once and last met that day (at least one game, counted as one);
+`dg`/`dw` are duel games and wins from the stored `games`. The ladder half is
+noted by `_history(src, key, days)` during the read `_build_vcells` already
+makes — `last_seen` is the last column of both covering indexes — so there is no
+second pass. Every hub has a row for the newest day, zeros when it was not
+played: a reader can tell "not played" from "a list the build did not cover".
+
+The stage runs only after a finished version-cell read (half the hubs would
+call the other half unplayed), and a failure costs the day window its filter
+and nothing else: the last build's table stays, with the day it holds in `meta`
+(`activityDay`), and a reader checks its age. A ladder table with no
+`last_seen` column writes none. `duel_index.activity()` returns `{"day",
+"games": {list key: {age in days: games}}}`, loaded once per build;
+`/api/analytics/status` -> `duelIndex.activityDay` / `activityDecks`.
+
+**The rule** (`team_analysis.window_state(act, days, span, scale)`):
+
+| state | when | suggested |
+|---|---|---|
+| `absent` | under `WINDOW_MIN_GAMES` 5 in the window | no |
+| `fading` | share of the pool's play under `WINDOW_FADE` 0.5 of its share in the `span` days before | no |
+| `easing` / `steady` / `rising` | by the same ratio (`WINDOW_EASE` 0.8, `WINDOW_RISE` 1.25) | yes |
+| `new` | played in the window, not at all before it | yes |
+| `played` | played, and too little before to compare (`span` under `WINDOW_MIN_PREVIOUS` 14, or the previous share predicts under `WINDOW_MIN_EXPECTED` 10 games) | yes |
+
+`span` is `WINDOW_PREVIOUS_DAYS` 60, or what the table has. `scale` is the pool's
+own games in the window over its games in the span: the comparison is of
+shares, because the tracked roster's growth made every list "rise" by games.
+
+**The pool** (`_window_pool(days) -> (candidates, info)`). `_build_counter_pool`
+puts each candidate's play on it (`_Candidate.act`; None for a list the build
+did not cover, which is kept — unknown is not unplayed) and keeps the pool's
+totals by age. A window is worked out once a pool and remembered by `days`.
+Ages count back from the table's newest day, not from the opponent's last
+battle. NOT APPLIED — the whole pool, exactly as before — when there is no
+window, no table, a table older than `WINDOW_STALE_DAYS` 3, a window longer
+than the table (All Data), or when it would keep under `WINDOW_MIN_KEEP` a
+quarter of the pool. `info` says which, and is published as `pool.window`
+without its per-list map.
+
+**The wiring.** `analyze(blue, red, days)` -> `_window_pool(days)`; a scouting
+report's `cards` are that pool, and a match plan's folders rate it beside the
+squad's own decks (`_folder(..., pool=)`). `bring(tag, since, until)` passes the
+length of its range, `DEFAULT_DAYS` when there is none. `_finish` puts `recent
+{days, games, trend}` on a row whose list the window read. The attribute on the
+duel context is `pool_window` — `window` is that class's own method, and the
+first cut assigned a dict over it (seen reading the class, before a run).
+
+**Why the rate is untouched.** Counting a list's window games several times an
+older game in its own record was replayed on three held-out weeks: no gain at 7
+days, 0.00015 log loss at 15, 0.00032 at 30, one week of three worse. Lists
+whose share halved do play under their record (0.5 to 4.1 points against a
+steady list, graded by how far they fell) — which is the reason to leave them
+out rather than to print them a different number.
+
+**Deploying it** needs the index rebuilt once with the new module BEFORE the
+service restart (`python3 duel_index.py --build`, env sourced), or the first
+requests answer `no_activity` until the next poll's build.
+
 ## The card matchup model (`card_matchup.py`, `card_matchup_train.py`, 2026-10-11)
 
 The figure on every Deck Counter and Team Analysis row is now the fused rate AND

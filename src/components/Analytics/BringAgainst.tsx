@@ -17,7 +17,10 @@ import {
   balanceChips,
   familyChips,
   playsTitle,
+  recentTitle,
   shareLabel,
+  windowLabel,
+  windowTitle,
   type BringView,
 } from '../../utils/bringAgainst';
 import styles from './BringAgainst.module.css';
@@ -123,7 +126,12 @@ function BringDeck({
             most rows says nothing. A nerf is already in the figure. */}
         <span
           className={styles.figure}
-          title={[figureTitle, ...changed.map((m) => m.title)].filter(Boolean).join(' · ') || undefined}
+          title={
+            [figureTitle, recentTitle(deck.recent), ...changed.map((m) => m.title)]
+              .filter(Boolean)
+              .join(' · ') || undefined
+          }
+          data-trend={deck.recent?.trend}
           data-balance={changed.length ? changed.map((m) => m.kind).join(' ') : undefined}
         >
           {pct(figure ?? deck.expectedWinRate)}
@@ -261,7 +269,19 @@ export function BringAgainst({ bring }: { bring: BringReport }) {
         value={view}
         onChange={setView}
       />
-      <p className={styles.note}>{VIEW_NOTE[view]}</p>
+      {/* THE DAY RANGE REACHES THE SUGGESTIONS (2026-10-11): the decks below
+          are ones played in the days picked above, and the count says how many
+          of the pool that left. Nothing is drawn when the range is All Data or
+          the server could not apply it — the whole pool was used. */}
+      <p className={styles.note}>
+        {VIEW_NOTE[view]}
+        {windowLabel(bring.pool.window) && (
+          <span data-window title={windowTitle(bring.pool.window)}>
+            {' '}
+            {windowLabel(bring.pool.window)}.
+          </span>
+        )}
+      </p>
 
       {view === 'best' && (
         <ol className={styles.decks} data-view="best">

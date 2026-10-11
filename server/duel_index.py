@@ -140,6 +140,11 @@ VCELL_MATCH_CACHE = 400_000
 #: Threat hubs whose version cells a reader keeps in memory, per build.
 VCELL_CACHE = 512
 
+#: HOW MANY DAYS OF PLAY-BY-DAY THE BUILD KEEPS for every hub list
+#: (`activity`): the longest day window the site offers (90) plus the period
+#: a window is compared with (60), and a little slack.
+ACTIVITY_DAYS = 160
+
 
 def _dcx():
     # Imported late: `deck_counter` is heavy and only the classifier is needed.
@@ -543,36 +548,146 @@ def _version_hubs(catalogue_keys) -> tuple[list[str], set[str]]:
     return sorted(cands), threats
 
 
-def _history(src: sqlite3.Connection, key: str) -> dict[str, list[int]]:
+def _dated(src: sqlite3.Connection) -> bool:
+    """Whether the ladder pair table says WHEN a pair last met (`last_seen`)."""
+    try:
+        return any(r[1] == "last_seen"
+                   for r in src.execute("PRAGMA table_info(pair_matchup_agg)"))
+    except sqlite3.Error:
+        return False
+
+
+def _note_day(days: dict, last: str | None, n: int, won: int) -> None:
+    """One pair row into a list's play by day: `{day: [games, wins, pairs]}`.
+
+    A PAIR ROW HAS ONE DATE, the day the two lists last met. For a pair that
+    met once — 94% of the table — that is the day of its game, exactly. A pair
+    that met more than once says only that AT LEAST ONE of its games was that
+    day, so it is counted apart (`pairs`), never as `n` games on one day.
+    """
+    day = (last or "")[:8]
+    if n <= 0 or len(day) != 8 or not day.isdigit():
+        return
+    d = days.get(day)
+    if d is None:
+        d = days[day] = [0, 0, 0]
+    if n == 1:
+        d[0] += 1
+        d[1] += won
+    else:
+        d[2] += 1
+
+
+def _history(src: sqlite3.Connection, key: str,
+             days: dict | None = None) -> dict[str, list[int]]:
     """`{opponent list: [games, this list's wins]}` from the ladder, both
     sides of `pair_matchup_agg` folded (a row is stored once, either way round;
-    draws are not games here, as in every ladder rate on the site)."""
+    draws are not games here, as in every ladder rate on the site).
+
+    With `days` (a dict to fill) the same read also says WHEN the list was
+    played (`_note_day`). It is the same covering index either way — the date
+    is its last column — so the play by day costs no second pass.
+    """
     out: dict[str, list[int]] = {}
-    for opp, w, l in src.execute(
-            "SELECT deck_b, a_wins, a_losses FROM pair_matchup_agg WHERE deck_a = ?", (key,)):
+    if days is None:
+        qa = "SELECT deck_b, a_wins, a_losses, NULL FROM pair_matchup_agg WHERE deck_a = ?"
+        qb = "SELECT deck_a, a_wins, a_losses, NULL FROM pair_matchup_agg WHERE deck_b = ?"
+    else:
+        qa = "SELECT deck_b, a_wins, a_losses, last_seen FROM pair_matchup_agg WHERE deck_a = ?"
+        qb = "SELECT deck_a, a_wins, a_losses, last_seen FROM pair_matchup_agg WHERE deck_b = ?"
+    for opp, w, l, last in src.execute(qa, (key,)):
         r = out.get(opp)
         if r is None:
             out[opp] = [w + l, w]
         else:
             r[0] += w + l
             r[1] += w
-    for opp, w, l in src.execute(
-            "SELECT deck_a, a_wins, a_losses FROM pair_matchup_agg WHERE deck_b = ?", (key,)):
+        if days is not None:
+            _note_day(days, last, w + l, w)
+    for opp, w, l, last in src.execute(qb, (key,)):
         r = out.get(opp)           # stored the other way round: our wins are a_losses
         if r is None:
             out[opp] = [w + l, l]
         else:
             r[0] += w + l
             r[1] += l
+        if days is not None:
+            _note_day(days, last, w + l, l)
     return out
 
 
-def _build_vcells(con: sqlite3.Connection, source: str, catalogue_keys) -> dict | None:
+def _build_activity(con: sqlite3.Connection, ladder: dict[str, dict]) -> dict | None:
+    """Write `activity_new`: every hub list's games BY DAY, ladder and duels.
+
+    WHAT IT IS FOR: a day window on Team Analysis or the Deck Counter asks
+    "which of the lists Deckkies may suggest are being played in THESE days",
+    and nothing else on the site can answer it — every matchup record here is
+    a total with no dates. `ladder` is what `_history` noted while the version
+    cells were read (`{list: {day: [games, wins, pairs]}}`); the duels come
+    from the stored games, all of them, not only the evidence window.
+
+    EVERY HUB HAS A ROW FOR THE NEWEST DAY, zeros when it was not played, so a
+    reader can tell "not played" from "a list this build did not cover".
+    Returns counts, or None when there is nothing to write.
+    """
+    if not ladder:
+        return None
+    duel: dict[str, dict[str, list[int]]] = {}
+    for bt, ad, bd, win in con.execute("SELECT battle_time, a_deck, b_deck, winner FROM games"):
+        day = (bt or "")[:8]
+        if len(day) != 8 or not day.isdigit():
+            continue
+        for deck, won in ((ad, win == 1), (bd, win == 2)):
+            if deck in ladder:
+                d = duel.setdefault(deck, {}).get(day)
+                if d is None:
+                    d = duel[deck][day] = [0, 0]
+                d[0] += 1
+                d[1] += int(won)
+    newest = max([d for days in ladder.values() for d in days]
+                 + [d for days in duel.values() for d in days], default="")
+    anchor = _day_of(newest)
+    if anchor is None:
+        return None
+    floor = (anchor - datetime.timedelta(days=ACTIVITY_DAYS - 1)).strftime("%Y%m%d")
+    rows = []
+    for key, days in ladder.items():
+        dd = duel.get(key) or {}
+        seen = False
+        for day in sorted(set(days) | set(dd)):
+            if day < floor or day > newest:
+                continue
+            lg, lw, lm = days.get(day) or (0, 0, 0)
+            dg, dw = dd.get(day) or (0, 0)
+            rows.append((key, day, lg, lw, lm, dg, dw))
+            seen = seen or day == newest
+        if not seen:
+            rows.append((key, newest, 0, 0, 0, 0, 0))
+    con.executescript(
+        """
+        DROP TABLE IF EXISTS activity_new;
+        CREATE TABLE activity_new(
+            deck TEXT NOT NULL, day TEXT NOT NULL,
+            lg INTEGER NOT NULL, lw INTEGER NOT NULL, lm INTEGER NOT NULL,
+            dg INTEGER NOT NULL, dw INTEGER NOT NULL,
+            PRIMARY KEY (deck, day)) WITHOUT ROWID;
+        """)
+    con.execute("BEGIN")
+    con.executemany("INSERT INTO activity_new VALUES (?,?,?,?,?,?,?)", rows)
+    con.execute("COMMIT")
+    return {"decks": len(ladder), "rows": len(rows), "day": newest}
+
+
+def _build_vcells(con: sqlite3.Connection, source: str, catalogue_keys,
+                  activity: dict | None = None) -> dict | None:
     """Write `vhub_new` and `vcell_new`. Run while `temp.sides` still holds the
     window's pilot-adjusted duel sides. Returns counts, or None when there is
     nothing to build — no counter snapshot means no threat hubs, and then the
     last build's cells stay rather than being swapped for tables that were
-    never written."""
+    never written.
+
+    `activity`, when given, is filled with each hub's ladder play by day off
+    the same read (`_history`), for `_build_activity`."""
     cands, threats = _version_hubs(catalogue_keys)
     if not cands or not threats:
         return None
@@ -615,8 +730,12 @@ def _build_vcells(con: sqlite3.Connection, source: str, catalogue_keys) -> dict 
 
     src = cd.connect(source)
     try:
+        dated = activity is not None and _dated(src)
         for key, cid in hub_id.items():
-            hist = _history(src, key)
+            days = {} if dated else None
+            hist = _history(src, key, days)
+            if dated:
+                activity[key] = days
             # V2 — this list against every threat's family.
             acc: dict[int, list[float]] = {}
             for opp, (n, w) in hist.items():
@@ -870,8 +989,9 @@ def build(path: str | None = None, source: str | None = None, *, full: bool = Fa
         # no version cells scores at the archetype levels, which is the fused
         # rate minus its narrowest evidence — never a wrong one.
         t_v = time.perf_counter()
+        played: dict[str, dict] = {}
         try:
-            vstats = _build_vcells(con, source, [k for _, k, _ in cat])
+            vstats = _build_vcells(con, source, [k for _, k, _ in cat], played)
         except Exception as exc:  # noqa: BLE001
             if con.in_transaction:
                 con.execute("ROLLBACK")
@@ -882,6 +1002,24 @@ def build(path: str | None = None, source: str | None = None, *, full: bool = Fa
             vstats = None
         t_vcell = time.perf_counter() - t_v
         con.execute("DROP TABLE IF EXISTS temp.sides")
+
+        # 3c. Every hub's play BY DAY (`activity`), from the read the version
+        # cells just made. Only a finished read is written: half the hubs
+        # would call the other half "not played". A failure here costs the
+        # day window its filter and nothing else — the last build's table
+        # stays, and a reader checks how old it is.
+        astats = None
+        if vstats is not None:
+            try:
+                astats = _build_activity(con, played)
+            except Exception as exc:  # noqa: BLE001
+                if con.in_transaction:
+                    con.execute("ROLLBACK")
+                con.execute("DROP TABLE IF EXISTS activity_new")
+                print(f"duel_index: play by day skipped: {type(exc).__name__}: {exc}",
+                      file=sys.stderr)
+                astats = None
+        del played
 
         # 4. The swap.
         built_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -913,6 +1051,10 @@ def build(path: str | None = None, source: str | None = None, *, full: bool = Fa
             swap += ["vhub", "vcell"]
             stamp.update({"vhubs": str(vstats["hubs"]), "vthreats": str(vstats["threats"]),
                           "vcells": str(vstats["cells"]), "vcellSeconds": f"{t_vcell:.1f}"})
+        if astats is not None:
+            swap += ["activity"]
+            stamp.update({"activityDay": astats["day"], "activityDecks": str(astats["decks"]),
+                          "activityRows": str(astats["rows"])})
         con.execute("BEGIN IMMEDIATE")
         for t in swap:
             con.execute(f"DROP TABLE IF EXISTS {t}")
@@ -934,6 +1076,7 @@ def build(path: str | None = None, source: str | None = None, *, full: bool = Fa
         "rows": n_rows,
         "catalogue": len(recs),
         "versionCells": vstats,
+        "activity": astats,
         "seconds": {"ingest": round(t_ingest, 1), "aggregate": round(t_agg, 1),
                     "versionCells": round(t_vcell, 1),
                     "total": round(time.time() - started, 1)},
@@ -945,7 +1088,7 @@ def build(path: str | None = None, source: str | None = None, *, full: bool = Fa
 
 _lock = threading.Lock()
 _state: dict = {"buildId": None, "meta": {}, "checked": 0.0, "catalogue": None,
-                "vhubs": None, "vhub_keys": None}
+                "vhubs": None, "vhub_keys": None, "activity": None}
 _cache: "OrderedDict[str, dict]" = OrderedDict()
 _vcache: "OrderedDict[str, dict]" = OrderedDict()
 
@@ -973,7 +1116,8 @@ def _current() -> dict | None:
             return _state["meta"] if _usable(_state["meta"]) else None
         _state["checked"] = now
         if not os.path.exists(PATH):
-            _state.update(buildId=None, meta={}, catalogue=None, vhubs=None, vhub_keys=None)
+            _state.update(buildId=None, meta={}, catalogue=None, vhubs=None, vhub_keys=None,
+                          activity=None)
             _vcache.clear()
             return None
         try:
@@ -983,14 +1127,15 @@ def _current() -> dict | None:
             finally:
                 con.close()
         except sqlite3.Error:
-            _state.update(buildId=None, meta={}, catalogue=None, vhubs=None, vhub_keys=None)
+            _state.update(buildId=None, meta={}, catalogue=None, vhubs=None, vhub_keys=None,
+                          activity=None)
             _vcache.clear()
             return None
         if meta.get("buildId") != _state["buildId"]:
             _cache.clear()
             _vcache.clear()
             _state.update(buildId=meta.get("buildId"), catalogue=None, vhubs=None,
-                          vhub_keys=None)
+                          vhub_keys=None, activity=None)
         _state["meta"] = meta
         return meta if _usable(meta) else None
 
@@ -1135,6 +1280,55 @@ def version_cells(threat_cards) -> dict[str, tuple] | None:
         while len(_vcache) > VCELL_CACHE:
             _vcache.popitem(last=False)
     return out
+
+
+def activity() -> dict | None:
+    """Each hub list's games by day, as AGES: `{"day": "YYYYMMDD", "games":
+    {list key: {age in days: games}}}`, age 0 being `day` (the newest day the
+    build saw). None when this build has no such table.
+
+    A day's games are the ladder games of pairs that met once, one for each
+    pair that met more than once and last met that day (`_note_day`), and
+    the duel games. A hub that was not played has an empty dict; a list that
+    is not in `games` at all was not covered by the build, which is a
+    different answer. Loaded once per build.
+    """
+    if _current() is None:
+        return None
+    with _lock:
+        if _state["activity"] is not None:
+            return _state["activity"] or None
+        day = (_state["meta"] or {}).get("activityDay") or ""
+    anchor = _day_of(day)
+    out: dict = {}
+    if anchor is not None:
+        try:
+            con = _ro(PATH)
+            try:
+                rows = con.execute(
+                    "SELECT deck, day, lg + lm + dg FROM activity").fetchall()
+            finally:
+                con.close()
+        except sqlite3.Error:
+            rows = None
+        if rows is not None:
+            games: dict[str, dict[int, int]] = {}
+            ages: dict[str, int] = {}
+            for key, d, n in rows:
+                per = games.setdefault(key, {})
+                if not n:
+                    continue
+                age = ages.get(d)
+                if age is None:
+                    when = _day_of(d)
+                    age = ages[d] = (anchor - when).days if when is not None else -1
+                if age >= 0:
+                    per[age] = per.get(age, 0) + int(n)
+            out = {"day": day, "games": games}
+    with _lock:
+        # An empty dict remembers "looked, nothing there" for this build.
+        _state["activity"] = out
+    return out or None
 
 
 def _player_rows(tag: str, since: str | None, until: str | None) -> list[tuple]:
@@ -1597,6 +1791,10 @@ def status() -> dict:
         "versionHubs": num("vhubs"),
         "versionThreats": num("vthreats"),
         "versionCells": num("vcells"),
+        # Play by day for every hub list (`activity`): the newest day it
+        # holds, and how many lists. None on a build without it.
+        "activityDay": meta.get("activityDay"),
+        "activityDecks": num("activityDecks"),
         "buildSeconds": float(meta["buildSeconds"]) if meta.get("buildSeconds") else None,
     }
 

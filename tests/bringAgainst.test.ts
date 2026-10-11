@@ -11,7 +11,10 @@ import {
   familyChips,
   patchDay,
   playsTitle,
+  recentTitle,
   shareLabel,
+  windowLabel,
+  windowTitle,
 } from '../src/utils/bringAgainst';
 
 /* "Bring this against them" (the Deck Counter) and the per-archetype chips
@@ -210,7 +213,7 @@ describe('the Deck Counter’s list is the scouting engine’s', () => {
   it('a balance change is the figure’s tooltip on both screens, never a mark on the row', () => {
     expect(block).toMatch(/balanceChips\(deck, cardName\)/);
     expect(folders).toMatch(/balanceChips\(rec, /);
-    expect(block).toMatch(/title=\{\[figureTitle, \.\.\.changed\.map\(\(m\) => m\.title\)\]/);
+    expect(block).toMatch(/\[figureTitle, recentTitle\(deck\.recent\), \.\.\.changed\.map\(\(m\) => m\.title\)\]/);
     expect(block).not.toContain('styles.balance');
     expect(folders).not.toContain('styles.recBalance');
   });
@@ -250,5 +253,82 @@ describe('the Deck Counter’s list is the scouting engine’s', () => {
         .replace(/^\s*\/\/.*$/gm, '');
       expect(visible.toLowerCase()).not.toContain(banned.toLowerCase());
     }
+  });
+});
+
+describe('the day window reaches the suggestions (2026-10-11)', () => {
+  const block = read('src/components/Analytics/BringAgainst.tsx');
+  const folders = read('src/components/Analytics/TeamAnalysis/TeamFolders.tsx');
+  const screen = read('src/components/Analytics/TeamAnalysis/TeamAnalysis.tsx');
+  const WINDOW = {
+    days: 7,
+    applied: true,
+    reason: null,
+    pool: 786,
+    kept: 543,
+    minGames: 5,
+    previousDays: 60,
+    notPlayed: 30,
+    fading: 213,
+  } as const;
+
+  it('says how many of the pool were played in the days picked', () => {
+    expect(windowLabel(WINDOW)).toBe('543 of 786 decks in play · last 7 days');
+    expect(windowLabel({ ...WINDOW, pool: 2341, kept: 1602 })).toBe(
+      '1,602 of 2,341 decks in play · last 7 days',
+    );
+  });
+
+  it('says nothing when the window was not applied: the whole pool was used', () => {
+    expect(windowLabel({ ...WINDOW, applied: false, reason: 'stale' })).toBeUndefined();
+    expect(windowLabel({ ...WINDOW, days: null })).toBeUndefined();
+    expect(windowLabel(undefined)).toBeUndefined();
+    expect(windowLabel(null)).toBeUndefined();
+    expect(windowTitle({ ...WINDOW, applied: false, reason: 'thin' })).toBeUndefined();
+  });
+
+  it('the count’s tooltip names what was left out, in figures', () => {
+    expect(windowTitle(WINDOW)).toBe(
+      'Suggestions come from decks played in the last 7 days. 30 had under 5 games in them. ' +
+        '213 hold under half the share of play they had in the 60 days before.',
+    );
+    // No previous days to compare with: nothing is claimed about a share.
+    expect(windowTitle({ ...WINDOW, notPlayed: 0, fading: 0, previousDays: 0 })).toBe(
+      'Suggestions come from decks played in the last 7 days.',
+    );
+    expect(windowTitle({ ...WINDOW, fading: 12, previousDays: 0 })).not.toContain('share');
+  });
+
+  it('a row’s play in the window is a tooltip line, with which way its share moved', () => {
+    expect(recentTitle({ days: 7, games: 429, trend: 'rising' })).toBe(
+      'Played 429 times in the last 7 days · share of play rising',
+    );
+    expect(recentTitle({ days: 30, games: 1485, trend: 'easing' })).toBe(
+      'Played 1,485 times in the last 30 days · share of play easing',
+    );
+    expect(recentTitle({ days: 7, games: 1, trend: 'new' })).toBe(
+      'Played 1 time in the last 7 days · new in these days',
+    );
+    // Too little before the window to compare with: the count alone.
+    expect(recentTitle({ days: 7, games: 9, trend: 'played' })).toBe(
+      'Played 9 times in the last 7 days',
+    );
+    expect(recentTitle(undefined)).toBeUndefined();
+  });
+
+  it('both screens put it in the figure’s tooltip, never a mark on the row', () => {
+    expect(block).toMatch(/\[figureTitle, recentTitle\(deck\.recent\), \.\.\.changed\.map/);
+    expect(folders).toMatch(/recentTitle\(rec\.recent\),/);
+    expect(block).not.toContain('styles.recent');
+    expect(folders).not.toContain('styles.recRecent');
+  });
+
+  it('each screen draws the count once, from what the SERVER said it did', () => {
+    expect(block).toMatch(/windowLabel\(bring\.pool\.window\) && \(/);
+    expect(screen).toMatch(/windowLabel\(report\.pool\.window\) && \(/);
+    expect(screen).toMatch(/data-window title=\{windowTitle\(report\.pool\.window\)\}/);
+    // Not from the chip the reader has pressed: a board on screen was made
+    // with ITS days, and the chip may have moved since.
+    expect(screen).not.toMatch(/windowLabel\([^)]*days/);
   });
 });

@@ -35,6 +35,7 @@ import { FolderGallery, OpenFolder, RosterRead } from './TeamFolders';
 import { SavedAnalyses } from './TeamSaves';
 import styles from './TeamAnalysis.module.css';
 import { DAY_PRESETS, DEFAULT_DAYS, dayChip } from '../../../utils/datePresets';
+import { windowLabel, windowTitle } from '../../../utils/bringAgainst';
 
 /**
  * TEAM ANALYSIS — a roster read, or two rosters matched against each other.
@@ -701,6 +702,18 @@ export function TeamAnalysis() {
                 : report.pool.reason === 'no_blue_history'
                   ? 'Nothing stored for your side yet.'
                   : `No deck on your side has ${report.pool.minGames}+ games.`}
+            </p>
+          )}
+
+          {/* THE HISTORY WINDOW REACHES THE SUGGESTIONS (2026-10-11). The days
+              picked used to choose which of the OPPONENT'S games were read and
+              nothing else; they now also choose which decks may be suggested —
+              the ones played in those days. One count, so the filter can be
+              seen; which lists were left out is its tooltip. Absent when the
+              window was not applied (an older server, or a saved board). */}
+          {windowLabel(report.pool.window) && (
+            <p className={styles.note} data-window title={windowTitle(report.pool.window)}>
+              {windowLabel(report.pool.window)}
             </p>
           )}
 

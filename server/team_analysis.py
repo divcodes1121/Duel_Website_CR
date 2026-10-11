@@ -365,6 +365,59 @@ RESOLVE_SEATED = 40
 SQUAD_POOL = 80
 SQUAD_POOL_PER_FAMILY = 8
 
+# ── The day window reaches the suggestions (2026-10-11) ─────────────────────
+#
+# ASKED: "when we are filtering days like 7D, 14D I want that you filter the
+# recommended decks given too in those same days ... read the battles from
+# those days too and then see weightage of previous + the days and see which
+# is heavier ... we don't need too old decks as they won't be in meta."
+#
+# Until now the window chose which of the OPPONENT'S games were read and
+# nothing else: the counter pool was the same 786 lists at 7 days and at 90.
+# Measured on that pool (2026-10-11, read-only, `brain-evidence/
+# window_20261011/`): at 7 days 32 lists had under five games, and 218 had
+# under half the share of play they held in the 60 days before. A list whose
+# share halved won 52.5% the following week, a steady one 55.4%, a rising one
+# 56.9% (three held-out weeks, 1.0M games).
+#
+# WHAT WAS MEASURED AND NOT BUILT: counting a list's window games several
+# times an older game in its own record. Three held-out weeks: no gain at 7
+# days (log loss 0.68108 at every weight), 0.00015 at 15 days, 0.00032 at 30,
+# and one week of the three worse. So the window decides WHICH lists may be
+# suggested; the figure printed beside one is unchanged.
+
+#: Games in the window for a list to count as played in it.
+WINDOW_MIN_GAMES = 5
+
+#: "Previous" is this many days before the window (less when the record is
+#: shorter; no comparison at all under `WINDOW_MIN_PREVIOUS`).
+WINDOW_PREVIOUS_DAYS = 60
+WINDOW_MIN_PREVIOUS = 14
+
+#: A list's share of the pool's play in the window, against its share in the
+#: previous days. Under `WINDOW_FADE` the previous days are the heavier side by
+#: two to one: the list belongs to the meta before this one.
+WINDOW_FADE = 0.5
+WINDOW_EASE = 0.8
+WINDOW_RISE = 1.25
+
+#: Games the previous share predicts for the window before "it fell" means
+#: anything: five games where ten were expected is a fall, one where two were
+#: expected is a week.
+WINDOW_MIN_EXPECTED = 10.0
+
+#: WHICH STATES ARE NOT SUGGESTED. See `window_state`.
+WINDOW_DROP = ("absent", "fading")
+
+#: A play-by-day table older than this many days is not applied (the index
+#: builds after every poll; an old one means the build is not running).
+WINDOW_STALE_DAYS = 3
+
+#: If the window would keep less than this share of the pool it is not
+#: applied: that is a data fault or a window too thin to choose by, and a
+#: list of ten drawn from a handful of lists is the generic list again.
+WINDOW_MIN_KEEP = 0.25
+
 #: Decks holding a card before the card can be called a counter: the mean of
 #: fewer is one list's result wearing a card's name.
 CARD_MIN_DECKS = 6
@@ -1028,9 +1081,13 @@ class _Candidate:
 
     __slots__ = ("cards", "key", "archetype", "name", "art", "inferred", "owner",
                  "games", "wins", "win_rate", "use_rate", "profile", "origin", "memo",
-                 "field")
+                 "field", "act")
 
     def __init__(self, deck: dict, owner: dict | None, profile: "_DeckProfile"):
+        # WHEN THE LIST WAS PLAYED, for a pool candidate: `{age in days:
+        # games}` off the duel index (`_pool_activity`). None when the build
+        # did not cover the list — unknown, which is not "not played".
+        self.act = None
         # THE LIST'S OWN RATE AGAINST THE FIELD, for a pool candidate
         # (`_set_field_rates`); None for a teammate's deck, about which
         # nothing general is known.
@@ -1272,7 +1329,8 @@ def _scout_candidates() -> list["_Candidate"]:
 
 
 #: The counter pool, kept between requests: `{"key", "cands", "stats"}`.
-_COUNTER_POOL: dict = {"key": None, "cands": [], "stats": {}, "building": False}
+_COUNTER_POOL: dict = {"key": None, "cands": [], "stats": {}, "building": False,
+                       "activity": None}
 _COUNTER_LOCK = threading.Lock()
 _COUNTER_BUILD = threading.Lock()
 
@@ -1496,9 +1554,188 @@ def _build_counter_pool(key: tuple) -> dict:
     # EACH LIST'S OWN RATE AGAINST THE FIELD, once a pool: what `counters`
     # tells a counter to THIS opponent from an all-round deck by.
     rated = _set_field_rates(out)
-    return {"key": key, "cands": out, "building": False,
+    # WHEN EACH LIST WAS PLAYED, once a pool: what a day window filters by.
+    played = _pool_activity(out)
+    return {"key": key, "cands": out, "building": False, "activity": played,
             "stats": {"ladder": n_seeds, "duel": len(out) - n_seeds, "slotGaps": gaps,
-                      "duelFrom": duel_from, "fieldRated": rated}}
+                      "duelFrom": duel_from, "fieldRated": rated,
+                      "activityDay": (played or {}).get("day"),
+                      "activityLists": (played or {}).get("lists")}}
+
+
+def _pool_activity(cands: list["_Candidate"]) -> dict | None:
+    """Put each pool candidate's play by day on it (`act`) and return the
+    pool's own totals: `{"day", "total": {age: games}, "depth", "lists"}`.
+    None when the duel index has no play-by-day table. Never raises."""
+    try:
+        table = _duel_index.activity() if _duel_index is not None else None
+    except Exception:  # noqa: BLE001 - the window is extra; the pool stands
+        traceback.print_exc()
+        table = None
+    if not table:
+        return None
+    games = table.get("games") or {}
+    total: dict[int, int] = {}
+    lists = 0
+    for c in cands:
+        per = games.get(c.key)
+        c.act = per
+        if per is None:
+            continue
+        lists += 1
+        for age, n in per.items():
+            total[age] = total.get(age, 0) + n
+    if not total:
+        return None
+    return {"day": table.get("day"), "total": total, "depth": max(total), "lists": lists}
+
+
+def window_state(act: dict, days: int, span: int, scale: float | None) -> tuple[str, int]:
+    """One list in one day window: `(state, games in the window)`.
+
+    `act` is `{age in days: games}`; `span` is how many days before the window
+    it is compared with; `scale` is the WHOLE POOL's games in the window over
+    its games in those `span` days. The comparison is of SHARES, not of games
+    a day: the tracked roster grew 2.7 times between August and September, so
+    by raw games every list on the site "rose".
+
+      absent  - under `WINDOW_MIN_GAMES` in the window. Not played in it.
+      fading  - played, at under half the share it held before
+                (`WINDOW_FADE`): the previous days are the heavier side.
+      easing / steady / rising - played, by how its share moved.
+      new     - played in the window and not at all before it.
+      played  - played, and there is too little before to compare with.
+    """
+    games = sum(n for a, n in act.items() if a < days)
+    if games < WINDOW_MIN_GAMES:
+        return "absent", games
+    if span < WINDOW_MIN_PREVIOUS or not scale:
+        return "played", games
+    before = sum(n for a, n in act.items() if days <= a < days + span)
+    if before <= 0:
+        return "new", games
+    expected = before * scale
+    if expected < WINDOW_MIN_EXPECTED:
+        return "played", games
+    ratio = games / expected
+    if ratio < WINDOW_FADE:
+        return "fading", games
+    if ratio < WINDOW_EASE:
+        return "easing", games
+    if ratio < WINDOW_RISE:
+        return "steady", games
+    return "rising", games
+
+
+_WINDOW_LOCK = threading.Lock()
+_WINDOW_CACHE: dict = {"cands": None, "by_days": {}}
+
+
+def _span_days(since: str | None, until: str | None) -> int | None:
+    """How many days an explicit `(since, until)` covers, or None."""
+    try:
+        a = datetime.date.fromisoformat((since or "")[:10])
+        b = datetime.date.fromisoformat((until or "")[:10])
+    except ValueError:
+        return None
+    return max(1, (b - a).days + 1)
+
+
+def _today() -> datetime.date:
+    return datetime.datetime.now(datetime.timezone.utc).date()
+
+
+def _window_pool(days: int | None) -> tuple[list["_Candidate"], dict]:
+    """`(the lists that may be suggested in a window of `days`, what was done)`.
+
+    THE LISTS PLAYED IN THOSE DAYS, and not the ones the days before were
+    heavier in (`window_state`, `WINDOW_DROP`). The window is counted back
+    from the newest day the play-by-day table holds — the pool is the meta
+    NOW, whenever the opponent last played.
+
+    The second value is published (`pool.window`) so a filter is never
+    invisible: `applied`, and when not, `reason` — `no_window`, `no_activity`
+    (an index built before the table existed), `stale`, `past_record` (a
+    window longer than the table) or `thin` (`WINDOW_MIN_KEEP`). When it is
+    not applied the pool comes back whole, exactly as before.
+    `states` (`{list key: (state, games)}`) is for the rows; it is not sent.
+    """
+    cands = _counter_candidates()
+    info: dict = {"days": days, "applied": False, "reason": None, "pool": len(cands),
+                  "kept": len(cands), "minGames": WINDOW_MIN_GAMES, "states": {}}
+    with _COUNTER_LOCK:
+        act = _COUNTER_POOL.get("activity") if _COUNTER_POOL.get("cands") is cands else None
+    if not days or days < 1:
+        info["reason"] = "no_window"
+        return cands, info
+    if not act:
+        info["reason"] = "no_activity"
+        return cands, info
+    day = duel_day(act.get("day"))
+    info["day"] = day.isoformat() if day else None
+    if day is None or (_today() - day).days > WINDOW_STALE_DAYS:
+        info["reason"] = "stale"
+        return cands, info
+    depth = int(act["depth"])
+    if days > depth:
+        info["reason"] = "past_record"
+        return cands, info
+    with _WINDOW_LOCK:
+        if _WINDOW_CACHE["cands"] is not cands:
+            _WINDOW_CACHE.update(cands=cands, by_days={})
+        hit = _WINDOW_CACHE["by_days"].get(days)
+    if hit is not None:
+        return hit
+
+    total = act["total"]
+    span = min(WINDOW_PREVIOUS_DAYS, depth + 1 - days)
+    now = sum(n for a, n in total.items() if a < days)
+    before = sum(n for a, n in total.items() if days <= a < days + span)
+    scale = (now / float(before)) if now and before else None
+    kept: list["_Candidate"] = []
+    states: dict[str, tuple] = {}
+    counts: dict[str, int] = {}
+    for c in cands:
+        if c.act is None:
+            kept.append(c)          # not covered by the build: unknown, kept
+            counts["unknown"] = counts.get("unknown", 0) + 1
+            continue
+        state, games = window_state(c.act, days, span, scale)
+        counts[state] = counts.get(state, 0) + 1
+        if state in WINDOW_DROP:
+            continue
+        kept.append(c)
+        states[c.key] = (state, games)
+    info.update(previousDays=span if scale else 0,
+                notPlayed=counts.get("absent", 0), fading=counts.get("fading", 0),
+                states_count=counts)
+    if len(kept) < WINDOW_MIN_KEEP * len(cands):
+        info["reason"] = "thin"
+        out = (cands, info)
+    else:
+        info.update(applied=True, kept=len(kept), states=states)
+        out = (kept, info)
+    with _WINDOW_LOCK:
+        if _WINDOW_CACHE["cands"] is cands:
+            _WINDOW_CACHE["by_days"][days] = out
+    return out
+
+
+def duel_day(stamp) -> datetime.date | None:
+    """`YYYYMMDD` to a date, None when it is not one."""
+    s = str(stamp or "")
+    try:
+        return datetime.date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+    except ValueError:
+        return None
+
+
+def _window_public(info: dict) -> dict:
+    """What a response says about the window (everything but the per-list map)."""
+    out = {k: v for k, v in info.items() if k not in ("states", "states_count")}
+    if info.get("states_count"):
+        out["lists"] = dict(info["states_count"])
+    return out
 
 
 def _counter_candidates() -> list["_Candidate"]:
@@ -1561,7 +1798,8 @@ def _reset_counter_pool() -> None:
     for a caller that has just replaced one of its two sources by hand."""
     global _COUNTER_POOL
     with _COUNTER_LOCK:
-        _COUNTER_POOL = {"key": None, "cands": [], "stats": {}, "building": False}
+        _COUNTER_POOL = {"key": None, "cands": [], "stats": {}, "building": False,
+                         "activity": None}
 
 
 def _comfort(games: int) -> float:
@@ -1776,6 +2014,9 @@ class _DuelContext:
         # The fused rate's per-request state (`_FusionContext`), set by
         # `analyze`. On the duel context because every scorer already has it.
         self.fx: "_FusionContext | None" = None
+        # What the day window did to the counter pool (`_window_pool`), set
+        # by `analyze` and `bring`; the rows read each list's play from it.
+        self.pool_window: dict | None = None
 
     def prefetch(self, decks) -> None:
         """Duel records for many lists at once, on the shared pool."""
@@ -2354,6 +2595,9 @@ def _finish(rows: list[dict], by_key: dict, threats: list[dict],
     ordered by.
     """
     out = []
+    # `pool_window`, NOT `window`: that name is this context's own method.
+    window = getattr(ctx, "pool_window", None) if ctx is not None else None
+    states = (window or {}).get("states") or {}
     for r in rows:
         if "art" not in r:
             card = by_key.get(r["key"])
@@ -2363,6 +2607,12 @@ def _finish(rows: list[dict], by_key: dict, threats: list[dict],
                     if k in r:
                         full[k] = r[k]
                 r = full
+        # HOW MUCH THE LIST WAS PLAYED IN THE WINDOW ASKED FOR, and which way
+        # its share of play moved (`window_state`). Only on a list the window
+        # could read; a teammate's own deck is theirs whenever they played it.
+        st = states.get(r.get("key"))
+        if st is not None:
+            r["recent"] = {"days": window["days"], "games": st[1], "trend": st[0]}
         if ctx is not None and ctx.on and projection:
             try:
                 r["duel"] = ctx.figures(r.get("cards"), projection)
@@ -2491,7 +2741,7 @@ def _by_card(rows: list[dict], threats: list[dict], finish) -> dict | None:
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             snap: dict | None, top_n: int = TOP_N,
             seeds: dict | None = None, ctx: _DuelContext | None = None,
-            *, views: bool = False) -> dict:
+            *, views: bool = False, pool: list[_Candidate] | None = None) -> dict:
     """One opponent, and what should be brought against them.
 
     BOTH MODES COME THROUGH HERE. In a scouting report `blue` is empty, so
@@ -2505,6 +2755,10 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     counters to each family they play (`byFamily`) and the decks behind each
     counter card (`byCard`). The Deck Counter asks for them; a board of twelve
     opponents does not carry them.
+
+    `pool` is the counter pool a match plan rates beside the squad's own
+    decks — the lists of the day window asked for (`_window_pool`). None is
+    the whole pool.
     """
     decks = (opponent.get("decks") or [])[:OPPONENT_DECKS]
     _archetypes_for(decks)
@@ -2573,7 +2827,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         nonlocal _pool_rows
         if _pool_rows is None:
             _pool_rows = scored if not blue else (
-                rate_all(_counter_candidates()) if threats else [])
+                rate_all(pool if pool is not None else _counter_candidates())
+                if threats else [])
         return _pool_rows
 
     def finish(rows: list[dict]) -> list[dict]:
@@ -2885,8 +3140,12 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
     opp = _resolve(tag, DEFAULT_DAYS, window=(since, until) if since else None)
     _seat_decks((opp.get("decks") or [])[:RESOLVE_SEATED], dcx.seater())
     snap = dcx._snap()
-    cards = _counter_candidates()
+    # THE LISTS OF THE WINDOW ASKED FOR: as many days as the range covers,
+    # the same rule a scouting report of this player uses (`_window_pool`).
+    cards, window = _window_pool(
+        (_span_days(since, until) if since else None) or DEFAULT_DAYS)
     ctx = _DuelContext()
+    ctx.pool_window = window
     ctx.fx = _FusionContext(ctx, snap)
     ctx.fx.balance = True
     ctx.fx.use_cards()
@@ -2906,7 +3165,8 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
         "byFamily": folder.get("byFamily") or [],
         "byCard": folder.get("byCard"),
         "reason": folder["reason"],
-        "pool": {"decks": len(cards), **counter_pool_stats()},
+        "pool": {"decks": len(cards), **counter_pool_stats(),
+                 "window": _window_public(window)},
         "brain": scout.BRAIN_VERSION,
         # Whether the card model rated these rows beside the fused rate.
         "cardModel": ctx.fx.cm.get("brain") if ctx.fx.cm is not None else None,
@@ -2962,7 +3222,11 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     # THE COUNTER POOL in a scouting report: every vetted ladder list and
     # every duel-catalogue list. A match plan's `cards` are the squad's own
     # decks, and each folder rates the same counter pool beside them.
-    cards = _counter_candidates() if is_scout else _candidates(blue)
+    #
+    # THE POOL IS THE WINDOW'S (`_window_pool`): the lists played in the
+    # `days` asked for, less the ones the days before were heavier in.
+    pool, window = _window_pool(days)
+    cards = pool if is_scout else _candidates(blue)
     top_n = SCOUT_TOP_N if is_scout else TOP_N
 
     # THE DUEL BRAIN, read once for the request. Every list the board draws
@@ -2970,17 +3234,19 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     # so both have their duel records fetched up front, on the pool, instead of
     # one at a time inside the folder loop.
     ctx = _DuelContext()
+    ctx.pool_window = window
     ctx.fx = _FusionContext(ctx, snap)
     ctx.fx.balance = True
     ctx.fx.use_cards()
     if ctx.on:
         try:
             ctx.prefetch([c.cards for c in cards]
-                         + ([] if is_scout else [c.cards for c in _counter_candidates()]))
+                         + ([] if is_scout else [c.cards for c in pool]))
         except Exception:  # noqa: BLE001
             traceback.print_exc()
 
-    folders = [_folder(opp, blue, cards, snap, top_n, seeds, ctx) for opp in red]
+    folders = [_folder(opp, blue, cards, snap, top_n, seeds, ctx, pool=pool)
+               for opp in red]
 
     # A pool with nothing in it is the one failure the screen cannot recover
     # from, and it is worth naming ONCE at the top: every folder below it would
@@ -3010,6 +3276,10 @@ def analyze(blue_tags: list[str], red_tags: list[str],
             "minGames": MIN_COMFORT_GAMES,
             # The lists every folder's counters were chosen from, by source.
             "counters": counter_pool_stats(),
+            # WHAT THE DAY WINDOW DID TO THAT POOL: how many lists were
+            # played in it, how many were left out and why — or why it was
+            # not applied. A filter nobody can see is one nobody can check.
+            "window": _window_public(window),
         },
         "days": days,
         "limits": {

@@ -774,6 +774,35 @@ and rows under 50% against what really came fall from 40.7% to 22.8%.
   `if "vs" not in c`, as `counters` and `answers` ask. `test_team_scout`
   160 -> 164 (three of the new checks fail on the old code).
 
+## 4n. The day window picks the pool (2026-10-11, brain still 4.1)
+
+`team_scout` did not change, and neither did any rate. What changed is the POOL
+it is handed. The History chip (7D, 15D ...) used to decide which of the
+opponent's games `played_space` read; the 787 lists `counters` and `squad_plan`
+choose from were the same at 7 days and at 90. Asked for by name: the
+recommended decks of a scouting report and of a match plan should come from the
+days picked, because a deck that has left the meta is not one to suggest.
+
+- **In the pool for a window:** 5+ games in it, and a share of the pool's play at
+  least half of the share it held in the 60 days before
+  (`team_analysis.window_state`). At 7 days that keeps 543 of 787.
+- **Measured before:** a quarter of the rows suggested today were lists the
+  window leaves out (25.9% at 7 days, on 185 of 200 opponents' lists). Lists
+  whose share had halved won 52.5% the following week against 55.4% for steady
+  ones.
+- **A match plan:** the Deckkies picks come from the windowed pool; a teammate's
+  own decks are never filtered. Staged on 8 plans of 3 v 3 at 7 days: 123 of 647
+  picks were lists the window leaves out, then none, and the teammates' own decks
+  on the lists went 73 -> 85.
+- **The cost:** about half a point on the printed figure of a list, and the most
+  repeated list on 29.0% of opponents at 7 days (26.0% before). Told to the
+  account holder.
+- **Second consumer:** `coach_daily` does not pass a window and is unchanged
+  (204/204).
+
+The record, with the tables: README "The day window picks the suggested decks",
+server/README "The day window on the suggestions".
+
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
 Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it

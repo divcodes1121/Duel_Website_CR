@@ -6,7 +6,13 @@
  * TYPE IMPORTS ONLY, so it is testable without React (the rule `tiers.ts`,
  * `duelFigures.ts` and `squadParse.ts` follow).
  */
-import type { BalanceMark, PlaysFamily, TeamRecommendation } from '../state/analyticsClient';
+import type {
+  BalanceMark,
+  PlayTrend,
+  PlaysFamily,
+  PoolWindow,
+  TeamRecommendation,
+} from '../state/analyticsClient';
 
 export type BringView = 'best' | 'family' | 'card';
 
@@ -103,6 +109,57 @@ export function balanceChips(
       `${nameOf(m.card)}${m.form === 'base' ? '' : ` (${m.form})`} — ` +
       `${BALANCE_WORD[m.kind] ?? 'Changed'} ${patchDay(m.date)}`,
   }));
+}
+
+const TREND_WORD: Record<PlayTrend, string | null> = {
+  rising: 'share of play rising',
+  steady: 'share of play steady',
+  easing: 'share of play easing',
+  new: 'new in these days',
+  played: null,
+};
+
+/**
+ * A suggested deck's play in the day window asked for, for the figure's
+ * TOOLTIP: `Played 429 times in the last 7 days · share of play rising`.
+ *
+ * A tooltip and not a mark, like the balance log: every row of a windowed list
+ * was played in the window, so a mark on every row would say nothing.
+ */
+export function recentTitle(recent: TeamRecommendation['recent']): string | undefined {
+  if (!recent || !recent.days) return undefined;
+  const n = recent.games;
+  const word = TREND_WORD[recent.trend] ?? null;
+  return (
+    `Played ${n.toLocaleString('en-US')} ${n === 1 ? 'time' : 'times'} in the last ` +
+    `${recent.days} days${word ? ` · ${word}` : ''}`
+  );
+}
+
+/** `543 of 786 decks in play · last 7 days` — what the day window kept of the
+ *  pool. Undefined when the window was not applied (the whole pool was used). */
+export function windowLabel(w: PoolWindow | null | undefined): string | undefined {
+  if (!w?.applied || !w.days) return undefined;
+  return (
+    `${w.kept.toLocaleString('en-US')} of ${w.pool.toLocaleString('en-US')} decks in play` +
+    ` · last ${w.days} days`
+  );
+}
+
+/** The tooltip of that count: which lists were left out, in figures. */
+export function windowTitle(w: PoolWindow | null | undefined): string | undefined {
+  if (!w?.applied || !w.days) return undefined;
+  const bits = [`Suggestions come from decks played in the last ${w.days} days.`];
+  if (w.notPlayed) {
+    bits.push(`${w.notPlayed.toLocaleString('en-US')} had under ${w.minGames} games in them.`);
+  }
+  if (w.fading && w.previousDays) {
+    bits.push(
+      `${w.fading.toLocaleString('en-US')} hold under half the share of play they had in the ` +
+        `${w.previousDays} days before.`,
+    );
+  }
+  return bits.join(' ');
 }
 
 export interface FamilyChip {

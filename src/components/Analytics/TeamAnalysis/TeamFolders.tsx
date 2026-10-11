@@ -13,7 +13,7 @@ import { DeckActions } from '../../DeckActions/DeckActions';
 import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import { VsMark } from '../../VsMark/VsMark';
 import { duelChip, duelDeckLabel, duelTitle } from '../../../utils/duelFigures';
-import { balanceChips, chipLabels } from '../../../utils/bringAgainst';
+import { balanceChips, chipLabels, recentTitle } from '../../../utils/bringAgainst';
 import { CARDS_BY_KEY } from '../../../data/cards';
 import styles from './TeamAnalysis.module.css';
 import { Threats } from './Threats';
@@ -292,8 +292,14 @@ function Recommendation({ rec, rank, labels }: {
             className={styles.recRate}
             title={[
               'Expected win rate against the decks this opponent is likely to bring, weighted by how likely each is.',
+              /* How much the list was played in the History window picked
+                 (2026-10-11). A tooltip: every suggested row was played in it. */
+              recentTitle(rec.recent),
               ...balanceChips(rec, (k) => CARDS_BY_KEY.get(k)?.name ?? k).map((m) => m.title),
-            ].join(' · ')}
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+            data-trend={rec.recent?.trend}
           >
             {pct(rec.expectedWinRate)}
           </span>

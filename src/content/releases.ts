@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-11-window-decks',
+    date: '2026-10-11',
+    kind: 'improved',
+    title: 'The day filter now picks the suggested decks too',
+    body: [
+      'On Team Analysis and the Deck Counter, the days you pick (7D, 15D, 30D …) used to choose only which of the opponent’s games were read. The decks suggested against them came from the same pool whatever you picked. They now come from decks played in those days: a deck with under five games in the window is left out, and so is a deck whose share of play has fallen to under half of what it held in the two months before.',
+      'Checked on 200 real opponents: at 7 days, one suggested deck in four was one of those, on 185 of the 200 lists. They are gone, and the decks that replaced them were played about 40% more in the window. The price is about half a point on the printed win rate of a list, because the pool is smaller. Decks that had lost half their share went on to win 52.5% the following week, against 55.4% for decks holding steady.',
+      'A count above the results says how many decks the window kept, and a deck’s tooltip says how much it was played in those days. The win rate printed beside a deck is worked out as before.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-11-match-plan-coverage',
     date: '2026-10-11',
     kind: 'fixed',

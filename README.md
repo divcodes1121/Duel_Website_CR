@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **The day window picks the suggested decks too (Team Analysis, Deck Counter)** | **LIVE SINCE 2026-10-11 18:19 UTC.** Asked: when 7D or 14D is picked on Team Scout, the recommended decks should come from those same days, with the days weighed against what came before, because old decks are not in the meta. Until now the window chose which of the OPPONENT'S games were read and nothing else. The duel index now keeps every hub list's play BY DAY, and a window keeps the lists played in it (5+ games) whose share of the pool's play is at least half of what it was in the 60 days before. Replayed on 200 real opponents: at 7 days 25.9% of suggested rows were decks the window leaves out, on 185 of 200 lists; now none. Cost by the printed figure: #1 -0.31, all ten -0.55; most repeated list 26.0% -> 29.0% of opponents. A list whose share had halved won 52.5% the next week, a steady one 55.4%. Weighing a list's window games heavier in its own record was measured and NOT built (no gain at 7 days). See [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11) |
 | **Counters read the cards: a card-against-card model beside the fused rate (`card-matchup-1.0`)** | **LIVE SINCE 2026-10-11 10:56 UTC.** Asked: make the Deck Counter's counters exceptional, and only on proof. Measured: the fused rate knows an opponent's archetype and rarely their cards (94% of ladder deck pairs were played once). A model with one weight a card and one a card-against-card, fitted on 10.6M ladder games and every duel, sits beside it. On 24,307 unseen duel games: log loss 0.6328 -> 0.6123; inside one duel the won game is rated above the lost one 58.4% -> 66.2%. Replayed on 392 player-sides with a neutral judge: the #1 deck 52.2 -> 58.7 against what really came, rows under 50% 40.7% -> 22.8%; the most repeated list is on 27.6% of lists (20.9% before). See [Counters read the cards](#counters-read-the-cards-2026-10-11) |
 | **Ten decks, specific to the opponent; duel decks from CRL players only (`team-scout-4.1`)** | **LIVE SINCE 2026-10-10 12:38 UTC.** Reported: the same decks under every opponent, duel decks from random players. Measured: one list was on 56% of all lists and the named duel list had no CRL game. Now one all-round deck at most per list, the rest must gain clearly more against that opponent than the typical deck does, duel lists only from the CRL group (1,706 -> 130), ten rows. Replay: distinct decks 316 -> 490, the most repeated list on 38% -> 25% of opponents, at -0.49 points on the top three. See [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10) |
 | **Counters for what they are likely to bring — the wide read, the living card manual, a CRL-only read for Coach Assist** | **LIVE SINCE 2026-10-10 AS `668d623`. Server by scp first, 11:42 UTC (the deployed files matched the last commit; backups `*.bak-20261010-114257-prewide`; only `royalweb` restarted; eight suites green there), the client about a minute after the push (`/api/health` and the served bundle). The trainer change went 11:54 UTC (`*.bak-20261010-115402-precrlfit`).** Reported the day 3.0 shipped: *"it's not good, because the opponent also counter-snipes"*. Measured on 700 friendly duels: an opponent brings their most played archetype one time in five, and is not counter-picking from their own lists — so brain `team-scout-4.0` reads their duel decks first, flattens the weights and scores against twenty of their lists. Old against new through the production path on 600 duels: top three **+1.55 points**, rows under 50% against what really came **10.6% → 4.7%**, the printed figure's gap to what happened **7.6 → 2.1 points**. The card manual (`All_Cards_stats.md`) is now pushed as data with one command; its balance log is applied (a nerf measured at −1.4 points). Coach Assist's read is fitted on the CRL group's duels only. See [Counters for what they are likely to bring](#counters-for-what-they-are-likely-to-bring-2026-10-10) |
@@ -224,6 +225,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27d. [Counters for what they are likely to bring](#counters-for-what-they-are-likely-to-bring-2026-10-10)
 27e. [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10)
 27f. [Counters read the cards](#counters-read-the-cards-2026-10-11)
+27g. [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11)
 28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
 29. [The layout engine — measure, then commit](#the-layout-engine--measure-then-commit)
 29a. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
@@ -12509,6 +12511,146 @@ the `.js` and the `.css`) and then never committed. See
 import is eager until that is fixed, and the reason is written at the import.
 
 ---
+
+## The day window picks the suggested decks (2026-10-11)
+
+**LIVE SINCE 2026-10-11, server 18:19 UTC** (backups `*.bak-20261011-181159-prewindow`;
+the index was rebuilt by hand with the new stage, then only `royalweb` restarted).
+Asked for: *"the Team Scout, both the scouting report and the match plan — when we
+filter days like 7D, 14D, I want the recommended decks filtered to those same days
+too. Read the battles from those days, see the weight of previous plus the days and
+which is heavier, because we don't need too-old decks: they won't be in the meta."*
+
+**What the window did before.** It chose which of the OPPONENT'S games were read.
+The decks suggested against them came from one pool — every vetted ladder list
+and the CRL group's duel lists, 787 today — whatever was picked. A list is in
+that pool on its ALL-TIME record, and nothing in a matchup record has a date.
+
+**Measured first** (`brain-evidence/window_20261011/`, read-only on the server).
+
+| | 7 days | 15 days | 30 days |
+|---|---|---|---|
+| pool lists with under 5 games in the window | 30 | 9 | 2 |
+| pool lists at under half the share of play they held in the 60 days before | 213 | 225 | 236 |
+| of today's suggested rows, on 200 real opponents: one of those | 25.9% | 25.6% | 29.8% |
+| lists of ten holding at least one | 185 of 200 | 190 | 191 |
+
+*It is share, not games a day.* The tracked roster grew 2.7 times between August
+and September, so by raw games every list on the site "rose". A list's play in
+the window is compared with what its share of the POOL'S play in the previous
+days predicts.
+
+*Does a list that fell win less?* Three held-out weeks, 1.0M games, with the
+balance log's nerf drag already taken off the record so that only what the
+engine does not know yet is left:
+
+| share now / share before | record said | the next week | against a steady list |
+|---|---|---|---|
+| under 0.20 (30-day window) | 54.6% | 51.4% | -4.1 |
+| 0.20 - 0.35 | 55.2% | 53.6% | -2.4 |
+| 0.35 - 0.50 | 54.8% | 54.8% | -1.0 |
+| 0.50 - 0.65 | 53.8% | 53.4% | -1.3 |
+| 0.65 - 0.80 | 54.3% | 55.3% | +0.1 |
+| 0.80 - 1.25 (steady) | 54.0% | 54.9% | 0 |
+| over 2.0 | 56.1% | 57.5% | +0.5 |
+
+At 7 days the lists under half won **52.5%** the following week, the steady ones
+**55.4%**, the rising ones **56.9%**. The further a list's share fell, the
+further under its own record it played. Half is where the line is.
+
+**Measured and NOT built: weighing the window's games heavier in a list's own
+record.** That is the other reading of "the weight of previous plus the days".
+Counting a window game 2, 3, 5 or 10 times an older one, scored on the following
+week: no gain at 7 days (log loss 0.68108 at every weight), 0.00015 at 15 days,
+0.00032 at 30, and one held-out week of the three got worse. So the window
+decides WHICH lists may be suggested, and the figure printed beside one is
+worked out exactly as before.
+
+**What was built.**
+
+- **The duel index keeps every hub list's play by day** (`activity`, 2,516 lists,
+  160 days). Ladder: the pair table has one date a pair, the day the two lists
+  last met; 94% of pairs met once, so that IS the game's day, and a pair that met
+  more than once is counted as one pair seen that day, never as its games. Duels:
+  every stored game. It is read off the same covering-index pass the version
+  cells already make, so the build is no slower (279 s; the eight builds before
+  it ran 198-354 s).
+- **A window keeps a list when** it has 5+ games in the window AND its share of
+  the pool's play in the window is at least half of what its share in the 60
+  days before predicts (`team_analysis.window_state`, `_window_pool`). "Fell" is
+  only said when the previous share predicts 10+ games — five games where ten
+  were expected is a fall, one where two were expected is a week. The window is
+  counted back from the newest day the table holds: the pool is the meta now,
+  whenever the opponent last played.
+- **Both screens, one rule.** Team Analysis passes its day chip; the Deck Counter
+  passes the length of its date range (30 days when none is given, the days its
+  history is read over). A scouting report of one player and the Deck Counter
+  list for that player and window are the same ten decks — checked live.
+- **A match plan's Deckkies picks follow it; a teammate's own deck never does.**
+  Their deck is theirs whenever they played it.
+- **It says what it did.** `pool.window` on both payloads: applied or not, why
+  not (`no_window`, `no_activity`, `stale`, `past_record`, `thin`), how many
+  lists it kept and how many it left out for each reason. All Data is
+  `past_record`: the whole pool. A table more than three days old, or a window
+  that would keep under a quarter of the pool, is not applied.
+- **On screen: one count and a tooltip.** `543 of 787 decks in play · last 7
+  days` above Team Analysis' results and beside the Deck Counter's note; each
+  suggested deck's figure says in its tooltip how often it was played in those
+  days and which way its share moved. Nothing was added to a row.
+
+**Replayed, old pool against the windowed pool** (production path, a scratch copy
+of the index, 200 real opponents with a duel in the last ten days — 100 from the
+CRL group — each asked three times):
+
+| | 7 days | 15 days | 30 days |
+|---|---|---|---|
+| suggested rows the window leaves out, before -> after | 25.9% -> 0 | 25.6% -> 0 | 29.8% -> 0 |
+| #1 deck, by the printed figure | 64.90 -> 64.59 | 64.92 -> 64.34 | 64.86 -> 64.19 |
+| all ten | 60.94 -> 60.39 | 60.87 -> 60.29 | 60.92 -> 60.19 |
+| same #1 | 61.0% | 62.5% | 54.0% |
+| rows kept from the old ten | 7.0 | 7.1 | 6.7 |
+| families at 10%+ answered at 55%+ | 769/769 -> 769/769 | 748 -> 747 of 748 | 731 -> 730 of 731 |
+| games in the window behind a suggested row (median) | 307 -> 429 | 571 -> 888 | 1,051 -> 1,485 |
+| distinct decks in 2,000 rows | 401 -> 328 | 397 -> 331 | 408 -> 328 |
+| most repeated list, share of opponents | 26.0% -> 29.0% | 23.0% -> 26.0% | 21.5% -> 26.0% |
+| rows with a matchup under 50% on their chips | 56.3% -> 60.6% | 56.9% -> 60.5% | 57.1% -> 61.9% |
+| seconds an answer (median) | 0.50 -> 0.35 | 0.49 -> 0.36 | 0.60 -> 0.43 |
+
+Leaving out only the lists not played at all (and keeping the faded ones) changed
+almost nothing: 23.6% of rows were still decks that had left the meta. The rule
+about share is what does the work.
+
+**The costs, plainly.** Half a point on the printed figure of a list, because the
+pool is a third smaller; and the same reason puts the most repeated list on 3 to
+4.5 more opponents in every hundred. Against that: the rows left out are the ones
+that went on to play 1 to 4 points under their printed record, so by what
+happened next the trade is about level on strength and what changes is that the
+decks are ones being played now. In 8 staged 3 v 3 match plans, 123 of 647
+Deckkies picks were decks the window leaves out; with it none are, and the
+teammates' own decks on the lists went from 73 to 85.
+
+**Checked.** `test_duel_index` 76 -> 93, `test_team_analysis` 266 -> 304,
+`bringAgainst.test.ts` 29 -> 35; **34 planted faults, all caught** (one check was
+too weak first: every hub in the fixture had been played on the newest day, so
+the row that tells "not played" from "not covered" was never exercised). **4,801
+Python checks across 80 suites** (only the known `test_ml_21a`), **1,679 vitest
+across 69 files**. Live through the public API on CRL-group players: 35/35 (7
+days keeps 543 of 787, 30 days 549, All Data the whole pool; a scouting report
+and the Deck Counter agree row for row; first request after the restart 18.6 s,
+then 0.5-1.7 s). In a real browser on production data, local site against the
+live API: 21/21 — both modes of Team Analysis, the Deck Counter at 30 days, 7
+days and All Data, light theme, 390 px. Screenshots `testing/window-*.png`.
+
+**Not done, and why.** A positive lean toward rising lists (their record
+understates them by half a point, but who picks up a rising list is not
+controlled for). Per-archetype rates by window (the version cells hold totals;
+the overall-record version showed no gain). Coach Assist, the daily field plan
+and the meta board are untouched. Not checked signed in on the live site: the
+frontend half is a count line and two tooltips, and was seen locally on
+production data.
+
+**To undo without a deploy:** set `WINDOW_DROP = ()` in `team_analysis.py` and
+restart `royalweb` — every list is kept, and rows still say how each was played.
 
 ## Counters read the cards (2026-10-11)
 

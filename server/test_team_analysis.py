@@ -1507,6 +1507,189 @@ _none = ta.bring("#NOBODY")
 check("nobody stored is no_history, with no decks invented",
       _none["reason"] == "no_history" and _none["decks"] == [] and _none["byFamily"] == [])
 
+# THE DAY WINDOW REACHES THE SUGGESTIONS (2026-10-11): the lists played in
+# the days asked for, and not the ones the days before were heavier in.
+_SCALE = 7 / 60.0       # a pool that played the same games a day, 7 days against 60
+check("under five games in the window is not played in it",
+      ta.window_state({0: 2, 3: 2, 9: 500}, 7, 60, _SCALE) == ("absent", 4) and ta.WINDOW_MIN_GAMES == 5)
+check("a share under half of what it held before is fading - the previous days are the heavier side",
+      ta.window_state({1: 30, 20: 600}, 7, 60, _SCALE) == ("fading", 30) and ta.WINDOW_FADE == 0.5)
+check("...exactly half is not",
+      ta.window_state({1: 35, 20: 600}, 7, 60, _SCALE) == ("easing", 35))
+check("...and the rest by how the share moved",
+      [ta.window_state({1: n, 20: 600}, 7, 60, _SCALE)[0] for n in (55, 56, 70, 87, 88)]
+      == ["easing", "steady", "steady", "steady", "rising"])
+check("IT IS SHARE, NOT GAMES A DAY: the same games a day while the pool doubled is a fall",
+      ta.window_state({1: 70, 20: 600}, 7, 60, _SCALE)[0] == "steady"
+      and ta.window_state({1: 60, 20: 600}, 7, 60, 2 * _SCALE)[0] == "fading")
+check("played in the window and never before it is new",
+      ta.window_state({2: 9}, 7, 60, _SCALE) == ("new", 9))
+check("too little before to compare with is played, never fading",
+      ta.window_state({2: 6, 20: 40}, 7, 60, _SCALE) == ("played", 6)        # 4.7 games expected
+      and ta.window_state({2: 6, 20: 600}, 7, 10, _SCALE) == ("played", 6)    # ten days of record
+      and ta.window_state({2: 6, 20: 600}, 7, 60, None) == ("played", 6)
+      and ta.WINDOW_MIN_EXPECTED == 10.0 and ta.WINDOW_MIN_PREVIOUS == 14)
+check("games before the previous days are not counted on either side",
+      ta.window_state({1: 30, 70: 6000}, 7, 60, _SCALE) == ("new", 30))
+check("a span is its days, both ends counted",
+      ta._span_days("2026-08-14", "2026-08-20") == 7 and ta._span_days("2026-08-20", "2026-08-20") == 1
+      and ta._span_days(None, "2026-08-20") is None and ta._span_days("x", "y") is None)
+
+_pool_keys = [c.key for c in ta._counter_candidates()]
+_wk = {a: next(k for k in _pool_keys if k.startswith(a)) for a in ("hog", "golem", "xbow", "lava")}
+
+
+def _days(spans):
+    out = {}
+    for lo, hi, n in spans:
+        for a in range(lo, hi):
+            out[a] = n
+    return out
+
+
+# Hog and X-Bow: ten games a day for ninety days. Golem: heavy a fortnight ago,
+# nearly gone this week. Lava: not played for a month.
+_ACT = {_wk["hog"]: _days([(0, 90, 10)]), _wk["xbow"]: _days([(0, 90, 10)]),
+        _wk["golem"]: _days([(0, 6, 2), (8, 30, 20), (30, 90, 10)]),
+        _wk["lava"]: _days([(30, 90, 10)])}
+# The index module itself, with only its play-by-day reader replaced: the
+# rest of the engine reads the real one, as it does in production.
+_saved_win = (dix.activity, ta._today)
+check("the engine reads the duel index module", ta._duel_index is dix)
+dix.activity = lambda: {"day": "20261011", "games": _ACT}
+ta._today = lambda: __import__("datetime").date(2026, 10, 11)
+try:
+    _whole = {d["key"]: d["expectedWinRate"] for d in _bring["decks"]}
+    check("before the window: the Golem list leads this opponent's list",
+          _bring["decks"][0]["key"] == _wk["golem"] and _wk["hog"] in _whole, str(list(_whole)))
+    ta._reset_counter_pool()
+    _c7, _i7 = ta._window_pool(7)
+    check("a pool knows when each of its lists was played, and through which day",
+          ta.counter_pool_stats().get("activityDay") == "20261011"
+          and ta.counter_pool_stats().get("activityLists") == 4
+          and all(c.act is not None for c in ta._counter_candidates()))
+    check("seven days: the list not played and the list the days before were heavier in are left out",
+          sorted(c.key for c in _c7) == sorted([_wk["hog"], _wk["xbow"]])
+          and _i7["applied"] and _i7["kept"] == 2 and _i7["pool"] == 4
+          and _i7["notPlayed"] == 1 and _i7["fading"] == 1 and _i7["previousDays"] == 60,
+          str(ta._window_public(_i7)))
+    check("...each kept list with its games in the window and which way its share moved",
+          _i7["states"] == {_wk["hog"]: ("rising", 70), _wk["xbow"]: ("rising", 70)}, str(_i7["states"]))
+    check("...and what is published says what was done, without the per-list map",
+          ta._window_public(_i7)["lists"] == {"rising": 2, "fading": 1, "absent": 1}
+          and "states" not in ta._window_public(_i7) and ta._window_public(_i7)["day"] == "2026-10-11")
+    _c30, _i30 = ta._window_pool(30)
+    check("thirty days: the Golem list was played in THOSE days, so it is back; Lava still is not",
+          sorted(c.key for c in _c30) == sorted([_wk["hog"], _wk["xbow"], _wk["golem"]])
+          and _i30["states"][_wk["golem"]] == ("rising", 452), str(_i30.get("states")))
+    check("a window is worked out once a pool", ta._window_pool(7)[0] is _c7)
+
+    _b7 = ta.bring("#R1", "2026-08-14", "2026-08-20")
+    check("the Deck Counter's list follows the window: seven days of range is a seven-day pool",
+          _b7["pool"]["window"]["applied"] and _b7["pool"]["window"]["days"] == 7
+          and _b7["pool"]["decks"] == 2, str(_b7["pool"]))
+    check("...the old-meta list is not on it, however well it scored",
+          _wk["golem"] not in [d["key"] for d in _b7["decks"]]
+          and [d["key"] for d in _b7["decks"]] == [_wk["hog"]], str([d["key"][:10] for d in _b7["decks"]]))
+    check("...THE FIGURE OF A LIST THAT STAYED IS THE SAME FIGURE",
+          _b7["decks"][0]["expectedWinRate"] == _whole[_wk["hog"]],
+          f"{_b7['decks'][0]['expectedWinRate']} {_whole[_wk['hog']]}")
+    check("...and its row says how much it was played in those days",
+          _b7["decks"][0].get("recent") == {"days": 7, "games": 70, "trend": "rising"},
+          str(_b7["decks"][0].get("recent")))
+    check("...the views are read off the same windowed pool",
+          all(d["key"] != _wk["golem"] for g in _b7["byFamily"] for d in g["decks"]))
+    _b30 = ta.bring("#R1", "2026-07-22", "2026-08-20")
+    check("a thirty-day range brings the Golem list back, at the figure it had",
+          _b30["decks"][0]["key"] == _wk["golem"]
+          and _b30["decks"][0]["expectedWinRate"] == _whole[_wk["golem"]]
+          and _b30["decks"][0]["recent"]["days"] == 30)
+    check("no range is the default thirty days, the same days their history is read over",
+          ta.bring("#R1")["pool"]["window"]["days"] == ta.DEFAULT_DAYS)
+
+    _s7 = ta.analyze([], ["#R1"], days=7)
+    check("a scouting report at seven days is the same pool and says so",
+          _s7["pool"]["window"]["applied"] and _s7["pool"]["decks"] == 2
+          and [d["key"] for d in _s7["folders"][0]["recommended"]] == [_wk["hog"]]
+          and [d["key"] for d in _s7["overall"]["recommended"]] == [_wk["hog"]],
+          str(_s7["pool"].get("window")))
+    check("...the same decks the Deck Counter lists for that window",
+          [d["key"] for d in _s7["folders"][0]["recommended"]] == [d["key"] for d in _b7["decks"]])
+    _p7 = ta.analyze(["#B1"], ["#R1"], days=7)
+    _fills = [d for d in _p7["folders"][0]["perPlayer"][0]["decks"] if not d.get("owner")]
+    check("a match plan's fills come from the windowed pool too",
+          _p7["pool"]["window"]["applied"] and _fills
+          and all(d["key"] != _wk["golem"] for d in _fills)
+          and all(d["key"] != _wk["golem"] for d in _p7["folders"][0]["recommended"]),
+          str([d["key"][:10] for d in _fills]))
+    _p30 = ta.analyze(["#B1"], ["#R1"], days=30)
+    check("...and at thirty days the Golem list is offered again",
+          _wk["golem"] in [d["key"] for d in _p30["folders"][0]["perPlayer"][0]["decks"]])
+
+    # A TEAMMATE'S OWN DECK IS THEIRS, whatever the meta did with the list.
+    _own_c = ta._Candidate({"cards": _wk["golem"].split(","), "winCondition": "golem"},
+                           {"tag": "#B1", "name": "B1"}, ta._counter_candidates()[1].profile)
+    check("the window never reads a teammate's own deck", _own_c.act is None)
+
+    # WHEN IT IS NOT APPLIED the pool comes back whole, and it says why.
+    _all = ta._counter_candidates()
+    check("no window, no filter", ta._window_pool(None)[0] is _all
+          and ta._window_pool(0)[1]["reason"] == "no_window")
+    check("a window longer than the record is not applied (All Data)",
+          ta._window_pool(4000)[0] is _all and ta._window_pool(4000)[1]["reason"] == "past_record"
+          and ta._window_pool(4000)[1]["applied"] is False)
+    ta._today = lambda: __import__("datetime").date(2026, 10, 15)
+    check("a play-by-day table four days old is not applied",
+          ta._window_pool(7)[0] is _all and ta._window_pool(7)[1]["reason"] == "stale"
+          and ta.WINDOW_STALE_DAYS == 3)
+    ta._today = lambda: __import__("datetime").date(2026, 10, 14)
+    check("...three days old still is", ta._window_pool(7)[1]["applied"])
+    ta._today = lambda: __import__("datetime").date(2026, 10, 11)
+
+    # A list the build did not cover is UNKNOWN, which is not "not played".
+    _saved_act = dict(_ACT)
+    del _ACT[_wk["lava"]]
+    ta._reset_counter_pool()
+    _cu, _iu = ta._window_pool(7)
+    check("a list the build did not cover is kept, with nothing claimed about it",
+          _wk["lava"] in [c.key for c in _cu] and _wk["lava"] not in _iu["states"]
+          and ta._window_public(_iu)["lists"].get("unknown") == 1, str(ta._window_public(_iu)))
+    _ACT.update(_saved_act)
+
+    # A window that would leave a handful of lists is a fault, not a filter.
+    _ACT[_wk["hog"]] = _days([(30, 90, 10)])
+    _ACT[_wk["xbow"]] = _days([(30, 90, 10)])
+    _ACT[_wk["golem"]] = _days([(30, 90, 10)])
+    ta._reset_counter_pool()
+    _ct, _it = ta._window_pool(7)
+    check("a window that would keep under a quarter of the pool is not applied",
+          len(_ct) == 4 and _it["reason"] == "thin" and not _it["applied"] and not _it["states"]
+          and ta.WINDOW_MIN_KEEP == 0.25, str(ta._window_public(_it)))
+    _ACT.update(_saved_act)
+
+    # An index from before the table, and one that fails.
+    dix.activity = lambda: None
+    ta._reset_counter_pool()
+    _cn, _in = ta._window_pool(7)
+    check("an index with no play-by-day table: the whole pool, as before, and it says so",
+          len(_cn) == 4 and _in["reason"] == "no_activity" and _in["kept"] == 4)
+    check("...and the list is the one from before the window existed",
+          [d["key"] for d in ta.bring("#R1", "2026-08-14", "2026-08-20")["decks"]]
+          == [d["key"] for d in _bring["decks"]])
+    dix.activity = lambda: (_ for _ in ()).throw(RuntimeError("index gone"))
+    ta._reset_counter_pool()
+    _saved_err = sys.stderr
+    sys.stderr = __import__("io").StringIO()
+    try:
+        _cf, _if = ta._window_pool(7)
+    finally:
+        sys.stderr = _saved_err
+    check("a failing read costs the window and nothing else",
+          len(_cf) == 4 and _if["reason"] == "no_activity")
+finally:
+    dix.activity, ta._today = _saved_win
+    ta._reset_counter_pool()
+
 # THE CARD VIEW: the manual names the cards, the rated pool ranks the decks.
 import card_counters as _ccx  # noqa: E402
 

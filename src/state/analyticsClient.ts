@@ -834,7 +834,7 @@ export interface BringReport {
   /** The card view. Null when the card manual is not deployed. */
   byCard: { theirCards: CardShare[]; cards: BringCard[] } | null;
   reason: 'no_history' | 'no_evidence' | null;
-  pool: { decks: number; ladder?: number; duel?: number };
+  pool: { decks: number; ladder?: number; duel?: number; window?: PoolWindow };
   /** How their history was read (brain 4.0). */
   read?: {
     temper: number;
@@ -845,6 +845,38 @@ export interface BringReport {
   } | null;
   brain: string;
 }
+
+/**
+ * WHAT THE DAY WINDOW DID TO THE COUNTER POOL (`team_analysis._window_pool`).
+ *
+ * Since 2026-10-11 the window a reader picks (7D, 15D …) also decides which
+ * lists may be SUGGESTED: the ones played in those days, less the ones whose
+ * share of play is under half of what it was in the days before. `applied:
+ * false` means the whole pool was used, and `reason` says why. Absent from a
+ * server that predates it.
+ */
+export interface PoolWindow {
+  days: number | null;
+  applied: boolean;
+  reason: 'no_window' | 'no_activity' | 'stale' | 'past_record' | 'thin' | null;
+  /** Lists in the pool, and how many the window kept. */
+  pool: number;
+  kept: number;
+  /** Games in the window for a list to count as played in it. */
+  minGames: number;
+  /** The newest day the play-by-day table holds (`YYYY-MM-DD`). */
+  day?: string | null;
+  /** How many days before the window a list's share was compared with. */
+  previousDays?: number;
+  notPlayed?: number;
+  fading?: number;
+  /** Lists by state, dropped ones included. */
+  lists?: Record<string, number>;
+}
+
+/** Which way a list's share of the pool's play moved, window against the days
+ *  before it. `played` = played in the window, too little before to compare. */
+export type PlayTrend = 'rising' | 'steady' | 'easing' | 'new' | 'played';
 
 export interface PlayerCounterReport {
   player: { tag: string; winRate: number; battles: number; wins: number; archiveUsed: boolean };
@@ -2370,6 +2402,10 @@ export interface TeamRecommendation {
   worst?: { family: string; name?: string; rate: number } | null;
   /** Cards of this deck the game changed in the last month. */
   balance?: BalanceMark[];
+  /** How much this list was played in the day window asked for, and which way
+   *  its share of play moved. Pool lists only, and only when the window was
+   *  applied (`PoolWindow`). */
+  recent?: { days: number; games: number; trend: PlayTrend };
   /** On a per-family list only: the rate against THAT family. */
   rate?: number;
   /** How many of the eight cards this teammate plays in a deck of their own
@@ -2589,6 +2625,8 @@ export interface TeamReport {
      *  waiting rather than by pasting more. */
     reason: 'no_blue_history' | 'no_blue_comfort' | 'no_matchup_data' | null;
     minGames: number;
+    /** What the day window did to the counter pool. */
+    window?: PoolWindow;
   };
   days: number;
   limits: {

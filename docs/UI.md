@@ -2046,6 +2046,18 @@ saved duel in the builder a probe must click the `Versus` tab and then
 
 ## Bring this against them, and the chips under a suggested deck (2026-10-10)
 
+> **The day window, 2026-10-11:** the days picked (Team Analysis' History chips,
+> the Deck Counter's range) now decide which decks may be suggested. What the
+> screens draw for it is ONE count and a tooltip: `543 of 787 decks in play ·
+> last 7 days` (`windowLabel`) above Team Analysis' results and at the end of the
+> Deck Counter's note line, with which lists were left out as its tooltip
+> (`windowTitle`); and on each suggested deck, a line in the FIGURE'S TOOLTIP —
+> `Played 429 times in the last 7 days · share of play rising` (`recentTitle`).
+> No mark on a row: every row of a windowed list was played in the window, so a
+> mark on every row would say nothing. The count comes from what the server said
+> it did (`pool.window`), never from the chip pressed, and is not drawn when the
+> window was not applied (All Data, an older server, a saved board).
+>
 > **Brain 4.1, the same evening:** every list is up to TEN decks. Nothing was
 > added to a row: which deck is the one all-round pick and how specific each
 > counter is are in the payload (`allRound`, `lift`) and not on the screen.

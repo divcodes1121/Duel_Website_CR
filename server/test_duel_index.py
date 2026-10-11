@@ -391,6 +391,119 @@ try:
     di._state["checked"] = 0.0
     check("a rebuild gives the same cells", (rebuilt.get("versionCells") or {}).get("cells")
           == vs.get("cells") and (di.version_cells(BAIT) or {}).get(k(MORTAR)) == mb)
+    print("\n-- Play by day --")
+    check("a ladder table with no dates writes no play by day, and the cells are still built",
+          rebuilt.get("activity") is None and di.activity() is None
+          and di.status()["activityDay"] is None and (rebuilt.get("versionCells") or {}).get("cells"),
+          str(rebuilt.get("activity")))
+    X = [[f"x{i}-{j}" for j in range(8)] for i in range(8)]
+    bot.execute("ALTER TABLE pair_matchup_agg ADD COLUMN last_seen TEXT")
+    for a, b, when in ((MORTAR, BAIT, day(2)), (BAIT_N, MORTAR, day(10)), (HOG, BAIT, day(3)),
+                       (HOG_N, BAIT, day(3)), (GOLEM, BAIT_N, day(30))):
+        bot.execute("UPDATE pair_matchup_agg SET last_seen = ? WHERE deck_a = ? AND deck_b = ?",
+                    (when, k(a), k(b)))
+    dated = [
+        (MORTAR, X[0], 1, 0, day(1)),      # one game, Mortar won it
+        (X[1], MORTAR, 1, 0, day(1)),      # stored the other way round: Mortar LOST it
+        (MORTAR, X[2], 0, 1, day(40)),     # one game forty days back, lost
+        (MORTAR, X[3], 1, 0, day(300)),    # older than the table keeps
+        (MORTAR, X[4], 1, 0, None),        # no date
+        (MORTAR, X[5], 1, 0, "soon"),      # not a date
+        (MORTAR, X[6], 0, 0, day(1)),      # a draw only: not a game here
+    ]
+    bot.executemany("INSERT INTO pair_matchup_agg VALUES (?,?,?,?,0,?,?)",
+                    [(k(a), k(b), w, l, w + l, when) for a, b, w, l, when in dated])
+    bot.commit()
+    acted = di.build(IDX, BOT)
+    di._state["checked"] = 0.0
+    ast = acted.get("activity") or {}
+    check("a dated ladder table: every hub's play by day is written",
+          ast.get("decks") == 4 and ast.get("day") == day(0)[:8] and ast.get("rows", 0) >= 4, str(ast))
+    check("...and status says through which day",
+          di.status()["activityDay"] == day(0)[:8] and di.status()["activityDecks"] == 4,
+          str(di.status()))
+    raw = sqlite3.connect(IDX)
+    mort = {d: (lg, lw, lm, dg, dw) for d, lg, lw, lm, dg, dw in raw.execute(
+        "SELECT day, lg, lw, lm, dg, dw FROM activity WHERE deck = ?", (k(MORTAR),))}
+    check("a pair that met once is one game on its day, won or lost from THIS list's side",
+          mort.get(day(1)[:8], ())[:3] == (2, 1, 0), str(mort.get(day(1)[:8])))
+    check("a pair that met more than once is one pair on its last day, never its games",
+          mort.get(day(2)[:8], ())[:3] == (0, 0, 1) and mort.get(day(10)[:8], ())[:3] == (0, 0, 1),
+          f"{mort.get(day(2)[:8])} {mort.get(day(10)[:8])}")
+    check("a game forty days back is kept", mort.get(day(40)[:8], ())[:3] == (1, 0, 0))
+    check("a day older than the table keeps, a missing date and a date that is not one are not",
+          day(300)[:8] not in mort and di.ACTIVITY_DAYS == 160
+          and sum(v[0] + v[2] for v in mort.values()) == 5, str(sorted(mort)))
+    duel_days = dict(raw.execute(
+        "SELECT substr(battle_time, 1, 8), COUNT(*) FROM games WHERE a_deck = ? OR b_deck = ? "
+        "GROUP BY 1", (k(MORTAR), k(MORTAR))))
+    duel_wins = dict(raw.execute(
+        "SELECT substr(battle_time, 1, 8), COUNT(*) FROM games WHERE (a_deck = ? AND winner = 1) "
+        "OR (b_deck = ? AND winner = 2) GROUP BY 1", (k(MORTAR), k(MORTAR))))
+    check("the duel games are every stored game of the list, by day, with its wins",
+          duel_days and {d: v[3] for d, v in mort.items() if v[3]} == duel_days
+          and {d: v[4] for d, v in mort.items() if v[4]} == duel_wins,
+          f"{duel_days} { {d: v[3] for d, v in mort.items()} }")
+    hubs_in = {r[0] for r in raw.execute("SELECT DISTINCT deck FROM activity")}
+    newest_rows = {r[0] for r in raw.execute(
+        "SELECT deck FROM activity WHERE day = ?", (day(0)[:8],))}
+    check("every hub has a row for the newest day, played that day or not",
+          hubs_in == {k(MORTAR), k(HOG), k(BAIT), k(GOLEM)} and newest_rows == hubs_in,
+          str(len(newest_rows)))
+    raw.close()
+    act = di.activity()
+    ma = (act or {}).get("games", {}).get(k(MORTAR)) or {}
+    check("a reader gets games by AGE, age 0 being the newest day",
+          act is not None and act["day"] == day(0)[:8]
+          and ma.get(1) == 2 + duel_days.get(day(1)[:8], 0)
+          and ma.get(2) == 1 + duel_days.get(day(2)[:8], 0)
+          and ma.get(40) == 1 and ma.get(10) == 1, str(ma))
+    check("...a list no build covered is not in it at all, which is not the same as not played",
+          k(STRAY_A) not in act["games"] and k(X[0]) not in act["games"])
+    check("the dated read gives the same cells",
+          (di.version_cells(BAIT) or {}).get(k(MORTAR)) == mb, str((di.version_cells(BAIT) or {}).get(k(MORTAR))))
+    again = di.build(IDX, BOT)
+    di._state["checked"] = 0.0
+    check("a rebuild gives the same play by day",
+          (again.get("activity") or {}).get("rows") == ast.get("rows")
+          and ((di.activity() or {}).get("games") or {}).get(k(MORTAR)) == ma)
+    real_stage = di._build_activity
+    di._build_activity = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("no room"))
+    saved_err = sys.stderr
+    sys.stderr = open(os.devnull, "w")
+    try:
+        failed = di.build(IDX, BOT)
+    finally:
+        sys.stderr.close()
+        sys.stderr = saved_err
+        di._build_activity = real_stage
+    di._state["checked"] = 0.0
+    check("a failing play-by-day stage costs neither the build nor the cells",
+          failed.get("activity") is None and (failed.get("versionCells") or {}).get("cells")
+          and di.available())
+    check("...and the last build's table is still served, with the day it holds",
+          ((di.activity() or {}).get("games") or {}).get(k(MORTAR)) == ma
+          and di.status()["activityDay"] == day(0)[:8])
+    QUIET = ["x-bow", "tesla", "archers", "knight", "the-log", "electro-spirit",
+             "skeletons", "poison"]
+    dcx_mod.seeds = lambda: {"bait": [{"cards": BAIT}], "golem": [{"cards": GOLEM}],
+                             "xbow": [{"cards": QUIET}]}
+    quiet = di.build(IDX, BOT)
+    di._state["checked"] = 0.0
+    qa = (di.activity() or {}).get("games") or {}
+    check("a hub nobody played is in the table with nothing in it: not played, which is not unknown",
+          (quiet.get("activity") or {}).get("decks") == 5 and qa.get(k(QUIET)) == {}
+          and k(STRAY_A) not in qa and qa.get(k(MORTAR)) == ma,
+          f"{(quiet.get('activity') or {})} {qa.get(k(QUIET))}")
+    dcx_mod.seeds = lambda: {"bait": [{"cards": BAIT}], "golem": [{"cards": GOLEM}]}
+    days_seen: dict = {}
+    di._note_day(days_seen, day(3), 1, 1)
+    di._note_day(days_seen, day(3), 1, 0)
+    di._note_day(days_seen, day(3), 9, 5)
+    di._note_day(days_seen, "", 1, 1)
+    di._note_day(days_seen, day(3), 0, 0)
+    check("one day's note: games and wins of pairs that met once, and the pairs that met more",
+          days_seen == {day(3)[:8]: [2, 1, 1]}, str(days_seen))
     dcx_mod.seeds = lambda: {}
 
     print("\n-- Pilot strength --")
