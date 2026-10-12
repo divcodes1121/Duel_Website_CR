@@ -1623,6 +1623,33 @@ plan is missing because the meta board is in its first build after a restart
 says so (`The meta board is still being built. Try again in a few minutes.`)
 instead of the generic line.
 
+## The families board, built their way (2026-10-12)
+
+`FamiliesCard` in `CoachRoster/FieldAnswers.tsx`; strings in
+`state/coachStyle.ts` (no imports, `tests/coachStyle.test.ts`). The server now
+chooses a win condition's four rows by how the player builds
+(`server/coach_style.py`), so two players no longer open the same board.
+
+- **Card note** gains `· built their way` (`your` on `#/my`) when the rows
+  were chosen by style.
+- **One muted line of figures** under it (`data-style-line`): `Their spells ·
+  Barbarian Barrel + Poison 49% · Barbarian Barrel + Fireball 21% · 3.2
+  elixir · building in 85%`. Packages under 5% of their battles are left out;
+  a deck with no spell is `no spell`.
+- **Each row's note** is `spells 2/2 · support 3/4 · same building` — of that
+  list's spells and support cards, how many they play; `same building` when
+  it is one they run, `no building` when the list has none and neither do
+  they; a building they do not run is not mentioned. A zero is printed
+  (`spells 0/2`). When the list is close to one deck they pilot it leads with
+  `7/8 of one deck`. The server's ordering score is never printed.
+- **The detail line** reads `40 decks · 4 closest to their builds`, plus
+  `field best 63.8%` when the win condition's strongest list is not one of
+  the rows.
+- **Chip figure** = the best of the rows SHOWN. The *Best expected* tile on
+  the tab reads `fieldBest`, the strongest list in the pool.
+
+An older server (no `style`) keeps the previous row note and `top 4`.
+
 ## Coach Assist: "Or bring one of these" and its duel figures (2026-09-30)
 
 Each row after the name and its labels carries ONE duel figure, never both:

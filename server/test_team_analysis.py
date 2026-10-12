@@ -490,6 +490,38 @@ check("and rebuilt when it has", ta._scout_candidates() is not scout_pool,
       "the representatives come off snapshot['reps'], so a rebuild is exactly "
       "when they may differ and nothing else is")
 
+# THE FIELD POOL: every vetted ladder list, not the twelve most played of each
+# win condition. The coach's families board chooses a win condition's decks by
+# how the reader builds, and those lists are mostly ranked 13th to 40th.
+print(NL + "the field pool is every vetted list of a win condition")
+_real_seeds, _real_fill = ta.dcx.seeds, ta.cd.fillable_slots
+_extra = [k for k in __import__("duel_combos").card_keys() if k not in HOG][:20]
+_many = [{"cards": list(HOG[:7]) + [x], "games": 900 - i, "archetypes": {}}
+         for i, x in enumerate(_extra)]
+ta.dcx.seeds = lambda: {"hog": _many + [dict(_many[0])],
+                        "short": [{"cards": list(SHORT), "games": 50, "archetypes": {}}]}
+ta.cd.fillable_slots = lambda cs: 0 if set(cs) == set(SHORT) else ta.cd.SPECIAL_SLOTS
+ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 3000.0}
+ta._FIELD_POOL = None
+ta._SCOUT_POOL = None
+_field = ta._field_candidates()
+check("it holds every list, past the scout pool's cap",
+      len(_field) == len(_many) > ta.SCOUT_SEEDS_PER_ARCHETYPE, str(len(_field)))
+check("the scout pool of the same snapshot is still capped",
+      len(ta._scout_candidates()) == ta.SCOUT_SEEDS_PER_ARCHETYPE, str(len(ta._scout_candidates())))
+check("a list listed twice is one candidate", len({c.key for c in _field}) == len(_field))
+check("a list that cannot fill all three special slots is left out here too",
+      not any(c.key == ",".join(sorted(SHORT)) for c in _field))
+check("a field candidate is nobody's deck, and is a ladder list",
+      all(c.owner is None and c.origin == "ladder" for c in _field))
+check("it is kept while the snapshot has not moved", ta._field_candidates() is _field)
+ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 3001.0}
+check("and rebuilt when it has", ta._field_candidates() is not _field)
+ta.dcx._snap = lambda: None
+check("no snapshot is no pool", ta._field_candidates() == [])
+ta.dcx.seeds, ta.cd.fillable_slots = _real_seeds, _real_fill
+ta._FIELD_POOL = None
+
 ta.dcx._representatives = lambda: REPS
 ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 1000.0}
 ta._SCOUT_POOL = None

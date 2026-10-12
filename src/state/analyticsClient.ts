@@ -3006,6 +3006,46 @@ export interface FieldPick {
   /** This row is in its family because it is close to what they play, not
    *  because it out-ranked the others. Labelled rather than passed off. */
   closestOfFamily?: boolean;
+  /** How closely this list is built the way THIS player builds
+   *  (`server/coach_style.py`). On `families` rows when they have enough of
+   *  their own games to read; absent otherwise and from an older server. */
+  style?: DeckStyleFit;
+}
+
+/** One list against a player's own builds. The counts are what a reader can
+ *  check by looking at the strip; `score` only orders. */
+export interface DeckStyleFit {
+  score: number;
+  /** [of this list's spells, how many they play], likewise support cards. */
+  spells: [number, number];
+  support: [number, number];
+  /** `yours` = a building they run, `none` = no building, like them. */
+  building: 'yours' | 'none' | 'other';
+  /** Share (0-1) of their battles played with exactly this spell set. */
+  package: number;
+  /** Battles they have with this list's win condition; 0 when it was read
+   *  off everything they play. */
+  winConBattles: number;
+  elixir: number | null;
+}
+
+/** How a player builds, in figures: what the families board is chosen by. */
+export interface PlayStyle {
+  brain: string;
+  battles: number;
+  decks: number;
+  /** A list must be at `floor`% or better against the field and within `band`
+   *  points of its win condition's best to be chosen for fitting. */
+  band: number;
+  floor: number;
+  elixir: number | null;
+  /** Share (0-1) of their battles with no building in the deck. */
+  noBuilding: number;
+  /** Their most-used spell sets, most used first. An empty set is "none". */
+  packages: { spells: string[]; names: string[]; share: number }[];
+  winCons: string[];
+  /** Lists the board was chosen from. */
+  pool?: number;
 }
 
 /** One window's record against one archetype, beside the window before it.
@@ -3114,6 +3154,12 @@ export interface DeckFamily {
   /** The personal order put a different deck at the top of this family than
    *  the field's order would. 0 across a board is a real answer. */
   moved: boolean;
+  /** The rows were chosen by how the player builds, not by rate alone. */
+  styled?: boolean;
+  /** The win condition's best list against the field, whether or not it is
+   *  one of `decks` — what was passed over for a closer build is not hidden.
+   *  Absent from an older server, where it equals `best`. */
+  fieldBest?: number;
   decks: FieldPick[];
 }
 
@@ -3195,6 +3241,8 @@ export interface FieldPlan {
     /** Distinct cards across the decks they play. */
     cards: number;
   };
+  /** How they build — null under the server's floor of their own games. */
+  style?: PlayStyle | null;
   brief?: boolean;
   /** What the meta's own direction did to the projection. `applied` is false
    *  under the history floor, and `reason` says so — it switches itself on

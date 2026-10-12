@@ -473,6 +473,49 @@ check("a family smaller than the cut is shown whole",
       len(cdl.families([sc("mortar", 55.0), sc("mortar", 54.0)])[0]["decks"]) == 2)
 
 
+print("a win condition's decks are the ones built the way THIS player builds")
+
+# REPORTED 2026-10-12: "everyone should not have the same, as everyone's
+# playstyle is different". Measured on seven roster players: the lead list of
+# a win condition was the same deck for all seven in 11 of 17. When the rows
+# carry a style read (`coach_style.fit`), the family's rows are chosen by it
+# among lists that still beat the field; without one, nothing changes.
+
+
+def styled(arch, rate, score, tag):
+    r = sc(arch, rate, cards=[f"{arch}-{tag}-{i}" for i in range(8)])
+    r["key"] = f"{arch}-{tag}"
+    r["style"] = {"score": score, "spells": [0, 2], "support": [0, 4], "building": "other",
+                  "package": 0.0, "winConBattles": 0, "elixir": 3.5}
+    return r
+
+
+_st = [styled("hog", 63.0, 0.05, "best"), styled("hog", 59.0, 0.60, "a"),
+       styled("hog", 58.0, 0.50, "b"), styled("hog", 57.0, 0.40, "c"),
+       styled("hog", 56.0, 0.30, "d"), styled("hog", 49.0, 0.99, "loser")]
+_gs = cdl.families(_st)[0]
+check("the rows are the closest builds, best rate first",
+      [r["key"] for r in _gs["decks"]] == ["hog-a", "hog-b", "hog-c", "hog-d"],
+      [r["key"] for r in _gs["decks"]])
+check("the family says its rows were chosen by build", _gs["styled"] is True)
+check("the chip's figure is the best of the rows SHOWN", _gs["best"] == 59.0, _gs["best"])
+check("and the win condition's own best is still published, never hidden",
+      _gs["fieldBest"] == 63.0, _gs.get("fieldBest"))
+check("a different lead than the field's order counts as moved", _gs["moved"] is True)
+check("a list that loses to the field is never shown for fitting",
+      not any(r["key"] == "hog-loser" for r in _gs["decks"]))
+check("the total still counts every list of the win condition", _gs["total"] == 6)
+_plain = cdl.families([sc("hog", 61.0), sc("hog", 58.0)])[0]
+check("rows with no style read: the field's order, exactly as before",
+      _plain["styled"] is False and _plain["best"] == 61.0 and _plain["fieldBest"] == 61.0
+      and _plain["moved"] is False, _plain)
+_two = cdl.families([styled("hog", 60.0, 0.9, "x"), styled("golem", 58.0, 0.1, "y")])
+check("a styled board is still ordered by each win condition's shown best",
+      [g["archetype"] for g in _two] == ["hog", "golem"])
+_p1 = cdl.families(_st, per=1)[0]
+check("`per` is honoured on a styled family", len(_p1["decks"]) == 1 and _p1["decks"][0]["key"] == "hog-a")
+
+
 print("the board is grouped by what they can already play")
 
 # THE PARTITION RUNS ON WHAT THEY HAVE PLAYED, not on card overlap. Grouping

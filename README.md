@@ -303,6 +303,7 @@ python server/test_deck_packages.py # 56 checks: spell packages, buildings and s
 python server/test_deck_evidence.py # 48 checks: who played a deck and in what mode — the vetting every offered deck passes
 python server/test_coach_session.py # 65 checks over today's practice session
 python server/test_coach_session_log.py # 26 checks: what each player was shown, so the next day's deck differs
+python server/test_coach_style.py # 54 checks: how a player builds, and which ladder lists are built that way
 python server/test_after_poll.py  # 13 checks: the duel evidence updates when a bot poll finishes, never mid-poll
 python server/test_db_keeper.py   # 11 checks over the one idle connection per database file
 python server/test_card_art.py    # 131 checks over deck arrangement and card art
@@ -17398,6 +17399,96 @@ planted faults, all caught (one test was too weak first). **Not opened in a
 browser signed in as the coach.** Undo without a deploy: restore the
 backups and restart royalweb.
 
+### Every way to answer this field, built the player's way (2026-10-12)
+
+Reported against the families board on the coach's *Against the field* tab:
+*"everyone should not have the same, as everyone's playstyle is different …
+see what spells they are pairing with which win cons, check usage, search
+those decks from actual playing ones used widely, see all support types … it
+should not be generic and the same for all"*.
+
+**Measured first, on the seven roster players.** The lead deck of a win
+condition was the **same list for all seven in 11 of 17** win conditions, and
+two thirds of any player's board was also on another player's. Two causes:
+
+* **The pool was the twelve most-played lists of each win condition** (204).
+  The snapshot holds every vetted ladder list — about forty each, 651, each
+  with 25+ pilots and played in the last thirty days (`deck_evidence`). The
+  twelve are the meta's lists by construction, the same dozen for every
+  reader; the lists a particular player would build are mostly further down.
+* **"Theirs" meant raw card overlap.** Two Hog decks sharing six cards with a
+  player can differ in exactly the part that is the player's own: Fireball +
+  Log against Earthquake + Snowball, Cannon against Tesla against no building.
+
+**How a player builds — `server/coach_style.py`, pure.** `profile()` reads
+their own decks in the window, weighted by battles and split by
+`deck_packages`' roles (win condition / spell / building / support): each
+card's share of their battles, each exact **spell package's** share, the share
+with no building, and their mean deck cost. The same again for **each win
+condition card they have 20+ games with**, because a player's Hog decks may
+run Earthquake while their Graveyard decks run Poison — a Hog list is fitted
+against the Hog games first (half the score), the rest against everything they
+play. What that reads like, for the seven:
+
+| player | their spell packages | building | deck cost |
+| --- | --- | --- | --- |
+| 1 | Barbarian Barrel + Fireball 80% | in 15% | 3.65 |
+| 2 | Arrows 23%, Barbarian Barrel + Lightning + Tornado 20% | in 74% | 3.64 |
+| 4 | Barbarian Barrel + Poison 49%, Barbarian Barrel + Fireball 21% | in 85% | 3.21 |
+| 7 | Barbarian Barrel + Vines 44%, Tornado + Vines + Zap 23% | in 12% | 3.73 |
+
+**The rule** (`coach_style.pick`): a win condition's four rows are the real
+ladder lists **built most like this player builds**, among those that still
+beat the field (`STYLE_FLOOR` 52%) and sit within `STYLE_BAND` 10 points of
+the win condition's best list. A near copy of a chosen list (7 shared cards)
+is skipped, so the four rows are four builds. The rate printed beside a deck
+is its own expected rate — nothing here changes a figure — and the win
+condition's best rate is published (`fieldBest`) and printed when a row does
+not hold it, so what was passed over is never hidden. Under 20 battles of
+their own there is no profile and the board is the field's order, as before.
+
+**Replayed on the seven** (651 real lists scored for each), then staged
+through the production path and read back from the live route:
+
+| | before | now |
+| --- | --- | --- |
+| win conditions whose lead list is the same deck for all seven | 11 of 17 | **1 of 17** |
+| a board's lists also on another player's board | 66% | **40%** |
+| lists on every one of the seven boards | 24 | **6** |
+| distinct lists across the seven boards | 137 | **209** |
+| win conditions whose lead differs from the field's order | 0 to 2 of 17 | **10 to 15** |
+| of a row's spells, ones the player plays | 66% | **72%** |
+| of a row's support cards, ones the player plays | 41% | **50%** |
+| expected rate of the decks shown | 55.5% | **56.1%** |
+
+The shown decks are slightly *stronger* than before, not weaker, because they
+are chosen from three times as many lists. **A wider pool alone makes the
+boards MORE alike** (81% shared — everybody gets the same stronger lists), and
+a narrow band cannot separate them (within three points of the best there are
+one to four lists in a third of the win conditions); the table in
+`coach_style.py` has every setting tried. The cost is that a win condition's
+strongest list is not always one of its rows: it is missed by 2.2 points on
+average, and its rate is printed.
+
+**On screen.** One line of figures under the card's note — `Their spells ·
+Barbarian Barrel + Poison 49% · Barbarian Barrel + Fireball 21% · 3.2 elixir ·
+building in 85%` — and each row says `spells 2/2 · support 3/4 · same
+building`: of that list's spells and support cards, how many they play
+(`state/coachStyle.ts`). The *Best expected* tile reads the strongest list in
+the pool rather than the first chip.
+
+**Not changed:** the seven recommendations, *Closest to how they play*, *Worth
+learning* and today's session still read the 204-list pool, and the roster's
+Today board (`brief`) does no extra work. Plan time 0.25 -> 0.31 s; the full
+payload 91 -> 104 kB.
+
+Deployed 2026-10-12 07:18 UTC (backups `*.bak-20261012-071855-prestyle`, only
+royalweb restarted). Tests: `test_coach_style.py` 54 (new),
+`test_coach_daily.py` 205 -> 215, `test_team_analysis.py` 304 -> 312,
+`tests/coachStyle.test.ts` 19 (new); sixteen planted faults, all caught (two
+tests were too weak first). **Not opened in a browser signed in as the
+coach.** Undo without a deploy: restore the backups and restart royalweb.
+
 ### Where the data lives, and what enforces access
 
 The coaching state is in Supabase — `supabase/004_coach_roster.sql` — and
@@ -18568,6 +18659,8 @@ server/
                               really changes daily
   coach_session_log.py        what each player was shown, so the next day's deck
                               is a different win condition (own SQLite file)
+  coach_style.py              how a player builds (spell packages, support,
+                              building, cost) and which ladder lists match. No imports
   after_poll.py               brings the duel index, the model, the duel read, the
                               pairing table and the swap graph up to date when a
                               bot poll ends

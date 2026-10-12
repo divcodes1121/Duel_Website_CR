@@ -1462,6 +1462,30 @@ the focus 11 of 98 -> 0, against the focus 62.3 -> 65.8, against the field
 `test_coach_session_log.py` 26. Deployed 2026-10-12, backups
 `{coach_daily,coach_session,app,test_coach_daily,test_coach_session}.py.bak-20261012-064221-predailydecks`.
 
+**The families board is built the player's way (2026-10-12).**
+`coach_style.py` (pure, `coach-style-1.0`): `profile(own, role_of, elixir_of)`
+— card shares, exact spell packages, no-building share and mean cost off
+their own decks by battles, plus `byWinCon` for each win-condition card with
+`STYLE_MIN_BATTLES` (20) of its own; `fit(cards, prof, …)` — spells 0.40
+(half the cards, half the exact package), support 0.40, building 0.12, pace
+0.08, blended 50/50 with the win condition's own reading when there is one,
+with printable counts `spells [n, m]`, `support [n, m]`, `building`
+(`yours`/`none`/`other`); `pick(decks, per, band, floor)` — among lists at
+`STYLE_FLOOR` (52) or better and within `STYLE_BAND` (10) of the best, the
+closest builds, near copies (`NEAR_COPY` 7) skipped, returned best rate
+first; `public(prof)` -> `plan()['style']`.
+
+`team_analysis._field_candidates()` is every vetted seed (651 on the live
+snapshot, against the scout pool's 204), cached per snapshot, no database
+read. `plan()` scores it for the families board only and not in `brief`;
+`families()` uses `coach_style.pick` when its rows carry `style` and is
+unchanged when they do not. Families gain `styled` and `fieldBest`.
+
+Live, seven roster players: lead list identical for all seven 11 of 17 -> 1,
+a board also on another's 66% -> 40%, shown rate 55.5 -> 56.1, plan 0.31 s.
+`test_coach_style.py` 54. Deployed 2026-10-12, backups
+`{coach_daily,team_analysis,test_coach_daily,test_team_analysis}.py.bak-20261012-071855-prestyle`.
+
 
 ### The copy is figures
 

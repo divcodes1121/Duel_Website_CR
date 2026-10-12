@@ -1328,6 +1328,66 @@ def _scout_candidates() -> list["_Candidate"]:
     return out
 
 
+#: Every vetted ladder list, kept per snapshot like the scout pool above.
+_FIELD_POOL: tuple[object, list["_Candidate"]] | None = None
+
+
+def _field_candidates() -> list["_Candidate"]:
+    """EVERY vetted ladder list of every win condition -- about forty each.
+
+    For the coach's "Every way to answer this field" board, which chooses a
+    win condition's decks by how the reader BUILDS (`coach_style`). The scout
+    pool's twelve most-played per win condition are the meta's lists by
+    construction, the same dozen for every reader: measured on seven roster
+    players, the lead list of a win condition was the same deck for all seven
+    in 11 of 17. The lists a particular player would build -- their spell
+    package, their building, their support cards -- are mostly ranked 13th to
+    40th by games.
+
+    Same evidence and the same cost as the scout pool: a seed carries its own
+    per-archetype record (`_SeedProfile`), so this is no database read. Same
+    rule as every suggestion: a list that cannot field all three special slots
+    is left out. Empty when the snapshot has no seeds; the caller then uses
+    the scout pool.
+    """
+    global _FIELD_POOL
+
+    snap = dcx._snap()
+    key = (snap or {}).get("computedAt")
+    if key is None:
+        return []
+    if _FIELD_POOL is not None and _FIELD_POOL[0] == key:
+        return _FIELD_POOL[1]
+
+    out: list["_Candidate"] = []
+    seen: set[str] = set()
+    seat = dcx.seater()
+    for arch, decks in (dcx.seeds() or {}).items():
+        for seed in decks:
+            cards = list(seed.get("cards") or [])
+            if len(set(cards)) != 8 or cd.fillable_slots(cards) < cd.SPECIAL_SLOTS:
+                continue
+            try:
+                prof = _SeedProfile(seed, arch)
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                continue
+            cards, art, inferred = seat(cards)
+            c = _Candidate(
+                {"cards": cards, "art": art, "inferredArt": inferred,
+                 "winCondition": arch, "name": cd.deck_title(arch, cards),
+                 "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
+                 "origin": "ladder"},
+                None, prof)
+            if c.key in seen:
+                continue
+            seen.add(c.key)
+            out.append(c)
+
+    _FIELD_POOL = (key, out)
+    return out
+
+
 #: The counter pool, kept between requests: `{"key", "cands", "stats"}`.
 _COUNTER_POOL: dict = {"key": None, "cands": [], "stats": {}, "building": False,
                        "activity": None}

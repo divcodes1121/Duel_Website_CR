@@ -6,6 +6,7 @@ import { DeckActions } from '../../DeckActions/DeckActions';
 import { ChartCard, InsightRow } from '../../ui/bionis-dashboard';
 import { TrendIcon } from '../../Dashboard/icons';
 import { drawnDeck, formInferred } from '../../../utils/deckSeating';
+import { packageLine, sharedLine, styleLine } from '../../../state/coachStyle';
 import styles from './CoachRoster.module.css';
 
 /**
@@ -84,17 +85,6 @@ export function FreshnessLine({ plan }: { plan: FieldPlan | null }) {
         .join(' · ')}
     </p>
   );
-}
-
-function sharedLine(p: FieldPick): string | null {
-  const a = p.affinity;
-  if (!a) return null;
-  const bits: string[] = [];
-  if (a.familiar) bits.push(`${a.shared}/${a.of} of one deck`);
-  else if (a.knowsCards) bits.push(`${a.known}/${a.of} your cards`);
-  else return null;
-  if (a.familiar && a.deckBattles) bits.push(`${a.deckBattles} games`);
-  return p.closestOfFamily ? `Closest yours · ${bits.join(' · ')}` : bits.join(' · ');
 }
 
 function DeckRow({ p, note, name = true }: { p: FieldPick; note?: string | null; name?: boolean }) {
@@ -246,6 +236,8 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
 
   const mine = fams.filter((g) => g.yours);
   const rest = fams.filter((g) => !g.yours);
+  const styled = fams.some((g) => g.styled);
+  const pack = styled ? packageLine(plan.style, self) : null;
 
   const chips = (list: DeckFamily[]) => (
     <div className={styles.famRow}>
@@ -257,6 +249,8 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
           aria-pressed={open === g.archetype}
           onClick={() => setOpen(open === g.archetype ? null : g.archetype)}
         >
+          {/* The rate is the best of the ROWS SHOWN, which are chosen by how
+              they build; the win condition's own best is in the detail line. */}
           {g.name} · {g.best.toFixed(1)}%
           {/* GAMES THEY HAVE PLAYED OF IT, which is what the group above
               partitions on. The card-overlap count is dense enough to read
@@ -271,12 +265,21 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
     <ChartCard
       title="Every way to answer this field"
       note={
-        mine.length > 0
-          ? `${mine.length} ${self ? 'yours' : 'theirs'} first, then the field · best % first`
-          : 'Best % first · nothing built from their cards'
+        [
+          mine.length > 0
+            ? `${mine.length} ${self ? 'yours' : 'theirs'} first, then the field · best % first`
+            : 'Best % first · nothing built from their cards',
+          styled ? `built ${self ? 'your' : 'their'} way` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
       }
       badge={String(fams.length)}
     >
+      {/* HOW THEY BUILD, in figures — what the rows below are chosen by. A
+          win condition's four decks are the real ladder lists closest to
+          these packages among those that still beat the field. */}
+      {pack && <p className={styles.muted} data-style-line>{pack}</p>}
       {/* TWO GROUPS, NOT ONE RANKING — and the split is a measured fact
           (is any deck of this win condition built from cards they play?)
           rather than a weight. Ordering by a bounded familiarity nudge was
@@ -305,11 +308,22 @@ export function FamiliesCard({ plan, self = false }: { plan: FieldPlan; self?: b
               {/* `knows` is deliberately NOT here: it read 12 of 12 in every
                   family for a broad player, so it varies too little to be
                   worth a column. The games figure is on the chip already. */}
-              {[`${g.total} decks`, `top ${g.decks.length}`].join(' · ')}
+              {[
+                `${g.total} decks`,
+                g.styled ? `${g.decks.length} closest to ${self ? 'your' : 'their'} builds` : `top ${g.decks.length}`,
+                /* WHAT WAS PASSED OVER. The rows are chosen by build among
+                   lists that still beat the field, so the win condition's
+                   strongest list may not be one of them — its rate is said. */
+                g.fieldBest != null && g.fieldBest > g.best + 0.05
+                  ? `field best ${g.fieldBest.toFixed(1)}%`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
             <ul className={styles.deckList}>
               {g.decks.map((p) => (
-                <DeckRow key={p.key} p={p} note={sharedLine(p)} name={false} />
+                <DeckRow key={p.key} p={p} note={styleLine(p)} name={false} />
               ))}
             </ul>
           </div>

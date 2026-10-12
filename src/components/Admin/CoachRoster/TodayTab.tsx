@@ -119,6 +119,10 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
   const boosted = plan.threats.filter((t) => t.boost > 1);
   const near = (plan.closest ?? []).length;
   const fams = (plan.families ?? []).length;
+  const bestFamily = (plan.families ?? []).reduce<NonNullable<FieldPlan['families']>[number] | null>(
+    (top, g) => (top && (top.fieldBest ?? top.best) >= (g.fieldBest ?? g.best) ? top : g),
+    null,
+  );
 
   return (
     <Dashboard className={styles.overview}>
@@ -177,8 +181,12 @@ export function TodayTab({ player, win }: { player: RosterPlayer; win: CoachWind
         />
         <KeyMetricCard
           label="Best expected"
-          value={plan.families?.length ? `${plan.families[0].best.toFixed(1)}%` : '—'}
-          note={plan.families?.length ? plan.families[0].name : 'vs this projection'}
+          /* THE FIELD'S BEST, not the first chip's rate: the families board
+             now shows the lists closest to how they build, so `best` is the
+             best of the rows shown and the first family is THEIRS first. This
+             tile is the strongest answer in the whole pool. */
+          value={bestFamily ? `${(bestFamily.fieldBest ?? bestFamily.best).toFixed(1)}%` : '—'}
+          note={bestFamily ? bestFamily.name : 'vs this projection'}
           icon={<TrendIcon />}
         />
       </MetricGrid>

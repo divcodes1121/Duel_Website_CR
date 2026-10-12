@@ -67,7 +67,10 @@ import traceback
 
 import clash_data as cd
 import coach_intel
+import coach_style as cst
 import deck_counter as dcx
+import deck_packages as dpk
+import duel_combos as dxc
 import meta as meta_board
 import team_analysis as ta
 import team_scout as ts
@@ -458,7 +461,7 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         else:
             row.pop("artFilled", None)
 
-    def score_all(projection):
+    def score_all(projection, cands=None):
         """Every candidate scored. THE WHOLE POOL, which is the change.
 
         This used to end in `diversify()` and return seven, so 197 of 204
@@ -468,7 +471,7 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         the same numbers and cannot disagree about a deck.
         """
         out = []
-        for c in pool:
+        for c in (pool if cands is None else cands):
             got = ts.score(
                 lambda other, _p=c.profile: _p.against(other, snap),
                 projection,
@@ -518,6 +521,41 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
     fams: list[dict] = []
     near: list[dict] = []
     learn = None
+    style = None
+
+    def _elixir(card):
+        return dxc.card_info(card).get("elixir") or 0
+
+    def _board_rows(pool_cards):
+        """The rows the families board is chosen from, each with how closely
+        it is built the way THIS player builds (`coach_style`).
+
+        EVERY VETTED LADDER LIST, not the scout pool's twelve most-played of
+        each win condition -- those are the same dozen for every reader, and
+        the lists a particular player would build are mostly further down.
+        Scored by the same `ts.score` against the same projection, so a list
+        on both pools carries the same figure on both. Not in `brief`: the
+        roster row draws no family, and this is ~450 more score calls.
+        """
+        nonlocal style
+        rows = scored
+        if not brief:
+            try:
+                wide = ta._field_candidates()
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                wide = []
+            if len(wide) > len(pool):
+                rows = score_all(threats, wide)
+                for r in rows:
+                    r["affinity"] = deck_affinity(r["cards"], own, pool_cards)
+        prof = cst.profile(own, dpk.default_role, _elixir)
+        if prof:
+            for r in rows:
+                r["style"] = cst.fit(r["cards"], prof, dpk.default_role, _elixir)
+            style = cst.public(prof, lambda c: dxc.card_info(c).get("name") or c)
+            style["pool"] = len(rows)
+        return rows
 
     def _build_lists():
         nonlocal fams, near, learn
@@ -530,7 +568,17 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
         # inside `worth_learning` says so.
         beat = near[0]["expectedWinRate"] if near else None
         learn = worth_learning(scored, hist, hist_total, beat, near, threats)
-        fams = families(scored, hist=hist, total=hist_total)
+        # THE BOARD IS BUILT THEIR WAY. A fault in the style read costs the
+        # personal choice and nothing else: the board falls back to the scout
+        # pool in the field's order, which is what it was.
+        try:
+            board_rows = _board_rows(pool_cards)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            board_rows = scored
+            for r in board_rows:
+                r.pop("style", None)
+        fams = families(board_rows, hist=hist, total=hist_total)
         # A family row draws a card strip, a name, a rate and whether they
         # could already pilot it -- so it carries exactly that. MEASURED: the
         # untrimmed rows made `families` 61 kB of a 108 kB payload, and the
@@ -662,6 +710,10 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
             "knownFloor": KNOWN_MIN,
             "cards": len(card_pool(own)),
         },
+        # HOW THEY BUILD (`coach_style`): their spell packages, building and
+        # deck cost, which is what the families board is chosen by. None under
+        # the profile floor (`coach_style.STYLE_MIN_BATTLES` of their own).
+        "style": style,
         **({} if brief else {
             "families": fams,
             # HOW MANY FAMILIES THE PERSONAL ORDER ACTUALLY MOVED. 0 is a real
@@ -1031,7 +1083,17 @@ def families(scored: list[dict], per: int = FAMILY_DECKS,
         # a claim the reader cannot check is not worth making.
         field_first = min(g["decks"], key=lambda r: (-r["expectedWinRate"], r["name"]))
         g["decks"].sort(key=lambda r: (-personal_rate(r), -r["expectedWinRate"], r["name"]))
-        best = g["decks"][0]
+        # BUILT THEIR WAY, when the rows carry a style read: among the lists
+        # that still beat the field, the four built the way this player builds
+        # (`coach_style.pick`). Without one -- no profile, or a caller that
+        # never asked -- the field's order with the reserved slots, as before.
+        styled = any(r.get("style") for r in g["decks"])
+        shown = cst.pick(g["decks"], per) if styled else None
+        best = shown[0] if shown else g["decks"][0]
+        g["styled"] = styled
+        # THE WIN CONDITION'S BEST LIST, whether or not it is one of the rows:
+        # what was passed over for a closer build is never hidden.
+        g["fieldBest"] = field_first["expectedWinRate"]
         # `best` STAYS THE EXPECTED WIN RATE, never the personal score. The
         # screen prints it as a percentage against the field, and printing a
         # familiarity-adjusted number as a win rate would be printing a figure
@@ -1058,7 +1120,7 @@ def families(scored: list[dict], per: int = FAMILY_DECKS,
         g["yours"] = in_range(g["archetype"], hist or {}, total)
         g["games"] = (hist or {}).get(g["archetype"], 0)
         g["_p"] = personal_rate(best)
-        g["decks"] = _pick(g["decks"], per)
+        g["decks"] = shown if shown else _pick(g["decks"], per)
         out.append(g)
     # WIN CONDITIONS THEY CAN ALREADY PLAY FIRST, then the rest of the field,
     # each run ordered by how well it answers the field.
