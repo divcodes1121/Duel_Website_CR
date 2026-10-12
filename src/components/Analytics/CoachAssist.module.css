@@ -729,6 +729,88 @@
   background: var(--solid-green);
 }
 
+/* HOW A PLAYER PLAYS: one line a win condition — its card, its name with the
+   two one-word tags, and the two figures at the right edge. */
+.wcList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.wcRow {
+  display: grid;
+  grid-template-columns: 1.9rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.3rem;
+}
+
+.wcArt {
+  width: 1.9rem;
+  display: block;
+}
+
+.wcArt img {
+  width: 100%;
+  display: block;
+}
+
+.wcName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.wcUse,
+.wcTag {
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* How much it is played: an outline, so it never competes with the tag. */
+.wcUse {
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+/* What their duel record with it says: a fill that carries white text. */
+.wcTag {
+  color: var(--on-solid);
+  background: var(--solid-green);
+}
+
+.wcTag[data-tag='weak'] {
+  background: var(--solid-red);
+}
+
+.wcFig {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+@media (max-width: 34rem) {
+  .wcRow {
+    grid-template-columns: 1.9rem minmax(0, 1fr);
+  }
+
+  .wcFig {
+    grid-column: 2;
+  }
+}
+
 /* Where a counter comes from ("CRL duel list" / "Meta list"). Two words that
    must stay one pill: beside a name that wraps, it broke in the middle. */
 .duelTag[data-counter] {

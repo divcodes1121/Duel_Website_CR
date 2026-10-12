@@ -24,6 +24,7 @@ import { duelPickLabel, duelShort } from './duelFigures';
 import { familyChips, shareLabel } from './bringAgainst';
 import { drawnDeck } from './deckSeating';
 import { counterHeading, counterLabel, counterNote, setCounterNote } from './coachCounters';
+import { profileNote, skillLabel, useLabel, winConLine } from './coachProfile';
 import { distinctDeckLabels } from './trendSeries';
 
 /* Report models for the screens that had NO export before this module:
@@ -470,6 +471,23 @@ export function coachSuggestionDoc(sg: CoachSuggestion): ReportDoc {
             [counterLabel(d.origin), vs].filter(Boolean).join(' · '));
         }),
       }] : []),
+      // How each player plays in their window: a bar a win condition, as wide
+      // as its share of their games, labelled with the two one-word tags.
+      ...([['mine', sg.myName || 'your player'], ['opponent', sg.oppName || 'they']] as const)
+        .filter(([side]) => sg.profiles?.[side]?.winCons.length)
+        .map(([side, who]) => {
+          const p = sg.profiles![side]!;
+          return {
+            kind: 'bars' as const,
+            heading: `How ${who} plays · ${profileNote(p)}`,
+            bars: p.winCons.map((w) => ({
+              label: [w.name, useLabel(w.use), skillLabel(w.skill?.tag)].filter(Boolean).join(' · '),
+              value: winConLine(w),
+              fraction: w.share,
+              hue: (side === 'mine' ? 'blue' : 'pink') as 'blue' | 'pink',
+            })),
+          };
+        }),
       ...(sg.best?.plan && (sg.best.plan.then.won || sg.best.plan.then.lost) ? [{
         kind: 'decks' as const,
         heading: 'Then bring',

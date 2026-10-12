@@ -1636,7 +1636,161 @@ finally:
         else:
             sys.modules[_name] = _mod
 
+print("\neach player's skill with the win condition they bring (2026-10-12)")
+import player_skill as _psm  # noqa: E402
+
+_HOG = ["hog-rider", "the-log", "fireball", "musketeer", "ice-spirit", "skeletons", "cannon", "ice-golem"]
+_GOLEM = ["golem", "night-witch", "baby-dragon", "lightning", "tornado", "lumberjack", "mega-minion", "barbarian-barrel"]
+_LAVA = ["lava-hound", "balloon", "miner", "arrows", "skeleton-dragons", "tombstone", "mega-minion", "fireball"]
+_NOWC = ["knight", "archers", "arrows", "fireball", "the-log", "ice-spirit", "skeletons", "musketeer"]
+check("a deck's win condition is its priciest win-condition card",
+      coach._family_card(_HOG) == "hog-rider" and coach._family_card(_GOLEM) == "golem"
+      and coach._family_card(_LAVA) == "lava-hound" and coach._family_card(list(reversed(_LAVA))) == "lava-hound")
+check("no win condition, or no deck: none", coach._family_card(_NOWC) is None and coach._family_card([]) is None)
+_SK = {"mine": {"hog-rider": [40, 30, 20.0], "golem": [40, 12, 20.0]},
+       "theirs": {"golem": [40, 28, 20.0]}, "k": 20.0, "weight": 2.0}
+_strong, _weak, _their = 10 / 60, -8 / 60, 8 / 60
+check("the shift is weight x (my skill with my win condition - theirs with theirs)",
+      abs(coach._skill_shift(_SK, _HOG, _GOLEM) - 2.0 * (_strong - _their)) < 1e-12
+      and abs(coach._skill_shift(_SK, _GOLEM, _GOLEM) - 2.0 * (_weak - _their)) < 1e-12)
+check("a win condition a player has no record with is no skill either way",
+      abs(coach._skill_shift(_SK, _LAVA, _HOG) - 0.0) < 1e-12
+      and abs(coach._skill_shift(_SK, _HOG, _LAVA) - 2.0 * _strong) < 1e-12)
+check("a side that is not named counts for nothing; no table is no shift",
+      abs(coach._skill_shift(_SK, _HOG, None) - 2.0 * _strong) < 1e-12
+      and abs(coach._skill_shift(_SK, None, _GOLEM) + 2.0 * _their) < 1e-12
+      and coach._skill_shift(None, _HOG, _GOLEM) == 0.0)
+
+_flat = SimpleNamespace(on=True, rate=lambda mine, theirs=None, archetype=None: {"winRate": 50.0})
+_kw0 = dict(my_def=None, opp_def=None, my_str=0.5, opp_str=0.5)
+p_none, src_none = coach._combined_pair({"weights": {}}, _flat, _HOG, _GOLEM, **_kw0)
+p_sk, _s = coach._combined_pair({"weights": {}}, _flat, _HOG, _GOLEM, skill=_SK, **_kw0)
+p_weak, _s = coach._combined_pair({"weights": {}}, _flat, _GOLEM, _GOLEM, skill=_SK, **_kw0)
+check("without the table a pair is rated exactly as before", p_none == 0.5 and src_none == "combined")
+check("with it, the same matchup is this player's: their strong win condition up, their weak one down",
+      abs(p_sk - _dm.sig(2.0 * (_strong - _their))) < 1e-12 and abs(p_weak - _dm.sig(2.0 * (_weak - _their))) < 1e-12
+      and p_weak < 0.5 < p_sk, f"{p_sk} {p_weak}")
+_norate = SimpleNamespace(on=True, rate=lambda *a, **k: None)
+_w1 = {"weights": {"pilot": 1.0}}
+m_plain, m_src = coach._combined_pair(_w1, _norate, _HOG, _GOLEM, **_kw0)
+m_sk, _s = coach._combined_pair(_w1, _norate, _HOG, _GOLEM, skill=_SK, **_kw0)
+check("where the win model answers alone the skill is added to it too",
+      m_src == "model" and abs(m_sk - _dm.sig(_dm.logit(m_plain) + 2.0 * (_strong - _their))) < 1e-12)
+e_sk = coach._combined({"weights": {}}, _flat, _HOG, [{"cards": _GOLEM, "prob": 0.5}, {"cards": _LAVA, "prob": 0.5}],
+                       _kw0, _SK)
+check("the figure against several of their decks weighs each pair's own shift",
+      e_sk["winRate"] == round(100 * (0.5 * _dm.sig(2.0 * (_strong - _their)) + 0.5 * _dm.sig(2.0 * _strong)), 1))
+
+_saved_ps = (_psm.on, _psm.records, _psm.weights, coach._ps)
+try:
+    _psm.on = lambda path=None: False
+    check("a table whose own holdout did not gain moves nothing", coach._skills("#A", "#B") is None)
+    _psm.on = lambda path=None: True
+    _psm.weights = lambda path=None: (20.0, 2.0)
+    _psm.records = lambda tag, path=None: {"#A": {"hog-rider": [40, 30, 20.0]}}.get(tag, {})
+    got_sk = coach._skills("#A", "#B")
+    check("both players' records and the table's own weights",
+          got_sk == {"mine": {"hog-rider": [40, 30, 20.0]}, "theirs": {}, "k": 20.0, "weight": 2.0})
+    _psm.records = lambda tag, path=None: (_ for _ in ()).throw(RuntimeError("table gone"))
+    check("a table that raises is no term, never an error", coach._skills("#A", "#B") is None)
+    coach._ps = None
+    check("no table module: no term, no win condition named",
+          coach._skills("#A", "#B") is None and coach._skill_shift(_SK, _HOG, _GOLEM) == 0.0)
+finally:
+    _psm.on, _psm.records, _psm.weights, coach._ps = _saved_ps
+
+print("\nhow one player plays, in their window")
+_saved_prof = (sys.modules.get("player_decks"), _psm.records, _psm.weights)
+# Stored least played first, so "most played first" is the code's doing.
+_PLAYED = {"per": {
+    "l1": [3, 5, 0, "t", _LAVA, "lava"],
+    "n1": [9, 9, 0, "t", _NOWC, "other"],
+    "g1": [8, 12, 0, "t", _GOLEM, "golem"],
+    "h2": [6, 4, 0, "t", _HOG[:7] + ["tesla"], "hog"],
+    "h1": [30, 18, 2, "t", _HOG, "hog"],
+}, "duel": {"h1": 20, "g1": 5}}
+_asked = []
+try:
+    sys.modules["player_decks"] = SimpleNamespace(played=lambda tag, since, until: (_asked.append((tag, since, until)) or _PLAYED))
+    _psm.records = lambda tag, path=None: {"hog-rider": [40, 30, 20.0], "golem": [40, 12, 20.0], "lava-hound": [3, 0, 1.5]}
+    _psm.weights = lambda path=None: (20.0, 2.0)
+    prof = coach._win_con_profile("#A", "2026-09-12", "2026-10-11")
+    rows_p = {r["card"]: r for r in prof["winCons"]}
+    check("the window asked for is the window read", _asked == [("#A", "2026-09-12", "2026-10-11")]
+          and prof["window"] == {"from": "2026-09-12", "to": "2026-10-11"})
+    check("their games are filed under each deck's win condition; a deck with none is not in it",
+          [r["card"] for r in prof["winCons"]] == ["hog-rider", "golem", "lava-hound"] and prof["games"] == 88
+          and prof["winConsPlayed"] == 3, str([r["card"] for r in prof["winCons"]]))
+    check("USE RATE AND WIN RATE of a win condition, over every list of it",
+          rows_p["hog-rider"]["games"] == 60 and rows_p["hog-rider"]["wins"] == 36 and rows_p["hog-rider"]["decks"] == 2
+          and rows_p["hog-rider"]["share"] == round(60 / 88, 4) and rows_p["hog-rider"]["winRate"] == 60.0
+          and rows_p["golem"]["winRate"] == 40.0 and rows_p["hog-rider"]["duelGames"] == 20)
+    check("how much it is played has a name: main, regular, rare",
+          [rows_p[c]["use"] for c in ("hog-rider", "golem", "lava-hound")] == ["main", "regular", "rare"])
+    check("the tag is their duel record against what those games should have gone",
+          rows_p["hog-rider"]["skill"] == {"games": 40, "wins": 30, "expected": 20.0, "perGame": 16.7, "tag": "strong"}
+          and rows_p["golem"]["skill"]["tag"] == "weak" and rows_p["lava-hound"]["skill"]["tag"] is None)
+    check("the player's own totals", prof["wins"] == 47 and prof["winRate"] == round(100 * 47 / 88, 1))
+    _psm.records = lambda tag, path=None: {}
+    check("a player outside the table still has a profile, with no tag",
+          all(r["skill"] is None for r in coach._win_con_profile("#A", None, None)["winCons"]))
+    sys.modules["player_decks"] = SimpleNamespace(played=lambda *a: {"per": {}, "duel": {}})
+    check("nothing stored in the window, or no tag: no profile",
+          coach._win_con_profile("#A", None, None) is None and coach._win_con_profile("", None, None) is None)
+    sys.modules["player_decks"] = SimpleNamespace(played=lambda *a: (_ for _ in ()).throw(RuntimeError("reader gone")))
+    check("a reader that raises is no profile, never an error", coach._win_con_profile("#A", None, None) is None)
+
+    marked = [{"cards": list(_HOG)}, {"cards": list(_LAVA)}, {"cards": ["mortar"] + _NOWC[1:]}, {"cards": list(_NOWC)}]
+    coach._annotate(marked, prof)
+    check("each deck says which of the player's win conditions it is, with their use, win rate and tag",
+          marked[0]["winCon"] == {"card": "hog-rider", "name": marked[0]["winCon"]["name"], "share": round(60 / 88, 4),
+                                  "winRate": 60.0, "games": 60, "use": "main", "tag": "strong"}
+          and marked[1]["winCon"]["tag"] is None and marked[1]["winCon"]["use"] == "rare")
+    check("a win condition they did not play in the window is marked new",
+          marked[2]["winCon"]["card"] == "mortar" and marked[2]["winCon"].get("new") is True)
+    check("a deck with no win condition, or no profile at all, is left alone",
+          "winCon" not in marked[3] and "winCon" not in (coach._annotate([{"cards": list(_HOG)}], None) or [{}])[0])
+    solo = [{"cards": list(_HOG)}]
+    coach._annotate(solo, None)
+    check("...really: no profile, no mark", "winCon" not in solo[0])
+finally:
+    if _saved_prof[0] is None:
+        sys.modules.pop("player_decks", None)
+    else:
+        sys.modules["player_decks"] = _saved_prof[0]
+    _psm.records, _psm.weights = _saved_prof[1], _saved_prof[2]
+
+print("\nthe counters lean on the player's skill")
+_saved_lean = (coach._ta, coach._rec, coach._archetype, coach.cd)
+coach.cd = SimpleNamespace(SPECIAL_SLOTS=3, deck_title=lambda a, c: _tagof(c), fillable_slots=lambda cards: 3)
+coach._archetype = lambda cards: _FAM.get(_tagof(cards), "x")
+coach._rec = lambda md, opp, chips, snap, rates, extra=None: {**md, "expected": {"winRate": 50.0}}
+try:
+    lean_pool = [_pool_list(t, "ladder") for t in ("la", "lb", "lc", "ld", "le", "lf", "lg")]
+    lean_table = {"la": 60.0, "lb": 59.0, "lc": 58.0, "ld": 57.0, "le": 56.0, "lf": 55.0, "lg": 51.0}
+    _with_pool(lean_pool)
+    plain = [_tagof(r["cards"]) for r in coach._counter_rows(_C_OPP, set(), _FakeRates(lean_table), [], None, 30)[0]]
+    leaned, _i = coach._counter_rows(_C_OPP, set(), _FakeRates(lean_table), [], None, 30,
+                                     lean=lambda cards: {"lf": 0.4, "la": -0.4, "lg": 2.0}.get(_tagof(cards), 0.0))
+    order = [_tagof(r["cards"]) for r in leaned]
+    check("(without a lean: the five best by the cards)", plain == ["la", "lb", "lc", "ld", "le"])
+    check("THE PLAYER'S STRONG WIN CONDITION COMES UP AND THEIR WEAK ONE GOES DOWN",
+          order[0] == "lf" and "la" not in order and set(order) == {"lf", "lb", "lc", "ld", "le"}, str(order))
+    check("a list under the floor on its CARDS is not made a counter by skill", "lg" not in order)
+    by = {_tagof(r["cards"]): r for r in leaned}
+    check("a row carries both figures: what its cards rate, and what it was chosen on",
+          by["lf"]["counterValue"] == 55.0 and by["lf"]["counterChosenOn"] > 60.0
+          and by["lb"]["counterValue"] == by["lb"]["counterChosenOn"] == 59.0, str(by["lf"]))
+finally:
+    coach._ta, coach._rec, coach._archetype, coach.cd = _saved_lean
+
 _sug2 = _src[_src.index("def suggest("):_src.index("def mine_hist_pool(")]
+check("suggest hands the counters the coached player's skill, and sends both profiles",
+      "lean=(lambda cards: _skill_shift(_sk, cards, None)) if _sk else None)" in _sug2
+      and '"profiles": profiles,' in _sug2 and "_annotate(list(top) + list(counters), profiles[\"mine\"])" in _sug2)
+check("...the brain's context carries the table for the pair, and the plan and the set read it",
+      '"skill": _skills(my_tag, opp_tag)}' in _src and 'skill = ctx.get("skill")' in _src
+      and "_combined_pair(model, rates, a, b, skill=skill, **kw)" in _src)
 check("suggest tells the brain what kind of duel it is",
       "_brain_ctx(opp, my_tag, opp_tag, _level_scale(kind, mine_hist, opp_hist))" in _sug2)
 check("suggest finds the counters BEFORE the set is composed and hands them to it",

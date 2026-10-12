@@ -1673,6 +1673,41 @@ docstring. Backups `*.bak-20260930-153444-presynergy`.
 `coach._build_for_duel` no longer calls `plan_loadout` ("Planned for the whole
 duel" removed on request); `LOADOUT_EXTRA` is gone and `built` has no `loadout`.
 
+## A player's skill with each win condition (`player_skill.py`, 2026-10-12)
+
+`player-skill-1.0`. README "How each player plays" has the measurement.
+
+- **The table**: `.player_skill.json` (GITIGNORED — player tags; mode 600 on
+  the server), `{brain, meta, players: {tag: {win condition: [games, wins,
+  expected]}}}`, players with `MIN_GAMES` 10 duel games. A deck's win condition
+  is its priciest win-condition card (`family_of`).
+- **`build(games, expect, family)`** (pure): every duel game in time order;
+  `expect(i, pilot gap)` is the log-odds from everything but skill; each
+  player's `[games, wins, expected]` for the win condition they brought. The
+  newest `HOLDOUT_SHARE` 0.15 are scored on the way with only what came
+  before. **`--build`** reads `.duel_games.pkl` (the duel model step's cache;
+  `CLASH_DUEL_GAMES` overrides) and `card_matchup.load()` (its nuisance
+  weights and card term are the expectation); writes `on: true` only when the
+  holdout has `HOLDOUT_MIN` 5,000 games and gained. A step of `after_poll.py`
+  after the duel read. 32 s on 461,532 games.
+- **Reading**: `load` (cache keyed by path and mtime), `on`, `records(tag)`,
+  `weights`, `skill(rec, k)` = `(wins - expected) / (games + K)`, `tag(rec)`
+  (`strong` >= `STRONG` 0.04, `weak` <= `WEAK` -0.02, from `TAG_MIN_GAMES` 8),
+  `shift(mine, theirs)` = `WEIGHT` 2.0 x the gap, in log-odds. `status()` is on
+  `/api/analytics/status` as `playerSkill` (counts only).
+- **In `coach.py`**: `_brain_ctx` carries `skill` = `_skills(my, opp)`;
+  `_combined_pair(..., skill=)` adds `_skill_shift` (also where the win model
+  answers alone, and in the plan's unnamed-deck fallback); `_counter_rows(
+  lean=)` chooses counters on the leaned figure while the floor and
+  `counterValue` stay on the cards (`counterChosenOn` is the leaned one);
+  `_win_con_profile(tag, since, until)` over `player_decks.played`
+  (`PROFILE_ROWS` 8, `PROFILE_MAIN` 0.30, `PROFILE_REGULAR` 0.10);
+  `_annotate` puts `winCon` on option and counter rows. Payload `profiles
+  {mine, opponent}`, `brainModel.skill`.
+- **Off without a deploy**: `mv .player_skill.json{,.off}` (the profile stays,
+  without tags; no figure is moved).
+- **Tests**: `test_player_skill.py` 40, `test_coach.py` 296.
+
 ## Counters in the Suggestion (`coach._counter_rows`, 2026-10-12)
 
 `coach-counter-1.0`. No new module and no new route: it rides on

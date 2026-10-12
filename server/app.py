@@ -612,6 +612,15 @@ class Handler(BaseHTTPRequestHandler):
                     out["cardMatchup"] = card_matchup.status()
                 except Exception:  # noqa: BLE001
                     out["cardMatchup"] = None
+                # EACH PLAYER'S SKILL WITH EVERY WIN CONDITION (Coach Assist).
+                # `on: false` = the table's own holdout did not gain and no
+                # figure is moved; `builtAt` going stale is a stopped updater.
+                # Counts only, never a tag.
+                try:
+                    import player_skill
+                    out["playerSkill"] = player_skill.status()
+                except Exception:  # noqa: BLE001
+                    out["playerSkill"] = None
                 # THE CARD MANUAL the brain is reading: how many cards have an
                 # entry, and the newest patch in its balance log. It is pushed
                 # as data, without a deploy, so this is the only place that

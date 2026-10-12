@@ -126,7 +126,7 @@ describe('the contract with the server', () => {
     expect(SERVER).toMatch(/"rated": len\(scored\)/);
     expect(SERVER).toMatch(/"against": len\(threats\)/);
     expect(SERVER).toContain('"counters": sum(1 for d in res["decks"] if d["index"] >= len(own))');
-    expect(SERVER).toContain('if c.origin == "duel" and take(value, c):');
+    expect(SERVER).toContain('if raw_value >= COUNTER_MIN and c.origin == "duel" and take(value, c, raw_value):');
     // The pool marks its lists with exactly these two words.
     const POOL = norm('server/team_analysis.py');
     expect(POOL).toContain('"origin": "ladder"}');

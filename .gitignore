@@ -192,3 +192,7 @@ assets/fonts/noto/
 # ladder pair table and the duels, rebuilt daily. An artifact, not source.
 server/.card_matchup.json
 server/.card_matchup.json.tmp
+# Each player's duel record with every win condition (`player_skill.py`).
+# PLAYER TAGS: server only, never committed.
+server/.player_skill.json
+server/.player_skill.json.tmp

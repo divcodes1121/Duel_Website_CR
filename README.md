@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Coach Assist reads how each player plays: win-condition tags and a recommendation of their own** | **2026-10-12.** Asked: rate players by the decks they play, how much, and their win rate across every win condition in the 7D / 14D / 30D window, and make the recommendation each player's own. Measured: how much a win condition is played predicts nothing, the win rate against a player's own average does not help; their duel record with it against what each game should have gone does (lowest fifth -4.9 points, highest +8.1; CRL games 0.5924 -> 0.5875 log loss). A skill table for 13,494 duel players, rebuilt after every poll, is in every Coach Assist figure; a profile per player and per window is on the screen. See [How each player plays](#how-each-player-plays-win-condition-tags-and-a-recommendation-of-their-own-2026-10-12) |
 | **Coach Assist finds counters to what the opponent brings** | **2026-10-12.** Asked: the Suggestion opens with the player's own recent duel decks; it should analyse what the opponent opens with, find counters among the meta decks and the CRL players' duel decks, and do the same after each game. Measured blind first (323 real duel openings, an independent judge): the old pick rated 50.4% against the deck opponents really opened with, the first counter 60.7%, the answer as built 58.4% (+8.0 [+6.5, +9.5]). A block of five counters under "Play this" at every stage, counters in the set and the options, the card model in every Coach Assist rate, a correction to the win chance between two known players, and no card-level term in a friendly duel (it is played at a cap). Also measured: a deck new to the pilot costs nothing we could find, and opponents do not counter-pick inside a duel. LIVE as `9f436cc` + `715be7e`, 45 of 45 signed in on production. See [Counters to what they bring](#counters-to-what-they-bring-2026-10-12) |
 | **The day window picks the suggested decks too (Team Analysis, Deck Counter)** | **LIVE SINCE 2026-10-11 18:19 UTC.** Asked: when 7D or 14D is picked on Team Scout, the recommended decks should come from those same days, with the days weighed against what came before, because old decks are not in the meta. Until now the window chose which of the OPPONENT'S games were read and nothing else. The duel index now keeps every hub list's play BY DAY, and a window keeps the lists played in it (5+ games) whose share of the pool's play is at least half of what it was in the 60 days before. Replayed on 200 real opponents: at 7 days 25.9% of suggested rows were decks the window leaves out, on 185 of 200 lists; now none. Cost by the printed figure: #1 -0.31, all ten -0.55; most repeated list 26.0% -> 29.0% of opponents. A list whose share had halved won 52.5% the next week, a steady one 55.4%. Weighing a list's window games heavier in its own record was measured and NOT built (no gain at 7 days). See [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11) |
 | **Counters read the cards: a card-against-card model beside the fused rate (`card-matchup-1.0`)** | **LIVE SINCE 2026-10-11 10:56 UTC.** Asked: make the Deck Counter's counters exceptional, and only on proof. Measured: the fused rate knows an opponent's archetype and rarely their cards (94% of ladder deck pairs were played once). A model with one weight a card and one a card-against-card, fitted on 10.6M ladder games and every duel, sits beside it. On 24,307 unseen duel games: log loss 0.6328 -> 0.6123; inside one duel the won game is rated above the lost one 58.4% -> 66.2%. Replayed on 392 player-sides with a neutral judge: the #1 deck 52.2 -> 58.7 against what really came, rows under 50% 40.7% -> 22.8%; the most repeated list is on 27.6% of lists (20.9% before). See [Counters read the cards](#counters-read-the-cards-2026-10-11) |
@@ -293,7 +294,8 @@ python server/test_duel_set.py    # 49 checks over the set composer: no shared c
 python server/test_duel_brain.py  # 83 checks over the duel brain's figures and picks
 python server/test_suggested_seating.py # 49 checks: a suggested deck fields every slot its cards can fill
 python server/test_coach_daily.py # 204 checks over the plan against the field
-python server/test_coach.py       # 264 checks over the Coach Assist rules, incl. its duel wiring, the duel read's, the duel plan's, the set's, the gate on built decks and the counters
+python server/test_player_skill.py # 40 checks over each player's skill with a win condition: the table, its holdout gate, the reader
+python server/test_coach.py       # 296 checks over the Coach Assist rules, incl. its duel wiring, the duel read's, the duel plan's, the set's, the gate on built decks and the counters
 python server/test_coach_choice.py # 79 checks: decks around the cards a reader names — which lists are rated, the order, the sections
 python server/test_deck_architect.py # 51 checks: building around a card from how duel players build (shells, core, open slots)
 python server/test_deck_tuner.py  # 152 checks over the swap brain, incl. the three-slot rule and the player-first lists
@@ -3788,6 +3790,50 @@ first replay, a flaw in it, and the sensitivity run that was not adopted: [`DECK
 entry of 2026-10-12. Server: [server/README.md](server/README.md) "Counters in
 the Suggestion". Screen: [docs/UI.md](docs/UI.md) "The counters block on the
 Suggestion".
+
+### How each player plays: win-condition tags and a recommendation of their own (2026-10-12)
+
+Asked: *"rate players according to the decks they play, how much they play,
+the win rate they have across all win conditions ... tags with use rate and win
+rate for 7D, 14D, 30D ... a dedicated recommendation for each unique player,
+and the decks appear with the whole duel set too."*
+
+**On the screen**, under the counters: a column for each player, **"How
+<name> plays"**, listing every win condition they fielded in the History
+window chosen — its share of their games, their win rate with it, `Main` /
+`Regular` / `Rare`, and `Above expected` / `Below expected` where their duel
+record with it earns one. Every option and counter then says what its own win
+condition is to the coached player ("your Battle Ram · 62.1% won · 57% of
+games · above expected", or "Mortar: new for you").
+
+**In the engine**: each player's skill with the win condition they bring is in
+every figure for the pair, so "Play this", the counters shown, the set to load
+and the look-ahead are that player's and not the same for everybody.
+
+**What was measured to decide what "skill" is** (duel games from 1 October the
+model had not seen):
+
+| reading | what it predicts |
+|---|---|
+| how MUCH they play the win condition | almost nothing: +2.1 points over expectation with one never brought to a duel, +2.8 with a main one |
+| their win rate with it against their own average | nothing, and between two known players it makes the figure worse |
+| **their record with it against what each game should have gone** (who they met, levels, both decks' cards) | lowest fifth -4.9 points, highest fifth **+8.1**, in order all the way; CRL-group games 0.5924 -> 0.5875 log loss |
+
+So the tag and the term are the third. A table of it is kept for every player
+with duel games stored (13,494 players, rebuilt after each poll in 32 s) and
+checks itself on the newest games each time; if it stops helping it switches
+itself off. Staged on 90 real pairs, turning it on changed "Play this" on 27,
+the five counters shown on 71, and the set on 40, with no illegal deck and no
+extra time.
+
+**What it does not do.** The tag reads duel games only. The profile's two
+figures are the window's while the tag is over every stored duel, so a 67% win
+rate can sit beside "Below expected" for a very strong player — which is why
+it is not called Weak. The record:
+[`DECKKIES_DUEL_RECOMMENDER.md`](DECKKIES_DUEL_RECOMMENDER.md), second log
+entry of 2026-10-12; server: [server/README.md](server/README.md) "A player's
+skill with each win condition"; screen: [docs/UI.md](docs/UI.md) "How a player
+plays, on the Suggestion".
 
 ### The duel read: game order, recency, and what they have left (2026-10-07)
 

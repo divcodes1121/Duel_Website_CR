@@ -99,6 +99,11 @@ def main(argv: list[str]) -> int:
         # Which deck a player brings next (`duel_read`): refitted on every
         # stored duel, so each poll's duels shape the next read.
         ("duel read", [sys.executable, "-u", os.path.join(HERE, "duel_read_train.py")]),
+        # Each player's skill with every win condition (`player_skill`): their
+        # duel record against what each game should have gone, from the game
+        # cache the duel model step has just written and the card matchup
+        # model's expectation. Coach Assist adds it to every figure for a pair.
+        ("player skill", [sys.executable, "-u", os.path.join(HERE, "player_skill.py"), "--build"]),
         # Which cards duel players put together: the gate on "Or bring one of
         # these" (a deck whose cards they do not pair is skipped).
         ("deck synergy", [sys.executable, "-u", os.path.join(HERE, "deck_synergy.py"), "--build"]),

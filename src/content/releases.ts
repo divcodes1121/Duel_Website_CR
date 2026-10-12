@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-12-coach-player-profile',
+    date: '2026-10-12',
+    kind: 'improved',
+    title: 'Coach Assist reads how each player plays',
+    body: [
+      'The Suggestion now shows, for you and for your opponent, every win condition played in the History window you picked (7d, 15d, 30d …): its share of the games, the win rate with it, whether it is a main, regular or rare pick, and a tag — “Above expected” or “Below expected” — where the duel record with it earns one. Each deck offered then says what its win condition is to you: your win rate and use of it, or that it is new for you.',
+      'The recommendation is your own, too. Each player’s skill with the win condition they bring is now part of every figure, so “Play this”, the counters shown and the set to load differ from player to player against the same opponent. On 90 real pairings it changed “Play this” on 27 and the counters shown on 71.',
+      'What “skill” means here was measured, not chosen. How much you play a win condition predicted nothing, and your win rate with it against your own average did not help. Your record with it against what each of those duel games should have gone — who you met, the levels, both decks — did: players in the lowest fifth then won 4.9 points under expectation, in the highest fifth 8.1 over. That is why a strong player can read “Below expected” at 67% won.',
+    ],
+    needs: 'pro',
+  },
+  {
     id: '2026-10-12-coach-counters',
     date: '2026-10-12',
     kind: 'improved',

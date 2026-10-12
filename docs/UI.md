@@ -1746,6 +1746,32 @@ is "Graveyard decks" — select by `button[title=...]`. The deck buttons are ico
   it moves above them. Cards are 3.4rem tiles that wrap. Measured in a
   browser: nothing past the block's edge at 1440 and 390, both themes.
 
+## How a player plays, on the Suggestion (2026-10-12)
+
+`CoachAssist.tsx` `ProfileColumn`, words in `utils/coachProfile.ts` (no
+imports).
+
+- Under the counters block, above the brain line: two columns
+  (`data-profiles`), blue for the coached player and pink for the opponent,
+  each headed **"How <name> plays"** with the player's own totals in the note
+  (`633 games · 61.5% won`). Drawn for each player the server sent a profile
+  for.
+- A row (`data-wincon`) is one win condition: its card, its name, an outline
+  pill for how much it is played (`Main` 30%+, `Regular` 10%+, `Rare`), a
+  filled pill when their duel record with it earns one (`Above expected`
+  green, `Below expected` red; nothing for "even" or too few games), and at
+  the right edge `57% of games · 62.1% won`. The tooltip holds the counts and
+  the duel record behind the tag. Most played first, eight at most.
+- **Not "Strong" / "Weak".** The tag is against what each duel game should
+  have gone, so a very good player can be under it at 67% won.
+- Every option and counter row gains a line (`data-row-wincon`) for its own
+  win condition as the coached player plays it: `your Battle Ram · 62.1% won ·
+  57% of games · above expected`, or `Mortar: new for you`.
+- The window is the History chips': the profile changes with 7d / 15d / 30d,
+  the tag does not (it is over every stored duel).
+- The brain line ends `each player's win-condition skill read` when the table
+  moved the figures. The PDF carries a bar block for each player.
+
 ## The counters block on the Suggestion (2026-10-12)
 
 `CoachAssist.tsx` `CounterPanel`, words in `utils/coachCounters.ts` (no

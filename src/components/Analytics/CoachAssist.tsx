@@ -26,6 +26,7 @@ import {
   type CoachSuggestion,
   type CoachBrainModel,
   type CoachCounters,
+  type CoachProfile,
   type CoachBrainSwap,
   type CoachBuilt,
   type CoachBuiltDeck,
@@ -45,6 +46,7 @@ import { isPaid, useAccess } from '../../state/gate';
 import { DAY_PRESETS } from '../../utils/datePresets';
 import { duelResults, scoreLabel, type GameResult } from '../../utils/duelResults';
 import { counterHeading, counterLabel, counterNote, setCounterNote } from '../../utils/coachCounters';
+import { profileNote, rowWinCon, skillLabel, useLabel, winConLine, winConTitle } from '../../utils/coachProfile';
 import { WinConFilter, filterCardName } from '../WinConFilter/WinConFilter';
 
 /* Coach Assist — two windows over `server/coach.py`.
@@ -428,6 +430,12 @@ function DeckRow({
               list look mis-sorted against the usage figures. */}
           {deck.coRevealed ? ` · ${deck.coRevealed}× alongside the revealed deck` : ''}
         </span>
+        {/* The deck's own win condition as the coached player plays it. */}
+        {deck.winCon && (
+          <span className={styles.deckMeta} data-row-wincon={deck.winCon.tag ?? (deck.winCon.new ? 'new' : '')}>
+            {rowWinCon(deck.winCon)}
+          </span>
+        )}
         {/* The same deck in real DUELS against what they bring, when the duels
             have enough games on it — green only when it clears the gate. */}
         {deck.duel && (
@@ -1317,6 +1325,7 @@ function BrainLine({ model, cards }: { model: CoachBrainModel; cards?: boolean }
         /* A friendly duel is played at a level cap, so the level term is off
            there (`levelScale` 0); said as that, not as "levels not read". */
         model.levelScale === 0 ? 'level-capped duel' : model.levels ? 'card levels read' : 'levels not read',
+        model.skill ? 'each player\'s win-condition skill read' : null,
       ].filter(Boolean).join(' · ')}
     </p>
   );
@@ -1805,6 +1814,39 @@ type SuggestStep =
  *  follow-ups for the deck being recommended. One strip when both branches
  *  name the same deck. */
 /**
+ * HOW EACH PLAYER PLAYS (2026-10-12): every win condition they fielded in their
+ * own window, with its share of their games, their win rate with it, and the
+ * tag their duel record with it earns. The tag is the term that moves every
+ * figure on this screen for the pair (`server/player_skill.py`). Figures and
+ * one-word tags only.
+ */
+function ProfileColumn({ title, profile, hue }: { title: string; profile: CoachProfile; hue: 'blue' | 'pink' }) {
+  return (
+    <section className={styles.block} data-hue={hue} data-profile="">
+      <h4 className={styles.blockTitle}>
+        {title}
+        <span className={styles.blockNote}>{profileNote(profile)}</span>
+      </h4>
+      <ul className={styles.wcList}>
+        {profile.winCons.map((w) => (
+          <li key={w.card} className={styles.wcRow} title={winConTitle(w)} data-wincon={w.card}>
+            <span className={styles.wcArt}><CardArt card={w.card} /></span>
+            <span className={styles.wcName}>
+              {w.name}
+              <span className={styles.wcUse} data-use={w.use}>{useLabel(w.use)}</span>
+              {skillLabel(w.skill?.tag) && (
+                <span className={styles.wcTag} data-tag={w.skill?.tag ?? ''}>{skillLabel(w.skill?.tag)}</span>
+              )}
+            </span>
+            <span className={styles.wcFig}>{winConLine(w)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
  * COUNTERS TO WHAT THEY BRING NEXT (2026-10-12): decks from outside the
  * player's own duel decks — the CRL group's duel lists and the vetted ladder
  * lists — rated against the read of the opponent's next deck, legal against
@@ -2206,6 +2248,17 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
 
       {data.counters && data.counters.decks.length > 0 && (
         <CounterPanel counters={data.counters} stage={data.stage} />
+      )}
+
+      {(data.profiles?.mine || data.profiles?.opponent) && (
+        <div className={styles.two} data-profiles="">
+          {data.profiles?.mine && (
+            <ProfileColumn title={`How ${data.myName || 'your player'} plays`} profile={data.profiles.mine} hue="blue" />
+          )}
+          {data.profiles?.opponent && (
+            <ProfileColumn title={`How ${data.oppName || 'they'} plays`} profile={data.profiles.opponent} hue="pink" />
+          )}
+        </div>
       )}
 
       {data.brainModel && <BrainLine model={data.brainModel} cards={!!data.fusion?.cardModel} />}

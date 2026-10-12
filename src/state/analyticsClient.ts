@@ -1417,6 +1417,45 @@ export interface CoachDeck {
   /** The figure a counter was chosen on: the cards and the ladder+duel rate
    *  against their likely decks, with nobody's skill or levels in it. */
   counterValue?: number;
+  /** This deck's own win condition as the COACHED player plays it in their
+   *  window (2026-10-12): their use and win rate with it and the tag their
+   *  duel record earns, or `new` when they did not play it. Only on the
+   *  Suggestion's options and counters. */
+  winCon?: {
+    card: string; name: string; share?: number; winRate?: number; games?: number;
+    use?: 'main' | 'regular' | 'rare'; tag?: 'strong' | 'even' | 'weak' | null; new?: boolean;
+  };
+}
+
+/** One win condition of a player's profile (`coach._win_con_profile`). */
+export interface CoachWinCon {
+  card: string;
+  name: string;
+  /** Own-deck 1v1 games and duel games with it in the window. */
+  games: number;
+  wins: number;
+  /** Its share of their games in the window (0-1), and their win rate with it. */
+  share: number;
+  winRate: number;
+  /** Different lists of it they fielded, and how many of the games were duel games. */
+  decks: number;
+  duelGames: number;
+  use: 'main' | 'regular' | 'rare';
+  /** Their record with it over every stored duel game against what those
+   *  games should have gone (`player_skill`): the term that moves a figure.
+   *  Null for a player outside the table. `tag` is null under eight games. */
+  skill: { games: number; wins: number; expected: number; perGame: number;
+           tag: 'strong' | 'even' | 'weak' | null } | null;
+}
+
+/** HOW ONE PLAYER PLAYS in their window: every win condition, most played first. */
+export interface CoachProfile {
+  games: number;
+  wins: number;
+  winRate: number;
+  winCons: CoachWinCon[];
+  winConsPlayed: number;
+  window: { from: string | null; to: string | null };
 }
 
 /** COUNTERS TO WHAT THEY BRING NEXT (`server/coach.py`, 2026-10-12): lists from
@@ -1617,6 +1656,9 @@ export interface CoachSuggestion {
   /** Counters to what they bring next. Null with no pool or nothing of
    *  theirs to rate against; absent from a server older than 2026-10-12. */
   counters?: CoachCounters | null;
+  /** Each player's win conditions in their own window. A player with nothing
+   *  stored in it is null; absent from a server older than 2026-10-12. */
+  profiles?: { mine: CoachProfile | null; opponent: CoachProfile | null };
   /** One-card changes real duel players made to "Play this" that raise its
    *  win chance against this opponent. */
   brainSwaps?: CoachBrainSwap[];
@@ -1681,6 +1723,10 @@ export interface CoachBrainModel {
   /** Both players have a long duel record, so the gap between the two is
    *  taken at 0.7 of its size (measured 2026-10-12). */
   pilotKnown?: boolean;
+  /** Whether each player's skill with the win condition they bring moved
+   *  these figures (`player_skill`): null = no table, or its holdout did not
+   *  gain. `mine` / `theirs` say whether that player is in the table. */
+  skill?: { brain: string; k: number; weight: number; mine: boolean; theirs: boolean } | null;
   /** How much of the card-level term applied: 0 in a friendly duel (played
    *  at a level cap), 1 in a clan-war duel, and when the kind was not told
    *  the share of the two players' stored duels that are clan-war duels. */

@@ -119,7 +119,8 @@ otherwise (today's read 52.2 / 50.7; a perfect read 54.2 / 49.7; noise about
 | 3 | **Pick for the duel, not the game** — look-ahead over their likely order; the result of each game moves the next one | **LIVE 2026-10-07** |
 | 4 | **The set composer** — three or four card-disjoint decks from duel-proven decks, key spells and win conditions spread so no deck is starved; harmony checklist and duel-pairing gate on every deck; at most two human swaps | **LIVE 2026-10-07**: the set from the player's own decks as they are (`duel_set.py`) and the gate on constructed decks (`deck_packages.py`). Swaps inside a set: built, measured, OFF |
 | 5 | **Keep learning** — retrain after every poll; this scorecard re-run before any step ships; a CRL cohort line in it | **partly LIVE 2026-10-07**: everything is refitted after each poll and the read's holdout carries a CRL line on the status route. The look-ahead and set scorecards are still lab scripts |
-| 6 | **Counters to what they bring** — the CRL group's duel lists and the vetted ladder lists rated against the read of their next deck, at every stage; in the set, in the options, and in a block of their own | **LIVE 2026-10-12** (the log's last entry) |
+| 6 | **Counters to what they bring** — the CRL group's duel lists and the vetted ladder lists rated against the read of their next deck, at every stage; in the set, in the options, and in a block of their own | **LIVE 2026-10-12** |
+| 7 | **Each player's win conditions** — a skill table for every duel player (record with a win condition against what each game should have gone) in every figure, and a profile per window on the screen | **LIVE 2026-10-12** (the log's last entry) |
 
 ## Rules for this work
 
@@ -732,9 +733,87 @@ The lab directory on the server (`/tmp/c0lab`) is removed; its outputs, the
 two date-split models and the replays (no tag in them) are in the evidence
 folder's `out/`.
 
+### 2026-10-12 — each player's win conditions: the profile and the skill
+
+Asked the same day, after the counters: *"suggest decks on the player's usage
+and how they play — rate players according to the decks they play, how much
+they play, the win rate they have across all win conditions ... for every win
+condition under the time window, 7D, 14D, 30D, assign tags with use rate and
+win rate ... a dedicated recommendation for each unique player, and the decks
+appear with the whole duel set too."*
+
+**Measured first, three ways** (`c1_skill.py`, `c1_skill2.py`; duel games from 1
+October, the card model fitted before it; a deck's win condition = its priciest
+win-condition card; players with 30+ earlier duel games):
+
+- *How MUCH they play a win condition says almost nothing.* Won minus
+  expected: never brought it to a duel +2.1 [-2.5, +6.6] (394), under 10% of
+  their games +0.6, 10-30% +2.5, 30%+ +2.8. (It agrees with the same day's
+  "a deck new to the pilot costs nothing".)
+- *Their record with it against THEIR OWN average does not help*, and between
+  two known players it hurts: games with a CRL-group player 0.5924 ->
+  0.5929-0.5969 log loss, two players with 20+ games best weight 0. It mostly
+  restates how strong the player is.
+- *Their record with it against what each game SHOULD have gone does.*
+  `skill = (wins - expected) / (games + K)`, the expectation being both
+  players' running records, the levels and the cards of both decks. With 10+
+  games on the win condition, by fifths of skill: -4.9 [-7.3, -2.4], 0.0,
+  +3.4, +4.8, **+8.1 [+6.1, +10.2]** won over expectation (1,399 sides each).
+  As a term `weight x (skill of mine - skill of theirs)`, fitted 1-6 October,
+  scored after (K 20): every duel game 0.6276 -> 0.6266, friendly duels 0.6467
+  -> 0.6452, games with a CRL-group player **0.5924 -> 0.5875**, two players
+  with 20+ games 0.6205 -> 0.6174. These are real results, not a judge.
+
+**Built** (`player-skill-1.0`):
+
+- `server/player_skill.py`: the table for EVERY player with duel games —
+  `{tag: {win condition: [games, wins, expected]}}` — built from the duel-game
+  cache and the card matchup model's expectation, a step of `after_poll.py`
+  (32 s; 461,532 games, 13,494 players with 10+ duel games; the artifact
+  `.player_skill.json` is gitignored, it holds tags). The newest 15% of games
+  are scored on the way, each with only what came before: 0.6222 -> 0.6214 on
+  69,230; a table whose holdout does not gain says `on: false` and moves
+  nothing. `K` 20, `WEIGHT` 2.0, tags `strong` >= +4 points a game, `weak`
+  <= -2, from 8 games.
+- `coach._combined_pair(..., skill=)`: the term is in EVERY pair figure, so
+  the options, the counters, the set and the look-ahead are this player's.
+  `_counter_rows(lean=)`: which five counters are shown leans on the coached
+  player's skill with each list's win condition (the floor stays on the
+  cards).
+- `coach._win_con_profile(tag, since, until)`: in the player's own window
+  (the History chips), every win condition with its share of their games,
+  their win rate with it (own-deck 1v1 games and duel games — the Decks
+  screen's reader), `main` / `regular` / `rare`, and the tag from the table.
+  Sent for both players as `profiles`; every option and counter row carries
+  `winCon` (that win condition as the coached player plays it, or `new`).
+- Screen: two columns "How <name> plays" under the counters; a line on each
+  deck row ("your Battle Ram · 62.1% won · 57% of games · above expected");
+  the brain line says the skill was read. The tag is worded **Above / Below
+  expected**, not Strong / Weak: staged, a profile read "66.7% won" beside a
+  tag that would have said Weak.
+
+**Staged, the table on against off** (90 sides, before game 1 and after it):
+"Play this" differs on 27 and 24 of 90; the counters block on 71 and 59; the
+set or options on 40 and 34; where the pick is the same its game figure moves
+-5.5 to +6.4 points (mean +0.5); no illegal deck; median 2.80 s against 2.92.
+Of 450 counter rows, 78 are a win condition the player is above expectation
+with, 28 even, 5 below, 223 new to them.
+
+**Left, said:** the tag is from DUEL games only (a ladder record with a win
+condition was not measured); the profile's figures are the window's and the
+tag is over every stored duel, so the two can point different ways — the
+tooltip prints the duel record; the term is small on average (0.0008 log loss
+over every game) and is worth most between known players.
+
+Tests: `test_player_skill.py` 40 (new), `test_coach.py` 264 -> 296,
+`tests/coachProfile.test.ts` 16 (new); 35 planted faults all caught (two tests
+too weak first: every fixture game was a coin flip, and the profile fixture
+was stored already sorted). Deployed 17:57 UTC (backups
+`{coach,app,after_poll,test_coach}.py.bak-20261012-175659-preskill`).
+
 ## Next action
 
-Steps 1 to 4 and 6 are live and the part of step 5 that needed nobody is too.
+Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.
 What is left, in the order I would take it:
 
 0. **The printed figure at the top end** ("80%+" winning 53-60% of the few

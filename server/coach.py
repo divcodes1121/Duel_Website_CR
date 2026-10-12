@@ -118,6 +118,11 @@ except Exception:  # noqa: BLE001 - deployment shape
 #: them to open with. Composed from the player's OWN duel decks, as they are.
 #: Imported softly.
 try:
+    import player_skill as _ps
+except Exception:  # noqa: BLE001 - deployment shape: no table, no personal term
+    _ps = None
+
+try:
     import duel_set as _ds
 except Exception:  # noqa: BLE001 - deployment shape
     traceback.print_exc()
@@ -1376,7 +1381,8 @@ COUNTER_MEASURED = {"sides": 323, "actual": 49.8, "own": 50.4, "ownByCards": 54.
 
 
 def _combined_pair(model: dict, rates, deck, od, *, my_def, opp_def,
-                   my_str: float, opp_str: float) -> tuple[float, str] | None:
+                   my_str: float, opp_str: float, skill: dict | None = None
+                   ) -> tuple[float, str] | None:
     """One matchup: the old brain's rate adjusted by player strength and card
     levels, as a probability, and which engine answered. The new model alone
     only where the old brain has no rate."""
@@ -1387,21 +1393,27 @@ def _combined_pair(model: dict, rates, deck, od, *, my_def, opp_def,
     if m and m.get("winRate") is not None:
         z = (dm.logit(float(m["winRate"]) / 100.0)
              + w.get("pilot", 0.0) * (dm.logit(my_str) - dm.logit(opp_str))
-             + w.get("level", 0.0) * (odf - md))
+             + w.get("level", 0.0) * (odf - md)
+             # EACH PLAYER'S OWN SKILL WITH THE WIN CONDITION THEY BRING
+             # (`player_skill`): what separates this player's Hog decks from
+             # their Golem decks, which no term above knows.
+             + _skill_shift(skill, deck, od))
         return dm.sig(z), "combined"
     if not w:
         return None
-    return dm.score(w, dm.features(deck, od, md, odf, my_str, opp_str)), "model"
+    p = dm.score(w, dm.features(deck, od, md, odf, my_str, opp_str))
+    d = _skill_shift(skill, deck, od)
+    return (dm.sig(dm.logit(p) + d) if d else p), "model"
 
 
-def _combined(model, rates, deck, decks, kw) -> dict | None:
+def _combined(model, rates, deck, decks, kw, skill: dict | None = None) -> dict | None:
     """`{winRate, vs, sources}` against the opponent's likely decks."""
     total = sum(float(d.get("prob") or 0.0) for d in decks) or 0.0
     if total <= 0:
         return None
     acc, vs, used = 0.0, [], {}
     for d in decks:
-        got = _combined_pair(model, rates, deck, d["cards"], **kw)
+        got = _combined_pair(model, rates, deck, d["cards"], skill=skill, **kw)
         if got is None:
             return None
         p, src = got
@@ -1474,7 +1486,9 @@ def _brain_ctx(opp: dict, my_tag: str, opp_tag: str, level_scale: float = 1.0) -
               opp_def=_scaled_deficits((opp_p or {}).get("cardDeficits"), level_scale),
               my_str=my_str, opp_str=opp_str)
     return {"model": model, "decks": decks, "kw": kw, "records": (rec_mine, rec_opp),
-            "levelScale": round(float(level_scale), 3)}
+            "levelScale": round(float(level_scale), 3),
+            # Each player's record with every win condition (None = no table).
+            "skill": _skills(my_tag, opp_tag)}
 
 
 #: BETWEEN TWO KNOWN PLAYERS A RECORD SAYS LESS THAN THE MODEL'S WEIGHT ASSUMES.
@@ -1535,13 +1549,14 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
         rec_mine, rec_opp = ctx["records"]
         my_str, opp_str = kw["my_str"], kw["opp_str"]
         my_def, opp_def = kw["my_def"], kw["opp_def"]
+        skill = ctx.get("skill")
         if ctx_out is not None:
-            ctx_out.update(model=model, decks=decks, kw=kw)
+            ctx_out.update(model=model, decks=decks, kw=kw, skill=skill)
 
         out = []
         for r in rows:
             row = dict(r)
-            e = _combined(model, rates, r["cards"], decks, kw)
+            e = _combined(model, rates, r["cards"], decks, kw, skill)
             if e:
                 row["brain"] = e
             out.append(row)
@@ -1560,7 +1575,7 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
             seat = counter.seater()
             base = top["brain"]["winRate"]
             for s in proposed:
-                e = _combined(model, rates, s["cards"], decks, kw)
+                e = _combined(model, rates, s["cards"], decks, kw, skill)
                 # ONE ENGINE PER COMPARISON: a variant the old brain has no
                 # rate for would be judged by the model alone against a base
                 # the old brain judged -- two different rulers.
@@ -1590,6 +1605,11 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
             "strength": {"mine": round(100 * dm.strength(*rec_mine), 1), "mineGames": rec_mine[0],
                          "theirs": round(100 * dm.strength(*rec_opp), 1), "theirsGames": rec_opp[0]},
             "pilotKnown": min(int(rec_mine[0] or 0), int(rec_opp[0] or 0)) >= PILOT_KNOWN_GAMES,
+            # Whether each player's skill with the win condition they bring
+            # moved these figures (`player_skill`), and with what weights.
+            "skill": ({"brain": _ps.BRAIN, "k": skill["k"], "weight": skill["weight"],
+                       "mine": bool(skill["mine"]), "theirs": bool(skill["theirs"])}
+                      if skill else None),
             "levels": bool(my_def and opp_def),
             # How much of the level term applied: 0 = a friendly duel (played
             # at a level cap), 1 = a clan-war duel, between = not told.
@@ -1678,8 +1698,8 @@ def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int,
         seat = counter.seater()
         kept = []
         for b in built:
-            e = _combined(model, rates, b["cards"], decks, kw)
-            base = _combined(model, rates, b["seed"], decks, kw)
+            e = _combined(model, rates, b["cards"], decks, kw, ctx.get("skill"))
+            base = _combined(model, rates, b["seed"], decks, kw, ctx.get("skill"))
             if not e or not base or e["sources"] != base["sources"]:
                 continue
             gain = e["winRate"] - base["winRate"]
@@ -1756,6 +1776,7 @@ def _plan_tools(pool_cards: list[list[str]], opp_hist: dict, kind, ctx: dict, ra
     """
     import duel_model as dm
     model, kw = ctx["model"], ctx["kw"]
+    skill = ctx.get("skill")
     weights = model.get("weights") or {}
     hist, now = opp_hist["read"], _now()
     reads: dict = {}
@@ -1797,7 +1818,7 @@ def _plan_tools(pool_cards: list[list[str]], opp_hist: dict, kind, ctx: dict, ra
         a, b = sorted(my) if my else [], sorted(their_deck) if their_deck else []
         p = None
         if a and b:
-            pair = _combined_pair(model, rates, a, b, **kw)
+            pair = _combined_pair(model, rates, a, b, skill=skill, **kw)
             if pair is not None:
                 p = pair[0]
         if p is None:
@@ -1808,6 +1829,10 @@ def _plan_tools(pool_cards: list[list[str]], opp_hist: dict, kind, ctx: dict, ra
                 a, b, dm.deck_deficit(a, kw.get("my_def")) if a else my_unknown,
                 dm.deck_deficit(b, kw.get("opp_def")) if b else opp_unknown,
                 kw["my_str"], kw["opp_str"]))
+            # One side unnamed: the skill of whoever's deck IS known.
+            d = _skill_shift(skill, a or None, b or None)
+            if d:
+                p = dm.sig(dm.logit(p) + d)
         wins[key] = p
         return p
 
@@ -1830,6 +1855,178 @@ def _duel_figures(rows: list[dict], rates, opp: dict, opp_tag: str, opp_win: tup
                 r["duel"] = rates.duel.figures(r["cards"], projection)
     except Exception:  # noqa: BLE001 - the rows stand without the chip
         traceback.print_exc()
+
+
+# ── EACH PLAYER'S WIN CONDITIONS (2026-10-12, `player_skill.py`) ───────────
+#
+# Asked for: "rate players according to the decks they play, how much they
+# play, the win rate they have across all win conditions ... tags with use
+# rate and win rate for 7D, 14D, 30D ... a dedicated recommendation for each
+# unique player, and the decks and the whole duel set follow it".
+#
+# TWO THINGS, kept apart because the measurement said they are different:
+#
+#   * THE PROFILE is what the reader asked to see: in the player's own window,
+#     each win condition's share of their games and their win rate with it
+#     (`_win_con_profile`, own-deck 1v1 games and duel games, the Decks
+#     screen's reader).
+#   * THE SKILL is what moves a figure: their duel record with a win
+#     condition against what each of those games should have gone
+#     (`player_skill`, every stored duel game, rebuilt after each poll). How
+#     MUCH somebody plays a win condition predicted nothing, and their record
+#     against their own average made games between two known players worse;
+#     this one took CRL games from 0.5924 to 0.5875 log loss. It is added to
+#     every pair figure (`_combined_pair`), so the options, the counters, the
+#     set and the look-ahead are all this player's.
+
+#: Win conditions listed in a profile, and the shares that name how much one
+#: is played.
+PROFILE_ROWS = 8
+PROFILE_MAIN = 0.30
+PROFILE_REGULAR = 0.10
+
+_FAMILY_CACHE: dict[str, str | None] = {}
+
+
+def _logit(p: float) -> float:
+    import math
+    p = min(max(p, 1e-4), 1 - 1e-4)
+    return math.log(p / (1 - p))
+
+
+def _sigmoid(z: float) -> float:
+    import math
+    return 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, z))))
+
+
+def _family_card(cards) -> str | None:
+    """A deck's win condition as `player_skill` files it: its priciest
+    win-condition card. None for a deck with none, or with no table module."""
+    if _ps is None or not cards:
+        return None
+    key = _deck_key(cards)
+    if key not in _FAMILY_CACHE:
+        if len(_FAMILY_CACHE) >= 4096:
+            _FAMILY_CACHE.clear()
+        _FAMILY_CACHE[key] = _ps.family_of(
+            cards, lambda c: dx.card_info(c).get("is_win_condition"),
+            lambda c: dx.card_info(c).get("elixir"))
+    return _FAMILY_CACHE[key]
+
+
+def _skills(my_tag: str, opp_tag: str) -> dict | None:
+    """Both players' records with every win condition, and the weights the
+    table was built for: `{mine, theirs, k, weight}`. None with no table, or
+    one whose own holdout did not gain (`player_skill.on`)."""
+    try:
+        if _ps is None or not _ps.on():
+            return None
+        k, weight = _ps.weights()
+        return {"mine": _ps.records(my_tag) if my_tag else {},
+                "theirs": _ps.records(opp_tag) if opp_tag else {},
+                "k": k, "weight": weight}
+    except Exception as exc:  # noqa: BLE001 - the figures stand without the term
+        print("coach._skills: %r" % (exc,), file=sys.stderr)
+        return None
+
+
+def _skill_shift(skill: dict | None, mine, theirs) -> float:
+    """What the two players' skill moves a game by, in log-odds: mine with
+    the win condition of `mine`, theirs with that of `theirs`. Either deck
+    may be None (not named). 0 with no table."""
+    if not skill or _ps is None:
+        return 0.0
+    fm = _family_card(mine) if mine else None
+    ft = _family_card(theirs) if theirs else None
+    return _ps.shift(skill["mine"].get(fm) if fm else None,
+                     skill["theirs"].get(ft) if ft else None,
+                     skill["weight"], skill["k"])
+
+
+def _card_name(card: str) -> str:
+    try:
+        return cd.deck_title("other", [card]) or card.replace("-", " ").title()
+    except Exception:  # noqa: BLE001
+        return card.replace("-", " ").title()
+
+
+def _win_con_profile(tag: str, since: str | None, until: str | None) -> dict | None:
+    """HOW ONE PLAYER PLAYS in a window: `{games, wins, winRate, winCons}`.
+
+    Every deck they fielded in own-deck 1v1 games and duel games
+    (`player_decks.played`, the Decks screen's reader: no 2v2, no drafts, no
+    event decks), filed under its win condition. A row: `card`, `name`,
+    `games`, `wins`, `share` of their games, `winRate`, `decks` (different
+    lists), `duelGames`, `use` (`main` / `regular` / `rare`), and `skill` —
+    their record with it over every stored duel game against what those
+    games should have gone: `{games, wins, expected, perGame, tag}` (`tag`
+    is `strong` / `even` / `weak`, None under `player_skill.TAG_MIN_GAMES`).
+    Most played first.
+
+    None with no tag, nothing stored in the window, or any failure: a
+    profile is extra and never costs the answer.
+    """
+    if not tag:
+        return None
+    try:
+        import player_decks as pdk
+        got = pdk.played(tag, since, until)
+        fams: dict[str, dict] = {}
+        for key, (wins, losses, draws, _last, cards, _arch) in (got.get("per") or {}).items():
+            fam = _family_card(cards)
+            if not fam:
+                continue
+            e = fams.setdefault(fam, {"games": 0, "wins": 0, "decks": 0, "duelGames": 0})
+            e["games"] += wins + losses + draws
+            e["wins"] += wins
+            e["decks"] += 1
+            e["duelGames"] += int((got.get("duel") or {}).get(key, 0))
+        total = sum(e["games"] for e in fams.values())
+        if not total:
+            return None
+        records = _ps.records(tag) if _ps is not None else {}
+        k = _ps.weights()[0] if _ps is not None else 0.0
+        rows = []
+        for fam, e in fams.items():
+            share = e["games"] / total
+            rec = records.get(fam)
+            rows.append({
+                "card": fam, "name": _card_name(fam), "games": e["games"], "wins": e["wins"],
+                "share": round(share, 4), "winRate": round(100.0 * e["wins"] / e["games"], 1),
+                "decks": e["decks"], "duelGames": e["duelGames"],
+                "use": ("main" if share >= PROFILE_MAIN else
+                        "regular" if share >= PROFILE_REGULAR else "rare"),
+                "skill": ({"games": int(rec[0]), "wins": int(rec[1]), "expected": round(float(rec[2]), 1),
+                           "perGame": round(100.0 * _ps.skill(rec, k), 1), "tag": _ps.tag(rec, k)}
+                          if rec else None),
+            })
+        rows.sort(key=lambda r: (-r["games"], r["card"]))
+        wins = sum(e["wins"] for e in fams.values())
+        return {"games": total, "wins": wins, "winRate": round(100.0 * wins / total, 1),
+                "winCons": rows[:PROFILE_ROWS], "winConsPlayed": len(rows),
+                "window": {"from": since, "to": until}}
+    except Exception as exc:  # noqa: BLE001
+        print("coach._win_con_profile: %r" % (exc,), file=sys.stderr)
+        return None
+
+
+def _annotate(rows: list[dict], profile: dict | None) -> None:
+    """Each row's own win condition as the coached player plays it, in place:
+    `winCon` = that row of their profile (`{card, name, share, winRate, use,
+    tag}`), or `{card, name, new: True}` for a win condition they did not
+    play in the window. Nothing for a deck with no win condition."""
+    by = {r["card"]: r for r in (profile or {}).get("winCons") or []}
+    for row in rows:
+        fam = _family_card(row.get("cards"))
+        if not fam:
+            continue
+        hit = by.get(fam)
+        if hit:
+            row["winCon"] = {"card": fam, "name": hit["name"], "share": hit["share"],
+                             "winRate": hit["winRate"], "games": hit["games"], "use": hit["use"],
+                             "tag": (hit.get("skill") or {}).get("tag")}
+        elif profile:
+            row["winCon"] = {"card": fam, "name": _card_name(fam), "new": True}
 
 
 # ── COUNTERS TO WHAT THEY BRING (2026-10-12) ───────────────────────────────
@@ -1901,7 +2098,8 @@ def _family_of(archetype: str, cards) -> str:
 
 
 def _counter_rows(opp: dict, used: set, rates: "_Rates | None", chips: list[dict], snap,
-                  days: int | None, skip: set | None = None) -> tuple[list[dict], dict | None]:
+                  days: int | None, skip: set | None = None,
+                  lean=None) -> tuple[list[dict], dict | None]:
     """COUNTERS TO WHAT THEY ARE LIKELY TO BRING NEXT: `(rows, info)`.
 
     Every list of the counter pool for the window (`team_analysis._window_pool`:
@@ -1951,13 +2149,20 @@ def _counter_rows(opp: dict, used: set, rates: "_Rates | None", chips: list[dict
             num += like * rate
             den += like
         if den >= 0.999 * total:
-            scored.append((num / den, c))
+            value = num / den
+            # THIS PLAYER'S OWN SKILL WITH THE LIST'S WIN CONDITION moves
+            # which lists are chosen (`lean`, log-odds), never the figure a
+            # list is held to the floor by: a counter is a counter on its
+            # cards, and which five are shown is personal.
+            bias = float(lean(c.cards) or 0.0) if lean is not None else 0.0
+            chosen_on = (100.0 * _sigmoid(_logit(value / 100.0) + bias)) if bias else value
+            scored.append((chosen_on, c, value))
     scored.sort(key=lambda r: (-r[0], r[1].key))
 
     want = max(COUNTER_SHOW, COUNTER_SET)
     rows, families, taken = [], {}, []
 
-    def take(value: float, c) -> bool:
+    def take(value: float, c, raw: float) -> bool:
         if cd.fillable_slots(c.cards) < cd.SPECIAL_SLOTS:
             return False
         arch = _archetype(list(c.cards))
@@ -1974,7 +2179,8 @@ def _counter_rows(opp: dict, used: set, rates: "_Rates | None", chips: list[dict
         row = _rec(md, opp, chips, snap, rates)
         if not row.get("expected"):
             return False
-        row["counterValue"] = round(value, 1)
+        row["counterValue"] = round(raw, 1)
+        row["counterChosenOn"] = round(value, 1)
         families[fam] = families.get(fam, 0) + 1
         taken.append(set(c.cards))
         rows.append(row)
@@ -1987,16 +2193,17 @@ def _counter_rows(opp: dict, used: set, rates: "_Rates | None", chips: list[dict
     # group's own players 59.3 against 57.5).
     top_value = scored[0][0] if scored else 0.0
     held = 0
-    for value, c in scored:
-        if held >= COUNTER_DUEL_SLOTS or value < max(COUNTER_MIN, top_value - COUNTER_DUEL_BAND):
+    for value, c, raw_value in scored:
+        if held >= COUNTER_DUEL_SLOTS or value < top_value - COUNTER_DUEL_BAND:
             break
-        if c.origin == "duel" and take(value, c):
+        if raw_value >= COUNTER_MIN and c.origin == "duel" and take(value, c, raw_value):
             held += 1
-    for value, c in scored:
-        if len(rows) >= want or value < COUNTER_MIN:
+    for value, c, raw_value in scored:
+        if len(rows) >= want:
             break
-        take(value, c)
-    rows.sort(key=lambda r: -r["counterValue"])
+        if raw_value >= COUNTER_MIN:
+            take(value, c, raw_value)
+    rows.sort(key=lambda r: -r["counterChosenOn"])
     info = {
         "brain": COUNTER_BRAIN,
         "pool": len(pool), "rated": len(scored),
@@ -2017,7 +2224,7 @@ def _with_brain(rows: list[dict], ctx: dict | None, rates) -> None:
         if r.get("brain"):
             continue
         try:
-            e = _combined(ctx["model"], rates, r["cards"], ctx["decks"], ctx["kw"])
+            e = _combined(ctx["model"], rates, r["cards"], ctx["decks"], ctx["kw"], ctx.get("skill"))
         except Exception:  # noqa: BLE001 - a row without the figure still stands
             e = None
         if e:
@@ -2671,10 +2878,12 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     # what they have left after it. Legal against what I have spent.
     counters, counter_info = [], None
     try:
+        _sk = (ctx0 or {}).get("skill")
         counters, counter_info = _counter_rows(
             opp, used_mine, rates, chips, snap,
             _ta._span_days(opp_since, opp_until) if _ta is not None and opp_since else None,
-            skip={_deck_key(r["cards"]) for r in top})
+            skip={_deck_key(r["cards"]) for r in top},
+            lean=(lambda cards: _skill_shift(_sk, cards, None)) if _sk else None)
         _with_brain(counters, ctx0, rates)
         if counters and all(r.get("brain") for r in counters):
             counters.sort(key=lambda r: -r["brain"]["winRate"])
@@ -2740,6 +2949,14 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     # is no longer "Play this", and the screen draws them against "Play this".
     if duel_plan and duel_plan.get("changed"):
         brain_swaps = []
+
+    # HOW EACH PLAYER PLAYS, IN THEIR OWN WINDOW (2026-10-12): every win
+    # condition with its share of their games, their win rate with it and the
+    # tag their duel record earns it. Each deck on the screen then says which
+    # of the coached player's win conditions it is.
+    profiles = {"mine": _win_con_profile(my_tag, my_since, my_until),
+                "opponent": _win_con_profile(opp_tag, opp_since, opp_until)}
+    _annotate(list(top) + list(counters), profiles["mine"])
 
     best = top[0] if top else None
     observed = None
@@ -2820,6 +3037,9 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         # rates, or nothing of theirs to rate against.
         "counters": ({**counter_info, "decks": counters[:COUNTER_SHOW]}
                      if counter_info else None),
+        # Each player's win conditions in their own window: use, win rate
+        # and tag. None for a player with nothing stored in it.
+        "profiles": profiles,
         # One-card changes real duel players made to "Play this", that help here.
         "brainSwaps": brain_swaps,
         "observedLoadout": observed,
@@ -3264,7 +3484,7 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
         brain = None
         if ctx:
             try:
-                brain = _combined(ctx["model"], rates, cards, ctx["decks"], ctx["kw"])
+                brain = _combined(ctx["model"], rates, cards, ctx["decks"], ctx["kw"], ctx.get("skill"))
             except Exception:  # noqa: BLE001 - the fused rate still answers
                 traceback.print_exc()
         exp = _expected(cards, opp["decks"], snap, rates)
