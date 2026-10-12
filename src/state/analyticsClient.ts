@@ -3268,9 +3268,22 @@ export interface DailySession {
     archetype: string;
     expectedWinRate: number;
     vsFocus: { winRate: number; games: number; basis: string | null };
-    source: 'their-cards' | 'field';
+    /** Nearest to the player first: `their-cards` shares five or more cards
+     *  with ONE deck they pilot, `known-cards` is built from cards they play
+     *  somewhere, `field` is neither. An older server never sends the middle
+     *  one. */
+    source: 'their-cards' | 'known-cards' | 'field';
     shared?: number | null;
+    /** How many of the eight are cards they play at all. */
+    known?: number | null;
     deckBattles?: number | null;
+    /** Its win condition by NAME — what "a different deck from yesterday" is
+     *  measured on. Absent from an older server. */
+    family?: string;
+    /** Not a win condition or list they were shown in their last sessions. */
+    fresh?: boolean;
+    /** Clears the server's counter floor against today's focus. */
+    counters?: boolean;
   }) | null;
   against: (SessionDeck & {
     useRate: number | null;

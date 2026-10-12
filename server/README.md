@@ -1408,7 +1408,7 @@ affinity) and degrades to `null` rather than taking the plan down. It is in
 | part | from | rule |
 | --- | --- | --- |
 | `focus` | `coach_intel.report(tag, day-1, day)` + the window's deficits | lost to it since yesterday by `FRESH_EXCESS` (2) losses beyond their own rate — `FRESH_ALONE` (3) if it is not a known weakness — else the `ROTATION` (3) weakest take turns by `day.toordinal()`, else the field's three most-played. Never `other`. |
-| `practise` | the scored pool + `profile.against(focus)` | best against the focus among decks from their cards (`affinity.familiar`) that stay within `FIELD_SLACK` (3) of their best field answer; the whole pool, labelled `field`, only when nothing is familiar |
+| `practise` | the scored pool + `profile.against(focus)` | **since 2026-10-12**: counters the focus (`COUNTER_MIN` 55), wins the field (`FIELD_MIN` 50), not a win condition from their last 3 sessions or a list from their last 6 (`coach_session_log`), their cards first (`their-cards`, `known-cards`, then `field`). Before: best against the focus among `affinity.familiar` decks within `FIELD_SLACK` (3) of their best field answer |
 | `against` | the meta board | the archetype's most-used list, with `rankDelta` from the movement |
 | `duel`, `duelWeek` | `duel_index` + `duel_brain` | own proven duel deck (`own_answers`), else `population_answers` → `personal(known=their cards)`; only `strong()`; 3-slot catalogue filter as Team Analysis |
 | `rising` | `meta_history.movement(7)` | on both boards, `rankDelta > 0`, use up ≥ `RISING_FLOOR` (15%, = `TREND_FLOOR`); `threatensYou` when they lose to that archetype |
@@ -1430,6 +1430,37 @@ changed on **25 of 32** day-to-day steps, against **1 of 32** before.
 `test_coach_session.py` — 48 checks, literals only; two planted faults (a
 deficit-ordered rotation, no excess rule) each turned it red. Deployed
 2026-09-30, backups `{app,coach_daily}.py.bak-20260930-085052-presession`.
+
+**The practice deck is a different win condition each day (2026-10-12).**
+`practise(scored, rate_vs, *, family_of, avoid_families, avoid_keys)`:
+`COUNTER_MIN` 55 against the focus, `FIELD_MIN` 50 against the field (the
+3-point `FIELD_SLACK` is gone — it left a player with one stand-out deck
+exactly one candidate), tiers `their-cards` -> `known-cards` -> `field`, and
+the win conditions of the last `AVOID_FAMILY_SESSIONS` (3) sessions and the
+lists of the last `AVOID_DECK_SESSIONS` (6) are not offered. `avoid_families`
+is one set a session, newest first; the oldest is forgiven first and the
+counter floor last. Rows gain `family`, `known`, `fresh`, `counters`,
+`sessionsSeen`.
+
+`coach_session_log.py` is where "shown" is stored: `recent(tag, day,
+sessions)` (strictly before `day`, at most `LOOKBACK_DAYS` 14 back; never
+creates the file), `avoid(history, n, m)`, `record(tag, day, key, family,
+focus)` (called by `build(record=True)`, which `plan()` passes only when no
+`day` is pinned), `status()` -> `coachSessions` on `/status`. Own file
+`server/.coach_sessions.db` (`CLASH_SESSION_LOG_DB`), pruned past
+`RETAIN_DAYS` 45, every failure degrades to "nothing remembered".
+
+`coach_daily.field_threats` no longer returns nothing while `board.building`
+is set: that flag is on for the whole of each half-hourly refresh beside a
+complete reading, and it blanked every plan for those minutes. Only a board
+with no decks is refused.
+
+Staged replay (seven roster players, fourteen days, recorded day by day):
+same win condition as the day before 50 of 91 -> 0, days under 55% against
+the focus 11 of 98 -> 0, against the focus 62.3 -> 65.8, against the field
+59.3 -> 55.1, plan time median 0.20 s. `test_coach_session.py` 65,
+`test_coach_session_log.py` 26. Deployed 2026-10-12, backups
+`{coach_daily,coach_session,app,test_coach_daily,test_coach_session}.py.bak-20261012-064221-predailydecks`.
 
 
 ### The copy is figures

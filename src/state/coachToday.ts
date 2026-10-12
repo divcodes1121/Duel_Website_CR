@@ -37,6 +37,9 @@ export type TodayKind =
 
 export interface TodayPlanInput {
   basis: 'weighted' | 'unweighted' | 'no_history' | 'none';
+  /** Why there is no plan when `basis` is `none`. `building` is the meta
+   *  board's first build after a restart: minutes, and worth saying so. */
+  reason?: string | null;
   battles: number;
   tailoredPicks: number;
   recommendations: {
@@ -86,8 +89,10 @@ export interface TodayPlanInput {
       artInferred?: boolean;
       artFilled?: string[];
       vsFocus: { winRate: number };
-      source: 'their-cards' | 'field';
+      source: 'their-cards' | 'known-cards' | 'field';
       shared?: number | null;
+      /** How many of the eight are cards they play somewhere. */
+      known?: number | null;
       deckBattles?: number | null;
     } | null;
   } | null;
@@ -114,6 +119,9 @@ export interface TodayRow {
      *  Present only when the pick IS one of theirs. */
     shared?: number;
     deckBattles?: number;
+    /** Cards of the eight they play somewhere — set when the pick is built
+     *  from their cards rather than close to one of their decks. */
+    known?: number;
     /** The pick's rate against today's focus, when it came from the session. */
     vsFocus?: number;
   } | null;
@@ -125,9 +133,10 @@ export interface TodayRow {
   /** One short sentence. Never an adjective the plan cannot carry. */
   note: string;
   tailoredPicks: number;
-  /** Where the pick came from. `their-deck` is the only one that is about
-   *  this player rather than about the field. */
-  source: 'their-deck' | 'field';
+  /** Where the pick came from. `their-deck` is close to ONE deck they pilot,
+   *  `their-cards` is built from cards they play across their decks, `field`
+   *  is about the field rather than about this player. */
+  source: 'their-deck' | 'their-cards' | 'field';
 }
 
 /** Plans that could not be read are their own kind — a coach must be able to
@@ -140,7 +149,12 @@ export function todayRow(
   if (!plan || plan.basis === 'none') {
     return {
       tag, label, kind: 'failed', pick: null, workOn: [], tailoredPicks: 0, source: 'field', focus: null,
-      note: 'Their plan could not be worked out just now.',
+      /* `building` is the meta board's first build after a server restart,
+         not a fault in this player's data — a coach who reads "could not be
+         worked out" seven times over looks for something broken. */
+      note: plan?.reason === 'building'
+        ? 'The meta board is still being built. Try again in a few minutes.'
+        : 'Their plan could not be worked out just now.',
     };
   }
 
@@ -172,6 +186,7 @@ export function todayRow(
         artFilled: s.artFilled,
         shared: s.source === 'their-cards' ? (s.shared ?? undefined) : undefined,
         deckBattles: s.source === 'their-cards' ? (s.deckBattles ?? undefined) : undefined,
+        known: s.source === 'known-cards' ? (s.known ?? undefined) : undefined,
         vsFocus: s.vsFocus.winRate,
       }
     : top
@@ -188,7 +203,7 @@ export function todayRow(
         }
       : null;
   const source: TodayRow['source'] = s
-    ? s.source === 'their-cards' ? 'their-deck' : 'field'
+    ? s.source === 'their-cards' ? 'their-deck' : s.source === 'known-cards' ? 'their-cards' : 'field'
     : mine ? 'their-deck' : 'field';
   const workOn = plan.weighted.slice(0, 3).map((w) => w.name);
 
@@ -216,6 +231,18 @@ export function todayRow(
       tailoredPicks: plan.tailoredPicks, source, focus,
       note: pick.shared != null && pick.deckBattles != null
         ? `${pick.shared} of 8 cards are in a deck they have played ${pick.deckBattles} times.`
+        : 'Built from cards they already play.',
+    };
+  }
+  /* BUILT FROM CARDS THEY PLAY, though not close to any one of their decks:
+     today's deck is a different win condition from the last sessions', and
+     their own lists of it were used up. Still about this player. */
+  if (source === 'their-cards') {
+    return {
+      tag, label, kind: 'tailored', pick, workOn,
+      tailoredPicks: plan.tailoredPicks, source, focus,
+      note: pick.known != null
+        ? `${pick.known} of 8 are cards they already play.`
         : 'Built from cards they already play.',
     };
   }

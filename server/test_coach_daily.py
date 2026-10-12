@@ -82,7 +82,12 @@ check("the most-played survive, not the first seen",
       capped[0]["archetype"] == "a0" and all(t["archetype"] != "a19" for t in capped))
 
 print("\na board that is not a reading is not a projection")
-check("a building board yields nothing", cdl.field_threats(board(deck("a", "hog", 10.0), building=True)) == [])
+check("a board with no decks yet yields nothing", cdl.field_threats(board(building=True)) == [])
+# `building` is set for the whole of every half-hourly refresh, beside the last
+# complete reading. Refusing on the flag blanked every plan for those minutes:
+# the roster's Today board read "7 could not be read" (2026-10-12).
+check("a board being REFRESHED is still read -- it holds a complete reading",
+      len(cdl.field_threats(board(deck("a", "hog", 10.0), building=True))) == 1)
 check("an empty board yields nothing", cdl.field_threats(board()) == [])
 check("a board of zero use rate yields nothing",
       cdl.field_threats(board(deck("a", "hog", 0.0))) == [])

@@ -265,6 +265,33 @@ describe("today's session", () => {
     expect(r.pick?.shared).toBeUndefined();
   });
 
+  /* 2026-10-12: the deck is a DIFFERENT WIN CONDITION from their last
+     sessions, so once their own lists of a counter are used up the server
+     reaches for one built from cards they play across their decks. That is
+     still about this player, and must not be labelled the field's. */
+  it('a deck built from cards they play is theirs, with the count that says so', () => {
+    const r = todayRow('#A', 'A', plan({ session: session({
+      practise: { key: 'k', name: 'Elixir Golem', expectedWinRate: 56.4, cards: eight,
+                  vsFocus: { winRate: 62.5 }, source: 'known-cards', shared: 3, known: 6 },
+    }) }));
+    expect(r.source).toBe('their-cards');
+    expect(r.kind).toBe('tailored');
+    expect(r.note).toBe('6 of 8 are cards they already play.');
+    /* `shared` (3 of one deck) is under the familiarity floor and would read
+       as a weak claim about the wrong thing. */
+    expect(r.pick?.shared).toBeUndefined();
+    expect(r.note).not.toContain('played');
+  });
+
+  it('a board still being built says so instead of blaming the player', () => {
+    const r = todayRow('#A', 'A', plan({ basis: 'none', reason: 'building', recommendations: [] }));
+    expect(r.kind).toBe('failed');
+    expect(r.note).toContain('still being built');
+    expect(todayRow('#A', 'A', plan({ basis: 'none', reason: 'no_meta', recommendations: [] })).note)
+      .toBe('Their plan could not be worked out just now.');
+    expect(todayRow('#A', 'A', null).note).toBe('Their plan could not be worked out just now.');
+  });
+
   it('an older server with no session keeps the old behaviour', () => {
     const r = todayRow('#A', 'A', plan({ closest }));
     expect(r.pick?.key).toBe('thirty-day');

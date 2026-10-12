@@ -301,7 +301,8 @@ python server/test_duel_model.py  # 46 checks over the duel win model and the co
 python server/test_deck_synergy.py # 22 checks over the duel-pairing gate
 python server/test_deck_packages.py # 56 checks: spell packages, buildings and support around a win condition, and the gate on built decks
 python server/test_deck_evidence.py # 48 checks: who played a deck and in what mode — the vetting every offered deck passes
-python server/test_coach_session.py # 48 checks over today's practice session
+python server/test_coach_session.py # 65 checks over today's practice session
+python server/test_coach_session_log.py # 26 checks: what each player was shown, so the next day's deck differs
 python server/test_after_poll.py  # 13 checks: the duel evidence updates when a bot poll finishes, never mid-poll
 python server/test_db_keeper.py   # 11 checks over the one idle connection per database file
 python server/test_card_art.py    # 131 checks over deck arrangement and card art
@@ -17247,7 +17248,9 @@ answered by `server/coach_session.py` as `session` on the same field route
 * **Practise with**: the best deck *against that matchup* built from their own
   cards, provided it stays within `FIELD_SLACK` (3 points) of their best
   all-round answer — a deck that wins today's matchup by giving away the rest
-  of the field teaches the wrong thing.
+  of the field teaches the wrong thing. **Superseded 2026-10-12**: that slack
+  pinned two of seven players to one deck; see "The practice deck is a
+  different win condition every day" below.
 * **Practise against**: the meta's most-played list of that archetype, with
   its weekly movement.
 * **Proven in duels**: from the duel index — their own duel deck when it is
@@ -17293,6 +17296,107 @@ catalogue; ~1.3 s warm per plan live, the brief session is ~2.2 kB. Tests:
 `server/test_coach_session.py` 48 (two planted faults each turned it red),
 `tests/coachToday.test.ts` +9, 60/60 in a browser on real staged payloads
 (both themes, 1440 and 390).
+
+### The practice deck is a different win condition every day (2026-10-12)
+
+Reported from the roster's **Today** board, which read *"7 could not be
+read"* for every player, and then: *"this should change daily, with different
+decks and different win cons, according to what they are losing and what deck
+counters it … the decks should change every day for players as they see on
+the dashboard, and it must be different win cons / decks, not the same type"*.
+
+**Two faults, measured before either was touched.**
+
+1. **The board blanked for a few minutes of every half hour.** The route
+   answered `basis: "none", reason: "building"` with no picks. The meta board
+   had a complete reading in hand (50 decks, 34 minutes old), but
+   `meta.board()` sets `building` for the whole of its half-hourly refresh and
+   `coach_daily.field_threats` returned nothing whenever the flag was set. The
+   refresh takes 4 to 5 minutes now (it was about 95 seconds when that line
+   was written), so roughly one request in seven got an empty plan.
+   Watched live: the same request went from 0 picks to 7 the second the
+   refresh ended. `field_threats` now refuses only a board with no decks in
+   it; `reason: "building"` survives for the first build after a restart, and
+   the row says "The meta board is still being built" instead of blaming the
+   player.
+2. **The deck barely moved.** The seven roster players, the live route, a
+   session for each of the last eight days: **two players got the identical
+   deck on all eight** (one of them at **24.2%** against the day's matchup),
+   and the other five cycled two or three lists on a three-day loop. The
+   focus moved daily; the deck chosen for it did not. The cause was
+   `FIELD_SLACK = 3.0`: the pick had to sit within three points of the
+   player's best all-round deck, so a player with one stand-out list had
+   exactly one candidate whatever the matchup — while the same players held
+   **3 to 11 different win conditions** among their own-card decks at 55%+
+   against it.
+
+**The rule now** (`coach_session.practise`, pure):
+
+* it **counters** today's matchup — `COUNTER_MIN` 55%, the figure
+  `team_scout.GOOD_RATE` uses for the same claim;
+* it still wins against the field — `FIELD_MIN` 50%, an absolute floor in
+  place of the distance from their best deck;
+* its **win condition is not one they were shown in their last three
+  sessions**, and the exact list not in their last six
+  (`AVOID_FAMILY_SESSIONS`, `AVOID_DECK_SESSIONS`). A win condition is the
+  deck's NAME: Minion Giant, Goblin Giant and Skeleton Barrel are filed under
+  one `other` and are three different decks to the person practising them;
+* their own cards first: close to one deck they pilot (`their-cards`), then
+  built from cards they play across their decks (`known-cards`, new), then
+  the pool (`field`). A tier is left before a win condition is repeated.
+
+When nothing satisfies all of that the oldest session is forgiven first, so
+the last thing given up is "not what they had yesterday"; the counter floor
+outlasts every one of them (a real counter is repeated before a fresh deck
+that loses the matchup). The payload says which happened: `fresh`,
+`counters`, `family`.
+
+**What they were shown is stored** — `server/coach_session_log.py`, its own
+SQLite file (`server/.coach_sessions.db`, gitignored: it holds player tags),
+one row per player, day and list. A recomputation cannot answer "different
+from yesterday": it needs yesterday's pick, which needs the day before's, and
+wherever the chain is cut the answer can disagree with what was on the
+screen. Sessions are the days a plan was actually served, not calendar days,
+so a player who opens the page every third day is not handed the same deck
+each time the rotation comes round. A day never reads its own rows, so the
+deck is the same all day; a pinned `?day=` reads the history before that day
+and writes nothing. A log that cannot be read or written costs the memory and
+never the plan. Counts ride on `/api/analytics/status` as `coachSessions`.
+
+**Replayed through the production path**, staged on the VPS, the seven roster
+players over fourteen days with each day recorded the way a real one is:
+
+| | before | now |
+| --- | --- | --- |
+| same win condition as the day before | 50 of 91 day steps | **0 of 91** |
+| same list as the day before | 35 of 91 | **0 of 91** |
+| win conditions a player saw in 14 days | 1 to 3 | **7 to 8** |
+| lists a player saw | 1 to 4 | **10 to 13** |
+| days the deck was under 55% against the matchup | 11 of 98 | **0 of 98** |
+| against the day's matchup | 62.3% | **65.8%** |
+| against the field | 59.3% | 55.1% |
+| picked from their own cards | 98 of 98 | 94 + 4 from cards they play |
+
+The cost is the field figure, four points, and it is the point of the change:
+the deck is for today's matchup. Three sessions rather than two because the
+focus walks three matchups — with two, a player whose cards hold three
+counters loops the same three win conditions on the rotation's own beat
+(measured: 4 to 8 win conditions a player at two, 7 to 8 at three, for 0.4 of
+a point).
+
+**Not coordinated across players.** Each plan is one player's; on a given day
+the seven share 5.3 win conditions on average (4.0 before) and one win
+condition can still be on two or three rows. The first day after the deploy
+has no history, so it is each player's single best counter.
+
+Deployed 2026-10-12 06:42 UTC (backups `*.bak-20261012-064221-predailydecks`,
+only royalweb restarted). Live: all seven rows answer, 63 to 80% against the
+matchup, the same answer on a second read, seven rows in the log. Tests:
+`test_coach_session.py` 48 -> 65, `test_coach_session_log.py` 26 (new),
+`test_coach_daily.py` 204 -> 205, `tests/coachToday.test.ts` +2; thirteen
+planted faults, all caught (one test was too weak first). **Not opened in a
+browser signed in as the coach.** Undo without a deploy: restore the
+backups and restart royalweb.
 
 ### Where the data lives, and what enforces access
 
@@ -18462,6 +18566,8 @@ server/
                               the order, the sections. No imports
   coach_session.py            today's practice session — the daily surface that
                               really changes daily
+  coach_session_log.py        what each player was shown, so the next day's deck
+                              is a different win condition (own SQLite file)
   after_poll.py               brings the duel index, the model, the duel read, the
                               pairing table and the swap graph up to date when a
                               bot poll ends

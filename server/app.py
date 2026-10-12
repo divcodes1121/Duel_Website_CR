@@ -633,6 +633,14 @@ class Handler(BaseHTTPRequestHandler):
                     out["metaHistory"] = meta_history.status()
                 except Exception:  # noqa: BLE001
                     out["metaHistory"] = {"days": 0, "newest": None, "oldest": None}
+                # WHAT THE COACH'S DAILY SESSION REMEMBERS (counts, never a
+                # tag). If this stops growing the practice deck silently goes
+                # back to repeating itself, and no other angle shows that.
+                try:
+                    import coach_session_log
+                    out["coachSessions"] = coach_session_log.status()
+                except Exception:  # noqa: BLE001
+                    out["coachSessions"] = {"available": False, "rows": 0}
                 return self._send(out)
 
             if path == "/api/analytics/meta":

@@ -113,25 +113,107 @@ check("nothing at all is None, not an invented focus", cs.focus(DAY, {}, {}, [])
 print("\nthe practice deck: their cards, good against today, still good against the field")
 
 
-def row(key, field, familiar):
-    return {"key": key, "expectedWinRate": field, "affinity": {"familiar": familiar}}
+def row(key, field, familiar, arch=None, known=None):
+    return {"key": key, "expectedWinRate": field, "archetype": arch or key,
+            "affinity": {"familiar": familiar,
+                         "knowsCards": familiar if known is None else known}}
 
 
 RATES = {"a": 70.0, "b": 58.0, "c": 75.0, "d": 80.0, "e": None}
 rv = lambda r: None if RATES.get(r["key"]) is None else {"winRate": RATES[r["key"]], "games": 100, "source": "deck"}
-got = cs.practise([row("a", 60.0, True), row("b", 61.0, True), row("c", 57.5, True),
+got = cs.practise([row("a", 60.0, True), row("b", 61.0, True), row("c", 49.0, True),
                    row("d", 64.0, False)], rv)
-check("the best against the focus among their decks within the slack",
+check("the best against the focus among their decks that still win the field",
       got["row"]["key"] == "a" and got["source"] == "their-cards", got)
-check("a familiar deck 3.5 points down the field is outside the slack (c not picked)",
+check("a deck under FIELD_MIN gives the field away (c not picked, though best vs the focus)",
       got["row"]["key"] != "c")
 check("a stronger non-familiar deck does not beat a familiar one", got["row"]["key"] != "d")
 check("the rate against the focus is published", got["vsFocus"] == {"winRate": 70.0, "games": 100, "basis": "deck"})
+check("it says it counters and is fresh", got["counters"] is True and got["fresh"] is True, got)
+check("it names the win condition it picked", got["family"] == "a", got)
 got = cs.practise([row("d", 64.0, False), row("b", 63.0, False)], rv)
 check("nothing familiar: the field's, labelled", got["row"]["key"] == "d" and got["source"] == "field", got)
 got = cs.practise([row("e", 64.0, True)], rv)
 check("no rate against the focus is not a pick", got is None)
 check("an empty pool is None", cs.practise([], rv) is None)
+
+
+print("\nthe practice deck is no longer pinned to their one best all-round list")
+# The 2026-10-12 report, in miniature: one stand-out deck (61.8 against the
+# field) that LOSES today's matchup, and a real counter 8 points down the field.
+# Under the old 3-point slack the stand-out was the only candidate.
+PIN = {"star": 24.2, "counter": 61.9}
+pv = lambda r: {"winRate": PIN[r["key"]], "games": 50, "source": "deck"}
+got = cs.practise([row("star", 61.8, True), row("counter", 54.2, True)], pv)
+check("a 24.2% deck is not the answer to the matchup, however good against the field",
+      got["row"]["key"] == "counter" and got["counters"] is True, got)
+got = cs.practise([row("star", 61.8, True)], pv)
+check("with no counter anywhere the best available is offered and SAYS it does not counter",
+      got["row"]["key"] == "star" and got["counters"] is False, got)
+
+
+print("\na different win condition from the ones they were just shown")
+POOL = [row("hog-1", 56.0, True, "hog"), row("hog-2", 55.0, True, "hog"),
+        row("mortar-1", 55.0, True, "mortar"), row("gy-1", 54.0, False, "graveyard", known=True),
+        row("lava-1", 58.0, False, "lava", known=False)]
+VS = {"hog-1": 70.0, "hog-2": 68.0, "mortar-1": 60.0, "gy-1": 66.0, "lava-1": 75.0}
+vv = lambda r: {"winRate": VS[r["key"]], "games": 80, "source": "deck"}
+check("no history: the best of their own",
+      cs.practise(POOL, vv)["row"]["key"] == "hog-1")
+got = cs.practise(POOL, vv, avoid_families={"hog"}, avoid_keys={"hog-1"})
+check("Hog yesterday: not the other Hog list -- a different win condition",
+      got["row"]["key"] == "mortar-1" and got["family"] == "mortar" and got["fresh"] is True, got)
+got = cs.practise(POOL, vv, avoid_families={"hog", "mortar"}, avoid_keys={"hog-1", "mortar-1"})
+check("their own decks exhausted: a deck built from cards they play, before a repeat",
+      got["row"]["key"] == "gy-1" and got["source"] == "known-cards", got)
+got = cs.practise(POOL, vv, avoid_families={"hog", "mortar", "graveyard"})
+check("then the pool's, labelled as the field's",
+      got["row"]["key"] == "lava-1" and got["source"] == "field", got)
+got = cs.practise(POOL, vv, avoid_families={"hog", "mortar", "graveyard", "lava"},
+                  avoid_keys={"hog-1"})
+check("every win condition seen: a repeat of the win condition, never of the same list",
+      got["row"]["key"] == "hog-2" and got["fresh"] is False, got)
+got = cs.practise(POOL[:1], vv, avoid_families={"hog"}, avoid_keys={"hog-1"})
+check("one deck in the world: it is offered again rather than nothing",
+      got["row"]["key"] == "hog-1" and got["fresh"] is False, got)
+weak_new = [row("hog-1", 56.0, True, "hog"), row("x-1", 55.0, True, "xbow")]
+wv = lambda r: {"winRate": {"hog-1": 62.0, "x-1": 48.0}[r["key"]], "games": 80, "source": "deck"}
+got = cs.practise(weak_new, wv, avoid_families={"hog"}, avoid_keys={"hog-1"})
+check("a real counter is repeated before a fresh deck that loses the matchup",
+      got["row"]["key"] == "hog-1" and got["counters"] is True, got)
+three = [r for r in POOL if r["key"] in ("hog-1", "mortar-1", "gy-1")]
+for r in three:
+    r["affinity"] = {"familiar": True, "knowsCards": True}
+got = cs.practise(three, vv, avoid_families=[{"mortar"}, {"hog"}, {"graveyard"}])
+check("three win conditions, all seen: the OLDEST session is forgiven first",
+      got["row"]["key"] == "gy-1" and got["fresh"] is False, got)
+got = cs.practise(three[:2], vv, avoid_families=[{"hog"}, {"mortar"}])
+check("yesterday's win condition is the last thing given up (Mortar, though Hog is better)",
+      got["row"]["key"] == "mortar-1", got)
+POOL[3]["affinity"] = {"familiar": False, "knowsCards": True}
+other_fam = lambda r: r["key"].split("-")[0]
+mixed = [row("minion-1", 56.0, True, "other"), row("goblin-1", 55.0, True, "other")]
+mv = lambda r: {"winRate": {"minion-1": 66.0, "goblin-1": 61.0}[r["key"]], "games": 80, "source": "deck"}
+got = cs.practise(mixed, mv, family_of=other_fam, avoid_families={"minion"})
+check("two `other` decks are two win conditions when the family is the deck's name",
+      got["row"]["key"] == "goblin-1" and got["fresh"] is True, got)
+
+
+print("\nreplayed day by day, no day repeats the win condition before it")
+import coach_session_log as slog  # noqa: E402
+hist, seen = [], []
+for i in range(12):
+    af, ak = slog.avoid(hist, cs.AVOID_FAMILY_SESSIONS, cs.AVOID_DECK_SESSIONS)
+    g = cs.practise(POOL, vv, avoid_families=af, avoid_keys=ak)
+    seen.append(g["family"])
+    hist.insert(0, {"day": str(i), "families": {g["family"]}, "keys": {g["row"]["key"]}})
+check("twelve sessions, never the same win condition twice running",
+      all(a != b for a, b in zip(seen, seen[1:])), seen)
+check("and never within AVOID_FAMILY_SESSIONS while four win conditions exist",
+      all(len(set(seen[i:i + cs.AVOID_FAMILY_SESSIONS + 1])) == cs.AVOID_FAMILY_SESSIONS + 1
+          for i in range(len(seen) - cs.AVOID_FAMILY_SESSIONS)), seen)
+check("AVOID_FAMILY_SESSIONS is not the rotation's own beat",
+      cs.AVOID_FAMILY_SESSIONS >= cs.ROTATION)
 
 
 print("\nrising: measured climbs only")

@@ -159,7 +159,14 @@ def field_threats(board: dict, limit: int = MAX_THREATS,
     belongs to what remains.
     """
     decks = [d for d in (board.get("decks") or []) if d.get("cards") and d.get("deckHash")]
-    if board.get("building") or not decks:
+    # `building` IS NOT "THERE IS NO BOARD". `meta.board()` sets it whenever
+    # the half-hourly refresh is running, and serves the last complete reading
+    # beside it. Refusing on the flag blanked EVERY plan for the length of the
+    # refresh -- 4 to 5 minutes of each 30 -- and the roster's Today board
+    # printed "7 could not be read" (reported 2026-10-12; watched live: the
+    # same request went from no picks to seven the second the refresh ended).
+    # The only board that cannot be read is one with no decks in it.
+    if not decks:
         return []
 
     by_use = sorted(decks, key=lambda d: -float(d.get("useRate") or 0.0))
@@ -579,7 +586,10 @@ def plan(tag: str, since: str | None = None, until: str | None = None,
             tag, coach_session.reference_day(day),
             defs=defs, threats=threats, scored=scored, pool=pool, snap=snap,
             board=board, move=move, own_cards=card_pool(own),
-            seat_pick=seat_pick, deck_key=ts.deck_key, overall=overall, brief=brief)
+            seat_pick=seat_pick, deck_key=ts.deck_key, overall=overall, brief=brief,
+            # Served TODAY: a pinned `day` is a review of the past and must
+            # not rewrite what the player was actually shown.
+            record=day is None)
     except Exception:  # noqa: BLE001
         traceback.print_exc()
         session = None

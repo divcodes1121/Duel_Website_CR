@@ -92,7 +92,9 @@ export function SessionCard({ session, self = false }: { session: DailySession |
               `${p.expectedWinRate.toFixed(1)}% vs field`,
               p.source === 'their-cards' && p.shared != null
                 ? `${p.shared}/8 of ${self ? 'your' : 'their'} deck${p.deckBattles ? ` · ${nf.format(p.deckBattles)}g` : ''}`
-                : 'the field’s deck',
+                : p.source === 'known-cards' && p.known != null
+                  ? `${p.known}/8 cards ${self ? 'you' : 'they'} play`
+                  : 'the field’s deck',
             ]}
           />
         )}

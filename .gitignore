@@ -151,6 +151,13 @@ server/.meta_history.db
 server/.meta_history.db-wal
 server/.meta_history.db-shm
 
+# What each player was served as a daily practice deck (coach_session_log.py),
+# so the next day's is a different win condition. Holds player tags; server
+# state, never committed.
+server/.coach_sessions.db
+server/.coach_sessions.db-wal
+server/.coach_sessions.db-shm
+
 # Storage jobs ledger (retention.py / db_backup.py) — server state, never committed.
 server/.data_ledger.db
 server/.data_ledger.db-*

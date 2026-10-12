@@ -1610,6 +1610,19 @@ the session's deck with `x% vs <matchup> · y% vs field`. Strings live in
 `state/coachToday.ts` (`focusLine`, `formatDay` — a calendar split, never the
 local clock, so a reader west of UTC is not shown the day before).
 
+**Since 2026-10-12 the *Practise with* deck is a different win condition from
+the player's last three sessions** (the server remembers what it served; see
+the README's "The practice deck is a different win condition every day").
+Nothing new is drawn for it. The third figure on the row has one more
+wording: `7/8 of their deck · 41g` (close to one deck they pilot), **`6/8
+cards they play`** (built from cards they use across their decks — the tier
+reached when their own lists of a counter were shown recently), or `the
+field's deck`. On the Today board the same deck keeps the *Built from their
+cards* badge with the note `6 of 8 are cards they already play.` A row whose
+plan is missing because the meta board is in its first build after a restart
+says so (`The meta board is still being built. Try again in a few minutes.`)
+instead of the generic line.
+
 ## Coach Assist: "Or bring one of these" and its duel figures (2026-09-30)
 
 Each row after the name and its labels carries ONE duel figure, never both:
