@@ -808,8 +808,19 @@ over every game) and is worth most between known players.
 Tests: `test_player_skill.py` 40 (new), `test_coach.py` 264 -> 296,
 `tests/coachProfile.test.ts` 16 (new); 35 planted faults all caught (two tests
 too weak first: every fixture game was a coin flip, and the profile fixture
-was stored already sorted). Deployed 17:57 UTC (backups
-`{coach,app,after_poll,test_coach}.py.bak-20261012-175659-preskill`).
+was stored already sorted). 5,009 Python checks across 83 suites (only the
+known `test_ml_21a`), 1,732 vitest across 72 files. Browser: staged answers on
+the local site 113 of 113; **signed in on https://deckkies.com 61 of 61**
+(both profiles equal to the answer the page received, the History switch to
+7 days giving another profile, then the earlier checks of the counters).
+
+Deployed 17:57 UTC, server first (the deployed files matched the last commit;
+backups `{coach,app,after_poll,test_coach}.py.bak-20261012-175659-preskill`;
+the table built in place by the updater's own command, mode 600; only
+`royalweb` restarted), then `900f838`. To watch: the updater's first `player
+skill` step under its timer (`grep "player skill"
+/var/log/clashbot/after-poll.log`, and `playerSkill.builtAt` on the status
+route).
 
 ## Next action
 
