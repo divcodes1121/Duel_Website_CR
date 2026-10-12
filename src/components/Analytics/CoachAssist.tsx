@@ -2151,6 +2151,12 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
           <span className={styles.verdictLabel}>Play this</span>
           <div className={styles.verdictBody}>
             <span className={styles.verdictName}>{best.deckName || best.archetype}</span>
+            {/* When the pick is a counter, the same pill its row wears. */}
+            {best.counter && (
+              <span className={styles.duelTag} data-counter={best.origin ?? ''}>
+                {counterLabel(best.origin)}
+              </span>
+            )}
             {best.plan ? (
               /* THE DUEL, NOT THE GAME, when the look-ahead ran: this deck now
                  is what leaves the best chance of taking two of three. */

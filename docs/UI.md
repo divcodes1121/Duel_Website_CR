@@ -1761,14 +1761,18 @@ imports). README "Counters to what they bring" has the measurement.
   saying where the list comes from (`data-counter="duel" | "ladder"`) —
   **CRL duel list** / **Meta list** — which never wraps.
 - The same pill is on a counter wherever else it is drawn: a deck of "Your set
-  for this duel", an option after game 1, "Play this" when it is one. The
-  set's note counts them: `4 decks · 1 counter · 56.2%`.
+  for this duel", an option after game 1, and beside the name on "Play this"
+  when the pick is one. The set's note counts them: `4 decks · 1 counter ·
+  56.2%`.
 - **No sentence.** The block has no paragraph; the reasoning is in the README.
   The line under the result reads "Your still-legal decks and the counters to
   theirs, ranked by ...".
 - The brain line says `+ card-vs-card model` when the card model rated the
   list, and then no longer quotes the game-2 figure (it was measured without
-  the model).
+  the model). Its last part is `level-capped duel` when no level term
+  applied (`brainModel.levelScale === 0`: the Duel switch on Friendly, or two
+  players who only play friendly duels), else `card levels read` / `levels
+  not read` as before.
 - The PDF carries the block, headed with the same heading and counts, each
   deck's note led by where it comes from.
 

@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Coach Assist finds counters to what the opponent brings** | **2026-10-12.** Asked: the Suggestion opens with the player's own recent duel decks; it should analyse what the opponent opens with, find counters among the meta decks and the CRL players' duel decks, and do the same after each game. Measured blind first (323 real duel openings, an independent judge): the old pick rated 50.4% against the deck opponents really opened with, the first counter 60.7%, the answer as built 55.9% (+5.4 [+4.0, +6.9]). A block of five counters under "Play this" at every stage, counters in the set and the options, the card model in every Coach Assist rate, and a correction to the win chance between two known players. Also measured: a deck new to the pilot costs nothing we could find, and opponents do not counter-pick inside a duel. See [Counters to what they bring](#counters-to-what-they-bring-2026-10-12) |
+| **Coach Assist finds counters to what the opponent brings** | **2026-10-12.** Asked: the Suggestion opens with the player's own recent duel decks; it should analyse what the opponent opens with, find counters among the meta decks and the CRL players' duel decks, and do the same after each game. Measured blind first (323 real duel openings, an independent judge): the old pick rated 50.4% against the deck opponents really opened with, the first counter 60.7%, the answer as built 58.4% (+8.0 [+6.5, +9.5]). A block of five counters under "Play this" at every stage, counters in the set and the options, the card model in every Coach Assist rate, a correction to the win chance between two known players, and no card-level term in a friendly duel (it is played at a cap). Also measured: a deck new to the pilot costs nothing we could find, and opponents do not counter-pick inside a duel. LIVE as `9f436cc` + `715be7e`, 45 of 45 signed in on production. See [Counters to what they bring](#counters-to-what-they-bring-2026-10-12) |
 | **The day window picks the suggested decks too (Team Analysis, Deck Counter)** | **LIVE SINCE 2026-10-11 18:19 UTC.** Asked: when 7D or 14D is picked on Team Scout, the recommended decks should come from those same days, with the days weighed against what came before, because old decks are not in the meta. Until now the window chose which of the OPPONENT'S games were read and nothing else. The duel index now keeps every hub list's play BY DAY, and a window keeps the lists played in it (5+ games) whose share of the pool's play is at least half of what it was in the 60 days before. Replayed on 200 real opponents: at 7 days 25.9% of suggested rows were decks the window leaves out, on 185 of 200 lists; now none. Cost by the printed figure: #1 -0.31, all ten -0.55; most repeated list 26.0% -> 29.0% of opponents. A list whose share had halved won 52.5% the next week, a steady one 55.4%. Weighing a list's window games heavier in its own record was measured and NOT built (no gain at 7 days). See [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11) |
 | **Counters read the cards: a card-against-card model beside the fused rate (`card-matchup-1.0`)** | **LIVE SINCE 2026-10-11 10:56 UTC.** Asked: make the Deck Counter's counters exceptional, and only on proof. Measured: the fused rate knows an opponent's archetype and rarely their cards (94% of ladder deck pairs were played once). A model with one weight a card and one a card-against-card, fitted on 10.6M ladder games and every duel, sits beside it. On 24,307 unseen duel games: log loss 0.6328 -> 0.6123; inside one duel the won game is rated above the lost one 58.4% -> 66.2%. Replayed on 392 player-sides with a neutral judge: the #1 deck 52.2 -> 58.7 against what really came, rows under 50% 40.7% -> 22.8%; the most repeated list is on 27.6% of lists (20.9% before). See [Counters read the cards](#counters-read-the-cards-2026-10-11) |
 | **Ten decks, specific to the opponent; duel decks from CRL players only (`team-scout-4.1`)** | **LIVE SINCE 2026-10-10 12:38 UTC.** Reported: the same decks under every opponent, duel decks from random players. Measured: one list was on 56% of all lists and the named duel list had no CRL game. Now one all-round deck at most per list, the rest must gain clearly more against that opponent than the typical deck does, duel lists only from the CRL group (1,706 -> 130), ten rows. Replay: distinct decks 316 -> 490, the most repeated list on 38% -> 25% of opponents, at -0.49 points on the top three. See [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10) |
@@ -293,7 +293,7 @@ python server/test_duel_set.py    # 49 checks over the set composer: no shared c
 python server/test_duel_brain.py  # 83 checks over the duel brain's figures and picks
 python server/test_suggested_seating.py # 49 checks: a suggested deck fields every slot its cards can fill
 python server/test_coach_daily.py # 204 checks over the plan against the field
-python server/test_coach.py       # 256 checks over the Coach Assist rules, incl. its duel wiring, the duel read's, the duel plan's, the set's, the gate on built decks and the counters
+python server/test_coach.py       # 264 checks over the Coach Assist rules, incl. its duel wiring, the duel read's, the duel plan's, the set's, the gate on built decks and the counters
 python server/test_coach_choice.py # 79 checks: decks around the cards a reader names — which lists are rated, the order, the sections
 python server/test_deck_architect.py # 51 checks: building around a card from how duel players build (shells, core, open slots)
 python server/test_deck_tuner.py  # 152 checks over the swap brain, incl. the three-slot rule and the player-first lists
@@ -3750,14 +3750,15 @@ against **the deck the opponent really opened with**:
 | "Play this" as it was | 50.4% |
 | their own decks, chosen with the card model | 54.8% |
 | the first counter | **60.7%** (+10.3 [+8.7, +11.9]) |
-| **"Play this" as built** | **55.9%** (+5.4 [+4.0, +6.9]) |
+| **"Play this" as built** | **58.4%** (+8.0 [+6.5, +9.5]) |
 
-It is a counter on 39% of sides (judged 61.3% there) and one of the player's
-own decks otherwise: a counter must clear their best own deck by four points,
-and the engine's figure knows the player's card levels, which the judge does
-not. After game 1, against the deck they really brought in game 2: 54.4%
-against 50.0% for what players brought. 646 staged answers: no illegal deck,
-no counter short of three slots, no set sharing a card.
+It is a counter on 58% of sides (judged 61.1% there) and one of the player's
+own decks otherwise (54.8%, from 50.6% — the card model's doing): a counter
+must clear their best own deck by four points. The CRL group's own players
++5.7 [+2.2, +9.1], friendly duels +6.4 [+4.6, +8.4], clan-war duels +11.1.
+After game 1, against the deck they really brought in game 2: 56.4% against
+50.0% for what players brought. 646 staged answers: no illegal deck, no
+counter short of three slots, no set sharing a card.
 
 **Measured instead of assumed:**
 
@@ -3771,13 +3772,19 @@ no counter short of three slots, no set sharing a card.
 - Between two players who both have 20+ duel games the printed figure was too
   confident ("84.9%" won 77.2% on 951 held-out games): the gap between two such
   records is taken at 0.7.
+- **A friendly duel is played at a level cap.** The first build was checked
+  signed in on production and showed counters at 23-48% in a friendly duel:
+  the level term was applied from each player's collection whatever the
+  duel. In the 2,539 friendly duel games with both sides' levels the gap is
+  zero; in clan-war duels the better-levelled side wins 56.5% / 67.9% /
+  84.5% by the size of the gap. No level term in a friendly duel now; when
+  the kind is not told, by how much of the two players' duels are clan-war
+  duels. Before the fix the answer as built was +5.4; after it +8.0.
 
 **What it does not show.** The judge is a model: nobody played these decks in
-those duels. For the CRL group's own players the as-built gain is +2.2
-[-0.5, +4.9] on 73 sides — not separable from nothing. The top of the printed
-scale is still high ("80%+ this game" won 64% of 25). The whole record,
-including why the built answer takes about half of what the judge says is
-there: [`DECKKIES_DUEL_RECOMMENDER.md`](DECKKIES_DUEL_RECOMMENDER.md), the log
+those duels. The top of the printed scale is still high ("80%+ this game" won
+53% of the 15 sides that still print it). The whole record, including the
+first replay, a flaw in it, and the sensitivity run that was not adopted: [`DECKKIES_DUEL_RECOMMENDER.md`](DECKKIES_DUEL_RECOMMENDER.md), the log
 entry of 2026-10-12. Server: [server/README.md](server/README.md) "Counters in
 the Suggestion". Screen: [docs/UI.md](docs/UI.md) "The counters block on the
 Suggestion".

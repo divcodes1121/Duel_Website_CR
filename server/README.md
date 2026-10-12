@@ -1705,11 +1705,18 @@ bring" has the measurement; `DECKKIES_DUEL_RECOMMENDER.md` the whole record.
 - **`_pilot_strengths(rec_mine, rec_opp)`**: both records at
   `PILOT_KNOWN_GAMES` 20 -> the log-odds gap at `PILOT_KNOWN` 0.7 about its
   middle. `brainModel.strength` still prints each record as it is.
+- **`_level_scale(kind, mine_hist, opp_hist)`** -> 0.0 friendly (`kind is
+  True`), 1.0 clan war, else `1 - share of friendly duels` in the two
+  players' `read` histories (1.0 with none). `_brain_ctx(..., level_scale)`
+  hands the scorers each player's `cardDeficits` at that share
+  (`_scaled_deficits`; None at 0). `brainModel.levelScale` says which. The
+  win model itself is unchanged: its level weight was fitted on battle rows,
+  where a friendly duel has no level gap.
 - **Cost**: rating the pool is 0.1-0.2 s; staged median 2.44 s before game 1
   (2.82 before), 0.91 s after. Off without a deploy: `COUNTER_MIN = 101`
   (no list qualifies) and a `royalweb` restart; the card model alone:
   `mv .card_matchup.json{,.off}`.
-- **Tests**: `test_coach.py` 256 (fake pool and rates; 26 planted faults),
+- **Tests**: `test_coach.py` 264 (fake pool and rates; 32 planted faults),
   `test_duel_set.py` 49. On a box with a trained card model the suite still
   stubs the rates.
 

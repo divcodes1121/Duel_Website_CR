@@ -85,6 +85,9 @@ describe('the screen', () => {
     expect(row).toContain('{deck.counter && (');
     expect(row).toContain('{counterLabel(deck.origin)}');
     expect(row).toContain("data-counter={deck.origin ?? ''}");
+    // ...and on "Play this" itself when the pick is one.
+    expect(SCREEN).toContain('{best.counter && (');
+    expect(SCREEN).toContain('{counterLabel(best.origin)}');
   });
 
   it('says how many of the set are counters', () => {

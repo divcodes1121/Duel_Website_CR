@@ -631,6 +631,8 @@ it. Where only one side is known the weight is right (best 1.1).
   when it clears the best own deck by four points of this game (two of the
   duel).
 - `_pilot_strengths`: the gap between two long records at 0.7 of its size.
+- `_level_scale` (added the same day, see below): the card-level term by the
+  kind of duel — none in a friendly duel.
 - Payload: `counters {decks, pool, rated, window, cardModel, against,
   measured}`; rows `counter`, `origin`; `duelSet.counters` / `counterPool`;
   `brainModel.pilotKnown`; `fusion.cardModel`.
@@ -638,57 +640,108 @@ it. Where only one side is known the weight is right (best 1.1).
   have left" under "Play this" (figures only), a tag on every counter row, the
   count in the set's note; the PDF carries the block.
 
-**As built, the same 323 sides through the staged code** (`c0_stage.py`):
-"Play this" judged against the deck they really opened with **50.4 -> 55.9,
-+5.4 [+4.0, +6.9]**; against every deck they brought +3.2 [+2.3, +4.2]. It is
-a counter on 39% of sides (judged 61.3 there, from 50.0) and one of their own
-on 61% (52.4, from 50.7 — the card model's doing). Friendly +3.7 [+1.9, +5.3],
-clan war +8.7 [+6.1, +11.3], **the CRL group +2.2 [-0.5, +4.9] (73 sides, not
-told apart from nothing)**. After game 1, against the deck they really brought
-in game 2: 54.4 against 50.0 for what the players brought (+4.4 [+2.8, +6.0])
-and +2.2 [+1.2, +3.3] over the best own deck in the list. 646 answers: 0
-illegal decks, 0 counters short of three slots, 0 sets sharing a card; a set
-on 266 of 323 (252 before); a CRL duel list in the block on 73%; the first
-counter is 105 different lists across 323 sides, the most repeated on 6.8%;
-median 2.44 s before game 1 (2.82 before the change), 0.91 s after.
+**As built, first replay** (the same 323 sides through the staged code,
+`c0_stage.py`): "Play this" against the deck they really opened with 50.4 ->
+55.9, +5.4 [+4.0, +6.9]; a counter on 39% of sides; the CRL group +2.2
+[-0.5, +4.9], not told apart from nothing. About half of what the judge said
+was there. Where the set held no counter (126 sides) the engine's own figure
+put the best counter only 3.7 points over the best own deck while the judge
+said 6 — the engine's figure had the player's card levels in it.
 
-**Why it takes about half of what the judge says is there.** Where the set
-holds no counter (126 sides) the engine's own figure put the best counter 3.7
-points over the best own deck — under the margin — while the judge says 6.
-The engine's figure has the player's card levels in it and the judge does not;
-a counter is a deck whose cards this player may not have levelled. The margin
-and the cost were set from the first replay and were not tuned to the second.
+**Then the signed-in check on production found why** (`9f436cc` live, a real
+friendly pair): counters printing 23-48% "win chance". **A friendly duel is
+played at a level cap, and the level term was being applied from each player's
+COLLECTION whatever the duel.** The win model was fitted on what a battle row
+records — the levels the game was played at — so in training a friendly duel
+has no level gap at all (`c0_level.py`: 2,539 friendly duel games from 1
+October with both sides' levels: median gap 0.00, 90th percentile 0.00;
+85,745 clan-war games: 0.12 and 0.88, the better-levelled side winning 56.5% /
+67.9% / 84.5% by the size of the gap, best multiplier of the term 1.25 against
+the 1.0 shipped). At serving time a counter whose cards the player had not
+levelled was docked for it, and a well-levelled favourite printed far above
+what the cards say — part of the "89.6%" in the report. `coach._level_scale`:
+0 in a friendly duel, 1 in a clan-war duel, and when the kind was not told the
+share of the two players' stored duels that are clan-war duels (the reading of
+"not told" the duel read already makes). The brain line says "level-capped
+duel". Live as `715be7e`.
+
+**As built, second replay** (`c0_pair.py`: the OLD code and the NEW code, both
+through `c0_stage.py`, same 323 sides, the kind of duel passed as production
+passes it). "Play this" judged against the deck they really opened with:
+
+| | sides | old | new | new minus old |
+|---|---|---|---|---|
+| everyone | 323 | 50.4 | **58.4** | **+8.0 [+6.5, +9.5]** |
+| the CRL group | 73 | 50.5 | 56.2 | +5.7 [+2.2, +9.1] |
+| friendly duels | 210 | 49.6 | 56.0 | +6.4 [+4.6, +8.4] |
+| clan-war duels | 113 | 51.9 | 63.0 | +11.1 [+8.4, +13.8] |
+
+Against every deck they brought +5.5 [+4.6, +6.4]. "Play this" rated under 50%
+by the judge on 23.5% of sides (46.4% before). It is a counter on 58% of sides
+(judged 61.1 there, from 50.3) and one of their own on 42% (54.8, from 50.6).
+The first counter in the block is judged 60.9. After game 1, against the deck
+they really brought in game 2: 56.4 against 50.0 for what the players brought
+(+6.4 [+4.7, +8.0]) and +3.0 [+1.9, +4.2] over the best own deck in the list;
+a counter on 43%. 646 answers: 0 illegal decks, 0 counters short of three
+slots, 0 sets sharing a card; a set on 268 of 323 (252 before), holding 0 / 1
+/ 2 / 3+ counters on 92 / 112 / 50 / 14; a CRL duel list in the block on 71%;
+the first counter is 92 different lists across 323 sides, the most repeated on
+9.6%; median 2.39 s before game 1 (2.23 for the old code in the same run),
+0.90 s after.
+
+**One sensitivity run, not adopted** (160 sides, before the level fix): no
+cost for a counter in a set and a margin of 2 instead of 4 gave +6.7 against
++5.4 on the same sides, a counter on 58% instead of 39%. The margin and the
+cost were set from the first replay's arms and were not tuned to the judge.
+
+**A flaw in my first replay, said.** `c0_replay.py` and the first `c0_stage.py`
+passed the kind of duel as a word ("friendly" / "war"); in `coach` it is True /
+False / None, and "war" is truthy, so the read took every duel as a friendly
+one. Both arms of that replay were rated against the same read, so the
+comparison stands, but its clan-war figures were made with a flatter read than
+production uses. The second replay passes True / False.
 
 **Left open, said:**
 
 - The judge is a model. Nobody played these decks in these duels, and real
   results cannot confirm a deck nobody brought.
-- The printed figure at the top is still too high: "80%+ this game" won 64%
-  of 25 staged sides (60% of 35 before). The pilot correction is one cause
-  measured; the rest is not found.
-- For the CRL group the as-built gain is not separable from zero on 73 sides.
-- A friendly duel is level-capped and the level term does not know it.
+- The printed figure at the top is still too high: "80%+ this game" won 53%
+  of 15 sides in the second replay (60% of 40 with the old code). Far fewer
+  sides print it now; the rest of the cause is not found.
+- When the kind of duel is not told, the level term is weighed by what the two
+  players usually play. The switch on the screen is exact.
 - The Prediction window and "Build around your cards" are unchanged except
   that their rates now read the card model too.
 
-Tests: `test_coach.py` 211 -> 256, `test_duel_set.py` 46 -> 49,
-`tests/coachCounters.test.ts` 15 (new); 26 planted faults in the new code all
+Tests: `test_coach.py` 211 -> 264, `test_duel_set.py` 46 -> 49,
+`tests/coachCounters.test.ts` 16 (new); 32 planted faults in the new code all
 caught (two tests too weak first: the near-copy fixture was read as the list it
-copied, and the cost test was passing on the last-set rule). 4,929 Python
-checks across 82 suites (only the known `test_ml_21a`), 1,715 vitest across 71
-files. Browser, staged answers replayed on the local site: 68 of 68 (both
-themes, 1440 and 390, before game 1 and after it).
+copied, and the cost test was passing on the last-set rule). 4,929+ Python
+checks across 82 suites (only the known `test_ml_21a`), 1,716 vitest across 71
+files. Browser: staged answers replayed on the local site 73 of 73 (both
+themes, 1440 and 390, before game 1 and after it); **signed in on
+https://deckkies.com 45 of 45** (before game 1, after it with both real decks
+pasted, and the Friendly switch; every row on screen equal to the answer the
+page received; no deck offered holding a played card).
+
+**Deployed.** Server by scp first, 16:07 UTC (the deployed files matched the
+last commit; backups `{coach,duel_set,test_coach,test_duel_set}.py.bak-20261012-160751-precounters`;
+only `royalweb` restarted), then `9f436cc`; the level cap 16:29 UTC (backups
+`{coach,test_coach}.py.bak-20261012-162915-prelevelcap`), then `715be7e`.
+The lab directory on the server (`/tmp/c0lab`) is removed; its outputs, the
+two date-split models and the replays (no tag in them) are in the evidence
+folder's `out/`.
 
 ## Next action
 
 Steps 1 to 4 and 6 are live and the part of step 5 that needed nobody is too.
 What is left, in the order I would take it:
 
-0. **The printed figure at the top end** ("80%+" winning 60-64%). Find the
-   rest of it: the level term in level-capped friendly duels is the first
-   suspect; the look-ahead's own compounding the second. And **the CRL
-   group's as-built gain** (+2.2, not separable from zero on 73 sides):
-   re-run `c0_stage.py` when a month of their duels is stored.
+0. **The printed figure at the top end** ("80%+" winning 53-60% of the few
+   sides that still print it). The level term in friendly duels was one
+   cause and is fixed; the look-ahead's own compounding is the next
+   suspect. And the scorecard of this entry as a server command, beside
+   the two of item 1.
 1. **The look-ahead's and the set's scorecards on the server.** They are lab
    scripts on a local export (`replay_plan.py`, `replay_set.py`), each needing
    a win model fitted BEFORE the test window and a judge fitted after it. A
