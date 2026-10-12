@@ -1596,7 +1596,49 @@ check("one of them met only a few times: the records as they are",
       coach._pilot_strengths((127, 95), (19, 12)) == (ra_, _dm.strength(19, 12))
       and coach._pilot_strengths((0, 0), (0, 0)) == (0.5, 0.5))
 
+print("\ncard levels, by the kind of duel")
+_fr_h = {"read": [{"friendly": True}, {"friendly": True}, {"friendly": True}]}
+_war_h = {"read": [{"friendly": False}]}
+check("a friendly duel is played at a level cap: no level term",
+      coach._level_scale(True, _war_h, _war_h) == 0.0)
+check("a clan-war duel is not: the whole term", coach._level_scale(False, _fr_h, _fr_h) == 1.0)
+check("not told: the share of the two players' stored duels that are clan-war duels",
+      coach._level_scale(None, _fr_h, _war_h) == 0.25 and coach._level_scale(None, _fr_h, None) == 0.0
+      and coach._level_scale(None, _war_h, {}) == 1.0)
+check("not told and nothing stored for either: the term as it was", coach._level_scale(None, None, {"read": []}) == 1.0)
+_defs = {"hog-rider": 2.0, "the-log": 0.0}
+check("deficits at a share of their size; whole at 1, none at 0, none when there are none",
+      coach._scaled_deficits(_defs, 0.25) == {"hog-rider": 0.5, "the-log": 0.0}
+      and coach._scaled_deficits(_defs, 1.0) is _defs and coach._scaled_deficits(_defs, 0.0) is None
+      and coach._scaled_deficits(None, 0.5) is None and coach._scaled_deficits({}, 1.0) is None)
+
+_saved_bc = (coach.cd, sys.modules.get("duel_model"), sys.modules.get("duel_index"))
+try:
+    sys.modules["duel_model"] = SimpleNamespace(load=lambda: {"weights": {}}, strength=_dm.strength,
+                                                logit=_dm.logit, sig=_dm.sig)
+    sys.modules["duel_index"] = SimpleNamespace(available=lambda: True, player_record=lambda tag: (30, 20))
+    coach.cd = SimpleNamespace(cr_profile=lambda tag: {"cardDeficits": {"hog-rider": 2.0}})
+    _o = {"decks": [{"cards": deck("zz"), "prob": 1.0}]}
+    c_war = coach._brain_ctx(_o, "#A", "#B", 1.0)
+    c_fr = coach._brain_ctx(_o, "#A", "#B", 0.0)
+    c_half = coach._brain_ctx(_o, "#A", "#B", 0.5)
+    check("the brain's context carries each player's deficits at that share",
+          c_war["kw"]["my_def"] == {"hog-rider": 2.0} and c_fr["kw"]["my_def"] is None
+          and c_fr["kw"]["opp_def"] is None and c_half["kw"]["opp_def"] == {"hog-rider": 1.0}
+          and (c_war["levelScale"], c_fr["levelScale"], c_half["levelScale"]) == (1.0, 0.0, 0.5),
+          str((c_war["kw"], c_fr["kw"])))
+    check("...and by default the whole term, as before", coach._brain_ctx(_o, "#A", "#B")["levelScale"] == 1.0)
+finally:
+    coach.cd = _saved_bc[0]
+    for _name, _mod in (("duel_model", _saved_bc[1]), ("duel_index", _saved_bc[2])):
+        if _mod is None:
+            sys.modules.pop(_name, None)
+        else:
+            sys.modules[_name] = _mod
+
 _sug2 = _src[_src.index("def suggest("):_src.index("def mine_hist_pool(")]
+check("suggest tells the brain what kind of duel it is",
+      "_brain_ctx(opp, my_tag, opp_tag, _level_scale(kind, mine_hist, opp_hist))" in _sug2)
 check("suggest finds the counters BEFORE the set is composed and hands them to it",
       _sug2.index("_counter_rows(") < _sug2.index("_duel_set(mine_hist") and "counters=counters)" in _sug2)
 check("...the look-ahead may bring any of them later, and the answer carries the block",

@@ -1314,7 +1314,9 @@ function BrainLine({ model, cards }: { model: CoachBrainModel; cards?: boolean }
         model.strength.theirsGames
           ? `them ${model.strength.theirs.toFixed(0)}% over ${model.strength.theirsGames}`
           : 'none for them',
-        model.levels ? 'card levels read' : 'levels not read',
+        /* A friendly duel is played at a level cap, so the level term is off
+           there (`levelScale` 0); said as that, not as "levels not read". */
+        model.levelScale === 0 ? 'level-capped duel' : model.levels ? 'card levels read' : 'levels not read',
       ].filter(Boolean).join(' · ')}
     </p>
   );

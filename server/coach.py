@@ -1413,7 +1413,43 @@ def _combined(model, rates, deck, decks, kw) -> dict | None:
     return {"winRate": round(100 * acc, 1), "vs": vs, "sources": used}
 
 
-def _brain_ctx(opp: dict, my_tag: str, opp_tag: str) -> dict | None:
+def _level_scale(kind, *hists) -> float:
+    """How much of the card-level term applies to THIS duel: 0 for a friendly
+    duel, 1 for a clan-war duel, and when the kind was not told, the share of
+    the two players' stored duels that are clan-war duels (the same reading
+    of "not told" the duel read makes).
+
+    A FRIENDLY DUEL IS PLAYED AT A LEVEL CAP, and the win model was fitted that
+    way without anybody deciding it: a battle row records the levels the game
+    was played at, so in the 2,539 friendly duel games from 1 October with both
+    sides' levels the gap between them is zero (median 0.00, 90th percentile
+    0.00), against 0.12 and 0.88 in 85,745 clan-war games, where the
+    better-levelled side won 56.5% / 67.9% / 84.5% by the size of the gap.
+    Coach Assist, though, reads levels off each player's COLLECTION and applied
+    the weight whatever the duel — so in a friendly duel a counter whose cards
+    the player has not levelled printed as low as 23% (seen live, 2026-10-12),
+    and a well-levelled favourite printed well above what the cards say.
+    """
+    if kind is True:
+        return 0.0
+    if kind is False:
+        return 1.0
+    duels = [h for hist in hists for h in ((hist or {}).get("read") or [])]
+    if not duels:
+        return 1.0
+    return 1.0 - sum(1 for h in duels if h.get("friendly")) / len(duels)
+
+
+def _scaled_deficits(deficits: dict | None, scale: float) -> dict | None:
+    """A player's card-level deficits at `scale` of their size (None at 0)."""
+    if not deficits or scale >= 1.0:
+        return deficits or None
+    if scale <= 0.0:
+        return None
+    return {c: float(v) * scale for c, v in deficits.items()}
+
+
+def _brain_ctx(opp: dict, my_tag: str, opp_tag: str, level_scale: float = 1.0) -> dict | None:
     """What the combined brain needs for ONE pairing of players, or None.
 
     `{"model", "decks", "kw", "records"}`: the trained duel model, the
@@ -1434,10 +1470,11 @@ def _brain_ctx(opp: dict, my_tag: str, opp_tag: str) -> dict | None:
     myp = cd.cr_profile(my_tag) if my_tag else None
     opp_p = cd.cr_profile(opp_tag) if opp_tag else None
     my_str, opp_str = _pilot_strengths(rec_mine, rec_opp)
-    kw = dict(my_def=(myp or {}).get("cardDeficits") or None,
-              opp_def=(opp_p or {}).get("cardDeficits") or None,
+    kw = dict(my_def=_scaled_deficits((myp or {}).get("cardDeficits"), level_scale),
+              opp_def=_scaled_deficits((opp_p or {}).get("cardDeficits"), level_scale),
               my_str=my_str, opp_str=opp_str)
-    return {"model": model, "decks": decks, "kw": kw, "records": (rec_mine, rec_opp)}
+    return {"model": model, "decks": decks, "kw": kw, "records": (rec_mine, rec_opp),
+            "levelScale": round(float(level_scale), 3)}
 
 
 #: BETWEEN TWO KNOWN PLAYERS A RECORD SAYS LESS THAN THE MODEL'S WEIGHT ASSUMES.
@@ -1554,6 +1591,9 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
                          "theirs": round(100 * dm.strength(*rec_opp), 1), "theirsGames": rec_opp[0]},
             "pilotKnown": min(int(rec_mine[0] or 0), int(rec_opp[0] or 0)) >= PILOT_KNOWN_GAMES,
             "levels": bool(my_def and opp_def),
+            # How much of the level term applied: 0 = a friendly duel (played
+            # at a level cap), 1 = a clan-war duel, between = not told.
+            "levelScale": ctx.get("levelScale", 1.0),
         }
         return out, info, swaps
     except Exception as exc:  # noqa: BLE001
@@ -2619,7 +2659,8 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     # Absent model or evidence: the list stands exactly as ranked above.
     brain_ctx: dict = {}
     try:
-        ctx0 = _brain_ctx(opp, my_tag, opp_tag) if top else None
+        ctx0 = (_brain_ctx(opp, my_tag, opp_tag, _level_scale(kind, mine_hist, opp_hist))
+                if top else None)
     except Exception as exc:  # noqa: BLE001 - `_brain` reports its own failure the same way
         print("coach.suggest: brain context: %r" % (exc,), file=sys.stderr)
         ctx0 = None

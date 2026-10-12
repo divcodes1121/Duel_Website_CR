@@ -96,6 +96,14 @@ describe('the screen', () => {
     expect(SCREEN).toContain("cards ? null : m && model.mode === 'combined'");
     expect(SCREEN).toContain("${cards ? ' + card-vs-card model' : ''}");
   });
+
+  it('says a friendly duel is level-capped instead of "levels not read"', () => {
+    expect(SCREEN).toContain("model.levelScale === 0 ? 'level-capped duel' : model.levels ? 'card levels read' : 'levels not read'");
+    expect(CLIENT).toContain('levelScale?: number;');
+    expect(SERVER).toContain('"levelScale": ctx.get("levelScale", 1.0),');
+    // The kind reaches the level term: friendly off, clan war on.
+    expect(SERVER).toMatch(/if kind is True:\n\s+return 0\.0\n\s+if kind is False:\n\s+return 1\.0/);
+  });
 });
 
 describe('the contract with the server', () => {

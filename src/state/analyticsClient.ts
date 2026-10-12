@@ -1681,6 +1681,10 @@ export interface CoachBrainModel {
   /** Both players have a long duel record, so the gap between the two is
    *  taken at 0.7 of its size (measured 2026-10-12). */
   pilotKnown?: boolean;
+  /** How much of the card-level term applied: 0 in a friendly duel (played
+   *  at a level cap), 1 in a clan-war duel, and when the kind was not told
+   *  the share of the two players' stored duels that are clan-war duels. */
+  levelScale?: number;
 }
 
 export interface CoachBrainSwap {
