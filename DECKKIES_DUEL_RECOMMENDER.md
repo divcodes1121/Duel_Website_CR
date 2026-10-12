@@ -119,6 +119,7 @@ otherwise (today's read 52.2 / 50.7; a perfect read 54.2 / 49.7; noise about
 | 3 | **Pick for the duel, not the game** — look-ahead over their likely order; the result of each game moves the next one | **LIVE 2026-10-07** |
 | 4 | **The set composer** — three or four card-disjoint decks from duel-proven decks, key spells and win conditions spread so no deck is starved; harmony checklist and duel-pairing gate on every deck; at most two human swaps | **LIVE 2026-10-07**: the set from the player's own decks as they are (`duel_set.py`) and the gate on constructed decks (`deck_packages.py`). Swaps inside a set: built, measured, OFF |
 | 5 | **Keep learning** — retrain after every poll; this scorecard re-run before any step ships; a CRL cohort line in it | **partly LIVE 2026-10-07**: everything is refitted after each poll and the read's holdout carries a CRL line on the status route. The look-ahead and set scorecards are still lab scripts |
+| 6 | **Counters to what they bring** — the CRL group's duel lists and the vetted ladder lists rated against the read of their next deck, at every stage; in the set, in the options, and in a block of their own | **LIVE 2026-10-12** (the log's last entry) |
 
 ## Rules for this work
 
@@ -134,8 +135,12 @@ otherwise (today's read 52.2 / 50.7; a perfect read 54.2 / 49.7; noise about
   so is a predicted deck: a deck sharing a card with a revealed one cannot be
   the next deck.
 - **Closed, do not reopen without a new question**: counter-sniping (8.3% ->
-  2.7%), spell-conditioned archetype prediction (21A), free generation of decks.
-  `MECHANISM.md` §13 has the figures.
+  2.7%; measured again inside a duel on 2026-10-12: +0.44 points of 6.6
+  available, see the log), spell-conditioned archetype prediction (21A), free
+  generation of decks. `MECHANISM.md` §13 has the figures.
+- **A judge must share no game with what it judges.** The 2026-10-12 replay
+  split by date three ways: the picking model before the test days, the judge
+  after them. A judge that is one arm's own figure prefers that arm.
 - **A built deck is constructed from how duel players build**, never a real deck
   with a card swapped in for the sake of it; duel-proven lists lead.
 - **Screens say what to do**, in figures. No explanatory prose is added to
@@ -534,11 +539,156 @@ Backups `{duel_read,duel_read_train,test_duel_read}.py.bak-20261010-115402-precr
 `.duel_read.json.bak-…`, `/etc/royalweb.env.bak-…`. To go back: remove the
 variable; the next poll refits on everybody. `test_duel_read` 67 → 76.
 
+### 2026-10-12 — counters to what they bring, at every stage
+
+Asked, with the opening answer pasted (an own duel deck as "Play this" at
+"89.6% to win the duel"): *"this shows the recent duel decks to start with, but
+it does not work like this — we need to analyse what the opponent goes game 1
+mostly, analyse the deck, find counters, check the duel battles we have saved,
+the meta decks and the duel decks of the top CRL players ... the same after
+game 1 and game 2, analyse the pattern, and also what we have used, as the
+opponent will bring a counter to that too."*
+
+**What was true.** Before a duel the options WERE the player's own duel decks
+and nothing else (step 4's default, "their own decks first"); meta lists only
+topped a thin list up. The counter pool the Deck Counter and Team Analysis draw
+on — every vetted ladder list and the CRL group's duel lists, rated with the
+card model — was never consulted here.
+
+**Measured blind before anything was built**
+(`brain-evidence/coach_counter_20261012/`, production code on the server, 323
+sides of duels played 1-6 October between two collected players, each with
+only what was stored before the duel's day). The figure that PICKS came from a
+card model fitted on games before 1 October (`c0_fit.py before`); the JUDGE is
+a card model fitted only on games from 7 October on (`c0_fit.py since`: 33,135
+duel games and 2.25M ladder games, no game in common with the other, and it
+beats "who is playing" on its own held-out games, 0.6490 -> 0.6328). It rates
+the cards of two decks with nobody's skill in it. Judged win chance of the deck
+each arm says to open with, against **the deck the opponent really opened
+with**:
+
+| | everyone (323) | CRL group (73) | friendly duels (210) |
+|---|---|---|---|
+| what the players really opened with | 49.8 | 50.0 | 49.7 |
+| "Play this" as it was | 50.4 | 51.2 | 49.6 |
+| their own decks, chosen by the Deck Counter's figure (fused + card model) | 54.8 | 53.9 | 53.7 |
+| the Deck Counter's own #1 (what they play in general) | 59.0 | 59.7 | 58.2 |
+| **the #1 counter to the read of their opener** | **60.7** | 57.5 | 58.1 |
+| the #1 counter among the CRL group's duel lists | 60.7 | 59.3 | 58.9 |
+| their own best deck, in hindsight | 62.8 | 62.5 | 63.1 |
+
+The #1 counter over "Play this" as it was: **+10.3 [+8.7, +11.9]**; CRL group
++6.4 [+3.0, +9.6]; friendly +8.5 [+6.5, +10.5]; clan war +13.7. Against every
+deck they brought in that duel +9.0 [+8.1, +10.0]. The read named their real
+opener first on 31% of sides (17% in friendly duels) and had it among the decks
+rated against on 49%; **where it had missed the opener altogether the counter
+was still 5.8 points better** (55.6 against 49.8), where it had it 66.0 against
+51.0. Taking the counter only when it leads the best own deck by 0, 2, 4 or 6
+points keeps the whole gain (+10.3, +10.3, +10.2, +9.9); 8 and 12 start to cost
+(+9.3, +7.7). The counter's printed figure stood 9.1 points above the judge's
+rating of it, an own deck's 4.6.
+
+**Two things that were assumed, measured on real duel games** (from 1 October,
+scored with the model fitted before it; `c0_duelfacts.py`):
+
+- *A deck new to the pilot costs nothing measurable.* Players with 10+ earlier
+  duel games bringing a list of a win condition they had never brought to a
+  duel won +1.0 points over expectation [-0.6, +2.6] (3,179 games); on lists
+  they had brought 3-9 times +0.7. Friendly duels +0.1 [-3.6, +3.8].
+- *Opponents do not counter-pick inside a duel.* Options = the decks of their
+  previous duel still legal. The deck they brought in game 2 was +0.44 points
+  better against the deck the other player had USED in game 1 than the average
+  of their options, of 6.6 available by always picking the best (12,659 game
+  2s); against what the other still held +0.29 of 5.7; their opener against the
+  other's last set +0.27 of 5.2. Friendly duels -0.40 [-1.1, +0.3], the CRL
+  group +0.10. It agrees with the closed line above and with the 700 friendly
+  duels of 2026-10-10: there is no "they will counter what we used" term, and
+  none was built.
+
+**And the figure itself.** The replay put the live screen's "80%+ this game"
+at 60% won (35 sides). `c0_pilot.py`: between two players who BOTH have 20+
+earlier duel games the pilot term is too strong — best multiplier 0.7 (fitted
+1-6 October, 995 games); on the 951 games after it log loss 0.6205 -> 0.6139,
+and the favoured side at "84.9%" won 77.2% as shipped, at "83.8%" 80.5% with
+it. Where only one side is known the weight is right (best 1.1).
+
+**Built** (`coach-counter-1.0`; `coach.py`, `duel_set.py`):
+
+- `_Rates` asks for the card model and the balance log, as the Deck Counter
+  does: every Coach Assist rate is now fused + cards. `adopt()` rates a
+  counter-pool list with the pool's own profile (no query, no ladder-history
+  read).
+- `_counter_rows`: the window's pool (`team_analysis._window_pool`, the
+  opponent's days), no card the player has spent, rated against the SAME read
+  every option is rated against (their likely opener; after a game, what they
+  have left). Five shown, one a win condition, no near-copy; two slots held
+  for CRL duel lists within four points of the best; floor 52.
+- Before a duel `_duel_set` composes from the player's own duel decks AND five
+  counters; a counter costs the set two points of duel-win chance in the
+  choosing (never in the figure shown). A player with fewer than three duel
+  decks of their own now gets a set. After game 1 the two best counters join
+  the options and the look-ahead's pool; outside a set a counter leads only
+  when it clears the best own deck by four points of this game (two of the
+  duel).
+- `_pilot_strengths`: the gap between two long records at 0.7 of its size.
+- Payload: `counters {decks, pool, rated, window, cardModel, against,
+  measured}`; rows `counter`, `origin`; `duelSet.counters` / `counterPool`;
+  `brainModel.pilotKnown`; `fusion.cardModel`.
+- Screen: the block "Counters to their likely opener" / "Counters to what they
+  have left" under "Play this" (figures only), a tag on every counter row, the
+  count in the set's note; the PDF carries the block.
+
+**As built, the same 323 sides through the staged code** (`c0_stage.py`):
+"Play this" judged against the deck they really opened with **50.4 -> 55.9,
++5.4 [+4.0, +6.9]**; against every deck they brought +3.2 [+2.3, +4.2]. It is
+a counter on 39% of sides (judged 61.3 there, from 50.0) and one of their own
+on 61% (52.4, from 50.7 — the card model's doing). Friendly +3.7 [+1.9, +5.3],
+clan war +8.7 [+6.1, +11.3], **the CRL group +2.2 [-0.5, +4.9] (73 sides, not
+told apart from nothing)**. After game 1, against the deck they really brought
+in game 2: 54.4 against 50.0 for what the players brought (+4.4 [+2.8, +6.0])
+and +2.2 [+1.2, +3.3] over the best own deck in the list. 646 answers: 0
+illegal decks, 0 counters short of three slots, 0 sets sharing a card; a set
+on 266 of 323 (252 before); a CRL duel list in the block on 73%; the first
+counter is 105 different lists across 323 sides, the most repeated on 6.8%;
+median 2.44 s before game 1 (2.82 before the change), 0.91 s after.
+
+**Why it takes about half of what the judge says is there.** Where the set
+holds no counter (126 sides) the engine's own figure put the best counter 3.7
+points over the best own deck — under the margin — while the judge says 6.
+The engine's figure has the player's card levels in it and the judge does not;
+a counter is a deck whose cards this player may not have levelled. The margin
+and the cost were set from the first replay and were not tuned to the second.
+
+**Left open, said:**
+
+- The judge is a model. Nobody played these decks in these duels, and real
+  results cannot confirm a deck nobody brought.
+- The printed figure at the top is still too high: "80%+ this game" won 64%
+  of 25 staged sides (60% of 35 before). The pilot correction is one cause
+  measured; the rest is not found.
+- For the CRL group the as-built gain is not separable from zero on 73 sides.
+- A friendly duel is level-capped and the level term does not know it.
+- The Prediction window and "Build around your cards" are unchanged except
+  that their rates now read the card model too.
+
+Tests: `test_coach.py` 211 -> 256, `test_duel_set.py` 46 -> 49,
+`tests/coachCounters.test.ts` 15 (new); 26 planted faults in the new code all
+caught (two tests too weak first: the near-copy fixture was read as the list it
+copied, and the cost test was passing on the last-set rule). 4,929 Python
+checks across 82 suites (only the known `test_ml_21a`), 1,715 vitest across 71
+files. Browser, staged answers replayed on the local site: 68 of 68 (both
+themes, 1440 and 390, before game 1 and after it).
+
 ## Next action
 
-Steps 1 to 4 are live and the part of step 5 that needed nobody is too. What
-is left, in the order I would take it:
+Steps 1 to 4 and 6 are live and the part of step 5 that needed nobody is too.
+What is left, in the order I would take it:
 
+0. **The printed figure at the top end** ("80%+" winning 60-64%). Find the
+   rest of it: the level term in level-capped friendly duels is the first
+   suspect; the look-ahead's own compounding the second. And **the CRL
+   group's as-built gain** (+2.2, not separable from zero on 73 sides):
+   re-run `c0_stage.py` when a month of their duels is stored.
 1. **The look-ahead's and the set's scorecards on the server.** They are lab
    scripts on a local export (`replay_plan.py`, `replay_set.py`), each needing
    a win model fitted BEFORE the test window and a judge fitted after it. A

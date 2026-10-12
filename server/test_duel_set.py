@@ -99,6 +99,13 @@ check("only the first POOL candidates are considered",
       all(d["index"] < ds.POOL for d in ds.compose(many, vm)["decks"]))
 check("the caller can widen the pool", any(d["index"] == 11 for d in ds.compose(many, vm, pool=12)["decks"]))
 check("it says how many sets it valued", r4["valued"] == 5 and len(v.calls) >= 5, str(r4["valued"]))
+# Twelve decks that share nothing are C(12, 4) = 495 sets of four: more than the cap.
+capped = ds.compose(many, vm, pool=12)
+check("a wide pool stops at the cap on sets valued", capped["valued"] == ds.MAX_VALUED == 240)
+wide = ds.compose(many, vm, pool=12, max_valued=600)
+check("...unless the caller raises it (the player's decks AND counters from outside)",
+      wide["valued"] == 495 and any(d["index"] == 11 for d in wide["decks"]))
+check("the cap is the caller's too when it is lower", ds.compose(many, vm, pool=12, max_valued=7)["valued"] == 7)
 
 print("a deck the caller pins")
 must = ds.compose([A, B, C, D, E], v, size=3, must=[4])

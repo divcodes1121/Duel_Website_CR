@@ -1028,11 +1028,21 @@ class _Rates:
             try:
                 self.duel = _ta._DuelContext()
                 self.fx = _ta._FusionContext(self.duel, snap)
+                # THE CARDS, AND THE BALANCE LOG (2026-10-12): the Deck
+                # Counter's figure. Coach Assist did not ask for either until
+                # a blind replay did (`COUNTER_MEASURED`): choosing among a
+                # player's OWN duel decks by this figure instead of the fused
+                # rate alone was worth five points against the deck the
+                # opponent really opened with. No model file = the fused rate.
+                self.fx.balance = True
+                self.fx.use_cards()
             except Exception:  # noqa: BLE001 - the old engine still answers
                 traceback.print_exc()
                 self.duel = self.fx = None
         self.on = self.fx is not None
         self._cands: dict[str, SimpleNamespace] = {}
+        # Counter-pool lists rated here (`adopt`): keys `prepare` leaves alone.
+        self._adopted: set[str] = set()
 
     def _cand(self, cards) -> SimpleNamespace:
         key = ",".join(sorted(set(cards)))
@@ -1052,11 +1062,31 @@ class _Rates:
         if not self.on:
             return
         try:
-            cands = [self._cand(d) for d in mine if len(set(d or [])) == 8]
+            cands = [self._cand(d) for d in mine if len(set(d or [])) == 8
+                     and ",".join(sorted(set(d))) not in self._adopted]
             self.fx.prepare(cands, [{"cards": list(t)} for t in theirs if t],
                             hubs_too=True)
         except Exception:  # noqa: BLE001 - archetype levels still answer
             traceback.print_exc()
+
+    def adopt(self, cand) -> None:
+        """A list of the counter pool, rated here exactly as the pool rates it.
+
+        The pool's own candidate carries a profile that costs no query (a seed
+        holds its records) and the archetype halves it has already worked out;
+        building a `_DeckProfile` for it instead is three reads a list. It is
+        NOT prepared against their decks from its ladder history either — the
+        Deck Counter does not, and the replay that justified counters here
+        rated them this way. A list the player also owns keeps the richer
+        candidate it already has.
+        """
+        if not self.on or cand.key in self._cands:
+            return
+        c = SimpleNamespace(cards=list(cand.cards), key=cand.key, archetype=cand.archetype,
+                            profile=cand.profile, memo=cand.memo)
+        c.rate = self.fx.rater(c)
+        self._cands[cand.key] = c
+        self._adopted.add(cand.key)
 
     def rate(self, mine, theirs=None, archetype: str | None = None) -> dict | None:
         """`mine` against one deck — or, given `archetype`, against that
@@ -1081,7 +1111,10 @@ class _Rates:
         if not self.on:
             return None
         return {"brain": _ta._fusion.FUSION_VERSION,
-                "sources": {k: v for k, v in self.fx.stats.items() if v}}
+                "sources": {k: v for k, v in self.fx.stats.items() if v},
+                # The card model rated these beside the fused rate (None = no
+                # model has been trained on this box).
+                "cardModel": self.fx.cm.get("brain") if self.fx.cm is not None else None}
 
 
 def _expected(mine: list[str], opp_decks: list[dict], snap,
@@ -1313,6 +1346,34 @@ def _duel_decks(rates: "_Rates", tag: str, since: str | None,
 COMBINED_MEASURED = {"games": 3000, "logLoss": 0.630, "choices": 2500,
                      "agree": 59.0, "disagree": 39.4}
 
+#: WHAT THE COUNTERS MEASURED before they were wired (2026-10-12). Blind, through
+#: the production code on the server: duels of 1-6 October, each side with only
+#: what was stored before the duel's day; pick figures from a card model fitted
+#: on games before 1 October, judged by a card model fitted only on games from
+#: 7 October (no game in common), against THE DECK THE OPPONENT REALLY OPENED
+#: WITH. Judged win chance of the deck each arm says to open with:
+#:
+#:                                                   everyone  CRL group  friendly
+#:   sides                                               323        73        210
+#:   what the players really opened with                49.8      50.0       49.7
+#:   "Play this" as it was (own duel decks)             50.4      51.2       49.6
+#:   their own decks, chosen by fused + card model      54.8      53.9       53.7
+#:   the #1 counter                                     60.7      57.5       58.1
+#:   the #1 counter among the CRL group's duel lists    60.7      59.3       58.9
+#:
+#: The #1 counter over "Play this" as it was: +10.3 points [+8.7, +11.9]; CRL
+#: group +6.4 [+3.0, +9.6]; friendly duels +8.5 [+6.5, +10.5]. Where the read
+#: had NOT named their opener at all (164 sides) the counter was still 5.8
+#: points better (55.6 against 49.8); where it had, 66.0 against 51.0. Against
+#: every deck they brought in that duel: +9.0 [+8.1, +10.0].
+#:
+#: WHAT IT COSTS, told: the counter's printed figure stood 9.1 points above the
+#: judge's rating of it (an own deck's 4.6) — the best of several hundred lists
+#: by any figure reads high — and the judge is a model, not results: nobody
+#: played these decks in these duels.
+COUNTER_MEASURED = {"sides": 323, "actual": 49.8, "own": 50.4, "ownByCards": 54.8,
+                    "counter": 60.7, "gain": 10.3, "interval": [8.7, 11.9]}
+
 
 def _combined_pair(model: dict, rates, deck, od, *, my_def, opp_def,
                    my_str: float, opp_str: float) -> tuple[float, str] | None:
@@ -1372,10 +1433,41 @@ def _brain_ctx(opp: dict, my_tag: str, opp_tag: str) -> dict | None:
     rec_mine, rec_opp = di.player_record(my_tag), di.player_record(opp_tag)
     myp = cd.cr_profile(my_tag) if my_tag else None
     opp_p = cd.cr_profile(opp_tag) if opp_tag else None
+    my_str, opp_str = _pilot_strengths(rec_mine, rec_opp)
     kw = dict(my_def=(myp or {}).get("cardDeficits") or None,
               opp_def=(opp_p or {}).get("cardDeficits") or None,
-              my_str=dm.strength(*rec_mine), opp_str=dm.strength(*rec_opp))
+              my_str=my_str, opp_str=opp_str)
     return {"model": model, "decks": decks, "kw": kw, "records": (rec_mine, rec_opp)}
+
+
+#: BETWEEN TWO KNOWN PLAYERS A RECORD SAYS LESS THAN THE MODEL'S WEIGHT ASSUMES.
+#: The pilot weight is fitted on every duel game, where one side is usually a
+#: collected player and the other somebody met once. Coach Assist is asked
+#: about two players who both have a long record, each earned against other
+#: people. Measured 2026-10-12 on duel games from 1 October with a card model
+#: fitted before it: when both had 20+ earlier duel games the best multiplier
+#: of the pilot term (fitted 1-6 October, 995 games) was 0.7, and on the 951
+#: games after it log loss went 0.6205 -> 0.6139; the side the figure favoured
+#: at "84.9%" won 77.2% as shipped, at "83.8%" won 80.5% with it. Where only
+#: one side was known the weight was right as it stood (best 1.1). The same
+#: replay that tested the counters had found the live screen's "80%+ this
+#: game" winning 60% of 35.
+PILOT_KNOWN_GAMES = 20
+PILOT_KNOWN = 0.7
+
+
+def _pilot_strengths(rec_mine: tuple, rec_opp: tuple) -> tuple[float, float]:
+    """The two strengths every scorer is handed. When BOTH players have a
+    record of `PILOT_KNOWN_GAMES` the gap between them (in log-odds) is taken
+    at `PILOT_KNOWN` of its size, about its middle. It moves every deck of a
+    pairing alike, so it changes what is printed and not which deck leads."""
+    import duel_model as dm
+    a, b = dm.strength(*rec_mine), dm.strength(*rec_opp)
+    if min(int(rec_mine[0] or 0), int(rec_opp[0] or 0)) >= PILOT_KNOWN_GAMES:
+        za, zb = dm.logit(a), dm.logit(b)
+        mid = (za + zb) / 2.0
+        a, b = dm.sig(mid + PILOT_KNOWN * (za - mid)), dm.sig(mid + PILOT_KNOWN * (zb - mid))
+    return a, b
 
 
 def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
@@ -1456,8 +1548,11 @@ def _brain(rows: list[dict], opp: dict, my_tag: str, opp_tag: str,
             "trainedAt": meta.get("trainedAt"),
             "games": meta.get("games"),
             "holdout": meta.get("holdout"),
-            "strength": {"mine": round(100 * my_str, 1), "mineGames": rec_mine[0],
-                         "theirs": round(100 * opp_str, 1), "theirsGames": rec_opp[0]},
+            # Each player's own record, as it is — not the pair of strengths
+            # the scorers were handed (`_pilot_strengths`).
+            "strength": {"mine": round(100 * dm.strength(*rec_mine), 1), "mineGames": rec_mine[0],
+                         "theirs": round(100 * dm.strength(*rec_opp), 1), "theirsGames": rec_opp[0]},
+            "pilotKnown": min(int(rec_mine[0] or 0), int(rec_opp[0] or 0)) >= PILOT_KNOWN_GAMES,
             "levels": bool(my_def and opp_def),
         }
         return out, info, swaps
@@ -1697,6 +1792,223 @@ def _duel_figures(rows: list[dict], rates, opp: dict, opp_tag: str, opp_win: tup
         traceback.print_exc()
 
 
+# ── COUNTERS TO WHAT THEY BRING (2026-10-12) ───────────────────────────────
+#
+# Asked for: "this shows the recent duel decks to start with — we need to
+# analyse what the opponent goes game 1 mostly, analyse the deck, find counters,
+# check the duel battles we have saved, the meta decks and the duel decks of
+# the top CRL players ... the same after game 1 and game 2".
+#
+# Until now the only decks that could be "Play this" were the player's own duel
+# decks (meta lists only topped a thin list up). The counter pool the Deck
+# Counter and Team Analysis draw on — every vetted ladder list and the duel
+# lists of the CRL group — was never consulted here.
+#
+# MEASURED BLIND FIRST (`brain-evidence/coach_counter_20261012/`, production
+# code on the server, duels of 1-6 October 2026, each side with only what was
+# stored before the duel's day). Every engine figure used to PICK came from a
+# card model fitted on games before 1 October; the JUDGE is a card model fitted
+# only on games from 7 October on, which shares no game with it and rates the
+# cards of two decks with nobody's skill in it. Against the deck the opponent
+# really opened with — see `COUNTER_MEASURED` for the figures.
+#
+# TWO THINGS THAT WERE ASSUMED AND MEASURED INSTEAD, on duel games from 1
+# October scored with the model fitted before it:
+#
+#   * A DECK NEW TO THE PILOT COSTS NOTHING MEASURABLE. Players with 10+
+#     earlier duel games bringing a list of a win condition they had never
+#     brought to a duel won +1.0 points over expectation [-0.6, +2.6] (3,179
+#     games) — the same as on lists they had brought 3-9 times (+0.7).
+#   * OPPONENTS DO NOT COUNTER-PICK INSIDE A DUEL. Of the decks a player was
+#     holding, the one they brought in game 2 was +0.44 points better against
+#     the deck the other had USED in game 1 than their other options, of 6.6
+#     available (12,659 game 2s); friendly duels -0.40 [-1.1, +0.3], the CRL
+#     group +0.10. So there is no "they will counter what we used" term.
+
+#: Counters shown in the block, and the most one win condition may hold of
+#: them: five lists of one archetype are one idea.
+COUNTER_SHOW = 5
+COUNTER_PER_FAMILY = 1
+#: Of those, how many are held for the CRL group's duel lists, and how far
+#: under the best counter one may sit and still be held.
+COUNTER_DUEL_SLOTS = 2
+COUNTER_DUEL_BAND = 4.0
+#: Counters the set composer may draw on before a duel, and the player's own
+#: decks beside them (most recent first).
+COUNTER_SET = 5
+COUNTER_SET_OWN = 6
+#: Counters that join the options once the duel has started.
+COUNTER_OPTIONS = 2
+#: A list rated under this against what they bring is not a counter.
+COUNTER_MIN = 52.0
+#: WHAT A COUNTER MUST CLEAR THE PLAYER'S BEST OWN DECK BY to be "Play this",
+#: in points of this game (halved for a duel figure), and what one costs a set
+#: in duel-win chance. The best of several hundred lists by a noisy figure
+#: reads higher than it is: the replay's judge put the counter's printed
+#: figure further above its own rating than an own deck's. Any lead from 0 to
+#: 6 points kept the whole measured gain; past 8 it starts to cost.
+COUNTER_MARGIN = 4.0
+COUNTER_SET_COST = 0.02
+#: Candidate sets the composer may value with counters in the pool.
+COUNTER_SET_VALUED = 600
+
+COUNTER_BRAIN = "coach-counter-1.0"
+
+
+def _family_of(archetype: str, cards) -> str:
+    """One name a win condition: `other` decks are told apart by their card."""
+    return archetype if archetype and archetype != "other" else cd.deck_title(archetype, list(cards))
+
+
+def _counter_rows(opp: dict, used: set, rates: "_Rates | None", chips: list[dict], snap,
+                  days: int | None, skip: set | None = None) -> tuple[list[dict], dict | None]:
+    """COUNTERS TO WHAT THEY ARE LIKELY TO BRING NEXT: `(rows, info)`.
+
+    Every list of the counter pool for the window (`team_analysis._window_pool`:
+    vetted ladder lists and the CRL group's duel lists, not the ones the days
+    before were heavier in) that shares no card with what the player has spent,
+    rated against THE READ OF THEIR NEXT DECK — the same decks and shares every
+    other figure on this screen is computed against, so before game 1 it is
+    their likely opener and after it what they have left — by the request's own
+    rates (the fused rate with the card model). Best first, one list a win
+    condition, no near-copy of one already taken.
+
+    Rows are `_rec` rows (seated, `expected`, chips) flagged `counter` with
+    their `origin` ("duel" / "ladder"). `skip` is deck keys never offered (the
+    player's own options: those are already on the screen as theirs).
+
+    `([], None)` without the pool, the rates, or a deck of theirs to rate
+    against. Never raises: the caller's list stands without it.
+    """
+    if _ta is None or rates is None or not rates.on:
+        return [], None
+    threats = []
+    for d in opp.get("decks") or []:
+        cards = list(d.get("cards") or [])
+        p = float(d.get("prob") or 0.0)
+        if len(set(cards)) != 8 or p <= 0:
+            continue
+        a = _archetype(cards)
+        threats.append({"cards": cards, "archetype": a, "family": a,
+                        "likelihood": p, "key": _deck_key(cards)})
+    total = sum(t["likelihood"] for t in threats)
+    if not threats or total <= 0:
+        return [], None
+    pool, window = _ta._window_pool(days or _ta.DEFAULT_DAYS)
+    if not pool:
+        return [], None
+    if rates.duel is not None and rates.duel.on:
+        rates.duel.prefetch([c.cards for c in pool])
+    table = rates.fx.threat_table(threats)
+    skip = skip or set()
+    scored = []
+    for c in pool:
+        cards = set(c.cards)
+        if len(cards) != 8 or (cards & used) or c.key in skip:
+            continue
+        num = den = 0.0
+        for like, _fam, rate, _src in rates.fx.lean_rates(c, table):
+            num += like * rate
+            den += like
+        if den >= 0.999 * total:
+            scored.append((num / den, c))
+    scored.sort(key=lambda r: (-r[0], r[1].key))
+
+    want = max(COUNTER_SHOW, COUNTER_SET)
+    rows, families, taken = [], {}, []
+
+    def take(value: float, c) -> bool:
+        if cd.fillable_slots(c.cards) < cd.SPECIAL_SLOTS:
+            return False
+        arch = _archetype(list(c.cards))
+        fam = _family_of(arch, c.cards)
+        if families.get(fam, 0) >= COUNTER_PER_FAMILY:
+            return False
+        if any(len(set(c.cards) & t) >= MIN_OVERLAP for t in taken):
+            return False
+        rates.adopt(c)
+        seated, marks, _inferred = rates.duel.seat(c.cards)
+        md = dz._arranged(seated, marks) | {
+            "archetype": arch, "deckName": dz.deck_label(seated, arch),
+            "counter": True, "origin": c.origin}
+        row = _rec(md, opp, chips, snap, rates)
+        if not row.get("expected"):
+            return False
+        row["counterValue"] = round(value, 1)
+        families[fam] = families.get(fam, 0) + 1
+        taken.append(set(c.cards))
+        rows.append(row)
+        return True
+
+    # THE CRL GROUP'S DUEL LISTS FIRST, while they are within a few points of
+    # the best counter there is: asked for by name ("duel decks only from the
+    # top CRL players"), and free — in the replay the best CRL duel list was
+    # judged the same as the best counter overall (60.7 and 60.7; for the CRL
+    # group's own players 59.3 against 57.5).
+    top_value = scored[0][0] if scored else 0.0
+    held = 0
+    for value, c in scored:
+        if held >= COUNTER_DUEL_SLOTS or value < max(COUNTER_MIN, top_value - COUNTER_DUEL_BAND):
+            break
+        if c.origin == "duel" and take(value, c):
+            held += 1
+    for value, c in scored:
+        if len(rows) >= want or value < COUNTER_MIN:
+            break
+        take(value, c)
+    rows.sort(key=lambda r: -r["counterValue"])
+    info = {
+        "brain": COUNTER_BRAIN,
+        "pool": len(pool), "rated": len(scored),
+        "window": _ta._window_public(window),
+        "cardModel": rates.fx.cm.get("brain") if rates.fx.cm is not None else None,
+        "against": len(threats),
+        "measured": COUNTER_MEASURED,
+    }
+    return rows, info
+
+
+def _with_brain(rows: list[dict], ctx: dict | None, rates) -> None:
+    """Each row's combined-brain figure against their likely decks, in place —
+    the figure `_brain` puts on an option, for rows it does not order."""
+    if not ctx or not ctx.get("model"):
+        return
+    for r in rows:
+        if r.get("brain"):
+            continue
+        try:
+            e = _combined(ctx["model"], rates, r["cards"], ctx["decks"], ctx["kw"])
+        except Exception:  # noqa: BLE001 - a row without the figure still stands
+            e = None
+        if e:
+            r["brain"] = e
+
+
+def _figure(row: dict) -> tuple[float, float] | None:
+    """`(the figure a row is ranked on, the counter margin in its units)`: the
+    duel when the look-ahead valued it, else this game."""
+    plan = row.get("plan") or {}
+    if plan.get("duel") is not None:
+        return float(plan["duel"]), COUNTER_MARGIN / 2
+    for k in ("brain", "expected"):
+        v = (row.get(k) or {}).get("winRate")
+        if v is not None:
+            return float(v), COUNTER_MARGIN
+    return None
+
+
+def _own_leads(rows: list[dict]) -> list[dict]:
+    """The list, with the player's best OWN deck first unless the counter at
+    the top clears it by `COUNTER_MARGIN`. Order otherwise untouched."""
+    if not rows or not rows[0].get("counter"):
+        return rows
+    own = next((r for r in rows if not r.get("counter")), None)
+    a, b = _figure(rows[0]), _figure(own) if own is not None else None
+    if own is None or a is None or b is None or a[0] - b[0] >= a[1]:
+        return rows
+    return [own] + [r for r in rows if r is not own]
+
+
 def _own_duel_decks(hist: dict | None, used: set) -> list[dict]:
     """The player's OWN duel decks in the window, newest first, as rows the
     screen can draw. Lists within two cards of each other are one deck (the
@@ -1720,13 +2032,18 @@ def _own_duel_decks(hist: dict | None, used: set) -> list[dict]:
 
 
 def _duel_set(mine_hist: dict | None, used: set, opp: dict, opp_hist: dict | None, kind,
-              ctx: dict | None, rates, chips: list[dict], snap) -> tuple[list[dict], dict] | None:
+              ctx: dict | None, rates, chips: list[dict], snap,
+              counters: list[dict] | None = None) -> tuple[list[dict], dict] | None:
     """THE SET TO LOAD before the duel: `(rows, info)`, or None.
 
     Decks that share no card, chosen from the player's OWN duel decks as they
-    are (`duel_set.compose`) by the chance of winning the duel with them — the
-    same look-ahead that then picks the order (`_duel_plan` is run over these
-    rows by the caller). Four when four fit, else three.
+    are AND the counters to what this opponent brings (`_counter_rows`), by the
+    chance of winning the duel with them (`duel_set.compose`) — the same
+    look-ahead that then picks the order (`_duel_plan` is run over these rows
+    by the caller). Four when four fit, else three. A counter costs the set
+    `COUNTER_SET_COST` of duel-win chance in the choosing, never in the figure
+    shown. With counters a player who has fewer than three duel decks of their
+    own still gets a set.
 
     NO DECK IS CHANGED. Swaps to resolve shared cards were measured and left
     off: 98.6% of players with three duel decks can field a set as it stands,
@@ -1751,39 +2068,60 @@ def _duel_set(mine_hist: dict | None, used: set, opp: dict, opp_hist: dict | Non
         return None
     try:
         own, _dropped = _drop_event_decks(_own_duel_decks(mine_hist, used))
-        own = own[:_ds.POOL]
-        if len(own) < _ds.MIN_SIZE:
+        own_keys = {_deck_key(r["cards"]) for r in own}
+        extra = [r for r in (counters or [])[:COUNTER_SET]
+                 if _deck_key(r["cards"]) not in own_keys]
+        own = own[:COUNTER_SET_OWN if extra else _ds.POOL]
+        entries = own + extra
+        if len(entries) < _ds.MIN_SIZE:
             return None
-        cards = [r["cards"] for r in own]
+        cards = [r["cards"] for r in entries]
+        outside = {_deck_key(r["cards"]) for r in extra}
         read, win = _plan_tools(cards, opp_hist, kind, ctx, rates)
+        true: dict = {}
 
         def value(group) -> float:
             out = _dp.plan(group, read, win)
-            return out["options"][0]["duel"] if out.get("options") else 0.0
+            v = out["options"][0]["duel"] if out.get("options") else 0.0
+            keys = frozenset(_deck_key(d) for d in group)
+            true[keys] = v
+            return v - COUNTER_SET_COST * len(keys & outside)
 
-        res = _ds.compose(cards, value)
+        def shown(got: dict) -> float:
+            """The set's chance as the look-ahead valued it, without the cost
+            a counter carries in the choosing."""
+            return true.get(frozenset(_deck_key(d["cards"]) for d in got["decks"]), got["value"])
+
+        res = _ds.compose(cards, value, pool=len(cards), max_valued=COUNTER_SET_VALUED)
         if res is None:
             return None
         # THEIR LAST DUEL'S DECKS STAY unless leaving one out buys `SET_MARGIN`.
         # Each of those decks as the row it was folded into; a duel is at
         # least two games, so fewer than two is no set to keep.
         last = None
-        recent = next((h["decks"] for h in reversed(mine_hist["read"]) if len(h.get("decks") or []) >= 2), None)
+        recent = next((h["decks"] for h in reversed((mine_hist or {}).get("read") or [])
+                       if len(h.get("decks") or []) >= 2), None)
         prev: list[int] = []
         for d in recent or []:
             i = next((i for i, r in enumerate(own) if len(set(r["cards"]) & set(d)) >= MIN_OVERLAP), None)
             if i is not None and i not in prev:
                 prev.append(i)
         if len(prev) >= 2 and not set(prev) <= {d["index"] for d in res["decks"]}:
-            kept = _ds.compose(cards, value, must=prev)
+            kept = _ds.compose(cards, value, must=prev, pool=len(cards),
+                               max_valued=COUNTER_SET_VALUED)
             if kept is not None:
                 if res["value"] - kept["value"] < SET_MARGIN:
                     res = kept
                 else:
-                    last = {"duel": round(100 * kept["value"], 1), "size": kept["size"]}
-        rows = [_rec(own[d["index"]], opp, chips, snap, rates) for d in res["decks"]]
-        info = {"brain": _ds.BRAIN, "size": res["size"], "duel": round(100 * res["value"], 1),
-                "pool": len(own), "valued": res["valued"], "last": last}
+                    last = {"duel": round(100 * shown(kept), 1), "size": kept["size"]}
+        rows = [dict(entries[d["index"]]) if d["index"] >= len(own)
+                else _rec(own[d["index"]], opp, chips, snap, rates) for d in res["decks"]]
+        info = {"brain": _ds.BRAIN, "size": res["size"], "duel": round(100 * shown(res), 1),
+                "pool": len(own), "valued": res["valued"], "last": last,
+                # How many of the set's decks are counters from outside the
+                # player's own duel decks, and how many were on offer.
+                "counters": sum(1 for d in res["decks"] if d["index"] >= len(own)),
+                "counterPool": len(extra)}
         return rows, info
     except Exception as exc:  # noqa: BLE001 - the options as they were still answer
         print("coach._duel_set: %r" % (exc,), file=sys.stderr)
@@ -2286,34 +2624,76 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         print("coach.suggest: brain context: %r" % (exc,), file=sys.stderr)
         ctx0 = None
 
+    # COUNTERS TO WHAT THEY BRING NEXT (2026-10-12, `_counter_rows`): the
+    # vetted ladder lists and the CRL group's duel lists, rated against the
+    # same read every option above was — their likely opener before game 1,
+    # what they have left after it. Legal against what I have spent.
+    counters, counter_info = [], None
+    try:
+        counters, counter_info = _counter_rows(
+            opp, used_mine, rates, chips, snap,
+            _ta._span_days(opp_since, opp_until) if _ta is not None and opp_since else None,
+            skip={_deck_key(r["cards"]) for r in top})
+        _with_brain(counters, ctx0, rates)
+        if counters and all(r.get("brain") for r in counters):
+            counters.sort(key=lambda r: -r["brain"]["winRate"])
+        _duel_figures(counters, rates, opp, opp_tag, (opp_since, opp_until))
+    except Exception as exc:  # noqa: BLE001 - the player's own options still answer
+        print("coach.suggest: counters: %r" % (exc,), file=sys.stderr)
+        counters, counter_info = [], None
+
     # THE SET TO LOAD (2026-10-07, `duel_set.py`), before a duel only. A duel is
-    # played from decks that share no card, so the first answer is which of the
-    # player's OWN decks to load together; the options below are then those
-    # decks, and the look-ahead picks which of them to open with.
+    # played from decks that share no card, so the first answer is which decks
+    # to load together — the player's OWN duel decks and the counters above —
+    # the options below are then those decks, and the look-ahead picks which of
+    # them to open with.
     duel_set = None
     if stage == 0:
-        got = _duel_set(mine_hist, used_mine, opp, opp_hist, kind, ctx0, rates, chips, snap)
+        got = _duel_set(mine_hist, used_mine, opp, opp_hist, kind, ctx0, rates, chips, snap,
+                        counters=counters)
         if got:
             top, duel_set = got
             mine = list(top)
-            _duel_figures(top, rates, opp, opp_tag, (opp_since, opp_until))
+            _duel_figures([r for r in top if not r.get("duel")], rates, opp, opp_tag,
+                          (opp_since, opp_until))
             # The list is the set now: no slot in it is a held duel pick.
             if duel_brain:
                 duel_brain = {**duel_brain, "picked": 0}
+    plan_pool = mine
+    if duel_set is None and counters:
+        # No set (the duel has started, or there is no read to compose one
+        # against): the best counters stand beside the player's own options,
+        # and the look-ahead may bring any of them in a later game.
+        have = {_deck_key(r["cards"]) for r in top}
+        top = list(top) + [dict(r) for r in counters[:COUNTER_OPTIONS]
+                           if _deck_key(r["cards"]) not in have]
+        plan_pool = list(mine) + [r for r in counters if _deck_key(r["cards"]) not in have]
 
     top, brain_info, brain_swaps = _brain(top, opp, my_tag, opp_tag, used_mine, rates,
                                           ctx_out=brain_ctx, ctx=ctx0)
     if brain_info and brain_info.get("ranked"):
         basis = "the combined brain's win chance"
+    elif duel_set is None and counters:
+        # Not every row could be given the brain's figure: the list is still
+        # one list, best expected rate first.
+        top = sorted(top, key=lambda r: -((r.get("expected") or {}).get("winRate") or 0.0))
 
     # THE DUEL PLAN (2026-10-07, `duel_plan.py`): the same options valued by
     # the chance of winning the DUEL — what each leaves for the games after
     # it, against what they are then likely to bring. Absent a fitted read or
     # the win model, the list stands exactly as ranked above.
-    top, duel_plan = _duel_plan(top, mine, my_played, opp_played, results, opp, opp_hist,
+    top, duel_plan = _duel_plan(top, plan_pool, my_played, opp_played, results, opp, opp_hist,
                                 kind, brain_ctx, rates)
     if duel_plan and duel_plan.get("ranked"):
         basis = "the chance of winning the duel"
+    # A COUNTER LEADS ONLY WHEN IT CLEARS THE PLAYER'S BEST OWN DECK
+    # (`COUNTER_MARGIN`). Inside a composed set the cost was already paid in
+    # the choosing, and the order is the look-ahead's.
+    if duel_set is None and top:
+        led = _own_leads(top)
+        if led[0] is not top[0]:
+            brain_swaps = []          # they were changes to the deck that led
+        top = led
     # THE ONE-CARD CHANGES WERE FOUND FOR THE DECK THE BRAIN PUT FIRST. When
     # the look-ahead leads with another deck they are changes to a deck that
     # is no longer "Play this", and the screen draws them against "Play this".
@@ -2392,6 +2772,13 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         # the set (the player's own decks, sharing no card). None = the
         # options are the usual ranked list.
         "duelSet": duel_set,
+        # COUNTERS TO WHAT THEY BRING NEXT: lists from the vetted ladder pool
+        # and the CRL group's duels, legal now, best first, each with the same
+        # figures an option carries. Some of them may also be in
+        # `recommendations` (flagged `counter` there). None = no pool, no
+        # rates, or nothing of theirs to rate against.
+        "counters": ({**counter_info, "decks": counters[:COUNTER_SHOW]}
+                     if counter_info else None),
         # One-card changes real duel players made to "Play this", that help here.
         "brainSwaps": brain_swaps,
         "observedLoadout": observed,

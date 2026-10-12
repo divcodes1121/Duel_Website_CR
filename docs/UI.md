@@ -1746,6 +1746,32 @@ is "Graveyard decks" — select by `button[title=...]`. The deck buttons are ico
   it moves above them. Cards are 3.4rem tiles that wrap. Measured in a
   browser: nothing past the block's edge at 1440 and 390, both themes.
 
+## The counters block on the Suggestion (2026-10-12)
+
+`CoachAssist.tsx` `CounterPanel`, words in `utils/coachCounters.ts` (no
+imports). README "Counters to what they bring" has the measurement.
+
+- Directly under "Play this", above the brain line: a green block of up to
+  five rows (`data-counter-panel`). Heading **"Counters to their likely
+  opener"** before game 1 and **"Counters to what they have left"** after it;
+  the note is two counts (`data-counter-note`): `552 lists rated · against 5
+  of their decks`. Drawn only when the server sent rows.
+- A row is an option row (`DeckRow`): name, elixir, the duel chip, the eight
+  cards seated, the win chance, the matchup chips. One addition: a pill
+  saying where the list comes from (`data-counter="duel" | "ladder"`) —
+  **CRL duel list** / **Meta list** — which never wraps.
+- The same pill is on a counter wherever else it is drawn: a deck of "Your set
+  for this duel", an option after game 1, "Play this" when it is one. The
+  set's note counts them: `4 decks · 1 counter · 56.2%`.
+- **No sentence.** The block has no paragraph; the reasoning is in the README.
+  The line under the result reads "Your still-legal decks and the counters to
+  theirs, ranked by ...".
+- The brain line says `+ card-vs-card model` when the card model rated the
+  list, and then no longer quotes the game-2 figure (it was measured without
+  the model).
+- The PDF carries the block, headed with the same heading and counts, each
+  deck's note led by where it comes from.
+
 ## The set heading on the Suggestion (2026-10-07)
 
 `CoachAssist.tsx`. README "The set to load before a duel" has the measurement.

@@ -151,7 +151,7 @@ def _swap_deck(seed, out_cards, substitutes, allow, in_use, per_card):
 
 def compose(decks, value, *, size: int = SIZE, min_size: int = MIN_SIZE, substitutes=None,
             allow=None, must=(), pool: int = POOL, max_clashes: int = MAX_CLASHES,
-            swap_cost: float = SWAP_COST) -> dict | None:
+            swap_cost: float = SWAP_COST, max_valued: int = MAX_VALUED) -> dict | None:
     """The set to load, or None when no `min_size` decks can be made to fit.
 
     `decks`       the player's decks in priority order (eight cards each)
@@ -159,6 +159,8 @@ def compose(decks, value, *, size: int = SIZE, min_size: int = MIN_SIZE, substit
     `substitutes` substitutes(card) -> [(card, pairs)]; None = no deck is changed
     `allow`       allow(new cards, seed cards) -> bool for a changed deck
     `must`        indices into `decks` that must be in the set, unchanged
+    `max_valued`  candidate sets valued at most (a caller with a wider pool —
+                  the player's decks AND counters from outside — raises it)
 
     -> `{"brain", "size", "value", "decks": [{"index", "cards", "swaps"}],
     "swaps", "valued"}`. `index` is the caller's; `swaps` is `[{out, in,
@@ -184,7 +186,7 @@ def compose(decks, value, *, size: int = SIZE, min_size: int = MIN_SIZE, substit
                 continue
             locked = [pos for pos, i in enumerate(idx) if i in need]
             for new, swaps in resolve(group, substitutes, allow, locked=locked):
-                if valued >= MAX_VALUED:
+                if valued >= max_valued:
                     break
                 valued += 1
                 n_swaps = sum(len(s) for s in swaps)

@@ -729,6 +729,12 @@
   background: var(--solid-green);
 }
 
+/* Where a counter comes from ("CRL duel list" / "Meta list"). Two words that
+   must stay one pill: beside a name that wraps, it broke in the middle. */
+.duelTag[data-counter] {
+  white-space: nowrap;
+}
+
 /* The deck's duel figure. Green INK (the body step) only when it clears the
    strength gate; otherwise it is information and wears the ordinary ink. */
 .duelRate {

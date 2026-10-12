@@ -23,6 +23,7 @@ import { printableName } from './report/text';
 import { duelPickLabel, duelShort } from './duelFigures';
 import { familyChips, shareLabel } from './bringAgainst';
 import { drawnDeck } from './deckSeating';
+import { counterHeading, counterLabel, counterNote, setCounterNote } from './coachCounters';
 import { distinctDeckLabels } from './trendSeries';
 
 /* Report models for the screens that had NO export before this module:
@@ -441,7 +442,7 @@ export function coachSuggestionDoc(sg: CoachSuggestion): ReportDoc {
         kind: 'decks',
         // Before a duel the options are the SET to load (`duelSet`), first deck first.
         heading: sg.duelSet
-          ? `Your set for this duel · ${sg.duelSet.size} decks · ${pct(sg.duelSet.duel)}`
+          ? `Your set for this duel · ${sg.duelSet.size} decks${setCounterNote(sg.duelSet.counters)} · ${pct(sg.duelSet.duel)}`
             + (sg.duelSet.last ? ` · your last set ${pct(sg.duelSet.last.duel)}` : '')
           : 'Play this',
         // WHEN THE DUEL PLAN RANKED THE LIST the figure is the duel's, as on the
@@ -455,6 +456,20 @@ export function coachSuggestionDoc(sg: CoachSuggestion): ReportDoc {
           return coachDeck(d, d.expected ? pct(d.expected.winRate) : undefined, vs || 'expected');
         }),
       },
+      // Counters to what they bring next: lists from outside the player's own
+      // duel decks, with where each comes from leading its note.
+      ...(sg.counters?.decks.length ? [{
+        kind: 'decks' as const,
+        heading: `${counterHeading(sg.stage)} · ${counterNote(sg.counters)}`,
+        decks: sg.counters.decks.map((d) => {
+          const vs = d.expected?.vs?.length
+            ? d.expected.vs.slice(0, 3).map((v) => `${v.name} ${Math.round(v.winRate)}%`).join(' · ')
+            : '';
+          const rate = d.brain?.winRate ?? d.expected?.winRate;
+          return coachDeck(d, rate != null ? pct(rate) : undefined,
+            [counterLabel(d.origin), vs].filter(Boolean).join(' · '));
+        }),
+      }] : []),
       ...(sg.best?.plan && (sg.best.plan.then.won || sg.best.plan.then.lost) ? [{
         kind: 'decks' as const,
         heading: 'Then bring',

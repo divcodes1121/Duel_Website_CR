@@ -25,6 +25,7 @@ import {
   type CoachPrediction,
   type CoachSuggestion,
   type CoachBrainModel,
+  type CoachCounters,
   type CoachBrainSwap,
   type CoachBuilt,
   type CoachBuiltDeck,
@@ -43,6 +44,7 @@ import { useReportRegistration } from '../../state/reportExport';
 import { isPaid, useAccess } from '../../state/gate';
 import { DAY_PRESETS } from '../../utils/datePresets';
 import { duelResults, scoreLabel, type GameResult } from '../../utils/duelResults';
+import { counterHeading, counterLabel, counterNote, setCounterNote } from '../../utils/coachCounters';
 import { WinConFilter, filterCardName } from '../WinConFilter/WinConFilter';
 
 /* Coach Assist — two windows over `server/coach.py`.
@@ -413,6 +415,11 @@ function DeckRow({
           {deck.deckName || deck.archetype}
           {deck.fill && <span className={styles.fillTag}>meta deck</span>}
           {duelPickLabel(deck) && <span className={styles.duelTag}>{duelPickLabel(deck)}</span>}
+          {deck.counter && (
+            <span className={styles.duelTag} data-counter={deck.origin ?? ''}>
+              {counterLabel(deck.origin)}
+            </span>
+          )}
         </span>
         <span className={styles.deckMeta}>
           {deck.avgElixir ? `${deck.avgElixir.toFixed(1)} elixir` : ''}
@@ -1284,14 +1291,18 @@ function Delta({ n }: { n: number | null }) {
 /** What ranked this list, in figures: the head-to-head it won, when the model
  *  was last retrained and on how much, and the two players' duel strengths.
  *  One line, no explanation. */
-function BrainLine({ model }: { model: CoachBrainModel }) {
+function BrainLine({ model, cards }: { model: CoachBrainModel; cards?: boolean }) {
   const m = model.measured;
   const h = model.holdout;
   return (
     <p className={styles.askHint}>
       {[
-        model.mode === 'combined' ? 'Combined brain: ladder+duel rate + player strength + card levels' : 'Duel brain',
-        m && model.mode === 'combined'
+        model.mode === 'combined'
+          ? `Combined brain: ladder+duel rate${cards ? ' + card-vs-card model' : ''} + player strength + card levels`
+          : 'Duel brain',
+        /* The game-2 figure was measured on the brain WITHOUT the card
+           model; with it the line would quote a different engine. */
+        cards ? null : m && model.mode === 'combined'
           ? `picks matching it won ${m.agree.toFixed(1)}% vs ${m.disagree.toFixed(1)}% on ${m.choices.toLocaleString('en-US')} unseen game-2 choices`
           : h?.accuracy != null ? `${h.accuracy.toFixed(1)}% right on ${h.n.toLocaleString('en-US')} unseen` : null,
         model.games ? `retrained ${model.trainedAt ? model.trainedAt.slice(0, 10) : ''} on ${model.games.toLocaleString('en-US')} duel games` : null,
@@ -1791,6 +1802,30 @@ type SuggestStep =
 /** What to bring NEXT, if this game is won and if it is lost — the duel plan's
  *  follow-ups for the deck being recommended. One strip when both branches
  *  name the same deck. */
+/**
+ * COUNTERS TO WHAT THEY BRING NEXT (2026-10-12): decks from outside the
+ * player's own duel decks — the CRL group's duel lists and the vetted ladder
+ * lists — rated against the read of the opponent's next deck, legal against
+ * what has been played. Each row is an option row: the same win chance, duel
+ * chip and matchup chips, plus a tag saying where the list comes from.
+ * Figures only; a row that is also in the set or the options says so there.
+ */
+function CounterPanel({ counters, stage }: { counters: CoachCounters; stage: number }) {
+  return (
+    <section className={styles.block} data-hue="green" data-counter-panel="">
+      <h4 className={styles.blockTitle}>
+        {counterHeading(stage)}
+        <span className={styles.blockNote} data-counter-note>{counterNote(counters)}</span>
+      </h4>
+      <ul className={styles.deckList}>
+        {counters.decks.map((d, i) => (
+          <DeckRow key={d.cards.join(',')} deck={d} rank={i + 1} hue="green" />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function ThenRow({ then }: { then: CoachPlanRow['then'] }) {
   const { won, lost } = then;
   if (!won && !lost) return null;
@@ -2099,8 +2134,9 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
             )}
           </h3>
           <p className={styles.resultSub}>
-            Your still-legal decks ranked by {data.basis}. A duel loadout cannot repeat a
-            card, so anything overlapping what you have played is excluded outright.
+            Your still-legal decks{data.counters?.decks.length ? ' and the counters to theirs,' : ''} ranked
+            by {data.basis}. A duel loadout cannot repeat a card, so anything overlapping what
+            you have played is excluded outright.
           </p>
         </div>
         <button type="button" className={styles.secondary} onClick={reset}>
@@ -2160,7 +2196,11 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
         </section>
       )}
 
-      {data.brainModel && <BrainLine model={data.brainModel} />}
+      {data.counters && data.counters.decks.length > 0 && (
+        <CounterPanel counters={data.counters} stage={data.stage} />
+      )}
+
+      {data.brainModel && <BrainLine model={data.brainModel} cards={!!data.fusion?.cardModel} />}
 
       {/* PRO AND ADMIN. Directly under the pick, because it is the answer to
           "the player will not play that". */}
@@ -2221,7 +2261,7 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
           {data.duelSet ? 'Your set for this duel' : 'Your options, ranked'}
           {data.duelSet && (
             <span className={styles.blockNote} data-duel-set>
-              {data.duelSet.size} decks · {data.duelSet.duel.toFixed(1)}%
+              {data.duelSet.size} decks{setCounterNote(data.duelSet.counters)} · {data.duelSet.duel.toFixed(1)}%
               {data.duelSet.last ? ` · your last set ${data.duelSet.last.duel.toFixed(1)}%` : ''}
             </span>
           )}

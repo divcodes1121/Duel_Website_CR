@@ -137,7 +137,8 @@ describe('the set to load before a duel', () => {
   });
 
   it('prints figures and nothing else: how many, its chance, their last set when it differs', () => {
-    expect(SCREEN).toMatch(/data-duel-set>\n\s+\{data\.duelSet\.size\} decks · \{data\.duelSet\.duel\.toFixed\(1\)\}%/);
+    // Since 2026-10-12 the count of counters in the set sits between the two.
+    expect(SCREEN).toMatch(/data-duel-set>\n\s+\{data\.duelSet\.size\} decks\{setCounterNote\(data\.duelSet\.counters\)\} · \{data\.duelSet\.duel\.toFixed\(1\)\}%/);
     expect(SCREEN).toMatch(/\{data\.duelSet\.last \? ` · your last set \$\{data\.duelSet\.last\.duel\.toFixed\(1\)\}%` : ''\}/);
   });
 
@@ -149,7 +150,7 @@ describe('the set to load before a duel', () => {
 
   it('heads the PDF block the same way', () => {
     const ADAPTERS = norm('src/utils/screenAdapters.ts');
-    expect(ADAPTERS).toMatch(/heading: sg\.duelSet\n\s+\? `Your set for this duel · \$\{sg\.duelSet\.size\} decks · \$\{pct\(sg\.duelSet\.duel\)\}`/);
+    expect(ADAPTERS).toMatch(/heading: sg\.duelSet\n\s+\? `Your set for this duel · \$\{sg\.duelSet\.size\} decks\$\{setCounterNote\(sg\.duelSet\.counters\)\} · \$\{pct\(sg\.duelSet\.duel\)\}`/);
     expect(ADAPTERS).toMatch(/: 'Play this',/);
   });
 });

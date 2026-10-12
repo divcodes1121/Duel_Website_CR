@@ -1673,11 +1673,51 @@ docstring. Backups `*.bak-20260930-153444-presynergy`.
 `coach._build_for_duel` no longer calls `plan_loadout` ("Planned for the whole
 duel" removed on request); `LOADOUT_EXTRA` is gone and `built` has no `loadout`.
 
+## Counters in the Suggestion (`coach._counter_rows`, 2026-10-12)
+
+`coach-counter-1.0`. No new module and no new route: it rides on
+`/api/analytics/coach/suggest` as `counters`. README "Counters to what they
+bring" has the measurement; `DECKKIES_DUEL_RECOMMENDER.md` the whole record.
+
+- **Rates.** `coach._Rates` now sets `fx.balance = True` and calls
+  `fx.use_cards()`, so every Coach Assist rate is the Deck Counter's (fused +
+  card model + balance log). `_Rates.adopt(candidate)` registers a counter-pool
+  list with the pool's own profile and remembered archetype halves — no
+  `_DeckProfile` (three reads) and no ladder-history read; `prepare` skips
+  adopted keys. A list the player also owns keeps the richer candidate.
+- **`_counter_rows(opp, used, rates, chips, snap, days, skip)`** ->
+  `(rows, info)`. Pool = `team_analysis._window_pool(days)` (the opponent's
+  window; 553 of 789 at 30 days on 2026-10-12). Threats = `opp["decks"]` with
+  their `prob` — the read of their next deck. Each list: `fx.lean_rates` over
+  `fx.threat_table`, share-weighted; a list not rated against every threat is
+  left out. Then, best first: three special slots, `COUNTER_PER_FAMILY` 1,
+  no near-copy (`MIN_OVERLAP`), floor `COUNTER_MIN` 52; `COUNTER_DUEL_SLOTS` 2
+  held for `origin == "duel"` lists within `COUNTER_DUEL_BAND` 4 of the best.
+  Rows are `_rec` rows + `counter`, `origin`, `counterValue`.
+- **In `suggest`**: counters are found before the set; `_with_brain` puts the
+  combined figure on them and `_duel_figures` the duel chip. Stage 0:
+  `_duel_set(..., counters=)` composes from `COUNTER_SET_OWN` 6 own decks +
+  `COUNTER_SET` 5 counters (`duel_set.compose(pool=, max_valued=600)`); a
+  counter costs `COUNTER_SET_COST` 0.02 in `value`, and the figure shown is the
+  look-ahead's own (`shown()`). No set: `COUNTER_OPTIONS` 2 join `top`, all
+  five the plan's pool, and `_own_leads` puts the best own deck first unless
+  the counter clears it by `COUNTER_MARGIN` 4 game points (2 duel points).
+- **`_pilot_strengths(rec_mine, rec_opp)`**: both records at
+  `PILOT_KNOWN_GAMES` 20 -> the log-odds gap at `PILOT_KNOWN` 0.7 about its
+  middle. `brainModel.strength` still prints each record as it is.
+- **Cost**: rating the pool is 0.1-0.2 s; staged median 2.44 s before game 1
+  (2.82 before), 0.91 s after. Off without a deploy: `COUNTER_MIN = 101`
+  (no list qualifies) and a `royalweb` restart; the card model alone:
+  `mv .card_matchup.json{,.off}`.
+- **Tests**: `test_coach.py` 256 (fake pool and rates; 26 planted faults),
+  `test_duel_set.py` 49. On a box with a trained card model the suite still
+  stubs the rates.
+
 ## The set composer (`duel_set.py`, 2026-10-07)
 
 Pure: `itertools`. `compose(decks, value, *, size=4, min_size=3,
 substitutes=None, allow=None, must=(), pool=8, max_clashes=3,
-swap_cost=0.005)` -> `{brain, size, value, decks: [{index, cards, swaps}],
+swap_cost=0.005, max_valued=240)` -> `{brain, size, value, decks: [{index, cards, swaps}],
 swaps, valued}` or None.
 
 - Candidates are the first `pool` distinct eight-card decks, in the caller's

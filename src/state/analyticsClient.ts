@@ -1335,6 +1335,10 @@ export interface CoachDuelSet {
   /** How many of their own decks it was chosen from. */
   pool: number;
   valued: number;
+  /** How many of the set's decks are counters from outside their own duel
+   *  decks, and how many counters were on offer (2026-10-12). */
+  counters?: number;
+  counterPool?: number;
   /** The same figure for the decks of their most recent duel, when that is a
    *  different set. Null when it is this one, or there is none to compare. */
   last: { duel: number; size: number } | null;
@@ -1402,6 +1406,39 @@ export interface CoachDeck {
   p?: number;
   /** Other seen lists within two cards, counted into this row. */
   variants?: number;
+  /** A COUNTER to what they bring (`coach._counter_rows`, 2026-10-12): a list
+   *  from the counter pool, not one of the player's own duel decks. Set on the
+   *  rows of `counters.decks`, and on those of them that are also in
+   *  `recommendations` (a set that holds one, or an option after game 1). */
+  counter?: boolean;
+  /** Where a counter comes from: the duel lists of the CRL group, or the
+   *  vetted ladder lists. Only on counters. */
+  origin?: 'duel' | 'ladder' | null;
+  /** The figure a counter was chosen on: the cards and the ladder+duel rate
+   *  against their likely decks, with nobody's skill or levels in it. */
+  counterValue?: number;
+}
+
+/** COUNTERS TO WHAT THEY BRING NEXT (`server/coach.py`, 2026-10-12): lists from
+ *  the vetted ladder pool and the CRL group's duels that share no card with
+ *  what the player has spent, rated against the same read every option is —
+ *  their likely opener before game 1, what they have left after it. */
+export interface CoachCounters {
+  brain: string;
+  /** Best first; at most five, one a win condition. */
+  decks: CoachDeck[];
+  /** Lists in the window's pool, and how many could be rated. */
+  pool: number;
+  rated: number;
+  window?: PoolWindow | null;
+  /** The card model that rated them beside the ladder+duel rate, if any. */
+  cardModel?: string | null;
+  /** How many of their likely decks they were rated against. */
+  against: number;
+  /** The blind replay behind the block (judged win chance against the deck
+   *  opponents really opened with). */
+  measured?: { sides: number; actual: number; own: number; ownByCards: number;
+               counter: number; gain: number; interval?: [number, number] };
 }
 
 /** The four shelves a card is filed under in "what they have left". */
@@ -1564,7 +1601,7 @@ export interface CoachSuggestion {
   /** The engine that rated this answer: Team Analysis's fused ladder+duel rate
    *  and how many pairings each level answered. Absent from an older server;
    *  null when the fused rate was unavailable and `win_prob` answered. */
-  fusion?: { brain: string; sources: Record<string, number> } | null;
+  fusion?: { brain: string; sources: Record<string, number>; cardModel?: string | null } | null;
   /** How much of the list the duel brain shaped. `picked` is 0 or 1. */
   duelBrain?: { brain: string; weight: number; picked: number; catalogueSlotSkipped: number } | null;
   /** The duel win model: what it was trained on, its measured holdout, and
@@ -1577,6 +1614,9 @@ export interface CoachSuggestion {
   /** The set to load, on the opening answer only. Null when their own decks
    *  do not make one (the options are then the usual ranked list). */
   duelSet?: CoachDuelSet | null;
+  /** Counters to what they bring next. Null with no pool or nothing of
+   *  theirs to rate against; absent from a server older than 2026-10-12. */
+  counters?: CoachCounters | null;
   /** One-card changes real duel players made to "Play this" that raise its
    *  win chance against this opponent. */
   brainSwaps?: CoachBrainSwap[];
@@ -1638,6 +1678,9 @@ export interface CoachBrainModel {
   choice?: { agree: { n: number; won: number }; disagree: { n: number; won: number } } | null;
   strength: { mine: number; mineGames: number; theirs: number; theirsGames: number };
   levels: boolean;
+  /** Both players have a long duel record, so the gap between the two is
+   *  taken at 0.7 of its size (measured 2026-10-12). */
+  pilotKnown?: boolean;
 }
 
 export interface CoachBrainSwap {

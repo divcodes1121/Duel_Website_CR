@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-12-coach-counters',
+    date: '2026-10-12',
+    kind: 'improved',
+    title: 'Coach Assist now finds counters to what your opponent brings',
+    body: [
+      'Until now the Suggestion could only tell you to play one of your own recent duel decks. It now also rates a pool of other decks — the duel decks of the CRL group and the ladder decks being played these days — against the decks your opponent is likely to bring next: their likely opener before game 1, and what they have left after each game. The best five are listed under “Play this”, each with its win chance, its record in real duels, its matchups and a tag saying where the deck comes from. None of them holds a card you have already played.',
+      'A counter can be one of the decks in “Your set for this duel”, and it can be “Play this” when it clears your own best deck by a real margin. Tested blind on 323 real duel openings from 1–6 October and judged by a model that had seen none of them: against the deck the opponent really opened with, the old pick rated 50.4%, the new one 55.9%, and the first counter in the list 60.1%. Nobody played these decks in those duels, so that is a model’s judgement and not a result.',
+      'Two things were measured instead of assumed. A deck that is new to you costs nothing we could find: players bringing a deck they had never brought to a duel won as often as expected. And opponents do not counter-pick inside a duel: the deck they bring in game 2 is no better against what you used than the other decks they were holding. Also, the win chance between two players who both have a long duel record was too confident (“85%” was winning 77%), so the gap between two such records now counts for less.',
+    ],
+    needs: 'pro',
+  },
+  {
     id: '2026-10-11-window-decks',
     date: '2026-10-11',
     kind: 'improved',

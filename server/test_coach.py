@@ -1114,7 +1114,7 @@ finally:
 _src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "coach.py"), encoding="utf-8").read()
 _sug = _src[_src.index("def suggest("):_src.index("def mine_hist_pool(")]
 check("suggest plans AFTER the brain has ranked and BEFORE it names the best deck",
-      _sug.index("_brain(top, opp") < _sug.index("_duel_plan(top, mine, my_played, opp_played, results")
+      _sug.index("_brain(top, opp") < _sug.index("_duel_plan(top, plan_pool, my_played, opp_played, results")
       < _sug.index("best = top[0] if top else None"))
 check("...and the answer carries the plan", '"duelPlan": duel_plan' in _sug)
 
@@ -1330,6 +1330,284 @@ finally:
 check("real cards are filed under the four roles",
       [coach._role_of(c) for c in ("hog-rider", "fireball", "cannon", "musketeer")]
       == ["wincon", "spell", "building", "support"])
+
+print("\ncounters to what they bring (2026-10-12)")
+_FAM = {}
+
+
+def _pool_list(tag, origin, family=None, cards=None):
+    cards = list(cards) if cards else deck(tag)
+    _FAM[tag] = family or tag
+    return SimpleNamespace(cards=cards, key=",".join(sorted(cards)), archetype="x", origin=origin,
+                           profile=None, memo={})
+
+
+class _FakeFx:
+    """A pool list against each of their decks, from a table of rates."""
+
+    def __init__(self, table):
+        self.table, self.cm = table, {"brain": "card-matchup-test"}
+
+    def threat_table(self, threats):
+        return [(t["likelihood"], _tagof(t["cards"])) for t in threats]
+
+    def lean_rates(self, c, table):
+        for like, theirs in table:
+            r = self.table.get((_tagof(c.cards), theirs), self.table.get(_tagof(c.cards)))
+            if r is not None:
+                yield like, "fam", r, "archetype"
+
+
+class _FakeRates:
+    def __init__(self, table, on=True):
+        self.on, self.fx = on, _FakeFx(table)
+        self.prefetched, self.adopted = [], []
+        self.duel = SimpleNamespace(on=True, prefetch=lambda decks: self.prefetched.append(len(decks)),
+                                    seat=lambda cards: (list(cards), {}, False))
+
+    def adopt(self, c):
+        self.adopted.append(_tagof(c.cards))
+
+
+_C_OPP = {"decks": [{"cards": list(_PX), "prob": 0.75}, {"cards": list(_PY), "prob": 0.25},
+                    {"cards": ["?"], "prob": 0.5}, {"cards": list(_PZ), "prob": 0.0}]}
+_saved_counter = (coach._ta, coach._rec, coach._archetype, coach.cd)
+_real_cd = coach.cd
+_NO_SLOTS = set()
+coach.cd = SimpleNamespace(SPECIAL_SLOTS=3, deck_title=lambda a, c: _tagof(c),
+                           fillable_slots=lambda cards: 2 if _tagof(cards) in _NO_SLOTS else 3)
+coach._archetype = lambda cards: _FAM.get(_tagof(cards), "x")
+coach._rec = lambda md, opp, chips, snap, rates, extra=None: {**md, "expected": {"winRate": 50.0}}
+
+
+def _with_pool(pool, window=None):
+    asked = []
+    coach._ta = SimpleNamespace(
+        DEFAULT_DAYS=30, _window_public=lambda w: {"days": w["days"]},
+        _window_pool=lambda days: (asked.append(days) or pool, window or {"days": days}))
+    return asked
+
+
+try:
+    table = {("ca", "px"): 70.0, ("ca", "py"): 50.0,      # 65.0 against what they bring
+             ("cb", "px"): 60.0, ("cb", "py"): 90.0,      # 67.5
+             "cc": 64.0, "cd": 63.0, "ce": 62.0, "cf": 61.0, "cg": 51.0,
+             ("ch", "px"): 99.0}                          # never rated against Y
+    pool = [_pool_list(t, "ladder") for t in ("ca", "cb", "cc", "cd", "ce", "cf", "cg", "ch")]
+    days = _with_pool(pool)
+    fr = _FakeRates(table)
+    rows, info = coach._counter_rows(_C_OPP, set(), fr, [], None, 15)
+    got = [_tagof(r["cards"]) for r in rows]
+    check("the pool is rated against the decks the read holds, by each deck's share: best first",
+          got == ["cb", "ca", "cc", "cd", "ce"], str(got))
+    check("...and the figure a row was chosen on rides with it",
+          [r["counterValue"] for r in rows[:2]] == [67.5, 65.0], str([r.get("counterValue") for r in rows]))
+    check("the pool asked for is the window's (the opponent's days), read once",
+          days == [15] and info["window"] == {"days": 15} and info["pool"] == 8)
+    check("a list not rated against EVERY deck of theirs is not ranked on half the question",
+          "ch" not in got and info["rated"] == 7, str(info))
+    check("their decks without eight cards or without a share are not rated against",
+          info["against"] == 2)
+    check("every row is a seated, scored option flagged as a counter with where it comes from",
+          all(r["counter"] is True and r["origin"] == "ladder" and r["expected"] and r["deckName"] for r in rows))
+    check("each is rated by the request's own rates as the pool rates it (adopted), duel records fetched once",
+          fr.adopted == got or sorted(fr.adopted) == sorted(got), str(fr.adopted))
+    check("...for the whole pool", fr.prefetched == [8])
+    check("the answer says what rated it and what it measured",
+          info["brain"] == "coach-counter-1.0" and info["cardModel"] == "card-matchup-test"
+          and info["measured"]["sides"] == 323)
+    _with_pool(pool, None)
+    check("no window given: the default days", coach._counter_rows(_C_OPP, set(), _FakeRates(table), [], None, None)[1]
+          ["window"] == {"days": 30})
+
+    rows_u, _i = coach._counter_rows(_C_OPP, {pool[1].cards[3]}, _FakeRates(table), [], None, 30)
+    check("A LIST HOLDING A CARD I HAVE PLAYED IS NEVER A COUNTER",
+          "cb" not in [_tagof(r["cards"]) for r in rows_u] and len(rows_u) == 5)
+    rows_s, _i = coach._counter_rows(_C_OPP, set(), _FakeRates(table), [], None, 30, skip={pool[0].key})
+    check("a list already on the screen as one of the player's options is not repeated",
+          "ca" not in [_tagof(r["cards"]) for r in rows_s])
+    check("a list under the floor is not a counter", "cg" not in
+          [_tagof(r["cards"]) for r in coach._counter_rows(_C_OPP, set(), _FakeRates(table), [], None, 30,
+                                                           skip={c.key for c in pool[:3]})[0]])
+    _NO_SLOTS.add("cb")
+    check("a list that cannot field all three special slots is not offered",
+          "cb" not in [_tagof(r["cards"]) for r in coach._counter_rows(_C_OPP, set(), _FakeRates(table), [], None, 30)[0]])
+    _NO_SLOTS.clear()
+
+    fam_pool = [_pool_list("ha", "ladder", "hog"), _pool_list("hb", "ladder", "hog"), _pool_list("ga", "ladder", "golem")]
+    _with_pool(fam_pool)
+    got_f = [_tagof(r["cards"]) for r in
+             coach._counter_rows(_C_OPP, set(), _FakeRates({"ha": 70.0, "hb": 69.0, "ga": 60.0}), [], None, 30)[0]]
+    check("ONE LIST A WIN CONDITION: the second Hog list is one idea twice", got_f == ["ha", "ga"], str(got_f))
+    # Six of Hog list A's eight cards under another win condition's name.
+    near = _pool_list("nb", "ladder", "other-family", cards=["nb"] + fam_pool[0].cards[1:7] + ["nb-2"])
+    _with_pool([fam_pool[0], near, fam_pool[2]])
+    got_n = [_tagof(r["cards"]) for r in
+             coach._counter_rows(_C_OPP, set(), _FakeRates({"ha": 70.0, "nb": 69.0, "ga": 60.0}), [], None, 30)[0]]
+    check("(the near-copy is another win condition by name, so only its cards can stop it)",
+          coach._archetype(near.cards) == "other-family" and len(set(near.cards) & set(fam_pool[0].cards)) == 6)
+    check("a near-copy of a list already taken is not a second counter", got_n == ["ha", "ga"], str(got_n))
+
+    # Six ladder lists rated above a CRL duel list that is 3.5 points under the best.
+    crl_pool = [_pool_list(t, "ladder") for t in ("l1", "l2", "l3", "l4", "l5", "l6")] + \
+               [_pool_list("d1", "duel"), _pool_list("d2", "duel"), _pool_list("d3", "duel")]
+    crl_table = {"l1": 70.0, "l2": 69.5, "l3": 69.0, "l4": 68.5, "l5": 68.0, "l6": 67.5,
+                 "d1": 66.5, "d2": 66.2, "d3": 66.1}
+    _with_pool(crl_pool)
+    got_c = [_tagof(r["cards"]) for r in coach._counter_rows(_C_OPP, set(), _FakeRates(crl_table), [], None, 30)[0]]
+    check("THE CRL GROUP'S DUEL LISTS ARE HELD when they sit within the band of the best counter",
+          got_c == ["l1", "l2", "l3", "d1", "d2"], str(got_c))
+    check("...as many as the slots, no more", "d3" not in got_c and coach.COUNTER_DUEL_SLOTS == 2)
+    far = dict(crl_table, d1=65.9, d2=60.0, d3=59.0)
+    got_far = [_tagof(r["cards"]) for r in coach._counter_rows(_C_OPP, set(), _FakeRates(far), [], None, 30)[0]]
+    check("a duel list further under the best than the band is not held over a better list",
+          got_far == ["l1", "l2", "l3", "l4", "l5"], str(got_far))
+
+    _with_pool(pool)
+    check("no rates, rates off, nothing of theirs to rate against, or no pool: no counters and no claim",
+          coach._counter_rows(_C_OPP, set(), None, [], None, 30) == ([], None)
+          and coach._counter_rows(_C_OPP, set(), _FakeRates(table, on=False), [], None, 30) == ([], None)
+          and coach._counter_rows({"decks": []}, set(), _FakeRates(table), [], None, 30) == ([], None))
+    _with_pool([])
+    check("...", coach._counter_rows(_C_OPP, set(), _FakeRates(table), [], None, 30) == ([], None))
+finally:
+    coach._ta, coach._rec, coach._archetype, coach.cd = _saved_counter
+
+print("\na counter leads only when it clears the best own deck")
+
+
+def _lr(name, counter, brain=None, duel=None, expected=None):
+    r = {"cards": deck(name), "counter": counter} if counter else {"cards": deck(name)}
+    if brain is not None:
+        r["brain"] = {"winRate": brain}
+    if duel is not None:
+        r["plan"] = {"duel": duel, "game": 50.0}
+    if expected is not None:
+        r["expected"] = {"winRate": expected}
+    return r
+
+
+def _order(rows):
+    return [_tagof(r["cards"]) for r in coach._own_leads(rows)]
+
+
+check("the margin is four points of this game, two of the duel",
+      coach.COUNTER_MARGIN == 4.0 and coach._figure(_lr("k", True, brain=60.0)) == (60.0, 4.0)
+      and coach._figure(_lr("k", True, brain=60.0, duel=55.0)) == (55.0, 2.0)
+      and coach._figure(_lr("k", True, expected=58.0)) == (58.0, 4.0) and coach._figure({"cards": []}) is None)
+check("a counter four points clear of the best own deck leads",
+      _order([_lr("k", True, brain=60.0), _lr("a", False, brain=56.0), _lr("b", False, brain=50.0)]) == ["k", "a", "b"])
+check("A COUNTER UNDER THE MARGIN GIVES WAY to the player's best own deck, the rest in order",
+      _order([_lr("k", True, brain=59.9), _lr("j", True, brain=57.0), _lr("a", False, brain=56.0),
+              _lr("b", False, brain=50.0)]) == ["a", "k", "j", "b"])
+check("on duel figures the margin is the duel's",
+      _order([_lr("k", True, brain=70.0, duel=51.9), _lr("a", False, brain=50.0, duel=50.0)]) == ["a", "k"]
+      and _order([_lr("k", True, brain=70.0, duel=52.0), _lr("a", False, brain=50.0, duel=50.0)]) == ["k", "a"])
+check("an own deck on top, no own deck at all, or a figure missing: the list stands",
+      _order([_lr("a", False, brain=50.0), _lr("k", True, brain=49.0)]) == ["a", "k"]
+      and _order([_lr("k", True, brain=50.0), _lr("j", True, brain=49.0)]) == ["k", "j"]
+      and _order([_lr("k", True, brain=50.0), _lr("a", False)]) == ["k", "a"] and coach._own_leads([]) == [])
+
+print("\ncounters in the set to load")
+_PK, _PK2 = deck("pk"), deck("pk2")
+_PM3 = dict(_PM2)
+for _o in ("px", "py", "pz"):
+    _PM3[("pk", _o)] = 0.95                        # K beats everything they bring
+    _PM3[("pk2", _o)] = _PM3.get(("pd", _o), 0.5)  # K2 is D ...
+_PM3[("pk2", "pz")] = _PM3.get(("pd", "pz"), 0.5) + 0.01   # ... and a hair better in game 3
+
+
+def _fake_pair3(model, rates, a, b, **kw):
+    return _PM3.get((_tagof(a), _tagof(b)), 0.5), "combined"
+
+
+def _crow(cards):
+    return {"cards": list(cards), "deckName": _tagof(cards), "archetype": "x", "art": {},
+            "counter": True, "origin": "duel", "expected": {"winRate": 61.0}}
+
+
+_saved_cs = (coach._dr, coach._combined_pair, coach._rec, coach._drop_event_decks)
+coach._dr, coach._combined_pair = _FakeRead(), _fake_pair3
+coach._rec = lambda md, opp, chips, snap, rates, extra=None: {**md, "expected": {"winRate": 50.0}}
+coach._drop_event_decks = lambda decks: (list(decks), 0)
+try:
+    o_read = lambda rev, lost: [({0: _PX, 1: _PY, 2: _PZ}[len(rev)], 1.0)] if len(rev) < 3 else []  # noqa: E731
+    o_win = lambda a, b: _PM3.get((_tagof(a) if a else "", _tagof(b) if b else ""), 0.5)  # noqa: E731
+    o_value = lambda g: _plan_oracle.plan(g, o_read, o_win)["options"][0]["duel"]  # noqa: E731
+    mh5 = _MH([_PE, _PF], [_PA, _PB, _PC])        # A, B, C last time; E and F lose to everything
+    rows_c, info_c = coach._duel_set(mh5, set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
+                                     counters=[_crow(_PK)])
+    names_c = sorted(_tagof(r["cards"]) for r in rows_c)
+    check("A COUNTER THAT BEATS WHAT THEY BRING IS LOADED beside the player's own decks",
+          names_c == ["pa", "pb", "pc", "pk"] and info_c["counters"] == 1 and info_c["counterPool"] == 1, str(names_c))
+    k_row = next(r for r in rows_c if _tagof(r["cards"]) == "pk")
+    check("...as the row it was given: flagged, with its own figures",
+          k_row["counter"] is True and k_row["origin"] == "duel" and k_row["expected"] == {"winRate": 61.0}
+          and all(not r.get("counter") for r in rows_c if r is not k_row))
+    check("THE FIGURE SHOWN IS THE LOOK-AHEAD'S OWN — the cost a counter carries is in the choosing only",
+          info_c["duel"] == round(100 * o_value([_PA, _PB, _PC, _PK]), 1), str(info_c))
+    check("...and the player's own decks are counted apart from the counters", info_c["pool"] == 5)
+
+    mh4 = _MH([_PA, _PB, _PC, _PD])
+    # D is NOT a deck of their last duel here, so only the cost can keep it.
+    mh_cost = _MH([_PD, _PE], [_PA, _PB, _PC])
+    free = real_compose([list(d) for d in (_PA, _PB, _PC, _PD, _PK2)], o_value, pool=5)
+    check("(K2 instead of D is the better set by the look-ahead alone, by less than the cost)",
+          "pk2" in [_tagof(d["cards"]) for d in free["decks"]]
+          and 0 < free["value"] - o_value([_PA, _PB, _PC, _PD]) < coach.COUNTER_SET_COST,
+          f"{[_tagof(d['cards']) for d in free['decks']]} {free['value'] - o_value([_PA, _PB, _PC, _PD]):.4f}")
+    rows_m, info_m = coach._duel_set(mh_cost, set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
+                                     counters=[_crow(_PK2)])
+    check("A COUNTER WORTH LESS THAN ITS COST DOES NOT REPLACE ONE OF THEIR OWN DECKS",
+          sorted(_tagof(r["cards"]) for r in rows_m) == ["pa", "pb", "pc", "pd"] and info_m["counters"] == 0,
+          str([_tagof(r["cards"]) for r in rows_m]))
+    rows_2, info_2 = coach._duel_set(_MH([_PA, _PB]), set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
+                                     counters=[_crow(_PK), _crow(_PK2)])
+    check("TWO OWN DECKS AND COUNTERS ARE A SET: a player short of three duel decks gets one now",
+          info_2 is not None and info_2["size"] == 4 and info_2["counters"] == 2
+          and {"pa", "pb"} <= {_tagof(r["cards"]) for r in rows_2})
+    check("no history at all: the set is counters only, never an error",
+          coach._duel_set(None, set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
+                          counters=[_crow(_PK), _crow(_PK2), _crow(_PG)])[1]["counters"] == 3)
+    rows_d, info_d = coach._duel_set(mh4, set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
+                                     counters=[_crow(_PA)])
+    check("a counter that IS one of their own decks is that deck, once",
+          info_d["counterPool"] == 0 and info_d["counters"] == 0 and len(rows_d) == 4)
+    clash = _crow(_PK[:7] + [_PA[5]])             # a counter sharing a card with A
+    rows_x, info_x = coach._duel_set(_MH([_PA, _PB, _PC]), set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
+                                     counters=[clash])
+    keys_x = [set(r["cards"]) for r in rows_x]
+    check("a set never holds two decks that share a card, counter or not",
+          all(not (keys_x[i] & keys_x[j]) for i in range(len(keys_x)) for j in range(i + 1, len(keys_x))))
+finally:
+    coach._dr, coach._combined_pair, coach._rec, coach._drop_event_decks = _saved_cs
+
+print("\nwho is playing, between two known players")
+import duel_model as _dm  # noqa: E402
+
+a_, b_ = coach._pilot_strengths((127, 95), (56, 38))
+ra_, rb_ = _dm.strength(127, 95), _dm.strength(56, 38)
+gap_raw, gap_new = _dm.logit(ra_) - _dm.logit(rb_), _dm.logit(a_) - _dm.logit(b_)
+check("both with a long record: the gap between them is taken at 0.7 of its size",
+      abs(gap_new - coach.PILOT_KNOWN * gap_raw) < 1e-9 and coach.PILOT_KNOWN == 0.7, f"{gap_raw} {gap_new}")
+check("...about its middle, so neither player is moved more than the other",
+      abs((_dm.logit(a_) + _dm.logit(b_)) - (_dm.logit(ra_) + _dm.logit(rb_))) < 1e-9)
+check("one of them met only a few times: the records as they are",
+      coach._pilot_strengths((127, 95), (19, 12)) == (ra_, _dm.strength(19, 12))
+      and coach._pilot_strengths((0, 0), (0, 0)) == (0.5, 0.5))
+
+_sug2 = _src[_src.index("def suggest("):_src.index("def mine_hist_pool(")]
+check("suggest finds the counters BEFORE the set is composed and hands them to it",
+      _sug2.index("_counter_rows(") < _sug2.index("_duel_set(mine_hist") and "counters=counters)" in _sug2)
+check("...the look-ahead may bring any of them later, and the answer carries the block",
+      "_duel_plan(top, plan_pool, my_played" in _sug2 and '"counters": (' in _sug2)
+check("...and outside a set a counter must clear the player's own deck to lead",
+      _sug2.index("_own_leads(top)") > _sug2.index("_duel_plan(top, plan_pool"))
+_rt = _src[_src.index("class _Rates:"):_src.index("def _expected(")]
+check("Coach Assist's rates read the card model and the balance log, like the Deck Counter's",
+      "self.fx.use_cards()" in _rt and "self.fx.balance = True" in _rt)
+check("...and a counter-pool list is never re-read from its ladder history here",
+      "not in self._adopted" in _rt and "def adopt(" in _rt)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
