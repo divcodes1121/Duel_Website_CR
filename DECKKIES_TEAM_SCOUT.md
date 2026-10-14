@@ -805,7 +805,7 @@ server/README "The day window on the suggestions".
 
 ## 4o. What the best duel players bring, and a list per teammate (2026-10-14, brain 5.0)
 
-**Built and verified, not yet deployed.** The README chapter "What the best duel
+**LIVE since 2026-10-14 as `b25d12e`** (server first, backups `*.bak-<stamp>-prets5`). The README chapter "What the best duel
 players bring, and a list per teammate" has every table; this is what changed in
 the brain and why.
 

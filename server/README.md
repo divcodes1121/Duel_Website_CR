@@ -2167,7 +2167,7 @@ counted all twelve.
 
 ## What the best duel players bring (`team_analysis._competitive_pool`, `team_scout.personal_plan`, 2026-10-14)
 
-**Brain `team-scout-5.0`, built and verified, not yet deployed.** The README's
+**Brain `team-scout-5.0`, LIVE since 2026-10-14 (`b25d12e`).** The README's
 "What the best duel players bring, and a list per teammate" has the figures.
 
 - **The pool is the window's.** `_competitive_pool(days, until=None)` ->
