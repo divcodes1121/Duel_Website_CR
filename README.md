@@ -1361,6 +1361,7 @@ and `.env`, the env files, the units and the service's irreplaceable state,
 and keeps one on the box (the first: 57.2 GB -> **7.1 GB**, full `integrity_check` ok). **A Windows scheduled task on the owner's PC**
 (`deploy/pull-backup.ps1`, 10:30 IST) downloads it, re-hashes it, keeps two, and
 confirms it to the VPS; the console says how long ago that last happened.
+**STOPPED 2026-10-14 at the account holder's request** ("a command prompt opens around 10 am, a backup downloads and my C: drive is filling"): the scheduled task is deleted. It had used 31 GB of C: — two verified copies (16.9 GB) and seven half-finished downloads (14.3 GB) the script never cleaned up. The VPS still makes and keeps its nightly copy, ON ITS OWN DISK ONLY, so there is no off-box copy now and the console's backup line goes to "Off-box copy is old" — truthfully. `deploy/pull-backup.ps1` stays in the repo; re-registering the task (and fixing the leftover `.part` files first) would bring it back.
 The bot's own code was also only on the VPS (the 2v2 guard and raw-cap
 interlock were never committed) — both are in its private repo now.
 

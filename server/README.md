@@ -214,6 +214,8 @@ which the VPS accepts only when the hash matches. The console shows when an
 off-box copy was last confirmed. **A copy that only exists on the VPS is a
 rollback, not a backup.** Restore = `zstd -d battles-*.db.zst -o battles.db`.
 
+**STOPPED 2026-10-14 at the account holder's request** ("a command prompt opens around 10 am, a backup downloads and my C: drive is filling"): the scheduled task is deleted. It had used 31 GB of C: — two verified copies (16.9 GB) and seven half-finished downloads (14.3 GB) the script never cleaned up. The VPS still makes and keeps its nightly copy, ON ITS OWN DISK ONLY, so there is no off-box copy now and the console's backup line goes to "Off-box copy is old" — truthfully. `deploy/pull-backup.ps1` stays in the repo; re-registering the task (and fixing the leftover `.part` files first) would bring it back.
+
 ### The data ledger and the console (`data_ledger.py`)
 
 `server/.data_ledger.db` (gitignored) holds one row per battle-day deleted, one
