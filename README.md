@@ -12710,6 +12710,51 @@ nothing on it was a deck the top duel players actually bring.)
 - **Unchanged:** Coach Assist reads the old pool (`_window_pool`) and its
   counters were measured on it; `coach_daily` does not use either.
 
+### 5.1 the same day: one super-strong deck of each win condition
+
+The account holder looked at 5.0 live, pasted a 7-player scouting report and
+wrote: *"do we need these much Bridge Spam, Sparky ... one deck super strong of
+each win con is good, so we can have ten win-con decks countering all the decks
+of the players — and what our player should bring against them, that too ...
+the decks must be taken from duel battles, meta decks"*. Three things on that
+board: three "Bridge Spam" rows on the roster-wide list (5.0 capped by the
+win-condition CARD, and Battle Ram and Ram Rider lists are both Bridge Spam on
+the screen); its two variety rules choosing weaker variants on purpose; and one
+row reading `0.0% vs the field +59.5 here` — a CRL list with no ladder games,
+whose empty ladder record was printed.
+
+- **One deck of each family, the strongest** (`counters(by_wincon=True)` reads
+  `winFamily` — the archetype, or the win condition of an `other` deck — before
+  the card). 4.1's specificity rule and 5.0's roster spread are off for
+  scouting (`SCOUT_SPECIFIC = False`; the spread is removed).
+- **A teammate's list the same**: one deck a family, ten rows, a deck of a win
+  condition they play counted `FAMILIAR_FIRST` (3) points more in the choosing
+  (never in the figure), claims capped at one deck of a family per teammate so
+  the second-best Bridge Spam list goes to the next Bridge Spam player.
+- **"vs the field" is the rated figure** (`field`) when the pool has one, and a
+  ladder record only with 20+ games behind it (`OVERALL_MIN_GAMES`).
+
+| Blind replay, same 300 opponents | 4.1 | 5.0 | **5.1** |
+|---|---|---|---|
+| #1 against what they brought | 60.62 | 60.72 | **60.89** |
+| #1, CRL opponents | 59.89 | 60.65 | **60.94** (+1.05 [+0.19, +1.86] on 4.1) |
+| All ten | 57.83 | 57.23 | **57.69** |
+| Rows the judge puts under 50% | 13.2% | 14.6% | **11.7%** |
+| Rosters of six where one deck is on 5-6 lists | 1 of 45 | 0 | **11 of 45** |
+| Match plans: rows a teammate / distinct / shared | 10 / 53% / 5.0 | 9.1 / 97.5% / 0.15 | **10 / 97.6% / 0.16** |
+| Best teammate's #1 | 63.88 | 64.43 | **64.39** |
+
+On the account holder's 7-player board: every list ten different win
+conditions, one Bridge Spam on the roster-wide list; Bridge Spam leads six of
+the seven opponents' lists, because that Battle Ram / Golden Knight list rates
+best against a Bridge-Spam-and-Hog roster. **That repetition across a roster is
+the cost of "the strongest of each", said.**
+
+Measured and NOT built: "always their own win conditions first" on a teammate's
+list (93% of rows theirs, the best teammate's #1 -0.7), and a staple rule for
+CRL lists (two of the group, or one of them five times: the 30-day pool 467 ->
+221, every figure worse by 0.5, one deck on 5-6 lists in 27 of 45 rosters).
+
 ### Measured blind before anything was kept
 
 300 opponents in duels of 1-6 October (150 CRL players), each read with only

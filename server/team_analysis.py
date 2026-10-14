@@ -326,7 +326,7 @@ SCOUT_TOP_N = 10
 #: Whether a SCOUTING list (and the Deck Counter's) keeps 4.1's rules for a
 #: counter specific to the opponent (`team_scout.counters(specific=...)`).
 #: Decided by the 5.0 replay; a teammate's list never uses them.
-SCOUT_SPECIFIC = True
+SCOUT_SPECIFIC = False
 
 #: Lists of one WIN CONDITION (the card) on a scouting list, and on a
 #: teammate's list (5.0). Asked for: "versatility, different win conditions,
@@ -340,14 +340,10 @@ SCOUT_SPECIFIC = True
 #: version of it: rows a teammate 8.1 -> 9.1, their own win conditions 66% ->
 #: 69% of rows, figures the same.
 SCOUT_PER_WINCON = 1
-MATE_PER_WINCON = 3
+MATE_PER_WINCON = 1
 
-#: A SCOUTING REPORT'S DECKS ARE SPREAD OVER THE ROSTER (5.0): a deck already
-#: on earlier opponents' lists is chosen as though this many points weaker a
-#: listing, at most the cap — `squad_plan`'s shared-backup rule (1 and 2.5),
-#: one level up. It moves a comparable deck aside, never a clearly better one.
-SCOUT_SPREAD_COST = 1.0
-SCOUT_SPREAD_CAP = 2.5
+#: A ladder record quoted as "vs the field" needs this many games (5.1).
+OVERALL_MIN_GAMES = 20
 
 #: Opponent decks shown on the left of a folder, and the spread they weight.
 #: Their long tail is noise for this purpose: a deck played once tells you
@@ -1116,7 +1112,7 @@ class _Candidate:
 
     __slots__ = ("cards", "key", "archetype", "name", "art", "inferred", "owner",
                  "games", "wins", "win_rate", "use_rate", "profile", "origin", "memo",
-                 "field", "act", "crl", "meta_rank", "wincon")
+                 "field", "act", "crl", "meta_rank", "wincon", "family")
 
     def __init__(self, deck: dict, owner: dict | None, profile: "_DeckProfile"):
         # WHEN THE LIST WAS PLAYED, for a pool candidate: `{age in days:
@@ -1156,6 +1152,12 @@ class _Candidate:
         # Its win condition as `player_skill` names one: the key a player's
         # record with it is kept under.
         self.wincon = _wincon(self.cards)
+        # ITS FAMILY as a reader sees it named (`_family`: the archetype, or
+        # the win condition of an `other` deck). 5.1 caps a list at one deck
+        # of a family: two Battle Ram and Ram Rider lists are both "Bridge
+        # Spam" on the screen, and three of them on a list of ten read as one
+        # answer three times.
+        self.family = _family(self.archetype, self.cards)[0]
 
     def against(self, other: str, snap: dict | None) -> dict | None:
         return self.profile.against(other, snap)
@@ -1938,6 +1940,15 @@ POOL_MIN_DAYS = 7
 #: is an experiment as often as a choice; two is a list somebody came back to.
 CRL_MIN_GAMES = 2
 
+#:
+#: MEASURED AND NOT BUILT (5.1): requiring two of the group, or one of them
+#: five times ("a staple"). A third of a scouting list on the account holder's
+#: boards was lists one player brought two to four times, and the rule took
+#: the 30-day pool from 467 to 221 lists — and made every figure worse by the
+#: blind judge (the #1 -0.6, the top three -0.5, all ten -0.5) and tripled the
+#: rosters where one deck is on 5-6 of six lists (11 -> 27 of 45). One
+#: player's lists carry real answers.
+
 #: The window's most played vetted lists that join the pool.
 META_LISTS = 40
 
@@ -2255,6 +2266,7 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None,
         if card.field is not None:
             base["fieldRate"] = card.field
         base["winCon"] = card.wincon
+        base["winFamily"] = card.family
         return base
     base = scout.score(
         lambda arch: card.against(arch, snap),
@@ -2297,6 +2309,7 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None,
     if card.field is not None:
         out["fieldRate"] = card.field
     out["winCon"] = card.wincon
+    out["winFamily"] = card.family
     if not dress:
         return out
     return _dress(out, card, threats)
@@ -2344,8 +2357,16 @@ def _dress(out: dict, card: _Candidate, threats: list[dict]) -> dict:
     # the denominator the headline is missing on its own: a deck expected to
     # win 58% against this opponent while winning 57% against everybody is
     # barely a counter, and one at 58% against a 49% baseline is a real answer.
+    # "VS THE FIELD" IS THE LIST'S RATED FIGURE AGAINST THE AVERAGE OPPONENT
+    # (`field`, the same evidence as the figure beside it) when the pool has
+    # one. The ladder record is the fallback, and only with games behind it: a
+    # CRL list nobody plays on the ladder carried {winRate: 0.0} and printed
+    # "0.0% vs the field +59.5 here" (seen live, 2026-10-14).
     overall = card.profile.overall if not card.owner else None
-    if overall:
+    if not card.owner and card.field is not None:
+        out["overallWinRate"] = round(float(card.field), 1)
+        out["overallGames"] = None
+    elif overall and int(overall.get("games") or 0) >= OVERALL_MIN_GAMES:
         out["overallWinRate"] = overall.get("winRate")
         out["overallGames"] = overall.get("games")
     # WHICH OF ITS CARDS THE GAME CHANGED LATELY (the manual's balance log):
@@ -3179,15 +3200,8 @@ def _skill_shifts(tag: str) -> dict[str, float]:
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             snap: dict | None, top_n: int = TOP_N,
             seeds: dict | None = None, ctx: _DuelContext | None = None,
-            *, views: bool = False, pool: list[_Candidate] | None = None,
-            listed: dict | None = None) -> dict:
+            *, views: bool = False, pool: list[_Candidate] | None = None) -> dict:
     """One opponent, and what should be brought against them.
-
-    `listed` (a scouting report, 5.0) counts how many earlier opponents'
-    lists each deck is already on, across the roster: a deck listed before
-    is chosen as though `SCOUT_SPREAD_COST` points weaker a listing (at most
-    `SCOUT_SPREAD_CAP`), so a comparable deck takes its place. The figure
-    printed and the order shown are unchanged. Counted here, after the pick.
 
     BOTH MODES COME THROUGH HERE. In a scouting report `blue` is empty, so
     `perPlayer` falls out empty on its own rather than being special-cased —
@@ -3347,7 +3361,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
                      for mate in blue]
             plan_lists, cover = scout.personal_plan(squad, pool_rows(), threats,
                                                     limit=PER_PLAYER_TOP_N,
-                                                    per_wincon=MATE_PER_WINCON)
+                                                    per_wincon=MATE_PER_WINCON,
+                                                    new_slots=PER_PLAYER_TOP_N)
             who = {m["tag"]: m["name"] for m in blue}
             for c in cover:
                 c["name"] = names.get(c["archetype"]) or dcx._label(c["archetype"] or "other")
@@ -3407,17 +3422,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     elif blue:
         recommended = suggested(_distinct(scored), top_n)
     else:
-        # NOT `spread`: that name is this folder's archetype bars, sent below.
-        roster_cost = None
-        if listed is not None:
-            def roster_cost(c, _l=listed):
-                return -min(SCOUT_SPREAD_CAP, SCOUT_SPREAD_COST * _l.get(c["key"], 0))
         recommended = scout.counters(scored, plays, limit=top_n, specific=SCOUT_SPECIFIC,
-                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
-                              adjust=roster_cost)
-        if listed is not None:
-            for r in recommended:
-                listed[r["key"]] = listed.get(r["key"], 0) + 1
+                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True)
     recommended = finish(recommended)
     for r in recommended:
         if blue and not r.get("owner"):
@@ -3709,9 +3715,7 @@ def analyze(blue_tags: list[str], red_tags: list[str],
         except Exception:  # noqa: BLE001
             traceback.print_exc()
 
-    # A SCOUTING REPORT SPREADS ITS DECKS OVER THE ROSTER (5.0): see `_folder`.
-    listed: dict | None = {} if is_scout else None
-    folders = [_folder(opp, blue, cards, snap, top_n, seeds, ctx, pool=pool, listed=listed)
+    folders = [_folder(opp, blue, cards, snap, top_n, seeds, ctx, pool=pool)
                for opp in red]
 
     # A pool with nothing in it is the one failure the screen cannot recover

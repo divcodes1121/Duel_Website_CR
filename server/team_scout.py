@@ -310,6 +310,43 @@ on fewer decks), and two points on a match plan's average row (the strongest
 rows are no longer given to every teammate). The judge rates cards only and
 cannot see a teammate's record with a win condition, which is what their list
 now leans on; the best answer each opponent gets is better.
+
+────────────────────────────────────────────────────────────────────────────
+5.1 (2026-10-14, the same day): ONE SUPER-STRONG DECK OF EACH WIN CONDITION
+────────────────────────────────────────────────────────────────────────────
+
+The account holder looked at 5.0 live: "do we need these much Bridge Spam,
+Sparky ... one deck super strong of each win con is good, so we can have ten
+win-con decks countering all the decks of the players, and what our player
+should bring against them too". 5.0 capped a list at one deck per win-
+condition CARD, so a Battle Ram and a Ram Rider list — both "Bridge Spam" on
+the screen — sat on one list; and its two variety rules (4.1's specificity,
+a roster spread) chose weaker variants on purpose.
+
+5.1: a list holds one deck of each FAMILY (`winFamily`, the name a reader
+sees), the strongest of it against the opponent; no specificity rule, no
+spread. A teammate's list is the same — one deck a family, ten rows — with a
+deck of a win condition they play counting `FAMILIAR_FIRST` (3) points more
+in the choosing. Blind, same replay:
+
+    scouting list                    4.1      5.0      5.1
+    #1 against what came             60.62    60.72    60.89
+    #1, CRL opponents                59.89    60.65    60.94  (+1.05 [+0.19, +1.86] on 4.1)
+    all ten                          57.83    57.23    57.69
+    rows the judge puts under 50%    13.2%    14.6%    11.7%
+    one deck on 5-6 lists of a       1 of 45  0        11 of 45
+      roster of six
+
+    match plans                      4.1      5.0      5.1
+    rows a teammate                  10       9.1      10
+    distinct rows / shared           53%/5.0  97.5%/0.15  97.6%/0.16
+    best teammate's #1               63.88    64.43    64.39
+
+The cost is repetition across a roster: the strongest Bridge Spam list is the
+best Bridge Spam against most of one, and it says so. MEASURED AND NOT BUILT:
+"always their own win conditions first" (93% of rows theirs, the #1 -0.7), and
+a staple rule for CRL lists (two players, or one five times: every figure
+worse, one deck on 5-6 lists in 27 of 45 rosters).
 """
 
 from __future__ import annotations
@@ -322,7 +359,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-5.0"
+BRAIN_VERSION = "team-scout-5.1"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -1770,6 +1807,8 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     relaxed = [False]
 
     def cap_key(r) -> str:
+        if by_wincon and r.get("winFamily"):
+            return "wf:" + str(r["winFamily"])
         if by_wincon and r.get("winCon"):
             return "wc:" + str(r["winCon"])
         return r.get("archetype") or ""
@@ -2316,6 +2355,23 @@ def _personal_row(r: dict, p: dict) -> dict:
 CLAIM_WEIGHT = 10.0
 
 
+#: In the CHOOSING of a teammate's list (never the figure or the order
+#: printed), a deck of a win condition they play counts this many points more
+#: than one they do not (5.1). Three, measured: "always first" (100) made 93%
+#: of rows their own win conditions and cost the best teammate's #1 0.7 points
+#: by the blind judge; three keeps 69% theirs and the #1 where 5.0 had it
+#: (64.39 against 64.43), with ten rows a teammate.
+FAMILIAR_FIRST = 3.0
+
+
+def _familiar_first(r) -> float:
+    return FAMILIAR_FIRST if r.get("familiar") else 0.0
+
+
+def _family_key(r) -> str:
+    return str(r.get("winFamily") or r.get("winCon") or r.get("archetype") or "")
+
+
 def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                   new_slots: int = NEW_SLOTS, share_max: int = SHARE_MAX,
                   min_list: int = MIN_LIST, per_wincon: int = PER_ARCHETYPE):
@@ -2364,8 +2420,15 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
     held: dict[str, list[dict]] = {t: [] for t in cand}
     fam_n: dict[str, int] = {t: 0 for t in cand}
     new_n: dict[str, int] = {t: 0 for t in cand}
+    per_fam: dict[tuple, int] = {}
     for _neg, _o, key, tag, r in claims:
         if taken.get(key, 0) >= share_max:
+            continue
+        # A teammate claims no more decks of one family than their list may
+        # hold (`per_wincon`): the second-best Bridge Spam list is left for
+        # the next teammate rather than held unused.
+        fk = (tag, _family_key(r))
+        if per_fam.get(fk, 0) >= per_wincon:
             continue
         if r["familiar"]:
             if fam_n[tag] >= limit:
@@ -2377,6 +2440,7 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
             new_n[tag] += 1
         held[tag].append(r)
         taken[key] = taken.get(key, 0) + 1
+        per_fam[fk] = per_fam.get(fk, 0) + 1
 
     lists: dict[str, list[dict]] = {}
     for tag in order:
@@ -2386,7 +2450,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
             continue
         mine = [r for r in rows if r.get("owner")] + held[tag]
         picked = counters(mine, plays, limit=limit, score_key="personalScore", specific=False,
-                                  by_wincon=True, per_family=per_wincon, floor_only=True)
+                                  by_wincon=True, per_family=per_wincon, floor_only=True,
+                                  adjust=_familiar_first)
         want = min(min_list, limit)
         if len(picked) < want:
             # Topped up, never replaced: what the list holds is kept.
@@ -2396,7 +2461,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                 picked = counters(tier, plays, limit=max(want, len(picked)),
                                   score_key="personalScore", specific=False,
                                   by_wincon=True, per_family=per_wincon, floor_only=True,
-                                  adjust=lambda c, _k=keep: 1000.0 if c["key"] in _k else 0.0)
+                                  adjust=lambda c, _k=keep: (1000.0 if c["key"] in _k else 0.0)
+                                  + _familiar_first(c))
                 if len(picked) >= want:
                     break
             for r in picked:

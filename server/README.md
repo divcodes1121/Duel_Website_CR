@@ -2183,11 +2183,12 @@ counted all twelve.
   and the next is built on a thread. `info` (less `states`) is `pool.window`.
 - **Used by** `analyze` (both modes) and `bring` (the Deck Counter).
   `_window_pool` / `_counter_candidates` are kept for Coach Assist.
-- **Scouting lists**: `counters(by_wincon=True, per_family=SCOUT_PER_WINCON (1),
-  floor_only=True, specific=SCOUT_SPECIFIC (True))`, plus a roster spread
-  (`SCOUT_SPREAD_COST` 1, `SCOUT_SPREAD_CAP` 2.5) through `_folder(listed=)`.
+- **Scouting lists** (5.1): `counters(by_wincon=True, per_family=SCOUT_PER_WINCON (1),
+  floor_only=True, specific=SCOUT_SPECIFIC (False))` — one deck of each family
+  (`winFamily`), the strongest. 5.0's roster spread is gone.
 - **Match plans**: `scout.personal_plan(squad, pool rows, threats,
-  per_wincon=MATE_PER_WINCON (3))` with each teammate's `wincons`
+  per_wincon=MATE_PER_WINCON (1), new_slots=10)` — one deck a family, ten rows,
+  `FAMILIAR_FIRST` 3 points toward their own win conditions — with each teammate's `wincons`
   (`_wincon_shares`: shares of their games by win condition, `_wincon` = the
   priciest win-condition card, `player_skill`'s key) and `shift`
   (`_skill_shifts`: `WEIGHT x skill` per win condition, `{}` when the table is

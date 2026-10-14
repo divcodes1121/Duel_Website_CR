@@ -1025,7 +1025,7 @@ finally:
 
 print(NL + "counters to what they play")
 
-check("the brain is 5.0", ts.BRAIN_VERSION == "team-scout-5.0" and folder["brain"] == ts.BRAIN_VERSION)
+check("the brain is 5.1", ts.BRAIN_VERSION == "team-scout-5.1" and folder["brain"] == ts.BRAIN_VERSION)
 
 # DUEL LISTS COME FROM THE NAMED GROUP ONLY, and every pool list knows its own
 # rate against the field.
@@ -1802,6 +1802,7 @@ print(NL + "5.0: the pool is what the CRL group brings, and the window's meta")
 import datetime as _dt5  # noqa: E402
 
 CR1, CR2, CR3 = cards("cra"), cards("crb"), cards("crc")     # lists the group brought
+CR4, CR5 = cards("crd"), cards("cre")                         # one player's experiment / staple
 ME1, ME2, ME3 = cards("mea"), cards("meb"), cards("mec")     # vetted lists
 SH5 = list(SHORT)                                            # cannot fill three slots
 _gw_calls = []
@@ -1809,7 +1810,8 @@ _gw_calls = []
 
 def _gw5(tags, since, until):
     _gw_calls.append((tuple(sorted(tags)), since, until))
-    return {_k(CR1): [5, 3, 2], _k(CR2): [2, 1, 1], _k(CR3): [1, 1, 1],
+    return {_k(CR1): [5, 3, 2], _k(CR2): [2, 1, 2], _k(CR3): [1, 1, 1],
+            _k(CR4): [3, 2, 1], _k(CR5): [5, 4, 1],
             _k(ME1): [4, 3, 2], _k(SH5): [9, 5, 3]}
 
 
@@ -1849,6 +1851,9 @@ try:
     check("a list the group brought twice or more is in the pool, once is not",
           _k(CR1) in keys7 and _k(CR2) in keys7 and _k(CR3) not in keys7
           and ta.CRL_MIN_GAMES == 2, str(sorted(keys7)))
+    check("ONE player's list is in from two games (a staple rule was measured and made "
+          "every figure worse)", _k(CR5) in keys7 and _k(CR4) in keys7
+          and not hasattr(ta, "CRL_STAPLE_GAMES"), str(sorted(keys7)))
     check("a list that cannot fill all three special slots is not, and is counted",
           _k(SH5) not in keys7 and i7["slotGaps"] == 1, str(i7.get("slotGaps")))
     check("the window's played vetted lists are in it; one fading out of it is not",
@@ -1864,11 +1869,11 @@ try:
           isinstance(keys7[_k(ME1)].profile, ta._SeedProfile)
           and isinstance(keys7[_k(CR1)].profile, ta._ListProfile))
     check("the group's lists lead the pool, most brought first",
-          [c.key for c in p7][:2] == [_k(CR1), _k(ME1)], str([c.key for c in p7]))
+          [c.key for c in p7][:3] == [_k(CR1), _k(CR5), _k(ME1)], str([c.key for c in p7]))
     check("the pool says what it holds, and over which days",
           i7["days"] == 7 and i7["from"] == "2026-10-08" and i7["to"] == "2026-10-14"
-          and i7["group"] == "crl" and i7["crlLists"] == 3 and i7["metaLists"] == 2
-          and i7["crlGames"] == 11 and i7["pool"] == 4, str(ta._pool_public(i7)))
+          and i7["group"] == "crl" and i7["crlLists"] == 5 and i7["metaLists"] == 2
+          and i7["crlGames"] == 19 and i7["pool"] == 6, str(ta._pool_public(i7)))
     check("...and a meta list's play in the window rides on its row (`states`)",
           i7["states"].get(_k(ME1))[1] == 120 and "states" not in ta._pool_public(i7),
           str(i7["states"].get(_k(ME1))))
@@ -1973,6 +1978,36 @@ finally:
      ta._set_field_rates, ta._today, ta.META_LISTS, ta.CRL_MIN_GAMES,
      ta._COMP_CACHE["by"], ta._COMP_CACHE["building"]) = _saved5
     ta._COMP_CACHE["by"], ta._COMP_CACHE["building"] = {}, set()
+
+
+print(NL + "5.1: 'vs the field' is the rated figure, never a record with no games")
+
+
+class _NoLadder:
+    overall = {"winRate": 0.0, "games": 0}
+
+    def against(self, other, snap):
+        return None
+
+
+def _dressed(card):
+    base = {"key": card.key, "cards": list(card.cards), "matchups": [], "threatCovered": 1.0,
+            "evidenceStrength": 1.0, "confidence": "known", "expectedWinRate": 60.0,
+            "matchupValue": 60.0, "playerFit": None}
+    return ta._dress(base, card, [])
+
+
+_c51 = ta._Candidate({"cards": list(HOG), "winCondition": "hog"}, None, _NoLadder())
+_o51 = _dressed(_c51)
+check("a list with no ladder games prints no 'vs the field' (it printed 0.0% +59.5, live)",
+      _o51.get("overallWinRate") is None, str(_o51.get("overallWinRate")))
+_c51.field = 55.46
+check("...a list with a rated figure against the field prints that",
+      _dressed(_c51)["overallWinRate"] == 55.5, str(_dressed(_c51).get("overallWinRate")))
+_NoLadder.overall = {"winRate": 51.0, "games": 40}
+_c51.field = None
+check("...and a ladder record with games behind it, when there is no rated figure",
+      _dressed(_c51)["overallWinRate"] == 51.0 and ta.OVERALL_MIN_GAMES == 20)
 
 
 print(NL + "the fused rate")

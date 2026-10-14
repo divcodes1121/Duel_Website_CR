@@ -1322,6 +1322,56 @@ def property_wincon_variety_and_floor():
     check("...and without it one row still says so", len(ts.counters([e], plays, limit=3)) == 1)
 
 
+def property_family_cap_and_familiar_first():
+    print("")
+    print("property — 5.1: one deck of a family on a list, a teammate's families first")
+    plays = [{"family": "hog", "share": 0.5}, {"family": "giant", "share": 0.3},
+             {"family": "graveyard", "share": 0.2}]
+    # Battle Ram and Ram Rider lists: two win-condition CARDS, one family.
+    ram = p_row("A", {"hog": 66, "giant": 66, "graveyard": 66}, "battle-ram")
+    ram["winFamily"] = "bridge-spam"
+    rider = p_row("B", {"hog": 65, "giant": 65, "graveyard": 65}, "ram-rider")
+    rider["winFamily"] = "bridge-spam"
+    gol = p_row("C", {"hog": 58, "giant": 58, "graveyard": 58}, "golem")
+    gol["winFamily"] = "golem"
+    got = ts.counters([ram, rider, gol], plays, limit=3, by_wincon=True, per_family=1,
+                      floor_only=True, specific=False)
+    check("two lists of one FAMILY (Bridge Spam) are one row, the stronger",
+          [r["name"] for r in got] == ["A", "C"], str([r["name"] for r in got]))
+    rows = []
+    for i, k in enumerate(("A", "B", "C", "D", "E")):
+        r = p_row(k, {"hog": 68 - i / 2, "giant": 68 - i / 2, "graveyard": 68 - i / 2}, "wc-" + k)
+        r["winFamily"] = "f-" + k
+        rows.append(r)
+    mine = p_row("F", {"hog": 65.5, "giant": 65.5, "graveyard": 65.5}, "mortar")
+    mine["winFamily"] = "mortar"
+    one = [{"tag": "#M", "own": [], "cards": set(), "wincons": {"mortar": 0.9}, "shift": {}}]
+    lists, _ = ts.personal_plan(one, rows + [mine], SQ_THREATS, limit=3, new_slots=3,
+                                min_list=0, per_wincon=1)
+    names = [r["name"] for r in lists["#M"]]
+    check("within FAMILIAR_FIRST points, a deck of the teammate's own win condition takes "
+          "the place of a stranger's", "F" in names and len(names) == 3 and ts.FAMILIAR_FIRST == 3.0,
+          str(names))
+    check("...and the list still reads strongest first", names == ["A", "B", "F"], str(names))
+    far = dict(mine, expectedWinRate=55.0, matchupValue=55.0, recommendationScore=55.0)
+    far_lists, _ = ts.personal_plan(one, rows + [far], SQ_THREATS, limit=3, new_slots=3,
+                                    min_list=0, per_wincon=1)
+    check("...but a stranger's deck clearly stronger keeps it",
+          "F" not in [r["name"] for r in far_lists["#M"]], str([r["name"] for r in far_lists["#M"]]))
+    # Two Mortar players, two Mortar lists: one each, not both to the first.
+    m1 = p_row("A", {"hog": 66, "giant": 66, "graveyard": 66}, "mortar")
+    m2 = p_row("B", {"hog": 62, "giant": 62, "graveyard": 62}, "mortar")
+    for r in (m1, m2):
+        r["winFamily"] = "mortar"
+    two, _ = ts.personal_plan(
+        [{"tag": "#P", "own": [], "cards": set(), "wincons": {"mortar": 1.0}, "shift": {}},
+         {"tag": "#Q", "own": [], "cards": set(), "wincons": {"mortar": 0.8}, "shift": {}}],
+        [m1, m2], SQ_THREATS, limit=3, new_slots=0, min_list=0, per_wincon=1)
+    check("two players of one family each get one of its lists, the stronger to the bigger share",
+          [r["name"] for r in two["#P"]] == ["A"] and [r["name"] for r in two["#Q"]] == ["B"],
+          str({t: [r["name"] for r in two[t]] for t in two}))
+
+
 def main() -> int:
     print("team_scout — the coaching brain")
     case_1_many_known_decks()
@@ -1347,6 +1397,7 @@ def main() -> int:
     property_lineup()
     property_counters_not_specific()
     property_wincon_variety_and_floor()
+    property_family_cap_and_familiar_first()
     property_speedups_are_exact()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0

@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-14-team-scout-5-1',
+    date: '2026-10-14',
+    kind: 'improved',
+    title: 'Team Analysis: the strongest deck of each win condition',
+    body: [
+      'A list now holds one deck of each win condition, by the name you see — one Bridge Spam, one Giant, one Hog Rider — and it is the strongest deck of that win condition against the player or roster, from the CRL players’ duel decks and the meta of the days you picked. Ten rows are ten different ways to win, none expected to lose.',
+      'A teammate’s list on a match plan is built the same way, ten rows, leaning toward the win conditions they play. “vs the field” is now the deck’s rated figure against the average opponent, never a record with no games behind it.',
+      'Checked blind on 300 real duel opponents: the first deck did a little better than before, and fewer suggested decks lost to what the opponent really brought (11.7% against 13.2%). Because each row is the strongest of its kind, a strong deck can lead several players’ lists on one roster.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-14-team-scout-5',
     date: '2026-10-14',
     kind: 'improved',

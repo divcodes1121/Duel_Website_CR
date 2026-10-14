@@ -836,6 +836,15 @@ distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15, a different #
 per teammate 124 -> 151 of 152, the best teammate's #1 63.88 -> 64.43, every row
 58.17 -> 56.28 (the cost: the strongest rows are no longer everybody's).
 
+**5.1 the same day** (README "5.1 the same day: one super-strong deck of each
+win condition"): one deck of each FAMILY (`winFamily`) on a list, the strongest
+— no specificity rule, no roster spread — and the same on a teammate's list, ten
+rows, `FAMILIAR_FIRST` 3 points toward their own win conditions in the choosing;
+"vs the field" is the rated `field`. Blind: #1 60.89, all ten 57.69, judged rows
+under 50% 11.7% (4.1 13.2%), best teammate's #1 64.39; the cost, one deck on 5-6
+lists in 11 of 45 rosters of six. A staple rule for CRL lists was measured and
+made every figure worse.
+
 **Second consumers, unchanged:** Coach Assist's counters read `_window_pool`
 (the 4.1 pool) and were measured on it; `coach_daily` calls `score`, `diversify`
 and `threat_space`, none of which changed. `squad_plan` is kept (its tests
