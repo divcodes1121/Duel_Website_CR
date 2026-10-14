@@ -233,6 +233,26 @@ try:
           and di.deck_key(HOG_N) in grp, str({k[:14]: v for k, v in grp.items()}))
     check("...only theirs", di.deck_key(HOG_X) not in grp)
     check("...and nobody is nothing", di.lists_of([]) == {} and di.lists_of(["#NOBODY"]) == {})
+    # 5.0: THE GROUP'S LISTS IN A WINDOW, with how they did (`group_window`),
+    # held to the per-player reader over the same games.
+    grw = di.group_window(["#P0", " #p9 "])
+    mine = {d["key"]: d for d in di.player_decks("#P0")}
+    nine = {d["key"]: d for d in di.player_decks("#P9")}
+    check("a group's lists in a window: games, wins and how many of them brought it",
+          grw[di.deck_key(MORTAR)][:2] == [mine[di.deck_key(MORTAR)]["games"],
+                                          mine[di.deck_key(MORTAR)]["wins"]]
+          and grw[di.deck_key(MORTAR)][2] == 1
+          and grw[di.deck_key(HOG_N)][:2] == [nine[di.deck_key(HOG_N)]["games"],
+                                             nine[di.deck_key(HOG_N)]["wins"]],
+          str({k[:14]: v for k, v in grw.items()}))
+    since = di.iso_to_stamp("2026-09-01")
+    check("...from the day asked for",
+          di.group_window(["#P0"], since)[di.deck_key(MORTAR)][0]
+          == {d["key"]: d for d in di.player_decks("#P0", since=since)}[di.deck_key(MORTAR)]["games"])
+    check("...and BEFORE the day it ends on, which a replay relies on",
+          di.group_window(["#P0"], None, "00000000") == {}
+          and di.group_window(["#P0"], None, "~")[di.deck_key(MORTAR)][0] == mine[di.deck_key(MORTAR)]["games"])
+    check("...nobody is nothing", di.group_window([]) == {} and di.group_window(["#NOBODY"]) == {})
     fld = di.deck_players()
     by = {k: (wc, p) for k, wc, p in fld}
     check("the lists most players field come first, with their win condition",

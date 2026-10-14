@@ -872,6 +872,18 @@ export interface PoolWindow {
   fading?: number;
   /** Lists by state, dropped ones included. */
   lists?: Record<string, number>;
+
+  /* ── Brain 5.0 (2026-10-14): the pool IS the window's ─────────────────
+   * Team Analysis and the Deck Counter suggest from what the CRL group
+   * brought to duels in the window and the window's most played lists. */
+  /** First and last day of the window (`YYYY-MM-DD`). */
+  from?: string;
+  to?: string;
+  /** The named group whose duel lists are in the pool (`crl`), or null. */
+  group?: string | null;
+  crlLists?: number;
+  crlGames?: number;
+  metaLists?: number;
 }
 
 /** Which way a list's share of the pool's play moved, window against the days
@@ -2487,9 +2499,28 @@ export interface TeamRecommendation {
   /** Families (`plays[].family`) this row is the list's best counter to, at
    *  55% or better. */
   answers?: string[];
-  /** Where a population list comes from: the duel catalogue or the vetted
-   *  ladder seeds. Absent on a teammate's own deck. */
-  origin?: 'ladder' | 'duel';
+  /** Where a population list comes from. Since brain 5.0 (2026-10-14):
+   *  `crl` = a list the CRL group brought to duels in the window, `meta` = one
+   *  of the window's most played lists. `ladder` / `duel` are 4.1's (the duel
+   *  catalogue, the vetted ladder seeds), still sent by the Deck Counter of an
+   *  older server. Absent on a teammate's own deck. */
+  origin?: 'ladder' | 'duel' | 'crl' | 'meta';
+  /** The CRL group's duel games with this list in the window, how many they
+   *  won and how many of them brought it (5.0). */
+  crl?: { games: number; wins: number; pilots: number };
+  /** Its rank among the window's most played lists (5.0), 1 = most played. */
+  metaRank?: number;
+  /** Its win condition, as `player_skill` names one (a card key). */
+  winCon?: string | null;
+  /** A match plan's row (5.0): the win condition is one this teammate plays
+   *  (5% of their games or more), or the deck is their own. */
+  familiar?: boolean;
+  /** That win condition's share of this teammate's games in the window. */
+  winConShare?: number;
+  /** Points this teammate's record with the win condition moved the figure by
+   *  (`player_skill`); `baseRate` is the figure before it. */
+  skillShift?: number;
+  baseRate?: number;
   /** The family they are likely to bring that this deck does WORST against
    *  (brain 4.0). */
   worst?: { family: string; name?: string; rate: number } | null;
@@ -2664,8 +2695,29 @@ export interface TeamFolder {
   /** The duel brain's read of this opponent. Absent from an older server. */
   duel?: TeamDuelRead;
   considered: number;
+  /** The teammate the lineup pairs with this opponent (5.0, match plans
+   *  only): their tag, keyed into `perPlayer[].owner.tag`. */
+  assigned?: string;
   /** Why there is nothing to show, when there is nothing to show. */
   reason: 'no_history' | 'no_evidence' | null;
+}
+
+/**
+ * WHO TAKES WHOM (brain 5.0, match plans only): each opponent paired with a
+ * teammate so the squad's total win chance is the highest it can be, and the
+ * deck that teammate brings — their list's #1 against that opponent.
+ * `winRate` is null when the teammate had nothing to bring against them.
+ */
+export interface TeamLineupRow {
+  blue: { tag: string; name: string };
+  red: { tag: string; name: string };
+  winRate: number | null;
+  deck: string | null;
+  key: string | null;
+  cards: string[] | null;
+  art: Record<string, 'evolution' | 'hero'> | null;
+  /** The deck is the teammate's own. */
+  own: boolean;
 }
 
 /**
@@ -2709,6 +2761,8 @@ export interface TeamReport {
   blue: TeamMember[];
   red: TeamMember[];
   folders: TeamFolder[];
+  /** Present in match plans only (brain 5.0). */
+  lineup?: TeamLineupRow[];
   /** Present in scout mode only. */
   overall?: TeamOverall;
   pool: {

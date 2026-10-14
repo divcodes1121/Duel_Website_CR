@@ -2165,6 +2165,38 @@ twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
 
 
+## What the best duel players bring (`team_analysis._competitive_pool`, `team_scout.personal_plan`, 2026-10-14)
+
+**Brain `team-scout-5.0`, built and verified, not yet deployed.** The README's
+"What the best duel players bring, and a list per teammate" has the figures.
+
+- **The pool is the window's.** `_competitive_pool(days, until=None)` ->
+  `(candidates, info)`: every list the `DUEL_POOL_COHORT` group (`crl`, from
+  `.duel_cohorts.json`) brought to duel games between `until - days + 1` and
+  `until` — `duel_index.group_window(tags, since, until)`, `{key: [games, wins,
+  pilots]}`, two games or more (`CRL_MIN_GAMES`) — and the `META_LISTS` (40)
+  most played vetted lists (seeds + meta board) by the duel index's play by
+  day, shifted to `until`, less `WINDOW_DROP` states. Three special slots or it
+  is skipped (`slotGaps`). Origins `crl` (with `crl` = the group's record) and
+  `meta` (`meta_rank`). Days held to 7..90 (`pool_days`). Cached per (days,
+  until) and per `_counter_key()`; when the key moves, the pool in hand answers
+  and the next is built on a thread. `info` (less `states`) is `pool.window`.
+- **Used by** `analyze` (both modes) and `bring` (the Deck Counter).
+  `_window_pool` / `_counter_candidates` are kept for Coach Assist.
+- **Scouting lists**: `counters(by_wincon=True, per_family=SCOUT_PER_WINCON (1),
+  floor_only=True, specific=SCOUT_SPECIFIC (True))`, plus a roster spread
+  (`SCOUT_SPREAD_COST` 1, `SCOUT_SPREAD_CAP` 2.5) through `_folder(listed=)`.
+- **Match plans**: `scout.personal_plan(squad, pool rows, threats,
+  per_wincon=MATE_PER_WINCON (3))` with each teammate's `wincons`
+  (`_wincon_shares`: shares of their games by win condition, `_wincon` = the
+  priciest win-condition card, `player_skill`'s key) and `shift`
+  (`_skill_shifts`: `WEIGHT x skill` per win condition, `{}` when the table is
+  off). Then `_lineup` -> `report.lineup` and `folder.assigned`.
+- Every scored row carries `winCon`; a teammate's rows `familiar`,
+  `winConShare`, `skillShift`, `baseRate`; pool rows `crl`, `metaRank`.
+- **To undo without a deploy**: there is no switch; the previous files are the
+  `*.bak-<stamp>-prets5` backups (one restart).
+
 ## The day window on the suggestions (`duel_index.activity`, `team_analysis._window_pool`, 2026-10-11)
 
 The window a reader picks (`days` on `/api/analytics/teams`, the date range on

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TeamDuelFigures } from '../src/state/analyticsClient';
-import { duelChip, duelDeckLabel, duelPickLabel, duelShort, duelTitle } from '../src/utils/duelFigures';
+import { crlTitle, duelChip, duelDeckLabel, duelPickLabel, duelShort, duelTitle } from '../src/utils/duelFigures';
 
 /**
  * How the duel brain's figures print, on the screen and in the PDF. One helper
@@ -23,6 +23,18 @@ describe('duelFigures', () => {
     expect(duelDeckLabel({ origin: 'ladder' })).toBeNull();
     expect(duelDeckLabel({})).toBeNull();
     expect(duelPickLabel({})).toBeNull();
+  });
+
+  it('brain 5.0: says whether a list is one the CRL group brought or one of the meta', () => {
+    expect(duelDeckLabel({ origin: 'crl' })).toBe('CRL duel list');
+    expect(duelDeckLabel({ origin: 'meta' })).toBe('Meta list');
+    expect(crlTitle({ crl: { games: 12, wins: 8, pilots: 3 } })).toBe(
+      'Brought to 12 duel games by 3 CRL players · 8 won',
+    );
+    expect(crlTitle({ crl: { games: 1, wins: 0, pilots: 1 } })).toBe(
+      'Brought to 1 duel game by 1 CRL player · 0 won',
+    );
+    expect(crlTitle({})).toBeUndefined();
   });
 
   it('prints the rate to one decimal and the games behind it', () => {

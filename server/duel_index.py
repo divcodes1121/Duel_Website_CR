@@ -1405,6 +1405,53 @@ def lists_of(tags) -> dict[str, list[int]]:
     return {",".join(sorted(k.split(","))): [n, len(who)] for k, (n, who) in per.items()}
 
 
+def group_window(tags, since: str | None = None,
+                 until: str | None = None) -> dict[str, list[int]]:
+    """`{deck key: [games, wins, pilots]}` over the duel games `tags` played
+    with `since <= battle_time < until` (stored-format stamps; None = open).
+
+    The lists a NAMED GROUP fielded in a WINDOW, and how they did: Team
+    Analysis' candidate pool since 5.0 is what the group brings now, not every
+    list it ever brought (`lists_of`). Read on the `games_a` / `games_b`
+    indexes, one tag at a time. `{}` with no usable index; tags matched as
+    stored (upper case, with the `#`)."""
+    tags = sorted({str(t).strip().upper() for t in (tags or ()) if str(t).strip()})
+    if not tags or _current() is None:
+        return {}
+    lo, hi = since or "", until or "~"
+    per: dict[str, list] = {}
+    try:
+        con = _ro(PATH)
+        try:
+            for tag in tags:
+                for side, mine in (("a", 1), ("b", 2)):
+                    for deck, winner in con.execute(
+                            f"SELECT {side}_deck, winner FROM games "
+                            f"WHERE {side}_tag = ? AND battle_time >= ? AND battle_time < ?",
+                            (tag, lo, hi)):
+                        e = per.get(deck)
+                        if e is None:
+                            e = per[deck] = [0, 0, set()]
+                        e[0] += 1
+                        e[1] += 1 if winner == mine else 0
+                        e[2].add(tag)
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+    out: dict[str, list[int]] = {}
+    for k, (n, w, who) in per.items():
+        key = ",".join(sorted(k.split(",")))
+        e = out.get(key)
+        if e is None:
+            out[key] = [n, w, len(who)]
+        else:                       # one list stored in two card orders
+            e[0] += n
+            e[1] += w
+            e[2] = max(e[2], len(who))
+    return out
+
+
 def deck_players(limit: int = 4000) -> list[tuple[str, str, int]]:
     """`[(deck key, win condition, players)]`, the lists most PLAYERS field
     first, over every duel game in the index — the raw material of the

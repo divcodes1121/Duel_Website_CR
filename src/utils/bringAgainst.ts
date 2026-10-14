@@ -139,6 +139,14 @@ export function recentTitle(recent: TeamRecommendation['recent']): string | unde
 /** `543 of 786 decks in play · last 7 days` — what the day window kept of the
  *  pool. Undefined when the window was not applied (the whole pool was used). */
 export function windowLabel(w: PoolWindow | null | undefined): string | undefined {
+  // Brain 5.0: the pool IS the window's — the CRL group's duel lists in it and
+  // its most played lists.
+  if (w && w.crlLists !== undefined && w.days) {
+    return (
+      `${(w.crlLists ?? 0).toLocaleString('en-US')} CRL duel lists + ` +
+      `${(w.metaLists ?? 0).toLocaleString('en-US')} meta lists · last ${w.days} days`
+    );
+  }
   if (!w?.applied || !w.days) return undefined;
   return (
     `${w.kept.toLocaleString('en-US')} of ${w.pool.toLocaleString('en-US')} decks in play` +
@@ -148,6 +156,13 @@ export function windowLabel(w: PoolWindow | null | undefined): string | undefine
 
 /** The tooltip of that count: which lists were left out, in figures. */
 export function windowTitle(w: PoolWindow | null | undefined): string | undefined {
+  if (w && w.crlLists !== undefined && w.days) {
+    return (
+      `Suggestions come from the decks CRL players brought to duels from ${w.from} to ${w.to} ` +
+      `(two games or more), and the ${w.metaLists ?? 0} most played decks of those days. ` +
+      `No deck expected to lose is listed.`
+    );
+  }
   if (!w?.applied || !w.days) return undefined;
   const bits = [`Suggestions come from decks played in the last ${w.days} days.`];
   if (w.notPlayed) {

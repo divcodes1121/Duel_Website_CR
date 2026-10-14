@@ -247,6 +247,69 @@ the list that prompted this — Hog, Earthquake, Giant Skeleton — had no game 
 a CRL player.
 
 Lists are TEN rows on Team Analysis and the Deck Counter (asked for by name).
+
+────────────────────────────────────────────────────────────────────────────
+5.0 (2026-10-14): WHAT THE BEST PLAYERS BRING, AND A LIST PER TEAMMATE
+────────────────────────────────────────────────────────────────────────────
+
+Reported: "the recommendation decks are so trash ... random decks, decks
+repetitive for more players ... get battles from CRL duel rows, meta decks
+going on in the time frame ... fix both the match plan and the scouting
+report". Measured on two live answers the same day: about one row in seven was
+a list the CRL group had brought to a duel, and in a 4v4 plan all four
+teammates were offered the same four decks against one opponent (160 rows, 67
+distinct decks).
+
+THE POOL (`team_analysis._competitive_pool`) is the lists the CRL group
+brought to duels in the window asked for (two games or more) and the window's
+40 most played vetted lists — nothing else. Rated and chosen as before.
+
+A MATCH PLAN's lists are `personal_plan`: each teammate's list is decks of the
+win conditions they play, rated with their own record with each
+(`player_skill`), at most `NEW_SLOTS` rows of a win condition they do not
+play, and one teammate a pool deck. `lineup` pairs every opponent with a
+teammate. 4.1's specificity rules stay on a SCOUTING list (without them the
+most repeated list went from 25% to 42% of opponents) and are off on a
+teammate's (`counters(specific=False)`): there the player makes the lists
+differ.
+
+ONE LIST PER WIN CONDITION on a scouting list, three on a teammate's
+(`counters(by_wincon=True)`, the card, not the bot's archetype), and NOTHING
+UNDER 50% on either (`floor_only`): asked for the same day — "versatility,
+different win conditions, ranked and matched against the opponent's decks,
+keep >50% decks".
+
+MEASURED BLIND (300 opponents in duels of 1-6 October, 150 of them CRL players;
+the rating model fitted before 1 October, the judge from 7 October, each
+opponent read with only what was stored before their duel):
+
+    scouting list                    4.1      5.0
+    rows the CRL group brought       36.7%    96.7%
+    win conditions in a list of ten  7.1      10.0
+    #1 against what came             60.62    60.72  (+0.10 [-0.53, +0.74])
+    #1, CRL opponents                59.89    60.65  (+0.76 [-0.18, +1.72])
+    top three                        60.21    59.68  (-0.53 [-0.90, -0.14])
+    all ten                          57.83    57.23  (-0.60 [-0.88, -0.33])
+    rows printed under 50%           0        0
+    distinct / most repeated         365/25%  308/29%
+    rosters of six: the most         2.89     2.78
+      repeated deck is on (of 6)
+
+    4v4 match plans (ten)            4.1      5.0
+    distinct rows                    53%      97.5%
+    decks two teammates share        5.0      0.15
+    a different #1 per teammate      124/152  151/152
+    rows of the teammate's own win   -        69%
+      conditions (or their own deck)
+    best teammate's #1, judged       63.88    64.43
+    every row, judged                58.17    56.28
+
+The costs, said: about half a point on a scouting list's tail and the most
+repeated list on 30% of opponents (every row a different win condition draws
+on fewer decks), and two points on a match plan's average row (the strongest
+rows are no longer given to every teammate). The judge rates cards only and
+cannot see a teammate's record with a win condition, which is what their list
+now leans on; the best answer each opponent gets is better.
 """
 
 from __future__ import annotations
@@ -259,7 +322,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-4.1"
+BRAIN_VERSION = "team-scout-5.0"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -1636,7 +1699,9 @@ def worst_case(vs, plays, *, share=WORST_SHARE):
 
 
 def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
-             score_key="recommendationScore", first=None, adjust=None):
+             score_key="recommendationScore", first=None, adjust=None,
+             specific=True, per_family=PER_ARCHETYPE, by_wincon=False,
+             floor_only=False):
     """The decks to bring: the strongest counters to what they play.
 
     `rows` are scored candidates (`score()`'s rows — each is copied, nothing
@@ -1658,6 +1723,20 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
       4. READ IN THE ORDER OF THE FIGURE PRINTED. Before 3.0 a list ran 66.8,
          43.8, 57.5, 63.3: pick order, with nothing on the screen to say why.
 
+    `specific=False` drops 4.1's three rules for telling a counter from an
+    all-round deck (`MIN_LIFT`, `ALL_ROUND`, `GENERIC_WEIGHT`): a teammate's
+    own list since 5.0 (`personal_plan`), where what makes the lists differ
+    is the player, not how unusual a deck is.
+
+    `by_wincon=True` caps the list at `per_family` decks of one WIN CONDITION
+    (a row's `winCon`, the card), not of one bot archetype — the bot files
+    Battle Ram, Ram Rider and Royal Hogs lists under one key and two Mortar
+    lists under another, so "two of an archetype" said little about how many
+    different ways to win a list offers (5.0). `floor_only=True` never returns
+    a row under `FLOOR_RATE`, not even the one row that otherwise says nothing
+    clears it: on Team Analysis no deck expected to lose is shown (asked for
+    by name, 2026-10-14).
+
     `first` is a row (matched by `key`) that leads whatever its figure — the
     #1 a squad assigned this teammate. Each row comes back with `vs` (its rate
     against each family) and `answers` (the families it is the list's best
@@ -1676,10 +1755,10 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         lift = lift_of(c)
         if lift is not None:
             c["lift"] = round(lift, 1)
-        if c.get("edge") is not None and c["edge"] > 0:
+        if specific and c.get("edge") is not None and c["edge"] > 0:
             c["_v"] -= GENERIC_WEIGHT * float(c["edge"])
         # ALL-ROUND: rated, and not specifically better against them.
-        c["_round"] = lift is not None and lift < MIN_LIFT
+        c["_round"] = specific and lift is not None and lift < MIN_LIFT
         pool.append(c)
     if not pool:
         return []
@@ -1690,11 +1769,16 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     count: dict[str, int] = {}
     relaxed = [False]
 
+    def cap_key(r) -> str:
+        if by_wincon and r.get("winCon"):
+            return "wc:" + str(r["winCon"])
+        return r.get("archetype") or ""
+
     def fits(r, skip=None) -> bool:
         """Whether `r` may join the list (ignoring the row `skip`, about to go)."""
-        a = r.get("archetype") or ""
-        n = count.get(a, 0) - (1 if skip is not None and (skip.get("archetype") or "") == a else 0)
-        if n >= PER_ARCHETYPE:
+        a = cap_key(r)
+        n = count.get(a, 0) - (1 if skip is not None and cap_key(skip) == a else 0)
+        if n >= per_family:
             return False
         if r["_round"] and not relaxed[0]:
             held = sum(1 for c in chosen if c["_round"] and c is not skip)
@@ -1712,7 +1796,7 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     def take(r) -> None:
         chosen.append(r)
         subs.update(_subsets(frozenset(r.get("cards") or []), SAME_DECK_OVERLAP))
-        a = r.get("archetype") or ""
+        a = cap_key(r)
         count[a] = count.get(a, 0) + 1
 
     def drop(r) -> None:
@@ -1720,12 +1804,14 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         subs.clear()
         for c in chosen:
             subs.update(_subsets(frozenset(c.get("cards") or []), SAME_DECK_OVERLAP))
-        a = r.get("archetype") or ""
+        a = cap_key(r)
         count[a] = count.get(a, 0) - 1
 
     lead = None
     if first is not None:
         lead = next((r for r in pool if r["key"] == first["key"]), None)
+        if lead is not None and floor_only and _rate(lead) < FLOOR_RATE:
+            lead = None
         if lead is not None:
             take(lead)
 
@@ -1747,7 +1833,7 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
             if id(r) in listed or r is lead or _rate(r) < FLOOR_RATE or not fits(r):
                 continue
             take(r)
-    if not chosen:
+    if not chosen and not floor_only:
         # Nothing clears the floor. One row, at its own figure, says so better
         # than an empty board that reads as "no data".
         take(pool[0])
@@ -2134,6 +2220,273 @@ def squad_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS):
         if c["tag"] and c["answered"]:
             lists[c["tag"]][0].setdefault("covers", []).append(c["archetype"])
     return lists, cover
+
+
+# ── 4d. 5.0: each teammate's own list, and who takes whom ───────────────────
+#
+# Reported 2026-10-14 against brain 4.1: "decks repetitive for more players".
+# Measured on a live 4v4 the same day: against one opponent all four teammates
+# were offered the same Giant 62.2, Lava Hound 58.0, Log Bait 57.8 and Balloon
+# 57.1, and the whole plan's 160 rows held 67 distinct decks. `squad_plan`
+# gave each teammate a different #1 inside a three-point band and nothing more:
+# below the #1 every list was the same population ranking, and a teammate's
+# own decks were worth 1.5 points against it.
+#
+# WHAT MAKES TWO TEAMMATES' LISTS DIFFERENT IS THE TEAMMATES, so 5.0 builds
+# each list out of the player:
+#
+#   1. THEIR WIN CONDITIONS. A list is decks of the win conditions they play
+#      (`FAMILIAR_SHARE` of their games in the window) — their own lists and
+#      the pool's — with at most `NEW_SLOTS` rows of a win condition they do
+#      not play. A coach adds a deck to somebody's repertoire; they do not hand
+#      them a list of strangers.
+#   2. THEIR RECORD WITH EACH WIN CONDITION. `shift` is `player_skill`'s
+#      measured term (wins over expectation with that win condition, shrunk),
+#      the one Coach Assist prints in every figure: a list of this teammate's
+#      Hog decks is rated for THEM.
+#   3. ONE TEAMMATE A DECK. A pool deck goes on one list per opponent
+#      (`SHARE_MAX`), to whoever values it most; two Mortar players get two
+#      different Mortar lists.
+#
+# Nothing here invents a deck and nothing lowers a floor: every row is still
+# a real list rated against what the opponent plays, none under `FLOOR_RATE`.
+
+#: A win condition is one of a teammate's when it holds this share of their
+#: games in the window (`personal_plan`'s `wincons`).
+FAMILIAR_SHARE = 0.05
+
+#: Rows on a teammate's list whose win condition is not theirs.
+NEW_SLOTS = 3
+
+#: A list shorter than this is filled past `NEW_SLOTS`, then with decks a
+#: teammate earlier in the order already holds — a short list is worse than
+#: a shared row.
+MIN_LIST = 5
+
+#: How many teammates' lists one pool deck may be on, against one opponent.
+SHARE_MAX = 1
+
+
+def _logit(p: float) -> float:
+    p = min(max(p, 1e-4), 1.0 - 1e-4)
+    return math.log(p / (1.0 - p))
+
+
+def _sig(z: float) -> float:
+    return 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, z))))
+
+
+def personal_rate(rate: float, shift: float) -> float:
+    """A win rate in percent, moved by `shift` log-odds (`player_skill`)."""
+    if not shift:
+        return float(rate)
+    return round(100.0 * _sig(_logit(float(rate) / 100.0) + float(shift)), 1)
+
+
+def _personal_row(r: dict, p: dict) -> dict:
+    """One candidate row, as it is for player `p`: rated with their record
+    with its win condition, marked familiar or not."""
+    c = dict(r)
+    if "vs" not in c:
+        c["vs"] = vs_archetypes(c)
+    wc = c.get("winCon")
+    shift = float((p.get("shift") or {}).get(wc) or 0.0) if wc else 0.0
+    base = _rate(c)
+    if shift:
+        mine = personal_rate(base, shift)
+        c["baseRate"] = base
+        c["expectedWinRate"] = c["matchupValue"] = mine
+        c["skillShift"] = round(mine - base, 1)
+        c["vs"] = {a: personal_rate(v, shift) for a, v in c["vs"].items()}
+        c["recommendationScore"] = round(
+            float(c.get("recommendationScore") or base) + (mine - base), 3)
+    share = float((p.get("wincons") or {}).get(wc) or 0.0) if wc else 0.0
+    c["winConShare"] = round(share, 3)
+    c["familiar"] = bool(c.get("owner")) or share >= FAMILIAR_SHARE
+    c["known"] = 8 if c.get("owner") else known_cards(c.get("cards"), p.get("cards"))
+    c["personalScore"] = round(
+        float(c.get("recommendationScore") or _rate(c)) + _known_bonus(c["known"]), 3)
+    return c
+
+
+#: Points of claim per whole share of a teammate's play: when two teammates
+#: want one pool deck, it goes to the one whose win condition it is more of.
+#: Ten — a player on Golem 90% of the time claims a Golem list over one on it
+#: 30% unless that list rates six points better for the second.
+CLAIM_WEIGHT = 10.0
+
+
+def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
+                  new_slots: int = NEW_SLOTS, share_max: int = SHARE_MAX,
+                  min_list: int = MIN_LIST, per_wincon: int = PER_ARCHETYPE):
+    """Every teammate's list against ONE opponent, each built out of that
+    teammate (5.0; see the section note).
+
+    `players` is `[{"tag", "own": [scored rows], "cards": set, "wincons":
+    {win condition: share of their games}, "shift": {win condition: log-odds}}]`
+    in roster order. `pool` is the population, scored against `threats`; each
+    row carries `winCon` (its win condition, as `player_skill` names one).
+
+    Returns `(lists, cover)` in `squad_plan`'s shape: `lists[tag]` is that
+    teammate's list (copies; nothing the caller holds is written), strongest
+    first, its head marked `squadPick`; `cover` is one row per archetype of
+    the projection saying which head answers it best.
+
+    THE POOL IS SHARED OUT BY CLAIMS. Every (teammate, pool deck) pair claims
+    with the deck's figure for them plus `CLAIM_WEIGHT` times its win
+    condition's share of their play; the strongest claims are granted first,
+    `share_max` teammates a deck, at most `limit` decks of their own win
+    conditions and `new_slots` of others a teammate. Each list is then chosen
+    from their own decks and what they were granted (`counters`). A list
+    shorter than `min_list` is topped up — first from decks nobody holds, then
+    from decks a teammate already has — keeping every row it already had.
+    """
+    weight = archetype_weights(threats)
+    plays = [{"family": a, "share": w}
+             for a, w in sorted(weight.items(), key=lambda kv: (-kv[1], kv[0]))]
+    order = {p["tag"]: i for i, p in enumerate(players)}
+
+    cand: dict[str, list[dict]] = {}
+    for p in players:
+        own = list(p.get("own") or [])
+        cand[p["tag"]] = [_personal_row(r, p)
+                          for r in own + fills(own, pool or [], need=len(pool or []))]
+
+    claims = []
+    for tag, rows in cand.items():
+        for r in rows:
+            if r.get("owner") or _rate(r) < FLOOR_RATE:
+                continue
+            claim = r["personalScore"] + CLAIM_WEIGHT * float(r.get("winConShare") or 0.0)
+            claims.append((-claim, order[tag], r["key"], tag, r))
+    claims.sort(key=lambda c: c[:3])
+    taken: dict[str, int] = {}
+    held: dict[str, list[dict]] = {t: [] for t in cand}
+    fam_n: dict[str, int] = {t: 0 for t in cand}
+    new_n: dict[str, int] = {t: 0 for t in cand}
+    for _neg, _o, key, tag, r in claims:
+        if taken.get(key, 0) >= share_max:
+            continue
+        if r["familiar"]:
+            if fam_n[tag] >= limit:
+                continue
+            fam_n[tag] += 1
+        else:
+            if new_n[tag] >= new_slots:
+                continue
+            new_n[tag] += 1
+        held[tag].append(r)
+        taken[key] = taken.get(key, 0) + 1
+
+    lists: dict[str, list[dict]] = {}
+    for tag in order:
+        rows = cand.get(tag) or []
+        if not rows:
+            lists[tag] = []
+            continue
+        mine = [r for r in rows if r.get("owner")] + held[tag]
+        picked = counters(mine, plays, limit=limit, score_key="personalScore", specific=False,
+                                  by_wincon=True, per_family=per_wincon, floor_only=True)
+        want = min(min_list, limit)
+        if len(picked) < want:
+            # Topped up, never replaced: what the list holds is kept.
+            free = [r for r in rows if not r.get("owner") and taken.get(r["key"], 0) < share_max]
+            for tier in (mine + free, rows):
+                keep = {r["key"] for r in picked}
+                picked = counters(tier, plays, limit=max(want, len(picked)),
+                                  score_key="personalScore", specific=False,
+                                  by_wincon=True, per_family=per_wincon, floor_only=True,
+                                  adjust=lambda c, _k=keep: 1000.0 if c["key"] in _k else 0.0)
+                if len(picked) >= want:
+                    break
+            for r in picked:
+                if not r.get("owner") and r["key"] not in {h["key"] for h in held[tag]}:
+                    taken[r["key"]] = taken.get(r["key"], 0) + 1
+        if picked:
+            picked[0]["squadPick"] = True
+        lists[tag] = picked
+
+    cover = []
+    for a, w in sorted(weight.items(), key=lambda kv: (-kv[1], kv[0])):
+        best = None
+        for tag in order:
+            r = (lists.get(tag) or [None])[0]
+            if r is None or a not in (r.get("vs") or {}):
+                continue
+            if best is None or r["vs"][a] > best[1]["vs"][a]:
+                best = (tag, r)
+        cover.append({
+            "archetype": a,
+            "likelihood": round(w, 4),
+            "tag": best[0] if best else None,
+            "deck": best[1].get("name") if best else None,
+            "winRate": best[1]["vs"][a] if best else None,
+            "answered": bool(best and best[1]["vs"][a] >= ANSWERED),
+        })
+    for c in cover:
+        if c["tag"] and c["answered"]:
+            lists[c["tag"]][0].setdefault("covers", []).append(c["archetype"])
+    return lists, cover
+
+
+def lineup(values, blue, red) -> list[dict]:
+    """WHO TAKES WHOM: the pairing of teammates (`blue`) and opponents (`red`)
+    with the highest total win chance, every player of the smaller side paired.
+
+    `values[(blue tag, red tag)]` is that teammate's best figure against that
+    opponent, absent when they have nothing to bring. A pair with no figure
+    can still be made (it counts as nothing), so a roster with a gap is paired
+    rather than left half empty. Exact: a search over the smaller side's
+    subsets, at most 12 x 2^12 states. Ties keep roster order, so a board
+    reloads the same.
+
+    Returns `[{"blue", "red", "winRate"}]` in `red`'s order.
+    """
+    blue, red = list(blue), list(red)
+    if not blue or not red:
+        return []
+    flip = len(blue) < len(red)
+    big, small = (red, blue) if flip else (blue, red)
+    n = len(small)
+    bonus = 1000.0       # a made pair always beats an unmade one
+
+    def worth(b: str, s: str) -> float:
+        v = values.get((s, b) if flip else (b, s))
+        return bonus + (float(v) if v is not None else 0.0)
+
+    full = (1 << n) - 1
+    neg = float("-inf")
+    best = [[neg] * (1 << n) for _ in range(len(big) + 1)]
+    back: list[list] = [[None] * (1 << n) for _ in range(len(big) + 1)]
+    best[0][0] = 0.0
+    for i, b in enumerate(big):
+        row, nxt, link = best[i], best[i + 1], back[i + 1]
+        for mask in range(1 << n):
+            v = row[mask]
+            if v == neg:
+                continue
+            if v > nxt[mask]:
+                nxt[mask], link[mask] = v, (mask, None)
+            for j in range(n):
+                bit = 1 << j
+                if mask & bit:
+                    continue
+                w = v + worth(b, small[j])
+                if w > nxt[mask | bit]:
+                    nxt[mask | bit], link[mask | bit] = w, (mask, j)
+    end = max(range(1 << n), key=lambda m: (best[len(big)][m], m == full))
+    pairs = []
+    mask = end
+    for i in range(len(big), 0, -1):
+        prev, j = back[i][mask]
+        if j is not None:
+            b, s = big[i - 1], small[j]
+            pairs.append((s, b) if flip else (b, s))
+        mask = prev
+    rank = {t: k for k, t in enumerate(red)}
+    out = [{"blue": b, "red": r, "winRate": values.get((b, r))} for b, r in pairs]
+    out.sort(key=lambda x: rank[x["red"]])
+    return out
 
 
 # ── 5. Saying why, from the evidence and nothing else ───────────────────────

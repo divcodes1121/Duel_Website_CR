@@ -12,7 +12,7 @@ import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import { VsMark } from '../../VsMark/VsMark';
-import { duelChip, duelDeckLabel, duelTitle } from '../../../utils/duelFigures';
+import { crlTitle, duelChip, duelDeckLabel, duelTitle } from '../../../utils/duelFigures';
 import { balanceChips, chipLabels, recentTitle } from '../../../utils/bringAgainst';
 import { CARDS_BY_KEY } from '../../../data/cards';
 import styles from './TeamAnalysis.module.css';
@@ -153,6 +153,34 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
   );
 }
 
+/**
+ * WHO TAKES WHOM (brain 5.0, match plans only): every opponent paired with a
+ * teammate so the squad's total win chance is the highest it can be
+ * (`team_scout.lineup`), and the deck that teammate brings. Figures and
+ * names only.
+ */
+function Lineup({ rows }: { rows: NonNullable<TeamReport['lineup']> }) {
+  return (
+    <section className={styles.lineup} aria-label="Lineup" data-lineup>
+      <h3 className={styles.galleryTitle}>
+        Lineup
+        <span className={styles.galleryCount}>{rows.length}</span>
+      </h3>
+      <ul className={styles.lineupList}>
+        {rows.map((r) => (
+          <li key={r.red.tag} className={styles.lineupRow}>
+            <span className={styles.lineupRed}>{r.red.name}</span>
+            <span className={styles.lineupVs} aria-hidden="true">vs</span>
+            <span className={styles.lineupBlue}>{r.blue.name}</span>
+            <span className={styles.lineupDeck}>{r.deck ?? '—'}</span>
+            <span className={styles.lineupRate}>{pct(r.winRate)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** The gallery: one card per opponent, click to open. */
 export function FolderGallery({
   report,
@@ -163,6 +191,8 @@ export function FolderGallery({
 }) {
   return (
     <>
+      {report.lineup && report.lineup.length > 0 && <Lineup rows={report.lineup} />}
+
       <h3 className={styles.galleryTitle}>
         {report.mode === 'scout' ? 'Player by player' : 'Opponents'}
         <span className={styles.galleryCount}>{report.folders.length}</span>
@@ -170,7 +200,12 @@ export function FolderGallery({
 
       <div className={styles.folderGrid}>
         {report.folders.map((f) => {
-          const best = f.recommended[0];
+          /* A MATCH PLAN'S FOLDER SHOWS WHO TAKES THEM (5.0): the teammate the
+             lineup pairs with this opponent, and their #1. */
+          const mate = f.assigned
+            ? f.perPlayer.find((pp) => pp.owner.tag === f.assigned)
+            : undefined;
+          const best = mate?.decks[0] ?? f.recommended[0];
           return (
             <button
               key={f.player.tag}
@@ -203,7 +238,11 @@ export function FolderGallery({
                   </span>
                   <span className={styles.folderLead}>
                     <strong>{pct(best.expectedWinRate)}</strong>{' '}
-                    {best.owner ? (
+                    {mate ? (
+                      <>
+                        {mate.owner.name} · {best.name}
+                      </>
+                    ) : best.owner ? (
                       <>
                         with {best.owner.name}&apos;s {best.name}
                       </>
@@ -266,7 +305,11 @@ function Recommendation({ rec, rank, labels }: {
               proven in real DUEL games against what this opponent brings — the
               teammate's own first — and the label is what says why a deck the
               ladder ranks lower sits this high. */}
-          {duelDeckLabel(rec) && <span className={styles.recDuel}>{duelDeckLabel(rec)}</span>}
+          {duelDeckLabel(rec) && (
+            <span className={styles.recDuel} data-origin={rec.origin} title={crlTitle(rec)}>
+              {duelDeckLabel(rec)}
+            </span>
+          )}
           <span className={styles.recDeck}>{rec.name}</span>
           {/* WHO FLIES IT, OR THAT NOBODY HERE DOES. An owned deck names its
               pilot; a fill says it is a Deckkies pick. A scouting row belongs
@@ -282,6 +325,11 @@ function Recommendation({ rec, rank, labels }: {
               {!rec.owner && rec.known !== undefined && rec.known > 0 && (
                 <span className={styles.recKnown}> · {rec.known}/8 cards they play</span>
               )}
+              {/* A WIN CONDITION THIS TEAMMATE DOES NOT PLAY (5.0): at most
+                  three such rows a list, and they are said to be new. */}
+              {!rec.owner && rec.familiar === false && (
+                <span className={styles.recNew} data-new-wincon> · new win con</span>
+              )}
             </span>
           )}
         </div>
@@ -295,6 +343,11 @@ function Recommendation({ rec, rank, labels }: {
               /* How much the list was played in the History window picked
                  (2026-10-11). A tooltip: every suggested row was played in it. */
               recentTitle(rec.recent),
+              /* THIS TEAMMATE'S RECORD WITH THE WIN CONDITION (5.0,
+                 `player_skill`) is in the figure; the tooltip says by how much. */
+              rec.skillShift
+                ? `Their own record with this win condition: ${rec.skillShift > 0 ? '+' : ''}${rec.skillShift.toFixed(1)} points`
+                : undefined,
               ...balanceChips(rec, (k) => CARDS_BY_KEY.get(k)?.name ?? k).map((m) => m.title),
             ]
               .filter(Boolean)

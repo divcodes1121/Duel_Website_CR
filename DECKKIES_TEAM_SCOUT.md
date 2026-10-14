@@ -803,6 +803,50 @@ days picked, because a deck that has left the meta is not one to suggest.
 The record, with the tables: README "The day window picks the suggested decks",
 server/README "The day window on the suggestions".
 
+## 4o. What the best duel players bring, and a list per teammate (2026-10-14, brain 5.0)
+
+**Built and verified, not yet deployed.** The README chapter "What the best duel
+players bring, and a list per teammate" has every table; this is what changed in
+the brain and why.
+
+Reported against 4.1: *"the recommendation decks are so trash ... random decks,
+decks repetitive for more players ... get battles from CRL duel rows, meta decks
+going on in the time frame"*, then *"versatility, different win conditions,
+ranked and matched against the opponent's decks, keep >50% decks"*.
+
+| was (4.1) | is (5.0) |
+|---|---|
+| pool: every vetted ladder list + the CRL group's catalogue lists (786, windowed to ~557) | `team_analysis._competitive_pool(days, until)`: the CRL group's duel lists IN THE WINDOW (2+ games) + the window's 40 most played vetted lists — 7 d ~220, 30 d ~500 |
+| two lists of one BOT ARCHETYPE on a list | one list of one WIN CONDITION (the card) on a scouting list, three on a teammate's (`counters(by_wincon=True, per_family=...)`) |
+| one row under 50% when nothing clears the floor | none (`counters(floor_only=True)`) |
+| scouting lists of a roster chosen independently | a deck already on earlier opponents' lists costs 1 point a listing, at most 2.5, in the CHOOSING (`SCOUT_SPREAD_*`) |
+| `squad_plan`: different #1s inside a 3-point band, the same population ranking below | `personal_plan`: decks of the teammate's own win conditions (5%+ of their games), rated with their `player_skill` record, at most `NEW_SLOTS` (3) of other win conditions, a pool deck to ONE teammate per opponent by claims (figure + 10 x the win condition's share of their play), short lists topped up keeping what they had |
+| — | `lineup`: the pairing of teammates and opponents with the highest total (exact search, at most 12 x 2^12 states); `report.lineup`, `folder.assigned` |
+
+`counters(specific=...)` keeps 4.1's specificity rules on a SCOUTING list
+(without them the most repeated list went from 25% to 42% of opponents) and
+drops them on a teammate's, where the player is what makes lists differ.
+
+**Measured blind** (300 opponents of 1-6 October, 150 CRL players; rated by the
+card model fitted before 1 October, judged by one fitted from 7 October):
+rows the CRL group brought 36.7% -> 96.7%, win conditions a list 7.1 -> 10.0,
+the #1 +0.10 [-0.53, +0.74], top three -0.53, all ten -0.60, rows printed under
+50% 0 -> 0, most repeated deck in a roster of six 2.89 -> 2.78 lists; match plans:
+distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15, a different #1
+per teammate 124 -> 151 of 152, the best teammate's #1 63.88 -> 64.43, every row
+58.17 -> 56.28 (the cost: the strongest rows are no longer everybody's).
+
+**Second consumers, unchanged:** Coach Assist's counters read `_window_pool`
+(the 4.1 pool) and were measured on it; `coach_daily` calls `score`, `diversify`
+and `threat_space`, none of which changed. `squad_plan` is kept (its tests
+still pin it) and no longer called by Team Analysis.
+
+**Two bugs the replay and the browser found before anything shipped**: a
+helper `fam` inside `counters` shadowed by the repair loop's own `fam` (match
+plans fell back to shared lists), and a function `spread` in `_folder` that
+overwrote the folder's archetype bars (a scouting report would not serialise).
+Both have tests that fail on the old code.
+
 ## 4e. Twelve a side, and the timing fixed at the root (2026-09-21)
 
 Asked for: rosters of 10–12 (the cap was 10), and "fix the timing issue, it

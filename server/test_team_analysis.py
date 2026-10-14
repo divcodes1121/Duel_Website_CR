@@ -776,6 +776,13 @@ check("and carries no roster-wide block", "overall" not in rep,
 print(NL + "the report — scouting")
 
 scout_rep = ta.analyze([], ["#R1"], days=30)
+import json as _json  # noqa: E402
+try:
+    _json.dumps(scout_rep)
+    _ser = True
+except TypeError as _e:
+    _ser = str(_e)
+check("a scouting report is plain JSON, as the route sends it", _ser is True, str(_ser))
 check("an empty blue roster IS scout mode", scout_rep["mode"] == "scout",
       "the mode is an absence rather than a flag, so the incoherent "
       "combination — a squad pasted AND scout asked for — cannot be expressed")
@@ -1018,7 +1025,7 @@ finally:
 
 print(NL + "counters to what they play")
 
-check("the brain is 4.1", ts.BRAIN_VERSION == "team-scout-4.1" and folder["brain"] == ts.BRAIN_VERSION)
+check("the brain is 5.0", ts.BRAIN_VERSION == "team-scout-5.0" and folder["brain"] == ts.BRAIN_VERSION)
 
 # DUEL LISTS COME FROM THE NAMED GROUP ONLY, and every pool list knows its own
 # rate against the field.
@@ -1443,6 +1450,13 @@ ta._pdecks.played = _real
 ta.dcx._snap = lambda: {"cells": {}, "archetypes": [], "computedAt": 1000.0}
 ta._SCOUT_POOL = None
 ta._reset_counter_pool()
+# THE CHECKS BELOW ARE THE ENGINE'S WIRING (rating, selection, views), on the
+# fixture's candidates: since 5.0 the pool comes from `_competitive_pool`,
+# which has its own section further down.
+_saved_cp = ta._competitive_pool
+# The stub is the 4.1 window pool, so the window checks below keep testing
+# how a pool, its days and each list's play reach the rows.
+ta._competitive_pool = lambda days, until=None: ta._window_pool(days)
 _bring = ta.bring("#R1")
 check("bring() answers with what they play and the decks to bring",
       _bring["plays"] and _bring["decks"] and _bring["brain"] == ts.BRAIN_VERSION, str(_bring.get("reason")))
@@ -1640,6 +1654,16 @@ try:
           ta.bring("#R1")["pool"]["window"]["days"] == ta.DEFAULT_DAYS)
 
     _s7 = ta.analyze([], ["#R1"], days=7)
+    try:
+        __import__("json").dumps(_s7)
+        __import__("json").dumps(ta.analyze(["#B1"], ["#R1"], days=7))
+        _ser7 = True
+    except TypeError as _e7:
+        _ser7 = str(_e7)
+    check("a scouting report and a match plan WITH ROWS are plain JSON (5.0: a local "
+          "function once shadowed the folder's `spread`)", _ser7 is True, str(_ser7))
+    check("...and the folder's archetype bars are still a list",
+          isinstance(_s7["folders"][0]["spread"], list))
     check("a scouting report at seven days is the same pool and says so",
           _s7["pool"]["window"]["applied"] and _s7["pool"]["decks"] == 2
           and [d["key"] for d in _s7["folders"][0]["recommended"]] == [_wk["hog"]]
@@ -1769,6 +1793,186 @@ dcx.deck_profile = fake_deck_profile
 ta.dcx._snap = lambda: None
 ta._SCOUT_POOL = None
 ta._reset_counter_pool()
+
+
+ta._competitive_pool = _saved_cp
+
+
+print(NL + "5.0: the pool is what the CRL group brings, and the window's meta")
+import datetime as _dt5  # noqa: E402
+
+CR1, CR2, CR3 = cards("cra"), cards("crb"), cards("crc")     # lists the group brought
+ME1, ME2, ME3 = cards("mea"), cards("meb"), cards("mec")     # vetted lists
+SH5 = list(SHORT)                                            # cannot fill three slots
+_gw_calls = []
+
+
+def _gw5(tags, since, until):
+    _gw_calls.append((tuple(sorted(tags)), since, until))
+    return {_k(CR1): [5, 3, 2], _k(CR2): [2, 1, 1], _k(CR3): [1, 1, 1],
+            _k(ME1): [4, 3, 2], _k(SH5): [9, 5, 3]}
+
+
+# Play by day, ages counted back from 14 October. ME1 and ME2 are played now,
+# ME3 was heavy before the window and is nearly gone (fading).
+_ACT5 = {_k(ME1): {0: 60, 3: 60, 20: 300}, _k(ME2): {1: 40, 5: 40, 20: 400},
+         _k(ME3): {2: 3, 4: 3, 20: 3000}}
+_fake5 = types.SimpleNamespace(
+    group_window=_gw5,
+    activity=lambda: {"day": "20261014", "games": _ACT5},
+    status=lambda: {"buildId": "b5"},
+    available=lambda: True,
+)
+_seeds5 = {"golem": [{"cards": list(ME1), "games": 400, "archetypes": {"xbow": {
+               "wins": 60, "losses": 40, "games": 100, "winRate": 60.0}}}],
+           "hog": [{"cards": list(ME2), "games": 300, "archetypes": {}},
+                   {"cards": list(ME3), "games": 300, "archetypes": {}}]}
+_saved5 = (ta._duel_index, ta._load_cohorts, ta.DUEL_POOL_COHORT, ta.dcx.seeds,
+           ta._set_field_rates, ta._today, ta.META_LISTS, ta.CRL_MIN_GAMES,
+           ta._COMP_CACHE["by"], ta._COMP_CACHE["building"])
+ta._duel_index = _fake5
+ta._load_cohorts = lambda: {"crl": {"#TOP1", "#TOP2"}}
+ta.DUEL_POOL_COHORT = "crl"
+ta.dcx.seeds = lambda: _seeds5
+ta._set_field_rates = lambda cands: 0
+ta._today = lambda: _dt5.date(2026, 10, 14)
+ta._COMP_CACHE["by"], ta._COMP_CACHE["building"] = {}, set()
+try:
+    check("a window is held to 7..90 days, 30 when none is asked",
+          [ta.pool_days(d) for d in (None, 0, 3, 7, 15, 30, 90, 4000)]
+          == [30, 30, 7, 7, 15, 30, 90, 90] and ta.POOL_DEFAULT_DAYS == 30)
+    p7, i7 = ta._competitive_pool(7)
+    keys7 = {c.key: c for c in p7}
+    check("the group's lists of the window are read, for its tags, between the window's days",
+          _gw_calls and _gw_calls[-1] == (("#TOP1", "#TOP2"), "20261008", "20261015"),
+          str(_gw_calls[-1:]))
+    check("a list the group brought twice or more is in the pool, once is not",
+          _k(CR1) in keys7 and _k(CR2) in keys7 and _k(CR3) not in keys7
+          and ta.CRL_MIN_GAMES == 2, str(sorted(keys7)))
+    check("a list that cannot fill all three special slots is not, and is counted",
+          _k(SH5) not in keys7 and i7["slotGaps"] == 1, str(i7.get("slotGaps")))
+    check("the window's played vetted lists are in it; one fading out of it is not",
+          _k(ME1) in keys7 and _k(ME2) in keys7 and _k(ME3) not in keys7, str(sorted(keys7)))
+    check("a list the group brought is labelled crl, with the group's record on it",
+          keys7[_k(CR1)].origin == "crl" and keys7[_k(CR1)].crl == [5, 3, 2]
+          and keys7[_k(ME1)].origin == "crl" and keys7[_k(ME1)].meta_rank == 1,
+          str((keys7[_k(CR1)].origin, keys7[_k(CR1)].crl, keys7[_k(ME1)].meta_rank)))
+    check("a meta list nobody of the group brought is labelled meta, ranked by its play",
+          keys7[_k(ME2)].origin == "meta" and keys7[_k(ME2)].crl is None
+          and keys7[_k(ME2)].meta_rank == 2, str((keys7[_k(ME2)].origin, keys7[_k(ME2)].meta_rank)))
+    check("a seed keeps the seed's own records; a list outside the seeds reads its own",
+          isinstance(keys7[_k(ME1)].profile, ta._SeedProfile)
+          and isinstance(keys7[_k(CR1)].profile, ta._ListProfile))
+    check("the group's lists lead the pool, most brought first",
+          [c.key for c in p7][:2] == [_k(CR1), _k(ME1)], str([c.key for c in p7]))
+    check("the pool says what it holds, and over which days",
+          i7["days"] == 7 and i7["from"] == "2026-10-08" and i7["to"] == "2026-10-14"
+          and i7["group"] == "crl" and i7["crlLists"] == 3 and i7["metaLists"] == 2
+          and i7["crlGames"] == 11 and i7["pool"] == 4, str(ta._pool_public(i7)))
+    check("...and a meta list's play in the window rides on its row (`states`)",
+          i7["states"].get(_k(ME1))[1] == 120 and "states" not in ta._pool_public(i7),
+          str(i7["states"].get(_k(ME1))))
+    check("the meta half is capped at META_LISTS", ta.META_LISTS == 40)
+    ta.META_LISTS = 1
+    ta._COMP_CACHE["by"] = {}
+    p1, _i1 = ta._competitive_pool(7)
+    check("...the most played first",
+          {c.key for c in p1 if c.meta_rank} == {_k(ME1)}, str([(c.key, c.meta_rank) for c in p1]))
+    ta.META_LISTS = _saved5[6]
+    ta._COMP_CACHE["by"] = {}
+
+    # A REPLAY reads no game after the day it stands on.
+    _gw_calls.clear()
+    past, ipast = ta._competitive_pool(7, until=_dt5.date(2026, 10, 1))
+    check("a window anchored in the past reads the group's games before it",
+          _gw_calls[-1][1:] == ("20260925", "20261002"), str(_gw_calls[-1:]))
+    check("...and the play by day shifted back to it (ME1's games of 14 Oct are after it)",
+          ipast["to"] == "2026-10-01" and _k(ME1) not in {c.key for c in past if c.origin == "meta"},
+          str([(c.key, c.origin) for c in past]))
+
+    # KEPT, and rebuilt beside the one in hand when its sources move.
+    ta._COMP_CACHE["by"] = {}
+    a5 = ta._competitive_pool(15)
+    check("a window's pool is kept", ta._competitive_pool(15) is a5)
+    check("another window is another pool", ta._competitive_pool(30) is not a5)
+    _key0 = ta._counter_key
+    _built = []
+    _real_build = ta._build_competitive_pool
+
+    def _slow_build(d, last):
+        _built.append(d)
+        return _real_build(d, last)
+
+    ta._build_competitive_pool = _slow_build
+    ta._counter_key = lambda: ("moved",)
+    try:
+        stale = ta._competitive_pool(15)
+        check("when its sources move the pool in hand still answers at once", stale is a5)
+        for _ in range(200):
+            if ta._COMP_CACHE["by"].get((15, "2026-10-14"), (None,))[0] == ("moved",):
+                break
+            __import__("time").sleep(0.01)
+        fresh = ta._competitive_pool(15)
+        check("...while the next is built beside it, once, and then answers",
+              fresh is not a5 and _built == [15] and fresh[1]["days"] == 15, str(_built))
+    finally:
+        ta._counter_key = _key0
+        ta._build_competitive_pool = _real_build
+
+    # THE WIN CONDITION, as `player_skill` names one.
+    _real_ci = ta.dx.card_info
+    _wc_info = {"hog-rider": {"is_win_condition": True, "elixir": 4},
+                "golem": {"is_win_condition": True, "elixir": 8},
+                "skeletons": {"elixir": 1}}
+    ta.dx.card_info = lambda c: _wc_info.get(c, {})
+    ta._WINCON_CACHE.clear()
+    try:
+        check("a deck's win condition is its priciest win-condition card",
+              ta._wincon(["skeletons", "hog-rider", "golem"]) == "golem"
+              and ta._wincon(["skeletons"]) is None and ta._wincon([]) is None)
+        mate = {"decks": [{"cards": ["hog-rider"] + cards("h")[:7], "matches": 30},
+                          {"cards": ["golem"] + cards("g")[:7], "matches": 10},
+                          {"cards": ["skeletons"] + cards("s")[:7], "matches": 60},
+                          {"cards": ["golem"] + cards("t")[:7], "matches": 0}]}
+        check("a teammate's win conditions are shares of their games with one",
+              ta._wincon_shares(mate) == {"hog-rider": 0.75, "golem": 0.25},
+              str(ta._wincon_shares(mate)))
+    finally:
+        ta.dx.card_info = _real_ci
+        ta._WINCON_CACHE.clear()
+    _real_ps = ta._ps
+    ta._ps = types.SimpleNamespace(
+        on=lambda: True, weights=lambda: (20.0, 2.0),
+        records=lambda tag: {"golem": [30, 20, 15.0]} if tag == "#S" else {},
+        skill=__import__("player_skill").skill)
+    try:
+        check("a teammate's record with a win condition is a shift in log-odds",
+              ta._skill_shifts("#S") == {"golem": 2.0 * (20 - 15.0) / (30 + 20.0)}
+              and ta._skill_shifts("#nobody") == {}, str(ta._skill_shifts("#S")))
+        ta._ps = types.SimpleNamespace(on=lambda: False)
+        check("...and none when the table's own holdout did not gain", ta._skill_shifts("#S") == {})
+        ta._ps = None
+        check("...or there is no table", ta._skill_shifts("#S") == {})
+    finally:
+        ta._ps = _real_ps
+
+    # NO GROUP: the meta half alone, said.
+    ta._COMP_CACHE["by"] = {}
+    ta._load_cohorts = lambda: {}
+    nog, inog = ta._competitive_pool(7)
+    check("with no group the pool is the window's meta, and says there was none",
+          inog["group"] is None and inog["crlLists"] == 0 and nog
+          and all(c.origin == "meta" for c in nog), str(ta._pool_public(inog)))
+    ta._COMP_CACHE["by"] = {}
+    _fake5.activity = lambda: None
+    empty, iempty = ta._competitive_pool(7)
+    check("with neither, an empty pool that says why", empty == [] and iempty["reason"] == "empty",
+          str(ta._pool_public(iempty)))
+finally:
+    (ta._duel_index, ta._load_cohorts, ta.DUEL_POOL_COHORT, ta.dcx.seeds,
+     ta._set_field_rates, ta._today, ta.META_LISTS, ta.CRL_MIN_GAMES,
+     ta._COMP_CACHE["by"], ta._COMP_CACHE["building"]) = _saved5
+    ta._COMP_CACHE["by"], ta._COMP_CACHE["building"] = {}, set()
 
 
 print(NL + "the fused rate")

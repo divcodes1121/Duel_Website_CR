@@ -1850,6 +1850,26 @@ the game" has the measurement.
   two decks side by side at 1440, stacked on a phone. Measured in a browser:
   inside the page at 1440 and 390, both themes.
 
+## Team Analysis on brain 5.0: the pills, the new-win-con tag and the lineup (2026-10-14)
+
+- **Every suggested row says where it comes from**: a green **CRL duel list**
+  pill (a list the CRL group brought to duels in the window; the tooltip says
+  `Brought to 12 duel games by 3 CRL players · 8 won`) or a maroon **Meta list**
+  pill (one of the window's 40 most played). The same words Coach Assist's
+  counters use. One pill, never broken (`white-space: nowrap`).
+- **A match plan row of a win condition the teammate does not play** ends its
+  owner line with `· new win con` (`data-new-wincon`). At most three a list.
+  The figure's tooltip says how much the teammate's own record with the win
+  condition moved it.
+- **The lineup** (`data-lineup`) sits above the opponents' folders: one line an
+  opponent — their name, `vs`, your teammate, the deck, the figure — and each
+  folder's face names its teammate and their #1. On a phone the deck name takes
+  its own line.
+- **The count line** above the results reads `462 CRL duel lists + 40 meta
+  lists · last 30 days`; its tooltip says which days and that no deck expected
+  to lose is listed.
+- No prose was added: names, figures, two pills and one short tag.
+
 ## The Recent Battles row (2026-10-02)
 
 One card per battle: a slim header (mode, score, result, time), then two tinted halves with

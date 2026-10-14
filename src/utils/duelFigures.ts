@@ -31,7 +31,24 @@ export function duelPickLabel(rec: Pick<TeamRecommendation, 'duelPick'>): string
 export function duelDeckLabel(
   rec: Pick<TeamRecommendation, 'duelPick' | 'origin'>,
 ): string | null {
+  // Brain 5.0 (2026-10-14): every pool list is one the CRL group brought to
+  // duels in the window or one of the window's most played lists, and the
+  // pill says which — the words Coach Assist's counters already use.
+  if (rec.origin === 'crl') return 'CRL duel list';
+  if (rec.origin === 'meta') return 'Meta list';
   return rec.origin === 'duel' || rec.duelPick ? 'Duel deck' : null;
+}
+
+/**
+ * The tooltip of a `CRL duel list` pill: what the group did with the list in
+ * the window — `Brought to 12 duel games by 3 CRL players · 8 won`. Undefined
+ * on a row that carries no such record.
+ */
+export function crlTitle(rec: Pick<TeamRecommendation, 'crl'>): string | undefined {
+  const c = rec.crl;
+  if (!c || !c.games) return undefined;
+  const players = `${c.pilots} CRL player${c.pilots === 1 ? '' : 's'}`;
+  return `Brought to ${c.games.toLocaleString('en-US')} duel game${c.games === 1 ? '' : 's'} by ${players} · ${c.wins} won`;
 }
 
 /**

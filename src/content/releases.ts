@@ -82,6 +82,20 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-14-team-scout-5',
+    date: '2026-10-14',
+    kind: 'improved',
+    title: 'Team Analysis suggests what the best duel players bring, and a list for each teammate',
+    body: [
+      'Every deck Team Analysis and the Deck Counter suggest now comes from two places only: decks the CRL players brought to duels in the days you picked (twice or more), and the 40 most played decks of those days. Each row says which — “CRL duel list” or “Meta list” — and a CRL list’s tooltip says how many games and players brought it. Until now about one suggested deck in three came from CRL duels; the rest were ladder lists, many of them unusual ones.',
+      'A scouting list is ten different win conditions, each matched against what that opponent plays, strongest first, and nothing expected to lose is listed. Across a roster, a deck already on earlier opponents’ lists gives way to a comparable one.',
+      'A match plan builds each teammate’s list out of that teammate: decks of the win conditions they play, rated with their own record with each, and at most three of a win condition they do not play (marked “new win con”). A suggested deck goes to one teammate per opponent, so lists no longer repeat — on your saved 10-player plans two teammates shared about six decks, now a fraction of one. A lineup above the folders pairs every opponent with the teammate whose best deck adds the most to the squad.',
+      'Checked blind on 300 real duel opponents, judged by a model that saw none of the games: the first deck suggested did as well as before while nearly every deck is now one top players really bring. The price: about half a point lower on the rest of a scouting list, and two points lower on a match plan’s average row, because the strongest decks are no longer handed to every teammate — the best deck each opponent gets is slightly better.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-12-coach-player-profile',
     date: '2026-10-12',
     kind: 'improved',

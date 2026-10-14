@@ -205,6 +205,15 @@ try:
 except Exception:  # noqa: BLE001 - deployment shape
     _duel = _duel_index = None
 
+#: EACH PLAYER'S RECORD WITH EACH WIN CONDITION (`player_skill`, 2026-10-12):
+#: wins over what each duel game should have gone, the term Coach Assist puts
+#: in every figure. Team Analysis reads it for a teammate's own list (5.0).
+#: Soft: without the table every teammate's figures are the pool's.
+try:
+    import player_skill as _ps
+except Exception:  # noqa: BLE001 - deployment shape
+    _ps = None
+
 # ── Floors ──────────────────────────────────────────────────────────────────
 
 #: Squad size cap per side. Mirrors `MAX_SQUAD` in `src/utils/squadParse.ts`,
@@ -313,6 +322,32 @@ PER_PLAYER_TOP_N = 10
 #: The per-teammate board keeps its own, smaller number — see
 #: `PER_PLAYER_TOP_N`, whose argument was about the board and not the model.
 SCOUT_TOP_N = 10
+
+#: Whether a SCOUTING list (and the Deck Counter's) keeps 4.1's rules for a
+#: counter specific to the opponent (`team_scout.counters(specific=...)`).
+#: Decided by the 5.0 replay; a teammate's list never uses them.
+SCOUT_SPECIFIC = True
+
+#: Lists of one WIN CONDITION (the card) on a scouting list, and on a
+#: teammate's list (5.0). Asked for: "versatility, different win conditions,
+#: ranked and matched against the opponent's decks" (2026-10-14).
+#:
+#: SCOUTING: one, so a list of ten is ten ways to win. Replayed (300
+#: opponents, judged blind): win conditions a list 7.2 -> 10.0, the #1 the
+#: same, all ten -0.4 points, the most repeated list 23.6% -> 30.5% of
+#: opponents. A TEAMMATE: three, because their list is built from the win
+#: conditions they play and a one-win-condition player needs more than one
+#: version of it: rows a teammate 8.1 -> 9.1, their own win conditions 66% ->
+#: 69% of rows, figures the same.
+SCOUT_PER_WINCON = 1
+MATE_PER_WINCON = 3
+
+#: A SCOUTING REPORT'S DECKS ARE SPREAD OVER THE ROSTER (5.0): a deck already
+#: on earlier opponents' lists is chosen as though this many points weaker a
+#: listing, at most the cap — `squad_plan`'s shared-backup rule (1 and 2.5),
+#: one level up. It moves a comparable deck aside, never a clearly better one.
+SCOUT_SPREAD_COST = 1.0
+SCOUT_SPREAD_CAP = 2.5
 
 #: Opponent decks shown on the left of a folder, and the spread they weight.
 #: Their long tail is noise for this purpose: a deck played once tells you
@@ -1081,7 +1116,7 @@ class _Candidate:
 
     __slots__ = ("cards", "key", "archetype", "name", "art", "inferred", "owner",
                  "games", "wins", "win_rate", "use_rate", "profile", "origin", "memo",
-                 "field", "act")
+                 "field", "act", "crl", "meta_rank", "wincon")
 
     def __init__(self, deck: dict, owner: dict | None, profile: "_DeckProfile"):
         # WHEN THE LIST WAS PLAYED, for a pool candidate: `{age in days:
@@ -1113,6 +1148,14 @@ class _Candidate:
         self.win_rate = float(deck.get("winRate") or 0.0)
         self.use_rate = float(deck.get("useRate") or 0.0)
         self.profile = profile
+        # 5.0's pool: `[games, wins, pilots]` of the CRL group with this list
+        # in the window, and its rank among the window's most played vetted
+        # lists. None for a list that is neither (a teammate's own).
+        self.crl = None
+        self.meta_rank = None
+        # Its win condition as `player_skill` names one: the key a player's
+        # record with it is kept under.
+        self.wincon = _wincon(self.cards)
 
     def against(self, other: str, snap: dict | None) -> dict | None:
         return self.profile.against(other, snap)
@@ -1862,6 +1905,299 @@ def _reset_counter_pool() -> None:
                          "activity": None}
 
 
+# ── 5.0: the pool is what the best players bring, in the window ─────────────
+#
+# Reported 2026-10-14: "the recommendation decks are so trash ... random
+# decks ... get battles from CRL duel rows, meta decks going on in the time
+# frame". Measured on two live answers the same day (a 4v4 plan and a
+# six-player scouting report): about one row in seven was a list the CRL
+# group had brought to a duel; the rest were vetted ladder lists — every one
+# with 25+ pilots, many of them the twentieth list of an archetype — and
+# 4.1's rule for "a counter specific to this opponent" (`MIN_LIFT`,
+# `GENERIC_WEIGHT`) picks, of all of those, the most unusual.
+#
+# THE POOL FOR A WINDOW is two things and nothing else:
+#
+#   crl   every list the CRL group (`DUEL_POOL_COHORT`) fielded in duel games
+#         in the window, `CRL_MIN_GAMES` or more — what the best duel players
+#         bring now, with their record;
+#   meta  the window's `META_LISTS` most played vetted lists (the snapshot's
+#         seeds and the meta board), by the duel index's play by day, leaving
+#         out a list the days before were heavier in (`WINDOW_DROP`).
+#
+# Both are rated and chosen exactly as before (`_score`, `team_scout`). The
+# old pool (`_counter_candidates`, `_window_pool`) is untouched: Coach Assist
+# reads it, and its counters were measured on it (2026-10-12).
+
+#: The window a pool is built for, in days, when none (or All Data) is asked.
+POOL_DEFAULT_DAYS = 30
+POOL_MAX_DAYS = 90
+POOL_MIN_DAYS = 7
+
+#: Duel games the group must have played a list in, in the window. One game
+#: is an experiment as often as a choice; two is a list somebody came back to.
+CRL_MIN_GAMES = 2
+
+#: The window's most played vetted lists that join the pool.
+META_LISTS = 40
+
+_COMP_LOCK = threading.Lock()
+_COMP_BUILD = threading.Lock()
+_COMP_CACHE: dict = {"by": {}, "building": set()}
+_COMP_KEEP = 16
+
+_WINCON_CACHE: dict = {}
+
+
+def _wincon(cards) -> str | None:
+    """A deck's win condition as `player_skill` files it (its priciest
+    win-condition card) — the key a player's record with it is kept under,
+    and the one Coach Assist uses. None for a deck with none."""
+    if not cards:
+        return None
+    key = ",".join(sorted(set(cards)))
+    hit = _WINCON_CACHE.get(key, 0)
+    if hit != 0:
+        return hit
+    best = None
+    for c in cards:
+        info = dx.card_info(c) or {}
+        if info.get("is_win_condition"):
+            cand = (-float(info.get("elixir") or 0), c)
+            if best is None or cand < best:
+                best = cand
+    out = best[1] if best else None
+    if len(_WINCON_CACHE) >= 8192:
+        _WINCON_CACHE.clear()
+    _WINCON_CACHE[key] = out
+    return out
+
+
+def pool_days(days: int | None) -> int:
+    """The window a pool is built for: `days` held to [7, 90]; 30 when none."""
+    try:
+        d = int(days) if days else POOL_DEFAULT_DAYS
+    except (TypeError, ValueError):
+        d = POOL_DEFAULT_DAYS
+    return max(POOL_MIN_DAYS, min(POOL_MAX_DAYS, d))
+
+
+def _stamp_of(day: datetime.date) -> str:
+    return day.strftime("%Y%m%d")
+
+
+def _meta_keys(days: int, last: datetime.date) -> tuple[list[tuple[str, str, int, str]], dict]:
+    """`([(list key, archetype, games in the window, state)], counts)` — the
+    window's most played vetted lists, most played first, `META_LISTS` of
+    them. `last` is the last day the window holds. Empty without the play by
+    day table."""
+    try:
+        table = _duel_index.activity() if _duel_index is not None else None
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        table = None
+    if not table:
+        return [], {"reason": "no_activity"}
+    anchor = duel_day(table.get("day"))
+    if anchor is None:
+        return [], {"reason": "no_activity"}
+    # Ages in the table count back from its newest day; the window's count
+    # back from `last`. A replay anchored in the past shifts them.
+    lag = (anchor - last).days
+    games = table.get("games") or {}
+
+    vetted: dict[str, str] = {}
+    for arch, decks in (dcx.seeds() or {}).items():
+        for s in decks:
+            cards = s.get("cards") or []
+            if len(set(cards)) == 8:
+                vetted.setdefault(",".join(sorted(cards)), arch)
+    try:
+        import meta as _meta_board
+        for d in (_meta_board.board() or {}).get("decks") or []:
+            cards = d.get("cards") or []
+            if len(set(cards)) == 8:
+                vetted.setdefault(",".join(sorted(cards)),
+                                  d.get("archetype") or d.get("winCondition") or "")
+    except Exception:  # noqa: BLE001 - the seeds alone are still the meta
+        pass
+
+    span = WINDOW_PREVIOUS_DAYS
+    shifted: dict[str, dict[int, int]] = {}
+    now_total = before_total = 0
+    for key in vetted:
+        per = games.get(key)
+        if not per:
+            continue
+        mine = {a - lag: n for a, n in per.items() if a - lag >= 0}
+        shifted[key] = mine
+        now_total += sum(n for a, n in mine.items() if a < days)
+        before_total += sum(n for a, n in mine.items() if days <= a < days + span)
+    scale = (now_total / float(before_total)) if now_total and before_total else None
+    rows = []
+    counts: dict[str, int] = {}
+    for key, act in shifted.items():
+        state, n = window_state(act, days, span, scale)
+        counts[state] = counts.get(state, 0) + 1
+        if state in WINDOW_DROP:
+            continue
+        rows.append((key, vetted[key], n, state))
+    rows.sort(key=lambda r: (-r[2], r[0]))
+    return rows[:META_LISTS], counts
+
+
+def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]:
+    """The pool for a window ending on `last` (see the section note)."""
+    since = last - datetime.timedelta(days=days - 1)
+    lo, hi = _stamp_of(since), _stamp_of(last + datetime.timedelta(days=1))
+    info: dict = {"days": days, "from": since.isoformat(), "to": last.isoformat(),
+                  "group": None, "crlLists": 0, "crlGames": 0, "metaLists": 0,
+                  "slotGaps": 0, "states": {}}
+
+    crl: dict[str, list[int]] = {}
+    tags = None
+    if _load_cohorts is not None and DUEL_POOL_COHORT and _duel_index is not None:
+        try:
+            tags = (_load_cohorts() or {}).get(DUEL_POOL_COHORT)
+            if tags:
+                crl = _duel_index.group_window(tags, lo, hi)
+                info["group"] = DUEL_POOL_COHORT
+        except Exception:  # noqa: BLE001 - the meta half still stands
+            traceback.print_exc()
+            crl = {}
+    crl = {k: v for k, v in crl.items()
+           if v[0] >= CRL_MIN_GAMES and len(set(k.split(","))) == 8}
+    meta_rows, counts = _meta_keys(days, last)
+
+    seeds: dict[str, tuple[str, dict]] = {}
+    for arch, decks in (dcx.seeds() or {}).items():
+        for s in decks:
+            cards = s.get("cards") or []
+            if len(set(cards)) == 8:
+                seeds.setdefault(",".join(sorted(cards)), (arch, s))
+
+    wanted: dict[str, dict] = {}
+    for rank, (key, arch, n, state) in enumerate(meta_rows, start=1):
+        wanted[key] = {"arch": arch, "meta": rank, "state": (state, n)}
+    for key, (n, w, pilots) in crl.items():
+        e = wanted.setdefault(key, {"arch": None, "meta": None, "state": None})
+        e["crl"] = [n, w, pilots]
+
+    todo = []
+    for key, e in wanted.items():
+        cards = key.split(",")
+        if cd.fillable_slots(cards) < cd.SPECIAL_SLOTS:
+            info["slotGaps"] += 1
+            continue
+        todo.append((key, e))
+
+    def make(item):
+        key, e = item
+        try:
+            if key in seeds:
+                arch, s = seeds[key]
+                return key, e, arch, _SeedProfile(s, arch)
+            arch = e.get("arch") or dcx._archetype_of_hash(key) or "other"
+            return key, e, arch, _ListProfile(key.split(","), arch)
+        except Exception:  # noqa: BLE001 - one bad list must not sink the pool
+            traceback.print_exc()
+            return key, e, None, None
+
+    seat = dcx.seater()
+    out: list[_Candidate] = []
+    for key, e, arch, prof in _POOL.map(make, todo):
+        if prof is None:
+            continue
+        cards, art, inferred = seat(key.split(","))
+        c = _Candidate({
+            "cards": cards, "art": art, "inferredArt": inferred,
+            "winCondition": arch, "name": cd.deck_title(arch, cards),
+            "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
+            "origin": "crl" if e.get("crl") else "meta"}, None, prof)
+        c.crl = e.get("crl")
+        c.meta_rank = e.get("meta")
+        out.append(c)
+        if e.get("state"):
+            info["states"][c.key] = e["state"]
+    out.sort(key=lambda c: (c.origin != "crl", -(c.crl or [0])[0], c.meta_rank or 0, c.key))
+    info["crlLists"] = sum(1 for c in out if c.crl)
+    info["crlGames"] = sum((c.crl or [0])[0] for c in out)
+    info["metaLists"] = sum(1 for c in out if c.meta_rank)
+    info["pool"] = len(out)
+    info["metaStates"] = counts
+    _set_field_rates(out)
+    return out, info
+
+
+def _competitive_pool(days: int | None, until: datetime.date | None = None) -> tuple[list, dict]:
+    """`(the pool for a window of `days`, what it holds)`.
+
+    `until` is the last day of the window (today when None) — a replay passes
+    a past day and reads no game after it. Cached per window and per build of
+    its sources (`_counter_key`): the snapshot, the duel index, the group file
+    and the card model. Never raises; an empty pool says why in `reason`.
+    """
+    d = pool_days(days)
+    last = until or _today()
+    key = _counter_key()
+    want = (d, last.isoformat())
+    with _COMP_LOCK:
+        hit = _COMP_CACHE["by"].get(want)
+        if hit is not None and hit[0] == key:
+            return hit[1]
+        # A POOL FROM THE LAST BUILD OF ITS SOURCES keeps answering while the
+        # next is built beside it (the snapshot moves hourly, the duel index
+        # after each poll): nobody waits on the rebuild, as `_counter_candidates`.
+        if hit is not None:
+            if want not in _COMP_CACHE["building"]:
+                _COMP_CACHE["building"].add(want)
+                threading.Thread(target=_rebuild_competitive, args=(d, last, key, want),
+                                 name="team-pool", daemon=True).start()
+            return hit[1]
+    with _COMP_BUILD:
+        with _COMP_LOCK:
+            hit = _COMP_CACHE["by"].get(want)
+        if hit is not None and hit[0] == key:
+            return hit[1]
+        got = _built_competitive(d, last)
+        _keep_competitive(want, key, got)
+    return got
+
+
+def _built_competitive(d: int, last: datetime.date) -> tuple[list, dict]:
+    try:
+        got = _build_competitive_pool(d, last)
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        got = ([], {"days": d, "reason": "failed", "pool": 0, "states": {}})
+    if not got[0]:
+        got[1]["reason"] = got[1].get("reason") or "empty"
+    return got
+
+
+def _keep_competitive(want: tuple, key, got: tuple) -> None:
+    with _COMP_LOCK:
+        by = _COMP_CACHE["by"]
+        if want not in by and len(by) >= _COMP_KEEP:
+            by.clear()
+        by[want] = (key, got)
+        _COMP_CACHE["building"].discard(want)
+
+
+def _rebuild_competitive(d: int, last: datetime.date, key, want: tuple) -> None:
+    got = _built_competitive(d, last)
+    if got[0]:
+        _keep_competitive(want, key, got)
+    else:
+        with _COMP_LOCK:
+            _COMP_CACHE["building"].discard(want)
+
+
+def _pool_public(info: dict) -> dict:
+    """What a response says about its pool (everything but the per-list map)."""
+    return {k: v for k, v in info.items() if k != "states"}
+
+
 def _comfort(games: int) -> float:
     """The tiebreak, in points. Linear to `COMFORT_FULL`, flat after."""
     if games <= 0:
@@ -1918,6 +2254,7 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None,
             base["origin"] = card.origin
         if card.field is not None:
             base["fieldRate"] = card.field
+        base["winCon"] = card.wincon
         return base
     base = scout.score(
         lambda arch: card.against(arch, snap),
@@ -1959,6 +2296,7 @@ def _score(card: _Candidate, threats: list[dict], snap: dict | None,
         out["origin"] = card.origin
     if card.field is not None:
         out["fieldRate"] = card.field
+    out["winCon"] = card.wincon
     if not dress:
         return out
     return _dress(out, card, threats)
@@ -2638,7 +2976,8 @@ def _own_duel_rows(mate: dict, ctx: _DuelContext | None, projection: dict,
 #: What the SELECTION wrote on a row, carried over when the row is rated in
 #: full for the screen.
 _CHOSEN_KEYS = ("answers", "fill", "squadPick", "covers", "known", "personalScore", "rate",
-                "worst", "lift", "allRound")
+                "worst", "lift", "allRound", "familiar", "winConShare", "skillShift",
+                "baseRate", "expectedWinRate", "matchupValue", "vs", "recommendationScore")
 
 
 def _finish(rows: list[dict], by_key: dict, threats: list[dict],
@@ -2673,6 +3012,15 @@ def _finish(rows: list[dict], by_key: dict, threats: list[dict],
         st = states.get(r.get("key"))
         if st is not None:
             r["recent"] = {"days": window["days"], "games": st[1], "trend": st[0]}
+        # WHO BRINGS IT (5.0): the CRL group's games with this list in the
+        # window, and its rank among the window's most played lists.
+        cand = by_key.get(r.get("key"))
+        crl = getattr(cand, "crl", None) if cand is not None else None
+        if crl:
+            r["crl"] = {"games": crl[0], "wins": crl[1], "pilots": crl[2]}
+        rank = getattr(cand, "meta_rank", None) if cand is not None else None
+        if rank:
+            r["metaRank"] = rank
         if ctx is not None and ctx.on and projection:
             try:
                 r["duel"] = ctx.figures(r.get("cards"), projection)
@@ -2798,11 +3146,48 @@ def _by_card(rows: list[dict], threats: list[dict], finish) -> dict | None:
     return {"theirCards": _cards.their_cards(use), "cards": cards}
 
 
+def _wincon_shares(mate: dict) -> dict[str, float]:
+    """`{win condition: share of the player's games}` over the decks they
+    played in the window (own-deck and duel games), by `_wincon`."""
+    per: dict[str, int] = {}
+    for d in mate.get("decks") or []:
+        cards = d.get("cards") or []
+        n = int(d.get("matches") or 0)
+        if n <= 0 or len(set(cards)) != 8:
+            continue
+        wc = _wincon(cards)
+        if wc:
+            per[wc] = per.get(wc, 0) + n
+    total = float(sum(per.values()))
+    return {k: v / total for k, v in per.items()} if total else {}
+
+
+def _skill_shifts(tag: str) -> dict[str, float]:
+    """`{win condition: log-odds}` — a player's record with each win
+    condition as `player_skill` moves a game by it. `{}` with no table, or
+    one whose own holdout did not gain (`player_skill.on`)."""
+    try:
+        if _ps is None or not _ps.on():
+            return {}
+        k, weight = _ps.weights()
+        return {wc: weight * _ps.skill(rec, k) for wc, rec in (_ps.records(tag) or {}).items()}
+    except Exception:  # noqa: BLE001 - the figures stand without the term
+        traceback.print_exc()
+        return {}
+
+
 def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             snap: dict | None, top_n: int = TOP_N,
             seeds: dict | None = None, ctx: _DuelContext | None = None,
-            *, views: bool = False, pool: list[_Candidate] | None = None) -> dict:
+            *, views: bool = False, pool: list[_Candidate] | None = None,
+            listed: dict | None = None) -> dict:
     """One opponent, and what should be brought against them.
+
+    `listed` (a scouting report, 5.0) counts how many earlier opponents'
+    lists each deck is already on, across the roster: a deck listed before
+    is chosen as though `SCOUT_SPREAD_COST` points weaker a listing (at most
+    `SCOUT_SPREAD_CAP`), so a comparable deck takes its place. The figure
+    printed and the order shown are unchanged. Counted here, after the pick.
 
     BOTH MODES COME THROUGH HERE. In a scouting report `blue` is empty, so
     `perPlayer` falls out empty on its own rather than being special-cased —
@@ -2953,10 +3338,16 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     cover: list[dict] = []
     if blue and threats:
         try:
+            # EACH TEAMMATE'S OWN LIST (5.0, `scout.personal_plan`): decks of
+            # the win conditions they play, rated with their record with each,
+            # one teammate a pool deck.
             squad = [{"tag": mate["tag"], "own": by_tag.get(mate["tag"], []),
-                      "cards": mate_cards[mate["tag"]]} for mate in blue]
-            plan_lists, cover = scout.squad_plan(squad, shortlist(pool_rows()), threats,
-                                                 limit=PER_PLAYER_TOP_N)
+                      "cards": mate_cards[mate["tag"]],
+                      "wincons": _wincon_shares(mate), "shift": _skill_shifts(mate["tag"])}
+                     for mate in blue]
+            plan_lists, cover = scout.personal_plan(squad, pool_rows(), threats,
+                                                    limit=PER_PLAYER_TOP_N,
+                                                    per_wincon=MATE_PER_WINCON)
             who = {m["tag"]: m["name"] for m in blue}
             for c in cover:
                 c["name"] = names.get(c["archetype"]) or dcx._label(c["archetype"] or "other")
@@ -2973,7 +3364,9 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         except Exception:  # noqa: BLE001 - the population half must never take the board down
             traceback.print_exc()
             extra = []
-        return scout.counters(list(own) + extra, plays, limit=limit)
+        return scout.counters(list(own) + extra, plays, limit=limit,
+                              specific=SCOUT_SPECIFIC,
+                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True)
 
     per_player = []
     for mate in blue:
@@ -3014,7 +3407,17 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     elif blue:
         recommended = suggested(_distinct(scored), top_n)
     else:
-        recommended = scout.counters(scored, plays, limit=top_n)
+        # NOT `spread`: that name is this folder's archetype bars, sent below.
+        roster_cost = None
+        if listed is not None:
+            def roster_cost(c, _l=listed):
+                return -min(SCOUT_SPREAD_CAP, SCOUT_SPREAD_COST * _l.get(c["key"], 0))
+        recommended = scout.counters(scored, plays, limit=top_n, specific=SCOUT_SPECIFIC,
+                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
+                              adjust=roster_cost)
+        if listed is not None:
+            for r in recommended:
+                listed[r["key"]] = listed.get(r["key"], 0) + 1
     recommended = finish(recommended)
     for r in recommended:
         if blue and not r.get("owner"):
@@ -3138,7 +3541,9 @@ def _combined(red: list[dict], cards: list[_Candidate],
             by_key.setdefault(c.key, c)
     scout.pool_lift(scored)
     scored.sort(key=lambda r: (-r["score"], r["key"]))
-    recommended = scout.counters(_distinct(scored), plays, limit=SCOUT_TOP_N)
+    recommended = scout.counters(_distinct(scored), plays, limit=SCOUT_TOP_N,
+                                 specific=SCOUT_SPECIFIC,
+                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True)
 
     # THE DUELS, ROSTER-WIDE: every opponent's own duel games pooled, for the
     # duel figures on each row.
@@ -3202,7 +3607,7 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
     snap = dcx._snap()
     # THE LISTS OF THE WINDOW ASKED FOR: as many days as the range covers,
     # the same rule a scouting report of this player uses (`_window_pool`).
-    cards, window = _window_pool(
+    cards, window = _competitive_pool(
         (_span_days(since, until) if since else None) or DEFAULT_DAYS)
     ctx = _DuelContext()
     ctx.pool_window = window
@@ -3225,8 +3630,7 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
         "byFamily": folder.get("byFamily") or [],
         "byCard": folder.get("byCard"),
         "reason": folder["reason"],
-        "pool": {"decks": len(cards), **counter_pool_stats(),
-                 "window": _window_public(window)},
+        "pool": {"decks": len(cards), "window": _pool_public(window)},
         "brain": scout.BRAIN_VERSION,
         # Whether the card model rated these rows beside the fused rate.
         "cardModel": ctx.fx.cm.get("brain") if ctx.fx.cm is not None else None,
@@ -3285,7 +3689,7 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     #
     # THE POOL IS THE WINDOW'S (`_window_pool`): the lists played in the
     # `days` asked for, less the ones the days before were heavier in.
-    pool, window = _window_pool(days)
+    pool, window = _competitive_pool(days)
     cards = pool if is_scout else _candidates(blue)
     top_n = SCOUT_TOP_N if is_scout else TOP_N
 
@@ -3305,7 +3709,9 @@ def analyze(blue_tags: list[str], red_tags: list[str],
         except Exception:  # noqa: BLE001
             traceback.print_exc()
 
-    folders = [_folder(opp, blue, cards, snap, top_n, seeds, ctx, pool=pool)
+    # A SCOUTING REPORT SPREADS ITS DECKS OVER THE ROSTER (5.0): see `_folder`.
+    listed: dict | None = {} if is_scout else None
+    folders = [_folder(opp, blue, cards, snap, top_n, seeds, ctx, pool=pool, listed=listed)
                for opp in red]
 
     # A pool with nothing in it is the one failure the screen cannot recover
@@ -3334,12 +3740,10 @@ def analyze(blue_tags: list[str], red_tags: list[str],
             "decks": len(cards),
             "reason": pool_reason,
             "minGames": MIN_COMFORT_GAMES,
-            # The lists every folder's counters were chosen from, by source.
-            "counters": counter_pool_stats(),
-            # WHAT THE DAY WINDOW DID TO THAT POOL: how many lists were
-            # played in it, how many were left out and why — or why it was
-            # not applied. A filter nobody can see is one nobody can check.
-            "window": _window_public(window),
+            # THE POOL OF THE WINDOW (5.0): the CRL group's duel lists in it
+            # and its most played vetted lists — how many of each, and the
+            # days. A pool nobody can see is one nobody can check.
+            "window": _pool_public(window),
         },
         "days": days,
         "limits": {
@@ -3391,6 +3795,42 @@ def analyze(blue_tags: list[str], red_tags: list[str],
     # nobody to take it. See `_combined`.
     if is_scout:
         out["overall"] = _combined(red, cards, snap, seeds, ctx)
+    else:
+        out["lineup"] = _lineup(blue, red, folders)
+    return out
+
+
+def _lineup(blue: list[dict], red: list[dict], folders: list[dict]) -> list[dict]:
+    """WHO TAKES WHOM (5.0): each opponent paired with the teammate whose
+    best deck against them adds the most to the squad (`scout.lineup`), and
+    the deck. Also written on each folder as `assigned`."""
+    values: dict[tuple[str, str], float] = {}
+    heads: dict[tuple[str, str], dict] = {}
+    for f in folders:
+        rt = f["player"]["tag"]
+        for pp in f.get("perPlayer") or []:
+            top = (pp.get("decks") or [None])[0]
+            if top is not None and top.get("expectedWinRate") is not None:
+                values[(pp["owner"]["tag"], rt)] = float(top["expectedWinRate"])
+                heads[(pp["owner"]["tag"], rt)] = top
+    try:
+        pairs = scout.lineup(values, [p["tag"] for p in blue], [p["tag"] for p in red])
+    except Exception:  # noqa: BLE001 - the folders stand without it
+        traceback.print_exc()
+        return []
+    names = {p["tag"]: p["name"] for p in blue + red}
+    by_red = {f["player"]["tag"]: f for f in folders}
+    out = []
+    for pr in pairs:
+        head = heads.get((pr["blue"], pr["red"])) or {}
+        row = {"blue": {"tag": pr["blue"], "name": names.get(pr["blue"], pr["blue"])},
+               "red": {"tag": pr["red"], "name": names.get(pr["red"], pr["red"])},
+               "winRate": pr["winRate"], "deck": head.get("name"),
+               "key": head.get("key"), "cards": head.get("cards"), "art": head.get("art"),
+               "own": bool(head.get("owner"))}
+        out.append(row)
+        if pr["red"] in by_red:
+            by_red[pr["red"]]["assigned"] = pr["blue"]
     return out
 
 

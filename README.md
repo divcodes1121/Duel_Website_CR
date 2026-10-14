@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Team Analysis suggests what the best duel players bring, and a list per teammate (`team-scout-5.0`)** | **2026-10-14, BUILT AND VERIFIED, NOT YET DEPLOYED.** Reported: *"the recommendation decks are so trash ... random decks, decks repetitive for more players"*. Measured on live answers: about 1 row in 7 was a list the CRL group brought to duels; a 4v4 plan's 160 rows held 67 decks and all four teammates got the same four against one opponent. Now the pool is the window's CRL duel lists (2+ games) and its 40 most played lists, nothing else; a scouting list is ten different win conditions, none under 50%, spread across the roster; a match plan builds each teammate's list from the win conditions they play, rated with their own record, one teammate a deck, and a lineup pairs every opponent with a teammate. Blind on 300 opponents: rows the CRL group brought 36.7% -> 96.7%, the #1 the same (+0.10), the rest of a list about half a point lower; match plans: distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15. See [What the best duel players bring](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14) |
 | **Coach Assist reads how each player plays: win-condition tags and a recommendation of their own** | **2026-10-12.** Asked: rate players by the decks they play, how much, and their win rate across every win condition in the 7D / 14D / 30D window, and make the recommendation each player's own. Measured: how much a win condition is played predicts nothing, the win rate against a player's own average does not help; their duel record with it against what each game should have gone does (lowest fifth -4.9 points, highest +8.1; CRL games 0.5924 -> 0.5875 log loss). A skill table for 13,494 duel players, rebuilt after every poll, is in every Coach Assist figure; a profile per player and per window is on the screen. See [How each player plays](#how-each-player-plays-win-condition-tags-and-a-recommendation-of-their-own-2026-10-12) |
 | **Coach Assist finds counters to what the opponent brings** | **2026-10-12.** Asked: the Suggestion opens with the player's own recent duel decks; it should analyse what the opponent opens with, find counters among the meta decks and the CRL players' duel decks, and do the same after each game. Measured blind first (323 real duel openings, an independent judge): the old pick rated 50.4% against the deck opponents really opened with, the first counter 60.7%, the answer as built 58.4% (+8.0 [+6.5, +9.5]). A block of five counters under "Play this" at every stage, counters in the set and the options, the card model in every Coach Assist rate, a correction to the win chance between two known players, and no card-level term in a friendly duel (it is played at a cap). Also measured: a deck new to the pilot costs nothing we could find, and opponents do not counter-pick inside a duel. LIVE as `9f436cc` + `715be7e`, 45 of 45 signed in on production. See [Counters to what they bring](#counters-to-what-they-bring-2026-10-12) |
 | **The day window picks the suggested decks too (Team Analysis, Deck Counter)** | **LIVE SINCE 2026-10-11 18:19 UTC.** Asked: when 7D or 14D is picked on Team Scout, the recommended decks should come from those same days, with the days weighed against what came before, because old decks are not in the meta. Until now the window chose which of the OPPONENT'S games were read and nothing else. The duel index now keeps every hub list's play BY DAY, and a window keeps the lists played in it (5+ games) whose share of the pool's play is at least half of what it was in the 60 days before. Replayed on 200 real opponents: at 7 days 25.9% of suggested rows were decks the window leaves out, on 185 of 200 lists; now none. Cost by the printed figure: #1 -0.31, all ten -0.55; most repeated list 26.0% -> 29.0% of opponents. A list whose share had halved won 52.5% the next week, a steady one 55.4%. Weighing a list's window games heavier in its own record was measured and NOT built (no gain at 7 days). See [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11) |
@@ -228,6 +229,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27e. [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10)
 27f. [Counters read the cards](#counters-read-the-cards-2026-10-11)
 27g. [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11)
+27h. [What the best duel players bring, and a list per teammate](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14)
 28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
 29. [The layout engine — measure, then commit](#the-layout-engine--measure-then-commit)
 29a. [Exporting a screen as a PDF](#exporting-a-screen-as-a-pdf)
@@ -12633,6 +12635,143 @@ the `.js` and the `.css`) and then never committed. See
 import is eager until that is fixed, and the reason is written at the import.
 
 ---
+
+## What the best duel players bring, and a list per teammate (team-scout-5.0, 2026-10-14)
+
+**BUILT AND VERIFIED, NOT YET DEPLOYED** (server + client; waiting on the
+account holder's go-ahead). Asked for, about both tabs of Team Analysis:
+*"the recommendation decks are so trash that I cannot bear — random decks,
+decks repetitive for more players. Fix the architecture completely; get the
+battles from CRL duel rows and the meta decks going on in the time frame"*, and
+then, while it was being built: *"full-proof analysis and recommendation, no
+shallow guesses; versatility — decks of different win conditions, ranked and
+matched against the opponent's decks; keep the decks over 50%"*. The account
+holder's own login was given for the check (not stored anywhere) and their six
+saved boards were re-run through both engines.
+
+### What was wrong, measured on live answers first
+
+| | live brain 4.1 |
+|---|---|
+| Rows of a 4v4 plan / a six-player scouting report that are lists the CRL group brought to duels | about 1 in 7 |
+| Rows that are vetted LADDER lists (25+ pilots each, many the 12th-40th list of an archetype) | the rest |
+| A 4v4 match plan: rows / distinct decks | 160 / 67 |
+| Against one opponent, all four teammates offered the same four decks | yes |
+| Decks two teammates share against one opponent (the account holder's saved 10v10 plans, re-run) | 5.8-6.1 of 10 |
+
+Two causes. **The pool** was every vetted ladder list plus the CRL group's
+catalogue lists, and 4.1's rule for "a counter specific to this opponent"
+(`MIN_LIFT`, `GENERIC_WEIGHT`) favours, of all of those, the most unusual —
+Giant + Sparky + Minion Horde + Skeleton Army, Three Musketeers + Monk + Rage.
+**The squad plan** gave each teammate a different #1 inside a 3-point band and
+nothing else; below it every teammate's list was the same population ranking,
+and their own decks were worth 1.5 points against it.
+
+(Checked rather than assumed: those Rage lists are not weak — their duel record
+is 6 to 12 points a game over expectation, mostly in clan-war duels. They are
+current, strong ladder lists. What made the board read as random is that almost
+nothing on it was a deck the top duel players actually bring.)
+
+### What 5.0 does
+
+- **The pool is the window's** (`team_analysis._competitive_pool(days, until)`):
+  every list the CRL group (`DUEL_POOL_COHORT`, the server's
+  `.duel_cohorts.json`) brought to duel games in the days picked, two games or
+  more (`CRL_MIN_GAMES`), and the window's `META_LISTS` (40) most played vetted
+  lists (seeds and meta board, by the duel index's play by day, less any whose
+  share fell under half). Nothing else. 7 days: about 180 + 40 lists; 30 days:
+  about 460 + 40. Built once per window and per build of its sources, rebuilt
+  beside the one in hand when they move. `until` anchors it in the past, which
+  is how the replay reads no game after a duel.
+- **A scouting list** (and the Deck Counter's "Bring this against them", the
+  same engine): rated as before (fused rate + card model, against what that
+  opponent plays), **one list per win condition** (the card, not the bot's
+  archetype bucket), **nothing under 50%** — not even the one row that used to
+  say nothing clears it — 4.1's specificity rules kept, and across a roster a
+  deck already on earlier opponents' lists is chosen as though up to 2.5 points
+  weaker so a comparable one takes its place (`SCOUT_SPREAD_*`). The figure and
+  the order printed are untouched by any of it.
+- **A match plan** (`team_scout.personal_plan`): each teammate's list is decks
+  of the win conditions they play (5%+ of their games), their own and the
+  pool's, rated with **their own record with each win condition**
+  (`player_skill`, the term Coach Assist uses), at most three of a win
+  condition they do not play (marked *new win con*), three of one win condition
+  at most, none under 50%. **A pool deck goes to one teammate per opponent**:
+  every (teammate, deck) pair claims with its figure plus ten points times the
+  win condition's share of that teammate's play, strongest claims first. A list
+  shorter than five is topped up, keeping what it had.
+- **A lineup** (`team_scout.lineup`, exact): every opponent paired with the
+  teammate whose best deck against them adds the most to the squad's total.
+  Drawn above the folders; each folder's face names its teammate and deck.
+- Rows carry `origin` `crl` / `meta` (pills **CRL duel list** / **Meta list**,
+  the CRL pill's tooltip saying how many games and players brought it), `crl`,
+  `metaRank`, `winCon`, and on a teammate's rows `familiar`, `winConShare`,
+  `skillShift`, `baseRate`. `pool.window` says what the pool holds. Brain
+  `team-scout-5.0`.
+- **Unchanged:** Coach Assist reads the old pool (`_window_pool`) and its
+  counters were measured on it; `coach_daily` does not use either.
+
+### Measured blind before anything was kept
+
+300 opponents in duels of 1-6 October (150 CRL players), each read with only
+what was stored before their duel; every rate from the card model fitted before
+1 October; judged against the decks they really brought by a card model fitted
+only from 7 October. Scripts and outputs in `brain-evidence/team_scout5_20261014/`
+(gitignored, it holds tags).
+
+| Scouting list (ten rows) | 4.1 | 5.0 |
+|---|---|---|
+| Rows that are lists the CRL group brought | 36.7% | **96.7%** |
+| Different win conditions in a list | 7.1 | **10.0** |
+| #1 against what they brought | 60.62 | 60.72 (+0.10 [-0.53, +0.74]) |
+| #1, CRL opponents | 59.89 | 60.65 (+0.76 [-0.18, +1.72]) |
+| Top three | 60.21 | 59.68 (-0.53 [-0.90, -0.14]) |
+| All ten | 57.83 | 57.23 (-0.60 [-0.88, -0.33]) |
+| Rows printed under 50% | 0 | 0 |
+| Rows the judge puts under 50% against what came | 13.2% | 14.6% |
+| Distinct decks / the most repeated list on | 365 / 24.7% | 308 / 29.2% of opponents |
+| Rosters of six: the most repeated deck is on | 2.89 of 6 lists | **2.78** |
+
+| 4v4 match plans (ten) | 4.1 | 5.0 |
+|---|---|---|
+| Distinct rows | 53% | **97.5%** |
+| Decks two teammates share | 5.0 | **0.15** |
+| A different #1 per teammate | 124/152 | **151/152** |
+| Rows of the teammate's own win conditions (or their deck) | — | 69% |
+| Best teammate's #1, judged | 63.88 | **64.43** |
+| Every row, judged | 58.17 | 56.28 |
+
+Variants measured on the way and not kept: dropping 4.1's specificity rules on
+a scouting list (the most repeated list went to 42% of opponents); two lists a
+win condition on a scouting list (7.2 win conditions a list, no better figures);
+two lists a win condition on a teammate's (fewer rows of their own play).
+
+**On the account holder's six saved boards, re-run today:** match plans
+distinct rows 31-36% -> 75-93% a folder, decks two teammates share ~6 -> 0.1-0.3,
+different #1s 53-68% -> 80-95%, teammates' own decks used 120 / 212 / 28 / 166 ->
+219 / 314 / 41 / 272; the 7-day scouting boards 56 ladder + 14 duel rows -> 61 CRL
++ 9 meta, the most repeated deck on 5 of 7 lists -> 4 of 7.
+
+**Costs, said:** about half a point on the bottom of a scouting list (ten win
+conditions draw on fewer lists), two points on a match plan's average row (the
+strongest decks are no longer given to every teammate — the judge rates cards
+only and cannot see a teammate's record with a win condition, which is what
+their list now leans on). A 7-day scouting list holds fewer distinct decks across
+a roster (the CRL pool of a week is about 180 lists).
+
+**Two bugs were found by the replay and the browser before anything shipped,
+both mine:** a helper named `fam` inside `counters` was shadowed by the
+answer-repair loop's own `fam` (a match plan silently fell back to the old
+shared lists — 1.1 decks shared instead of 0.13), and a function named `spread`
+in `_folder` overwrote the folder's archetype bars (a scouting report could not
+be serialised). Both now have tests that fail on the old code.
+
+Tests: `test_team_scout.py` 164 -> 205, `test_team_analysis.py` 312 -> 341,
+`test_duel_index.py` 93 -> 97, vitest 1,732 -> 1,734; 12 faults planted in the
+new rules, 11 caught (the 12th, the lineup's pairing bonus, changes no output:
+figures are never negative). Browser: 60/60 locally on the server's real 5.0
+answers for two of the saved boards (both themes, 1440 and 390), screenshots
+`testing/ts5-*.png`.
 
 ## The day window picks the suggested decks (2026-10-11)
 

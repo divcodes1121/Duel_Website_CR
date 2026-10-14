@@ -279,6 +279,19 @@ describe('the day window reaches the suggestions (2026-10-11)', () => {
     );
   });
 
+  it('brain 5.0: the pool line says what the pool holds and over which days', () => {
+    const POOL = {
+      days: 30, from: '2026-09-15', to: '2026-10-14', group: 'crl',
+      crlLists: 462, crlGames: 2693, metaLists: 40,
+    } as unknown as Parameters<typeof windowLabel>[0];
+    expect(windowLabel(POOL)).toBe('462 CRL duel lists + 40 meta lists · last 30 days');
+    expect(windowTitle(POOL)).toBe(
+      'Suggestions come from the decks CRL players brought to duels from 2026-09-15 to ' +
+        '2026-10-14 (two games or more), and the 40 most played decks of those days. ' +
+        'No deck expected to lose is listed.',
+    );
+  });
+
   it('says nothing when the window was not applied: the whole pool was used', () => {
     expect(windowLabel({ ...WINDOW, applied: false, reason: 'stale' })).toBeUndefined();
     expect(windowLabel({ ...WINDOW, days: null })).toBeUndefined();

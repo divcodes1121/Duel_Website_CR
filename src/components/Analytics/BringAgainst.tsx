@@ -11,7 +11,7 @@ import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { Tabs } from '../ui/tabs';
 import { drawnDeck, formInferred } from '../../utils/deckSeating';
-import { duelChip, duelDeckLabel, duelTitle } from '../../utils/duelFigures';
+import { crlTitle, duelChip, duelDeckLabel, duelTitle } from '../../utils/duelFigures';
 import {
   BRING_VIEWS,
   balanceChips,
@@ -109,7 +109,11 @@ function BringDeck({
       <div className={styles.deckHead}>
         {rank !== undefined && <span className={styles.rank}>{rank}</span>}
         <span className={styles.deckName}>{deck.name}</span>
-        {duelDeckLabel(deck) && <span className={styles.duelPill}>{duelDeckLabel(deck)}</span>}
+        {duelDeckLabel(deck) && (
+          <span className={styles.duelPill} data-origin={deck.origin} title={crlTitle(deck)}>
+            {duelDeckLabel(deck)}
+          </span>
+        )}
         {/* THE DUELS' OWN FIGURE, ONLY WHEN IT AGREES. The percentage on this
             row already holds the duel games (four ladder games each). A second
             figure beside it that says something else — "Duel 48%" on a row at

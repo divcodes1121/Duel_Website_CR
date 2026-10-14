@@ -1091,6 +1091,237 @@ def property_speedups_are_exact():
                                  (["a"] * 3, ["a"], "", ""), (list("abcdefgh"), list("abcdefgz"), "x", "y")]))
 
 
+# ── 5.0: each teammate's own list, and who takes whom (2026-10-14) ──────────
+#
+# Reported against 4.1: "decks repetitive for more players". Measured on a live
+# 4v4: all four teammates offered the same four decks against one opponent.
+# Each rule `personal_plan` adds is pinned here against literals.
+
+
+def p_row(name, rates, wincon, *, owner=None, games=None):
+    """A lean pool row (or an owned one), carrying its win condition."""
+    r = sq_row(name, rates, owner=owner, games=games)
+    r["winCon"] = wincon
+    return r
+
+
+def property_personal_plan():
+    print("")
+    print("property — 5.0: each teammate's list is built out of that teammate")
+
+    # Two Hog players and a Golem player; a pool with two Hog lists, two Golem
+    # lists and a strong Graveyard list nobody plays.
+    hog1 = p_row("A", {"hog": 64, "giant": 62, "graveyard": 60}, "hog-rider")
+    hog2 = p_row("B", {"hog": 61, "giant": 60, "graveyard": 58}, "hog-rider")
+    gol1 = p_row("C", {"hog": 60, "giant": 59, "graveyard": 57}, "golem")
+    gol2 = p_row("D", {"hog": 57, "giant": 56, "graveyard": 55}, "golem")
+    yard = p_row("E", {"hog": 70, "giant": 68, "graveyard": 66}, "graveyard")
+    pool = [hog1, hog2, gol1, gol2, yard]
+    snapshot = [dict(r) for r in pool]
+    players = [
+        {"tag": "#H1", "own": [], "cards": set(), "wincons": {"hog-rider": 0.8}, "shift": {}},
+        {"tag": "#H2", "own": [], "cards": set(), "wincons": {"hog-rider": 0.6, "golem": 0.3}, "shift": {}},
+        {"tag": "#G1", "own": [], "cards": set(), "wincons": {"golem": 0.9}, "shift": {}},
+    ]
+    # Five decks cannot fill three lists of three without sharing, so the
+    # top-up is off here (`min_list=0`); sharing is pinned on its own below.
+    lists, cover = ts.personal_plan(players, pool, SQ_THREATS, limit=3, new_slots=1, min_list=0)
+    keys = {t: [r["name"] for r in lists[t]] for t in lists}
+    check("the caller's rows are not written onto", [dict(r) for r in pool] == snapshot)
+    check("lists come back in roster order", list(lists) == ["#H1", "#H2", "#G1"], str(list(lists)))
+    shared = set(keys["#H1"]) & set(keys["#H2"]) & set(keys["#G1"])
+    check("no pool deck is on two teammates' lists (`SHARE_MAX` 1)",
+          len(sum(keys.values(), [])) == len(set(sum(keys.values(), []))), str(keys))
+    check("...so nothing is on all three", not shared, str(keys))
+    check("a Golem player's list holds Golem decks", "C" in keys["#G1"], str(keys))
+    check("a contested deck goes to the teammate whose win condition it is more of: "
+          "the Golem lists to the 90% Golem player, not the 30% one",
+          {"C", "D"} <= set(keys["#G1"]) and not ({"C", "D"} & set(keys["#H2"])), str(keys))
+    check("at most `new_slots` rows of a win condition the teammate does not play",
+          all(sum(1 for r in lists[t] if not r["familiar"]) <= 1 for t in lists),
+          str({t: [(r["name"], r["familiar"]) for r in lists[t]] for t in lists}))
+    check("the strongest deck nobody plays still reaches a list (as its new row)",
+          any("E" in keys[t] for t in keys), str(keys))
+    check("each list's head is marked as that teammate's pick",
+          all(lists[t][0].get("squadPick") for t in lists if lists[t]))
+    check("every row says how much of the teammate's play its win condition is",
+          lists["#G1"][0]["winConShare"] in (0.0, 0.9), str(lists["#G1"][0].get("winConShare")))
+    check("each list reads strongest first",
+          all([r["expectedWinRate"] for r in lists[t]]
+              == sorted((r["expectedWinRate"] for r in lists[t]), reverse=True) for t in lists))
+    again, _ = ts.personal_plan(players, pool, SQ_THREATS, limit=3, new_slots=1, min_list=0)
+    check("the plan is deterministic",
+          [[r["key"] for r in again[t]] for t in again] == [[r["key"] for r in lists[t]] for t in lists])
+    check("cover rows run most likely first, one per archetype",
+          [c["archetype"] for c in cover] == ["hog", "giant", "graveyard"], str(cover))
+
+    # A TEAMMATE'S RECORD WITH A WIN CONDITION MOVES THEIR FIGURE, and only theirs.
+    skilled = [{"tag": "#S", "own": [], "cards": set(), "wincons": {"golem": 1.0},
+                "shift": {"golem": 0.4}}]
+    sl, _ = ts.personal_plan(skilled, [gol1], SQ_THREATS, limit=1)
+    row = sl["#S"][0]
+    check("a skill shift raises the figure in log-odds, and says by how much",
+          row["baseRate"] == gol1["expectedWinRate"]
+          and row["expectedWinRate"] == ts.personal_rate(gol1["expectedWinRate"], 0.4)
+          and row["skillShift"] == round(row["expectedWinRate"] - row["baseRate"], 1)
+          and row["expectedWinRate"] > row["baseRate"], str(row))
+    check("...and the per-archetype rates with it",
+          all(row["vs"][a] == ts.personal_rate(v, 0.4) for a, v in ts.vs_archetypes(gol1).items()),
+          str(row["vs"]))
+    check("no shift, no change: the pool's own figure",
+          ts.personal_rate(57.3, 0.0) == 57.3 and "skillShift" not in lists["#H1"][0])
+    check("a negative record lowers it", ts.personal_rate(60.0, -0.3) < 60.0)
+
+    # A DECK TWO PLAYERS WANT GOES TO THE ONE IT IS WORTH MORE TO.
+    weak = {"tag": "#W", "own": [], "cards": set(), "wincons": {"hog-rider": 1.0}, "shift": {}}
+    strong = {"tag": "#X", "own": [], "cards": set(), "wincons": {"hog-rider": 1.0},
+              "shift": {"hog-rider": 0.3}}
+    two, _ = ts.personal_plan([weak, strong], [hog1, hog2], SQ_THREATS, limit=1, new_slots=0)
+    check("the better Hog list goes to the teammate rated higher with Hog",
+          two["#X"][0]["name"] == "A" and two["#W"][0]["name"] == "B",
+          str({t: [r["name"] for r in two[t]] for t in two}))
+
+    # A SHORT LIST IS FILLED rather than left short: first past the new-slot
+    # cap, then with a deck a teammate already holds.
+    empty_hand = {"tag": "#N", "own": [], "cards": set(), "wincons": {}, "shift": {}}
+    filled, _ = ts.personal_plan([empty_hand], pool, SQ_THREATS, limit=5, new_slots=1)
+    check("a teammate with no history still gets a full list from the pool",
+          len(filled["#N"]) == 5, str([r["name"] for r in filled["#N"]]))
+    crowd = [dict(empty_hand, tag="#N%d" % i) for i in range(3)]
+    crowded, _ = ts.personal_plan(crowd, [hog1, yard], SQ_THREATS, limit=5, new_slots=1)
+    check("when the pool runs out, a teammate shares a deck rather than going short",
+          all(len(crowded[t]) == 2 for t in crowded), str({t: len(crowded[t]) for t in crowded}))
+
+    # THE NEW-WIN-CONDITION ROWS ARE CAPPED even when they are the strongest.
+    many_new = [p_row(k, {"hog": 70 - i, "giant": 70 - i, "graveyard": 70 - i}, "wc-" + k)
+                for i, k in enumerate(("A", "B", "C", "D", "E"))]
+    fam_row = p_row("F", {"hog": 55, "giant": 55, "graveyard": 55}, "mortar")
+    solo_new, _ = ts.personal_plan(
+        [{"tag": "#M", "own": [], "cards": set(), "wincons": {"mortar": 1.0}, "shift": {}}],
+        many_new + [fam_row], SQ_THREATS, limit=6, new_slots=2, min_list=0)
+    check("five stronger decks of other win conditions: two are offered, beside their own",
+          sum(1 for r in solo_new["#M"] if not r["familiar"]) == 2
+          and "F" in [r["name"] for r in solo_new["#M"]],
+          str([(r["name"], r["familiar"]) for r in solo_new["#M"]]))
+
+    # A TOP-UP KEEPS WHAT THE LIST HAD: their own weaker deck is not pushed off
+    # by the shared decks that fill it.
+    weak_own = p_row("H", {"hog": 52, "giant": 52, "graveyard": 52}, "sparky",
+                     owner={"tag": "#P1", "name": "P1"}, games=20)
+    hogs = [p_row(k, {"hog": 70 - i, "giant": 70 - i, "graveyard": 70 - i}, "wc-" + k)
+            for i, k in enumerate(("A", "B", "C"))]
+    kept, _ = ts.personal_plan(
+        [{"tag": "#P0", "own": [], "cards": set(), "shift": {},
+          "wincons": {"wc-A": 0.34, "wc-B": 0.33, "wc-C": 0.33}},
+         {"tag": "#P1", "own": [weak_own], "cards": set(), "wincons": {"sparky": 1.0}, "shift": {}}],
+        hogs, SQ_THREATS, limit=3, new_slots=0, min_list=3)
+    check("a list topped up with shared decks keeps the teammate's own deck",
+          "H" in [r["name"] for r in kept["#P1"]] and len(kept["#P1"]) == 3,
+          str([r["name"] for r in kept["#P1"]]))
+
+    # THEIR OWN DECK is always theirs: familiar, eight known cards, never taken.
+    mine = p_row("G", {"hog": 58, "giant": 58, "graveyard": 58}, "goblin-drill",
+                 owner={"tag": "#O", "name": "O"}, games=30)
+    own_lists, _ = ts.personal_plan(
+        [{"tag": "#O", "own": [mine], "cards": set(SQ_DECKS["G"]), "wincons": {"goblin-drill": 1.0},
+          "shift": {}}], [hog1], SQ_THREATS, limit=2, new_slots=1)
+    own_row = next(r for r in own_lists["#O"] if r.get("owner"))
+    check("an owned deck is familiar with eight known cards",
+          own_row["familiar"] and own_row["known"] == 8, str(own_row))
+
+    # NOTHING SCORED IS NOTHING SHOWN.
+    none, cov0 = ts.personal_plan([dict(empty_hand)], [], SQ_THREATS)
+    check("a teammate with nothing scored gets an empty list", none["#N"] == [])
+    check("and every archetype is reported unanswered", not any(c["answered"] for c in cov0))
+
+
+def property_lineup():
+    print("")
+    print("property — 5.0: who takes whom")
+    v = {("#a", "#X"): 60.0, ("#a", "#Y"): 55.0, ("#b", "#X"): 59.0, ("#b", "#Y"): 50.0}
+    got = ts.lineup(v, ["#a", "#b"], ["#X", "#Y"])
+    check("the pairing with the highest total, not each opponent's best teammate",
+          [(x["blue"], x["red"]) for x in got] == [("#b", "#X"), ("#a", "#Y")], str(got))
+    check("each row carries the figure it was chosen on",
+          [x["winRate"] for x in got] == [59.0, 55.0], str(got))
+    more_red = ts.lineup({("#a", "#X"): 60.0, ("#a", "#Y"): 70.0, ("#a", "#Z"): 50.0},
+                         ["#a"], ["#X", "#Y", "#Z"])
+    check("more opponents than teammates: every teammate is paired, once",
+          [(x["blue"], x["red"]) for x in more_red] == [("#a", "#Y")], str(more_red))
+    more_blue = ts.lineup({("#a", "#X"): 50.0, ("#b", "#X"): 65.0, ("#c", "#X"): 60.0},
+                          ["#a", "#b", "#c"], ["#X"])
+    check("more teammates than opponents: the best one is chosen",
+          [(x["blue"], x["red"]) for x in more_blue] == [("#b", "#X")], str(more_blue))
+    gap = ts.lineup({("#a", "#X"): 60.0}, ["#a", "#b"], ["#X", "#Y"])
+    check("a teammate with nothing against an opponent is still paired, figure None",
+          len(gap) == 2 and {x["red"] for x in gap} == {"#X", "#Y"}
+          and next(x for x in gap if x["red"] == "#Y")["winRate"] is None, str(gap))
+    check("nobody on a side is no lineup", ts.lineup({}, [], ["#X"]) == [])
+    import itertools as _it
+    import random as _rnd
+    r = _rnd.Random(3)
+    blues = ["#b%d" % i for i in range(5)]
+    reds = ["#r%d" % i for i in range(5)]
+    vals = {(b, x): round(r.uniform(40, 70), 1) for b in blues for x in reds}
+    best = max(sum(vals[(b, x)] for b, x in zip(perm, reds)) for perm in _it.permutations(blues))
+    got5 = ts.lineup(vals, blues, reds)
+    check("it is exact: on 5 v 5 it matches every permutation tried",
+          abs(sum(x["winRate"] for x in got5) - best) < 1e-9,
+          "%s vs %s" % (sum(x["winRate"] for x in got5), best))
+
+
+def property_counters_not_specific():
+    print("")
+    print("property — 5.0: a teammate's list does not use 4.1's specificity rules")
+    plays = [{"family": "hog", "share": 0.4}, {"family": "giant", "share": 0.35},
+             {"family": "graveyard", "share": 0.25}]
+    rows = []
+    for i, k in enumerate(("A", "B", "C")):
+        r = sq_row(k, {"hog": 66 - i, "giant": 66 - i, "graveyard": 66 - i})
+        r["fieldRate"] = 65.0 - i      # each one as good against everybody: all-round
+        rows.append(r)
+    spec = ts.counters(rows, plays, limit=3)
+    plain = ts.counters(rows, plays, limit=3, specific=False)
+    check("with the rules one all-round row is held and the rest are fill",
+          sum(1 for r in spec if r.get("allRound")) == 3 and len(spec) == 3, str(spec))
+    check("without them no row is marked all-round",
+          not any(r.get("allRound") for r in plain) and len(plain) == 3)
+    check("and the order is the figure printed",
+          [r["name"] for r in plain] == ["A", "B", "C"], str([r["name"] for r in plain]))
+
+
+def property_wincon_variety_and_floor():
+    print("")
+    print("property — 5.0: one list per win condition, and nothing under 50%")
+    plays = [{"family": "hog", "share": 0.45}, {"family": "giant", "share": 0.30},
+             {"family": "graveyard", "share": 0.25}]
+    # Two Hog Rider lists at the top, a Golem list under them, and a weaker
+    # list that is the only real answer to Graveyard.
+    a = p_row("A", {"hog": 70, "giant": 68, "graveyard": 40}, "hog-rider")
+    b = p_row("B", {"hog": 69, "giant": 67, "graveyard": 41}, "hog-rider")
+    c = p_row("C", {"hog": 60, "giant": 58, "graveyard": 46}, "golem")
+    d = p_row("D", {"hog": 50, "giant": 50, "graveyard": 70}, "graveyard")
+    e = p_row("E", {"hog": 44, "giant": 45, "graveyard": 46}, "lava-hound")
+    # Two rows: A and C are chosen first (D is weaker than C overall), then
+    # the repair path must swap C for D, the only answer to Graveyard.
+    one = ts.counters([a, b, c, d, e], plays, limit=2, by_wincon=True, per_family=1,
+                      floor_only=True, specific=False)
+    names = [r["name"] for r in one]
+    check("one list of a win condition: the second Hog Rider list gives way",
+          "A" in names and "B" not in names, str(names))
+    check("the answer to a family they really play is swapped in (the repair path runs "
+          "with the win-condition cap on)", names == ["A", "D"] and "graveyard" in one[[r["name"] for r in one].index("D")]["answers"],
+          str([(r["name"], r.get("answers")) for r in one]))
+    check("no row under 50% is listed", all(r["expectedWinRate"] >= ts.FLOOR_RATE for r in one))
+    two = ts.counters([a, b, c, d, e], plays, limit=3, by_wincon=True, per_family=2,
+                      floor_only=True, specific=False)
+    check("two allowed: both Hog Rider lists may stand",
+          {"A", "B"} <= {r["name"] for r in two}, str([r["name"] for r in two]))
+    low = ts.counters([e], plays, limit=3, floor_only=True)
+    check("when nothing clears 50%, floor_only lists nothing", low == [], str(low))
+    check("...and without it one row still says so", len(ts.counters([e], plays, limit=3)) == 1)
+
+
 def main() -> int:
     print("team_scout — the coaching brain")
     case_1_many_known_decks()
@@ -1112,6 +1343,10 @@ def main() -> int:
     property_fills_follow_coach_assist()
     property_suggest_ranks_together()
     property_squad_plan()
+    property_personal_plan()
+    property_lineup()
+    property_counters_not_specific()
+    property_wincon_variety_and_floor()
     property_speedups_are_exact()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0

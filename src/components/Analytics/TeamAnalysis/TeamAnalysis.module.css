@@ -1461,3 +1461,92 @@
 .dayChip:disabled {
   cursor: default;
 }
+
+/* ── Brain 5.0 (2026-10-14) ───────────────────────────────────────────────
+ * The pill says where a list comes from: a list the CRL group brought to
+ * duels (green) or one of the window's most played (maroon). Two words, one
+ * pill: it must not break beside a wrapping name. */
+.recDuel {
+  white-space: nowrap;
+}
+
+.recDuel[data-origin='meta'] {
+  background: var(--solid-maroon);
+}
+
+/* A win condition this teammate does not play. Ink, not a pill: it is a fact
+   about the teammate, said after who plays the deck. */
+.recNew {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* WHO TAKES WHOM: one line an opponent, read across. */
+.lineup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lineupList {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lineupRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-nested);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.lineupRed,
+.lineupBlue,
+.lineupDeck {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineupRed {
+  font-weight: 600;
+  color: var(--hue-red);
+}
+
+.lineupBlue {
+  font-weight: 600;
+  color: var(--hue-blue);
+}
+
+.lineupVs {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.lineupRate {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 40rem) {
+  .lineupRow {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  }
+
+  .lineupDeck {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
