@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { TeamReport } from './analyticsClient';
+import { packText, unpackText } from './deckCodec';
 import {
   compactReport,
   isFullSave,
@@ -95,11 +96,67 @@ function readJson(key: string): unknown {
   }
 }
 
+/**
+ * THE REPORT IS KEPT PACKED HERE (2026-10-17, when rosters went to 20 a side).
+ * A 12v12 board measured 1.51 M characters compacted; a 20v20 one is ~4.7 M,
+ * past `MAX_BYTES` and most of the browser's whole allowance, so saving it
+ * failed as "too large". Each report is stored as `reportPacked` — deflate
+ * packed fifteen bits a character (`deckCodec.packText`, the saved library's
+ * own form), ~8x smaller. A save written before this (raw `report`) still
+ * reads; it is rewritten packed on the next write.
+ */
+interface StoredSave extends Omit<SavedTeamAnalysis, 'report'> {
+  report?: TeamReport;
+  reportPacked?: string;
+}
+
+/** Reports are never mutated in place, so a packed form is reused by identity
+ *  and a rename does not re-deflate twelve boards. */
+const packedReports = new WeakMap<TeamReport, string>();
+
+function packedOf(report: TeamReport): string {
+  let packed = packedReports.get(report);
+  if (packed === undefined) {
+    packed = packText(JSON.stringify(report));
+    packedReports.set(report, packed);
+  }
+  return packed;
+}
+
+function toStored(s: SavedTeamAnalysis): StoredSave {
+  if (!s.report) return s;
+  const { report, ...rest } = s;
+  return { ...rest, reportPacked: packedOf(report) };
+}
+
+function fromStored(e: unknown): unknown {
+  if (!e || typeof e !== 'object') return e;
+  const s = e as StoredSave;
+  if (typeof s.reportPacked !== 'string') return e;
+  const { reportPacked, ...rest } = s;
+  const text = unpackText(reportPacked);
+  if (text === null) return { ...rest, report: undefined };
+  try {
+    const report = JSON.parse(text) as TeamReport;
+    packedReports.set(report, reportPacked);
+    return { ...rest, report };
+  } catch {
+    return { ...rest, report: undefined };
+  }
+}
+
+/** Characters this list takes in storage. */
+function storedLength(list: SavedTeamAnalysis[]): number {
+  return JSON.stringify(list.map(toStored)).length;
+}
+
 function load(): SavedTeamAnalysis[] {
   const parsed = readJson(STORAGE_KEY);
   /* Shape-checked rather than trusted. This store's contents can be months
-     older than the code reading them; anything that fails is dropped. */
-  return Array.isArray(parsed) ? parsed.filter(isSave) : [];
+     older than the code reading them; anything that fails is dropped. A
+     report that will not unpack leaves the entry as a stub only if it still
+     carries its counts — otherwise it is dropped like any other bad row. */
+  return Array.isArray(parsed) ? parsed.map(fromStored).filter(isSave) : [];
 }
 
 function loadDeletes(): string[] {
@@ -118,7 +175,7 @@ function writeDeletes(ids: string[]): void {
 
 function tryWrite(list: SavedTeamAnalysis[]): boolean {
   try {
-    const json = JSON.stringify(list);
+    const json = JSON.stringify(list.map(toStored));
     if (json.length > MAX_BYTES) return false;
     localStorage.setItem(STORAGE_KEY, json);
     return true;
@@ -209,7 +266,7 @@ export const useTeamSaves = create<TeamSavesState>((set, get) => {
           : [record, ...saves];
 
       if (!persist(next)) {
-        const alone = JSON.stringify([record]).length;
+        const alone = storedLength([record]);
         return { ok: false, reason: alone > MAX_BYTES ? 'too-large' : 'unwritable' };
       }
       set({ saves: next });

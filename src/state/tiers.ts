@@ -155,6 +155,9 @@ export const FREE_SECTIONS = [
   'Decks',
   'Top Meta Decks',
   'Deck Counter',
+  /* FREE since 17 Oct 2026, on request: what people play in 2v2 is a board of
+     the whole population, like Top Meta Decks, not a reading of one player. */
+  '2v2 Decks',
 ] as const;
 
 /**

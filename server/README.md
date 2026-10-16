@@ -2681,6 +2681,39 @@ of a match plan's payload (live 5v5: 1.08 MB -> 257 kB), and the PDF, its only
 reader, prints it for the top pick alone. Per-teammate decks and the roster-wide
 list carry none. The client type is optional to match.
 
+**TWENTY A SIDE (2026-10-17).**
+
+**`MAX_SQUAD` is 20 on both halves** (`src/utils/squadParse.ts`,
+`server/team_analysis.py`), raised from 12 on request. Two things had to
+change before the number could:
+
+- **Who takes whom was exponential in the roster.** `team_scout.lineup` paired
+  the sides with an exact search over the smaller side's subsets: 12 x 2^12
+  states at twelve, 20 x 2^20 (~420M steps) at twenty, which would have hung the
+  request. Up to `SUBSET_MAX` (12) it still runs that search, so every board
+  that existed before is unchanged; above it, `_assign` (the Hungarian method,
+  O(n^3), exact) answers. Checked equal to the subset search on 400 random
+  rosters (150 in `test_team_scout.py`), and planting a fault in `_assign`
+  turns that check red. A 20v20 answers in under a millisecond.
+- **A 20v20 board did not fit the browser.** Measured on production: a real
+  12v12 report was 1.85 MB raw, 1.51M chars compacted, 183 kB gzipped and 26 s
+  cold. Scaled by folder x teammate cells (400 vs 144), a 20v20 save would be
+  about 4.7M chars, which is over `teamSaves.ts`'s 3M cap, so Save would have
+  failed. The browser copy now keeps each report as `reportPacked`
+  (`deckCodec.packText`, the saved library's deflate + 15-bit form, ~8x
+  smaller). Saves written before this still load, and they are rewritten
+  packed the next time anything is written. The account copy was already
+  gzipped (about 570 kB at 20v20, under the 1 MB request cap).
+  `tests/teamSavesStore.test.ts` drives the real store.
+
+Everything else in the engine works in `blue x red` loops, so it does 400 pairs
+where it did 144. **Measured live after the deploy: a cold 20v20 took 44 s
+and returned 4.8 MB** (20 folders, 20 pairings). A cold 12v12 took 26 s. The
+screen has no client timeout. Deploy order is the usual one: scp `team_analysis.py` and
+`team_scout.py` to the VPS, restart royalweb, and push only after that. If the
+client goes first, it allows 20 while the server cuts the roster at 12. The
+screen's `limits.maxSquad` check tells the reader when that happens.
+
 **TWELVE A SIDE, AND IT RUNS IN PARALLEL (2026-09-21).** `MAX_SQUAD` is 12;
 `test_team_analysis.py` reads the client's copy out of `squadParse.ts`, and the
 vitest suite reads this file's copy, so neither can drift alone.

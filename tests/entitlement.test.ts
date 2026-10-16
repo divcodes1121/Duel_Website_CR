@@ -58,9 +58,8 @@ const ALL_SECTIONS = [
      claim to be exhaustive. */
   'Coach Roster',
   /* The 2v2 pair board, moved off the admin console onto the landing strip on
-     11 Sep 2026. In neither `FREE_SECTIONS` nor `PRO_ONLY_SECTIONS`, so it
-     takes Team Analysis's arrangement exactly: seen by everyone, opened from
-     the trial up, gated for anon and free. */
+     11 Sep 2026. Opened from the trial up until 17 Oct 2026, FREE since (in
+     `FREE_SECTIONS`, on request). */
   '2v2 Decks',
   /* ADMIN ONLY, added 5 Oct 2026: every stored duel, newest first, with both
      players' names and tags. The first section to sit on the admin shelf for
@@ -288,7 +287,7 @@ describe('an unpaid tier opens exactly the free sections', () => {
      whatever order someone appended a constant in. */
   it('the free sections are the ones that were chosen', () => {
     expect([...FREE_SECTIONS].sort()).toEqual(
-      ['Deck Counter', 'Decks', 'Recent Battles', 'Search Player', 'Top Meta Decks'].sort(),
+      ['2v2 Decks', 'Deck Counter', 'Decks', 'Recent Battles', 'Search Player', 'Top Meta Decks'].sort(),
     );
   });
 });

@@ -82,6 +82,29 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-17-duo-free',
+    date: '2026-10-17',
+    kind: 'improved',
+    title: '2v2 Decks is free for everyone',
+    body: [
+      'The 2v2 board — the teammate deck pairs people play most, filterable by card — now opens for every account and without signing in.',
+    ],
+    href: '#/duo',
+    hrefLabel: 'Open 2v2 Decks',
+  },
+  {
+    id: '2026-10-17-team-twenty',
+    date: '2026-10-17',
+    kind: 'improved',
+    title: 'Team Analysis takes twenty a side',
+    body: [
+      'Paste up to twenty players on each side, in both the scouting report and the match plan. Who takes whom is still worked out exactly for the whole roster.',
+      'A full twenty-a-side board takes longer to work out than a smaller one, and saving it works the same as before.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-14-team-scout-5-1',
     date: '2026-10-14',
     kind: 'improved',

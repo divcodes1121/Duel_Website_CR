@@ -741,7 +741,7 @@ check("the floors are published with the report",
       and rep["limits"]["topN"] == ta.TOP_N)
 check("the window is echoed back", rep["days"] == 30)
 
-over = ta.analyze(["#B%d" % i for i in range(20)], ["#R1"], days=30)
+over = ta.analyze(["#B%d" % i for i in range(ta.MAX_SQUAD + 5)], ["#R1"], days=30)
 check("the squad cap is enforced server-side too",
       len(over["blue"]) == ta.MAX_SQUAD,
       "the client cap is feedback; this is the boundary")
@@ -758,11 +758,11 @@ check("MAX_SQUAD matches the client's copy",
       "src/utils/squadParse.ts MAX_SQUAD — the two are mirrors, and this "
       "file SLICES where the client REFUSES, so a drift is a silently "
       "shortened roster rather than an error")
-check("the cap is twelve — what the account holder's rosters really are",
-      ta.MAX_SQUAD == 12)
-check("a twelve-player roster is analysed whole, both sides",
-      len(ta.analyze(["#B%d" % i for i in range(12)],
-                     ["#R%d" % i for i in range(12)], days=30)["red"]) == 12)
+check("the cap is twenty (raised from twelve on request, 2026-10-17)",
+      ta.MAX_SQUAD == 20)
+check("a twenty-player roster is analysed whole, both sides",
+      len(ta.analyze(["#B%d" % i for i in range(20)],
+                     ["#R%d" % i for i in range(20)], days=30)["red"]) == 20)
 check("resolution keeps the roster order on the thread pool",
       [p["tag"] for p in over["blue"]] == ["#B%d" % i for i in range(ta.MAX_SQUAD)])
 

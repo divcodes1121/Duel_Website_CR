@@ -2495,6 +2495,62 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
     return lists, cover
 
 
+#: The largest smaller side `lineup` searches by subsets. Every roster up to
+#: the old 12-a-side cap keeps that exact path, so no board that existed
+#: before rosters went to 20 (2026-10-17) changes; past it `_assign` answers.
+SUBSET_MAX = 12
+
+
+def _assign(gain: list[list[float]]) -> list[int]:
+    """The column each row takes for the largest total `gain`, every row
+    assigned (rows <= columns). Hungarian method, O(rows^2 x columns), exact.
+    Ties go to the earlier column, so the answer is the same every run."""
+    n, m = len(gain), len(gain[0]) if gain else 0
+    if n == 0:
+        return []
+    top = max(max(r) for r in gain)
+    cost = [[top - g for g in r] for r in gain]       # maximise -> minimise
+    inf = float("inf")
+    u, v = [0.0] * (n + 1), [0.0] * (m + 1)
+    p, way = [0] * (m + 1), [0] * (m + 1)              # p[j] = row on column j (1-based)
+    for i in range(1, n + 1):
+        p[0] = i
+        j0 = 0
+        minv = [inf] * (m + 1)
+        used = [False] * (m + 1)
+        while True:
+            used[j0] = True
+            i0, delta, j1 = p[j0], inf, 0
+            row = cost[i0 - 1]
+            for j in range(1, m + 1):
+                if not used[j]:
+                    cur = row[j - 1] - u[i0] - v[j]
+                    if cur < minv[j]:
+                        minv[j], way[j] = cur, j0
+                    if minv[j] < delta:
+                        delta, j1 = minv[j], j
+            for j in range(m + 1):
+                if used[j]:
+                    u[p[j]] += delta
+                    v[j] -= delta
+                else:
+                    minv[j] -= delta
+            j0 = j1
+            if p[j0] == 0:
+                break
+        while True:
+            j1 = way[j0]
+            p[j0] = p[j1]
+            j0 = j1
+            if j0 == 0:
+                break
+    col = [0] * n
+    for j in range(1, m + 1):
+        if p[j]:
+            col[p[j] - 1] = j - 1
+    return col
+
+
 def lineup(values, blue, red) -> list[dict]:
     """WHO TAKES WHOM: the pairing of teammates (`blue`) and opponents (`red`)
     with the highest total win chance, every player of the smaller side paired.
@@ -2502,9 +2558,12 @@ def lineup(values, blue, red) -> list[dict]:
     `values[(blue tag, red tag)]` is that teammate's best figure against that
     opponent, absent when they have nothing to bring. A pair with no figure
     can still be made (it counts as nothing), so a roster with a gap is paired
-    rather than left half empty. Exact: a search over the smaller side's
-    subsets, at most 12 x 2^12 states. Ties keep roster order, so a board
-    reloads the same.
+    rather than left half empty. Exact either way: up to `SUBSET_MAX` on the
+    smaller side, a search over its subsets (at most 12 x 2^12 states, the
+    path every board up to 12 a side has always taken); above it, the
+    Hungarian assignment (`_assign`, O(n^3)), because at 20 a side the subset
+    search is 2^20 states a row — minutes in Python. Ties keep roster order,
+    so a board reloads the same.
 
     Returns `[{"blue", "red", "winRate"}]` in `red`'s order.
     """
@@ -2519,6 +2578,14 @@ def lineup(values, blue, red) -> list[dict]:
     def worth(b: str, s: str) -> float:
         v = values.get((s, b) if flip else (b, s))
         return bonus + (float(v) if v is not None else 0.0)
+
+    rank = {t: k for k, t in enumerate(red)}
+    if n > SUBSET_MAX:
+        cols = _assign([[worth(b, s) for b in big] for s in small])
+        pairs = [((s, big[c]) if flip else (big[c], s)) for s, c in zip(small, cols)]
+        out = [{"blue": b, "red": r, "winRate": values.get((b, r))} for b, r in pairs]
+        out.sort(key=lambda x: rank[x["red"]])
+        return out
 
     full = (1 << n) - 1
     neg = float("-inf")
@@ -2549,7 +2616,6 @@ def lineup(values, blue, red) -> list[dict]:
             b, s = big[i - 1], small[j]
             pairs.append((s, b) if flip else (b, s))
         mask = prev
-    rank = {t: k for k, t in enumerate(red)}
     out = [{"blue": b, "red": r, "winRate": values.get((b, r))} for b, r in pairs]
     out.sort(key=lambda x: rank[x["red"]])
     return out

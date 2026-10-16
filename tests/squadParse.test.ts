@@ -260,13 +260,13 @@ describe('readiness', () => {
     expect(squadProblem(over, squad(1))).toContain(String(MAX_SQUAD));
   });
 
-  it('takes a full twelve-player roster, which is what people paste', () => {
-    /* The cap was 8, then 10. The account holder's rosters run 10 to 12
-       (2026-09-21), so a cap of 10 refused the most common real input and asked
-       the person to decide which two opponents did not matter. */
-    expect(MAX_SQUAD).toBe(12);
-    expect(squadProblem(squad(12), squad(12))).toBeNull();
-    expect(squadProblem(squad(13), squad(1))).toContain('12');
+  it('takes a full twenty-player roster', () => {
+    /* The cap was 8, then 10, then 12 (rosters ran 10 to 12, 2026-09-21), and
+       20 on request (2026-10-17) once the lineup search stopped being
+       exponential in the roster. */
+    expect(MAX_SQUAD).toBe(20);
+    expect(squadProblem(squad(20), squad(20))).toBeNull();
+    expect(squadProblem(squad(21), squad(1))).toContain('20');
   });
 
   it('MIRRORS THE SERVER, and a drift here is a silently shortened roster', () => {

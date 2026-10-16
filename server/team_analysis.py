@@ -233,7 +233,13 @@ except Exception:  # noqa: BLE001 - deployment shape
 #: precomputed lookup on a thread pool and players resolve in parallel, so the
 #: bill grows with the roster in milliseconds rather than seconds. The scoring
 #: loop is `blue x red` in memory: 144 pairs, not 100.
-MAX_SQUAD = 12
+#:
+#: TWENTY, RAISED FROM TWELVE 2026-10-17, on request. The one part that did
+#: not scale was `team_scout.lineup`'s subset search (12 x 2^12 states, 20 x
+#: 2^20 at twenty): past twelve it now runs an exact Hungarian assignment.
+#: Everything else is `blue x red` work: 400 pairs instead of 144. Measured on
+#: production before the change, a cold 12v12 took 26 s and 1.85 MB.
+MAX_SQUAD = 20
 
 #: Threads for the two fan-outs below: resolving roster players and profiling
 #: the squad's decks. Both are I/O (SQLite and the CR API release the GIL).

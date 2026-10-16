@@ -36,7 +36,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'public', 'assets', 'gate')
 
 # Must match GATE_PREVIEW in src/components/Auth/GateCard.tsx.
-SLUGS = ['cards', 'duels', 'duelzone', 'coach', 'deck-analysis', 'teams', 'duo']
+SLUGS = ['cards', 'duels', 'duelzone', 'coach', 'deck-analysis', 'teams']  # 'duo' dropped 2026-10-17: 2v2 Decks is free
 THEMES = ['dark', 'light']
 
 # Small, because it is shown blurred and behind a scrim: 560px of source is

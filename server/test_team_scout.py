@@ -1269,6 +1269,38 @@ def property_lineup():
           abs(sum(x["winRate"] for x in got5) - best) < 1e-9,
           "%s vs %s" % (sum(x["winRate"] for x in got5), best))
 
+    # 20 A SIDE (2026-10-17): past SUBSET_MAX the Hungarian assignment answers.
+    # It must give the subset search's total on every roster both can do.
+    def total(L):
+        return (len(L), round(sum(x["winRate"] or 0 for x in L), 6))
+    same = True
+    for _ in range(150):
+        nb, nr = r.randint(1, 9), r.randint(1, 9)
+        bb = ["#b%d" % i for i in range(nb)]
+        rr = ["#r%d" % i for i in range(nr)]
+        vv = {(b, x): round(r.uniform(35, 75), 1) for b in bb for x in rr if r.random() < 0.8}
+        dp = ts.lineup(vv, bb, rr)
+        keep, ts.SUBSET_MAX = ts.SUBSET_MAX, 0
+        try:
+            hu = ts.lineup(vv, bb, rr)
+        finally:
+            ts.SUBSET_MAX = keep
+        same = same and total(dp) == total(hu)             and len({x["blue"] for x in hu}) == len(hu) == len({x["red"] for x in hu})             and [x["red"] for x in hu] == [x for x in rr if x in {y["red"] for y in hu}]
+    check("the assignment equals the subset search on 150 random rosters", same)
+    b20 = ["#b%d" % i for i in range(20)]
+    r20 = ["#r%d" % i for i in range(20)]
+    v20 = {(b, x): round(r.uniform(40, 70), 1) for b in b20 for x in r20}
+    import time as _t
+    t0 = _t.time()
+    got20 = ts.lineup(v20, b20, r20)
+    took = _t.time() - t0
+    check("20 v 20: everyone paired once, in the opponents' order",
+          [x["red"] for x in got20] == r20 and len({x["blue"] for x in got20}) == 20, str(got20)[:200])
+    check("20 v 20 answers in well under a second", took < 1.0, "%.2f s" % took)
+    perm = {b: x for b, x in zip(b20, r20)}
+    check("and beats (or ties) a plain one-to-one pairing",
+          sum(x["winRate"] for x in got20) >= sum(v20[(b, x)] for b, x in perm.items()) - 1e-9)
+
 
 def property_counters_not_specific():
     print("")

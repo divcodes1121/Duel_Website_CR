@@ -14,5 +14,4 @@ export const GATE_PREVIEW: Record<string, string> = {
   'Coach Assist': 'coach',
   'Deck Analysis': 'deck-analysis',
   'Team Analysis': 'teams',
-  '2v2 Decks': 'duo',
 };
