@@ -134,9 +134,33 @@ DEFAULT_NOVELTY = {
 
 PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".duel_read.json")
 
+#: THE READ FOR EVERYONE ELSE (2026-10-17). When `PATH` is fitted on one named
+#: group (`duel_read_train.TRAIN_COHORT`, the CRL group since 2026-10-10), the
+#: trainer also fits every player's duels into this file, and `path_for` reads
+#: a player outside the group with it.
+#:
+#: Why: the group's fit learned how THOSE players rotate, and applied to
+#: everybody it printed a new deck at 34% where 17% happened and a first pick
+#: at 45% that came 68% of the time. Measured on the trainer's own holdout (fit
+#: before 2 October 18:42 UTC, 84,002 decisions after it), players OUTSIDE the
+#: group, the group's fit against their own:
+#:
+#:     calibration error of the first pick      19.2 -> 2.9 points
+#:     log loss game 1 / 2 / 3                  1.045 / 1.012 / 0.660
+#:                                           -> 0.890 / 0.893 / 0.573
+#:     exact deck first, game 2                 58.1% -> 60.3%
+#:
+#: and the group's own players keep the group's fit, which is the better one
+#: for them (calibration error 4.4 against 7.8, log loss 1.385 against 1.435 at
+#: game 1). Keeping the group's ranking for everyone and refitting only the
+#: confidence parts on everyone was measured too, and was worse than this on
+#: every line (`brain-evidence/read_routing_20261017/`).
+PATH_ALL = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".duel_read_all.json")
+
 _DAY = 86400.0
 _lock = threading.Lock()
-_loaded: tuple[float, dict] | None = None
+#: path -> (mtime, artifact). One entry per file: the service reads two.
+_loaded: dict[str, tuple[tuple, dict]] = {}
 
 
 def _near(a: frozenset, b: frozenset) -> bool:
@@ -269,29 +293,29 @@ def novelty_features(history, revealed, now: float, n_candidates: int,
 
 
 def novelty(history, revealed, now: float, *, weights=None, n_candidates: int | None = None,
-            friendly_now=None) -> float:
+            friendly_now=None, path: str | None = None) -> float:
     """The chance their next deck is one NOT seen in `history`. 1.0 when there
     is nothing legal to name."""
     if n_candidates is None:
         n_candidates = len(candidates(history, revealed, now))
     if not n_candidates:
         return 1.0
-    w = tuple(weights) if weights is not None else novelty_weights_for(stage_of(revealed))
+    w = tuple(weights) if weights is not None else novelty_weights_for(stage_of(revealed), path)
     z = sum(a * b for a, b in zip(w, novelty_features(history, revealed, now, n_candidates,
                                                       friendly_now)))
     return 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, z))))
 
 
-def sharpness(history, revealed, *, weights=None, friendly_now=None) -> float:
+def sharpness(history, revealed, *, weights=None, friendly_now=None, path: str | None = None) -> float:
     """The scale on the ranking scores for this player: 1 = as fitted on
     everyone, below 1 = flatter (a player who rotates is harder to call)."""
-    w = tuple(weights) if weights is not None else sharpness_weights_for(stage_of(revealed))
+    w = tuple(weights) if weights is not None else sharpness_weights_for(stage_of(revealed), path)
     z = sum(a * b for a, b in zip(w, sharpness_features(history, friendly_now)))
     return math.exp(max(-3.0, min(3.0, z)))
 
 
 def read(history, revealed, now: float, *, lost_prev: bool = False, friendly_now=None,
-         weights=None, novelty_weights=None, sharpness_weights=None) -> list[dict]:
+         weights=None, novelty_weights=None, sharpness_weights=None, path: str | None = None) -> list[dict]:
     """The player's likely next decks, most likely first.
 
     Each row: `cards` (the list as they last played it), `p` (probability),
@@ -309,18 +333,21 @@ def read(history, revealed, now: float, *, lost_prev: bool = False, friendly_now
     probability, so two near-copies cannot take two of the three places a
     caller shows. The rows are ordered by that summed probability, so the order
     and the figure printed beside it can never disagree.
+
+    `path` is the artifact whose weights are used where none are passed —
+    `path_for(tag, groups)` says which one a player is read with.
     """
     feats = candidates(history, revealed, now, lost_prev)
     if not feats:
         return []
-    w = tuple(weights) if weights is not None else weights_for(stage_of(revealed))
+    w = tuple(weights) if weights is not None else weights_for(stage_of(revealed), path)
     scored = sorted(((sum(a * b for a, b in zip(w, f)), d) for d, f in feats.items()),
                     key=lambda e: (-e[0], _sig(e[1])))
-    kappa = sharpness(history, revealed, weights=sharpness_weights, friendly_now=friendly_now)
+    kappa = sharpness(history, revealed, weights=sharpness_weights, friendly_now=friendly_now, path=path)
     top = scored[0][0]
     ex = [(math.exp(kappa * (s - top)), d) for s, d in scored]
     seen = 1.0 - novelty(history, revealed, now, weights=novelty_weights,
-                         n_candidates=len(feats), friendly_now=friendly_now)
+                         n_candidates=len(feats), friendly_now=friendly_now, path=path)
     z = sum(e for e, _ in ex) / seen
 
     order: dict[frozenset, list] = {}
@@ -420,21 +447,26 @@ def _table(body: dict, names_key: str, key: str, names: tuple) -> dict | None:
     return got
 
 
-def load(path: str = PATH) -> dict | None:
+def load(path: str | None = None) -> dict | None:
     """The fitted artifact, or None. Re-read only when the file changes.
 
     REFUSED WHOLE when its ranking features are not this module's. The other
     two tables travel with the ranking they were fitted beside; a file without
     a usable one falls back to the defaults for that part only.
     """
-    global _loaded
+    path = path or PATH
     try:
-        m = os.path.getmtime(path)
+        # MODIFICATION TIME AND SIZE: a file rewritten inside one tick of a
+        # coarse filesystem clock (the server's) keeps its mtime, and a cache
+        # keyed by mtime alone hands the old weights back (seen 2026-10-17).
+        st = os.stat(path)
+        m = (st.st_mtime_ns, st.st_size)
     except OSError:
         return None
     with _lock:
-        if _loaded is not None and _loaded[0] == m and _loaded[1].get("_path") == path:
-            return _loaded[1]
+        hit = _loaded.get(path)
+        if hit is not None and hit[0] == m:
+            return hit[1]
     try:
         with open(path, encoding="utf-8") as f:
             body = json.load(f)
@@ -452,8 +484,34 @@ def load(path: str = PATH) -> dict | None:
         or dict(DEFAULT_NOVELTY)
     body["_path"] = path
     with _lock:
-        _loaded = (m, body)
+        _loaded[path] = (m, body)
     return body
+
+
+def fitted_on(path: str | None = None) -> str:
+    """Whose duels the artifact at `path` was fitted on: a group's name, or
+    `all` (also for an artifact that does not say, and for none at all)."""
+    art = load(path)
+    on = str(((art or {}).get("meta") or {}).get("trainedOn") or "all").strip().lower()
+    return on or "all"
+
+
+def path_for(tag, groups, main: str | None = None, others: str | None = None) -> str:
+    """Which artifact reads `tag`: `main`, unless `main` was fitted on one
+    named group, `tag` is not in it, and a usable fit on everyone is at
+    `others` — then `others`.
+
+    `groups` is `{name: set of tags}` (`duel_read_train.load_cohorts`). A
+    group the file does not hold has no members, so nobody is in it. When
+    anything is missing the answer is `main`: the read as it was.
+    """
+    main, others = main or PATH, others or PATH_ALL
+    on = fitted_on(main)
+    if on == "all" or load(others) is None:
+        return main
+    members = (groups or {}).get(on) or ()
+    t = str(tag or "").strip().upper()
+    return main if t and t in members else others
 
 
 def _pick(stage: int, key: str, default: dict, path: str) -> tuple:
@@ -462,20 +520,21 @@ def _pick(stage: int, key: str, default: dict, path: str) -> tuple:
     return table[min(max(int(stage), 0), 2)]
 
 
-def weights_for(stage: int, path: str = PATH) -> tuple:
+def weights_for(stage: int, path: str | None = None) -> tuple:
     return _pick(stage, "_weights", DEFAULT_WEIGHTS, path)
 
 
-def sharpness_weights_for(stage: int, path: str = PATH) -> tuple:
+def sharpness_weights_for(stage: int, path: str | None = None) -> tuple:
     return _pick(stage, "_sharpness", DEFAULT_SHARPNESS, path)
 
 
-def novelty_weights_for(stage: int, path: str = PATH) -> tuple:
+def novelty_weights_for(stage: int, path: str | None = None) -> tuple:
     return _pick(stage, "_novelty", DEFAULT_NOVELTY, path)
 
 
-def status(path: str = PATH) -> dict:
+def status(path: str | None = None) -> dict:
     """What `/api/analytics/status` reports: which weights are in use."""
+    path = path or PATH
     art = load(path)
     if not art:
         return {"brain": BRAIN, "fitted": False}
@@ -489,4 +548,14 @@ def status(path: str = PATH) -> dict:
         out["trainedOn"] = meta["trainedOn"]
         out["trainedDuels"] = meta.get("trainedDuels")
         out["trainedPlayers"] = meta.get("trainedPlayers")
+    # EVERYONE ELSE'S READ (2026-10-17), when one is in use beside a group's.
+    # `holdout` above is then what the service prints: each player read by the
+    # fit `path_for` gives them.
+    if path == PATH and fitted_on(path) != "all":
+        other = load(PATH_ALL)
+        om = (other or {}).get("meta") or {}
+        out["others"] = ({"fitted": True, "trainedOn": om.get("trainedOn") or "all",
+                          "trainedAt": om.get("trainedAt"), "trainedDuels": om.get("trainedDuels")}
+                         if other else {"fitted": False})
+        out["routed"] = bool(other) and bool(meta.get("routed"))
     return out

@@ -63,6 +63,7 @@ bot's SQLite files read-only.
 | **Counters to what they actually play — Deck Counter and Team Scout** | **LIVE SINCE 2026-10-10 AS `c1a1a0f` (superseded the same day by 4.0, the row above). Server by scp first, 06:49 UTC (the deployed files matched the last commit; backups `*.bak-20261010-064954-precounters`; only `royalweb` restarted), the client 52 s after the push (06:54 UTC, `/api/health` and the build meta). Checked on production: the live API for three players (brain `team-scout-3.0`, pool 2,341, every list ordered, nothing under 50%, every family at 10%+ answered at 55%+, every suggested deck fielding three special slots), six suites green on the VPS, and 42/42 in a real browser SIGNED IN on https://deckkies.com — the Deck Counter's three views in both themes and at 390px, a scouting report and a match plan, the figures on screen equal to the API's. Built and verified on staged code against production data first.** Reported: *"the decks given for counter are very generic and rely on the meta — we need decks which counter their archetypes, whatever they play, at least at a good percentage"*. Both lists are now one engine's: what a player PLAYS (own-deck and duel games, the Decks screen's count), every vetted ladder list and every duel list as candidates (2,341, was 204), the strongest counters in the order of their percentage, no deck expected to lose, and an answer held for every archetype they play a tenth of the time. Every deck shows its win rate against each archetype they play; Deck Counter also reads the same decks per archetype and per counter card (the card manual says which cards answer which — the battle data ranks the decks). On 20 real opponents the weakest of the seven went from a median **52.3% to 63.6%**, lists out of order **18 → 0**, rows under 50% **6 → 0**; one opponent answers in 0.56 s (was 0.85). See [Counters to what they play](#counters-to-what-they-play-2026-10-10) |
 | **Deck report: the last N sets, newest first** | **LIVE 2026-10-09 as `ea2193b`, client only** (`/api/health` reported it 53 s after the push; the served bundle carries both chips' tooltips and the release note). Asked, with 259 sets in the export dialog and only `First` beside the number: *"add an option beside First, 'Last', which will give descending order, and naming and numbers will be correct."* The report lists sets oldest first, so `First 3` were the three earliest ever built; the ones just saved were at the far end. **`Last`** takes the N most recent, newest first, and **each set keeps the number it has in the whole report** — the last three of 259 print as Duel Deck 259, 258, 257, the same numbers `All` and `First` give those sets. Same option in Solo and in Deck's Home (counted in decks). 17/17 in a browser, and the downloaded PDF read back: pages in the order 30, 29, 28, each heading over its own set's decks. See [The deck report: first N or last N](#the-deck-report-first-n-or-last-n-2026-10-09) |
 | **Saved sets: 1,000 for everyone, no limit for an admin** | **LIVE 2026-10-09 as `668e83a`** (client + `api/decks.ts`, one push; `/api/health` reported the commit 52 s later). Asked: *"I already have 225 decks ... unlimited for my account, which is admin, store it in cloud so that I don't have to worry about space ... and try to make 1000 saved decks for everyone."* An account's decks were ONE value capped at 1 MB (about 500 saved duels), and passing it stopped sync with nothing on screen. The saved library now travels and is stored **in parts** of 200 sets, named by their content, so there is no ceiling to hit: saving a duel uploads one part and a small head, and a reload downloads only parts the browser lacks (normally none). In the browser the same parts are kept **compressed** — 225 sets went from 445,301 to 62,326 characters, 1,000 five-deck sets from 2.25 M to 0.31 M. The limit is `SAVED_SET_LIMIT` = 1,000, enforced by the endpoint, with none for an admin (asked of Supabase with the caller's own token). The Saved tab is paged, 20 a page: with 1,000 sets it took **6.3 s to open and takes 0.4 s**. Old tabs keep working (the old calls are still answered) and a load with nothing to change writes nothing. **Nothing replaces a library without a copy being kept** — the account's old value is copied aside for good at the move, the browser keeps its old-format value and any longer library a shorter one replaces for 30 days, and a part is read back before it is relied on. **1,618 vitest**, 33 planted faults all caught, **33/33 + 11/11 in a browser** (the second run wiped the library on purpose and restored it from the copy). **On production, without a session, 26/26**: every new path of the endpoint answers 401 with its own JSON (so the function loads), the page reports the commit and the served bundle carries the new code. **Not exercised: the real database with a signed-in account** — the account holder's check (Saved should read 225; save one duel; reload; open on the phone). See [The saved library, in parts](#the-saved-library-in-parts-2026-10-09) |
+| **Coach Assist reads each opponent with the fit that holds for them** | **2026-10-17, server only, deployed 10:23 UTC** (backups `*.bak-20261017-102316-preroute`). The duel read was fitted on the CRL group alone since 2026-10-10 and printed that group's habits for every opponent (a new deck at 34% where 17% happened). Now the group is read with its own fit and everyone else with a fit on everyone (`.duel_read_all.json`): calibration error of the first pick 19.2 -> 2.9 points on the trainer's holdout, 10.2 -> 2.6 on 2,803 opponents through the production path. An out-of-time replay (7-11 October, every picking model fitted before 7 October) shows the 12 October counters still lift "Play this" +6.2 points [+4.8, +7.7]; today's change does not move the picks. Found and not changed: a deck's game figure prints about 8 points high where real results can check it (229 sides). See [Each opponent read with the fit that holds for them](#each-opponent-read-with-the-fit-that-holds-for-them-2026-10-17) |
 | **Save duel knows a duel from either player's side** | **LIVE 2026-10-09 as `668e83a`, client only, same push.** Reported: *"player A vs player B is saved; when I save player B vs player A, same set, it should show that already saved and the duel set number."* The same duel is listed in each player's Duel Zone with the decks on opposite sides, and the duplicate rule compared blue to blue and red to red only, so the second save added a second "Duel Deck n". The rule now matches the decks **either way round** and answers with the name of the set that holds it; the Duel Zone's row **reads the library**, as All Duels did, so it says `Already saved as Duel Deck n` before anything is pressed. **32/32 in a browser on two real duels** found in both players' Duel Zones. See [Saving a duel you actually played](#saving-a-duel-you-actually-played) |
 | **Coach Assist: the duel read, and what they have left** | **2026-10-07, server deployed first** (backups `*.bak-20261007-120910-preduelread`). The first two steps of a rebuild of the duel suggestion asked for that day, each proved on a BLIND replay of every stored duel (`DECKKIES_DUEL_RECOMMENDER.md`). The decks an opponent is expected to bring now come from a model fitted on the order and recency of their own duels (`server/duel_read.py`, refitted after every poll), not from a count of plays: on the CRL-list players it names the exact opening deck first **42.8%** of the time against **20.3%**, and within three 60.6% against 40.8%. A native duel's blocks were measured to be in game order (15,578 of 15,578 sides), so every duel now says what a player opens with. The screen gains a block of the win conditions, spells, buildings and support cards they may still bring with the chance of each and the cards already spent in grey, a `new deck` figure, a Clan war / Friendly switch, and each of their decks printed at its real chance. See [The duel read](#the-duel-read-game-order-recency-and-what-they-have-left-2026-10-07) |
 | **Coach Assist tells you which decks to load** | **2026-10-07, server deployed first 18:31 UTC** (backups `*.bak-20261007-183108-preduelset`). Step 4 of the duel recommender rebuild. Before a duel the first question is which decks to load together — a duel is played from decks that share no card. Asked before game 1, the Suggestion now answers with a SET: three or four of the player's OWN duel decks, exactly as they play them, chosen by the chance of winning the duel (`server/duel_set.py`, valued by the look-ahead); "Play this" is the deck of that set to open with and the decks to bring next come from it. Their last duel's decks stay unless leaving one out gains a full point. Blind, both full sets known whatever the score (672 player-duels), rated by a win model the planner never saw: the set really brought 52.8%, a composed one 54.6%; where the player's decks allow a choice (277) 60.2% against 64.2%. **The real results of those duels are too few to confirm it** (83 against 194). Changing cards to resolve clashes was built, measured and left OFF: 98.6% of players with three duel decks can already field a set. See [The set to load before a duel](#the-set-to-load-before-a-duel-2026-10-07) |
@@ -290,14 +291,14 @@ python server/test_counters.py    # 69 checks: counters to what they play — th
 python server/test_team_scout.py  # 160 checks over the coaching brain: projection, scoring, squad plan
 python server/test_matchup_fusion.py # 34 checks over the fused ladder+duel rate, against literals
 python server/test_duel_index.py  # 71 checks over the duel index, its version cells and its readers, on synthetic data
-python server/test_duel_read.py   # 67 checks over the duel read: legal candidates, order, recency, what is left by role, the cohort line
+python server/test_duel_read.py   # 103 checks over the duel read: legal candidates, order, recency, what is left by role, the cohort line, which fit reads whom
 python server/test_duel_plan.py   # 54 checks over the look-ahead for the whole duel, every figure worked by hand
 python server/test_duel_set.py    # 49 checks over the set composer: no shared card, the largest set, pinned decks, swaps, the cap on sets valued
 python server/test_duel_brain.py  # 83 checks over the duel brain's figures and picks
 python server/test_suggested_seating.py # 49 checks: a suggested deck fields every slot its cards can fill
 python server/test_coach_daily.py # 204 checks over the plan against the field
 python server/test_player_skill.py # 40 checks over each player's skill with a win condition: the table, its holdout gate, the reader
-python server/test_coach.py       # 296 checks over the Coach Assist rules, incl. its duel wiring, the duel read's, the duel plan's, the set's, the gate on built decks and the counters
+python server/test_coach.py       # 307 checks over the Coach Assist rules, incl. its duel wiring, the duel read's (and which fit reads whom), the duel plan's, the set's, the gate on built decks and the counters
 python server/test_coach_choice.py # 79 checks: decks around the cards a reader names — which lists are rated, the order, the sections
 python server/test_deck_architect.py # 51 checks: building around a card from how duel players build (shells, core, open slots)
 python server/test_deck_tuner.py  # 152 checks over the swap brain, incl. the three-slot rule and the player-first lists
@@ -3837,6 +3838,54 @@ it is not called Weak. The record:
 entry of 2026-10-12; server: [server/README.md](server/README.md) "A player's
 skill with each win condition"; screen: [docs/UI.md](docs/UI.md) "How a player
 plays, on the Suggestion".
+
+### Each opponent read with the fit that holds for them (2026-10-17)
+
+Since 2026-10-10 the duel read is fitted on the CRL group alone (asked for
+then). Applied to every opponent, that fit printed the group's habits for
+everyone: a new deck at 34% where 17% happened, a first pick at 45% that came
+68% of the time. The ranking was right; the figures beside it were not.
+
+**Now there are two fits.** The trainer fits the group (as before) and every
+player beside it (`server/.duel_read_all.json`); an opponent in the group is
+read with the group's fit, anyone else with everyone's, and the payload says
+which (`readFit`). Nothing changes on the screen except the figures.
+
+Measured before it was built, on the trainer's own holdout (84,002 decisions
+after 2 October), for players outside the group:
+
+| | the group's fit for everyone (until today) | each player with their fit |
+|---|---|---|
+| calibration error of the first pick | 19.2 points | **2.9** |
+| log loss, games 1 / 2 / 3 | 1.045 / 1.012 / 0.660 | **0.890 / 0.893 / 0.573** |
+| the exact deck named first at game 2 | 58.1% | **60.3%** |
+
+And on the production path — histories built the way Coach Assist builds them,
+both fits made only from duels before 7 October, 2,803 opponents of 7-16
+October: calibration error 10.2 -> **2.6**, log loss 0.488 -> **0.464**;
+clan-war duels 22.1 -> 5.3; friendly duels level (2.6 -> 2.7, log loss 0.674
+-> 0.686, slightly worse); the CRL group unchanged.
+
+**The whole Suggestion, checked out of time** (394 sides of duels from 7-11
+October; every model the picking side reads fitted before 7 October; the judge
+fitted only on games from 12 October): "Play this" against the deck the
+opponent really opened with — before the 12 October counters 50.2, live **56.4
+(+6.2 [+4.8, +7.7])**, with today's change 56.1 (-0.3 [-1.1, +0.6]). **The
+counters hold on duels they never saw**; today's change moves the printed
+figures, not the picks.
+
+**One thing found and NOT changed**: where it can be checked against real
+results (the deck rated is the deck they really opened with, 229 sides over
+two windows), a deck's "this game" figure prints about **8 points high**
+(54.6% printed, 46.7% won ±6.5), in friendly and clan-war duels alike. The top
+end is not where it is (80%+ won 82%). Too few sides to fit a correction
+safely yet. Also fixed: the read's artifact cache could return old weights for
+a file rewritten inside one tick of the server's file clock.
+
+Record: [`DECKKIES_DUEL_RECOMMENDER.md`](DECKKIES_DUEL_RECOMMENDER.md) log of
+2026-10-17; how it runs: [server/README.md](server/README.md) "Two fits".
+Deployed 2026-10-17 10:23 UTC, server only; `test_duel_read` 76 -> 103,
+`test_coach` 296 -> 307, 18 planted faults all caught.
 
 ### The duel read: game order, recency, and what they have left (2026-10-07)
 

@@ -822,10 +822,127 @@ skill` step under its timer (`grep "player skill"
 /var/log/clashbot/after-poll.log`, and `playerSkill.builtAt` on the status
 route).
 
+### 2026-10-17 — the read is routed by player; an out-of-time check of everything
+
+Asked: "the shadow mode was off — check now if we have enough data to change
+the duel recommendation, analyse everything", then "go ahead and at the end
+compare the results". The OIE's shadow switch was in fact ON
+(`CLASH_OIE=shadow`, 78 records from 16 players since 18 September); the R3
+sampler had stopped itself on 19 September. Neither feeds this recommender,
+which learns from stored duels: 200,457 duels / 485,617 games stored (170,792 /
+413,677 on 7 October); 24,519 duels since 7 October, 6,992 since 12 October;
+no duel longer than three games yet. Collection dropped about half this week
+(Thursday 546,956 -> 314,721 battles) with the bot re-syncing all 6,104 players
+every two hours — players playing less, not a fault.
+
+**Found: since 2026-10-10 the read printed the CRL group's habits for every
+opponent.** Fitted on the group alone (`trainedOn: crl`, 3,592 duels), it
+printed a new deck at 34% where 17% happened and a first pick at 45% that came
+68% of the time, for everyone outside the group. Ranking unaffected.
+
+**Measured first** (`brain-evidence/read_routing_20261017/`, the trainer's own
+split: fit before 2 October 18:42 UTC, 84,002 held-out decisions; the lab's
+`read()` matched the real one on 645 of 645 sampled):
+
+| players outside the group | the group's fit (live) | **routed** | everyone's fit for all | group ranking + everyone's confidence |
+|---|---|---|---|---|
+| calibration error, first pick | 19.2 | **2.9** | 2.9 | 4.4 |
+| log loss game 1 / 2 / 3 | 1.045 / 1.012 / 0.660 | **0.890 / 0.893 / 0.573** | same | 0.908 / 0.922 / 0.576 |
+| exact deck first, game 2 | 58.1% | **60.3%** | 60.3% | 58.1% |
+
+The group itself keeps its own fit: calibration error 4.4 against 7.8, log
+loss 1.385 against 1.435 at game 1 with everyone's.
+
+**Built** (`duel_read.PATH_ALL`, `path_for`, `read(path=)`; the trainer writes
+the everyone fit beside the group's and reports the routed holdout; coach
+`_read_fit`, `readFit` in the payload). Server README "Two fits".
+
+**Then checked on the production path**, where the replay of 12 October could
+not reach. `brain-evidence/coach_replay_20261017/`, three-way date split again:
+every model the PICKING side reads fitted before 7 October (card model, duel
+win model, skill table, both reads — `c2_prep.py`); test duels 7-11 October;
+the judge a card model fitted only on games from 12 October (16,893 duel games
++ 2.0M ladder, its own holdout 0.6317 -> 0.6109 — about half the size of the
+12 October judge).
+
+*The read, histories built by the real `coach._history` (native duels AND
+friendly-practice series), 2,803 opponent sides of 7-16 October:*
+
+| | calibration error, live -> routed | log loss game 1, live -> routed |
+|---|---|---|
+| everyone | 10.2 -> **2.6** | 0.488 -> **0.464** |
+| duel history only (654) | 17.1 -> **4.1** | 1.032 -> **0.905** |
+| clan-war duels (1,494) | 22.1 -> **5.3** | 0.325 -> **0.268** |
+| with friendly-practice series (365) | 3.8 -> **2.4** | 1.897 -> 1.939 (worse) |
+| friendly duels (1,309) | 2.6 -> 2.7 | 0.674 -> 0.686 (worse) |
+| the CRL group (93) | unchanged | unchanged |
+
+1,784 of the 2,803 had no duel history in the window: the read is silent and
+the count answers, as before.
+
+*The whole Suggestion, 394 sides (60 CRL, 231 friendly, 103 clan war), three
+arms through the staged code — "Play this" judged against the deck the
+opponent really opened with:*
+
+| | before 12 Oct | live | **routed (today)** |
+|---|---|---|---|
+| everyone | 50.15 | 56.37 | 56.08 |
+| live minus before | | **+6.22 [+4.80, +7.69]** | |
+| routed minus live | | | **-0.30 [-1.10, +0.55]** |
+| CRL group | 51.12 | 54.39 (+3.27 [-0.35, +6.65]) | 55.44 (+1.05 [-0.26, +2.45]) |
+| friendly duels | 49.21 | 54.94 (+5.73) | 54.22 (-0.71 [-1.70, +0.33]) |
+| clan-war duels | 52.59 | 60.09 (+7.50) | |
+| after game 1, vs their real game 2 | | 55.52 (+5.52 over what they brought) | 55.01 |
+
+**The 12 October counters hold out of time**: +6.2 on duels they never saw
+(+8.0 on the first window). The routing does not move the picks — it was not
+meant to; it moves the printed figures.
+
+**My flaw, said.** A first check of the read on these 394 sides
+(`c2_read.py`) compared the opponent's first row's newest list with the deck
+they brought EXACTLY, while the row's probability includes its near-identical
+variants; it made every arm look over-confident and the routed one worst. The
+2,803-side measurement matches by membership, as the trainer does.
+
+**The printed figure, checked where it can be.** The 12 October scorer's
+"printed this game vs the real game 1" compares the figure for the SUGGESTED
+deck with the result of the deck they REALLY played — mostly another deck — so
+it is not calibration. `c2_figure.py` keeps only sides where a deck the
+Suggestion rated is the one they opened with: over two windows (229 sides) a
+deck's game figure printed **54.6%** and won **46.7%** (±6.5): about **8 points
+high**, the same in friendly (+8.1) and clan-war (+7.8) duels. The top end is
+NOT where it is: printed 80%+ won 82% (11). "Play this"'s own figure has 50
+checkable sides (+2.0 ±13.8). **Not corrected**: 229 sides is too few to fit a
+correction that moves every figure on screen. The weekly scorecard (item 1
+below) is what collects these sides.
+
+**Also found and fixed: the read's artifact cache could hand back old weights**
+when a file was rewritten inside one tick of the server's coarse file clock
+(keyed by mtime alone — the trap `deck_packages` hit on 2026-10-07). Now mtime
+and size. Seen as a red test on the server, never in production (the file is
+rewritten once a poll).
+
+Tests: `test_duel_read.py` 76 -> 103, `test_coach.py` 296 -> 307 (one ratio
+check made relative: `p` is rounded to four decimals); 18 planted faults all
+caught (three tests too weak first: the cache, the routed holdout, the
+history's tag). Deployed 10:23 UTC, server only (backups
+`{coach,duel_read,duel_read_train,test_coach,test_duel_read}.py.bak-20261017-102316-preroute`,
+`.duel_read.json.bak-…`); both fits written in place by the updater's own
+command (198 s, was 41 s); only `royalweb` restarted; both suites green on the
+server; live `/coach/predict` reads CRL players with `crl` and others with
+`all`; status `duelRead.routed: true`.
+
 ## Next action
 
 Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.
 What is left, in the order I would take it:
+
+-1. **(2026-10-17) The deck figure reads about 8 points high** where it can be
+   checked against real results (229 sides, two windows). Fit a correction
+   on one window and confirm on the next once the weekly scorecard (item 1)
+   holds 600+ such sides. And the count fallback when the read is silent: in
+   the 394-side replay its first deck printed 41% (64 sides) — re-measure it
+   with membership matching before acting.
 
 0. **The printed figure at the top end** ("80%+" winning 53-60% of the few
    sides that still print it). The level term in friendly duels was one

@@ -239,6 +239,66 @@ check("a file without the new-deck table keeps its ranking and takes the default
 open(os.path.join(tmp, "junk.json"), "w").write("{not json")
 check("an unreadable file is no artifact", dr.load(os.path.join(tmp, "junk.json")) is None)
 
+# ── which fit reads whom (2026-10-17) ──────────────────────────────────────
+print("\na group's fit reads the group; a fit on everyone reads everyone else")
+gp, ap = os.path.join(tmp, "group.json"), os.path.join(tmp, "everyone.json")
+WG = {s: [0.0] * 6 + [-2.0] + [0.0] * 5 for s in (0, 1, 2)}     # recency only
+WA = {s: [0.0] * 4 + [4.0] + [0.0] * 7 for s in (0, 1, 2)}      # share only
+dr.save(WG, {"trainedOn": "crl"}, path=gp, novelty=N, sharpness=S)
+dr.save(WA, {"trainedOn": "all"}, path=ap, novelty=N, sharpness=S)
+os.utime(gp, (1_700_000_000, 1_700_000_000))
+os.utime(ap, (1_700_000_000, 1_700_000_000))
+# From an empty cache, so the group's file is the ONLY thing cached when
+# everyone's (same mtime) is asked for: a cache keyed by mtime alone hands
+# the group's weights back for it.
+dr._loaded.clear()
+check("TWO FILES WITH THE SAME MTIME ARE STILL TWO ARTIFACTS (one cache entry a path)",
+      dr.weights_for(0, gp) == tuple(WG[0]) and dr.weights_for(0, ap) == tuple(WA[0])
+      and dr.weights_for(0, gp) == tuple(WG[0]))
+check("whose duels: the artifact says", dr.fitted_on(gp) == "crl" and dr.fitted_on(ap) == "all")
+_rw = os.path.join(tmp, "rewritten.json")
+dr.save(WG, {"trainedOn": "all"}, path=_rw, novelty=N, sharpness=S)
+os.utime(_rw, (1_700_000_100, 1_700_000_100))
+_first = dr.fitted_on(_rw)
+dr.save(WG, {"trainedOn": "crl", "trainedDuels": 3592}, path=_rw, novelty=N, sharpness=S)
+os.utime(_rw, (1_700_000_100, 1_700_000_100))
+check("A FILE REWRITTEN INSIDE ONE CLOCK TICK IS READ AGAIN (the server's clock is coarse)",
+      _first == "all" and dr.fitted_on(_rw) == "crl")
+check("an artifact that does not say, or none at all, is everyone's",
+      dr.fitted_on(path) == "all" and dr.fitted_on(os.path.join(tmp, "absent.json")) == "all")
+G = {"crl": {"#IN1", "#IN2"}}
+check("a group member is read with the group's fit", dr.path_for("#IN1", G, gp, ap) == gp)
+check("...whatever the case or spaces of the tag", dr.path_for(" #in2 ", G, gp, ap) == gp)
+check("anyone else is read with everyone's fit", dr.path_for("#OUT", G, gp, ap) == ap)
+check("no tag is nobody in the group", dr.path_for(None, G, gp, ap) == ap and dr.path_for("", G, gp, ap) == ap)
+check("a group file that lacks the group: nobody is in it", dr.path_for("#IN1", {}, gp, ap) == ap)
+check("with no fit on everyone beside it, everyone keeps the main fit",
+      dr.path_for("#OUT", G, gp, os.path.join(tmp, "absent.json")) == gp)
+check("a main fit on everyone reads everyone, whatever is beside it", dr.path_for("#OUT", G, ap, gp) == ap)
+hist_r = [duel(9, [A, B]), duel(8, [A, B]), duel(7, [A, B]), duel(1, [C, D])]
+rg, ra = dr.read(hist_r, [], NOW, path=gp), dr.read(hist_r, [], NOW, path=ap)
+check("read(path=) uses that file's weights",
+      rg == dr.read(hist_r, [], NOW, weights=WG[0], novelty_weights=N[0], sharpness_weights=S[0])
+      and ra == dr.read(hist_r, [], NOW, weights=WA[0], novelty_weights=N[0], sharpness_weights=S[0]))
+check("...and the two fits rank differently here (else the check above proves nothing)",
+      rg[0]["cards"] != ra[0]["cards"], f"{rg[0]['cards'][0]} {ra[0]['cards'][0]}")
+_saved_paths = (dr.PATH, dr.PATH_ALL)
+dr.PATH, dr.PATH_ALL = gp, ap
+try:
+    check("THE DEFAULT PATH IS READ WHEN CALLED, not when the module loaded",
+          dr.read(hist_r, [], NOW) == rg and dr.path_for("#OUT", G) == ap)
+    dr.save(WG, {"trainedOn": "crl", "routed": True, "trainedAt": "t"}, path=gp, novelty=N, sharpness=S)
+    st = dr.status()
+    check("status names everyone else's fit beside the group's",
+          st["trainedOn"] == "crl" and st["routed"] is True and st["others"]["fitted"] is True
+          and st["others"]["trainedOn"] == "all", str(st))
+    os.remove(ap)
+    st = dr.status()
+    check("...and says when there is none, and that nothing is routed",
+          st["others"] == {"fitted": False} and st["routed"] is False, str(st))
+finally:
+    dr.PATH, dr.PATH_ALL = _saved_paths
+
 # ── the trainer is blind ───────────────────────────────────────────────────
 print("\nthe trainer only ever shows a decision what came before it")
 
@@ -358,6 +418,66 @@ check("an unreadable cohort file is no cohort", T.load_cohorts(_cp) == {})
 with open(_cp, "w", encoding="utf-8") as _f:
     _json.dump(["#S0"], _f)
 check("a cohort file that is not a table of groups is no cohort", T.load_cohorts(_cp) == {})
+
+# ── the routed holdout and the two files (2026-10-17) ──────────────────────
+print("\nthe holdout reads each player with the fit the service will read them with")
+_other = {"weights": {s: [0.0] * len(dr.FEATURES) for s in (0, 1, 2)},
+          "novelty": {s: [3.0] + [0.0] * (len(dr.NOVELTY_FEATURES) - 1) for s in (0, 1, 2)},
+          "sharpness": {s: [0.0] * len(dr.SHARPNESS_FEATURES) for s in (0, 1, 2)}}
+_grp = {"crl": {"#S0", "#S1", "#S2"}}
+_routed = T.score(players_s, model, 0, 10 ** 12, _grp, other=_other, members=_grp["crl"])
+_all_other = T.score(players_s, _other, 0, 10 ** 12, _grp)
+check("the group's own decisions are scored with the group's fit", _routed["crl"] == rep_c["crl"])
+check("everyone else's with the other fit (it says a new deck at ~95%)",
+      _routed["all"]["0"]["newDeckSaid"] > rep_c["all"]["0"]["newDeckSaid"] + 20
+      and _routed["all"]["0"]["newDeckSaid"] < _all_other["all"]["0"]["newDeckSaid"], str(_routed["all"]["0"]))
+check("no other fit: exactly the old report", T.score(players_s, model, 0, 10 ** 12, _grp, members=_grp["crl"]) ==
+      T.score(players_s, model, 0, 10 ** 12, _grp))
+
+print("\na group's fit is written beside a fit on everyone, and the holdout is routed")
+big = []
+for i in range(100):
+    opener, second, spare = deck(f"o{i}"), deck(f"s{i}"), deck(f"x{i}")
+    for day in range(1, 13):
+        gs = [(opener, X, 1), (spare, Y, 1)] if day % 2 else [(opener, X, 2), (second, Y, 1), (spare, Z, 1)]
+        # Each their own opponent: one opponent of all 100 would hold 1,200
+        # duels of history, read again for every one of their decisions.
+        big.append((day, f"#B{i}", f"#Q{i}", gs, "CW_Duel_1v1"))
+_rd = _tempfile.mkdtemp()
+_main, _every = os.path.join(_rd, "r.json"), os.path.join(_rd, "r_all.json")
+_keep = (T.TRAIN_COHORT, T.TRAIN_MIN_DUELS, T.EPOCHS)
+T.TRAIN_COHORT, T.TRAIN_MIN_DUELS, T.EPOCHS = "crl", 100, 2
+try:
+    _grp_b = {"crl": {f"#B{i}" for i in range(40)}}
+    out = T.run(games(big), path=_main, cohorts=_grp_b, path_all=_every)
+    _m = json.load(open(_main))["meta"]
+    _e = json.load(open(_every))["meta"]
+    check("both files are written", os.path.exists(_main) and os.path.exists(_every))
+    check("the main file is the group's and says the holdout is routed",
+          _m["trainedOn"] == "crl" and _m["routed"] is True and _m["trainedPlayers"] == 40, str(_m.get("trainedOn")))
+    check("the other is everyone's and says whom it reads",
+          _e["trainedOn"] == "all" and _e["readsOutside"] == "crl" and _e["trainedPlayers"] == 200, str(_e))
+    check("the routed holdout keeps the group line", "crl" in _m["holdout"] and _m["holdout"]["crl"]["0"]["n"] > 0)
+    check("THE OTHER FILE NAMES NO TAG", "#B" not in open(_every).read() and "#B" not in open(_main).read())
+    # THE HOLDOUT IS THE ROUTED ONE: the same fits, scored both ways on the
+    # same cut, and the reported figures are the routed reading.
+    _pb = T.players_of(games(big))
+    _tm = sorted(d["t"] for ds in _pb.values() for d in ds)
+    _cut, _hi = _tm[int(len(_tm) * T.REPORT_SPLIT)], _tm[-1] + 1
+    _rep = T.run(games(big), report_only=True, cohorts=_grp_b, path=_main, path_all=_every)
+    _want = T.score(_pb, _rep["model"], _cut, _hi, _grp_b, other=_rep["modelAll"], members=_grp_b["crl"])
+    _plain = T.score(_pb, _rep["model"], _cut, _hi, _grp_b)
+    check("the reported holdout is each player read with the fit they will be read with",
+          _rep["meta"]["holdout"] == _want and _want["crl"] == _plain["crl"])
+    check("...which is not the group's fit read for everyone (else the check above proves nothing)",
+          _want["all"] != _plain["all"])
+    os.remove(_every)
+    T.TRAIN_COHORT = ""
+    T.run(games(big), path=_main, cohorts=_grp_b, path_all=_every)
+    check("a fit on everyone writes ONE file and routes nothing",
+          not os.path.exists(_every) and json.load(open(_main))["meta"]["routed"] is False)
+finally:
+    T.TRAIN_COHORT, T.TRAIN_MIN_DUELS, T.EPOCHS = _keep
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

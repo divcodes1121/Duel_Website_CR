@@ -896,8 +896,10 @@ try:
           o.get("engine") == coach._dr.BRAIN and "left" in o and "newDeck" in o)
     shares = [d["prob"] for d in o["decks"] if d.get("read")]
     own = [d["p"] for d in o["decks"] if d.get("read")]
+    # RELATIVE: `p` is rounded to four decimals in the payload, so with a sharp
+    # read (a 14:1 ratio) rounding alone moves the ratio by more than 0.01.
     check("their decks keep the read's proportions",
-          len(shares) >= 2 and abs(shares[0] / shares[1] - own[0] / own[1]) < 1e-2, f"{shares} {own}")
+          len(shares) >= 2 and abs(shares[0] / shares[1] / (own[0] / own[1]) - 1) < 1e-2, f"{shares} {own}")
     check("and the shares the win rate is weighted by sum to one",
           abs(sum(d["prob"] for d in o["decks"]) - 1.0) < 1e-9)
 
@@ -927,6 +929,77 @@ try:
     finally:
         coach._dr.read = _real_read
 finally:
+    coach._now = _real_now
+
+print("\na group's fit reads the group, everyone else's fit reads everyone else (2026-10-17)")
+import tempfile as _tf  # noqa: E402
+
+_rdir = _tf.mkdtemp()
+_dr_saved = (coach._dr.PATH, coach._dr.PATH_ALL, coach._groups)
+_GP, _AP = os.path.join(_rdir, "read.json"), os.path.join(_rdir, "read_all.json")
+_DRm = coach._dr
+# Two fits that DISAGREE: the group's ranks by recency of play only, everyone's
+# by share only, and their new-deck tables differ — so a wrong route is a
+# different figure, not the same one by luck.
+_W_GROUP = {s: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -2.0, 0.0, 0.0, 0.0, 0.0, 0.0] for s in (0, 1, 2)}
+_W_ALL = {s: [0.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] for s in (0, 1, 2)}
+_N_GROUP = {s: [-0.5] + [0.0] * (len(_DRm.NOVELTY_FEATURES) - 1) for s in (0, 1, 2)}
+_N_ALL = {s: [-2.5] + [0.0] * (len(_DRm.NOVELTY_FEATURES) - 1) for s in (0, 1, 2)}
+_S0 = {s: [0.0] * len(_DRm.SHARPNESS_FEATURES) for s in (0, 1, 2)}
+_DRm.save(_W_GROUP, {"trainedOn": "crl", "routed": True}, path=_GP, novelty=_N_GROUP, sharpness=_S0)
+_DRm.save(_W_ALL, {"trainedOn": "all"}, path=_AP, novelty=_N_ALL, sharpness=_S0)
+_DRm.PATH, _DRm.PATH_ALL = _GP, _AP
+coach._groups = lambda: {"crl": {"#INSIDE"}}
+coach._now = lambda: _T
+try:
+    _inside, _outside = dict(RH(habit), tag="#INSIDE"), dict(RH(habit), tag="#OUTSIDE")
+    ri, ro = coach.opening_decks("#INSIDE", _inside), coach.opening_decks("#OUTSIDE", _outside)
+    want_i = _DRm.read(habit, [], _T, path=_GP)
+    want_o = _DRm.read(habit, [], _T, path=_AP)
+    check("a player in the group is read with the group's fit, and says so",
+          ri["readFit"] == "crl" and [round(d["prob"], 9) for d in ri["decks"]]
+          == [round(w["p"], 9) for w in want_i[:len(ri["decks"])]], str(ri.get("readFit")))
+    check("a player outside it is read with everyone's fit, and says so",
+          ro["readFit"] == "all" and [round(d["prob"], 9) for d in ro["decks"]]
+          == [round(w["p"], 9) for w in want_o[:len(ro["decks"])]], str(ro.get("readFit")))
+    check("the two answers really differ (else the two checks above prove nothing)",
+          abs(ri["newDeck"] - ro["newDeck"]) > 0.05, f"{ri['newDeck']} {ro['newDeck']}")
+    check("a tag's case does not move it out of the group",
+          coach.opening_decks("#inside", dict(RH(habit), tag="#inside"))["readFit"] == "crl")
+    rn = coach.next_decks("#OUTSIDE", [RA], _outside)
+    check("after a reveal too", rn["readFit"] == "all"
+          and abs(rn["newDeck"] - round(1 - sum(r["p"] for r in _DRm.read(habit, [RA], _T, path=_AP)), 4)) < 1e-3)
+    o = coach.opponent_next("#OUTSIDE", [], _outside)
+    check("the opponent's read in a suggestion carries which fit read them", o.get("readFit") == "all")
+    seen_kw = []
+    _real_read2 = _DRm.read
+
+    def _spy(*a, **k):
+        seen_kw.append(k.get("path"))
+        return _real_read2(*a, **k)
+
+    _DRm.read = _spy
+    try:
+        rd, _win = coach._plan_tools([], _outside, None, {"model": {"weights": {}}, "kw": {}}, None)
+        rd((), False)
+        rd2, _win2 = coach._plan_tools([], _inside, None, {"model": {"weights": {}}, "kw": {}}, None)
+        rd2((), False)
+    finally:
+        _DRm.read = _real_read2
+    check("the duel plan reads each opponent with the same fit the screen shows",
+          seen_kw == [_AP, None], str(seen_kw))
+    os.remove(_AP)
+    check("no fit on everyone beside the group's: everybody is read as before",
+          coach.opening_decks("#OUTSIDE", _outside)["readFit"] == "crl")
+    _DRm.save(_W_ALL, {"trainedOn": "all"}, path=_GP, novelty=_N_ALL, sharpness=_S0)
+    _DRm.save(_W_ALL, {"trainedOn": "all"}, path=_AP, novelty=_N_ALL, sharpness=_S0)
+    check("a main fit on everyone reads everyone, whatever file sits beside it",
+          coach._read_fit({"tag": "#OUTSIDE"}) == ({}, "all"))
+    coach._groups = lambda: (_ for _ in ()).throw(RuntimeError("group file broke"))
+    _DRm.save(_W_GROUP, {"trainedOn": "crl"}, path=_GP, novelty=_N_GROUP, sharpness=_S0)
+    check("routing that raises costs nothing: the main fit reads", coach._read_fit({"tag": "#X"}) == ({}, "main"))
+finally:
+    _DRm.PATH, _DRm.PATH_ALL, coach._groups = _dr_saved
     coach._now = _real_now
 
 print("\na native duel is read in game order, with its games' results")
@@ -961,6 +1034,7 @@ try:
           rd[0]["won"] == [True, False, None], str(rd[0]["won"]))
     check("a friendly duel is marked, a clan-war duel is not",
           rd[0]["friendly"] is True and rd[1]["friendly"] is False)
+    check("the history says whose it is (the read is chosen by the player)", h.get("tag") == "#NATIVE")
 finally:
     coach.dx.read_duel_rows = _real_rows
     coach._HISTORY_CACHE.clear()

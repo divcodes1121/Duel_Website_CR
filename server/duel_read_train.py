@@ -332,11 +332,17 @@ def _counts_top(hist, revealed) -> list[frozenset]:
     return out
 
 
-def score(players: dict, model: dict, lo: float, hi: float, cohorts: dict | None = None) -> dict:
+def score(players: dict, model: dict, lo: float, hi: float, cohorts: dict | None = None,
+          other: dict | None = None, members=None) -> dict:
     """Blind accuracy of `model` on decisions in `[lo, hi)`, for everyone, for
     friendly duels (the format coached players prepare for) and for each named
     group in `cohorts` (`{name: set of tags}`) — the decisions of THOSE
-    players, whatever the kind of duel. The report holds counts and rates."""
+    players, whatever the kind of duel. The report holds counts and rates.
+
+    With `other`, a player whose tag is NOT in `members` is read with `other`
+    instead — the routing the service does (`duel_read.path_for`), so the
+    report is what the screens print."""
+    inside = {str(t).upper() for t in (members or ())}
     def blank():
         return {"n": 0, "first": 0, "top3": 0, "countsFirst": 0, "countsTop3": 0, "new": 0, "newSaid": 0.0}
 
@@ -346,14 +352,15 @@ def score(players: dict, model: dict, lo: float, hi: float, cohorts: dict | None
     acc = {(c, s): blank() for c in names for s in (0, 1, 2)}
     bins: dict[tuple, list] = {}
     for tag, (stage, hist, revealed, truth, now, lost, friendly) in tagged_decisions(players, lo, hi):
+        m = other if other is not None and str(tag).upper() not in inside else model
         rows = dr.read(hist, revealed, now, lost_prev=lost, friendly_now=friendly,
-                       weights=model["weights"][stage],
-                       novelty_weights=model["novelty"][stage],
-                       sharpness_weights=model["sharpness"][stage])
+                       weights=m["weights"][stage],
+                       novelty_weights=m["novelty"][stage],
+                       sharpness_weights=m["sharpness"][stage])
         sets = [frozenset(r["cards"]) for r in rows[:3]]
         base = _counts_top(hist, revealed)
         seen = {frozenset(d) for h in hist for d in h["decks"]}
-        said = dr.novelty(hist, revealed, now, weights=model["novelty"][stage], friendly_now=friendly)
+        said = dr.novelty(hist, revealed, now, weights=m["novelty"][stage], friendly_now=friendly)
         mine = [g for g, tags in groups.items() if str(tag).upper() in tags]
         for c in (("all", "friendly") if friendly else ("all",)) + tuple(mine):
             a = acc[(c, stage)]
@@ -388,11 +395,14 @@ def score(players: dict, model: dict, lo: float, hi: float, cohorts: dict | None
     return rep
 
 
-def run(games, report_only: bool = False, path: str = dr.PATH, cohorts: dict | None = None) -> dict:
+def run(games, report_only: bool = False, path: str = dr.PATH, cohorts: dict | None = None,
+        path_all: str | None = None) -> dict:
     t0 = time.time()
     players = players_of(games)
     if cohorts is None:
         cohorts = load_cohorts()
+    if path_all is None:
+        path_all = dr.PATH_ALL if path == dr.PATH else path + ".all.json"
     times = sorted(d["t"] for ds in players.values() for d in ds)
     if len(times) < 2000:
         print(f"only {len(times) // 2} duels — not fitting")
@@ -404,7 +414,13 @@ def run(games, report_only: bool = False, path: str = dr.PATH, cohorts: dict | N
     # the players it was not fitted on as well.
     pop, trained_on = train_population(players, cohorts)
     part = fit(pop, lo, cut)
-    holdout = score(players, part, cut, hi, cohorts)
+    # A GROUP'S FIT READS ONLY THE GROUP (2026-10-17). Everybody else is read
+    # with a fit on everyone (`duel_read.PATH_ALL`, `path_for`), and the
+    # holdout reported is that routing — what the screens print.
+    routed = trained_on != "all"
+    part_all = fit(players, lo, cut) if routed else None
+    members = cohorts.get(trained_on, ()) if routed else ()
+    holdout = score(players, part, cut, hi, cohorts, other=part_all, members=members)
     meta = {
         "trainedOn": trained_on,
         "trainedPlayers": len(pop),
@@ -414,14 +430,28 @@ def run(games, report_only: bool = False, path: str = dr.PATH, cohorts: dict | N
         "to": time.strftime("%Y-%m-%d", time.gmtime(hi - 1)),
         "testFrom": time.strftime("%Y-%m-%d", time.gmtime(cut)),
         "windowDays": WINDOW_DAYS,
+        "routed": routed,
         "holdout": holdout,
     }
     print(json.dumps(meta, indent=1))
     if report_only:
-        return {"meta": meta, "model": part}
+        return {"meta": meta, "model": part, "modelAll": part_all}
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if routed:
+        # WRITTEN FIRST: by the time the group's file says it is routed, the
+        # file everybody else is read with is already the new one.
+        final_all = fit(players, lo, hi)
+        meta_all = {"trainedOn": "all", "trainedPlayers": len(players),
+                    "trainedDuels": sum(len(ds) for ds in players.values()),
+                    "duels": len(times) // 2, "from": meta["from"], "to": meta["to"],
+                    "windowDays": WINDOW_DAYS, "trainedAt": stamp, "readsOutside": trained_on,
+                    "rows": {str(s): final_all["rows"][s] for s in final_all["rows"]}}
+        dr.save(final_all["weights"], meta_all, path=path_all, novelty=final_all["novelty"],
+                sharpness=final_all["sharpness"])
+        print(f"saved {path_all}")
     final = fit(pop, lo, hi)
     meta["rows"] = {str(s): final["rows"][s] for s in final["rows"]}
-    meta["trainedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    meta["trainedAt"] = stamp
     meta["seconds"] = round(time.time() - t0)
     dr.save(final["weights"], meta, path=path, novelty=final["novelty"], sharpness=final["sharpness"])
     print(f"saved {path} in {meta['seconds']}s")

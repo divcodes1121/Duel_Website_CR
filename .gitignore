@@ -86,6 +86,8 @@ server/.duel_model.json
 server/.duel_model.json.tmp
 server/.duel_read.json
 server/.duel_read.json.tmp
+server/.duel_read_all.json
+server/.duel_read_all.json.tmp
 # Named groups of players the read's holdout is also reported for. PLAYER TAGS.
 server/.duel_cohorts.json
 

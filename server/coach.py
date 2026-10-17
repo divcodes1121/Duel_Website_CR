@@ -101,6 +101,51 @@ except Exception:  # noqa: BLE001 - deployment shape
     traceback.print_exc()
     _dr = None
 
+#: WHICH FIT READS A PLAYER (2026-10-17, `duel_read.path_for`). The read is
+#: fitted on the CRL group's duels (`CLASH_DUEL_READ_COHORT`); a player outside
+#: the group is read with the fit on everyone beside it, which is the one whose
+#: figures hold for them (calibration error of the first pick 19.2 -> 2.9
+#: points on the trainer's holdout). The group file is re-read when it changes.
+try:
+    from duel_read_train import COHORTS_PATH as _READ_COHORTS, load_cohorts as _read_cohorts
+except Exception:  # noqa: BLE001 - deployment shape
+    _READ_COHORTS, _read_cohorts = None, None
+_read_groups: list = [None, {}]   # [mtime of the group file, {name: set of tags}]
+
+
+def _groups() -> dict:
+    """`{name: set of tags}` from the group file, or `{}`. Never raises."""
+    if not _read_cohorts or not _READ_COHORTS:
+        return {}
+    try:
+        m = os.path.getmtime(_READ_COHORTS)
+    except OSError:
+        return {}
+    if _read_groups[0] != m:
+        try:
+            _read_groups[1] = _read_cohorts(_READ_COHORTS)
+        except Exception:  # noqa: BLE001 - a broken file is no group
+            _read_groups[1] = {}
+        _read_groups[0] = m
+    return _read_groups[1]
+
+
+def _read_fit(hist: dict | None) -> tuple[dict, str]:
+    """`(keyword arguments for duel_read.read, which fit that is)` for the
+    player `hist` belongs to. `({}, ...)` is the main artifact as it always
+    was — what every test's stand-in read expects."""
+    if _dr is None or not hasattr(_dr, "path_for"):
+        return {}, "main"
+    try:
+        main = _dr.fitted_on(_dr.PATH)
+        path = _dr.path_for((hist or {}).get("tag"), _groups())
+    except Exception:  # noqa: BLE001 - the routing must never take the screen down
+        traceback.print_exc()
+        return {}, "main"
+    if path == _dr.PATH:
+        return {}, main
+    return {"path": path}, _dr.fitted_on(path)
+
 #: PICK FOR THE DUEL, NOT THE GAME (2026-10-07, `duel_plan`). A duel is the first
 #: to two of three and no card is played twice, so the deck with the best
 #: matchup now is not always the deck to bring now. Replayed blind on 10,168
@@ -286,6 +331,8 @@ def _history(tag: str, since: str | None = None, until: str | None = None) -> di
     firsts = [s["games"][0]["cards"] for s in series if s["games"]]
 
     out = {
+        # Whose duels these are: the read is chosen by the player (`_read_fit`).
+        "tag": tag,
         "series": series,
         "seriesDecks": series_decks,
         "allDecks": all_decks,
@@ -377,7 +424,7 @@ def _read_rows(hist: dict | None, revealed: list[list[str]], kind=None) -> list[
     if _dr is None or not hist or not hist.get("read"):
         return None
     try:
-        rows = _dr.read(hist["read"], revealed, _now(), friendly_now=kind)
+        rows = _dr.read(hist["read"], revealed, _now(), friendly_now=kind, **_read_fit(hist)[0])
     except Exception:  # noqa: BLE001 - the read must never take the screen down
         traceback.print_exc()
         return None
@@ -394,12 +441,14 @@ def _read_rows(hist: dict | None, revealed: list[list[str]], kind=None) -> list[
     return out
 
 
-def _read_extras(rows: list[dict], revealed: list[list[str]]) -> dict:
+def _read_extras(rows: list[dict], revealed: list[list[str]], hist: dict | None = None) -> dict:
     """What a screen needs beside the decks when the read answered: which
-    engine, the chance of an unseen deck, and what is spent and left by role."""
+    engine (and whose duels its fit learned from, `readFit`), the chance of an
+    unseen deck, and what is spent and left by role."""
     seen = sum(r["prob"] for r in rows)
     return {
         "engine": _dr.BRAIN,
+        "readFit": _read_fit(hist)[1],
         "newDeck": round(max(0.0, 1.0 - seen), 4),
         "left": _dr.left([{"cards": r["cards"], "p": r["prob"]} for r in rows], revealed, _role_of),
     }
@@ -452,7 +501,7 @@ def opening_decks(tag: str, hist: dict | None = None, kind=None) -> dict:
         "lowConfidence": len(obs) < 4 or basis == "overall play rate",
     }
     if rows is not None:
-        out.update(_read_extras(rows, []))
+        out.update(_read_extras(rows, [], h))
     return out
 
 
@@ -780,7 +829,7 @@ def next_decks(tag: str, revealed: list[list[str]],
             }
 
     return {
-        **(_read_extras(rows, revealed) if rows is not None else {}),
+        **(_read_extras(rows, revealed, h) if rows is not None else {}),
         # More of the read than the three this window lists, for the caller
         # that weighs a recommendation against it (`opponent_next`).
         **({"pool": decks[:OPP_READ_DECKS]} if rows is not None else {}),
@@ -907,7 +956,7 @@ def opponent_next(opp_tag: str, opp_played: list[list[str]],
             legal = _legal(res.get("pool") or res["decks"], used)
             if legal:
                 candidates, source = legal, "opponent-history"
-                extras = {k: res[k] for k in ("engine", "newDeck", "left") if k in res}
+                extras = {k: res[k] for k in ("engine", "readFit", "newDeck", "left") if k in res}
 
     if not candidates:
         candidates = _legal(_population_decks(), used)
@@ -1779,6 +1828,7 @@ def _plan_tools(pool_cards: list[list[str]], opp_hist: dict, kind, ctx: dict, ra
     skill = ctx.get("skill")
     weights = model.get("weights") or {}
     hist, now = opp_hist["read"], _now()
+    fit_kw = _read_fit(opp_hist)[0]
     reads: dict = {}
 
     def read(revealed, _lost):
@@ -1786,7 +1836,7 @@ def _plan_tools(pool_cards: list[list[str]], opp_hist: dict, kind, ctx: dict, ra
         if got is None:
             rev = [sorted(r) if r else list(_UNKNOWN_DECK) for r in revealed]
             got = reads[revealed] = [(r["cards"], r["p"])
-                                     for r in _dr.read(hist, rev, now, friendly_now=kind)]
+                                     for r in _dr.read(hist, rev, now, friendly_now=kind, **fit_kw)]
         return got
 
     their, seen = [], set()

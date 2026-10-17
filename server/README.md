@@ -1581,6 +1581,47 @@ missing, unreadable or malformed file is no group and never an error.
 PLAYER (`tagged_decisions`), whatever the kind of duel, and the report holds
 counts and rates only — a test asserts no tag is in it.
 
+**Two fits: the group's, and everyone's for everyone else (2026-10-17).**
+Since 2026-10-10 the read is fitted on the CRL group alone
+(`CLASH_DUEL_READ_COHORT=crl`, `TRAIN_COHORT`). Applied to every opponent, that
+fit learned how the group rotates and printed it for everybody: on the
+trainer's own holdout a new deck at 34% where 17% happened, a first pick at 45%
+that came 68% of the time. The ranking was fine; the figures were not.
+
+- **The trainer**: when `TRAIN_COHORT` names a group with enough duels, `run()`
+  also fits every player's duels and writes them to
+  `server/.duel_read_all.json` (`duel_read.PATH_ALL`, gitignored, weights only;
+  its meta says `trainedOn: "all"`, `readsOutside: "crl"`), BEFORE the group's
+  file. The group's file says `routed: true`, and its `holdout` is scored the
+  way the service reads: a group member with the group's fit, everybody else
+  with everyone's (`score(..., other=, members=)`). About 2.5 minutes more a
+  poll. With no group named, one file, `routed: false`, as before.
+- **The read**: `read(..., path=)`, and `path_for(tag, groups)` -> `PATH` for
+  a member of the group the main file was fitted on (tags upper-cased), else
+  `PATH_ALL` when that file is usable, else `PATH`. A main file fitted on
+  everyone reads everyone. Every default path is looked up when called, not
+  when the module loaded. The load cache holds one entry per path.
+- **`coach.py`**: `_history` keeps the `tag`; `_read_fit(hist)` asks
+  `path_for` with the cohort file (`_groups`, re-read when it changes) and
+  passes `path=` to every read — the screen's (`_read_rows`) and the duel
+  plan's (`_plan_tools`). The payload's opponent read says which fit answered,
+  `readFit: "crl" | "all"`. Anything failing in the routing reads with the
+  main file, as before.
+- **Status**: `duelRead.others` (`fitted`, `trainedOn`, `trainedAt`,
+  `trainedDuels`) and `duelRead.routed`.
+- **Measured before it was built** (`brain-evidence/read_routing_20261017/`,
+  fit before 2 October 18:42 UTC, 84,002 held-out decisions; the real
+  `read()` matched the lab's on 645 of 645 sampled decisions). Players outside
+  the group, the group's fit -> everyone's: calibration error of the first
+  pick 19.2 -> 2.9 points; log loss games 1 / 2 / 3 1.045 / 1.012 / 0.660 ->
+  0.890 / 0.893 / 0.573; exact deck first at game 2 58.1% -> 60.3%. The group
+  keeps its own fit, which is better for it (error 4.4 against 7.8 with
+  everyone's). Keeping the group's ranking for everyone and refitting only the
+  confidence parts on everyone was worse than this on every line.
+- **To undo without a deploy**: delete `server/.duel_read_all.json`; the next
+  poll writes it again, so also clear `CLASH_DUEL_READ_COHORT` (one fit on
+  everyone, as before 2026-10-10) or restore the backups.
+
 Tests: `test_duel_read.py` (55, no database: the rules against literals, the
 artifact, the trainer's blindness on hand-built duels), `test_coach.py`
 (143), `test_duel_index.py` (71). Deployed 2026-10-07 12:09 UTC, backups
