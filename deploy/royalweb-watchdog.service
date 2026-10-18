@@ -1,0 +1,21 @@
+[Unit]
+# Asks the analytics API the question a visitor asks, and restarts it when it
+# has stopped answering or has lost sight of a database that is plainly there.
+# The policy (two bad readings in a row, one restart per 15 min, royalweb only,
+# never the bot) is in server/api_watchdog.py and its test.
+#
+# Added 2026-10-18 after the VPS came back from a power-off and royalweb served
+# "no stored history" for half an hour with the database intact.
+Description=Deckkies analytics API watchdog
+After=network-online.target royalweb.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/royalweb/server
+EnvironmentFile=/etc/royalweb.env
+ExecStart=/usr/bin/python3 -u api_watchdog.py
+# The probe waits up to 25 s; anything past a minute is a hung check, and a
+# hung watchdog must not pile up behind the next tick.
+TimeoutStartSec=90
+StandardOutput=append:/var/log/clashbot/watchdog.log
+StandardError=append:/var/log/clashbot/watchdog.log

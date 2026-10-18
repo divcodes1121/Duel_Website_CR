@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **When something breaks: a 404 page with a three.js game, an outage page that reloads itself, and watchdogs** | **2026-10-19.** After the VPS was powered off for half an hour on 2026-10-18 and every search hung for 200+ s: a slow request now asks whether the server is alive and gives up in seconds; an outage page (with the game) re-checks on its own and reloads when the server is back; unknown routes and wrong URLs get a 404 page with the same game; a crashed screen gets the page instead of a blank site; a watchdog on the VPS restarts the API when it stops answering or loses sight of its database; a GitHub workflow emails when the site is down and can start a stopped VPS once Contabo API keys are added. See [When something breaks](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19) |
 | **Team Analysis suggests what the best duel players bring, and a list per teammate (`team-scout-5.0`)** | **LIVE SINCE 2026-10-14 as `b25d12e`.** Reported: *"the recommendation decks are so trash ... random decks, decks repetitive for more players"*. Measured on live answers: about 1 row in 7 was a list the CRL group brought to duels; a 4v4 plan's 160 rows held 67 decks and all four teammates got the same four against one opponent. Now the pool is the window's CRL duel lists (2+ games) and its 40 most played lists, nothing else; a scouting list is ten different win conditions, none under 50%, spread across the roster; a match plan builds each teammate's list from the win conditions they play, rated with their own record, one teammate a deck, and a lineup pairs every opponent with a teammate. Blind on 300 opponents: rows the CRL group brought 36.7% -> 96.7%, the #1 the same (+0.10), the rest of a list about half a point lower; match plans: distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15. See [What the best duel players bring](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14) |
 | **Coach Assist reads how each player plays: win-condition tags and a recommendation of their own** | **2026-10-12.** Asked: rate players by the decks they play, how much, and their win rate across every win condition in the 7D / 14D / 30D window, and make the recommendation each player's own. Measured: how much a win condition is played predicts nothing, the win rate against a player's own average does not help; their duel record with it against what each game should have gone does (lowest fifth -4.9 points, highest +8.1; CRL games 0.5924 -> 0.5875 log loss). A skill table for 13,494 duel players, rebuilt after every poll, is in every Coach Assist figure; a profile per player and per window is on the screen. See [How each player plays](#how-each-player-plays-win-condition-tags-and-a-recommendation-of-their-own-2026-10-12) |
 | **Coach Assist finds counters to what the opponent brings** | **2026-10-12.** Asked: the Suggestion opens with the player's own recent duel decks; it should analyse what the opponent opens with, find counters among the meta decks and the CRL players' duel decks, and do the same after each game. Measured blind first (323 real duel openings, an independent judge): the old pick rated 50.4% against the deck opponents really opened with, the first counter 60.7%, the answer as built 58.4% (+8.0 [+6.5, +9.5]). A block of five counters under "Play this" at every stage, counters in the set and the options, the card model in every Coach Assist rate, a correction to the win chance between two known players, and no card-level term in a friendly duel (it is played at a cap). Also measured: a deck new to the pilot costs nothing we could find, and opponents do not counter-pick inside a duel. LIVE as `9f436cc` + `715be7e`, 45 of 45 signed in on production. See [Counters to what they bring](#counters-to-what-they-bring-2026-10-12) |
@@ -194,6 +195,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 7. [Reaching the analytics API from the hosted site](#reaching-the-analytics-api-from-the-hosted-site)
 8. [The tunnel, and what was actually proved](#the-tunnel-and-what-was-actually-proved)
 9. [The move off the home machine](#the-move-off-the-home-machine)
+   - [When something breaks: the 404 game, the outage page and the watchdogs](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19)
 10. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
 11. [Deck rendering: the three special slots](#deck-rendering-the-three-special-slots)
 12. [Duel combinations — the logic and why it looks like that](#duel-combinations--the-logic-and-why-it-looks-like-that)
@@ -2342,6 +2344,82 @@ change definitely shrinks. `.vercelignore` is cheap either way.
   exists.
 
 ---
+
+## When something breaks: the 404 game, the outage page and the watchdogs (2026-10-19)
+
+**What happened, 2026-10-18.** At 17:16 UTC the VPS received a power-button
+press from the hypervisor and shut itself down cleanly. For half an hour every
+player search sat on a loader for 200+ seconds, because the shared analytics
+fetch had no timeout and a request to a machine that is off waits for the
+browser's own TCP give-up. Nothing on screen said the server was down. When the
+box was restarted from the Contabo panel, a second fault followed: royalweb
+started in the same second as the bot, its one database check failed while the
+bot was still opening a 4.6 GB write-ahead log, and that failure was cached for
+the life of the process, so search answered from the live battlelog only (about
+25 battles) with the 75 GB database intact. A restart of royalweb cleared it.
+
+Four layers now catch that, from the browser outwards.
+
+| layer | where | what it does |
+|---|---|---|
+| request guard | `src/state/analyticsClient.ts` `get()` | a request still pending after `SLOW_REQUEST_MS` (8 s) asks whether the server is alive; dead = abandoned at once. A network error is retried once if the server answers; a 502/503/504 from Caddy is checked too |
+| outage page | `src/state/apiHealth.ts` + `components/ErrorScene/OutageHost.tsx` | one probe of `/api/analytics/status` decides **up / degraded / down**; ten failing requests cost one probe. Down = the outage page over the site, a countdown, re-checks at 5, 10, 15, 20, then every 30 s, and a **reload the moment the server is back**. "Keep building decks" folds it to a pill (the deck tools run on local data). Degraded (`hot.available: false`) = a pill only, live data still works |
+| API watchdog | `server/api_watchdog.py`, `royalweb-watchdog.timer` (every 2 min) | restarts **royalweb only** after two bad readings in a row (no answer, or a database the API cannot read while the file exists and the bot's maintenance flag is absent), at most once per 15 min. Never touches the bot. Log `/var/log/clashbot/watchdog.log` |
+| outside watcher | `.github/workflows/vps-watch.yml` + `scripts/vps_watch.py` (every 10 min) | probes api.deckkies.com from GitHub. Down on 3 probes a minute apart = a **failed run, which GitHub emails to the repository owner**. With Contabo API secrets it also **starts a stopped VPS**; power-cycling a running-but-unreachable one needs `VPS_RESTART_RUNNING=yes` (off: it cuts the bot mid-write) |
+
+The cached failure itself is fixed at the source: `clash_data._has_schema` keeps
+a pass for good and a failure for `SCHEMA_RETRY_S` (30 s), so a database that
+becomes readable is found without a restart (`server/test_schema_retry.py`, 9
+checks, 3 red on the old code).
+
+### The error page, and the game on it
+
+`components/ErrorScene/ErrorScene.tsx` is one page for four reasons:
+**not-found** (a hash route nobody built, or a real path forwarded by
+`public/404.html` as `#/lost?from=<path>`), **offline**, **crash** (a screen
+that threw, caught by `AppErrorBoundary`) and **stale** (a crash that is an old
+tab asking for files a newer deploy removed). It is lazy: nobody who never meets
+an error downloads it or three.js.
+
+- **Unknown routes are a 404 now.** `viewFor` used to fall through to the
+  landing screen, so a mistyped link looked like the link working.
+  `utils/routes.ts` `KNOWN_ROUTES` is the list, and a test holds every
+  `startsWith('#/...')` in App.tsx to it — add a route there when you add one.
+  **Only `#/...` can be a 404**: Supabase's `#access_token=` and `#error=`
+  redirects are left alone (a test pins it).
+- **A real wrong path** (deckkies.com/anything) gets `public/404.html`, served by
+  Vercel with a 404 status; it forwards into the app's page with the path named,
+  and without JavaScript it is a plain page with a link home.
+- **The game, "Dodge the Arena"** (`three/ArenaGame.tsx`, rules in
+  `three/arenaRules.ts`, 12 tests): a knight on your half of an arena, fireballs
+  lobbed from the enemy towers with a red ring where each lands, a Log rolling
+  across a lit lane from level 3, elixir drops to collect, eight a level, three
+  lives, best score per browser. WASD / arrows or drag; touch drags too. The
+  word in stone blocks follows the error: **404**, **OFF**, **OOPS**. The loop
+  runs only on screen and in a visible tab, and the game clock is the loop's
+  clamped delta, so a hidden tab pauses it. Under reduced motion no canvas is
+  drawn until the reader presses "Play anyway".
+- Your own (blue) towers were cut: nearer the camera than the player's half,
+  they were drawn huge and covered a quarter of the view. A phone frame looks
+  more steeply down rather than only pulling back, which left a band of nothing.
+
+**Verified** 37/37 in Chromium (dev server on production data): the 404 in both
+themes at 1440 and a 390 touch phone, play to game over, real routes and auth
+redirects not a 404, the outage page within seconds for a refusing server and in
+about 16 s for a hanging one, fold to a pill and back, **a reload by itself when
+the server returns**, the degraded pill, `404.html` forwarding, reduced motion.
+Main bundle +1.96 kB gzip (the guard, the health store, the boundary); the page
+is a 9.4 kB gzip chunk with three.js behind it. **Not exercised here: a real
+render crash (no screen throws on demand), Vercel serving `404.html` (checked
+after deploy), the GitHub workflow on GitHub, and the Contabo API with real
+keys.**
+
+**To arm the outside watcher's restart:** in the Contabo panel open **API** and
+note the Client ID, Client Secret, API User (the account email) and set an API
+Password; in GitHub open the repository's Settings -> Secrets and variables ->
+Actions and add `CONTABO_CLIENT_ID`, `CONTABO_CLIENT_SECRET`,
+`CONTABO_API_USER`, `CONTABO_API_PASSWORD`. Without them it only alerts. GitHub
+pauses scheduled workflows in a repository with no activity for 60 days.
 
 ## Top Meta Decks — why it is a snapshot
 

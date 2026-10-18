@@ -8,6 +8,8 @@
  * pointing a build straight at a remote host.
  */
 
+import { apiHealth } from './apiHealth';
+
 const BASE = import.meta.env.VITE_ANALYTICS_BASE ?? '';
 
 export interface ApiPlayer {
@@ -923,18 +925,71 @@ export class AnalyticsError extends Error {
   }
 }
 
+/* What a reader is told when nothing answers. A local checkout needs the
+   command; production needs the truth, which is that the server is down and
+   the site is checking (`OutageHost` shows the page that does). */
+const OFFLINE_MESSAGE = import.meta.env.DEV
+  ? 'The analytics service is not running. Start it with: python server/app.py'
+  : 'The analytics server is not answering right now. The site is checking again on its own.';
+
+/** A request still pending after this long asks `apiHealth` whether the server
+ *  is alive at all. Alive = leave it (some reads take 40 s cold); dead = stop
+ *  waiting. Before 2026-10-18 a request to a powered-off server simply hung
+ *  for the browser's TCP timeout — 200+ seconds on a loader. */
+export const SLOW_REQUEST_MS = 8000;
+
+/** Caddy answers these itself when the Python process behind it is gone. */
+const GATEWAY_DOWN = new Set([502, 503, 504]);
+
+async function fetchGuarded(url: string, headers?: Record<string, string>): Promise<Response> {
+  const ctrl = new AbortController();
+  let deadServer = false;
+  const slow = setTimeout(() => {
+    void apiHealth.confirm().then((state) => {
+      if (state === 'down') {
+        deadServer = true;
+        ctrl.abort();
+      }
+    });
+  }, SLOW_REQUEST_MS);
+  try {
+    return await fetch(url, { headers, signal: ctrl.signal });
+  } catch (e) {
+    if (deadServer) throw new AnalyticsError(OFFLINE_MESSAGE, 'offline');
+    throw e;
+  } finally {
+    clearTimeout(slow);
+  }
+}
+
 async function get<T>(path: string, headers?: Record<string, string>): Promise<T> {
+  const url = `${BASE}${path}`;
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, headers ? { headers } : undefined);
-  } catch {
-    // Nothing listening — the local API is not running.
-    throw new AnalyticsError(
-      'The analytics service is not running. Start it with: python server/app.py',
-      'offline',
-    );
+    res = await fetchGuarded(url, headers);
+  } catch (e) {
+    if (e instanceof AnalyticsError) throw e;
+    /* A NETWORK ERROR IS ONE ATTEMPT, NOT A VERDICT. Ask whether the server is
+       up; if it is, this was a blip (a phone changing networks, a dropped
+       connection) and the request is tried once more. */
+    const state = await apiHealth.confirm();
+    if (state === 'down') throw new AnalyticsError(OFFLINE_MESSAGE, 'offline');
+    try {
+      res = await fetchGuarded(url, headers);
+    } catch (again) {
+      if (again instanceof AnalyticsError) throw again;
+      void apiHealth.confirm();
+      throw new AnalyticsError(OFFLINE_MESSAGE, 'offline');
+    }
   }
-  if (res.ok) return (await res.json()) as T;
+  if (GATEWAY_DOWN.has(res.status)) {
+    const state = await apiHealth.confirm();
+    if (state === 'down') throw new AnalyticsError(OFFLINE_MESSAGE, 'offline');
+  }
+  if (res.ok) {
+    apiHealth.sawSuccess();
+    return (await res.json()) as T;
+  }
 
   const body = await res.json().catch(() => ({}) as { error?: string });
   const err = (body as { error?: string }).error;

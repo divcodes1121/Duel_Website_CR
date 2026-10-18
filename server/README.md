@@ -179,6 +179,14 @@ player keeps their own last ten months, and nothing is ever cut as a range.
   `/etc/royalweb.env` — `royalweb` itself can never delete. It is one of the two
   units that write to the bot's database (with `royalweb-duo-raw`).
 
+### The API watchdog and the schema retry (`api_watchdog.py`, 2026-10-19)
+
+systemd restarts royalweb when the process DIES; nothing restarted it when it was alive and useless. On 2026-10-18, after a power-off, royalweb started in the same second as the bot, its one `_has_schema` check failed while the bot was opening a 4.6 GB WAL, and that failure was cached for the life of the process: "no database" for half an hour with the file intact.
+
+- `clash_data._has_schema` caches a PASS for good and a FAILURE for `SCHEMA_RETRY_S` (30 s). `test_schema_retry.py` (9).
+- `api_watchdog.py` via `royalweb-watchdog.timer` (first check 3 min after boot, then every 2 min): probes `/api/analytics/status`; unhealthy = no answer in 25 s / not 200, or `hot.available: false` while the DB file exists and `.maintenance` is absent. Restarts **royalweb only** after `CONSECUTIVE_BAD` (2) readings in a row, at most once per `MIN_RESTART_GAP_S` (15 min). Never the bot. State `/var/lib/royalweb-watchdog/state.json` (no tags), log `/var/log/clashbot/watchdog.log` (only non-healthy lines). `--dry-run` decides and prints. `test_api_watchdog.py` (20). Off: `systemctl disable --now royalweb-watchdog.timer`.
+- The box cannot notice that it is OFF; `.github/workflows/vps-watch.yml` does that from outside (see the root README, "When something breaks").
+
 ### Backups (`db_backup.py`, `tools/dbstream`, 2026-09-29)
 
 Until 2026-09-29 there was **no backup** — three one-off pre-cleanup copies

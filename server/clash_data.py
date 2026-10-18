@@ -93,6 +93,20 @@ def _dir_of(path: str) -> str:
 
 
 _schema_cache: dict[str, bool] = {}
+#: When each path last FAILED the check. A pass is cached for good; a failure
+#: only for `SCHEMA_RETRY_S`.
+_schema_failed_at: dict[str, float] = {}
+
+#: How long a failed schema check is believed before it is tried again.
+#:
+#: A FAILURE USED TO BE CACHED FOR THE LIFE OF THE PROCESS, and it took the
+#: site's stored history down for half an hour on 2026-10-18. After a power-off
+#: the VPS booted, royalweb started at the same second as the bot, and the bot
+#: was still opening a 4.6 GB write-ahead log — so the one check this process
+#: ever made failed, was remembered, and every request after it answered "no
+#: database" while the file sat there intact. Only a restart cleared it. A pass
+#: is safe to keep (a database does not lose its tables); a failure is a moment.
+SCHEMA_RETRY_S = 30.0
 
 
 def _has_schema(path: str) -> bool:
@@ -100,10 +114,14 @@ def _has_schema(path: str) -> bool:
 
     Existence is not enough: an empty stub, a half-copied file, or a database
     from a different project all exist happily and then fail on first query.
-    Result is cached per path — this runs on every request.
+    A pass is cached per path — this runs on every request. A failure is
+    re-checked after `SCHEMA_RETRY_S` (see there for why).
     """
-    if path in _schema_cache:
-        return _schema_cache[path]
+    if _schema_cache.get(path):
+        return True
+    failed = _schema_failed_at.get(path)
+    if failed is not None and time.monotonic() - failed < SCHEMA_RETRY_S:
+        return False
     ok = False
     try:
         con = connect(path)
@@ -117,7 +135,12 @@ def _has_schema(path: str) -> bool:
             con.close()
     except Exception:
         ok = False
-    _schema_cache[path] = ok
+    if ok:
+        _schema_cache[path] = True
+        _schema_failed_at.pop(path, None)
+    else:
+        _schema_cache.pop(path, None)
+        _schema_failed_at[path] = time.monotonic()
     return ok
 
 

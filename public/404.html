@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>404 · Deckkies</title>
+  <link rel="icon" href="/favicon-32.png" />
+  <!--
+    VERCEL SERVES THIS FILE, WITH A 404 STATUS, FOR ANY PATH IT HAS NO FILE FOR
+    (deckkies.com/anything). The site routes on the HASH, so a real path was
+    never a page — and visitors used to get Vercel's plain "NOT_FOUND" text.
+
+    It forwards to the app's own 404 page (the one with the game), carrying
+    the path that was asked for, so the reader is told what was missing. The
+    status a crawler sees is still 404, because this response is the 404.
+
+    Without JavaScript it is a plain page with a link home.
+  -->
+  <script>
+    (function () {
+      var from = location.pathname + location.search;
+      location.replace('/#/lost?from=' + encodeURIComponent(from));
+    })();
+  </script>
+  <style>
+    :root { --bg: #f4f4f6; --text: #000; --muted: #3a3a3a; --accent: #6d28d9; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #000; --text: #fff; --muted: #d4d4d4; --accent: #a78bfa; }
+    }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+      font-family: Inter, 'Segoe UI', system-ui, sans-serif; }
+    main { min-height: 100%; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 0.75rem; padding: 1.5rem; text-align: center; box-sizing: border-box; }
+    h1 { margin: 0; font-size: 4rem; letter-spacing: 0.02em; }
+    p { margin: 0; color: var(--muted); }
+    a { color: var(--accent); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>404</h1>
+    <p>There is no page at this address.</p>
+    <p><a href="/">Back to Deckkies</a></p>
+  </main>
+</body>
+</html>

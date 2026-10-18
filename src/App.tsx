@@ -10,6 +10,9 @@ import styles from './App.module.css';
 import { withViewTransition } from './utils/viewTransition';
 import { CardInspectHost } from './components/CardInspect/CardInspect';
 import { ScrollRailHost } from './components/ui/scroll-rail';
+import { OutageHost } from './components/ErrorScene/OutageHost';
+import { AppErrorBoundary } from './components/ErrorScene/AppErrorBoundary';
+import { isUnknownRoute, missingPath } from './utils/routes';
 /* SPLIT OUT, the same treatment jsPDF and three.js get and for the same reason:
    it is a side route most visitors never open, and everything it needs — the
    book, the leaf machinery, the magnifier, eight plates of copy — would
@@ -27,6 +30,9 @@ const PlayerHome = lazy(() => import('./components/Player/PlayerHome'));
    (2026-09-26): Recharts and the kit are ~100 kB gzip that no public page may
    pay for, and an admin opening `#/admin` fetches them with the route. */
 const AdminConsole = lazy(() => import('./components/Admin/AdminConsole'));
+/* THE ERROR PAGE (404 / offline / crash), with its three.js game. Lazy: a
+   visitor who never meets an error never downloads it, or three.js. */
+const ErrorScene = lazy(() => import('./components/ErrorScene/ErrorScene'));
 
 /* One shell for every signed-in route. The builder, Deck's Home and Counter
  * Palette used to be separate full pages, each with its own nav bar; they now
@@ -97,6 +103,19 @@ function AppRoutes() {
   useEffect(() => {
     void initAccount();
   }, [initAccount]);
+
+  /* A ROUTE NOBODY BUILT IS A 404 NOW. It used to fall through to the landing
+     screen, so a mistyped link looked like the link working. `isUnknownRoute`
+     never matches Supabase's bare `#access_token=` / `#error=` redirects. */
+  if (isUnknownRoute(route)) {
+    return (
+      <div className={styles.app}>
+        <Suspense fallback={null}>
+          <ErrorScene kind="not-found" path={missingPath(route)} />
+        </Suspense>
+      </div>
+    );
+  }
 
   /* THE FIELD BOOK is its own route and carries no shell. It is one object — a
      book on a desk with a glass lying on it — and a top bar, a rail and a panel
@@ -248,12 +267,31 @@ function AppRoutes() {
 
    The scroll rail sits beside every route for the same reason: it is the
    scroller for whatever scrolls, on every screen, and attaches itself. */
+/* A plain hash read for the error boundary's reset key — NOT `useHashRoute`,
+   which wraps each change in a view transition; two of those per navigation
+   would start one transition inside another. */
+function useHashKey(): string {
+  const [hash, setHash] = useState(window.location.hash);
+  useEffect(() => {
+    const on = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  return hash;
+}
+
 function App() {
+  const hash = useHashKey();
   return (
     <>
-      <AppRoutes />
+      <AppErrorBoundary resetKey={hash}>
+        <AppRoutes />
+      </AppErrorBoundary>
       <CardInspectHost />
       <ScrollRailHost />
+      {/* While the analytics server is down: the outage page, its countdown,
+          and a reload the moment it is back (state/apiHealth.ts). */}
+      <OutageHost />
     </>
   );
 }

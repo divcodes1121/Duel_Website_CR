@@ -1,0 +1,38 @@
+# Checks from OUTSIDE that the analytics server answers, every ten minutes, and
+# starts the VPS through the Contabo API if it has been switched off.
+# scripts/vps_watch.py explains what it will and will not do.
+#
+# A failed run is the alert: GitHub emails the repository owner when a scheduled
+# workflow fails. With no CONTABO_* secrets it only alerts; with them it can
+# start a stopped VPS. Power-cycling a RUNNING but unreachable VPS additionally
+# needs the repository variable VPS_RESTART_RUNNING=yes.
+name: VPS watch
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vps-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - name: Probe api.deckkies.com and recover the VPS if it is off
+        run: python3 scripts/vps_watch.py
+        env:
+          CONTABO_CLIENT_ID: ${{ secrets.CONTABO_CLIENT_ID }}
+          CONTABO_CLIENT_SECRET: ${{ secrets.CONTABO_CLIENT_SECRET }}
+          CONTABO_API_USER: ${{ secrets.CONTABO_API_USER }}
+          CONTABO_API_PASSWORD: ${{ secrets.CONTABO_API_PASSWORD }}
+          VPS_RESTART_RUNNING: ${{ vars.VPS_RESTART_RUNNING }}

@@ -1,0 +1,17 @@
+[Unit]
+Description=Check the Deckkies analytics API every two minutes
+Requires=royalweb-watchdog.service
+
+[Timer]
+# Two minutes, and two bad readings before a restart, so an outage the API
+# cannot recover from by itself lasts about four minutes rather than until
+# somebody notices. The first check waits three minutes after boot: the bot
+# and royalweb both start then, and a check in that second is the moment
+# 2026-10-18 went wrong.
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=royalweb-watchdog.service
+
+[Install]
+WantedBy=timers.target

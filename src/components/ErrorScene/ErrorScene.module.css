@@ -1,0 +1,227 @@
+/* Its own scroll region: `body` is overflow hidden and every route owns its
+   scroll (see CLAUDE.md). Ground is --bg-1, the landing's closing band and top
+   bar value, so an error page sits on the site's own floor in both themes. */
+.page {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  color: var(--text);
+}
+
+.top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0.85rem clamp(1rem, 3vw, 2rem);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.brandMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0.18rem;
+  border-radius: 11px;
+  background: #0c1222;
+}
+
+:global([data-theme='dark']) .brandMark {
+  border: 1px solid var(--border);
+}
+
+.brandMark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.wordmark {
+  font-family: 'Bebas Neue', var(--font-display);
+  font-size: 1.45rem;
+  letter-spacing: 0.04em;
+}
+
+.body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  align-items: stretch;
+  padding: clamp(1rem, 3vw, 2.25rem) clamp(1rem, 3vw, 2rem) clamp(1.25rem, 3vw, 2rem);
+  min-height: 0;
+}
+
+.copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.9rem;
+  max-width: 34rem;
+}
+
+.code {
+  margin: 0;
+  font-family: 'Bebas Neue', var(--font-display);
+  font-size: clamp(4.5rem, 11vw, 9rem);
+  line-height: 0.85;
+  letter-spacing: 0.02em;
+  color: var(--hue-blue-deep);
+}
+
+.code[data-kind='offline'],
+.code[data-kind='crash'] {
+  color: var(--hue-red);
+  font-size: clamp(3.4rem, 8vw, 6.5rem);
+}
+
+.code[data-kind='stale'] {
+  color: var(--hue-violet);
+  font-size: clamp(3rem, 7vw, 5.5rem);
+}
+
+.title {
+  margin: 0;
+  font-family: 'Bebas Neue', var(--font-display);
+  font-size: clamp(1.9rem, 3.4vw, 2.8rem);
+  font-weight: 400;
+  line-height: 1.05;
+}
+
+.text {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+  max-width: 30rem;
+}
+
+.path {
+  margin: 0;
+}
+
+.path code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.status {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pulse {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--warning);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 25%, transparent);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.3rem;
+}
+
+.primary,
+.ghost {
+  min-height: 2.75rem;
+  padding: 0 1.25rem;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+
+.primary {
+  border: 0;
+  background: var(--solid-violet);
+  color: var(--on-solid);
+}
+
+.ghost {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+}
+
+.primary:hover,
+.ghost:hover {
+  transform: translateY(-1px);
+}
+
+.ghost:hover {
+  background: var(--surface-sunken);
+}
+
+.details {
+  font-size: 0.82rem;
+}
+
+.details summary {
+  cursor: pointer;
+}
+
+.details code {
+  display: block;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.game {
+  min-height: 24rem;
+  display: flex;
+}
+
+.game > * {
+  flex: 1;
+}
+
+/* Below a laptop: the copy above, the game below at a fixed share of the
+   screen, so the page scrolls instead of the game being squeezed. */
+@media (max-width: 860px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .copy {
+    max-width: none;
+  }
+
+  .game {
+    min-height: 0;
+    height: min(64vh, 34rem);
+  }
+}
