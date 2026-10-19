@@ -5358,6 +5358,15 @@ never a dual-axis chart — two measures of different scale get two charts.
 
 ## Trends that count games, and tables that fit a laptop (2026-09-28)
 
+> **2026-10-19: a deck row with no cards.** Reported on a player whose Top 10
+> Decks showed row 6 as "?" with nothing in it, and a "?" line in both trend
+> charts. It was 24 friendly battles in `All_Random_Princess_Friendly`, an
+> event that deals random decks: the battle is stored with no cards and an
+> empty deck id, and the report grouped those as a deck. `player_report` now
+> leaves battles with no deck out of the deck list and the trend series; they
+> still count in the player's battles and win rate. `test_player_trends.py`
+> 10 -> 14 checks, three of them red on the old code.
+
 Asked for as an interface review — *"analyze the repo and see what UI
 enhancements you can"* — which produced a plan of six faults to fix first and
 sixteen ideas in four batches, then *"ok go ahead"*. This is the first batch:

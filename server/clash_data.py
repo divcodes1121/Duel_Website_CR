@@ -889,21 +889,28 @@ def player_report(tag: str, since: str | None = None, until: str | None = None) 
 
         for r in rows:
             h, d, n, w, dr = r["h"] or "", r["d"], r["n"] or 0, r["w"] or 0, r["dr"] or 0
-            cell = deck_rows.setdefault(h, [0, 0, 0, ""])
-            cell[0] += n
-            cell[1] += w
-            cell[2] += dr
-            cell[3] = max(cell[3], r["last"] or "")
             totals[0] += n
             totals[1] += w
             totals[2] += max(0, n - w - dr)
             crowns[0] += r["cf"] or 0
             crowns[1] += r["ca"] or 0
             day = f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+            day_totals[day] = day_totals.get(day, 0) + n
+            # A BATTLE WITH NO DECK STORED IS NOT A DECK. Event friendlies that
+            # deal random decks (`All_Random_Princess_Friendly`, 2026-10-20)
+            # arrive with empty card lists, and grouping them by their empty
+            # hash drew a row "?" with no cards in the table and both trend
+            # charts. They still count in the player's battles and win rate.
+            if not h:
+                continue
+            cell = deck_rows.setdefault(h, [0, 0, 0, ""])
+            cell[0] += n
+            cell[1] += w
+            cell[2] += dr
+            cell[3] = max(cell[3], r["last"] or "")
             pd = per_day.setdefault((h, day), [0, 0])
             pd[0] += n
             pd[1] += w
-            day_totals[day] = day_totals.get(day, 0) + n
 
     if not deck_rows:
         return None

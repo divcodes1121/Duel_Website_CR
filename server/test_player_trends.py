@@ -126,5 +126,21 @@ check(
     all(sum(s["games"]) == d["matches"] for d in r["decks"] for s in [series.get(d["deckHash"])] if s),
 )
 
+# A BATTLE WITH NO DECK STORED IS NOT A DECK (2026-10-20). Random-deck event
+# friendlies arrive with empty card lists and an empty hash; the report drew
+# them as a row "?" with no cards, in the table and both trend charts.
+DB2 = os.path.join(TMP, "battles2.db")
+_make_db(DB2, ROWS + [b(2, "", "win"), b(2, "", "win"), b(3, None, "loss")])
+cd._tier_paths = lambda: [DB2]
+r2 = cd.player_report(TAG)
+hashes = [d["deckHash"] for d in (r2 or {}).get("decks", [])]
+check("no deck without cards is listed", "" not in hashes and all(d["cards"] for d in r2["decks"]), str(hashes))
+check("and no trend line for it", all(s["deckHash"] for s in r2["trends"]["series"]),
+      str([s["deckHash"] for s in r2["trends"]["series"]]))
+check("the real decks are unchanged", hashes == [d["deckHash"] for d in r["decks"]], str(hashes))
+check("deckless battles still count in the player's battles",
+      r2["player"]["battles"] == r["player"]["battles"] + 3,
+      str((r2["player"].get("battles"), r["player"].get("battles"))))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
