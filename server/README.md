@@ -459,10 +459,13 @@ name, tracked, seen}], available}`. It reads `.name_index.db` (gitignored; env
   `CLASH_RETENTION_DAYS`, 304) ago are dropped; the tracked flag is re-read.
   A missing or old-format file is rebuilt whole into `.tmp` and `os.replace`d;
   readers reopen on a new inode. `--build --full` forces it.
-- **Search**: exact `lname`, then starts-with (tracked rows first from the
-  partial index, then a 5,000-row scan of the range), then contains (tracked
-  rows by `instr`, then the first 5,000 FTS matches), each ordered tracked,
-  most recently seen, shorter, name. Under three characters only exact and
+- **Search**: TRACKED players first, at any match, in ONE pass over the
+  covering partial index `names_tracked_c (tracked, lname, day, tag, name)
+  WHERE tracked = 1` (exact, then starts-with, then `instr` contains); then
+  everyone else: exact `lname`, starts-with (a 5,000-row scan of the range),
+  contains (the first 5,000 FTS matches); each ordered most recently seen,
+  shorter, name. `update()` creates a missing index (and drops the old
+  rowid-only `names_tracked`) before its transaction. Under three characters only exact and
   starts-with run (trigram needs three). The query reaches FTS as one quoted
   phrase. Answers are cached per (file, `data_version`, query, limit).
 - **Status**: `nameIndex` on `/api/analytics/status` — counts, times, bytes,

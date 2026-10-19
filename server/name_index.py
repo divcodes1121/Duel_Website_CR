@@ -36,10 +36,12 @@ names past the window are dropped, the tracked flag is re-read. ~60k rows a
 poll, a second or two. A missing or old-format file is rebuilt whole into a
 temporary file and swapped in with `os.replace`, so a reader never sees half.
 
-ORDER. Exact name first, then names that START with it, then names that contain
-it; inside each, players we track (we hold their battles) first, then the most
-recently seen, then the shorter name. Not by battle count: the loudest account
-is not the one you meant.
+ORDER. Players we TRACK (we hold their battles) come before everyone else, at
+any match: a tracked "CAL Sub ™✨Kun" ranks above 2,600 untracked players
+named exactly "sub" (asked for, 2026-10-19 — it is usually the account meant).
+Within each of the two groups: exact name, then names that START with it, then
+names that contain it; then the most recently seen, then the shorter name. Not
+by battle count: the loudest account is not the one you meant.
 
 CLI:  python3 name_index.py --build [--full]    python3 name_index.py --search sub
 """
@@ -115,7 +117,10 @@ CREATE TABLE IF NOT EXISTS names(
 INDEXES = """
 CREATE INDEX IF NOT EXISTS names_lname ON names(lname);
 CREATE INDEX IF NOT EXISTS names_day ON names(day);
-CREATE INDEX IF NOT EXISTS names_tracked ON names(tracked) WHERE tracked = 1;
+-- COVERING, so ranking the ~6k tracked players reads no table page at all
+-- (a rowid-only index cost three passes of 6k random lookups, ~40 ms).
+DROP INDEX IF EXISTS names_tracked;
+CREATE INDEX IF NOT EXISTS names_tracked_c ON names(tracked, lname, day, tag, name) WHERE tracked = 1;
 """
 FTS = ("CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(name, content='names', "
        "content_rowid='id', tokenize='trigram case_sensitive 0 remove_diacritics 1')")
@@ -229,6 +234,9 @@ def update(bot_path: str, out_path: str = PATH, now: float | None = None) -> dic
         if _meta(con, "format") != str(FORMAT):
             con.close()
             return build_full(bot_path, out_path, now)
+        # An index added since this file was built (IF NOT EXISTS: free when
+        # present). Before the transaction, since executescript commits.
+        con.executescript(INDEXES)
         since = _meta(con, "watermark") or ""
         today = _day(_dt.datetime.fromtimestamp(now or time.time(), _dt.timezone.utc).isoformat())
         bot = _bot(bot_path)
@@ -362,22 +370,28 @@ def _search(con, q: str, limit: int) -> dict:
 
     cols = "id, tag, name, tracked, day"
     more = lambda: limit + len(seen)  # noqa: E731 - rows already taken may match again
-    # 1. The exact name.
-    take(f"SELECT {cols} FROM names WHERE lname = ? {ORDER} LIMIT ?", (lq, limit))
-    # 2. Starts with it. Tracked players first FOR CERTAIN (the partial index
-    #    holds ~6k rows), then the rest from a capped scan of the range.
+    contains = len(lq) >= MIN_CONTAINS
+    # TRACKED PLAYERS COME FIRST, ABOVE EVERY UNTRACKED MATCH (2026-10-19, asked
+    # for). They are the ones whose battles are stored — usually the account
+    # the reader means — and "CAL Sub ™✨Kun" (tracked) used to rank behind
+    # 2,600 untracked players named exactly "sub" and never reach the top 100.
+    # Among the tracked: exact, then starts with, then contains. The partial
+    # index holds ~6k rows, so these passes are cheap and exhaustive.
+    # ONE pass over the covering partial index, the tier computed in SQL.
+    take(f"SELECT {cols} FROM names INDEXED BY names_tracked_c WHERE tracked = 1 AND "
+         "(lname = :q OR (lname > :q AND lname < :hi) OR (:c AND instr(lname, :q) > 0)) "
+         "ORDER BY CASE WHEN lname = :q THEN 0 WHEN lname > :q AND lname < :hi THEN 1 ELSE 2 END, "
+         "day DESC, length(name), name LIMIT :n",
+         {"q": lq, "hi": _upper(lq), "c": 1 if contains else 0, "n": limit})
+    # Then everyone else, in the same order of match: the exact name...
     if len(rows) < limit:
-        take(f"SELECT {cols} FROM names WHERE tracked = 1 AND lname > ? AND lname < ? "
-             f"{ORDER} LIMIT ?", (lq, _upper(lq), more()))
+        take(f"SELECT {cols} FROM names WHERE lname = ? {ORDER} LIMIT ?", (lq, more()))
+    # ...starts with it (a capped scan of the range)...
     if len(rows) < limit:
         take(f"SELECT {cols} FROM (SELECT * FROM names WHERE lname > ? AND lname < ? "
              f"ORDER BY lname LIMIT {SCAN_CAP}) {ORDER} LIMIT ?",
              (lq, _upper(lq), more()))
-    # 3. Contains it (three characters and up), the same two passes.
-    contains = len(lq) >= MIN_CONTAINS
-    if contains and len(rows) < limit:
-        take(f"SELECT {cols} FROM names WHERE tracked = 1 AND instr(lname, ?) > 0 "
-             f"{ORDER} LIMIT ?", (lq, more()))
+    # ...contains it (three characters and up).
     if contains and len(rows) < limit:
         take(f"SELECT {cols} FROM names WHERE id IN "
              f"(SELECT rowid FROM fts WHERE fts MATCH ? LIMIT {SCAN_CAP}) {ORDER} LIMIT ?",

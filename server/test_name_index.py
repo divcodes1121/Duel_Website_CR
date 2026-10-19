@@ -86,20 +86,23 @@ upsert(b, "#ACCT", "Süb", 1)              # diacritics
 for i in range(40):
     upsert(b, f"#FILL{i}", f"filler{i}", 1)
 b.execute("INSERT INTO tracked_players VALUES ('#SUB6', '')")
+b.execute("INSERT INTO tracked_players VALUES ('#SUB4', '')")
 b.commit()
 
 out = ni.build_full(BOT, IDX, now=NOW)
 check("full build counts the window only", out["names"] == 51, out)
-check("full build marks the tracked", out["tracked"] == 1, out)
+check("full build marks the tracked", out["tracked"] == 2, out)
 check("no temp file left", not os.path.exists(IDX + ".tmp"))
 
 # ── ranking ────────────────────────────────────────────────────────────────
 r = search("sub")
 t = tags(r)
-check("exact names first", t[:2] == ["#SUB2", "#SUB1"], t)  # both exact, newer first
-check("then a tracked starts-with, however old", t[2] == "#SUB6", t)
-check("then starts-with (full-width SUBZERO folds into it)", set(t[3:5]) == {"#SUB3", "#FULL"}, t)
-check("then contains", set(t[4:]) >= {"#SUB4", "#SUB5"}, t)
+check("tracked first: a tracked starts-with, however old", t[0] == "#SUB6", t)
+check("then a tracked contains, above untracked exact names", t[1] == "#SUB4", t)
+check("then the exact names", t[2:4] == ["#SUB2", "#SUB1"], t)  # both exact, newer first
+check("then starts-with (full-width SUBZERO folds into it)", set(t[4:6]) == {"#SUB3", "#FULL"}, t)
+check("then contains", "#SUB5" in t[6:], t)
+check("a short list still holds the tracked", tags(search("sub", 2)) == ["#SUB6", "#SUB4"])
 check("full-width letters fold to ordinary ones", "#FULL" in t, t)
 check("a diacritic does not hide a name", "#ACCT" in t, t)
 check("out-of-window names are not indexed", "#OLD1" not in t, t)
@@ -153,7 +156,7 @@ t = tags(r)
 check("a renamed name leaves the old match", "#SUB5" not in t, t)
 check("the new name is found", "#NEW1" in t and "#SUB5" in tags(search("zebra")), t)
 check("cache does not serve the old answer", t != tags(before))
-check("tracked is re-read", t[2] == "#SUB3", t)
+check("tracked is re-read", t[0] == "#SUB3", t)
 check("untracked loses its place", t.index("#SUB6") > t.index("#SUB3"), t)
 out = ni.update(BOT, IDX, now=NOW)
 check("a second update finds nothing new", out["added"] == 0 and out["renamed"] == 0
@@ -187,6 +190,21 @@ if os.name == "nt" and getattr(ni._local, "con", None):
 check("an old format is rebuilt", ni.update(BOT, IDX, now=NOW)["mode"] == "full")
 os.remove(IDX)
 check("a missing file is built", ni.update(BOT, IDX, now=NOW)["mode"] == "full")
+
+# A file built before the covering index (the one deployed first) gets it on
+# its next update, and loses the old one.
+con = sqlite3.connect(IDX)
+con.execute("DROP INDEX names_tracked_c")
+con.execute("CREATE INDEX names_tracked ON names(tracked) WHERE tracked = 1")
+con.commit()
+con.close()
+ni.update(BOT, IDX, now=NOW)
+con = sqlite3.connect(IDX)
+idx = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'index'")}
+con.close()
+check("update adds the covering index", "names_tracked_c" in idx and "names_tracked" not in idx, idx)
+ni._cache.clear()
+check("and the tracked one still leads", tags(search("sub"))[0] == "#SUB3", tags(search("sub")))  # tracked set is #SUB3 alone by now
 
 # ── unavailable and status ─────────────────────────────────────────────────
 r = ni.search("sub", path=os.path.join(TMP, "nope.db"))

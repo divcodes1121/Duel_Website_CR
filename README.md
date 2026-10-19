@@ -2391,10 +2391,16 @@ so "findable by name" and "has data here" end together — and drops the rest
 after every poll. Its size settles at the number of distinct players seen in
 ten months: ~2 GB at today's rate, on a disk with 297 GB free.
 
-**How it ranks.** Exact name, then names that start with it, then names that
-contain it; inside each, tracked players first (guaranteed by a pass over the
-~6k tracked rows, not by luck of a scan), then the most recently seen, then the
-shorter name. Not by battle count — the loudest account is not the one you
+**How it ranks.** Tracked players (we hold their battles) come before every
+untracked match, then exact name, then names that start with it, then names
+that contain it, then the most recently seen, then the shorter name. *Changed
+the same day, on request:* the first order put the exact name first for
+everyone, so a "sub" search showed 2,600+ untracked players named exactly
+"sub" and the tracked **CAL Sub ™️✨Kun** and **TEF丨Sub ™✨Kun** never reached
+the top 100. The tracked rows come from one pass over a covering partial index
+(~6k rows, no table read), which also took the median search from 13 ms to
+6 ms (warm, 1-24 ms on every query tried; a first read from disk can take
+~0.3 s). Not by battle count — the loudest account is not the one you
 meant. Contains is an FTS5 **trigram** index (case- and accent-insensitive);
 trigram cannot match fewer than three characters, so one- and two-character
 queries match by starts-with on a case-folded column. What is typed is passed
