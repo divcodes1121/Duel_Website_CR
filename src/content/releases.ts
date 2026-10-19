@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-19-name-search',
+    date: '2026-10-19',
+    kind: 'new',
+    title: 'Find a player by name',
+    body: [
+      'Type a name into any player search and the players who carry it appear as you type, with their tags. "View all" lists the top 100.',
+      'A name finds players seen in a stored battle in the last ten months. A tag still reaches anyone.',
+    ],
+    href: '#/search',
+    hrefLabel: 'Search by name',
+  },
+  {
     id: '2026-10-17-duo-free',
     date: '2026-10-17',
     kind: 'improved',

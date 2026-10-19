@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Find a player by name** | **2026-10-19, built and verified on staged code against the real names; NOT deployed yet.** Asked, with RoyaleAPI's search pasted: type a name, see the players who carry it, fast. Every search field (top bar, player screen, landing hero) now lists up to seven players as you type, with their tags, and "View all N results" opens `#/search?q=` with the top 100. The server reads its own trigram index of the bot's 5,898,255 stored names (`server/name_index.py`, refreshed after every poll), never the bot's table: a scan of that table measured 0.6 s warm / 4.6 s cold, the index answers in 13 ms median, 39 ms worst, and a request from India is ~0.35 s on an open connection. 643 MB on disk, bounded to names seen in the last 304 days. See [Find a player by name](#find-a-player-by-name-2026-10-19) |
 | **When something breaks: a 404 page with a three.js game, an outage page that reloads itself, and watchdogs** | **2026-10-19.** After the VPS was powered off for half an hour on 2026-10-18 and every search hung for 200+ s: a slow request now asks whether the server is alive and gives up in seconds; an outage page (with the game) re-checks on its own and reloads when the server is back; unknown routes and wrong URLs get a 404 page with the same game; a crashed screen gets the page instead of a blank site; a watchdog on the VPS restarts the API when it stops answering or loses sight of its database; a GitHub workflow emails when the site is down and can start a stopped VPS once Contabo API keys are added. See [When something breaks](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19) |
 | **Team Analysis suggests what the best duel players bring, and a list per teammate (`team-scout-5.0`)** | **LIVE SINCE 2026-10-14 as `b25d12e`.** Reported: *"the recommendation decks are so trash ... random decks, decks repetitive for more players"*. Measured on live answers: about 1 row in 7 was a list the CRL group brought to duels; a 4v4 plan's 160 rows held 67 decks and all four teammates got the same four against one opponent. Now the pool is the window's CRL duel lists (2+ games) and its 40 most played lists, nothing else; a scouting list is ten different win conditions, none under 50%, spread across the roster; a match plan builds each teammate's list from the win conditions they play, rated with their own record, one teammate a deck, and a lineup pairs every opponent with a teammate. Blind on 300 opponents: rows the CRL group brought 36.7% -> 96.7%, the #1 the same (+0.10), the rest of a list about half a point lower; match plans: distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15. See [What the best duel players bring](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14) |
 | **Coach Assist reads how each player plays: win-condition tags and a recommendation of their own** | **2026-10-12.** Asked: rate players by the decks they play, how much, and their win rate across every win condition in the 7D / 14D / 30D window, and make the recommendation each player's own. Measured: how much a win condition is played predicts nothing, the win rate against a player's own average does not help; their duel record with it against what each game should have gone does (lowest fifth -4.9 points, highest +8.1; CRL games 0.5924 -> 0.5875 log loss). A skill table for 13,494 duel players, rebuilt after every poll, is in every Coach Assist figure; a profile per player and per window is on the screen. See [How each player plays](#how-each-player-plays-win-condition-tags-and-a-recommendation-of-their-own-2026-10-12) |
@@ -195,6 +196,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 7. [Reaching the analytics API from the hosted site](#reaching-the-analytics-api-from-the-hosted-site)
 8. [The tunnel, and what was actually proved](#the-tunnel-and-what-was-actually-proved)
 9. [The move off the home machine](#the-move-off-the-home-machine)
+   - [Find a player by name](#find-a-player-by-name-2026-10-19)
    - [When something breaks: the 404 game, the outage page and the watchdogs](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19)
 10. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
 11. [Deck rendering: the three special slots](#deck-rendering-the-three-special-slots)
@@ -2344,6 +2346,82 @@ change definitely shrinks. `.vercelignore` is cheap either way.
   exists.
 
 ---
+
+## Find a player by name (2026-10-19)
+
+Asked, with two screenshots of RoyaleAPI's player search: *"can we implement
+the search by name feature ... check if it will burden us"*, then *"will the
+690 MB file keep increasing as the players increase, also I want a fast search
+one like I showed"*.
+
+**What a reader sees.** Every player search field — the top bar's pill, the
+query row on a player screen, the landing hero — lists up to seven players as
+soon as two letters are typed (one character of a Japanese or Chinese name):
+the name with the match underlined, the tag under it, and a `Tracked` pill when
+the bot stores their battles. Arrow keys and Enter pick a row; `View all N
+results` opens `#/search?q=<name>`, the top 100, which searches again as you
+type and keeps the query in the URL. Enter with nothing highlighted opens a TAG
+when the text says it is one (a leading `#`, or tag letters with a digit) and
+the results page otherwise. A text that can be a tag always offers
+`Open #TAG` as the first row, because a name like "PLUGGY" is spelled entirely
+in tag letters.
+
+**Why it is affordable this time.** The first search-by-name (28 Aug 2026, see
+[It is tag-only](#it-is-tag-only-and-search-by-name-was-built-and-removed))
+scanned the bot's `player_names` with `LIKE`. That table held a few thousand
+names then and **5,898,255** now; the same scan measured **0.6 s warm and 4.6 s
+cold** on the VPS, per keystroke. So the names are copied into an index of our
+own, `server/.name_index.db` (gitignored, the `duo_pairs` arrangement — the
+bot's database is only opened `mode=ro`):
+
+| measured on the VPS, all 5.9M names | |
+|---|---|
+| a ranked search (dropdown or top 100), warm | median **13 ms**, p95 30, worst 39 |
+| the same answer again (cached) | 0.5 ms |
+| a whole build from nothing, idle priority | **88 s**, 37 MB of memory |
+| the update after a poll | ~1 s (0.8 s with nothing new) |
+| the file | **643 MB** |
+| a request from this machine (India) on an open connection | 0.33-0.39 s — the ~300 ms ping to the VPS |
+
+**Does the file keep growing?** The bot adds 55-75 thousand new names a day
+(row 5,000,000 was written on 2 Oct, 5,898,255 by 19 Oct) and never deletes
+one, so an index of every name ever seen would grow ~7 MB a day. The index
+keeps only names **seen in the last 304 days** — the battle retention window,
+so "findable by name" and "has data here" end together — and drops the rest
+after every poll. Its size settles at the number of distinct players seen in
+ten months: ~2 GB at today's rate, on a disk with 297 GB free.
+
+**How it ranks.** Exact name, then names that start with it, then names that
+contain it; inside each, tracked players first (guaranteed by a pass over the
+~6k tracked rows, not by luck of a scan), then the most recently seen, then the
+shorter name. Not by battle count — the loudest account is not the one you
+meant. Contains is an FTS5 **trigram** index (case- and accent-insensitive);
+trigram cannot match fewer than three characters, so one- and two-character
+queries match by starts-with on a case-folded column. What is typed is passed
+as one quoted phrase, never as FTS syntax. Counts stop at 100,000 and say `+`.
+
+**What it cannot do.** A name finds only players the bot has seen in a stored
+battle; RoyaleAPI has the same limit and says so. A tag still reaches anyone.
+There is no clan line under a name (the bot stores names with no clan), and a
+name is the one seen last, so a rename shows after the next poll.
+
+**Verified.** `server/test_name_index.py` 48 checks (real SQLite files; green
+here and on the VPS), `tests/nameSearch.test.ts` 10, `test_api_security` 102
+(route count 29). **34/34 in a real browser** against a staged `app.py` on the
+VPS reading the real index through a tunnel: the hero, the pill and the player
+screen's field, keyboard, Escape and outside click, a two-character Japanese
+name, a tag, the results page (100 rows, live typing, reload, click), light
+theme, and a 390px phone. The check found one real bug before it shipped:
+clicking a result moved the URL to the player and the results page's URL
+effect wrote `#/search` back over it. Main JS +2.35 kB gzip (the dropdown is
+on every screen); the results page is its own 1.6 kB chunk.
+
+**To deploy**: scp `name_index.py`, `app.py`, `after_poll.py` and the two test
+files to `/opt/royalweb/server/` (back up what is overwritten), build the index
+once (`python3 name_index.py --build`, ~90 s, or move the staged one from
+`/tmp/namestage/`), restart `royalweb` only, check `nameIndex` on
+`/api/analytics/status`, then push the frontend. After that the post-poll
+updater keeps it fresh.
 
 ## When something breaks: the 404 game, the outage page and the watchdogs (2026-10-19)
 
@@ -10283,6 +10361,10 @@ is drawn. Measured — root 886…1066, pill 856…1036, identical widths.
 ---
 
 ### It is tag-only, and search-by-name was built and removed
+
+> **Superseded 2026-10-19:** name search is back, reading its own index
+> instead of the bot's table — see [Find a player by name](#find-a-player-by-name-2026-10-19).
+> The record below is why it went the first time.
 
 `#9GJ0Q0LGG` is a poor thing to ask a person for, so `/api/analytics/search` was
 added — it read the bot's `player_names`, ordered starts-with first, escaped the

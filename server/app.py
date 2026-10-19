@@ -645,6 +645,14 @@ class Handler(BaseHTTPRequestHandler):
                 # WHAT THE COACH'S DAILY SESSION REMEMBERS (counts, never a
                 # tag). If this stops growing the practice deck silently goes
                 # back to repeating itself, and no other angle shows that.
+                # THE NAME INDEX the player search reads: how many names and
+                # when it was last brought up to date. A stopped updater leaves
+                # new players unfindable by name and nothing else shows it.
+                try:
+                    import name_index
+                    out["nameIndex"] = name_index.status()
+                except Exception:  # noqa: BLE001
+                    out["nameIndex"] = {"available": False}
                 try:
                     import coach_session_log
                     out["coachSessions"] = coach_session_log.status()
@@ -682,6 +690,23 @@ class Handler(BaseHTTPRequestHandler):
 
             if path == "/api/analytics/suggest":
                 return self._send({"tags": cd.suggest_tags(5)})
+
+            if path == "/api/analytics/search":
+                # FIND A PLAYER BY NAME. Reads OUR index (`name_index.py`,
+                # rebuilt after every poll), never the bot's database: the
+                # first version of this route (28 Aug 2026) scanned
+                # `player_names` with LIKE and was removed, and that table is
+                # 5.9M rows now (0.6-4.6 s a scan). The index answers in
+                # milliseconds, so a type-ahead can ask it. `limit` is clamped
+                # to 1..100 inside `search`; the query is bound or quoted as
+                # one FTS phrase, never SQL.
+                import name_index
+                q = parse_qs(parsed.query)
+                try:
+                    limit = int((q.get("limit") or ["8"])[0])
+                except ValueError:
+                    limit = 8
+                return self._send(name_index.search((q.get("q") or [""])[0], limit))
 
             if path == "/api/analytics/duo-pairs":
                 # THE UNIQUE DECK PAIRS PLAYED IN 2v2, for the admin board.

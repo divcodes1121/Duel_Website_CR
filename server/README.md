@@ -439,6 +439,38 @@ populated screen.
 Tags are validated against Supercell's 14-symbol alphabet before they reach a
 query (same rule as `clashdb.normalize_tag`), so junk never hits the database.
 
+## The name index (`name_index.py`, 2026-10-19)
+
+`/api/analytics/search?q=<text>&limit=<1..100>` answers the player search by
+name: `{query, total, capped, match: contains|starts|none, results: [{tag,
+name, tracked, seen}], available}`. It reads `.name_index.db` (gitignored; env
+`CLASH_NAME_INDEX`), never the bot's `player_names`, whose `LIKE` scan costs
+0.6-4.6 s at 5.9M rows.
+
+- **Tables**: `names(id = the bot's player_names rowid, tag, name, lname =
+  NFKC+casefold, day, tracked)` with indexes on `lname`, `day` and a partial one
+  on `tracked`; `fts`, an external-content FTS5 trigram index over `name`
+  (`case_sensitive 0 remove_diacritics 1`). `meta` holds `format`, the
+  `updated_at` watermark, `builtAt`, `fullAt`, `names`.
+- **Refresh**: a step of `after_poll.py` (`name_index.py --build`): rows the bot
+  touched after the watermark (the bot upserts with ON CONFLICT DO UPDATE, so a
+  rowid never moves); a renamed name is deleted from and re-added to the FTS
+  index; names last seen more than `RETAIN_DAYS` (= `CLASH_NAME_DAYS` or
+  `CLASH_RETENTION_DAYS`, 304) ago are dropped; the tracked flag is re-read.
+  A missing or old-format file is rebuilt whole into `.tmp` and `os.replace`d;
+  readers reopen on a new inode. `--build --full` forces it.
+- **Search**: exact `lname`, then starts-with (tracked rows first from the
+  partial index, then a 5,000-row scan of the range), then contains (tracked
+  rows by `instr`, then the first 5,000 FTS matches), each ordered tracked,
+  most recently seen, shorter, name. Under three characters only exact and
+  starts-with run (trigram needs three). The query reaches FTS as one quoted
+  phrase. Answers are cached per (file, `data_version`, query, limit).
+- **Status**: `nameIndex` on `/api/analytics/status` — counts, times, bytes,
+  never a name.
+- Measured 2026-10-19 on the VPS: build 88 s / 37 MB RSS / 643 MB file; update
+  0.8 s with nothing new; warm search median 13 ms, worst 39 ms.
+- **Route count 29** (`test_api_security`).
+
 ## Battle modes, and the 2v2 pairs (`battle_modes.py`, `duo_pairs.py`)
 
 **MODE DETECTION RUNS BEFORE THE DECK PIPELINE, NOT INSIDE IT.** A `TeamVsTeam`

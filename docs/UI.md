@@ -2263,3 +2263,18 @@ animation, so `networkidle` is not enough — wait for `input[type="password"]`.
 
 Screenshots at `deviceScaleFactor: 4` for anything small; a 48 px card tile or a
 50 px logo mark tells you nothing at 1×.
+
+## Name suggestions under a search field (2026-10-19)
+
+`components/NameSuggest/` attaches to an input it is handed (the gooey pill's,
+the player screen's query row, the landing hero's) and portals an opaque list
+under it: `Open #TAG` when the text can be a tag, up to seven players (name
+with the match underlined, tag under it, a green-ink `Tracked` pill), then
+`View all N results`. It sets the combobox ARIA on the input itself. The gooey
+pill's own result pills stay unused (no `items`, no `onSearch`) — they are a
+slow staggered spring of strings and cannot carry a tag. Rules (what is a tag,
+where Enter goes, minimum characters) live in `utils/nameSearch.ts`, no
+imports. The results page is `#/search?q=` (`Analytics/PlayerSearch/`, lazy):
+it rewrites the URL with `replaceState` ONLY while the hash is still
+`#/search` — the first cut rewrote it after a click had already moved to a
+player.

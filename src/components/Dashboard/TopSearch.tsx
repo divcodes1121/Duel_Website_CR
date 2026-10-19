@@ -18,19 +18,19 @@
  * itself, so this is not a private detail being reached into; it is the one
  * hook it offers.
  *
- * ── IT IS TAG-ONLY, AND THAT IS A DECISION ───────────────────────────────
+ * ── IT FINDS PLAYERS BY NAME (2026-10-19), AND THAT WAS A DECISION TWICE ──
  *
- * Search-by-name was built and removed. `/api/analytics/search` read the bot's
- * `player_names` and it worked, but the field is chrome on EVERY screen and the
- * component fires a request per debounced keystroke — so the cost of the
- * feature is a steady stream of authenticated queries against the analytics
- * host, paid on every page, to save typing a tag that the person pasting it
- * already has on their clipboard. It was not worth the traffic.
+ * Search-by-name was built and removed on 28 Aug 2026: it scanned the bot's
+ * `player_names` with LIKE, and this field is chrome on every screen, so every
+ * debounced keystroke paid for a table scan. That table is 5.9M names now and
+ * the scan would cost 0.6-4.6 s. It is back because the server reads its own
+ * trigram index instead (`server/name_index.py`, milliseconds a query).
  *
- * So there is no `onSearch` and no `items`: nothing is fetched, no result list
- * is produced, and the field does exactly one thing — take a tag and open it.
- * Enter is the whole interface, which is why the listener below is not an
- * enhancement but the feature.
+ * The list is NOT the component's own result pills (a slow staggered spring,
+ * strings only). `NameSuggest` attaches to the component's input and draws an
+ * ordinary dropdown under the pill; the component's `items`/`onSearch` stay
+ * unset, so its own effect never fetches. Enter with no row highlighted goes
+ * through `onGo`: a tag opens the player, a name opens the results page.
  *
  * ── AND THE TOKENS ───────────────────────────────────────────────────────
  *
@@ -40,8 +40,9 @@
  * `index.css`, and two new global colour names would be a second source of
  * truth for the same two values.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GooeySearch } from '../ui/gooey-search';
+import { NameSuggest } from '../NameSuggest/NameSuggest';
 import styles from './TopSearch.module.css';
 
 export function TopSearch({
@@ -54,50 +55,36 @@ export function TopSearch({
   inputRef?: React.MutableRefObject<HTMLInputElement | null>;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState<HTMLInputElement | null>(null);
 
-  /* Enter submits whatever is typed, and ⌘K finds the input once it exists.
-     Both are done on the DOM because the component owns its input and exposes
-     neither a ref nor an onSubmit. A MutationObserver rather than a one-shot
-     query because the input is not in the tree until the pill expands. */
+  /* The component owns its input and exposes no ref, and the input is not in
+     the tree until the pill expands — so it is found by watching the DOM.
+     `.gooey-search-input` is the class the component puts there itself. */
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-
-    let bound: HTMLInputElement | null = null;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter') return;
-      const value = (e.currentTarget as HTMLInputElement).value.trim();
-      if (!value) return;
-      e.preventDefault();
-      onGo(value);
-    };
-
     const bind = () => {
-      const input = root.querySelector<HTMLInputElement>('.gooey-search-input');
-      if (input === bound) return;
-      bound?.removeEventListener('keydown', onKey);
-      bound = input;
-      if (inputRef) inputRef.current = input;
-      input?.addEventListener('keydown', onKey);
+      const el = root.querySelector<HTMLInputElement>('.gooey-search-input');
+      if (inputRef) inputRef.current = el;
+      setInput((prev) => (prev === el ? prev : el));
     };
-
     bind();
     const mo = new MutationObserver(bind);
     mo.observe(root, { childList: true, subtree: true });
     return () => {
       mo.disconnect();
-      bound?.removeEventListener('keydown', onKey);
       if (inputRef) inputRef.current = null;
     };
-  }, [onGo, inputRef]);
+  }, [inputRef]);
 
   return (
     <div ref={rootRef} className={styles.scope}>
       <GooeySearch
-        placeholder="Enter player tag"
+        placeholder="Player name or tag"
         buttonLabel="Search"
         expandedWidth={280}
       />
+      <NameSuggest input={input} anchor={rootRef.current} onSubmit={onGo} />
     </div>
   );
 }

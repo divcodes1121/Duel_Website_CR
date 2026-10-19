@@ -4,6 +4,8 @@ import { ProfileMenu } from '../Profile/ProfileMenu';
 import { TierBadge } from '../TierBadge/TierBadge';
 import { GlassDockNav } from './GlassDockNav';
 import { TopSearch } from './TopSearch';
+import { NameSuggest } from '../NameSuggest/NameSuggest';
+import { searchHash } from '../../utils/nameSearch';
 import { Header } from '../Header/Header';
 import { DuelDeckBuilder } from '../DuelDeckBuilder/DuelDeckBuilder';
 import { DecksHome } from '../DecksHome/DecksHome';
@@ -48,6 +50,10 @@ const DuoDecks = lazy(() =>
    nobody else's page load should carry a line of it. */
 const AllDuels = lazy(() =>
   import('../Analytics/AllDuels/AllDuels').then((m) => ({ default: m.AllDuels })),
+);
+/* Lazy: reached only from a search field's "View all" or Enter on a name. */
+const PlayerSearch = lazy(() =>
+  import('../Analytics/PlayerSearch/PlayerSearch').then((m) => ({ default: m.PlayerSearch })),
 );
 import { ReadingState } from '../Analytics/ReadingState';
 import { PlayerAnalysis } from '../Analytics/PlayerAnalysis';
@@ -141,6 +147,7 @@ export type DashboardView =
   | 'teams'
   | 'duo'
   | 'allduels'
+  | 'search'
   | 'player';
 
 /* The home route is `#/`, not the empty string.
@@ -408,7 +415,7 @@ function go(hash: string) {
    so the backdrop keeps meaning something on all eleven screens rather than
    falling back to ambient on three of them. */
 const TOOL_HUE: Record<
-  'builder' | 'decks' | 'palette' | 'teams' | 'duo' | 'allduels',
+  'builder' | 'decks' | 'palette' | 'teams' | 'duo' | 'allduels' | 'search',
   FireflyHue
 > = {
   builder: 'violet',
@@ -417,6 +424,7 @@ const TOOL_HUE: Record<
   teams: 'pink',
   duo: 'green',
   allduels: 'blue',
+  search: 'blue',
 };
 
 /* ALL DUELS IS NOT IN `TOP_NAV`, `SIDE_NAV` OR THE LANDING STRIP, ON PURPOSE.
@@ -485,6 +493,11 @@ export function Dashboard({
   const [tag, setTag] = useState('');
   // The analysis screen carries the query in the top bar, seeded from the URL.
   const [topTag, setTopTag] = useState(playerTag);
+  /* The two forms' fields and boxes, for `NameSuggest` to attach to. */
+  const [heroInput, setHeroInput] = useState<HTMLInputElement | null>(null);
+  const [heroForm, setHeroForm] = useState<HTMLFormElement | null>(null);
+  const [queryInput, setQueryInput] = useState<HTMLInputElement | null>(null);
+  const [queryForm, setQueryForm] = useState<HTMLFormElement | null>(null);
   const [season, setSeason] = useState<string>(SEASONS[0]);
   /* ⌘K / Ctrl-K OPENS THE COMMAND PALETTE (2026-09-28). It used to expand
      the top bar's tag pill and focus it, which reached one thing — a tag. The
@@ -912,7 +925,12 @@ export function Dashboard({
               It is vengenceui's GooeySearch now rather than a form. The one
               thing that component cannot do is submit what you typed, which is
               the only thing this field is for — see `TopSearch`. */}
-          <TopSearch onGo={(t) => go(`#/player/${encodeURIComponent(t.trim())}`)} />
+          <TopSearch
+            onGo={(t) => {
+              const next = searchHash(t);
+              if (next) go(next);
+            }}
+          />
 
           {/* Was a 2.15rem circular icon button. It kept `data-metal` while it
               was a circle; as a 3:1 track that no longer applies, so the
@@ -1145,23 +1163,27 @@ export function Dashboard({
                   to be a static "Analytics" label, decoration restating the
                   screen you were already looking at; it is now the way out. */}
                 <form
+                ref={setQueryForm}
                 className={styles.topSearch}
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (topTag.trim()) go(`#/player/${encodeURIComponent(topTag.trim())}`);
+                  const next = searchHash(topTag);
+                  if (next) go(next);
                 }}
               >
                 <span className={styles.topSearchIcon}>
                   <SearchIcon size={16} />
                 </span>
                 <input
+                  ref={setQueryInput}
                   className={styles.topSearchInput}
                   value={topTag}
                   onChange={(e) => setTopTag(e.target.value)}
-                  placeholder="Enter player tag..."
-                  aria-label="Player tag"
+                  placeholder="Player name or tag..."
+                  aria-label="Player name or tag"
                   spellCheck={false}
                 />
+                <NameSuggest input={queryInput} anchor={queryForm} />
                 <button type="submit" className={styles.topSearchButton}>
                   Search
                 </button>
@@ -1313,6 +1335,17 @@ export function Dashboard({
 
                   Nothing is judged until the account has arrived — see
                   `accountResolved`. */}
+              {view === 'search' && (
+                <Suspense
+                  fallback={
+                    <ReadingState k="search-chunk" hue="blue">
+                      <p>Opening Player Search…</p>
+                    </ReadingState>
+                  }
+                >
+                  <PlayerSearch />
+                </Suspense>
+              )}
               {view === 'allduels' &&
                 (!accountResolved ? (
                   <p className={styles.adminOnly}>Checking your account…</p>
@@ -1372,24 +1405,27 @@ export function Dashboard({
                       </p>
 
                       <form
+                        ref={setHeroForm}
                         className={styles.searchRow}
                         onSubmit={(e) => {
                           e.preventDefault();
-                          const t = tag.trim();
-                          if (t) go(`#/player/${encodeURIComponent(t)}`);
+                          const next = searchHash(tag);
+                          if (next) go(next);
                         }}
                       >
                         <span className={styles.searchIcon}>
                           <SearchIcon size={19} />
                         </span>
                         <input
+                          ref={setHeroInput}
                           className={styles.searchInput}
                           value={tag}
                           onChange={(e) => setTag(e.target.value)}
-                          placeholder="Enter player tag..."
+                          placeholder="Player name or tag..."
                           spellCheck={false}
-                          aria-label="Player tag"
+                          aria-label="Player name or tag"
                         />
+                        <NameSuggest input={heroInput} anchor={heroForm} />
                         <button type="submit" className={styles.analyzeButton}>
                           Analyze
                           <ArrowRightIcon />

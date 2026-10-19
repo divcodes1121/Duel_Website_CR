@@ -65,6 +65,11 @@ server/.duo_decks.db-shm
 server/.duo_pairs.db
 server/.duo_pairs.db-wal
 server/.duo_pairs.db-shm
+# The player search's name index (`name_index.py`): every stored player's
+# name and tag, rebuilt from the bot's player_names after every poll.
+server/.name_index.db
+server/.name_index.db-journal
+server/.name_index.db.tmp
 
 # The cluster index (`cluster_index.py --build`) — derived from battles.db,
 # ~700 MB on production, rebuilt every four hours by royalweb-cluster.timer.

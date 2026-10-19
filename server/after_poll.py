@@ -113,6 +113,11 @@ def main(argv: list[str]) -> int:
         ("deck packages", [sys.executable, "-u", os.path.join(HERE, "deck_packages.py"), "--build"]),
         # The deck builder's move set: which cards humans interchange.
         ("swap graph", [sys.executable, "-u", os.path.join(HERE, "swap_graph.py"), "--build"]),
+        # The player search's name index (`name_index`): names the bot stored
+        # since the last run, renames re-indexed, names past the retention
+        # window dropped. A second or two; a whole rebuild (~2 min) only when
+        # the file is missing or of an older format.
+        ("name index", [sys.executable, "-u", os.path.join(HERE, "name_index.py"), "--build"]),
     ]
     failed = []
     for name, cmd in steps:

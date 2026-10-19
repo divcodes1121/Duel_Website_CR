@@ -23,6 +23,7 @@ export const KNOWN_ROUTES = [
   '#/palette',
   '#/teams',
   '#/duo',
+  '#/search',
   '#/all-duels',
   '#/player',
   '#/guide',

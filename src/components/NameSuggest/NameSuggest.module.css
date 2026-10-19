@@ -1,0 +1,110 @@
+/* The name dropdown. Opaque, like every dropdown here (`dd14-panel`): a
+ * translucent list over a page of card art is unreadable. Portalled to <body>,
+ * so it reads tokens from :root and works in both themes without a branch. */
+.panel {
+  position: fixed;
+  z-index: 1100;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface-strong);
+  color: var(--text);
+  font-family: var(--font-body);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+  animation: ns-in var(--dur-1) var(--ease) both;
+}
+
+@keyframes ns-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.45rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.row[data-active] {
+  background: var(--surface-sunken, var(--bg-3));
+  outline: 1px solid var(--border);
+}
+
+.row[data-kind='tag'] {
+  font-weight: 600;
+}
+
+.row[data-kind='all'] {
+  justify-content: center;
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 0.45rem 0.45rem;
+  font-weight: 600;
+}
+
+.who {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.mark {
+  background: none;
+  color: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+.tag {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tracked {
+  flex: none;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: var(--hue-green);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.empty {
+  margin: 0;
+  padding: 0.6rem 0.65rem;
+  font-size: 0.85rem;
+}

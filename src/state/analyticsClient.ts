@@ -1348,6 +1348,35 @@ export function fetchSuggestedTags(): Promise<{
   return get('/api/analytics/suggest');
 }
 
+/** One stored player whose name matched. */
+export interface NameHit {
+  tag: string;
+  name: string;
+  /** The bot tracks them: their battles are stored here. */
+  tracked: boolean;
+  /** The last day their name was seen in a battle, `YYYY-MM-DD`. */
+  seen: string | null;
+}
+
+export interface NameSearch {
+  query: string;
+  total: number;
+  /** `total` stopped counting at the server's cap. */
+  capped: boolean;
+  /** 'contains' from three characters, 'starts' below that. */
+  match: 'contains' | 'starts' | 'none';
+  results: NameHit[];
+  /** False when the name index is missing on the server. */
+  available: boolean;
+}
+
+/** Players whose stored name matches, best first (`server/name_index.py`). */
+export function searchPlayers(query: string, limit: number): Promise<NameSearch> {
+  return get<NameSearch>(
+    `/api/analytics/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+  );
+}
+
 export function fetchSources(): Promise<ApiSources> {
   return get<ApiSources>('/api/analytics/status');
 }

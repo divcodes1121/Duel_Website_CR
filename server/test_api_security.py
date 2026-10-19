@@ -170,6 +170,9 @@ class Authentication(unittest.TestCase):
                   # the bot's database, which makes it cheap — and cheap is
                   # not the same as public.
                   "/api/analytics/duo-pairs",
+                  # Every stored player's name: public in the game, but a bulk
+                  # read of them is still not for an unkeyed caller.
+                  "/api/analytics/search?q=sub",
                   # Coach Roster's admin-only route. Its second gate (the
                   # Supabase admin check) sits BEHIND this one, so an unkeyed
                   # caller is refused here before Supabase is ever asked.
@@ -754,7 +757,12 @@ class RoutingUnchanged(unittest.TestCase):
         # and crowns, filtered by card over 30, 60 or 90 days). Admin-gated: it
         # is a time-ordered list of every player's tag, name and decks.
         # `DuelFeedAdminGate` below pins the gate.
-        self.assertEqual(len(routes), 28)
+        #
+        # 29 on 19 Oct 2026: `/api/analytics/search` BACK, by request ("search
+        # by name"). What made it worth a route this time: it reads its own
+        # trigram index (`name_index.py`), so a keystroke costs milliseconds
+        # instead of a 0.6-4.6 s scan of the bot's 5.9M-row `player_names`.
+        self.assertEqual(len(routes), 29)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]
