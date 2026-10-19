@@ -187,6 +187,15 @@ systemd restarts royalweb when the process DIES; nothing restarted it when it wa
 - `api_watchdog.py` via `royalweb-watchdog.timer` (first check 3 min after boot, then every 2 min): probes `/api/analytics/status`; unhealthy = no answer in 25 s / not 200, or `hot.available: false` while the DB file exists and `.maintenance` is absent. Restarts **royalweb only** after `CONSECUTIVE_BAD` (2) readings in a row, at most once per `MIN_RESTART_GAP_S` (15 min). Never the bot. State `/var/lib/royalweb-watchdog/state.json` (no tags), log `/var/log/clashbot/watchdog.log` (only non-healthy lines). `--dry-run` decides and prints. `test_api_watchdog.py` (20). Off: `systemctl disable --now royalweb-watchdog.timer`.
 - The box cannot notice that it is OFF; `.github/workflows/vps-watch.yml` does that from outside (see the root README, "When something breaks").
 
+### Out of memory: the bot is the last thing the kernel kills (2026-10-19)
+
+At 17:31:01 UTC on 2026-10-19 the kernel's OOM killer killed the bot (systemd restarted it 10 s later). At that moment: bot 4.1 GB resident, the after-poll **duel model** step 4.4 GB, royalweb 2.8 GB, on 12 GB RAM + 4 GB swap. The killer takes the biggest process, and that was the sole writer of `battles.db`. First OOM this boot, none in the previous one (26 Aug - 18 Oct).
+
+- `deploy/clashbot.service.d/oom.conf` -> `/etc/systemd/system/clashbot.service.d/`: `OOMScoreAdjust=-900`. Set on the running bot with `choom` the same day (no restart): oom_score 695 -> 96.
+- `deploy/royalweb-afterpoll.service.d/memory.conf`: `MemoryHigh=6G` (reclaimed above it), `MemoryMax=7G` (only that step is killed; `after_poll` records it as failed and the next poll retries), `OOMScoreAdjust=500` (the kernel's first choice). systemd 255 does not log a unit's memory peak, so the cap is set over the 4.4 GB seen, not over a measured peak; if a step starts failing with exit -9 / `oom-kill`, raise it.
+- Undo: delete the drop-in and `systemctl daemon-reload` (for the bot, `choom -p <pid> -n 0` too).
+- **OPEN: the bot's own memory grows.** 408 MB 1 h 45 min after its restart, 4.1 GB after a day. Not investigated (the bot's code is the `Clash_Bot` repo).
+
 ### Backups (`db_backup.py`, `tools/dbstream`, 2026-09-29)
 
 Until 2026-09-29 there was **no backup** — three one-off pre-cleanup copies
