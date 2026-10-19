@@ -9,7 +9,6 @@ import {
   queryOf,
   searchHash,
   seenLabel,
-  splitMatch,
 } from '../src/utils/nameSearch';
 import { isUnknownRoute } from '../src/utils/routes';
 
@@ -50,9 +49,11 @@ describe('the dropdown', () => {
     expect(minChars('é')).toBe(2);
   });
 
-  it('marks the match whatever its case', () => {
-    expect(splitMatch('CAL Sub Kun', 'sub')).toEqual(['CAL ', 'Sub', ' Kun']);
-    expect(splitMatch('Kun', 'sub')).toEqual(['Kun', '', '']);
+  it('draws names plain: no highlighted match', () => {
+    for (const f of ['src/components/NameSuggest/NameSuggest.tsx',
+      'src/components/Analytics/PlayerSearch/PlayerSearch.tsx']) {
+      expect(readFileSync(f, 'utf8')).not.toMatch(/<mark|underline/);
+    }
   });
 
   it('labels counts and days', () => {

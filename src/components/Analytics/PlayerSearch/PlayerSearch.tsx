@@ -19,7 +19,6 @@ import {
   minChars,
   queryOf,
   seenLabel,
-  splitMatch,
 } from '../../../utils/nameSearch';
 import { suggestCache } from '../../NameSuggest/NameSuggest';
 import { SearchIcon } from '../../Dashboard/icons';
@@ -148,17 +147,12 @@ export function PlayerSearch() {
           </li>
         )}
         {(shown?.results ?? []).map((r, i) => {
-          const [a, b, c] = splitMatch(r.name, asked);
           return (
             <li key={r.tag} className={styles.row}>
               <button type="button" className={styles.hit} onClick={() => open(r.tag)}>
                 <span className={styles.rank}>{i + 1}</span>
                 <span className={styles.who}>
-                  <span className={styles.name}>
-                    {a}
-                    {b && <mark className={styles.mark}>{b}</mark>}
-                    {c}
-                  </span>
+                  <span className={styles.name}>{r.name}</span>
                   <span className={styles.meta}>
                     {r.tag}
                     {r.seen && <span className={styles.seen}>Seen {seenLabel(r.seen)}</span>}

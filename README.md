@@ -2357,7 +2357,7 @@ one like I showed"*.
 **What a reader sees.** Every player search field — the top bar's pill, the
 query row on a player screen, the landing hero — lists up to seven players as
 soon as two letters are typed (one character of a Japanese or Chinese name):
-the name with the match underlined, the tag under it, and a `Tracked` pill when
+the name in plain text (an underlined match was tried and removed on request), the tag under it, and a `Tracked` pill when
 the bot stores their battles. Arrow keys and Enter pick a row; `View all N
 results` opens `#/search?q=<name>`, the top 100, which searches again as you
 type and keeps the query in the URL. Enter with nothing highlighted opens a TAG

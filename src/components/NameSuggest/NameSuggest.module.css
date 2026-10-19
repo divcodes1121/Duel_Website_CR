@@ -75,16 +75,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
-}
-
-.mark {
-  background: none;
-  color: inherit;
-  font-weight: 800;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 2px;
+  /* Plain: no highlight of the match, no heavy weight (asked, 2026-10-19). */
+  font-weight: 500;
 }
 
 .tag {

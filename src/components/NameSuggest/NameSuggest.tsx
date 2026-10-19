@@ -27,7 +27,6 @@ import {
   asTag,
   countLabel,
   minChars,
-  splitMatch,
 } from '../../utils/nameSearch';
 import styles from './NameSuggest.module.css';
 
@@ -242,15 +241,10 @@ export function NameSuggest({
                 View all {countLabel(row.total, row.capped)} results
               </li>
             );
-          const [a, b, c] = splitMatch(row.name, asked);
           return (
             <li key={row.tag} {...common}>
               <span className={styles.who}>
-                <span className={styles.name}>
-                  {a}
-                  {b && <mark className={styles.mark}>{b}</mark>}
-                  {c}
-                </span>
+                <span className={styles.name}>{row.name}</span>
                 <span className={styles.tag}>{row.tag}</span>
               </span>
               {row.tracked && (

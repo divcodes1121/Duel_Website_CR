@@ -2269,7 +2269,8 @@ Screenshots at `deviceScaleFactor: 4` for anything small; a 48 px card tile or a
 `components/NameSuggest/` attaches to an input it is handed (the gooey pill's,
 the player screen's query row, the landing hero's) and portals an opaque list
 under it: `Open #TAG` when the text can be a tag, up to seven players (name
-with the match underlined, tag under it, a green-ink `Tracked` pill), then
+in plain weight 500 — the underlined match was removed on request the same
+day — tag under it, a green-ink `Tracked` pill), then
 `View all N results`. It sets the combobox ARIA on the input itself. The gooey
 pill's own result pills stay unused (no `items`, no `onSearch`) — they are a
 slow staggered spring of strings and cannot carry a tag. Rules (what is a tag,

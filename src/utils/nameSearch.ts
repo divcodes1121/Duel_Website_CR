@@ -56,15 +56,6 @@ export function minChars(text: string): number {
   return /[^\u0000-ɏ]/.test(text) ? 1 : 2;
 }
 
-/** Splits `name` around the first case-insensitive occurrence of `query`, for
- *  drawing the match in bold. No occurrence -> the whole name, unmarked. */
-export function splitMatch(name: string, query: string): [string, string, string] {
-  const q = query.trim().toLowerCase();
-  const i = q ? name.toLowerCase().indexOf(q) : -1;
-  if (i === -1 || name.toLowerCase().length !== name.length) return [name, '', ''];
-  return [name.slice(0, i), name.slice(i, i + q.length), name.slice(i + q.length)];
-}
-
 /** Rows in the dropdown. */
 export const SUGGEST_LIMIT = 7;
 /** Rows on the results page (the server's cap, as on RoyaleAPI). */
