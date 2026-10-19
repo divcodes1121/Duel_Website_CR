@@ -201,5 +201,10 @@ check("fold casefolds", ni.fold("STRASSE") == ni.fold("Straße"))
 check("fold NFKC", ni.fold("ＡＢＣ") == "abc")
 
 b.close()
+if getattr(ni._local, "con", None):
+    ni._local.con.close()
+    ni._local.con = None
+import shutil  # noqa: E402
+shutil.rmtree(TMP, ignore_errors=True)
 print(f"{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
