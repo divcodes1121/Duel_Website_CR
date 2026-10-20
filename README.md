@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Coach Duel — two AI coaches play a best of 3** | **BUILT 2026-10-20, NOT DEPLOYED, ADMIN ONLY** (the screen AND the server answer: `sim=1` asks Supabase whether the token is an admin's, like All Duels). Asked: an AI coach for each of two players, game by game, the matchup and who won, "the brain reading the top CRL decks, the trees, the meta", all three games planned. Each coach IS Coach Assist for its player (the set it would load, its read of the other player, the look-ahead); the server works out every game a best of 3 can reach and the exact chance of each final score, and the screen plays it like a game — two illustrated coaches on the arena, a draw per game from its chance, crowns, rematch. Staged on the VPS on 8 real CRL pairs: 2.5–28 s cold, a rematch costs nothing, 7.7 kB. See [Coach Duel](#coach-duel--two-ai-coaches-play-a-best-of-3-2026-10-20) |
+| **Coach Duel — you against an AI coach** | **LIVE (admin only)**; first build `475fe2b` (two AI coaches), rebuilt 2026-10-21 on feedback: Clash Royale's Blue and Red Kings, you coach Blue with pasted decks, the Red AI coach changes its set every rematch from its player's rotation (sometimes a real one-card switch) and remembers your decks. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) |
 | **Find a player by name** | **LIVE 2026-10-19 as `6f6a1df`** (server by scp first, backups `*.bak-20261019-100059-prenamesearch`, only royalweb restarted; the site reported the commit 60 s after the push; 9/9 in a real browser on https://deckkies.com signed out, the dropdown filled 460 ms after the last key). Asked, with RoyaleAPI's search pasted: type a name, see the players who carry it, fast. Every search field (top bar, player screen, landing hero) now lists up to seven players as you type, with their tags, and "View all N results" opens `#/search?q=` with the top 100. The server reads its own trigram index of the bot's 5,898,255 stored names (`server/name_index.py`, refreshed after every poll), never the bot's table: a scan of that table measured 0.6 s warm / 4.6 s cold, the index answers in 13 ms median, 39 ms worst, and a request from India is ~0.35 s on an open connection. 643 MB on disk, bounded to names seen in the last 304 days. See [Find a player by name](#find-a-player-by-name-2026-10-19) |
 | **When something breaks: a 404 page with a three.js game, an outage page that reloads itself, and watchdogs** | **2026-10-19.** After the VPS was powered off for half an hour on 2026-10-18 and every search hung for 200+ s: a slow request now asks whether the server is alive and gives up in seconds; an outage page (with the game) re-checks on its own and reloads when the server is back; unknown routes and wrong URLs get a 404 page with the same game; a crashed screen gets the page instead of a blank site; a watchdog on the VPS restarts the API when it stops answering or loses sight of its database; a GitHub workflow emails when the site is down and can start a stopped VPS once Contabo API keys are added. See [When something breaks](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19) |
 | **Team Analysis suggests what the best duel players bring, and a list per teammate (`team-scout-5.0`)** | **LIVE SINCE 2026-10-14 as `b25d12e`.** Reported: *"the recommendation decks are so trash ... random decks, decks repetitive for more players"*. Measured on live answers: about 1 row in 7 was a list the CRL group brought to duels; a 4v4 plan's 160 rows held 67 decks and all four teammates got the same four against one opponent. Now the pool is the window's CRL duel lists (2+ games) and its 40 most played lists, nothing else; a scouting list is ten different win conditions, none under 50%, spread across the roster; a match plan builds each teammate's list from the win conditions they play, rated with their own record, one teammate a deck, and a lineup pairs every opponent with a teammate. Blind on 300 opponents: rows the CRL group brought 36.7% -> 96.7%, the #1 the same (+0.10), the rest of a list about half a point lower; match plans: distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15. See [What the best duel players bring](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14) |
@@ -197,7 +197,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 7. [Reaching the analytics API from the hosted site](#reaching-the-analytics-api-from-the-hosted-site)
 8. [The tunnel, and what was actually proved](#the-tunnel-and-what-was-actually-proved)
 9. [The move off the home machine](#the-move-off-the-home-machine)
-   - [Coach Duel — two AI coaches play a best of 3](#coach-duel--two-ai-coaches-play-a-best-of-3-2026-10-20)
+   - [Coach Duel — you against an AI coach](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21)
    - [Find a player by name](#find-a-player-by-name-2026-10-19)
    - [When something breaks: the 404 game, the outage page and the watchdogs](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19)
 10. [Top Meta Decks — why it is a snapshot](#top-meta-decks--why-it-is-a-snapshot)
@@ -2349,145 +2349,139 @@ change definitely shrinks. `.vercelignore` is cheap either way.
 
 ---
 
-## Coach Duel — two AI coaches play a best of 3 (2026-10-20)
+## Coach Duel — you against an AI coach, best of 3 (2026-10-20, rebuilt 2026-10-21)
 
-Asked for: *"an AI coach for duels which will be like a game — you enter two
-players and an AI coach enters for each, like a battling coach, an actual game;
-it shows the MU percentage and who won, then game 2 proceeds ... the AI coach
-must have a brain reading the top CRL decks, the trees, the meta deck trends
-... all 3 games, make a plan"*. Then, while it was being built: *"right now just
-give this access to admin and no one else"*, and *"make the UI exquisite ... two
-characters, human-faced vector art"*.
+Asked for (2026-10-20): *"an AI coach for duels which will be like a game ... it
+shows the MU percentage and who won, then game 2 proceeds ... the AI coach must
+have a brain reading the top CRL decks, the trees, the meta deck trends"*; then
+*"just give this access to admin and no one else"*. The first build (two AI
+coaches, two drawn characters) went live as `475fe2b`. Feedback the next day:
+*"change the art, add Clash Royale's blue and red Kings ... the blue coach is a
+human who pastes the decks he wants his player to play, red is an AI coach ...
+after a rematch the decks change for the red coach based on the player's past
+trends, sometimes with a card switched ... the AI reads the opponent player ...
+make the UI better, take inspiration from websites"*.
 
-**Built, verified on production data, NOT DEPLOYED.** `#/coach-duel`.
+`#/coach-duel`, **admin only** (screen and server).
 
-### What a coach is
+### How it plays
 
-**Coach Assist, unchanged, once for each player** (`coach.suggest` at stage 0,
-`server/coach_duel.py`). So each coach brings what Coach Assist would tell its
-player to bring:
+1. **Pick both players** — your player (Blue) and the opponent (Red). The AI
+   coach scouts both (`sim=prep`, 2.6–15.5 s on real CRL pairs, then cached).
+2. **Load your decks** — paste three or four deck links (one at a time or all
+   at once; any text holding `deck=` links works), or press *Use Coach Assist's
+   set* for your player. A card in two decks is named and blocks the start.
+3. **Battle** — each game you pick one of your decks; the AI's deck is face
+   down until you lock in. Then it flips, the win chance appears, the needle
+   lands where the game's draw fell, and the game is won or lost. Your decks
+   carry your coach's figures (this game / the duel) and one is marked *Coach
+   pick*. First to two takes the duel.
+4. **Rematch** — the AI loads a different set and remembers the decks you
+   showed. *Change my decks* keeps the session going; *New players* starts over.
 
-- **the set it loads** — three or four decks that share no card, from the
-  player's own duel decks and the counters to what the other player is likely
-  to bring (the CRL group's duel lists and the vetted meta lists of the window,
-  `_counter_rows`), composed by the chance of winning the duel (`duel_set`);
-- **its read of the other player** (`duel_read`, fitted on the CRL group for
-  CRL players) — what they open with, what they bring after each game;
-- **every pairing rated by the combined brain** — the fused ladder+duel rate,
-  the card-vs-card model, both players' strength, card levels (not in a
-  friendly duel) and their skill with each win condition;
-- **the look-ahead over the three games** (`duel_plan`): the deck to bring now
-  is the one that wins the DUEL, given what it leaves for later.
+### The AI coach
 
-A coach does not see the other coach's set. It reads the other PLAYER from
-their history, exactly as it would in a real duel, so it can be surprised — the
-other coach may bring a counter that player has never played. The screen says
-which: *Read right*, *Its #2 guess*, *Surprised*.
+**Coach Assist for its player** (`coach.suggest`, stage 0): its read of your
+player (`duel_read`, CRL fit for CRL players), the counters to what your player
+brings (the CRL group's duel lists and the window's meta lists), every pairing
+rated by the combined brain (fused rate, card model, both players' strength,
+levels when not friendly, each player's skill with each win condition), and
+the look-ahead over the three games (`duel_plan`).
 
-### What decides a game
+- **Duel 1** it loads Coach Assist's own set.
+- **Every rematch** it draws a new set (`vary_set`): decks of its player's own
+  duel rotation weighted by how often they play each — the player's trend —
+  plus the counters at half a median deck's weight, kept only within
+  `VARY_BAND` (6 points of duel-win chance) of the best set it can see, and
+  never the set it just played while another qualifies.
+- **A card switched**, 40% of rematches (`switch_card`): one deck takes a
+  one-card change real duel players made to that very list
+  (`duel_index.near_variants`), never a card another deck of the set holds. The
+  end screen names it ("Switched Freeze → Rocket · seen in 226 real duels").
+- **It learns from the duel before**: the decks you showed earlier in the
+  session take half of its read of your next deck (`blend_read`).
+- **It never sees your set** — it reads your player's history and what you
+  have revealed in this duel, as a real coach would.
 
-The **referee** is both coaches' rulers at once: the first player's chance in a
-game is the mean of coach A's figure for A's deck against B's, and one minus
-coach B's figure for B's deck against A's. Measured on 120 pairings across 8
-real duels: the two rulers are a median **1.0 point** apart (90th percentile
-2.6, worst 5.2), so averaging them takes no side and hides no disagreement.
-The result of the game before then moves the next one by the in-duel shift the
-look-ahead already uses (`duel_plan.SHIFT`, fitted: after winning game 1 a
-player wins game 2 more often than any matchup says). The screen shows both:
-**Matchup** (decks and players) and **Win chance** (with momentum).
+One request answers its pick for every state the duel can reach (19 states with
+three decks of yours, 33 with four, keyed `path:your deck indices`), your
+coach's figures for the same states, and the win chance of every pairing — the
+mean of both coaches' rulers, which were a median 1.0 point apart on 120 real
+pairings. The game's chance is that pairing moved by the result before it
+(`duel_plan.SHIFT`), and a draw decides it. **Staged on 4 real CRL pairs, six
+duels each: every rematch a different AI set (6 of 6, no repeat), a real card
+switch in about 2 of 5, 0.1–3.9 s a duel.**
 
-### Why a tree, not one run
+### The look
 
-Both coaches' picks depend only on what has been shown and who won, so a best
-of 3 has **five games that can be played at most** — game 1, game 2 after each
-result, game 3 after each 1-1. The server works out all five in one request,
-which gives the **exact** chance of every final score (no sampling), and lets
-the screen play the duel like a game: each game is decided on the spot by a
-draw from its chance — the needle on the bar lands where the draw fell — and
-the next game is already known. **Rematch** draws again and asks the server
-nothing. **The plan for every result** lists the whole tree: what each coach
-brings after a win and after a loss, with the chance each game is played.
+The arena is a fighting-game versus screen: split diagonally blue / red over
+the hero art, a lightning seam down the middle, **the Blue King and the Red
+King** on glowing platforms facing each other, angled name banners with the
+King badge and crowns, the classic Duel emote (both Kings face to face) as the
+emblem, and the score in Bebas Neue. Gold game buttons with a lip that presses.
 
-### The screen
+**The Kings are Supercell's own art**: the 3D renders and emotes the Clash
+Royale wiki hosts and the clan-badge Kings RoyaleAPI publishes, used under the
+Fan Content Policy like every card image here. `scripts/build-king-art.py`
+downloads them SHA-pinned into the gitignored `assets/kings/` and writes
+`public/assets/kings/*.webp` (18 files, 492 kB, only that screen loads them).
+The Red King's calm, laughing and nervous poses are the Blue King's with ONLY
+the team colour moved (blue hue band to crimson; skin, beard and gold untouched,
+checked close up). The reverse — a blue fists-up King from the red one — was
+built and dropped: the skin's pink highlights share the crimson's hue and
+saturation, so every mask turned the face blue in patches.
 
-A stage over the arena backdrop (the hero art, a castle behind each coach, a
-fixed dark scrim in both themes), with **two illustrated coaches** —
-hand-drawn SVG busts (`CoachDuel/CoachAvatar.tsx`), blue with a headset, red
-with a cap and a beard. They are the screen's characters, not decoration:
+| moment | Blue King (you) | Red King (AI) |
+|---|---|---|
+| scouting / your loadout | calm | thinking emote, "I know <its player>. I'm reading <yours>." |
+| your pick | calm | thinking, "My pick is in. I give us 57%." |
+| a game being played | nervous, sweating | nervous, sweating |
+| you won the game | laughing, "Hi hi hi ha" | nervous, "Grrr" — "You surprised me." / "Saw it. Lost it." |
+| you lost it | nervous, crying | laughing — "Read you right." / "Lucky one." |
+| you won the duel | laughing, "Yeah!" | nervous, "GG" |
+| the AI won it | nervous, "GG" | fists up, "Yeah!" |
 
-| moment | the coaches |
-|---|---|
-| before the duel | ask for their players (the pickers sit under them) |
-| duel set up | say what they give themselves for the duel and what they open with |
-| a game being played | think, eyes down on the bar |
-| after a game | the winner smiles ("Read it right. 1–0." / "That's ours."), the loser frowns ("Didn't see that coming." / "Saw it, lost it."); both say what they bring next |
-| the end | the winner cheers ("GG — 2–1."), the other slumps ("GG. Rematch?") |
-
-Every movement is a transition between moods or a one-shot keyframe; nothing
-loops (the project allows one infinite animation and this is not it). Reduced
-motion: the moods still change, nothing moves. Between them: the round, the
-score, the exact duel odds, and a gold crown under each coach for every game
-won. Below: the games played (the winning deck outlined, the needle where the
-draw fell), the next game (both decks, *Expecting …* under each, the win
-chance, **Play game N** / **Play it out**), each coach's loaded decks (marked
-G1/G2/G3 as they are spent, *Counter* on a deck from outside the player's own),
-what the coach reads (CRL fit, counters, card model, win-con skill,
-level-capped) and the player's main win conditions with their skill tag.
-
-A link with both players (`#/coach-duel?a=%23TAG&b=%23TAG&d=30&k=friendly`)
-opens straight into the duel. The player pickers use the name search, in a
-new mode (`NameSuggest onPick`): a chosen player fills the seat instead of
-opening their page.
+Every movement is one-shot (a pose swap, an emote popping, the AI deck
+flipping, the needle); nothing loops. Phones stack the Kings side by side over
+the score.
 
 ### Who can open it
 
-**Admins only, for now** — `ADMIN_ONLY_SECTIONS` (beside All Duels). It is not
-in the dock, the rail or the landing strip; it is in the profile menu and the
-command palette for an admin, and a non-admin on the URL is told "Admins only"
-rather than offered a subscription. **The server refuses too**: `sim=1` on
+**Admins only** — `ADMIN_ONLY_SECTIONS`. Not in the dock, rail or landing
+strip; in the profile menu and the command palette for an admin; a non-admin on
+the URL is told "Admins only". **The server refuses too**: any `sim=` on
 `/api/analytics/coach/suggest` asks Supabase whether the `X-Coach-Token` is an
-admin's (`admin_auth.verify`, as All Duels does) — 401 without a token, 403 for
-a signed-in non-admin. The plain Coach Assist suggestion on the same path is
-untouched. To release it later as a Pro area like Coach Assist: move it to
-`PRO_ONLY_SECTIONS`, drop the server check, give it a landing card, a palette
-row in the general tools and a release note.
+admin's (401 / 403 otherwise). The plain Coach Assist suggestion on that path is
+untouched. To release it as a Pro area: move it to `PRO_ONLY_SECTIONS`, drop the
+server check, add a landing card, a general palette row and a release note.
 
-### Measured (staged on the VPS, read-only, production data)
-
-Changed `coach.py` and `coach_duel.py` loaded beside the deployed modules
-(renamed, so the live service was never touched), meta snapshots loaded as the
-service does, 8 duels between real CRL-list players from 10 October on:
-
-| | |
-|---|---|
-| first request, every cache cold | 28 s (one), then 2.5–25 s per new pair |
-| a rematch / reload of the same duel | 0.02–0.06 s (cached 10 minutes) |
-| payload | ~7.7 kB |
-| counters each coach could load | 5; 0–2 of them made a set |
-| the two rulers' disagreement | median 1.0 point, p90 2.6, max 5.2 (120 pairings) |
-| a coach's top guess was the deck brought | 1–6 of the 10 picks in a duel's tree |
-
-**What is NOT claimed.** The duel odds are the model's, built from the figures
-Coach Assist prints; the 2026-10-17 check found the suggested deck's figure
-reads about 8 points high where it can be checked against real results
-(`DECKKIES_DUEL_RECOMMENDER.md`). A coach-duel result is a simulation by that
-brain, not a prediction anyone has scored.
+**What is NOT claimed**: a duel here is the model playing it out. The win
+chances are the figures Coach Assist prints, which the 2026-10-17 check found
+about 8 points high for the suggested deck where it could be checked
+(`DECKKIES_DUEL_RECOMMENDER.md`).
 
 ### Tests
 
-`server/test_coach_duel.py` 52 (the tree's arithmetic by hand — a 60%
-favourite every game wins 64.8%; each coach told its own results; no card
-played twice down any road; the shift on games 2–3 only; a rematch asks
-nothing; a deck two cards off the one expected counts as read right),
-`test_api_security` +9 (`CoachDuelAdminGate`), `tests/coachDuel.test.ts` 16
-(the walk, the draw, the seeded generator, no imports). Tripwires moved on
-purpose: `entitlement` (admin shelf = All Duels + Coach Duel), `coachDuelRead`
-(three callers send `kind`). Browser: 148/148 in Chromium on a real staged
-answer (dark and light, 1440, 1100 with reduced motion, a 390 touch phone;
-moods through a duel, bubbles, crowns, rematch, plan, links, the picker), and
-screenshots looked at — which found the red deck running over the VS, the
-needle landing on the figures, the name plates clipped under the stage and the
-winner line breaking inside its score, all fixed. `testing/coach-duel-*.png`.
+`server/test_coach_duel.py` 86 (the decision states and their keys; the AI told
+its own results and its own earlier picks; a seen deck taking its share of the
+read, dropped when it clashes with a reveal, merged within two cards; a rematch
+set disjoint, within the band, never the last one, different across rematches,
+seeded; a card switch only a real one-card variant whose new card no other deck
+holds; the whole human round-trip against a stand-in Coach Assist),
+`test_api_security` `CoachDuelAdminGate` 10 (every `sim` mode 401 / 403, an admin
+reaches each), `tests/coachDuel.test.ts` 18 (keys equal the server's, the
+momentum shift by hand, the walk, loadout clashes, every link in one paste, the
+seen list, no imports). Browser 152/152 in Chromium on real staged answers —
+dark 1440, light 1280, a 390 touch phone, reduced motion — through setup,
+loadout (fill, a clashing paste, a good paste), every game with both Kings'
+poses and emotes checked, Victory/Defeat, a rematch asking round 1 with your
+shown decks and a different AI loadout with its switch named, change decks,
+new players. Pictures looked at (`testing/kd-*.png`), which moved the win
+chance above the decks, sized the face-off, compacted the arena during play and
+stopped the seam running through the labels.
+
+The first build's AI-vs-AI answer (`sim=1`, `simulate`) is still on the server
+and tested; nothing on screen calls it now.
 
 ---
 

@@ -203,3 +203,7 @@ server/.card_matchup.json.tmp
 # PLAYER TAGS: server only, never committed.
 server/.player_skill.json
 server/.player_skill.json.tmp
+
+# Coach Duel King art masters: Supercell art, downloaded and SHA-pinned by
+# scripts/build-king-art.py (~25 MB). The served WebPs are in public/.
+/assets/kings/

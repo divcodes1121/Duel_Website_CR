@@ -1926,35 +1926,32 @@ decided duel, an exception — returns the rows untouched and `duelPlan: null`.
 only `w` and `l` are kept, two at most; anything else is "not told"). No new
 route. `want=` (`chosen`) does not take it.
 
-## The coach duel (`coach_duel.py`, 2026-10-20)
+## The coach duel (`coach_duel.py`, 2026-10-20, you vs the AI 2026-10-21)
 
-Two AI coaches, one for each player, play a best of 3. **Admin only** for now.
+You coach Blue against the AI coach of the other player. **Admin only**: any
+`sim=` on the suggest route is behind `admin_auth.verify`; route count stays.
 
-    GET /api/analytics/coach/suggest?me=<A>&opp=<B>&sim=1[&days=30][&kind=friendly|war]
-        X-Coach-Token: <Supabase access token of an admin>
+    GET /api/analytics/coach/suggest?me=<you>&opp=<AI's player>&sim=prep
+    GET /api/analytics/coach/suggest?me=..&opp=..&sim=human&y1=<8 keys>..y4[&r=<rematch>][&s1..s8=<decks you showed>]
+    GET /api/analytics/coach/suggest?me=..&opp=..&sim=1          (the first build: AI vs AI)
 
-A parameter on the suggest route, not a route (the count stays at 29), behind
-`admin_auth.verify` for `sim=1` only. `400 same_player` for one tag twice.
-
-- `simulate(a, b, a_win, b_win, kind)` runs `coach.suggest(..., keep=)` once
-  per side at stage 0. `keep` (new, optional) receives the opponent's history,
-  the rates and the brain context the answer was built on; nothing in the
-  answer changes. The coach's set = `duelSet` rows when Coach Assist composed
-  one, else the first card-disjoint rows of options + counters
-  (`disjoint_set`); fewer than three = `{"error": "short_set", "side", "name"}`.
-- Each coach plays `duel_plan.plan` over its own set with its own
-  `coach._plan_tools` read and ruler (`policy`); a pick carries `believed`
-  (game / duel percent) and `expected` (its top three reads, `hit` within two
-  cards — `NEAR` 6).
-- `play(a_decks, b_decks, a_pick, b_pick, referee)` — pure — walks the five
-  reachable games; the referee is the mean of both rulers (`_referee`), the
-  next game shifted by `duel_plan.SHIFT`. Out: `tree` (path from A's side,
-  game, picks, `matchup`, `chance`, `reach`, `forfeit`), `outcomes` (exact,
-  percent), `duel`.
-- Cached 10 minutes per (tags, windows, kind). No model, no table, no timer.
-- A staging trap: a fresh process has NO meta snapshot (`deck_counter` and
-  `meta` load theirs in `start_background`), so the counter pool's key is None
-  and every coach loads no counter. Call both `_load_snapshot()` first.
+- `prep` reads both players (`_side_cached`: `coach.suggest(keep=)` per side,
+  10 minutes) and returns your player with Coach Assist's set, and the AI's
+  player without its decks.
+- `human` checks your decks (3-4, eight known cards, none shared ->
+  `bad_decks`), builds the AI's set (`_ai_set`: round 0 Coach Assist's set;
+  later `vary_set` over its player's own duel decks weighted by plays + counters
+  at `COUNTER_WEIGHT` x the median, within `VARY_BAND`, then `switch_card` at
+  `SWITCH_P` from `duel_index.near_variants`), reads you through `blend_read`
+  (`SEEN_WEIGHT` to the decks you showed), and answers `policy` (the AI's pick
+  in every `state_keys` state, `ai_policy`), `hints` (your look-ahead in each),
+  `matrix` (the referee for every pairing), `shift`, `switch`, `aiSet`.
+  Seeded by the two tags, your decks and the round: the same rematch is the
+  same draw.
+- Pure parts (`play`, `policy`, `ai_policy`, `state_keys`, `blend_read`,
+  `vary_set`, `switch_card`) take functions; `test_coach_duel.py`.
+- Staging trap: a fresh process has no meta snapshot, so no counter pool —
+  call `deck_counter._load_snapshot(); meta._load_snapshot()` first.
 
 ## The package table (`deck_packages.py`, 2026-10-07)
 

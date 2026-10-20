@@ -1034,7 +1034,14 @@ class Handler(BaseHTTPRequestHandler):
                 # admin and no one else"): the screen is on the admin shelf,
                 # and this asks Supabase whose token it is, as All Duels does
                 # — the key alone only says the request came through the edge.
-                if (q.get("sim") or [""])[0] in ("1", "true", "yes"):
+                #
+                # `sim=human` (2026-10-21): YOU coach `me` with the decks you
+                # paste (`y1`..`y4`), against the AI coach of `opp`; `r` is the
+                # rematch number and `s1`..`s8` the decks you showed in earlier
+                # duels, which the AI's read of you leans on. `sim=prep` reads
+                # both players once before you paste.
+                sim = (q.get("sim") or [""])[0].strip().lower()
+                if sim:
                     verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
                     if verdict != "ok":
                         self._outcome = "auth_failed"
@@ -1044,8 +1051,17 @@ class Handler(BaseHTTPRequestHandler):
                                            "input": (q.get("opp") or [""])[0]}, 400)
                     if opp == me:
                         return self._send({"error": "same_player"}, 400)
-                    out = coach_duel.simulate(me, opp, (my_since, my_until),
-                                              (opp_since, opp_until), _duel_kind(q))
+                    windows = ((my_since, my_until), (opp_since, opp_until))
+                    if sim == "prep":
+                        out = coach_duel.prep(me, opp, *windows, _duel_kind(q))
+                    elif sim == "human":
+                        raw_r = (q.get("r") or [""])[0]
+                        out = coach_duel.human(
+                            me, opp, _decks(q, ("y1", "y2", "y3", "y4")), *windows,
+                            _duel_kind(q), round_=min(int(raw_r), 999) if raw_r.isdigit() else 0,
+                            seen=_decks(q, tuple("s%d" % i for i in range(1, 9))))
+                    else:
+                        out = coach_duel.simulate(me, opp, *windows, _duel_kind(q))
                     return self._send({**out, "sources": _sources()})
                 want = [c for c in (q.get("want") or [""])[0].split(",") if c.strip()]
                 if want:

@@ -947,6 +947,17 @@ result from the game's chance. Nothing in Coach Assist's answer changed
 green). The odds inherit the deck figure's known high reading (item -1 below).
 README "Coach Duel" is the record.
 
+### 2026-10-21 — the Coach Duel: you against the AI coach
+
+On feedback the duel became human vs AI: you paste your player's decks and pick
+each game; the AI is this Suggestion for the other player. New: every rematch
+the AI draws a different set from its player's own duel rotation, weighted by
+plays (`vary_set`, within 6 points of its best), 40% of the time with a real
+one-card switch (`near_variants`), and its read of you gives half its mass to
+the decks you showed earlier in the session (`blend_read`). Staged on 4 real
+CRL pairs x 6 duels: 6 different AI sets each, no repeat. No figure of Coach
+Assist's own answer changed.
+
 ## Next action
 
 Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.

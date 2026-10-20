@@ -2281,29 +2281,25 @@ it rewrites the URL with `replaceState` ONLY while the hash is still
 player.
 
 
-## The Coach Duel stage (2026-10-20)
+## The Coach Duel arena (2026-10-20, rebuilt 2026-10-21)
 
-`#/coach-duel` (admin only for now). Two illustrated coaches on the arena
-backdrop — `CoachDuel/CoachAvatar.tsx`, hand-drawn SVG, front-facing, looking
-at each other with their eyes (`look`), so neither drawing is mirrored.
+`#/coach-duel` (admin only). A fighting-game versus screen over the hero art:
+diagonal blue / red split, a lightning seam, the Blue King (you, mirrored to
+face across) and the Red King (the AI) on glowing platforms, angled name banners
+with the King badge and crowns, the classic Duel emote as the emblem, Bebas
+Neue for every game word, Clash-gold buttons with dark ink.
 
-- **The stage is a fixed dark scrim in both themes**, like the painted
-  banners: its ink is fixed light (`--stage-text`, seat inks `#93c5fd` /
-  `#fca5a5`), never `--text`.
-- **Moods are state, not loops**: `idle`, `think`, `happy`, `sad`, `win` are
-  transitions (brows, lids, pupils, head tilt, five drawn mouths cross-fading)
-  plus one-shot keyframes keyed on the moment (`beat`): a blink, a nod, a
-  cheer. Nothing infinite.
-- **The bubble is the coach talking**: short lines with the server's figures
-  in them ("I give us 57.5%.", "Game 2: Balloon Bowler", "Expecting Hog EQ ·
-  41%"). This is the one screen where the no-prose rule bends — the characters
-  ARE the brief — and every line still carries a figure or a deck.
-- **Win chance figures sit above the bar, not on it**: the needle lands where
-  the draw fell, and on the bar it covered a figure as often as not.
-- **The stage is `flex: none`**: as a flex child with its own `min-height` it
-  was shrunk to that height and the name plates spilled out under it.
-- In the game card the strips are `align-self: stretch` (a right-aligned strip
-  shrink-wraps and ran over the VS at 1440), and `DeckActions` sits in a
-  wrapper (it centres itself).
-- Expected-deck badge: *Read right* only when the TOP guess was the deck
-  brought; *Its #2 guess* when a lower one was; *Surprised* otherwise.
+- **The arena is a fixed dark ground in both themes** (its ink is fixed light);
+  the panels under it follow the theme.
+- **The Kings react through their own emotes** — thinking, sweating, laughing,
+  crying, Grrr, GG, Yeah — in a white speech bubble, with at most one short
+  line carrying a figure or a deck. The no-prose rule bends here because the
+  characters ARE the brief; every line still says something measured.
+- **The AI's deck is face down until you lock in**, then flips. The win chance
+  sits directly under "Game N" (the moment you watch); the decks below it.
+- **The arena compacts during the battle** so the Kings stay on screen.
+- **The middle has a dark pool behind it** so the seam fades behind the labels.
+- Nothing loops; reduced motion keeps every state, no movement.
+- The steps (Pick both players · Load your decks · Battle the AI coach) sit
+  under the arena and follow the phase.
+

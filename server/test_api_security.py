@@ -938,6 +938,30 @@ class CoachDuelAdminGate(CoachRosterAdminGate):
                 self.assertEqual(status, 200)
                 self.assertIn("plain", body)
 
+    def test_every_coach_duel_mode_needs_an_admin(self):
+        """`sim=prep` and `sim=human` (you against the AI coach) sit behind the
+        same check as `sim=1`; an admin reaches each mode's own answer."""
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                mod.coach_duel.prep = lambda a, b, aw, bw, kind=None: {"mode": "prep"}
+                mod.coach_duel.human = lambda a, b, decks, aw, bw, kind=None, round_=0, seen=None: {
+                    "mode": "human", "decks": len(decks), "round": round_, "seen": len(seen or [])}
+                for mode in ("prep", "human", "anything"):
+                    path = self.PATH.replace("sim=1", "sim=" + mode)
+                    status, _, _ = fetch(base, path, headers=keyed())
+                    self.assertEqual(status, 401, mode)
+                    status, _, _ = fetch(base, path, headers={**keyed(), "X-Coach-Token": "a.b.member"})
+                    self.assertEqual(status, 403, mode)
+                admin = {**keyed(), "X-Coach-Token": "a.b.admin"}
+                _, _, body = fetch(base, self.PATH.replace("sim=1", "sim=prep"), headers=admin)
+                self.assertEqual(json.loads(body)["mode"], "prep")
+                deck = "knight,archers,fireball,zap,hog-rider,musketeer,cannon,skeletons"
+                _, _, body = fetch(base, self.PATH.replace("sim=1", "sim=human") +
+                                   "&y1=" + deck + "&y2=" + deck + "&r=3&s1=" + deck, headers=admin)
+                got = json.loads(body)
+                self.assertEqual((got["mode"], got["decks"], got["round"], got["seen"]), ("human", 2, 3, 1))
+
     def test_the_same_player_twice_is_refused(self):
         with fake_supabase() as sb:
             os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")

@@ -21,7 +21,7 @@ describe('the kind of duel', () => {
   it('is sent by both windows, and only when chosen', () => {
     expect(SCREEN).toMatch(/fetchCoachPrediction\(tag, decks, \{ days \}, kind\)/);
     expect(SCREEN).toMatch(/\{ days \}, tunerAllowed, kind, results\)/);
-    // Both windows, and the Coach Duel (2026-10-20), which plays both seats.
+    // Both windows, and the Coach Duel's one query builder (2026-10-21).
     expect(CLIENT.match(/if \(kind\) q\.set\('kind', kind\);/g)?.length).toBe(3);
   });
 

@@ -282,6 +282,49 @@ try:
     check("a player who cannot field three decks is said so, by side",
           short.get("error") == "short_set" and short["side"] == "a" and short["decks"] == 2, str(short))
 
+    print("you against the AI coach, through the stand-in")
+    E_, F_ = deck("e"), deck("f")
+    fake.dx = types.SimpleNamespace(card_keys=lambda: sorted({c for t in "abcdefghxyzq" for c in deck(t)} | {"t1", "t2"}))
+    fake._own_duel_decks = lambda hist, used: [
+        {"cards": d, "count": n, "deckName": "Own " + d[0][0], "art": {}}
+        for d, n in ((B1, 9), (B2, 7), (B3, 5), (E_, 4), (F_, 3))]
+    fake._drop_event_decks = lambda rows: (rows, 0)
+    fake_dz = types.ModuleType("duel_zone")
+    fake_dz._arranged = lambda cards, marks: {"cards": list(cards), "art": {}}
+    fake_dz.deck_label = lambda cards, arch: "Deck " + sorted(cards)[0][0]
+    real_dz = sys.modules.get("duel_zone")
+    sys.modules["duel_zone"] = fake_dz
+    try:
+        cdu._side_cache.clear()
+        bad = cdu.human("#AAA", "#BBB", [A1, A1[:4] + A2[:4], A3], (None, None), (None, None))
+        check("decks that share a card are refused", bad.get("error") == "bad_decks", str(bad))
+        check("two decks are not a duel set", cdu.human("#AAA", "#BBB", [A1, A2], (None, None), (None, None)).get("error") == "bad_decks")
+        h0 = cdu.human("#AAA", "#BBB", [A1, A2, A3], (None, None), (None, None))
+        check("no error", "error" not in h0, str(h0.get("error")))
+        check("duel 1: the AI loads Coach Assist's own set",
+              [d["cards"] for d in h0["ai"]["set"]] == [B1, B2, B3] and h0["aiSet"]["source"] == "coach-assist")
+        check("the AI's pick for every one of the 19 states", len(h0["policy"]) == 19
+              and all(v["deck"] in (0, 1, 2) for v in h0["policy"].values()))
+        check("your decks come back drawn, in your order", [d["cards"] for d in h0["you"]["set"]] == [A1, A2, A3])
+        check("and Coach Assist's set for your player, to fill yours", len(h0["you"]["suggested"]) == 4)
+        check("every pairing has a win chance", len(h0["matrix"]) == 3 and all(len(r) == 3 for r in h0["matrix"])
+              and all(0 < x < 100 for r in h0["matrix"] for x in r))
+        check("your figures for the states", ":" in h0["hints"] and set(h0["hints"][":"]) == {"0", "1", "2"})
+        h1 = cdu.human("#AAA", "#BBB", [A1, A2, A3], (None, None), (None, None), round_=1, seen=[A1])
+        ai1 = {tuple(d["cards"]) for d in h1["ai"]["set"]}
+        check("a rematch draws a different set from the player's rotation",
+              h1["aiSet"]["source"] == "rotation" and ai1 != {tuple(B1), tuple(B2), tuple(B3)}, str(ai1))
+        check("the rematch says how many of your decks it leans on", h1["seen"] == 1)
+        flat_ai = [c for d in h1["ai"]["set"] for c in d["cards"]]
+        check("the AI's rematch set shares no card", len(flat_ai) == len(set(flat_ai)))
+        h1b = cdu.human("#AAA", "#BBB", [A1, A2, A3], (None, None), (None, None), round_=1, seen=[A1])
+        check("the same rematch is the same draw (seeded)", h1b["ai"]["set"] == h1["ai"]["set"])
+    finally:
+        if real_dz is not None:
+            sys.modules["duel_zone"] = real_dz
+        else:
+            sys.modules.pop("duel_zone", None)
+
     def no_ctx(me, opp, *a, keep=None, **k):
         got = fake_suggest(me, opp, *a, keep=None, **k)
         if keep is not None:
@@ -295,6 +338,91 @@ finally:
         sys.modules["coach"] = real_coach
     else:
         sys.modules.pop("coach", None)
+
+print("you against the AI coach: the states")
+keys = [cdu.key_of(p, m) for p, m in cdu.state_keys(3)]
+check("a best of 3 with three decks has 19 decision states", len(keys) == 19 and len(set(keys)) == 19, str(len(keys)))
+check("game 1 is ':'", keys[0] == ":")
+check("game 3 needs a 1-1 and two different decks of yours",
+      all((k.split(":")[0] in ("wl", "lw")) == (k.count(",") == 1) for k in keys)
+      and ":0,0" not in "".join(keys))
+check("four decks: 1 + 8 + 24 states", len(cdu.state_keys(4)) == 33)
+
+seen_calls = []
+
+
+def first_free(ai_played, your_played, results):
+    seen_calls.append((tuple(ai_played), tuple(tuple(d) for d in your_played), results))
+    free = [i for i in range(3) if i not in ai_played]
+    return free[0], {"believed": {"game": 50.0, "duel": 50.0}}
+
+
+pol = cdu.ai_policy([A1, A2, A3], first_free)
+check("the AI picks in every state", len(pol) == 19 and pol[":"]["deck"] == 0)
+check("after you won game 1 with deck 1, the AI is told it lost and has played its game-1 deck",
+      ((0,), (tuple(A2),), "l") in seen_calls, str(seen_calls[:4]))
+check("at 1-1 the AI has played both its earlier picks", pol["wl:0,1"]["_played"] == [0, 1]
+      and pol["wl:0,1"]["deck"] == 2)
+
+print("the AI's read of you leans on what you showed before")
+X, Y = deck("x"), deck("y")
+
+
+def hist_read(revealed, lost):
+    return [(X, 0.6)]
+
+
+check("nothing seen is the read itself", cdu.blend_read(hist_read, []) is hist_read)
+br = cdu.blend_read(hist_read, [A1], weight=0.5)
+got = {tuple(sorted(c)): p for c, p in br((), None)}
+check("half the read goes to the deck you showed, half of the rest stays",
+      abs(got[tuple(sorted(A1))] - 0.5) < 1e-9 and abs(got[tuple(sorted(X))] - 0.3) < 1e-9, str(got))
+got2 = {tuple(sorted(c)): p for c, p in br((frozenset(A1[:2] + Y[2:]),), None)}
+check("a seen deck sharing a card with one you revealed this duel is not expected",
+      tuple(sorted(A1)) not in got2 and abs(sum(got2.values()) - 0.6) < 1e-9, str(got2))
+X_TECH = X[:6] + ["q1", "q2"]
+got3 = {tuple(sorted(c)): p for c, p in cdu.blend_read(hist_read, [X_TECH], weight=0.5)((), None)}
+check("a seen deck two cards off a read row adds to that row", len(got3) == 1
+      and abs(got3[tuple(sorted(X))] - 0.8) < 1e-9, str(got3))
+
+print("a rematch set")
+import random  # noqa: E402
+E = [{"cards": deck(c), "weight": w} for c, w in zip("abcdefg", (9, 7, 5, 4, 3, 2, 1))]
+E.append({"cards": deck("a")[:4] + deck("h")[:4], "weight": 50})   # clashes with a
+flat = lambda group: 0.5  # noqa: E731
+s1 = cdu.vary_set(E, flat, random.Random(1))
+check("four decks that share no card", len(s1) == 4 and
+      len({c for i in s1 for c in E[i]["cards"]}) == 32, str(s1))
+best_has_g = lambda group: 0.9 if deck("g") in group else 0.5  # noqa: E731
+s2 = cdu.vary_set(E, best_has_g, random.Random(2), draws=200)
+check("only a set within the band of the best is chosen", 6 in s2, str(s2))
+base = frozenset(cdu.vary_set(E, flat, random.Random(3)))
+s3 = frozenset(cdu.vary_set(E, flat, random.Random(3), avoid=base))
+check("the set loaded last time is not chosen again while another qualifies", s3 != base)
+rng_sets = {tuple(cdu.vary_set(E, flat, random.Random(k))) for k in range(12)}
+check("different rematches draw different sets", len(rng_sets) > 3, str(len(rng_sets)))
+clash = [{"cards": deck("a"), "weight": 1}, {"cards": deck("a")[:7] + ["z0"], "weight": 1},
+         {"cards": deck("b"), "weight": 1}]
+check("no set of three can be drawn from decks that clash: none", cdu.vary_set(clash, flat, random.Random(0)) is None)
+
+print("a card switch")
+S = [deck("a"), deck("b"), deck("c")]
+
+
+def variants(cards):
+    if cards == S[0]:
+        return [{"cards": S[0][:7] + [S[1][0]], "games": 900},       # takes a card deck b holds
+                {"cards": S[0][:7] + ["poison"], "games": 40}]
+    return []
+
+
+got_s, sw = cdu.switch_card(S, variants, random.Random(0), p=1.0)
+check("a real one-card variant is switched in", sw == {"deck": 0, "out": S[0][7], "in": "poison", "games": 40}
+      and got_s[0] == S[0][:7] + ["poison"], str(sw))
+check("never a card another deck of the set holds", S[1][0] not in got_s[0])
+check("the other decks are untouched", got_s[1:] == S[1:])
+check("no switch when the dice say no", cdu.switch_card(S, variants, random.Random(0), p=0.0) == (S, None))
+check("no switch with no real variant", cdu.switch_card([S[1], S[2]], variants, random.Random(0), p=1.0)[1] is None)
 
 print("the parts that decide a game read no file, database or network")
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "coach_duel.py"), encoding="utf-8").read()
