@@ -46,6 +46,10 @@ const TeamAnalysis = lazy(() =>
 const DuoDecks = lazy(() =>
   import('../Analytics/DuoDecks/DuoDecks').then((m) => ({ default: m.DuoDecks })),
 );
+/* Lazy: Pro-only, and nobody else's page load should carry it. */
+const CoachDuel = lazy(() =>
+  import('../Analytics/CoachDuel/CoachDuel').then((m) => ({ default: m.CoachDuel })),
+);
 /* Lazy, and for the strongest version of that reason: it is ADMIN ONLY, so
    nobody else's page load should carry a line of it. */
 const AllDuels = lazy(() =>
@@ -146,6 +150,7 @@ export type DashboardView =
   | 'palette'
   | 'teams'
   | 'duo'
+  | 'coachduel'
   | 'allduels'
   | 'search'
   | 'player';
@@ -302,6 +307,7 @@ const DUO_CARD = {
   hash: '#/duo',
 } as const;
 
+
 /* THE FALLBACK ONLY, NOT THE SOURCE — the comment here used to say these were
    filled from the database, which describes the effect below and not this
    constant. `fetchSuggestedTags()` replaces them with the real most-played
@@ -415,7 +421,7 @@ function go(hash: string) {
    so the backdrop keeps meaning something on all eleven screens rather than
    falling back to ambient on three of them. */
 const TOOL_HUE: Record<
-  'builder' | 'decks' | 'palette' | 'teams' | 'duo' | 'allduels' | 'search',
+  'builder' | 'decks' | 'palette' | 'teams' | 'duo' | 'coachduel' | 'allduels' | 'search',
   FireflyHue
 > = {
   builder: 'violet',
@@ -423,6 +429,7 @@ const TOOL_HUE: Record<
   palette: 'blue',
   teams: 'pink',
   duo: 'green',
+  coachduel: 'violet',
   allduels: 'blue',
   search: 'blue',
 };
@@ -805,6 +812,9 @@ export function Dashboard({
     { id: 'tool-guide', group: 'Tools', label: 'The field book', sub: 'What the site is, and what each account gets', icon: <InfoIcon size={15} />, keys: keysFor('guide'), run: () => goTo('guide') },
     ...(access === 'admin'
       ? [
+          /* ADMIN ONLY FOR NOW (2026-10-20): not in the landing strip, the dock
+             or the rail — here, in the profile menu and at its URL. */
+          { id: 'tool-coach-duel', group: 'Tools', label: 'Coach Duel', sub: 'Two AI coaches play a best of 3', icon: <CoachIcon size={15} />, hue: 'violet', keywords: 'ai coach simulate duel bo3 versus admin', run: () => go('#/coach-duel') },
           { id: 'tool-all-duels', group: 'Tools', label: 'All Duels', sub: 'Friendly duels that went to three games, newest first', icon: <SwordsIcon size={15} />, hue: 'blue', keywords: 'duel feed log war battles admin', run: () => go(ALL_DUELS_HASH) },
           { id: 'tool-admin', group: 'Tools', label: 'Admin console', sub: 'Accounts, storage, collection', icon: <ShieldIcon size={15} />, run: () => go('#/admin') },
         ]
@@ -1321,6 +1331,29 @@ export function Dashboard({
                   </Suspense>
                 ) : (
                   <GateCard access={access} section="2v2 Decks" />
+                ))}
+              {/* THE COACH DUEL (2026-10-20): ADMIN ONLY FOR NOW, and refused
+                  rather than gated, like All Duels below — nobody can buy
+                  their way to it yet, so a card offering to would be a lie. */}
+              {view === 'coachduel' &&
+                (!accountResolved ? (
+                  <p className={styles.adminOnly}>Checking your account…</p>
+                ) : sectionAllowed(access, 'Coach Duel') ? (
+                  <Suspense
+                    fallback={
+                      <ReadingState k="coach-duel-chunk" hue="violet">
+                        <p>Opening Coach Duel…</p>
+                      </ReadingState>
+                    }
+                  >
+                    <CoachDuel />
+                  </Suspense>
+                ) : (
+                  <div className={styles.adminOnly}>
+                    <h2>Admins only</h2>
+                    <p>Coach Duel is not open yet.</p>
+                    <a href={HOME}>Back to Deckkies</a>
+                  </div>
                 ))}
               {/* ALL DUELS — ADMIN ONLY, AND REFUSED RATHER THAN GATED. Every
                   other closed area draws a `GateCard`, because there is

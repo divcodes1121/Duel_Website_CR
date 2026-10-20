@@ -65,6 +65,9 @@ const ALL_SECTIONS = [
      players' names and tags. The first section to sit on the admin shelf for
      good rather than while it is being verified. */
   'All Duels',
+  /* ADMIN ONLY, added 20 Oct 2026 (on the shelf until it is released, then
+     Pro-only): two AI coaches play a best of 3, one for each player. */
+  'Coach Duel',
 ] as const;
 
 const PAID: Access[] = ['trial', 'pro', 'admin'];
@@ -193,8 +196,8 @@ describe('the admin shelf holds All Duels, and closes it to everyone else', () =
      went on it to stay — a list of every player's duels by name and tag is an
      admin's page, not a paid one. Anything else added here must be a
      deliberate act. */
-  it('exactly one section is admin-only', () => {
-    expect([...ADMIN_ONLY_SECTIONS]).toEqual(['All Duels']);
+  it('exactly these sections are admin-only', () => {
+    expect([...ADMIN_ONLY_SECTIONS]).toEqual(['All Duels', 'Coach Duel']);
   });
 
   /* THE BRANCH IS REACHABLE AGAIN, so it is tested. While the list was empty
@@ -207,11 +210,14 @@ describe('the admin shelf holds All Duels, and closes it to everyone else', () =
   });
 
   it('nobody below admin does — including paid Pro', () => {
-    for (const a of ['anon', 'free', 'trial', 'pro'] as Access[]) {
-      expect(sectionAllowed(a, 'All Duels'), a).toBe(false);
-    }
-    for (const t of ['free', 'trial', 'pro'] as Tier[]) {
-      expect(canOpenSection(t, 'All Duels'), t).toBe(false);
+    for (const s of ADMIN_ONLY_SECTIONS) {
+      expect(sectionAllowed('admin', s), s).toBe(true);
+      for (const a of ['anon', 'free', 'trial', 'pro'] as Access[]) {
+        expect(sectionAllowed(a, s), `${a} ${s}`).toBe(false);
+      }
+      for (const t of ['free', 'trial', 'pro'] as Tier[]) {
+        expect(canOpenSection(t, s), `${t} ${s}`).toBe(false);
+      }
     }
   });
 

@@ -1926,6 +1926,36 @@ decided duel, an exception — returns the rows untouched and `duelPlan: null`.
 only `w` and `l` are kept, two at most; anything else is "not told"). No new
 route. `want=` (`chosen`) does not take it.
 
+## The coach duel (`coach_duel.py`, 2026-10-20)
+
+Two AI coaches, one for each player, play a best of 3. **Admin only** for now.
+
+    GET /api/analytics/coach/suggest?me=<A>&opp=<B>&sim=1[&days=30][&kind=friendly|war]
+        X-Coach-Token: <Supabase access token of an admin>
+
+A parameter on the suggest route, not a route (the count stays at 29), behind
+`admin_auth.verify` for `sim=1` only. `400 same_player` for one tag twice.
+
+- `simulate(a, b, a_win, b_win, kind)` runs `coach.suggest(..., keep=)` once
+  per side at stage 0. `keep` (new, optional) receives the opponent's history,
+  the rates and the brain context the answer was built on; nothing in the
+  answer changes. The coach's set = `duelSet` rows when Coach Assist composed
+  one, else the first card-disjoint rows of options + counters
+  (`disjoint_set`); fewer than three = `{"error": "short_set", "side", "name"}`.
+- Each coach plays `duel_plan.plan` over its own set with its own
+  `coach._plan_tools` read and ruler (`policy`); a pick carries `believed`
+  (game / duel percent) and `expected` (its top three reads, `hit` within two
+  cards — `NEAR` 6).
+- `play(a_decks, b_decks, a_pick, b_pick, referee)` — pure — walks the five
+  reachable games; the referee is the mean of both rulers (`_referee`), the
+  next game shifted by `duel_plan.SHIFT`. Out: `tree` (path from A's side,
+  game, picks, `matchup`, `chance`, `reach`, `forfeit`), `outcomes` (exact,
+  percent), `duel`.
+- Cached 10 minutes per (tags, windows, kind). No model, no table, no timer.
+- A staging trap: a fresh process has NO meta snapshot (`deck_counter` and
+  `meta` load theirs in `start_background`), so the counter pool's key is None
+  and every coach loads no counter. Call both `_load_snapshot()` first.
+
 ## The package table (`deck_packages.py`, 2026-10-07)
 
 `deck_packages.build` (after every poll, 42 s on production;

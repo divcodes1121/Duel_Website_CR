@@ -2093,6 +2093,119 @@ export function fetchCoachSuggestion(
 }
 
 /* ────────────────────────────────────────────────────────────────────────
+   THE COACH DUEL (2026-10-20, `server/coach_duel.py`)
+   ────────────────────────────────────────────────────────────────────────
+   Two AI coaches, one for each player, play a best-of-3. Each coach is Coach
+   Assist for its player: the set it would load, its read of the other player
+   and the look-ahead over three games. Every game the duel can reach comes
+   back at once (`tree`), so the screen plays it like a game and a rematch
+   asks the server nothing. */
+
+/** A deck a coach loaded: the fields the screen draws. */
+export interface CoachDuelDeck {
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt?: boolean;
+  artFilled?: string[];
+  deckName: string;
+  archetype: string;
+  avgElixir?: number | null;
+  /** A counter from outside the player's own duel decks. */
+  counter?: boolean;
+  origin?: string;
+  /** This coach's figure for the deck against its READ of the other player. */
+  vsRead?: number;
+}
+
+/** What a coach expected the other side to bring, and whether it did. */
+export interface CoachDuelExpected {
+  name: string;
+  /** Percent. */
+  p: number;
+  hit: boolean;
+}
+
+export interface CoachDuelPick {
+  /** Index into that side's `set`; null = nothing legal left (a forfeit). */
+  deck: number | null;
+  /** What the coach believed when it picked, percent. Absent without a read. */
+  believed?: { game: number; duel: number };
+  expected?: CoachDuelExpected[];
+}
+
+/** One game the duel can reach. */
+export interface CoachDuelGame {
+  /** Who won each game before it, from the FIRST player's side: '', 'w', 'l', 'wl', 'lw'. */
+  path: string;
+  game: number;
+  a: CoachDuelPick;
+  b: CoachDuelPick;
+  /** The first player's chance on the decks and players alone, percent. */
+  matchup: number;
+  /** With the result of the game before it, percent. What the game is played at. */
+  chance: number;
+  /** Chance this game is played at all, percent. */
+  reach: number;
+  forfeit: 'a' | 'b' | 'both' | null;
+}
+
+export interface CoachDuelSide {
+  tag: string;
+  name: string;
+  set: CoachDuelDeck[];
+  /** The set's chance of winning the duel as this coach valued it against
+   *  its read of the other player, percent. Null without a composed set. */
+  belief: number | null;
+  composed: boolean;
+  brain: {
+    read: boolean;
+    readFit?: string | null;
+    engine?: string | null;
+    counters: number;
+    counterPool?: number | null;
+    cardModel?: string | null;
+    skill: boolean;
+    levelScale?: number | null;
+  };
+  profile: { card: string; name: string; share: number; winRate: number; use: string; tag: string | null }[];
+  evidence: { duels: number; games: number };
+}
+
+export interface CoachDuel {
+  brain: string;
+  games: number;
+  error?: 'short_set' | 'no_brain';
+  /** With `short_set`: which side could not field three decks. */
+  side?: 'a' | 'b';
+  name?: string;
+  decks?: number;
+  a: CoachDuelSide;
+  b: CoachDuelSide;
+  tree: CoachDuelGame[];
+  /** Exact chance of each final score from the first player's side, percent. */
+  outcomes: Record<string, number>;
+  duel: { a: number; b: number };
+}
+
+/** The coach duel between two players. `win` is resolved against each
+ *  player's own coverage, like Coach Assist. ADMIN ONLY FOR NOW: the Supabase
+ *  access token rides in `X-Coach-Token`, as for All Duels. */
+export function fetchCoachDuel(
+  a: string, b: string, win: DateWindow | undefined, kind: DuelKind | undefined,
+  token: string | null,
+): Promise<CoachDuel> {
+  const q = new URLSearchParams(win ? windowQuery(win) : undefined);
+  q.set('me', a);
+  q.set('opp', b);
+  q.set('sim', '1');
+  if (kind) q.set('kind', kind);
+  return get<CoachDuel>(
+    `/api/analytics/coach/suggest?${q.toString()}`,
+    token ? { 'X-Coach-Token': token } : undefined,
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────
    DECKS AROUND THE CARDS THE READER NAMES (2026-10-02, `server/coach.py`
    `chosen`, rules in `server/coach_choice.py`)
    ────────────────────────────────────────────────────────────────────────

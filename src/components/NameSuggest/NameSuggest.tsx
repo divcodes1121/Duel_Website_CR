@@ -46,6 +46,7 @@ export function NameSuggest({
   input,
   anchor,
   onSubmit,
+  onPick,
   minWidth = 340,
 }: {
   /** The field to listen to. Null while it does not exist (the pill). */
@@ -54,6 +55,10 @@ export function NameSuggest({
   anchor?: HTMLElement | null;
   /** Enter with no row highlighted. Absent = the field's own form submits. */
   onSubmit?: (text: string) => void;
+  /** A PICKER, NOT A SEARCH: a chosen player (or the typed tag) is handed back
+   *  instead of opened, and there is no "View all" row — the field is choosing
+   *  one player for a form (the Coach Duel's two seats). */
+  onPick?: (tag: string, name: string | null) => void;
   minWidth?: number;
 }) {
   const listId = `ns-${useId().replace(/:/g, '')}`;
@@ -72,7 +77,7 @@ export function NameSuggest({
   const rows: Row[] = [];
   if (tag) rows.push({ kind: 'tag', tag });
   for (const r of shown?.results ?? []) rows.push({ kind: 'player', ...r });
-  if (shown && shown.total > shown.results.length)
+  if (!onPick && shown && shown.total > shown.results.length)
     rows.push({ kind: 'all', query: asked, total: shown.total, capped: shown.capped });
 
   /* Ask, after a pause, unless the answer is already in hand. */
@@ -112,10 +117,11 @@ export function NameSuggest({
     (row: Row) => {
       close();
       input?.blur();
-      if (row.kind === 'all') go(`#/search?q=${encodeURIComponent(row.query)}`);
+      if (onPick && row.kind !== 'all') onPick(row.tag, row.kind === 'player' ? row.name : null);
+      else if (row.kind === 'all') go(`#/search?q=${encodeURIComponent(row.query)}`);
       else go(`#/player/${encodeURIComponent(row.tag)}`);
     },
-    [close, input],
+    [close, input, onPick],
   );
 
   /* The field's own events. Read through refs so the listeners are bound once

@@ -2822,7 +2822,8 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
             opp_played: list[list[str]],
             my_since: str | None = None, my_until: str | None = None,
             opp_since: str | None = None, opp_until: str | None = None,
-            swaps: bool = False, kind=None, results: str = "") -> dict:
+            swaps: bool = False, kind=None, results: str = "",
+            keep: dict | None = None) -> dict:
     """What to play next, and why.
 
     `my_played` / `opp_played` are the decks already used this duel, in order.
@@ -3039,6 +3040,14 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
                     seen_keys.add(k)
                     seeds.append({**r, "source": src})
         built = _build_for_duel(brain_ctx, seeds, rates, used_mine, stage)
+
+    # WHAT THE COACH DUEL NEEDS TO KEEP PLAYING (`coach_duel.py`): the read of
+    # the opponent, the rates and the brain context this answer was built on,
+    # so the games after this one are picked on the same ruler. Nothing here
+    # changes the answer.
+    if keep is not None:
+        keep.update(opp_hist=opp_hist, mine_hist=mine_hist, rates=rates,
+                    ctx=ctx0 or brain_ctx or None, opp=opp, kind=kind)
 
     return {
         "stage": stage,

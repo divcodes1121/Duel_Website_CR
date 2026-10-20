@@ -76,6 +76,11 @@ const SEEDS: Record<string, number> = {
   // count is remembered, ~1 s the first time a card filter is asked.
   'all-duels-chunk': 1_200,
   'all-duels': 2_500,
+  /* The Coach Duel (2026-10-20): Coach Assist once for each player. Staged on
+     the VPS with real CRL pairs: 28 s for the first with every cache cold,
+     then 2.5-8 s; a rematch is cached and costs nothing. */
+  'coach-duel-chunk': 1_200,
+  'coach-duel': 9_000,
 };
 
 const DEFAULT_SEED = 12_000;

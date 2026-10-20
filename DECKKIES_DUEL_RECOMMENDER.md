@@ -932,6 +932,21 @@ command (198 s, was 41 s); only `royalweb` restarted; both suites green on the
 server; live `/coach/predict` reads CRL players with `crl` and others with
 `all`; status `duelRead.routed: true`.
 
+### 2026-10-20 — the Coach Duel: Coach Assist for both players, played out
+
+Asked: two AI coaches, one per player, playing a best of 3 game by game. Built
+as `server/coach_duel.py` + `#/coach-duel` (admin only, the server checks).
+Each coach is this file's Suggestion at stage 0 for its player — the set, the
+read, the counters, the look-ahead — and the games after the first are picked
+by `duel_plan` over the set that coach loaded, told the other side's decks and
+the results. The referee is the mean of the two coaches' rulers (measured a
+median 1.0 point apart on 120 pairings), shifted by `SHIFT`. All five reachable
+games are computed at once, so the duel odds are exact; the screen draws each
+result from the game's chance. Nothing in Coach Assist's answer changed
+(`suggest(keep=)` only hands out what it already built; `test_coach` 307
+green). The odds inherit the deck figure's known high reading (item -1 below).
+README "Coach Duel" is the record.
+
 ## Next action
 
 Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.

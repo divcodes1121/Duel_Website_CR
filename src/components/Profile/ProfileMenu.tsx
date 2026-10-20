@@ -456,6 +456,19 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                     admin, like the console under it — the screen refuses
                     everyone else and the analytics service refuses the data,
                     so this just avoids showing a door that does not open. */}
+                {/* COACH DUEL, ADMINS ONLY FOR NOW (2026-10-20): two AI
+                    coaches play a best of 3. Same reasoning as All Duels. */}
+                {tier === 'admin' && (
+                  <a
+                    className={styles.item}
+                    role="menuitem"
+                    href="#/coach-duel"
+                    onClick={() => setPos(null)}
+                  >
+                    <Glyph d="crown" />
+                    Coach Duel
+                  </a>
+                )}
                 {tier === 'admin' && (
                   <a
                     className={styles.item}

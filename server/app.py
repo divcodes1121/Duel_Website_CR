@@ -72,6 +72,7 @@ import coach_intel  # noqa: E402
 import data_ledger  # noqa: E402
 import retention  # noqa: E402
 import duel_feed  # noqa: E402
+import coach_duel  # noqa: E402
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
@@ -1023,6 +1024,29 @@ class Handler(BaseHTTPRequestHandler):
                 # same reason as `swaps` above: the route count stays put.
                 # Unknown keys are dropped and echoed, never a 400 (the card
                 # catalogue moves; see `coach_choice.valid_want`).
+                # THE COACH DUEL (2026-10-20, `coach_duel.py`): two AI coaches,
+                # one for each player, play a best-of-3 against each other —
+                # every game it can reach, worked out at once. A PARAMETER, NOT
+                # A ROUTE, like `want` below: same two tags, same windows, and
+                # the route count stays put. Both tags are required.
+                #
+                # ADMIN ONLY FOR NOW (2026-10-20, "just give this access to
+                # admin and no one else"): the screen is on the admin shelf,
+                # and this asks Supabase whose token it is, as All Duels does
+                # — the key alone only says the request came through the edge.
+                if (q.get("sim") or [""])[0] in ("1", "true", "yes"):
+                    verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
+                    if verdict != "ok":
+                        self._outcome = "auth_failed"
+                        return self._send({"error": verdict}, admin_auth.STATUS[verdict])
+                    if not opp:
+                        return self._send({"error": "invalid_tag",
+                                           "input": (q.get("opp") or [""])[0]}, 400)
+                    if opp == me:
+                        return self._send({"error": "same_player"}, 400)
+                    out = coach_duel.simulate(me, opp, (my_since, my_until),
+                                              (opp_since, opp_until), _duel_kind(q))
+                    return self._send({**out, "sources": _sources()})
                 want = [c for c in (q.get("want") or [""])[0].split(",") if c.strip()]
                 if want:
                     out = coach.chosen(me, opp, _decks(q, ("m1", "m2")),

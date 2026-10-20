@@ -917,6 +917,38 @@ class RetentionAdminGate(CoachRosterAdminGate):
 
 
 
+class CoachDuelAdminGate(CoachRosterAdminGate):
+    """The Coach Duel (`sim=1` on the suggest route) is admin only for now,
+    behind the same check — while the plain suggestion on the same path
+    still answers with the key alone."""
+
+    PATH = "/api/analytics/coach/suggest?me=%23Y022GRCJQ&opp=%232PPQ0LY&sim=1"
+
+    def _serve(self, mod):
+        mod.cd.coverage = lambda tag=None: {"start": None, "end": None, "days": 0}
+        mod.coach_duel.simulate = lambda a, b, aw, bw, kind=None: {"a": {"tag": a}, "b": {"tag": b}}
+        mod.coach.suggest = lambda *a, **k: {"plain": True, "myTag": a[0]}
+        return serving(mod)
+
+    def test_the_plain_suggestion_needs_no_admin(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, body = fetch(base, self.PATH.replace("&sim=1", ""), headers=keyed())
+                self.assertEqual(status, 200)
+                self.assertIn("plain", body)
+
+    def test_the_same_player_twice_is_refused(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, body = fetch(
+                    base, "/api/analytics/coach/suggest?me=%23Y022GRCJQ&opp=%23Y022GRCJQ&sim=1",
+                    headers={**keyed(), "X-Coach-Token": "a.b.admin"})
+                self.assertEqual(status, 400)
+                self.assertIn("same_player", body)
+
+
 class DuelFeedAdminGate(CoachRosterAdminGate):
     """All Duels lists every player's duels, so it sits behind the same check."""
 

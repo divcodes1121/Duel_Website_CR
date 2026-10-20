@@ -235,7 +235,16 @@ export const PRO_ONLY_SECTIONS = [
  * this list is not a substitute for the pro carve-out. Anything here is
  * invisible, so nobody can want it.
  */
-export const ADMIN_ONLY_SECTIONS = ['All Duels'] as const;
+export const ADMIN_ONLY_SECTIONS = [
+  'All Duels',
+  /* ADMIN ONLY FOR NOW (2026-10-20, asked for: "just give this access to admin
+     and no one else"). Two AI coaches play a best of 3 — Coach Assist's whole
+     answer played out for both players. On the shelf while the account holder
+     looks at it; when it is released it is a Pro-only area like Coach Assist
+     (move it to `PRO_ONLY_SECTIONS`, give it a landing-strip card and a row in
+     the palette's general Tools, and add a release note). */
+  'Coach Duel',
+] as const;
 
 function adminOnly(section: string): boolean {
   return (ADMIN_ONLY_SECTIONS as readonly string[]).includes(section);

@@ -2279,3 +2279,31 @@ imports. The results page is `#/search?q=` (`Analytics/PlayerSearch/`, lazy):
 it rewrites the URL with `replaceState` ONLY while the hash is still
 `#/search` — the first cut rewrote it after a click had already moved to a
 player.
+
+
+## The Coach Duel stage (2026-10-20)
+
+`#/coach-duel` (admin only for now). Two illustrated coaches on the arena
+backdrop — `CoachDuel/CoachAvatar.tsx`, hand-drawn SVG, front-facing, looking
+at each other with their eyes (`look`), so neither drawing is mirrored.
+
+- **The stage is a fixed dark scrim in both themes**, like the painted
+  banners: its ink is fixed light (`--stage-text`, seat inks `#93c5fd` /
+  `#fca5a5`), never `--text`.
+- **Moods are state, not loops**: `idle`, `think`, `happy`, `sad`, `win` are
+  transitions (brows, lids, pupils, head tilt, five drawn mouths cross-fading)
+  plus one-shot keyframes keyed on the moment (`beat`): a blink, a nod, a
+  cheer. Nothing infinite.
+- **The bubble is the coach talking**: short lines with the server's figures
+  in them ("I give us 57.5%.", "Game 2: Balloon Bowler", "Expecting Hog EQ ·
+  41%"). This is the one screen where the no-prose rule bends — the characters
+  ARE the brief — and every line still carries a figure or a deck.
+- **Win chance figures sit above the bar, not on it**: the needle lands where
+  the draw fell, and on the bar it covered a figure as often as not.
+- **The stage is `flex: none`**: as a flex child with its own `min-height` it
+  was shrunk to that height and the name plates spilled out under it.
+- In the game card the strips are `align-self: stretch` (a right-aligned strip
+  shrink-wraps and ran over the VS at 1440), and `DeckActions` sits in a
+  wrapper (it centres itself).
+- Expected-deck badge: *Read right* only when the TOP guess was the deck
+  brought; *Its #2 guess* when a lower one was; *Surprised* otherwise.
