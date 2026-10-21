@@ -374,6 +374,41 @@ try:
         del fake._constructed_ok
         cdu._side_cache.clear()
         cdu._set_cache.clear()
+        # NO DECK THE AI BROUGHT BEFORE COMES BACK (reported 2026-10-21).
+        H_ = deck("h")
+        fake._own_duel_decks = lambda hist, used: real_own(hist, used) + [
+            {"cards": H_, "count": 2, "deckName": "Own h", "art": {}}]
+        cdu._side_cache.clear()
+        cdu._set_cache.clear()
+        fr = cdu.turn("#AAA", "#BBB", [A1], "", *W, round_=1, faced=[B1, B2, B3])
+        frk = [set(d["cards"]) for d in fr["ai"]["set"]]
+        check("a rematch brings no deck already faced while fresh ones fill the set",
+              "error" not in fr and not any(s in frk for s in (set(B1), set(B2), set(B3)))
+              and fr["aiSet"]["repeats"] == 0 and fr["aiSet"]["faced"] == 3, str(fr.get("aiSet")))
+        fake._own_duel_decks = real_own
+        cdu._side_cache.clear()
+        cdu._set_cache.clear()
+        fr2 = cdu.turn("#AAA", "#BBB", [A1], "", *W, round_=1, faced=[B1, B2, B3])
+        frk2 = [set(d["cards"]) for d in fr2["ai"]["set"]]
+        check("when fresh decks cannot fill it, as few repeats as it can",
+              "error" not in fr2 and fr2["aiSet"]["repeats"] == 1 and set(E_) in frk2 and set(F_) in frk2,
+              str(fr2.get("aiSet")))
+        B1x2 = B1[:7] + ["zz-new"]
+        cdu._set_cache.clear()
+        fr3 = cdu.turn("#AAA", "#BBB", [A1], "", *W, round_=1, faced=[B1x2, B2, B3])
+        check("a one-card switch of a deck faced counts as that deck",
+              fr3["aiSet"]["repeats"] == 1 and fr3["aiSet"]["faced"] == 3, str(fr3.get("aiSet")))
+        # YOUR SIDE: a pool to cycle, Coach Assist's set first.
+        pp = cdu.prep("#AAA", "#BBB", *W)
+        pool = pp["you"]["pool"]
+        check("your pool leads with Coach Assist's set and offers more decks than it",
+              [set(d["cards"]) for d in pool[:4]] == [set(A1), set(A2), set(A3), set(A4)] and len(pool) > 4
+              and all(len(set(d["cards"])) == 8 for d in pool), str([d["deckName"] for d in pool]))
+        check("no two decks of your pool are one card apart",
+              all(len(set(p["cards"]) & set(q["cards"])) < cdu.REPEAT_NEAR
+                  for i, p in enumerate(pool) for q in pool[i + 1:]))
+        cdu._side_cache.clear()
+        cdu._set_cache.clear()
         r1b = cdu.turn("#AAA", "#BBB", [A2, A3], "l", *W, round_=1, seen=[A1])
         check("the AI's set is the same in every game of one duel (seeded on the duel, not your decks)",
               r1b["ai"]["set"] == r1["ai"]["set"])

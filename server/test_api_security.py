@@ -945,9 +945,9 @@ class CoachDuelAdminGate(CoachRosterAdminGate):
             os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
             with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
                 mod.coach_duel.prep = lambda a, b, aw, bw, kind=None: {"mode": "prep"}
-                mod.coach_duel.turn = lambda a, b, decks, res, aw, bw, kind=None, round_=0, seen=None, games=3, play_all=False: {
+                mod.coach_duel.turn = lambda a, b, decks, res, aw, bw, kind=None, round_=0, seen=None, games=3, play_all=False, faced=None: {
                     "mode": "game", "decks": len(decks), "res": res, "round": round_,
-                    "seen": len(seen or []), "games": games, "all": play_all}
+                    "seen": len(seen or []), "games": games, "all": play_all, "faced": len(faced or [])}
                 for mode in ("prep", "game", "anything"):
                     path = self.PATH.replace("sim=1", "sim=" + mode)
                     status, _, _ = fetch(base, path, headers=keyed())
@@ -959,11 +959,13 @@ class CoachDuelAdminGate(CoachRosterAdminGate):
                 self.assertEqual(json.loads(body)["mode"], "prep")
                 deck = "knight,archers,fireball,zap,hog-rider,musketeer,cannon,skeletons"
                 _, _, body = fetch(base, self.PATH.replace("sim=1", "sim=game") +
-                                   "&y1=" + deck + "&y2=" + deck + "&res=WxL&r=3&s1=" + deck + "&bo=5",
+                                   "&y1=" + deck + "&y2=" + deck + "&res=WxL&r=3&s1=" + deck + "&bo=5"
+                                   "&x1=" + deck + "&x2=" + deck,
                                    headers=admin)
                 got = json.loads(body)
-                self.assertEqual((got["mode"], got["decks"], got["res"], got["round"], got["seen"], got["games"], got["all"]),
-                                 ("game", 2, "wl", 3, 1, 5, False))
+                self.assertEqual((got["mode"], got["decks"], got["res"], got["round"], got["seen"], got["games"],
+                                  got["all"], got["faced"]),
+                                 ("game", 2, "wl", 3, 1, 5, False, 2))
                 _, _, body = fetch(base, self.PATH.replace("sim=1", "sim=game") + "&y1=" + deck + "&all=1",
                                    headers=admin)
                 self.assertTrue(json.loads(body)["all"], "all=1 plays every game")

@@ -2145,8 +2145,9 @@ export interface CoachDuelSide {
 export interface CoachDuelPrep {
   mode: 'prep';
   error?: string;
-  /** Your player, with Coach Assist's set for them (to fill a game's deck). */
-  you: CoachDuelSide;
+  /** Your player, with Coach Assist's set for them and a wider pool, best
+   *  first, that the "Coach Assist deck" button cycles. */
+  you: CoachDuelSide & { pool?: CoachDuelDeck[] };
   /** The AI coach's player; its decks stay secret. */
   ai: CoachDuelSide;
 }
@@ -2207,6 +2208,7 @@ export function fetchCoachDuelPrep(
 export function fetchCoachDuelTurn(
   you: string, ai: string, decks: string[][], results: string, games: 3 | 5, playAll: boolean,
   round: number, seen: string[][], win: DateWindow | undefined, kind: DuelKind | undefined, token: string | null,
+  faced: string[][] = [],
 ): Promise<CoachDuelTurn> {
   const q = duelQuery(you, ai, win, kind);
   q.set('sim', 'game');
@@ -2216,6 +2218,8 @@ export function fetchCoachDuelTurn(
   if (results) q.set('res', results);
   decks.forEach((d, i) => q.set(`y${i + 1}`, d.join(',')));
   seen.slice(0, 8).forEach((d, i) => q.set(`s${i + 1}`, d.join(',')));
+  // The AI decks faced in earlier duels of the session: a rematch brings new ones.
+  faced.slice(0, 30).forEach((d, i) => q.set(`x${i + 1}`, d.join(',')));
   return get<CoachDuelTurn>(`/api/analytics/coach/suggest?${q.toString()}`,
     token ? { 'X-Coach-Token': token } : undefined);
 }

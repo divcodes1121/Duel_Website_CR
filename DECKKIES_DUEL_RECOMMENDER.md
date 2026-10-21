@@ -976,6 +976,14 @@ player, the fallback needed for two (2 and 1 decks). Games are still drawn
 from the chance; an upset is labelled, and a "favourite always wins" mode
 exists.
 
+### 2026-10-21 (fourth round) — no repeats across rematches
+
+Coach Duel's AI draws from one pool per player (own rotation, Coach Assist's
+answer and counters, real duel lists on their main win conditions) and never
+brings back a deck faced earlier in the session while fresh ones fill the
+format. Your side cycles a ranked pool of up to 40. A game is decided by the
+matchup (over 55% wins; 45–55% rolled).
+
 ## Next action
 
 Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.

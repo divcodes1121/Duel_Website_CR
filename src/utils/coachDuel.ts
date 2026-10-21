@@ -129,3 +129,62 @@ export function addSeen(seen: readonly string[][], shown: readonly string[][]): 
   }
   return out.slice(0, MAX_SEEN);
 }
+
+/** A deck's identity: its cards, order ignored. */
+export function deckKey(deck: readonly string[]): string {
+  return [...deck].sort().join(',');
+}
+
+/** The next deck to offer from `decks` (best first): legal in this duel, not
+ *  the one on screen, and not offered before in the session (`offered`, deck
+ *  keys). When every legal deck has been offered, the round starts again
+ *  (`fresh: false`). Reported 2026-10-21: "the Coach Assist pick is always
+ *  the same, it needs to differ every time" — and not repeat on a rematch. */
+export function nextFresh(
+  decks: readonly (readonly string[])[], earlier: readonly (readonly string[])[],
+  offered: ReadonlySet<string>, current?: readonly string[] | null,
+): { index: number; fresh: boolean } | null {
+  const cur = current ? deckKey(current) : null;
+  const legal = decks
+    .map((d, i) => ({ k: deckKey(d), i, d }))
+    .filter(({ d, k }) => k !== cur && clashWith(d, earlier).length === 0);
+  if (!legal.length) return null;
+  const unseen = legal.find(({ k }) => !offered.has(k));
+  return unseen ? { index: unseen.i, fresh: true } : { index: legal[0].i, fresh: false };
+}
+
+/** AI decks faced in earlier duels of the session, sent so a rematch brings
+ *  new ones; newest first, each once, at most this many. */
+export const MAX_FACED = 30;
+
+export function addFaced(faced: readonly string[][], set: readonly (readonly string[])[]): string[][] {
+  const out: string[][] = [];
+  const keys = new Set<string>();
+  for (const d of [...set].map((x) => [...x]).concat(faced)) {
+    const k = deckKey(d);
+    if (d.length === 8 && !keys.has(k)) {
+      keys.add(k);
+      out.push(d);
+    }
+  }
+  return out.slice(0, MAX_FACED);
+}
+
+/** "For winning, the matchup must be over 55%" (asked 2026-10-21). Over this
+ *  a side wins the game outright; inside the band around 50 the game is
+ *  close and the needle decides it. */
+export const MU_DECIDES = 55;
+
+/** How a game is decided: by the matchup (over `MU_DECIDES` wins, a close one
+ *  is rolled), or always rolled on the chance. */
+export type Luck = 'mu' | 'roll';
+
+/** The game's result: `rolled` says the needle decided it. `matchup` and
+ *  `chance` are your percents; `r` one uniform draw in [0, 1). */
+export function decide(luck: Luck, matchup: number, chance: number, r: number): { result: 'w' | 'l'; rolled: boolean } {
+  if (luck === 'mu') {
+    if (matchup > MU_DECIDES) return { result: 'w', rolled: false };
+    if (matchup < 100 - MU_DECIDES) return { result: 'l', rolled: false };
+  }
+  return { result: roll(chance, r), rolled: true };
+}

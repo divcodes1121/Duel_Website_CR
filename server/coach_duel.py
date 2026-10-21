@@ -450,6 +450,32 @@ SEEN_WEIGHT = 0.5
 FORMATS = {3: (4, 3), 5: (5, 5)}          # games -> (most decks, fewest)
 MAX_DECKS = 4
 
+#: REAL DUEL LISTS BUILT ON THE PLAYER'S OWN WIN CONDITIONS join both sides'
+#: pools (asked 2026-10-21: "there are countless decks in the duel battles
+#: which match the player's playstyle"): the most played lists of each of
+#: their three main win conditions, fielded by enough pilots that one player's
+#: pet list does not speak for everyone.
+STYLE_WINCONS = 3
+STYLE_PER_WINCON = 12
+STYLE_MIN_GAMES = 10
+STYLE_MIN_PLAYERS = 3
+#: Their weight in the AI's draw, as a share of the player's median own deck.
+STYLE_WEIGHT = 0.35
+
+#: Two decks sharing this many cards are ONE deck for "brought before": a
+#: one-card switch of a deck already faced is not a new deck.
+REPEAT_NEAR = 7
+
+#: A deck already brought in an earlier duel of the session still counts this
+#: much (of its weight) when fresh decks cannot fill the format.
+REPEAT_WEIGHT = 0.05
+
+#: The most decks offered to you (the "Coach Assist deck" button cycles them).
+YOU_POOL = 40
+
+#: Rows of the read a deck's figure for you is taken against.
+YOU_READ_ROWS = 6
+
 _side_cache: dict = {}
 _side_lock = threading.Lock()
 _set_cache: dict = {}
@@ -484,12 +510,15 @@ def blend_read(read, seen: list, weight: float = SEEN_WEIGHT):
 
 
 def vary_set(entries: list, value, rng, *, size: int = MAX_DECKS, min_size: int = SET_MIN,
-             draws: int = VARY_DRAWS, band: float = VARY_BAND, avoid=None) -> list | None:
+             draws: int = VARY_DRAWS, band: float = VARY_BAND, avoid=None,
+             shrink: bool = False) -> list | None:
     """A set: indices into `entries` (`{"cards", "weight"}`), sharing no card,
     drawn in proportion to `weight`, and within `band` of the best set drawn
     (`band=0` is the best). `avoid` (a frozenset of entry indices) is a set
     never chosen while another qualifies. None when no set of `min_size` can
-    be drawn."""
+    be drawn. `shrink` also weighs each drawn set cut down towards
+    `min_size` (in draw order), so a fallback can field fewer decks rather
+    than more of the ones it would rather not bring."""
     pool = [i for i, e in enumerate(entries) if len(set(e["cards"])) == 8 and e.get("weight", 0) > 0]
     sets: dict = {}
     for _ in range(draws):
@@ -510,6 +539,9 @@ def vary_set(entries: list, value, rng, *, size: int = MAX_DECKS, min_size: int 
             used |= cards
         if len(got) >= min_size:
             sets.setdefault(frozenset(got), None)
+            if shrink:
+                for n in range(min_size, len(got)):
+                    sets.setdefault(frozenset(got[:n]), None)
     if not sets:
         return None
     vals = {s: float(value([entries[i]["cards"] for i in sorted(s)])) for s in sets}
@@ -590,7 +622,8 @@ def prep(you: str, ai: str, you_win: tuple, ai_win: tuple, kind=None) -> dict:
     y = _side_cached(you, ai, you_win, ai_win, kind)
     a = _side_cached(ai, you, ai_win, you_win, kind)
     return {"brain": BRAIN, "mode": "prep",
-            "you": _public(y), "ai": _public(a, with_set=False)}
+            "you": _public(y) | {"set": [_brief(_seat(d)) for d in y["decks"]], "pool": _you_pool(y)},
+            "ai": _public(a, with_set=False)}
 
 
 def _rng(*parts) -> "random.Random":
@@ -628,40 +661,160 @@ def _sensible(cards, seed=None) -> bool:
         return True
 
 
-def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES) -> tuple[list, dict | None, dict]:
-    """The AI coach's decks for duel number `round_` (0 = the first) of a best
-    of `games`: `(rows, switch, info)`. Every deck must make sense
-    (`_sensible`); a set that cannot be made of such decks keeps the others."""
+def _seat(row: dict) -> dict:
+    """The row with every special slot its cards can fill drawn in its form
+    (`clash_data.complete_seating`): observed forms keep their seats, the
+    rest are filled. Reported 2026-10-21: evolutions and heroes were drawn as
+    plain cards on decks that came without marks."""
+    cards = list(row.get("cards") or [])
+    if len(cards) != 8:
+        return row
+    try:
+        import clash_data as cd
+        art = dict(row.get("art") or {})
+        ordered, art2, filled = cd.complete_seating(cards, art, cd.seated_positions(cards, art))
+    except Exception:  # noqa: BLE001 - drawn as it came
+        return row
+    out = dict(row)
+    out["cards"], out["art"] = list(ordered), dict(art2)
+    if filled:
+        out["artFilled"] = sorted(set(filled) | set(row.get("artFilled") or []))
+    return out
+
+
+def _style_lists(s: dict) -> list[dict]:
+    """Real duel lists on the player's own main win conditions (`STYLE_*`)."""
+    try:
+        import duel_index as di
+    except Exception:  # noqa: BLE001 - no index, no lists
+        return []
+    wins = [w.get("card") for w in _profile((s["answer"].get("profiles") or {}).get("mine"))][:STYLE_WINCONS]
+    out: list[dict] = []
+    for wc in wins:
+        if not wc:
+            continue
+        try:
+            rows = di.decks_holding([wc], min_games=STYLE_MIN_GAMES, limit=400)
+        except Exception:  # noqa: BLE001
+            continue
+        n = 0
+        for r in rows:
+            g = int(r.get("games") or 0)
+            if int(r.get("players") or 0) < STYLE_MIN_PLAYERS or 2 * int(r.get("topPilot") or 0) > g:
+                continue
+            try:
+                row = _deck_row(list(r["cards"]))
+            except Exception:  # noqa: BLE001
+                continue
+            out.append(row | {"games": g, "origin": "duel"})
+            n += 1
+            if n >= STYLE_PER_WINCON:
+                break
+    return out
+
+
+def _pool(s: dict) -> list[dict]:
+    """Every deck a coach may load for its player, kept on the side (it is
+    read once): `[{"cards", "row", "weight", "counter", "sensible"}]`.
+
+    The player's own duel rotation weighted by how often they play each (their
+    trend), Coach Assist's answer and the counters to the other player, and
+    real duel lists on their own win conditions. Lists within one card of a
+    deck already in are the same deck. Every row is seated (`_seat`)."""
+    got = s.get("_pool")
+    if got is not None:
+        return got
     import coach
-    most, fewest = FORMATS.get(games, FORMATS[GAMES])
-    base = [dict(d) for d in a["decks"]]
-    base_ok = all(_sensible(d["cards"]) for d in base)
-    if a["win"] is None or (round_ <= 0 and len(base) >= fewest and base_ok):
-        return base, None, {"source": "coach-assist"}
-    rng = _rng(seed, round_)
-    own = coach._own_duel_decks((a.get("keep") or {}).get("mine_hist"), set())
+    own = coach._own_duel_decks((s.get("keep") or {}).get("mine_hist"), set())
     own, _dropped = coach._drop_event_decks(own)
     counts = sorted(int(r.get("count") or 1) for r in own) or [1]
-    median = counts[len(counts) // 2]
-    counters = list(((a["answer"].get("counters") or {}).get("decks")) or [])
-    entries, keys = [], set()
+    median = float(counts[len(counts) // 2])
+    counters = list(((s["answer"].get("counters") or {}).get("decks")) or [])
+    entries: list[dict] = []
     for rows, weight, counter in ((own, None, False), (counters, COUNTER_WEIGHT * median, True),
-                                  (base, float(median), False)):
+                                  (s["decks"], median, False), (_style_lists(s), STYLE_WEIGHT * median, False)):
         for r in rows:
-            k = _key(r["cards"])
-            if k not in keys:
-                keys.add(k)
-                entries.append({"cards": list(r["cards"]), "row": r, "counter": counter or r.get("counter"),
-                                "weight": float(r.get("count") or 1) if weight is None else weight})
-    # DECKS THAT MAKE SENSE ONLY. When those cannot field the format (a best
-    # of 5 needs five decks sharing no card), the rest come in at a small
-    # weight, so a set takes as few of them as it can.
-    for e in entries:
-        e["sensible"] = _sensible(e["cards"])
+            cards = set(r.get("cards") or [])
+            if len(cards) != 8 or any(len(cards & set(e["cards"])) >= REPEAT_NEAR for e in entries):
+                continue
+            row = _seat(dict(r))
+            entries.append({"cards": list(row["cards"]), "row": row, "counter": bool(counter or r.get("counter")),
+                            "weight": float(r.get("count") or 1) if weight is None else weight,
+                            "sensible": _sensible(row["cards"])})
+    s["_pool"] = entries
+    return entries
+
+
+def _you_pool(y: dict) -> list[dict]:
+    """The decks offered to YOU, best first against the AI player as your
+    coach reads them; Coach Assist's own set leads. Reported 2026-10-21:
+    "the Coach Assist pick is always the same, it needs to differ every
+    time" — the screen cycles this list and never offers a deck twice until
+    it has offered them all."""
+    got = y.get("_youPool")
+    if got is not None:
+        return got
+    entries = _pool(y)
     good = [e for e in entries if e["sensible"]]
-    dropped = len(entries) - len(good)
-    every = entries
-    entries = good if len(good) >= fewest else every
+    if len(good) < 2 * SET_MAX:
+        good = entries
+    rows_read = []
+    if y.get("read") is not None and y.get("win") is not None:
+        try:
+            rows_read = [(frozenset(c), float(p)) for c, p in (y["read"]((), None) or [])[:YOU_READ_ROWS]]
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            rows_read = []
+
+    def value(cards) -> float | None:
+        tot = sum(p for _c, p in rows_read)
+        if tot <= 0:
+            return None
+        try:
+            mine = frozenset(cards)
+            return sum(p * float(y["win"](mine, c)) for c, p in rows_read) / tot
+        except Exception:  # noqa: BLE001
+            return None
+
+    lead = [_key(d["cards"]) for d in y["decks"]]
+    scored = [(e, value(e["cards"])) for e in good]
+    first = sorted((x for x in scored if _key(x[0]["cards"]) in lead), key=lambda x: lead.index(_key(x[0]["cards"])))
+    rest = sorted((x for x in scored if _key(x[0]["cards"]) not in lead),
+                  key=lambda x: (-(x[1] if x[1] is not None else -1.0), _key(x[0]["cards"])))
+    out = []
+    for e, v in (first + rest)[:YOU_POOL]:
+        row = _brief(e["row"]) | ({"counter": True} if e["counter"] else {})
+        if v is not None:
+            row["vsRead"] = round(100 * v, 1)
+        out.append(row)
+    y["_youPool"] = out
+    return out
+
+
+def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES,
+            faced: list | None = None) -> tuple[list, dict | None, dict]:
+    """The AI coach's decks for duel number `round_` (0 = the first) of a best
+    of `games`: `(rows, switch, info)`.
+
+    Every deck must make sense (`_sensible`), and NO DECK IT BROUGHT IN AN
+    EARLIER DUEL OF THE SESSION (`faced`, sent by the screen) comes back while
+    fresh ones can fill the format (reported 2026-10-21: "the decks repeat on
+    a rematch, they should not"). When they cannot, the rest come in at a
+    small weight and the set with the fewest of them is chosen."""
+    most, fewest = FORMATS.get(games, FORMATS[GAMES])
+    base = [dict(d) for d in a["decks"]]
+    faced_sets = [frozenset(d) for d in faced or [] if len(set(d)) == 8]
+
+    def repeat(cards) -> bool:
+        s = set(cards)
+        return any(len(s & f) >= REPEAT_NEAR for f in faced_sets)
+
+    base_ok = all(_sensible(d["cards"]) and not repeat(d["cards"]) for d in base)
+    if a["win"] is None or (round_ <= 0 and len(base) >= fewest and base_ok):
+        return [_seat(d) for d in base], None, {"source": "coach-assist"}
+    rng = _rng(seed, round_)
+    every = [dict(e, repeat=repeat(e["cards"])) for e in _pool(a)]
+    dropped = sum(1 for e in every if not e["sensible"])
     memo: dict = {}
 
     def value(group):
@@ -671,23 +824,36 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES) -> tuple[
             memo[k] = out["options"][0]["duel"] if out.get("options") else 0.0
         return memo[k]
 
-    def draw(pool, score=None):
+    def draw(pool, score=None, shrink=False):
+        # Without the decks faced (an older screen), at least not the set
+        # Coach Assist loaded in duel 1.
         base_keys = frozenset(i for i, e in enumerate(pool) if _key(e["cards"]) in {_key(d["cards"]) for d in base})
         return vary_set(pool, score or value, rng, size=most, min_size=fewest,
                         band=0.0 if round_ <= 0 else VARY_BAND,
-                        avoid=base_keys if round_ == 1 else None)
+                        avoid=base_keys if round_ == 1 and not faced_sets else None, shrink=shrink)
 
-    pick = draw(entries)
-    fallback = False
-    if not pick and entries is not every:
-        entries = [dict(e, weight=e["weight"] * (1.0 if e["sensible"] else UNSENSIBLE_WEIGHT)) for e in every]
-        bad = {_key(e["cards"]) for e in entries if not e["sensible"]}
-        # Fewest decks that make no sense first, then the duel's value (a
-        # value is a chance, under 1, so one more such deck always costs more).
-        pick = draw(entries, lambda g: value(g) - sum(1 for d in g if _key(d) in bad))
-        fallback = True
+    # Fresh decks that make sense; then fresh ones of any kind; then repeats.
+    # A penalty of 1 a deck outweighs any duel value (a chance, under 1), so a
+    # fallback set holds as few such decks as it can.
+    tiers = (
+        ([e for e in every if e["sensible"] and not e["repeat"]], False),
+        ([e for e in every if not e["repeat"]], True),
+        (every, True),
+    )
+    entries, pick, fallback = every, None, False
+    for i, (pool_, penal) in enumerate(tiers):
+        if len(pool_) < fewest:
+            continue
+        pool_ = [dict(e, weight=e["weight"] * (1.0 if e["sensible"] else UNSENSIBLE_WEIGHT)
+                      * (REPEAT_WEIGHT if e["repeat"] else 1.0)) for e in pool_]
+        bad = {_key(e["cards"]) for e in pool_ if not e["sensible"] or e["repeat"]}
+        pick = draw(pool_, (lambda g, bad=bad: value(g) - sum(1 for d in g if _key(d) in bad)) if penal else None,
+                    shrink=penal)
+        if pick:
+            entries, fallback = pool_, i > 0
+            break
     if not pick:
-        return base, None, {"source": "coach-assist", "reason": "no_draw"}
+        return [_seat(d) for d in base], None, {"source": "coach-assist", "reason": "no_draw"}
     rows = [dict(entries[i]["row"]) | ({"counter": True} if entries[i].get("counter") else {}) for i in pick]
     cards = [list(r["cards"]) for r in rows]
     switch = None
@@ -698,20 +864,24 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES) -> tuple[
                 return di.near_variants(c)
             except Exception:  # noqa: BLE001 - no index, no switch
                 return []
-        cards2, switch = switch_card(cards, variants, rng, ok=lambda new, old: _sensible(new, seed=old))
+        # A switch must leave the deck making sense AND not turn it into one
+        # already faced this session.
+        cards2, switch = switch_card(cards, variants, rng,
+                                     ok=lambda new, old: _sensible(new, seed=old) and not repeat(new))
         if switch:
             k = switch["deck"]
-            rows[k] = _deck_row(cards2[k]) | ({"counter": True} if rows[k].get("counter") else {}) | {"switched": True}
+            rows[k] = _seat(_deck_row(cards2[k])) | ({"counter": True} if rows[k].get("counter") else {}) | {"switched": True}
     info = {"source": "rotation" if round_ > 0 else "composed",
             "candidates": len(entries), "dropped": dropped, "fallback": fallback,
             "unsensible": sum(1 for i in pick if not entries[i]["sensible"]),
+            "repeats": sum(1 for i in pick if entries[i]["repeat"]), "faced": len(faced_sets),
             "value": round(100 * value([r["cards"] for r in rows]), 1)}
     return rows, switch, info
 
 
 def turn(you: str, ai: str, your_decks: list, results: str, you_win: tuple, ai_win: tuple,
          kind=None, round_: int = 0, seen: list | None = None, games: int = GAMES,
-         play_all: bool = False) -> dict:
+         play_all: bool = False, faced: list | None = None) -> dict:
     """One game of you against the AI coach. See the section note above.
 
     `your_decks` are your decks of every game so far, in order, THIS game's
@@ -743,13 +913,14 @@ def turn(you: str, ai: str, your_decks: list, results: str, you_win: tuple, ai_w
     # kept, so a best of 5 (five decks composed, ~9 s on the VPS) pays it on
     # game 1 only. Keyed on everything it depends on; `id(a)` changes when the
     # side is read again.
-    sk = (id(a), you, ai, games, int(round_), tuple(sorted(_key(d) for d in seen or [])))
+    sk = (id(a), you, ai, games, int(round_), tuple(sorted(_key(d) for d in seen or [])),
+          tuple(sorted(_key(d) for d in faced or [])))
     with _side_lock:
         hit = _set_cache.get(sk)
     if hit and time.time() - hit[0] < CACHE_TTL_S:
         rows, switch, set_info = hit[1]
     else:
-        rows, switch, set_info = _ai_set(a, ai_read, int(round_), f"{you}|{ai}|{games}", games)
+        rows, switch, set_info = _ai_set(a, ai_read, int(round_), f"{you}|{ai}|{games}", games, faced)
         with _side_lock:
             if len(_set_cache) >= CACHE_MAX:
                 for k in sorted(_set_cache, key=lambda k: _set_cache[k][0])[: CACHE_MAX // 2]:

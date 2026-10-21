@@ -29,36 +29,33 @@ import {
   type CoachDuelPrep,
   type CoachDuelSide,
   type CoachDuelTurn,
-  type DuelKind,
 } from '../../../state/analyticsClient';
+import { positionalArt } from '../../../utils/deckSeating';
 import { coachToken } from '../../../state/coachToken';
 import { DAY_PRESETS } from '../../../utils/datePresets';
 import { asTag } from '../../../utils/nameSearch';
 import {
+  addFaced,
   addSeen,
   clashWith,
+  decide,
+  deckKey,
   findDeckLinks,
   isFinished,
-  nextLegal,
+  MU_DECIDES,
+  nextFresh,
   pctLabel,
-  roll,
   scoreOf,
   winnerOf,
   winsNeeded,
   type Format,
+  type Luck,
 } from '../../../utils/coachDuel';
 import styles from './CoachDuel.module.css';
 
 type Seat = 'blue' | 'red';
-/** How a game is decided: drawn from its chance, or the favourite always wins. */
-type Luck = 'roll' | 'fav';
 type Pose = 'idle' | 'laugh' | 'nervous' | 'cheer';
 type Emote = 'laugh' | 'cry' | 'grrr' | 'think' | 'sweat' | 'gg' | 'yeah' | 'thumbsdown';
-
-const KINDS: { id: Exclude<DuelKind, null>; label: string }[] = [
-  { id: 'war', label: 'Clan war' },
-  { id: 'friendly', label: 'Friendly' },
-];
 
 /** How long the needle takes to land, unless motion is reduced. */
 const ROLL_MS = 1400;
@@ -86,7 +83,6 @@ interface Players {
   you: string;
   ai: string;
   days: number;
-  kind: DuelKind;
   games: Format;
   playAll: boolean;
   luck: Luck;
@@ -98,23 +94,20 @@ function readHash(): Partial<Players> {
   if (q === -1) return {};
   const p = new URLSearchParams(h.slice(q + 1));
   const days = Number(p.get('d'));
-  const k = p.get('k');
   return {
     you: asTag(p.get('a') ?? '') ?? undefined,
     ai: asTag(p.get('b') ?? '') ?? undefined,
     days: (DAY_PRESETS as readonly number[]).includes(days) ? days : undefined,
-    kind: k === 'friendly' || k === 'war' ? k : undefined,
     games: p.get('bo') === '5' ? 5 : p.get('bo') === '3' ? 3 : undefined,
     playAll: p.has('all') ? p.get('all') === '1' : undefined,
-    luck: p.get('o') === 'fav' ? 'fav' : p.has('o') ? 'roll' : undefined,
+    luck: p.get('o') === 'roll' ? 'roll' : p.has('o') ? 'mu' : undefined,
   };
 }
 
 function writeHash(s: Players) {
   const p = new URLSearchParams({ a: s.you, b: s.ai, d: String(s.days), bo: String(s.games) });
-  if (s.kind) p.set('k', s.kind);
   if (s.playAll) p.set('all', '1');
-  if (s.luck === 'fav') p.set('o', 'fav');
+  if (s.luck === 'roll') p.set('o', 'roll');
   const next = `#/coach-duel?${p.toString()}`;
   if (window.location.hash !== next) window.history.replaceState(null, '', next);
 }
@@ -268,20 +261,20 @@ function FormatControls({ games, playAll, luck, onChange }: {
         <button
           type="button"
           className={styles.chip}
-          aria-pressed={luck === 'roll'}
-          title="Each game is drawn from its win chance: at 60% you win 60 of 100 such games"
-          onClick={() => onChange({ luck: 'roll' })}
+          aria-pressed={luck === 'mu'}
+          title={`A matchup over ${MU_DECIDES}% wins the game; a close one (${100 - MU_DECIDES}–${MU_DECIDES}%) is rolled`}
+          onClick={() => onChange({ luck: 'mu' })}
         >
-          Roll the chance
+          Matchup over {MU_DECIDES}% wins
         </button>
         <button
           type="button"
           className={styles.chip}
-          aria-pressed={luck === 'fav'}
-          title="The side with the higher win chance always wins the game"
-          onClick={() => onChange({ luck: 'fav' })}
+          aria-pressed={luck === 'roll'}
+          title="Every game is drawn from its win chance: at 60% you win 60 of 100 such games"
+          onClick={() => onChange({ luck: 'roll' })}
         >
-          Favourite always wins
+          Roll every game
         </button>
       </div>
     </>
@@ -292,9 +285,21 @@ function FormatControls({ games, playAll, luck, onChange }: {
 
 interface Played {
   deck: string[];
+  /** Your deck's forms as you brought it (a pasted link is in slot order). */
+  art?: CoachDuelDeck['art'];
   ans: CoachDuelTurn;
   draw: number;
   result: 'w' | 'l';
+  /** The needle decided it (a close matchup, or "roll every game"). */
+  rolled: boolean;
+}
+
+interface Pending {
+  deck: string[];
+  art?: CoachDuelDeck['art'];
+  ans: CoachDuelTurn | null;
+  result?: 'w' | 'l';
+  rolled?: boolean;
 }
 
 interface Pasted {
@@ -308,10 +313,9 @@ export function CoachDuel() {
   const [youText, setYouText] = useState(start.you ?? '');
   const [aiText, setAiText] = useState(start.ai ?? '');
   const [days, setDays] = useState<number>(start.days ?? 30);
-  const [kind, setKind] = useState<DuelKind>(start.kind ?? null);
   const [games, setGames] = useState<Format>(start.games ?? 3);
   const [playAll, setPlayAll] = useState<boolean>(start.playAll ?? false);
-  const [luck, setLuck] = useState<Luck>(start.luck ?? 'roll');
+  const [luck, setLuck] = useState<Luck>(start.luck ?? 'mu');
   const [youInput, setYouInput] = useState<HTMLInputElement | null>(null);
   const [aiInput, setAiInput] = useState<HTMLInputElement | null>(null);
 
@@ -319,11 +323,17 @@ export function CoachDuel() {
   const [prep, setPrep] = useState<CoachDuelPrep | null>(null);
   const [round, setRound] = useState(0);
   const [seen, setSeen] = useState<string[][]>([]);
+  /* What a rematch must not bring back, on either side: the AI decks faced in
+     earlier duels (sent to the server) and the decks offered to you (kept
+     here). Reported 2026-10-21: "the decks repeat on a rematch, neither side
+     should". */
+  const [faced, setFaced] = useState<string[][]>([]);
+  const [offered, setOffered] = useState<Set<string>>(() => new Set());
   const [played, setPlayed] = useState<Played[]>([]);
   const [pasted, setPasted] = useState<Pasted | null>(null);
   const [paste, setPaste] = useState('');
   const [pasteNote, setPasteNote] = useState<string | null>(null);
-  const [pending, setPending] = useState<{ deck: string[]; ans: CoachDuelTurn | null } | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
   const [needle, setNeedle] = useState<number | null>(null);
   const [showLast, setShowLast] = useState(false);
   const [loading, setLoading] = useState<'prep' | null>(null);
@@ -358,11 +368,13 @@ export function CoachDuel() {
     setError(null);
     setRound(0);
     setSeen([]);
+    setFaced([]);
+    setOffered(new Set());
     resetDuel();
     setLoading('prep');
     writeHash(p);
     coachToken()
-      .then((token) => fetchCoachDuelPrep(p.you, p.ai, { days: p.days }, p.kind, token))
+      .then((token) => fetchCoachDuelPrep(p.you, p.ai, { days: p.days }, undefined, token))
       .then((d) => {
         if (mine === seq.current) setPrep(d);
       })
@@ -377,8 +389,8 @@ export function CoachDuel() {
   useEffect(() => {
     if (start.you && start.ai && start.you !== start.ai)
       loadPrep({
-        you: start.you, ai: start.ai, days: start.days ?? 30, kind: start.kind ?? null,
-        games: start.games ?? 3, playAll: start.playAll ?? false, luck: start.luck ?? 'roll',
+        you: start.you, ai: start.ai, days: start.days ?? 30,
+        games: start.games ?? 3, playAll: start.playAll ?? false, luck: start.luck ?? 'mu',
       });
   }, [start, loadPrep]);
 
@@ -428,7 +440,8 @@ export function CoachDuel() {
       setPasteNote('That link could not be read.');
       return;
     }
-    setPasted({ cards });
+    // A deck link is in slot order: slot 1 the evolution, 2 the hero, 3 either.
+    setPasted({ cards, art: positionalArt(cards) });
     setPaste('');
     setPasteNote(links.length > 1 ? 'One deck a game: the first link was taken.' : null);
   };
@@ -442,14 +455,19 @@ export function CoachDuel() {
       .then((text) => takePaste(text))
       .catch(() => setPasteNote('The browser did not allow reading the clipboard. Paste the link into the box below.'));
   };
-  const suggested = prep?.you.set ?? [];
+  const suggested = prep?.you.pool?.length ? prep.you.pool : prep?.you.set ?? [];
   const useSuggested = () => {
-    const i = nextLegal(suggested.map((d) => d.cards), earlier, pasted?.cards ?? null);
-    if (i === null) {
+    const n = nextFresh(suggested.map((d) => d.cards), earlier, offered, pasted?.cards ?? null);
+    if (n === null) {
       setPasteNote("No Coach Assist deck is left that shares no card with the ones you've played.");
       return;
     }
-    const d = suggested[i];
+    const d = suggested[n.index];
+    setOffered((o) => {
+      const next = new Set(n.fresh ? o : []);
+      next.add(deckKey(d.cards));
+      return next;
+    });
     setPasted({ cards: d.cards, name: d.deckName, art: d.art });
     setPasteNote(null);
   };
@@ -459,13 +477,14 @@ export function CoachDuel() {
     if (!players || !pasted || clash.length || rolling || finished) return;
     const mine = ++seq.current;
     const deck = pasted.cards;
-    setPending({ deck, ans: null });
+    const art = pasted.art ?? positionalArt(deck);
+    setPending({ deck, art, ans: null });
     setShowLast(false);
     setError(null);
     coachToken()
       .then((token) =>
         fetchCoachDuelTurn(players.you, players.ai, [...earlier, deck], path, players.games, players.playAll,
-          round, seen, { days: players.days }, players.kind, token),
+          round, seen, { days: players.days }, undefined, token, faced),
       )
       .then((ans) => {
         if (mine !== seq.current) return;
@@ -481,21 +500,20 @@ export function CoachDuel() {
           return;
         }
         const d = Math.random() * 100;
-        const fav = players.luck === 'fav';
-        const result = fav ? (ans.chance >= 50 ? 'w' : 'l') : roll(ans.chance, d / 100);
+        const { result, rolled } = decide(players.luck, ans.matchup, ans.chance, d / 100);
         const finish = () => {
-          setPlayed((xs) => [...xs, { deck, ans, draw: d, result }]);
+          setPlayed((xs) => [...xs, { deck, art, ans, draw: d, result, rolled }]);
           setPending(null);
           setNeedle(null);
           setPasted(null);
           setShowLast(true);
         };
-        setPending({ deck, ans });
+        setPending({ deck, art, ans, result, rolled });
         if (reducedMotion()) {
           finish();
           return;
         }
-        if (fav) {
+        if (!rolled) {
           timer.current = window.setTimeout(finish, 700);
           return;
         }
@@ -512,6 +530,7 @@ export function CoachDuel() {
 
   const rematch = () => {
     setSeen((s) => addSeen(s, earlier));
+    setFaced((f) => addFaced(f, (lastAns?.ai.set ?? []).map((d) => d.cards)));
     setRound((r) => r + 1);
     resetDuel();
   };
@@ -522,6 +541,8 @@ export function CoachDuel() {
     setError(null);
     setRound(0);
     setSeen([]);
+    setFaced([]);
+    setOffered(new Set());
     resetDuel();
   };
 
@@ -566,7 +587,11 @@ export function CoachDuel() {
   }
   const beat = `${path}|${rolling}|${!!pending?.ans}|${loading}|${!!prep}|${showLast}|${round}`;
 
-  const shownGame = rolling ? pending : lastPlayed && showLast ? { deck: lastPlayed.deck, ans: lastPlayed.ans } : null;
+  const shownGame: Pending | null = rolling
+    ? pending
+    : lastPlayed && showLast
+      ? { deck: lastPlayed.deck, art: lastPlayed.art, ans: lastPlayed.ans, result: lastPlayed.result, rolled: lastPlayed.rolled }
+      : null;
   const switchDeck = lastAns?.switch ? lastAns.ai.set[lastAns.switch.deck] : null;
 
   /* ── layout ── */
@@ -614,7 +639,7 @@ export function CoachDuel() {
               ) : (
                 <span className={styles.roundNo}>
                   {all ? 'Every game played' : 'Ends when someone wins'}
-                  {luckNow === 'fav' ? ' · favourite wins' : ''}
+                  {luckNow === 'mu' ? ` · over ${MU_DECIDES}% wins` : ' · every game rolled'}
                   {round > 0 ? ` · Rematch ${round}` : ''}
                 </span>
               )}
@@ -624,7 +649,7 @@ export function CoachDuel() {
               className={styles.setup}
               onSubmit={(e) => {
                 e.preventDefault();
-                if (ready) loadPrep({ you: youTag!, ai: aiTag!, days, kind, games, playAll, luck });
+                if (ready) loadPrep({ you: youTag!, ai: aiTag!, days, games, playAll, luck });
               }}
             >
               <FormatControls games={games} playAll={playAll} luck={luck} onChange={setFormat} />
@@ -632,13 +657,6 @@ export function CoachDuel() {
                 {DAY_PRESETS.map((d) => (
                   <button key={d} type="button" className={styles.chip} aria-pressed={days === d} onClick={() => setDays(d)}>
                     {d}d
-                  </button>
-                ))}
-              </div>
-              <div className={styles.chipRow} role="group" aria-label="Kind of duel">
-                {KINDS.map((k) => (
-                  <button key={k.id} type="button" className={styles.chip} aria-pressed={kind === k.id} onClick={() => setKind(kind === k.id ? null : k.id)}>
-                    {k.label}
                   </button>
                 ))}
               </div>
@@ -737,13 +755,22 @@ export function CoachDuel() {
             const ans = shownGame.ans;
             const g = rolling ? gameNo : lastPlayed!.ans.game;
             const aiDeck = ans && ans.aiDeck !== null ? ans.ai.set[ans.aiDeck] : null;
-            const youDeck: DrawDeck = ans ? ans.you.deck : { cards: shownGame.deck, deckName: pasted?.name };
+            /* YOUR DECK IS DRAWN AS YOU BROUGHT IT (reported 2026-10-21: evolutions
+               and heroes drawn wrong after Lock in). The server re-seats a deck
+               by what each card CAN be; a pasted link already says which form
+               sits in which slot. */
+            const youDeck: DrawDeck = {
+              cards: shownGame.deck,
+              art: shownGame.art ?? positionalArt(shownGame.deck),
+              deckName: ans?.you.deck.deckName ?? pasted?.name,
+            };
+            const shownRolled = shownGame.rolled !== false;
             const exp = ans?.expected[0];
             /* AN UPSET IS A RESULT AGAINST THE CHANCE (reported: "why does it say
                AI wins when I have more matchup?"). The game is DRAWN from its
                chance, so a 53% favourite loses 47 times in 100 — said where it
                happens, not left to look like a bug. */
-            const upset = !rolling && lastPlayed && ans ? (lastPlayed.result === 'w') !== (ans.chance >= 50) : false;
+            const upset = !rolling && lastPlayed && ans ? lastPlayed.rolled && (lastPlayed.result === 'w') !== (ans.chance >= 50) : false;
             return (
               <div className={styles.faceoff} data-result={!rolling && lastPlayed ? lastPlayed.result : undefined}>
                 <h2 className={styles.gameTitle}>
@@ -759,13 +786,17 @@ export function CoachDuel() {
                   <>
                     <ChanceBar
                       you={ans.chance}
-                      needle={luckNow === 'fav' ? null : rolling ? needle : lastPlayed!.draw}
+                      needle={!shownRolled ? null : rolling ? needle : lastPlayed!.draw}
                       rolling={rolling}
                     />
                     <p className={styles.howLine}>
-                      {luckNow === 'fav'
-                        ? 'Favourite always wins: the side with the higher chance takes the game.'
-                        : upset
+                      {!shownRolled
+                        ? shownGame.result === 'w'
+                          ? `Your matchup is over ${MU_DECIDES}%: you win the game outright.`
+                          : `Their matchup is over ${MU_DECIDES}%: the AI wins the game outright.`
+                        : luckNow === 'mu' && !upset
+                          ? `A close matchup (${100 - MU_DECIDES}–${MU_DECIDES}%) is decided by the needle — inside your blue, you win.`
+                          : upset
                           ? `The needle lands at random: at ${pctLabel(Math.max(ans.chance, 100 - ans.chance))} the favourite still loses ${pctLabel(Math.min(ans.chance, 100 - ans.chance))} of the time.`
                           : 'The needle lands at random — inside your blue, you win.'}
                     </p>

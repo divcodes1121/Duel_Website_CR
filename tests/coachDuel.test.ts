@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addFaced,
   addSeen,
+  decide,
+  deckKey,
+  MU_DECIDES,
+  nextFresh,
   clashWith,
   findDeckLinks,
   isDecided,
@@ -95,6 +100,51 @@ describe('what a rematch tells the AI', () => {
     const many = addSeen([], 'abcdefghij'.split('').map(deck));
     expect(many).toHaveLength(8);
     expect(many[0][0]).toBe('j0');
+  });
+});
+
+describe('the decks offered and faced across a session', () => {
+  it('offers every legal deck once before any comes back', () => {
+    const decks = [deck('a'), deck('b'), deck('c')];
+    const offered = new Set<string>();
+    const order: number[] = [];
+    let cur: string[] | null = null;
+    for (let k = 0; k < 3; k += 1) {
+      const n = nextFresh(decks, [], offered, cur)!;
+      expect(n.fresh).toBe(true);
+      order.push(n.index);
+      offered.add(deckKey(decks[n.index]));
+      cur = decks[n.index];
+    }
+    expect(new Set(order).size).toBe(3);
+    const again = nextFresh(decks, [], offered, cur)!;
+    expect(again.fresh).toBe(false);
+    expect(again.index).not.toBe(order[2]);
+  });
+  it('a rematch starts on a deck not offered before', () => {
+    const decks = [deck('a'), deck('b'), deck('c'), deck('d')];
+    const offered = new Set([deckKey(deck('a')), deckKey(deck('b'))]);
+    expect(nextFresh(decks, [], offered, null)).toEqual({ index: 2, fresh: true });
+  });
+  it('never offers a deck clashing with a card already played', () => {
+    const decks = [deck('a'), deck('b')];
+    expect(nextFresh(decks, [deck('a')], new Set(), null)).toEqual({ index: 1, fresh: true });
+    expect(nextFresh([deck('a')], [deck('a')], new Set(), null)).toBeNull();
+  });
+  it('remembers the AI decks faced, newest first, each once', () => {
+    const f = addFaced(addFaced([], [deck('a'), deck('b')]), [deck('b'), deck('c')]);
+    expect(f.map((d) => d[0])).toEqual(['b0', 'c0', 'a0']);
+  });
+});
+
+describe('a game won on the matchup', () => {
+  it('over 55% wins outright, under 45% loses, close is rolled', () => {
+    expect(MU_DECIDES).toBe(55);
+    expect(decide('mu', 55.1, 40, 0.99)).toEqual({ result: 'w', rolled: false });
+    expect(decide('mu', 44.9, 60, 0.01)).toEqual({ result: 'l', rolled: false });
+    expect(decide('mu', 55, 55, 0.2)).toEqual({ result: 'w', rolled: true });
+    expect(decide('mu', 52, 52, 0.9)).toEqual({ result: 'l', rolled: true });
+    expect(decide('roll', 70, 70, 0.95)).toEqual({ result: 'l', rolled: true });
   });
 });
 

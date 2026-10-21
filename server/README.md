@@ -1950,6 +1950,13 @@ You coach Blue against the AI coach of the other player. **Admin only**: any
   format, the others enter at `UNSENSIBLE_WEIGHT` and the set with the
   fewest of them wins (`aiSet.fallback`, `aiSet.unsensible`). A switch must
   pass it too. Its read of you = `blend_read` (`SEEN_WEIGHT` to `s1..s8`).
+  `x1..x30` = the AI decks faced in earlier duels of the session: none comes
+  back while fresh ones fill the format (`REPEAT_NEAR` 7 shared cards = the
+  same deck; else fewest repeats, `REPEAT_WEIGHT`). The candidates are one
+  pool per player (`_pool`): own duel rotation, Coach Assist's answer and
+  counters, and real duel lists on their three main win conditions
+  (`STYLE_*`), each seated (`_seat`) and sense-checked. `sim=prep` returns
+  `you.pool` (up to `YOU_POOL` 40, ranked against the AI player's read).
   **The AI's pick for game N is made from your decks of games 1..N-1 and the
   results only (`ai_picks`)**; game N's deck enters only the referee. A decided
   duel played on (`all=1`) has the policy fall back to the best deck for that

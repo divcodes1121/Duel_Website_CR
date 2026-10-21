@@ -1039,7 +1039,8 @@ class Handler(BaseHTTPRequestHandler):
                 # the AI coach of `opp`. `y1`..`y5` are your decks of every game
                 # so far, this game's last; `res` who won the earlier ones (from
                 # your side); `bo` 3 or 5; `r` the rematch number; `s1`..`s8`
-                # the decks you showed in earlier duels. The AI's pick is made
+                # the decks you showed in earlier duels; `x1`..`x30` the AI's
+                # decks faced in earlier duels (a rematch brings new ones). The AI's pick is made
                 # without this game's deck (`coach_duel.turn`). `sim=prep` reads
                 # both players once before the first game.
                 sim = (q.get("sim") or [""])[0].strip().lower()
@@ -1065,7 +1066,8 @@ class Handler(BaseHTTPRequestHandler):
                             _duel_kind(q), round_=min(int(raw_r), 999) if raw_r.isdigit() else 0,
                             seen=_decks(q, tuple("s%d" % i for i in range(1, 9))),
                             games=int(raw_bo) if raw_bo in ("3", "5") else 3,
-                            play_all=(q.get("all") or [""])[0] in ("1", "true", "yes"))
+                            play_all=(q.get("all") or [""])[0] in ("1", "true", "yes"),
+                            faced=_decks(q, tuple("x%d" % i for i in range(1, 31))))
                     else:
                         out = coach_duel.simulate(me, opp, *windows, _duel_kind(q))
                     return self._send({**out, "sources": _sources()})

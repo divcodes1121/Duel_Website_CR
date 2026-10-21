@@ -2311,6 +2311,10 @@ Neue for every game word, Clash-gold buttons with dark ink.
   face-down card is a 5rem strip.
 - **Upset!** beside the result when it went against the chance, and one line
   under the bar saying how the needle decides.
+- **The default rule is the matchup**: over 55% wins with no needle drawn; a
+  close one is rolled. No Clan war / Friendly chips.
+- Your deck is drawn in the slot order you brought it (a link's order), the
+  same before and after Lock in.
 - **The arena compacts during the battle** so the Kings stay on screen.
 - **The middle has a dark pool behind it** so the seam fades behind the labels.
 - Nothing loops; reduced motion keeps every state, no movement.

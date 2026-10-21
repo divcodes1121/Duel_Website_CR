@@ -2435,6 +2435,45 @@ scroll down to log out"*.
   window, so Log out was off the bottom with no way to reach it. It is now
   bounded by the window (`max-height` from where it opens) and scrolls inside.
 
+### No repeats on a rematch, a 55% matchup wins, forms as brought (2026-10-21, fourth round)
+
+Reported: *"the Coach Assist deck repeats when we go for a rematch — neither
+side should, there are countless duel decks that match the player's
+playstyle"*, *"heroes and evos are not rendered properly after Lock in and the
+next battle"*, *"the blue side Coach Assist picks are always the same"*,
+*"remove clan war and the other type option"*, then *"for winning the MU %
+should be > 55%, not 60%"*.
+
+- **One pool of decks per player** (`_pool`): their own duel rotation (weighted
+  by how often they play each), Coach Assist's answer and its counters, and
+  **real duel lists on their three main win conditions** (12 each, 10+ games,
+  3+ pilots, no pilot over half — `STYLE_*`). Lists within one card of a deck
+  already in are the same deck. Every deck is seated (`_seat`) and checked for
+  sense.
+- **The AI never brings a deck it brought before in the session** (the screen
+  sends them as `x1..x30`; a one-card switch of one counts as the same deck).
+  When fresh decks cannot fill the format, the set with the fewest repeats is
+  chosen (`REPEAT_WEIGHT`), and its card switch must not recreate one either.
+  Staged on 4 real CRL pairs, six duels each: no repeat in the first 4–6 duels;
+  after that, as few as the player's pool allows.
+- **Your Coach Assist deck cycles a ranked pool** (`you.pool` on `sim=prep`,
+  up to 40, best first against the AI player as your coach reads them, Coach
+  Assist's own set leading). The button never offers a deck twice in the
+  session until it has offered them all, rematches included (`nextFresh`).
+- **Your deck is drawn as you brought it.** A pasted link is in slot order
+  (slot 1 the evolution, 2 the hero), so it is drawn that way, before and after
+  Lock in; the server used to re-seat it by what each card *can* be. AI decks
+  without observed forms are seated with all three special slots.
+- **A game is decided by the matchup by default**: over **55%** wins outright,
+  under 45% loses, and a close one (45–55%) is rolled on the needle. "Roll
+  every game" is the other choice. The line under the bar says which happened.
+- **The Clan war / Friendly choice is gone.**
+
+Browser 41/41 on the staged API (both themes, 1440 and 390): no AI deck back
+on a rematch, no Coach Assist deck offered twice (by cards), your deck's forms
+identical before and after Lock in in every game, the 55% rule held on every
+game. `testing/ki-*.png`.
+
 ### The AI coach
 
 **Coach Assist for its player** (`coach.suggest`, stage 0): its read of your
@@ -2520,7 +2559,7 @@ about 8 points high for the suggested deck where it could be checked
 
 ### Tests
 
-`server/test_coach_duel.py` 91 — the AI's picks game by game (**each pick sees
+`server/test_coach_duel.py` 96 — the AI's picks game by game (**each pick sees
 only your earlier decks**), the turn against a stand-in Coach Assist (a repeated
 card refused, results must cover the earlier games, no game after the decision
 unless every game is played, the same AI pick whatever deck you lock in, a best
