@@ -74,13 +74,33 @@ end, at the level of individual functions and constants.
 >   three or four of the player's own duel decks that share no card, chosen by
 >   the same look-ahead; section 8's ranking still produces the list whenever
 >   their own decks do not make a set. README "The set to load before a duel".
+> * **`server/card_matchup.py` + `card_matchup_train.py`** (2026-10-11) — a
+>   card-vs-card model added beside the fused rate (refitted daily, off the
+>   request path) for Deck Counter and Team Analysis, and since 2026-10-12
+>   every Coach Assist rate. README "Counters read the cards".
+> * **`server/team_scout.py` 4.x-5.x** (2026-10-10 to 10-14) — counters to what
+>   a player is likely to bring (a wide, duel-weighted read), ten decks
+>   specific to the opponent, the CRL group's duel lists, one deck per win
+>   condition and a list per teammate. `DECKKIES_TEAM_SCOUT.md` §4j-4o.
+> * **Coach Assist's counters, `player_skill.py`, `coach_style.py`**
+>   (2026-10-12) — counters to the opponent's likely next deck at every
+>   stage; each player's record with each win condition against expectation
+>   in every figure; the field board built the way each player builds.
+> * **`server/coach_duel.py` + `server/duel_archetypes.py`** (2026-10-20/21,
+>   admin only) — Coach Duel: you against an AI coach that is Coach Assist
+>   for the other player, one game at a time. Its decks on both sides are
+>   drawn from every stored duel deck grouped by archetype (CRL lists first,
+>   each with its record against every opponent archetype over its pilots'
+>   expected wins). README "Coach Duel — you against an AI coach".
 >
 > **"None of them trains or calls a model" stopped being true on 2026-09-30.**
 > The duel brain's shrinkage and the fused rate's five weights are still
 > constants fitted once against held-out games. The duel win model is not: it
 > is refitted on every poll's new duel games, off the request path, and its
 > own held-out figures are stored in the artifact. Team Analysis and the
-> field plan still call no model. Every Team Analysis recommendation is still scored by
+> field plan still call no model. (Corrected 2026-10-21: since 2026-10-11 Team
+> Analysis and Deck Counter read the card-vs-card model, `card_matchup.py`;
+> the field plan still calls none.) Every Team Analysis recommendation is still scored by
 > `team_scout.score()`, which takes the threat space as an injected parameter
 > (and, since 2026-09-27, an optional per-threat rate — the fused one); the
 > duel brain's picks are scored the same way and placed in the list around that
@@ -1257,7 +1277,7 @@ Other constraints:
 * The Python API **does not ship with the frontend.** Vercel builds from GitHub;
   `server/` runs on the VPS at `/opt/royalweb/`. A new screen needs both, and the
   API must land **first** or the area appears and every request 404s.
-* `server/test_api_security.py` pins the route count at **21**. A new endpoint
+* `server/test_api_security.py` pins the route count at **21** (29 as of 2026-10-21). A new endpoint
   means bumping it in the same commit, plus the matching auth line.
 * `tests/entitlement.test.ts` pins exactly which sections are free.
 * Coach Assist is Pro-only and `/api/analytics` needs the VPS key, so **it cannot

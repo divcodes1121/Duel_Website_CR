@@ -291,12 +291,12 @@ the browser only ever talks to its own origin.
 
 ```bash
 npx tsc -b                        # typecheck
-npm run test                      # 1,662 tests in 69 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
-python server/test_team_analysis.py # 205 checks over both tabs of the squad board, incl. the fused rate's wiring and the counters wiring
-python server/test_counters.py    # 69 checks: counters to what they play — the projection, the selection, the card manual, one arithmetic three ways
-python server/test_team_scout.py  # 160 checks over the coaching brain: projection, scoring, squad plan
+npm run test                      # 1,798 tests in 78 files: deck, duel, export, report engine, admin, nav, pager, shader, coach and dashboard logic
+python server/test_team_analysis.py # 345 checks over both tabs of the squad board, incl. the fused rate's wiring and the counters wiring
+python server/test_counters.py    # 116 checks: counters to what they play — the projection, the selection, the card manual, one arithmetic three ways
+python server/test_team_scout.py  # 214 checks over the coaching brain: projection, scoring, squad plan
 python server/test_matchup_fusion.py # 34 checks over the fused ladder+duel rate, against literals
-python server/test_duel_index.py  # 71 checks over the duel index, its version cells and its readers, on synthetic data
+python server/test_duel_index.py  # 97 checks over the duel index, its version cells and its readers, on synthetic data
 python server/test_duel_read.py   # 103 checks over the duel read: legal candidates, order, recency, what is left by role, the cohort line, which fit reads whom
 python server/test_duel_plan.py   # 54 checks over the look-ahead for the whole duel, every figure worked by hand
 python server/test_duel_set.py    # 49 checks over the set composer: no shared card, the largest set, pinned decks, swaps, the cap on sets valued
@@ -304,12 +304,12 @@ python server/test_coach_duel.py  # 109 checks over Coach Duel: the AI picks wit
 python server/test_duel_archetypes.py # 15 checks over every duel deck grouped by archetype: CRL first, counter score, the seeded draw
 python server/test_duel_brain.py  # 83 checks over the duel brain's figures and picks
 python server/test_suggested_seating.py # 49 checks: a suggested deck fields every slot its cards can fill
-python server/test_coach_daily.py # 204 checks over the plan against the field
+python server/test_coach_daily.py # 215 checks over the plan against the field
 python server/test_player_skill.py # 40 checks over each player's skill with a win condition: the table, its holdout gate, the reader
 python server/test_coach.py       # 307 checks over the Coach Assist rules, incl. its duel wiring, the duel read's (and which fit reads whom), the duel plan's, the set's, the gate on built decks and the counters
 python server/test_coach_choice.py # 79 checks: decks around the cards a reader names — which lists are rated, the order, the sections
 python server/test_deck_architect.py # 51 checks: building around a card from how duel players build (shells, core, open slots)
-python server/test_deck_tuner.py  # 152 checks over the swap brain, incl. the three-slot rule and the player-first lists
+python server/test_deck_tuner.py  # 153 checks over the swap brain, incl. the three-slot rule and the player-first lists
 python server/test_deck_builder.py # 28 checks: human swaps out from a real deck, and the series arithmetic
 python server/test_duel_model.py  # 46 checks over the duel win model and the combined brain's arithmetic
 python server/test_deck_synergy.py # 22 checks over the duel-pairing gate
@@ -331,12 +331,30 @@ python server/test_recruit.py     # 39 checks over the tag recruiter
 python server/test_battle_modes.py # 166 checks over which game modes go where
 python server/test_duo_pairs.py   # 468 checks over the 2v2 partnership collection
 python server/test_recent_battles.py # 40 checks over the battle log and its mode router
-python server/test_player_decks.py # 54 checks over the Decks list: one row a deck, duel games counted once, both records, the lean reader
+python server/test_player_decks.py # 55 checks over the Decks list: one row a deck, duel games counted once, both records, the lean reader
 python server/test_duel_feed.py   # 94 checks over All Duels: friendly three-game duels only, newest first, the card filter, the fielded forms, paging
-python server/test_player_trends.py # 10 checks: the daily series carries games per day
-python server/test_api_security.py # 102 checks over auth, CORS, the rate limit, the admin gates and the route count (28)
+python server/test_player_trends.py # 14 checks: the daily series carries games per day
+python server/test_api_security.py # 112 checks over auth, CORS, the rate limit, the admin gates (Coach Duel's too) and the route count (29)
 python server/test_data_lifecycle.py # 42 checks (46 on the VPS, with dbstream) over retention, the ledger and backups
 python server/test_ladder_raw_purge.py # 15 checks: only old ladder raw goes; duel, NULL-mode and 2v2 never
+python server/test_duo_retention.py # 76 checks: the 2v2 collection keeps the top pairs per win condition
+python server/test_duo_raw_purge.py # 35 checks: 2v2 raw goes only behind the fold's cursor
+python server/test_tracking.py    # 30 checks over the tag queue, its prune and the tracking history
+python server/test_enrol_routes.py # 34 checks: every tag route queues the tag it was asked about
+python server/test_admin_auth.py  # 24 checks over the admin gate asked of Supabase
+python server/test_api_watchdog.py # 20 checks over the watchdog that restarts a hung API
+python server/test_schema_retry.py # 9 checks: a failed schema read is retried, not cached
+python server/test_ops_snapshot.py # 36 checks over the console's database snapshot
+python server/test_meta_history.py # 29 checks over the daily meta history and its movement
+python server/test_cluster_index.py # 64 checks over the precomputed deck x archetype records (and the query plan)
+python server/test_card_matchup.py # 34 checks over the card-vs-card model's reader
+python server/test_card_matchup_train.py # 36 checks with CLASH_ML_PKGS set (numpy + scipy); 0 without
+python server/test_card_balance.py # 54 checks over the balance log's drag on a rate
+python server/test_deck_harmony.py # 76 checks over the card roles a deck is checked against
+python server/test_coach_intel.py # 24 checks over a roster player's own-deck 1v1 figures
+python server/test_name_index.py  # 52 checks over the name search index
+python server/test_oie_ui.py      # 23 checks over what the opponent read may show
+python server/test_shadow_durability.py # 24 checks over the shadow log
 python server/test_ml_22_final.py # 67 checks over the FROZEN production contract
 python server/test_ml_20d.py      # 27 checks that `practice` excludes real duels
 python server/test_ml_21a.py      # 32 checks over the spell feasibility harness (1 known failure)
@@ -345,9 +363,11 @@ npm run build                     # what Vercel would run
 npm run update:cards              # refresh src/data/cards.json from RoyaleAPI
 ```
 
-That is 43 of the **77** Python suites; all of them total **4,494** checks
-(counted by a full run on 2026-10-10), and the only failure is `test_ml_21a`'s `123 != 122` (the card count moved when
-Minion Giant shipped; accepted). A script totalling them has to read BOTH
+That is 66 of the **88** Python suites (the other 22 are `test_ml_*` research
+suites); all of them total **5,353** checks (counted by a full run
+on 2026-10-21), and the only failure is `test_ml_21a`'s `123 != 122` (the card
+count moved when Minion Giant shipped; accepted). `test_api_security` can fail
+one case under load and passes alone. A script totalling them has to read BOTH
 result lines — the homegrown `check()` suites print `N passed, M failed`, the
 `test_ml_*` ones and `test_api_security` print `Ran N tests` — or it scores
 half the suite as zero.

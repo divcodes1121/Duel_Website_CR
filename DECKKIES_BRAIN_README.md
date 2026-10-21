@@ -4458,7 +4458,7 @@ afternoon; the cost of not finding out would have been a persisted store.
 | `server/battle_modes.py` | mode routing; the 2v2 allowlist |
 | `server/duo_pairs.py` | **the storage pattern to copy** |
 | `server/tracking.py`, `recruit.py` | tag enrolment |
-| `server/app.py` | the HTTP service; 22 routes; auth, CORS, rate limit |
+| `server/app.py` | the HTTP service; 22 routes then (29 as of 2026-10-21); auth, CORS, rate limit |
 | `api/analytics/opponent-read/[tag].ts` | the Vercel same-origin proxy |
 | `src/state/analyticsClient.ts` | `OpponentRead` type, `fetchOpponentRead` |
 | `src/components/Analytics/CoachAssist.tsx` | the UI, `OpponentReadPanel` |
