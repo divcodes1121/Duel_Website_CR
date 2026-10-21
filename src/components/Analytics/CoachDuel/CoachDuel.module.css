@@ -525,16 +525,92 @@
 }
 
 /* ── panels (theme-following) ─────────────────────────────────────────── */
+/* THE ARENA FLOOR (2026-10-21, asked: "the background is grey and very
+   plain"). The game is played on a floor that belongs to the arena above it:
+   Blue's light from the left, Red's from the right, a faint diamond court
+   like the game's tiles, gold rising from the middle where the result lands,
+   and the arena's blue-gold-red edge across the top. Light mode keeps the
+   same layout on a pale stone floor. Static: nothing here moves. */
 .panel {
+  --floor-base: linear-gradient(180deg, #121730 0%, #0b0e1d 55%, #090b16 100%);
+  --floor-blue: rgba(59, 130, 246, 0.22);
+  --floor-red: rgba(239, 68, 68, 0.2);
+  --floor-gold: rgba(255, 207, 63, 0.1);
+  --floor-tile: rgba(255, 255, 255, 0.035);
+  --floor-edge: rgba(255, 255, 255, 0.08);
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
-  padding: 1.1rem 1.2rem 1.2rem;
-  border-radius: 20px;
-  border: 1px solid var(--glass-stroke);
-  background: var(--glass-fill);
-  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-sheen);
+  padding: 1.3rem 1.2rem 1.4rem;
+  border-radius: 22px;
+  border: 1px solid var(--floor-edge);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 55% 70% at 0% 40%, var(--floor-blue), transparent 70%),
+    radial-gradient(ellipse 55% 70% at 100% 40%, var(--floor-red), transparent 70%),
+    radial-gradient(ellipse 45% 35% at 50% 100%, var(--floor-gold), transparent 75%),
+    repeating-linear-gradient(45deg, var(--floor-tile) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(-45deg, var(--floor-tile) 0 1px, transparent 1px 34px),
+    var(--floor-base);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32), inset 0 0 80px rgba(0, 0, 0, 0.35);
   animation: rise 360ms ease both;
+}
+/* The arena's edge, carried down: blue, gold, red. */
+.panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--blue) 0%, var(--gold) 50%, var(--red) 100%);
+  opacity: 0.9;
+  z-index: -1;
+}
+/* LIGHT: the same floor in daylight (reported "in light it's bland"): the
+   arena's diagonal blue / red split, stronger team light, a visible court
+   and a warm gold centre, on a pale ground that is not plain grey. */
+:global([data-theme='light']) .panel {
+  --floor-base: linear-gradient(180deg, #f3f6ff 0%, #f7f4fb 50%, #fff6f1 100%);
+  --floor-blue: rgba(37, 99, 235, 0.3);
+  --floor-red: rgba(220, 38, 38, 0.26);
+  --floor-gold: rgba(245, 158, 11, 0.26);
+  --floor-tile: rgba(30, 41, 79, 0.085);
+  --floor-edge: rgba(30, 41, 79, 0.14);
+  background:
+    linear-gradient(112deg, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0.04) 40%, transparent 49.5%,
+      transparent 50.5%, rgba(220, 38, 38, 0.04) 60%, rgba(220, 38, 38, 0.11) 100%),
+    radial-gradient(ellipse 50% 65% at 0% 35%, var(--floor-blue), transparent 70%),
+    radial-gradient(ellipse 50% 65% at 100% 35%, var(--floor-red), transparent 70%),
+    radial-gradient(ellipse 45% 40% at 50% 100%, var(--floor-gold), transparent 75%),
+    repeating-linear-gradient(45deg, var(--floor-tile) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(-45deg, var(--floor-tile) 0 1px, transparent 1px 34px),
+    var(--floor-base);
+  box-shadow: 0 18px 44px rgba(30, 41, 79, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+:global([data-theme='light']) .panel::before {
+  height: 4px;
+}
+/* The VS between the decks, deep enough to read on a pale floor. */
+:global([data-theme='light']) .panel .vs {
+  background: linear-gradient(100deg, #1d4ed8, #d97706 50%, #dc2626);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+/* Cards stand on the floor, not in it. */
+:global([data-theme='light']) .panel .tile,
+:global([data-theme='light']) .panel .trackGame:not([data-result]),
+:global([data-theme='light']) .panel .drop {
+  background-color: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 6px 18px rgba(30, 41, 79, 0.1);
+}
+:global([data-theme='light']) .panel .trackGame[data-result] {
+  box-shadow: 0 6px 18px rgba(30, 41, 79, 0.1);
+}
+:global([data-theme='dark']) .panel {
+  --text: #f6f7f8;
+  --border: rgba(255, 255, 255, 0.12);
+  --bg-2: rgba(10, 13, 28, 0.82);
 }
 @keyframes rise {
   from {
