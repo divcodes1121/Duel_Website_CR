@@ -794,11 +794,18 @@ export function CoachDuel() {
                         ? shownGame.result === 'w'
                           ? `Your matchup is over ${MU_DECIDES}%: you win the game outright.`
                           : `Their matchup is over ${MU_DECIDES}%: the AI wins the game outright.`
-                        : luckNow === 'mu' && !upset
-                          ? `A close matchup (${100 - MU_DECIDES}–${MU_DECIDES}%) is decided by the needle — inside your blue, you win.`
-                          : upset
-                          ? `The needle lands at random: at ${pctLabel(Math.max(ans.chance, 100 - ans.chance))} the favourite still loses ${pctLabel(Math.min(ans.chance, 100 - ans.chance))} of the time.`
-                          : 'The needle lands at random — inside your blue, you win.'}
+                        : /* WHY THIS GAME WENT THE WAY IT DID, in its own figures (reported
+                             2026-10-21: "could not understand why I lost" at 59.5% —
+                             a 51.4% matchup is close, so the needle decided). */
+                          rolling || !lastPlayed
+                          ? luckNow === 'mu'
+                            ? `Matchup ${pctLabel(ans.matchup)} is close (${100 - MU_DECIDES}–${MU_DECIDES}%), so the needle decides: inside your blue, you win.`
+                            : 'The needle decides: inside your blue, you win.'
+                          : `${luckNow === 'mu'
+                              ? `Matchup ${pctLabel(ans.matchup)} is close (${100 - MU_DECIDES}–${MU_DECIDES}%), so the needle decided. `
+                              : ''}It landed at ${Math.round(lastPlayed.draw)} — ${lastPlayed.result === 'w'
+                              ? `inside your ${pctLabel(ans.chance)}, you win.`
+                              : `past your ${pctLabel(ans.chance)}, so the AI wins${upset ? ` (at ${pctLabel(ans.chance)} you still lose ${pctLabel(100 - ans.chance)} of such games)` : ''}.`}`}
                     </p>
                     <p className={styles.matchLine}>
                       Matchup {pctLabel(ans.matchup)}
