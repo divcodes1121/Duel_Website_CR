@@ -462,6 +462,15 @@ STYLE_MIN_PLAYERS = 3
 #: Their weight in the AI's draw, as a share of the player's median own deck.
 STYLE_WEIGHT = 0.35
 
+#: FROM THE ARCHETYPE GROUPS (`duel_archetypes`, 2026-10-21): the player's own
+#: families (where their duel decks are) and the families that beat the other
+#: player's archetypes, CRL lists first. A CRL list weighs more in the draw.
+ARCH_OWN_FAMILIES = 4
+ARCH_PER_OWN = 8
+ARCH_COUNTER_FAMILIES = 4
+ARCH_PER_COUNTER = 5
+CRL_WEIGHT = 0.6
+
 #: Two decks sharing this many cards are ONE deck for "brought before": a
 #: one-card switch of a deck already faced is not a new deck.
 REPEAT_NEAR = 7
@@ -713,6 +722,70 @@ def _style_lists(s: dict) -> list[dict]:
     return out
 
 
+def _family_key(cards) -> str:
+    """A deck's family (`duel_archetypes.family_of`), "?" when unknown."""
+    try:
+        import duel_archetypes as da
+        import duel_index as di
+        import clash_data as cd
+        return da.family_of(di.classify(di.deck_key(cards)), list(cards), lambda c: cd.deck_title("other", c))
+    except Exception:  # noqa: BLE001
+        return "?"
+
+
+def _archetype_lists(s: dict, own_rows: list) -> list[dict] | None:
+    """Lists from EVERY duel deck grouped by archetype (`duel_archetypes`):
+    up to `ARCH_PER_OWN` from each of the player's own families (where their
+    duel decks are, most played first) and `ARCH_PER_COUNTER` from each of the
+    `ARCH_COUNTER_FAMILIES` families whose lists beat the other player's
+    archetype mix (as this coach reads them) beyond their pilots — CRL lists
+    first, a seeded draw among the close ones so two players (and two pairs)
+    do not see the same lists. Asked 2026-10-21: "two different players get
+    the same decks ... we literally have so many decks under each archetype".
+    None without the groups file (the caller falls back)."""
+    try:
+        import duel_archetypes as da
+        import duel_index as di
+        import clash_data as cd
+    except Exception:  # noqa: BLE001
+        return None
+    fams = da.families()
+    if not fams:
+        return None
+
+    def fam(cards) -> str:
+        k = di.deck_key(cards)
+        return da.family_of(di.classify(k), list(cards), lambda c: cd.deck_title("other", c))
+
+    weight: dict = {}
+    for r in own_rows:
+        try:
+            f = fam(r["cards"])
+        except Exception:  # noqa: BLE001
+            continue
+        weight[f] = weight.get(f, 0) + int(r.get("count") or 1)
+    own = [f for f, _n in sorted(weight.items(), key=lambda x: (-x[1], x[0]))][:ARCH_OWN_FAMILIES]
+    mix: dict = {}
+    if s.get("read") is not None:
+        try:
+            for c, p in (s["read"]((), None) or [])[:12]:
+                a = di.classify(di.deck_key(c))
+                mix[a] = mix.get(a, 0.0) + float(p)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+    picks = da.pick(fams, own, mix, _rng(s["tag"], s.get("opp"), "archetypes"),
+                    per_own=ARCH_PER_OWN, counter_families=ARCH_COUNTER_FAMILIES, per_counter=ARCH_PER_COUNTER,
+                    exclude={_key(r["cards"]) for r in own_rows})
+    out = []
+    for e in picks:
+        try:
+            row = _deck_row(list(e["cards"]))
+        except Exception:  # noqa: BLE001
+            continue
+        out.append(row | {"origin": e["tier"], "games": e["games"], "family": e["family"]})
+    return out
+
+
 def _pool(s: dict) -> list[dict]:
     """Every deck a coach may load for its player, kept on the side (it is
     read once): `[{"cards", "row", "weight", "counter", "sensible"}]`.
@@ -730,15 +803,23 @@ def _pool(s: dict) -> list[dict]:
     counts = sorted(int(r.get("count") or 1) for r in own) or [1]
     median = float(counts[len(counts) // 2])
     counters = list(((s["answer"].get("counters") or {}).get("decks")) or [])
+    arch = _archetype_lists(s, own)
+    if arch is None:
+        arch = _style_lists(s)
     entries: list[dict] = []
-    for rows, weight, counter in ((own, None, False), (counters, COUNTER_WEIGHT * median, True),
-                                  (s["decks"], median, False), (_style_lists(s), STYLE_WEIGHT * median, False)):
+    for rows, weight, counter, source in ((own, None, False, "own"), (counters, COUNTER_WEIGHT * median, True, "counter"),
+                                          (s["decks"], median, False, "set"), (arch, STYLE_WEIGHT * median, False, "archetype")):
         for r in rows:
+            if rows is arch and r.get("origin") == "crl":
+                weight = CRL_WEIGHT * median
+            elif rows is arch:
+                weight = STYLE_WEIGHT * median
             cards = set(r.get("cards") or [])
             if len(cards) != 8 or any(len(cards & set(e["cards"])) >= REPEAT_NEAR for e in entries):
                 continue
             row = _seat(dict(r))
             entries.append({"cards": list(row["cards"]), "row": row, "counter": bool(counter or r.get("counter")),
+                            "source": source, "family": _family_key(row["cards"]),
                             "weight": float(r.get("count") or 1) if weight is None else weight,
                             "sensible": _sensible(row["cards"])})
     s["_pool"] = entries
@@ -779,8 +860,27 @@ def _you_pool(y: dict) -> list[dict]:
     lead = [_key(d["cards"]) for d in y["decks"]]
     scored = [(e, value(e["cards"])) for e in good]
     first = sorted((x for x in scored if _key(x[0]["cards"]) in lead), key=lambda x: lead.index(_key(x[0]["cards"])))
-    rest = sorted((x for x in scored if _key(x[0]["cards"]) not in lead),
-                  key=lambda x: (-(x[1] if x[1] is not None else -1.0), _key(x[0]["cards"])))
+    # THE REST TAKE TURNS BY FAMILY (2026-10-21): ranked by the figure alone,
+    # every player facing one opponent got that opponent's few counters on
+    # top (measured: two players' pools 24% shared). The player's own
+    # families go first (by how much they play them), then the others by
+    # their best deck; each turn takes the best remaining deck of a family.
+    by_fam: dict = {}
+    for x in scored:
+        if _key(x[0]["cards"]) not in lead:
+            by_fam.setdefault(x[0].get("family") or "?", []).append(x)
+    for xs in by_fam.values():
+        xs.sort(key=lambda x: (-(x[1] if x[1] is not None else -1.0), _key(x[0]["cards"])))
+    own_w: dict = {}
+    for e in entries:
+        if e.get("source") == "own":
+            own_w[e.get("family") or "?"] = own_w.get(e.get("family") or "?", 0.0) + e["weight"]
+    order = sorted(by_fam, key=lambda f: (-own_w.get(f, 0.0), -(by_fam[f][0][1] if by_fam[f][0][1] is not None else -1.0), f))
+    rest = []
+    while any(by_fam.values()):
+        for f in order:
+            if by_fam[f]:
+                rest.append(by_fam[f].pop(0))
     out = []
     for e, v in (first + rest)[:YOU_POOL]:
         row = _brief(e["row"]) | ({"counter": True} if e["counter"] else {})

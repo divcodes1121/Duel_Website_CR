@@ -2114,6 +2114,9 @@ export interface CoachDuelDeck {
   avgElixir?: number | null;
   /** A counter from outside the player's own duel decks. */
   counter?: boolean;
+  /** Where the deck came from: "crl" = a list the CRL group plays in duels
+   *  (from the archetype groups), "duel" = other duel players'. */
+  origin?: string;
   /** This deck carries the AI's one-card switch. */
   switched?: boolean;
   /** This coach's figure for the deck against its read of the other player. */

@@ -2474,6 +2474,45 @@ on a rematch, no Coach Assist deck offered twice (by cards), your deck's forms
 identical before and after Lock in in every game, the 55% rule held on every
 game. `testing/ki-*.png`.
 
+### Every duel deck grouped by archetype, CRL lists first (2026-10-21, fifth round)
+
+Asked: *"two different players get the same type of decks ... we literally have
+so many decks under each archetype of duels, CRL players + normal duels ...
+give priority to CRL-level players' duel decks, then normal decks ... group all
+the decks under those archetypes, rank them, see which one can counter the
+opponent's archetypes well but also be surprising ... make a group so it can be
+stored"*.
+
+- **`server/duel_archetypes.py` stores the groups** (`.duel_archetypes.json`,
+  gitignored, rebuilt after every poll as the "duel archetypes" step, ~1 s,
+  1.6 MB): every duel list fielded in 3+ duel games by 2+ pilots with no
+  pilot over 60% of its games — **6,623 lists in 38 families, 521 of them CRL**
+  (the CRL group played them in 2+ duel games). A family is the archetype;
+  the bot's "other" bucket is split by win condition (Minion Giant, Goblin
+  Giant, …). Each list carries its record against every opponent archetype
+  with the pilots' expected wins, so a list is credited only for beating an
+  archetype beyond what its pilots would have done anyway. `duelArchetypes`
+  on `/api/analytics/status`.
+- **Coach Duel draws both sides' pools from it**: up to 8 lists from each of
+  the player's own families (where their duel decks are) and 5 from each of 4
+  families whose lists beat the other player's archetype mix — **CRL lists
+  first**, then other duel lists, ranked by that counter record. The picks are
+  drawn from a family's best few (and the counter families from the best six),
+  seeded on the two players, so the same pair sees the same lists and another
+  pair does not ("surprising").
+- **Your Coach Assist decks take turns by family** (your own families first,
+  the best of each), so one archetype's counters do not fill the top of the
+  list for everyone facing the same opponent.
+- A deck from the CRL group carries a **CRL list** tag (your offered deck, the
+  AI's deck, the reveal).
+
+Measured, 6 real players against one CRL opponent (top 15 of each pool):
+decks two players share 16% → 14% on average (9% beyond Coach Assist's own
+set); distinct decks 57 → 61 of 90; each pool now holds 10–29 CRL lists. What
+still repeats is mostly real: CRL players running the same lists, and families
+with few CRL lists. Browser 44/44 on the staged API (`testing/ki-*-crl.png`).
+`test_duel_archetypes.py` 15, `test_coach_duel.py` 100.
+
 ### The AI coach
 
 **Coach Assist for its player** (`coach.suggest`, stage 0): its read of your
@@ -2559,7 +2598,7 @@ about 8 points high for the suggested deck where it could be checked
 
 ### Tests
 
-`server/test_coach_duel.py` 96 — the AI's picks game by game (**each pick sees
+`server/test_coach_duel.py` 100 — the AI's picks game by game (**each pick sees
 only your earlier decks**), the turn against a stand-in Coach Assist (a repeated
 card refused, results must cover the earlier games, no game after the decision
 unless every game is played, the same AI pick whatever deck you lock in, a best

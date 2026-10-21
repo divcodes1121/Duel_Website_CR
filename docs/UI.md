@@ -2315,6 +2315,8 @@ Neue for every game word, Clash-gold buttons with dark ink.
   close one is rolled. No Clan war / Friendly chips.
 - Your deck is drawn in the slot order you brought it (a link's order), the
   same before and after Lock in.
+- A deck the CRL group plays carries a **CRL list** tag (the tag Coach
+  Assist uses), beside the remove button on your deck.
 - **The arena compacts during the battle** so the Kings stay on screen.
 - **The middle has a dark pool behind it** so the seam fades behind the labels.
 - Nothing loops; reduced motion keeps every state, no movement.

@@ -295,6 +295,11 @@ try:
     real_dz = sys.modules.get("duel_zone")
     sys.modules["duel_zone"] = fake_dz
     W = ((None, None), (None, None))
+    # These cases are about a stand-in pool: no deck from the server's real
+    # archetype groups (a VPS has them) may join it. The groups have a test
+    # of their own below.
+    real_arch_lists = cdu._archetype_lists
+    cdu._archetype_lists = lambda s, own: []
     try:
         cdu._side_cache.clear()
         check("a best of 4 is not a format", cdu.turn("#AAA", "#BBB", [A1], "", *W, games=4).get("error") == "bad_format")
@@ -407,12 +412,57 @@ try:
         check("no two decks of your pool are one card apart",
               all(len(set(p["cards"]) & set(q["cards"])) < cdu.REPEAT_NEAR
                   for i, p in enumerate(pool) for q in pool[i + 1:]))
+        # THE ARCHETYPE GROUPS (`duel_archetypes`): own family first, CRL lists
+        # first, and two different players do not get the same lists.
+        import duel_archetypes as da
+        groups = {"hog": [dict(cards=deck(f"h{i}"), tier="crl" if i < 3 else "duel", games=20,
+                               crlGames=3 if i < 3 else 0, edge=0.0, vs={}) for i in range(16)],
+                  "golem": [dict(cards=deck(f"g{i}"), tier="duel", games=20, crlGames=0, edge=0.0, vs={})
+                            for i in range(6)]}
+        fake_di = types.ModuleType("duel_index")
+        fake_di.deck_key = lambda cards: ",".join(sorted(set(cards)))
+        fake_di.classify = lambda key: "hog" if key[0] in "xyzef" else "golem"
+        fake_cd = types.ModuleType("clash_data")
+        fake_cd.deck_title = lambda arch, cards: "Thing"
+        saved = {m: sys.modules.get(m) for m in ("duel_index", "clash_data")}
+        real_fams = da.families
+        sys.modules["duel_index"], sys.modules["clash_data"] = fake_di, fake_cd
+        da.families = lambda: groups
+        try:
+            got = {}
+            for me in ("#AAA", "#CCC"):
+                cdu._side_cache.clear()
+                side = cdu._side_cached(me, "#BBB", (None, None), (None, None), None)
+                rows = real_arch_lists(side, real_own(None, set()))
+                got[me] = rows
+            a_rows = got["#AAA"]
+            check("archetype lists come from the player's own family, CRL lists first",
+                  a_rows and all(r["family"] == "hog" for r in a_rows[:cdu.ARCH_PER_OWN])
+                  and [r["origin"] for r in a_rows[:3]] == ["crl"] * 3, str([(r["family"], r["origin"]) for r in a_rows]))
+            check("then families that answer the opponent", any(r["family"] == "golem" for r in a_rows))
+            ka = {_k for r in got["#AAA"] for _k in [",".join(sorted(r["cards"]))]}
+            kc = {_k for r in got["#CCC"] for _k in [",".join(sorted(r["cards"]))]}
+            check("two different players are not handed the same lists", ka != kc, f"{len(ka & kc)} shared")
+            cdu._side_cache.clear()
+            side = cdu._side_cached("#AAA", "#BBB", (None, None), (None, None), None)
+            cdu._archetype_lists = real_arch_lists
+            pool_keys = [e["cards"] for e in cdu._pool(side)]
+            check("the archetype lists join the pool", any(c[0].startswith("h") for c in pool_keys))
+        finally:
+            cdu._archetype_lists = lambda s, own: []
+            da.families = real_fams
+            for m, mod in saved.items():
+                if mod is not None:
+                    sys.modules[m] = mod
+                else:
+                    sys.modules.pop(m, None)
         cdu._side_cache.clear()
         cdu._set_cache.clear()
         r1b = cdu.turn("#AAA", "#BBB", [A2, A3], "l", *W, round_=1, seen=[A1])
         check("the AI's set is the same in every game of one duel (seeded on the duel, not your decks)",
               r1b["ai"]["set"] == r1["ai"]["set"])
     finally:
+        cdu._archetype_lists = real_arch_lists
         if real_dz is not None:
             sys.modules["duel_zone"] = real_dz
         else:

@@ -305,6 +305,7 @@ interface Pending {
 interface Pasted {
   cards: string[];
   name?: string;
+  origin?: string;
   art?: CoachDuelDeck['art'];
 }
 
@@ -468,7 +469,7 @@ export function CoachDuel() {
       next.add(deckKey(d.cards));
       return next;
     });
-    setPasted({ cards: d.cards, name: d.deckName, art: d.art });
+    setPasted({ cards: d.cards, name: d.deckName, art: d.art, origin: d.origin });
     setPasteNote(null);
   };
 
@@ -835,7 +836,9 @@ export function CoachDuel() {
                       <DeckTile
                         deck={aiDeck}
                         seat="red"
-                        badge={aiDeck.switched ? <span className={styles.tag}>Switched</span> : aiDeck.counter ? <span className={styles.tag}>Counter</span> : undefined}
+                        badge={aiDeck.switched ? <span className={styles.tag}>Switched</span>
+                          : aiDeck.origin === 'crl' ? <span className={styles.tag}>CRL list</span>
+                            : aiDeck.counter ? <span className={styles.tag}>Counter</span> : undefined}
                       >
                         {exp && (
                           <p className={styles.readLine}>
@@ -874,9 +877,12 @@ export function CoachDuel() {
                     deck={{ ...pasted, deckName: pasted.name }}
                     seat="blue"
                     badge={
-                      <button type="button" className={styles.slotClear} aria-label="Remove this deck" onClick={() => setPasted(null)}>
-                        ×
-                      </button>
+                      <span className={styles.tileBadges}>
+                        {pasted.origin === 'crl' && <span className={styles.tag}>CRL list</span>}
+                        <button type="button" className={styles.slotClear} aria-label="Remove this deck" onClick={() => setPasted(null)}>
+                          ×
+                        </button>
+                      </span>
                     }
                   >
                     {clash.length > 0 ? (
@@ -962,7 +968,8 @@ export function CoachDuel() {
                       badge={
                         g >= 0 ? <span className={styles.tag}>G{g + 1}</span>
                           : d.switched ? <span className={styles.tag}>Switched</span>
-                            : d.counter ? <span className={styles.tag}>Counter</span> : undefined
+                            : d.origin === 'crl' ? <span className={styles.tag}>CRL list</span>
+                              : d.counter ? <span className={styles.tag}>Counter</span> : undefined
                       }
                     />
                   );

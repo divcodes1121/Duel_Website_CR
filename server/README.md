@@ -1957,6 +1957,16 @@ You coach Blue against the AI coach of the other player. **Admin only**: any
   counters, and real duel lists on their three main win conditions
   (`STYLE_*`), each seated (`_seat`) and sense-checked. `sim=prep` returns
   `you.pool` (up to `YOU_POOL` 40, ranked against the AI player's read).
+  Since the fifth round the outside lists come from **`duel_archetypes`**
+  (`.duel_archetypes.json`, an after-poll step): every duel list with 3+
+  games, 2+ pilots and no pilot over 60%, grouped by family (archetype;
+  `other` split by win condition), CRL-tier first, each with its record
+  against every opponent archetype vs its pilots' expected wins.
+  `_archetype_lists` picks the player's own families (`ARCH_PER_OWN` 8
+  each) and the families that beat the other side's mix
+  (`ARCH_COUNTER_FAMILIES` 4 x `ARCH_PER_COUNTER` 5), drawn seeded on the
+  pair (`duel_archetypes.pick`, `DRAW_WIDTH`, `FAMILY_SLACK`). Without the
+  file it falls back to `_style_lists`. Your pool takes turns by family.
   **The AI's pick for game N is made from your decks of games 1..N-1 and the
   results only (`ai_picks`)**; game N's deck enters only the referee. A decided
   duel played on (`all=1`) has the policy fall back to the best deck for that

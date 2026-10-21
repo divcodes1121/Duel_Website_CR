@@ -111,6 +111,10 @@ def main(argv: list[str]) -> int:
         # buildings, support (`deck_packages`): the gate on every deck Deckkies
         # constructs, and the rankings.
         ("deck packages", [sys.executable, "-u", os.path.join(HERE, "deck_packages.py"), "--build"]),
+        # Every duel deck grouped by archetype, CRL lists first, with each
+        # list's record against every opponent archetype (`duel_archetypes`):
+        # what Coach Duel draws both sides' decks from.
+        ("duel archetypes", [sys.executable, "-u", os.path.join(HERE, "duel_archetypes.py"), "--build"]),
         # The deck builder's move set: which cards humans interchange.
         ("swap graph", [sys.executable, "-u", os.path.join(HERE, "swap_graph.py"), "--build"]),
         # The player search's name index (`name_index`): names the bot stored

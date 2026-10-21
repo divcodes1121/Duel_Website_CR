@@ -984,6 +984,15 @@ brings back a deck faced earlier in the session while fresh ones fill the
 format. Your side cycles a ranked pool of up to 40. A game is decided by the
 matchup (over 55% wins; 45–55% rolled).
 
+### 2026-10-21 (fifth round) — every duel deck grouped by archetype
+
+`duel_archetypes.py` stores every duel list (3+ games, 2+ pilots, no pilot
+over 60%) grouped by archetype family, CRL lists tiered first, with each
+list's record against every opponent archetype over its pilots' expected
+wins: 6,623 lists, 38 families, 521 CRL. Coach Duel draws both sides' outside
+lists from it (own families + families that counter the other side's mix),
+seeded per pair. Not yet used by Coach Assist's Suggestion itself.
+
 ## Next action
 
 Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.

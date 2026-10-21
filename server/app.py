@@ -596,6 +596,13 @@ class Handler(BaseHTTPRequestHandler):
                     out["deckPackages"] = deck_packages.status()
                 except Exception:  # noqa: BLE001
                     out["deckPackages"] = None
+                # EVERY DUEL DECK GROUPED BY ARCHETYPE (CRL lists first): what
+                # Coach Duel draws both sides' decks from. Null before a build.
+                try:
+                    import duel_archetypes
+                    out["duelArchetypes"] = duel_archetypes.status()
+                except Exception:  # noqa: BLE001
+                    out["duelArchetypes"] = None
                 # THE DUEL READ's FIT (which deck a player brings next). Refitted
                 # after every poll; `fitted: false` = the built-in weights are in
                 # use, which is a stopped trainer, not a broken read.
