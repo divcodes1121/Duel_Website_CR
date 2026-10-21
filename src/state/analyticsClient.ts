@@ -2141,46 +2141,44 @@ export interface CoachDuelSide {
   evidence: { duels: number; games: number };
 }
 
-/** Both players read once, before you paste your decks. */
+/** Both players read once, before the first game. */
 export interface CoachDuelPrep {
   mode: 'prep';
   error?: string;
-  /** Your player, with Coach Assist's set for them (to fill your loadout). */
+  /** Your player, with Coach Assist's set for them (to fill a game's deck). */
   you: CoachDuelSide;
   /** The AI coach's player; its decks stay secret. */
   ai: CoachDuelSide;
 }
 
-/** What the AI decided in one state of the duel. */
-export interface CoachDuelAiPick {
-  /** Index into the AI's set; null = nothing legal left. */
-  deck: number | null;
-  /** What it believed when it picked, percent. */
-  believed?: { game: number; duel: number } | null;
-  /** The decks it expected you to bring, with its probability, percent. */
-  expected: { name: string; p: number; cards: string[] }[];
-}
-
-export interface CoachDuelHuman {
-  mode: 'human';
-  error?: 'bad_decks' | 'no_brain' | 'short_set';
+/** One game of you against the AI coach. */
+export interface CoachDuelTurn {
+  mode: 'game';
+  error?: 'bad_format' | 'bad_decks' | 'bad_results' | 'no_brain' | 'short_set';
   name?: string;
+  games: 3 | 5;
+  playAll: boolean;
   round: number;
-  you: CoachDuelSide & { set: CoachDuelDeck[]; suggested: CoachDuelDeck[] };
+  game: number;
+  you: CoachDuelSide & { deck: CoachDuelDeck };
+  /** The AI's whole set for this duel (the screen keeps it face down). */
   ai: CoachDuelSide & { set: CoachDuelDeck[] };
-  /** Where the AI's decks came from this duel. */
   aiSet: { source: 'coach-assist' | 'rotation'; candidates?: number; value?: number; reason?: string };
   /** The AI's one-card switch this duel, if it made one. */
   switch: { deck: number; out: string; in: string; games: number } | null;
-  /** The AI's pick in every state, keyed `path:your deck indices`. */
-  policy: Record<string, CoachDuelAiPick>;
-  /** Your coach-assist figures in every state: your deck index -> percent. */
-  hints: Record<string, Record<string, { game: number; duel: number }>>;
-  /** Your chance in each pairing (your deck x AI deck), percent. */
-  matrix: number[][];
-  /** The in-duel momentum, by game number. */
-  shift: Record<string, number>;
-  /** How many of your decks from earlier duels the AI's read leaned on. */
+  /** The AI's deck this game (index into its set; null = nothing legal left),
+   *  and its deck in every game so far. Chosen without seeing yours. */
+  aiDeck: number | null;
+  aiPicks: (number | null)[];
+  /** What the AI believed when it picked, and what it expected you to bring. */
+  believed: { game: number; duel: number } | null;
+  expected: { name: string; p: number; cards: string[]; hit: boolean }[];
+  /** Your chance on the decks and players, and with the momentum of the game
+   *  before (what the game is played at), percent. */
+  matchup: number;
+  chance: number;
+  /** Your coach's figures for the deck you brought, percent. */
+  yourOdds: { game: number; duel: number } | null;
   seen: number;
 }
 
@@ -2192,7 +2190,7 @@ function duelQuery(you: string, ai: string, win?: DateWindow, kind?: DuelKind): 
   return q;
 }
 
-/** Read both players before you paste your decks. ADMIN ONLY: the Supabase
+/** Read both players before the first game. ADMIN ONLY: the Supabase
  *  access token rides in `X-Coach-Token`, as for All Duels. */
 export function fetchCoachDuelPrep(
   you: string, ai: string, win: DateWindow | undefined, kind: DuelKind | undefined, token: string | null,
@@ -2203,18 +2201,22 @@ export function fetchCoachDuelPrep(
     token ? { 'X-Coach-Token': token } : undefined);
 }
 
-/** You against the AI coach: your decks, the rematch number, and the decks you
- *  showed in earlier duels (the AI's read leans on them). */
-export function fetchCoachDuelHuman(
-  you: string, ai: string, decks: string[][], round: number, seen: string[][],
-  win: DateWindow | undefined, kind: DuelKind | undefined, token: string | null,
-): Promise<CoachDuelHuman> {
+/** One game: your decks of every game so far (this game's last), who won the
+ *  earlier ones from your side, the format and the rematch number, and the
+ *  decks you showed in earlier duels (the AI's read leans on them). */
+export function fetchCoachDuelTurn(
+  you: string, ai: string, decks: string[][], results: string, games: 3 | 5, playAll: boolean,
+  round: number, seen: string[][], win: DateWindow | undefined, kind: DuelKind | undefined, token: string | null,
+): Promise<CoachDuelTurn> {
   const q = duelQuery(you, ai, win, kind);
-  q.set('sim', 'human');
+  q.set('sim', 'game');
+  q.set('bo', String(games));
+  if (playAll) q.set('all', '1');
   q.set('r', String(round));
+  if (results) q.set('res', results);
   decks.forEach((d, i) => q.set(`y${i + 1}`, d.join(',')));
   seen.slice(0, 8).forEach((d, i) => q.set(`s${i + 1}`, d.join(',')));
-  return get<CoachDuelHuman>(`/api/analytics/coach/suggest?${q.toString()}`,
+  return get<CoachDuelTurn>(`/api/analytics/coach/suggest?${q.toString()}`,
     token ? { 'X-Coach-Token': token } : undefined);
 }
 

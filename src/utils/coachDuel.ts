@@ -1,22 +1,18 @@
 /* THE COACH DUEL'S GAME RULES (`server/coach_duel.py`).
  *
- * You coach Blue; an AI coach plays Red. The server sends the AI's pick for
- * every state the duel can reach — keyed by who won each game from YOUR side
- * and which of your decks you brought (`keyOf`) — and the win chance of every
- * pairing. Playing the duel is reading those tables: you pick a deck, the AI's
- * deck for that state is looked up, the game's chance is the pairing's chance
- * moved by the result before it (`shifted`), and a draw decides it (`roll`).
+ * You coach Blue; an AI coach plays Red. Before the duel you choose the format
+ * (best of 3 or 5) and whether it stops once someone has won or every game is
+ * played. Then it goes one game at a time: you paste one deck, the server
+ * answers the AI's deck (chosen without seeing yours) and the game's chance,
+ * and a draw decides it (`roll`). No card may be played twice in a duel.
  * All of it lives here so the screen holds no arithmetic and the rules are
  * tested on their own (`tests/coachDuel.test.ts`).
  *
  * No imports.
  */
 
-/** A best of 3: two wins take it. */
-export const GAMES = 3;
-/** Decks a duel set holds at most, and the fewest that can play a best of 3. */
-export const MAX_DECKS = 4;
-export const MIN_DECKS = 3;
+export type Format = 3 | 5;
+
 /** Decks you showed that a rematch tells the AI about, at most. */
 export const MAX_SEEN = 8;
 
@@ -31,40 +27,29 @@ export function scoreOf(path: string): [number, number] {
   return [a, b];
 }
 
-/** A best of `games` is over once a side has won more than half. */
-export function isOver(path: string, games = GAMES): boolean {
-  const need = Math.floor(games / 2) + 1;
+/** Two wins of three, three of five. */
+export function winsNeeded(games: Format): number {
+  return Math.floor(games / 2) + 1;
+}
+
+/** Someone has won the duel along `path`. */
+export function isDecided(path: string, games: Format): boolean {
+  const need = winsNeeded(games);
   const [a, b] = scoreOf(path);
   return a >= need || b >= need;
 }
 
-/** Who won the duel along a finished `path`: 'you', 'ai', or null while it is on. */
-export function winnerOf(path: string, games = GAMES): 'you' | 'ai' | null {
-  if (!isOver(path, games)) return null;
+/** No game is left to play: decided (when stopping on a win), or every game
+ *  of the format played (when playing them all). */
+export function isFinished(path: string, games: Format, playAll: boolean): boolean {
+  return playAll ? path.length >= games : isDecided(path, games);
+}
+
+/** Who won the duel once it is finished: more games won. Null while it is on. */
+export function winnerOf(path: string, games: Format, playAll = false): 'you' | 'ai' | null {
+  if (!isFinished(path, games, playAll)) return null;
   const [a, b] = scoreOf(path);
   return a > b ? 'you' : 'ai';
-}
-
-/** The server's key for a decision state: the path, then your deck indices. */
-export function keyOf(path: string, mine: readonly number[]): string {
-  return `${path}:${mine.join(',')}`;
-}
-
-function logit(p: number): number {
-  const q = Math.min(Math.max(p, 1e-6), 1 - 1e-6);
-  return Math.log(q / (1 - q));
-}
-
-/** The chance (percent) of a game, moved by the result of the game before it
- *  — `duel_plan.shifted` on the server. `last` is 'w' / 'l' from your side,
- *  null for game 1. */
-export function shifted(
-  chance: number, last: 'w' | 'l' | null, game: number, shift: Record<string, number>,
-): number {
-  const d = shift[String(game)] ?? 0;
-  if (!d || !last) return chance;
-  const z = logit(chance / 100) + (last === 'w' ? d : -d);
-  return 100 / (1 + Math.exp(-z));
 }
 
 /** The result of a game played at `chance` percent for you, from one uniform
@@ -98,8 +83,14 @@ export function overlap(a: readonly string[], b: readonly string[]): number {
   return b.filter((c) => s.has(c)).length;
 }
 
-/** Every `deck=` link in pasted text, in order — so four links pasted at once
- *  fill four slots. Each comes back as the link text a parser can read. */
+/** The cards of `deck` already played in an earlier game of this duel —
+ *  the duel rule: no card twice. */
+export function clashWith(deck: readonly string[], earlier: readonly (readonly string[])[]): string[] {
+  const used = new Set(earlier.flat());
+  return deck.filter((c) => used.has(c));
+}
+
+/** Every `deck=` link in pasted text, in order. */
 export function findDeckLinks(text: string): string[] {
   let t = text;
   try {
@@ -110,29 +101,18 @@ export function findDeckLinks(text: string): string[] {
   return [...t.matchAll(/deck=([0-9;]+)/gi)].map((m) => `deck=${m[1]}`);
 }
 
-export interface LoadoutCheck {
-  /** Three or four decks, none sharing a card: ready to play. */
-  ok: boolean;
-  /** Decks (by index) holding a card another deck also holds. */
-  clashes: number[];
-  /** The cards held twice. */
-  shared: string[];
-  count: number;
-}
-
-/** A duel is played from decks that share no card. */
-export function checkLoadout(decks: readonly (readonly string[] | null)[]): LoadoutCheck {
-  const real = decks.map((d, i) => ({ d, i })).filter((x): x is { d: readonly string[]; i: number } => !!x.d && x.d.length === 8);
-  const holders = new Map<string, number[]>();
-  for (const { d, i } of real) for (const c of d) holders.set(c, [...(holders.get(c) ?? []), i]);
-  const shared = [...holders.entries()].filter(([, h]) => h.length > 1).map(([c]) => c);
-  const clashes = [...new Set(shared.flatMap((c) => holders.get(c) ?? []))].sort((x, y) => x - y);
-  return {
-    ok: real.length >= MIN_DECKS && real.length <= MAX_DECKS && shared.length === 0,
-    clashes,
-    shared: shared.sort(),
-    count: real.length,
-  };
+/** The first deck of `decks` that shares no card with the duel so far and is
+ *  not `skip` — "use a Coach Assist deck" steps through them. */
+export function nextLegal(
+  decks: readonly (readonly string[])[], earlier: readonly (readonly string[])[], skip?: readonly string[] | null,
+): number | null {
+  const skipKey = skip ? [...skip].sort().join(',') : null;
+  const ok = decks
+    .map((d, i) => ({ d, i }))
+    .filter(({ d }) => clashWith(d, earlier).length === 0);
+  if (!ok.length) return null;
+  const at = skipKey ? ok.findIndex(({ d }) => [...d].sort().join(',') === skipKey) : -1;
+  return ok[(at + 1) % ok.length].i;
 }
 
 /** The decks you have shown so far in the session, for the AI's next read:
@@ -148,40 +128,4 @@ export function addSeen(seen: readonly string[][], shown: readonly string[][]): 
     }
   }
   return out.slice(0, MAX_SEEN);
-}
-
-/** One game of the duel as it was played. */
-export interface PlayedGame {
-  game: number;
-  /** Your deck and the AI's deck, by index into each set. */
-  you: number;
-  ai: number | null;
-  /** Your chance before and after the momentum of the game before, percent. */
-  matchup: number;
-  chance: number;
-  draw: number;
-  result: 'w' | 'l';
-}
-
-/** The duel so far, from your picks and the draws: every game played, the
- *  path of results, and the key of the state you are deciding in now. */
-export function walk(
-  picks: readonly number[],
-  draws: readonly number[],
-  aiDeck: (key: string) => number | null,
-  pairChance: (you: number, ai: number) => number,
-  shift: Record<string, number>,
-): { games: PlayedGame[]; path: string; key: string } {
-  const games: PlayedGame[] = [];
-  let path = '';
-  for (let g = 0; g < draws.length && g < picks.length && !isOver(path); g += 1) {
-    const ai = aiDeck(keyOf(path, picks.slice(0, g)));
-    const matchup = ai === null ? 100 : pairChance(picks[g], ai);
-    const last = path ? (path[path.length - 1] as 'w' | 'l') : null;
-    const chance = ai === null ? 100 : shifted(matchup, last, g + 1, shift);
-    const result = roll(chance, draws[g] / 100);
-    games.push({ game: g + 1, you: picks[g], ai, matchup, chance, draw: draws[g], result });
-    path += result;
-  }
-  return { games, path, key: keyOf(path, picks.slice(0, games.length)) };
 }

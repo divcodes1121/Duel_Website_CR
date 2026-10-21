@@ -2295,8 +2295,14 @@ Neue for every game word, Clash-gold buttons with dark ink.
   crying, Grrr, GG, Yeah — in a white speech bubble, with at most one short
   line carrying a figure or a deck. The no-prose rule bends here because the
   characters ARE the brief; every line still says something measured.
+- **Format first**: Best of 3 / Best of 5 and Stop when someone wins / Play
+  all games are chosen on the arena before the players are read.
+- **One deck a game**: a paste box (or *Use a Coach Assist deck*, which
+  steps through the legal ones), the pasted deck as a tile with its clashes
+  named in red, the AI's face-down card beside it, *Lock in & battle*.
 - **The AI's deck is face down until you lock in**, then flips. The win chance
   sits directly under "Game N" (the moment you watch); the decks below it.
+- The game track has three or five slots; a five-game track uses smaller type.
 - **The arena compacts during the battle** so the Kings stay on screen.
 - **The middle has a dark pool behind it** so the seam fades behind the labels.
 - Nothing loops; reduced motion keeps every state, no movement.

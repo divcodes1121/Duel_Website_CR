@@ -1,47 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import {
   addSeen,
-  checkLoadout,
+  clashWith,
   findDeckLinks,
-  isOver,
-  keyOf,
+  isDecided,
+  isFinished,
+  nextLegal,
   overlap,
   pctLabel,
   roll,
   scoreOf,
   seeded,
-  shifted,
-  walk,
   winnerOf,
+  winsNeeded,
 } from '../src/utils/coachDuel';
 
 const deck = (t: string) => Array.from({ length: 8 }, (_, i) => `${t}${i}`);
-const SHIFT = { '2': 0.3288, '3': 0.0406 };
 
-describe('score and end of a duel', () => {
+describe('score and the end of a duel', () => {
   it('counts each side, from yours', () => {
     expect(scoreOf('')).toEqual([0, 0]);
-    expect(scoreOf('wl')).toEqual([1, 1]);
     expect(scoreOf('lww')).toEqual([2, 1]);
   });
-  it('ends at two wins, not before', () => {
-    expect(isOver('w')).toBe(false);
-    expect(isOver('wl')).toBe(false);
-    expect(isOver('ww')).toBe(true);
-    expect(isOver('lwl')).toBe(true);
+  it('two wins take a best of 3, three a best of 5', () => {
+    expect(winsNeeded(3)).toBe(2);
+    expect(winsNeeded(5)).toBe(3);
+    expect(isDecided('ww', 3)).toBe(true);
+    expect(isDecided('ww', 5)).toBe(false);
+    expect(isDecided('wlwlw', 5)).toBe(true);
   });
-  it('names the winner only once it is over', () => {
-    expect(winnerOf('w')).toBeNull();
-    expect(winnerOf('wlw')).toBe('you');
-    expect(winnerOf('ll')).toBe('ai');
+  it('stopping on a win ends at the decision; playing all ends at the last game', () => {
+    expect(isFinished('ww', 3, false)).toBe(true);
+    expect(isFinished('ww', 3, true)).toBe(false);
+    expect(isFinished('wwl', 3, true)).toBe(true);
+    expect(isFinished('www', 5, true)).toBe(false);
+    expect(isFinished('wwwll', 5, true)).toBe(true);
   });
-});
-
-describe('the keys match the server', () => {
-  it('path, then your deck indices', () => {
-    expect(keyOf('', [])).toBe(':');
-    expect(keyOf('w', [2])).toBe('w:2');
-    expect(keyOf('wl', [0, 3])).toBe('wl:0,3');
+  it('the winner is who won more, once it is finished', () => {
+    expect(winnerOf('w', 3)).toBeNull();
+    expect(winnerOf('wlw', 3)).toBe('you');
+    expect(winnerOf('ll', 3)).toBe('ai');
+    expect(winnerOf('ll', 3, true)).toBeNull();
+    expect(winnerOf('llw', 3, true)).toBe('ai');
+    expect(winnerOf('wwlll', 5, true)).toBe('ai');
   });
 });
 
@@ -57,61 +58,21 @@ describe('a game is decided by its chance', () => {
     expect(w / 20000).toBeGreaterThan(0.585);
     expect(w / 20000).toBeLessThan(0.615);
   });
-  it('momentum: game 1 never moves; after a win game 2 is higher, after a loss lower', () => {
-    expect(shifted(50, null, 1, SHIFT)).toBe(50);
-    // logit(.5) + .3288 -> 58.15%
-    expect(shifted(50, 'w', 2, SHIFT)).toBeCloseTo(58.15, 1);
-    expect(shifted(50, 'l', 2, SHIFT)).toBeCloseTo(41.85, 1);
-    expect(shifted(50, 'w', 3, SHIFT)).toBeCloseTo(51.01, 1);
-    expect(shifted(70, 'w', 4, SHIFT)).toBe(70);
-  });
 });
 
-describe('the duel as played', () => {
-  /* The AI brings deck 0 first, then deck 1 if you won, deck 2 if you lost;
-     at 1-1 the deck it has not played. */
-  const policy: Record<string, number> = {
-    ':': 0, 'w:0': 1, 'w:1': 1, 'w:2': 1, 'l:0': 2, 'l:1': 2, 'l:2': 2,
-    'wl:0,1': 2, 'wl:1,0': 2, 'wl:0,2': 2, 'lw:0,1': 1, 'lw:1,0': 1, 'lw:2,1': 1,
-  };
-  const ai = (k: string) => (k in policy ? policy[k] : null);
-  const pair = (y: number, a: number) => 40 + 10 * y + a;
-
-  it('reads the AI deck for the state you were in when you picked', () => {
-    // game 1: you 0 vs AI 0 at 40% -> draw 10 wins; game 2: you 1 vs AI 1
-    const w = walk([0, 1], [10, 99], ai, pair, SHIFT);
-    expect(w.games.map((g) => [g.you, g.ai, g.result])).toEqual([[0, 0, 'w'], [1, 1, 'l']]);
-    expect(w.path).toBe('wl');
-    expect(w.key).toBe('wl:0,1');
+describe('one deck a game, no card twice', () => {
+  it('names the cards already played', () => {
+    expect(clashWith(deck('a'), [deck('b')])).toEqual([]);
+    expect(clashWith([...deck('a').slice(0, 7), 'b3'], [deck('b'), deck('c')])).toEqual(['b3']);
   });
-  it('game 2 carries the momentum of game 1', () => {
-    const w = walk([0, 1], [10, 99], ai, pair, SHIFT);
-    expect(w.games[1].matchup).toBe(51);
-    expect(w.games[1].chance).toBeGreaterThan(51);
-  });
-  it('stops once the duel is decided', () => {
-    const w = walk([0, 1, 2], [1, 1, 1], ai, pair, SHIFT);
-    expect(w.games).toHaveLength(2);
-    expect(w.path).toBe('ww');
-  });
-  it('a pick without a draw yet is the decision in progress', () => {
-    const w = walk([2], [], ai, pair, SHIFT);
-    expect(w.games).toHaveLength(0);
-    expect(w.key).toBe(':');
-  });
-});
-
-describe('your loadout', () => {
-  it('three or four decks that share no card are ready', () => {
-    expect(checkLoadout([deck('a'), deck('b'), deck('c')]).ok).toBe(true);
-    expect(checkLoadout([deck('a'), deck('b'), deck('c'), deck('d')]).ok).toBe(true);
-    expect(checkLoadout([deck('a'), deck('b'), null]).ok).toBe(false);
-  });
-  it('a card in two decks names both decks and the card', () => {
-    const c = checkLoadout([deck('a'), [...deck('b').slice(0, 7), 'a3'], deck('c')]);
-    expect(c.ok).toBe(false);
-    expect(c.clashes).toEqual([0, 1]);
-    expect(c.shared).toEqual(['a3']);
+  it('a Coach Assist deck: the first one still legal, then the next on each press', () => {
+    const sug = [deck('a'), deck('b'), deck('c')];
+    expect(nextLegal(sug, [])).toBe(0);
+    expect(nextLegal(sug, [], deck('a'))).toBe(1);
+    expect(nextLegal(sug, [], deck('c'))).toBe(0);
+    // deck a's cards are spent: skip it
+    expect(nextLegal(sug, [[...deck('z').slice(0, 7), 'a2']])).toBe(1);
+    expect(nextLegal(sug, [deck('a'), deck('b'), deck('c')])).toBeNull();
   });
   it('finds every deck link in one paste', () => {
     const text =

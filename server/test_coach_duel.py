@@ -282,8 +282,8 @@ try:
     check("a player who cannot field three decks is said so, by side",
           short.get("error") == "short_set" and short["side"] == "a" and short["decks"] == 2, str(short))
 
-    print("you against the AI coach, through the stand-in")
-    E_, F_ = deck("e"), deck("f")
+    print("you against the AI coach, one game at a time, through the stand-in")
+    E_, F_, G_ = deck("e"), deck("f"), deck("g")
     fake.dx = types.SimpleNamespace(card_keys=lambda: sorted({c for t in "abcdefghxyzq" for c in deck(t)} | {"t1", "t2"}))
     fake._own_duel_decks = lambda hist, used: [
         {"cards": d, "count": n, "deckName": "Own " + d[0][0], "art": {}}
@@ -294,31 +294,60 @@ try:
     fake_dz.deck_label = lambda cards, arch: "Deck " + sorted(cards)[0][0]
     real_dz = sys.modules.get("duel_zone")
     sys.modules["duel_zone"] = fake_dz
+    W = ((None, None), (None, None))
     try:
         cdu._side_cache.clear()
-        bad = cdu.human("#AAA", "#BBB", [A1, A1[:4] + A2[:4], A3], (None, None), (None, None))
-        check("decks that share a card are refused", bad.get("error") == "bad_decks", str(bad))
-        check("two decks are not a duel set", cdu.human("#AAA", "#BBB", [A1, A2], (None, None), (None, None)).get("error") == "bad_decks")
-        h0 = cdu.human("#AAA", "#BBB", [A1, A2, A3], (None, None), (None, None))
-        check("no error", "error" not in h0, str(h0.get("error")))
-        check("duel 1: the AI loads Coach Assist's own set",
-              [d["cards"] for d in h0["ai"]["set"]] == [B1, B2, B3] and h0["aiSet"]["source"] == "coach-assist")
-        check("the AI's pick for every one of the 19 states", len(h0["policy"]) == 19
-              and all(v["deck"] in (0, 1, 2) for v in h0["policy"].values()))
-        check("your decks come back drawn, in your order", [d["cards"] for d in h0["you"]["set"]] == [A1, A2, A3])
-        check("and Coach Assist's set for your player, to fill yours", len(h0["you"]["suggested"]) == 4)
-        check("every pairing has a win chance", len(h0["matrix"]) == 3 and all(len(r) == 3 for r in h0["matrix"])
-              and all(0 < x < 100 for r in h0["matrix"] for x in r))
-        check("your figures for the states", ":" in h0["hints"] and set(h0["hints"][":"]) == {"0", "1", "2"})
-        h1 = cdu.human("#AAA", "#BBB", [A1, A2, A3], (None, None), (None, None), round_=1, seen=[A1])
-        ai1 = {tuple(d["cards"]) for d in h1["ai"]["set"]}
+        check("a best of 4 is not a format", cdu.turn("#AAA", "#BBB", [A1], "", *W, games=4).get("error") == "bad_format")
+        check("a card you already played this duel is refused",
+              cdu.turn("#AAA", "#BBB", [A1, A1[:4] + A2[:4]], "w", *W).get("error") == "bad_decks")
+        check("results must cover every earlier game",
+              cdu.turn("#AAA", "#BBB", [A1, A2], "", *W).get("error") == "bad_results")
+        check("no game after the duel is decided — unless every game is played",
+              cdu.turn("#AAA", "#BBB", [A1, A2, A3], "ww", *W).get("error") == "bad_results"
+              and "error" not in cdu.turn("#AAA", "#BBB", [A1, A2, A3], "ww", *W, play_all=True))
+        t1 = cdu.turn("#AAA", "#BBB", [A1], "", *W)
+        check("game 1 answers", "error" not in t1 and t1["game"] == 1 and t1["aiDeck"] in (0, 1, 2), str(t1.get("error")))
+        check("duel 1 of a best of 3: the AI loads Coach Assist's own set",
+              [d["cards"] for d in t1["ai"]["set"]] == [B1, B2, B3] and t1["aiSet"]["source"] == "coach-assist")
+        check("the game has a chance and your deck comes back drawn",
+              0 < t1["chance"] < 100 and t1["you"]["deck"]["cards"] == A1)
+        check("your coach's figure for the deck you brought", t1["yourOdds"] is not None and "game" in t1["yourOdds"])
+        t1b = cdu.turn("#AAA", "#BBB", [A3], "", *W)
+        check("THE AI PICKS WITHOUT SEEING YOUR DECK: another deck, the same pick",
+              t1b["aiDeck"] == t1["aiDeck"] and t1b["ai"]["set"] == t1["ai"]["set"])
+        t2 = cdu.turn("#AAA", "#BBB", [A1, A2], "w", *W)
+        check("game 2 replays game 1's pick and brings another deck",
+              t2["aiPicks"][0] == t1["aiDeck"] and t2["aiDeck"] not in (None, t1["aiDeck"]), str(t2["aiPicks"]))
+        t3 = cdu.turn("#AAA", "#BBB", [A1, A2, A3], "ww", *W, play_all=True)
+        check("play all: game 3 after 2-0 still has an AI deck it has not played",
+              t3["aiDeck"] is not None and t3["aiDeck"] not in t3["aiPicks"][:2] and t3["playAll"] is True)
+        b5 = cdu.turn("#AAA", "#BBB", [A1], "", *W, games=5)
+        flat5 = [c for d in b5["ai"]["set"] for c in d["cards"]]
+        check("a best of 5: the AI loads five decks that share no card",
+              "error" not in b5 and len(b5["ai"]["set"]) == 5 and len(flat5) == len(set(flat5)), str(b5.get("error")))
+        b5g5 = cdu.turn("#AAA", "#BBB", [A1, A2, A3, A4, G_], "wlwl", *W, games=5)
+        check("a best of 5 reaches a fifth game", b5g5.get("game") == 5 and b5g5["aiDeck"] is not None, str(b5g5.get("error")))
+        r1 = cdu.turn("#AAA", "#BBB", [A1], "", *W, round_=1, seen=[A1])
+        ai1 = {tuple(d["cards"]) for d in r1["ai"]["set"]}
         check("a rematch draws a different set from the player's rotation",
-              h1["aiSet"]["source"] == "rotation" and ai1 != {tuple(B1), tuple(B2), tuple(B3)}, str(ai1))
-        check("the rematch says how many of your decks it leans on", h1["seen"] == 1)
-        flat_ai = [c for d in h1["ai"]["set"] for c in d["cards"]]
-        check("the AI's rematch set shares no card", len(flat_ai) == len(set(flat_ai)))
-        h1b = cdu.human("#AAA", "#BBB", [A1, A2, A3], (None, None), (None, None), round_=1, seen=[A1])
-        check("the same rematch is the same draw (seeded)", h1b["ai"]["set"] == h1["ai"]["set"])
+              r1["aiSet"]["source"] == "rotation" and ai1 != {tuple(B1), tuple(B2), tuple(B3)}, str(ai1))
+        check("the rematch says how many of your decks it leans on", r1["seen"] == 1)
+        calls_before = [0]
+        real_vary = cdu.vary_set
+
+        def counted(*a, **k):
+            calls_before[0] += 1
+            return real_vary(*a, **k)
+        cdu.vary_set = counted
+        try:
+            cdu.turn("#AAA", "#BBB", [A1, A2], "w", *W, games=5)
+            cdu.turn("#AAA", "#BBB", [A1, A2, A3], "wl", *W, games=5)
+        finally:
+            cdu.vary_set = real_vary
+        check("the AI's set is composed once a duel, not once a game", calls_before[0] == 0, str(calls_before))
+        r1b = cdu.turn("#AAA", "#BBB", [A2, A3], "l", *W, round_=1, seen=[A1])
+        check("the AI's set is the same in every game of one duel (seeded on the duel, not your decks)",
+              r1b["ai"]["set"] == r1["ai"]["set"])
     finally:
         if real_dz is not None:
             sys.modules["duel_zone"] = real_dz
@@ -339,30 +368,24 @@ finally:
     else:
         sys.modules.pop("coach", None)
 
-print("you against the AI coach: the states")
-keys = [cdu.key_of(p, m) for p, m in cdu.state_keys(3)]
-check("a best of 3 with three decks has 19 decision states", len(keys) == 19 and len(set(keys)) == 19, str(len(keys)))
-check("game 1 is ':'", keys[0] == ":")
-check("game 3 needs a 1-1 and two different decks of yours",
-      all((k.split(":")[0] in ("wl", "lw")) == (k.count(",") == 1) for k in keys)
-      and ":0,0" not in "".join(keys))
-check("four decks: 1 + 8 + 24 states", len(cdu.state_keys(4)) == 33)
-
+print("the AI's picks, game by game")
 seen_calls = []
 
 
 def first_free(ai_played, your_played, results):
-    seen_calls.append((tuple(ai_played), tuple(tuple(d) for d in your_played), results))
-    free = [i for i in range(3) if i not in ai_played]
+    seen_calls.append((len(ai_played), len(your_played), results))
+    free = [i for i, d in enumerate([A1, A2, A3]) if d not in ai_played]
     return free[0], {"believed": {"game": 50.0, "duel": 50.0}}
 
 
-pol = cdu.ai_policy([A1, A2, A3], first_free)
-check("the AI picks in every state", len(pol) == 19 and pol[":"]["deck"] == 0)
-check("after you won game 1 with deck 1, the AI is told it lost and has played its game-1 deck",
-      ((0,), (tuple(A2),), "l") in seen_calls, str(seen_calls[:4]))
-check("at 1-1 the AI has played both its earlier picks", pol["wl:0,1"]["_played"] == [0, 1]
-      and pol["wl:0,1"]["deck"] == 2)
+got = cdu.ai_picks([A1, A2, A3], [B1, B2, B3], "wl", first_free, 3)
+check("one pick a game", [i for i, _ in got] == [0, 1, 2])
+check("EACH PICK SEES ONLY YOUR EARLIER DECKS, never the one of its own game",
+      [c[1] for c in seen_calls] == [0, 1, 2], str(seen_calls))
+check("each pick is told the results from the AI's side", [c[2] for c in seen_calls] == ["", "l", "lw"])
+check("it stops where it has nothing legal",
+      len(cdu.ai_picks([A1], [B1, B2], "w", lambda a, y, r: (None if a else 0, None), 2)) == 2
+      and cdu.ai_picks([A1], [B1, B2], "w", lambda a, y, r: (None if a else 0, None), 2)[1][0] is None)
 
 print("the AI's read of you leans on what you showed before")
 X, Y = deck("x"), deck("y")

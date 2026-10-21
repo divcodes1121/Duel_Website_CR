@@ -958,6 +958,14 @@ the decks you showed earlier in the session (`blend_read`). Staged on 4 real
 CRL pairs x 6 duels: 6 different AI sets each, no repeat. No figure of Coach
 Assist's own answer changed.
 
+### 2026-10-21 (later) — one game at a time, best of 3 or 5
+
+On request the duel became game by game: you paste one deck per game, choose
+best of 3 or 5 and stop-on-a-win or play-all first. Each game is one request
+(`turn`); the AI's pick is made from your earlier decks and the results only.
+A decided duel played on picks by the game alone (`gamePick`). Verified in a
+browser against the real AI through a staged API: 91/91.
+
 ## Next action
 
 Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.

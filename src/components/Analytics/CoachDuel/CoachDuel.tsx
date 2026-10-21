@@ -1,20 +1,18 @@
 /* THE COACH DUEL (2026-10-20, rebuilt 2026-10-21; `server/coach_duel.py`).
  *
- * You coach Blue; an AI coach plays Red. You name the two players, paste the
- * decks you want your player to bring, and pick one each game. The AI coach is
- * Coach Assist for its player: it loads a set, reads YOUR player (and, after a
- * rematch, the decks you showed it), and picks every game by the look-ahead.
- * Each rematch it loads a different set from its player's own rotation, now
- * and then with a real one-card switch.
+ * You coach Blue; an AI coach plays Red. You name the two players and choose
+ * the format (best of 3 or 5) and whether the duel stops once someone has won
+ * or plays every game. Then it goes ONE GAME AT A TIME: you paste the deck for
+ * the next game, lock it in, the AI's deck flips over — chosen on the server
+ * WITHOUT seeing yours — and the game is decided by its chance. No card twice
+ * in a duel. Each rematch the AI loads a different set from its player's own
+ * rotation, now and then with a real one-card switch, and remembers your decks.
  *
  * The two coaches are the Blue King and the Red King — Supercell's own art,
  * built by `scripts/build-king-art.py` — and they react the way the game's
  * Kings do: a laugh on a won game, tears on a lost one, GG at the end.
  *
- * One request answers the AI's pick for every state of the duel (`policy`),
- * so a game is decided on the spot: your deck, the AI's deck for that state,
- * the pairing's chance moved by the game before, and a draw. The rules are
- * `utils/coachDuel.ts`; this file only draws.
+ * The rules are `utils/coachDuel.ts`; this file only draws.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardArt } from '../CardArt';
@@ -25,31 +23,29 @@ import { CARDS_BY_KEY } from '../../../data/cards';
 import { parseClashRoyaleDeckLink } from '../../../utils/deckLink';
 import {
   AnalyticsError,
-  fetchCoachDuelHuman,
   fetchCoachDuelPrep,
+  fetchCoachDuelTurn,
   type CoachDuelDeck,
-  type CoachDuelHuman,
   type CoachDuelPrep,
   type CoachDuelSide,
+  type CoachDuelTurn,
   type DuelKind,
 } from '../../../state/analyticsClient';
 import { coachToken } from '../../../state/coachToken';
 import { DAY_PRESETS } from '../../../utils/datePresets';
 import { asTag } from '../../../utils/nameSearch';
 import {
-  GAMES,
-  MAX_DECKS,
-  MIN_DECKS,
   addSeen,
-  checkLoadout,
+  clashWith,
   findDeckLinks,
-  isOver,
-  overlap,
+  isFinished,
+  nextLegal,
   pctLabel,
+  roll,
   scoreOf,
-  walk,
   winnerOf,
-  type PlayedGame,
+  winsNeeded,
+  type Format,
 } from '../../../utils/coachDuel';
 import styles from './CoachDuel.module.css';
 
@@ -72,7 +68,7 @@ const kingArt = (seat: Seat, pose: Pose) =>
 const emoteArt = (e: Emote) => `${ART}emote-${e}.webp`;
 const PRELOAD = [
   ...(['blue', 'red'] as Seat[]).flatMap((s) => (['idle', 'laugh', 'nervous', 'cheer'] as Pose[]).map((p) => kingArt(s, p))),
-  ...(['laugh', 'cry', 'grrr', 'think', 'sweat', 'gg', 'yeah', 'thumbsdown'] as Emote[]).map(emoteArt),
+  ...(['laugh', 'cry', 'grrr', 'think', 'sweat', 'gg', 'yeah'] as Emote[]).map(emoteArt),
   `${ART}duel.webp`,
 ];
 
@@ -89,6 +85,8 @@ interface Players {
   ai: string;
   days: number;
   kind: DuelKind;
+  games: Format;
+  playAll: boolean;
 }
 
 function readHash(): Partial<Players> {
@@ -103,12 +101,15 @@ function readHash(): Partial<Players> {
     ai: asTag(p.get('b') ?? '') ?? undefined,
     days: (DAY_PRESETS as readonly number[]).includes(days) ? days : undefined,
     kind: k === 'friendly' || k === 'war' ? k : undefined,
+    games: p.get('bo') === '5' ? 5 : p.get('bo') === '3' ? 3 : undefined,
+    playAll: p.has('all') ? p.get('all') === '1' : undefined,
   };
 }
 
 function writeHash(s: Players) {
-  const p = new URLSearchParams({ a: s.you, b: s.ai, d: String(s.days) });
+  const p = new URLSearchParams({ a: s.you, b: s.ai, d: String(s.days), bo: String(s.games) });
   if (s.kind) p.set('k', s.kind);
+  if (s.playAll) p.set('all', '1');
   const next = `#/coach-duel?${p.toString()}`;
   if (window.location.hash !== next) window.history.replaceState(null, '', next);
 }
@@ -117,14 +118,16 @@ function explain(e: unknown): string {
   if (e instanceof AnalyticsError && e.kind === 'offline') return 'The analytics service is not answering.';
   if (e instanceof AnalyticsError && e.kind === 'invalid_tag') return 'One of those is not a player tag.';
   if (e instanceof Error && /unauthorized|forbidden/.test(e.message)) return 'Coach Duel is for admins only.';
-  return 'The duel could not be set up.';
+  return 'Something went wrong. Try again.';
 }
 
 /* ── pieces ────────────────────────────────────────────────────────────── */
 
-function Strip({ deck, size = 'md' }: { deck: { cards: string[]; art?: CoachDuelDeck['art']; artFilled?: string[] }; size?: 'sm' | 'md' | 'grid' }) {
+type DrawDeck = { cards: string[]; art?: CoachDuelDeck['art']; artFilled?: string[]; deckName?: string };
+
+function Strip({ deck }: { deck: DrawDeck }) {
   return (
-    <span className={size === 'sm' ? styles.stripSm : size === 'grid' ? styles.stripGrid : styles.strip}>
+    <span className={styles.stripGrid}>
       {deck.cards.map((c, i) => (
         <CardArt key={`${c}-${i}`} card={c} variant={deck.art?.[c]} inferred={!!deck.artFilled?.includes(c)} />
       ))}
@@ -140,20 +143,8 @@ function Crown({ on }: { on: boolean }) {
   );
 }
 
-function King({
-  seat,
-  pose,
-  emote,
-  line,
-  beat,
-  label,
-}: {
-  seat: Seat;
-  pose: Pose;
-  emote: Emote | null;
-  line?: string;
-  beat: string;
-  label: string;
+function King({ seat, pose, emote, line, beat, label }: {
+  seat: Seat; pose: Pose; emote: Emote | null; line?: string; beat: string; label: string;
 }) {
   return (
     <div className={styles.king} data-seat={seat}>
@@ -175,18 +166,8 @@ function King({
   );
 }
 
-function Plate({
-  seat,
-  side,
-  role,
-  children,
-  crowns,
-}: {
-  seat: Seat;
-  side: CoachDuelSide | null;
-  role: string;
-  children?: React.ReactNode;
-  crowns: number;
+function Plate({ seat, side, role, children, crowns, need }: {
+  seat: Seat; side: CoachDuelSide | null; role: string; children?: React.ReactNode; crowns: number; need: number;
 }) {
   return (
     <div className={styles.plate} data-seat={seat}>
@@ -203,7 +184,7 @@ function Plate({
         )}
       </div>
       <span className={styles.plateCrowns} aria-label={`${crowns} won`}>
-        {Array.from({ length: Math.floor(GAMES / 2) + 1 }, (_, i) => (
+        {Array.from({ length: Math.max(need, crowns) }, (_, i) => (
           <Crown key={i} on={i < crowns} />
         ))}
       </span>
@@ -230,70 +211,43 @@ function ChanceBar({ you, needle, rolling }: { you: number; needle: number | nul
   );
 }
 
-function DeckTile({
-  deck,
-  seat,
-  title,
-  badge,
-  children,
-  selected,
-  disabled,
-  onSelect,
-}: {
-  deck: CoachDuelDeck | { cards: string[]; deckName?: string; art?: CoachDuelDeck['art'] };
-  seat: Seat;
-  title?: string;
-  badge?: React.ReactNode;
-  children?: React.ReactNode;
-  selected?: boolean;
-  disabled?: boolean;
-  onSelect?: () => void;
+function DeckTile({ deck, seat, badge, children }: {
+  deck: DrawDeck; seat: Seat; badge?: React.ReactNode; children?: React.ReactNode;
 }) {
-  const body = (
-    <>
+  const name = deck.deckName || 'Your deck';
+  return (
+    <div className={styles.tile} data-seat={seat}>
       <span className={styles.tileHead}>
-        <span className={styles.tileName} title={title ?? (('deckName' in deck && deck.deckName) || undefined)}>
-          {title ?? (('deckName' in deck && deck.deckName) || 'Deck')}
+        <span className={styles.tileName} title={name}>
+          {name}
         </span>
         {badge}
       </span>
-      <Strip deck={deck} size="grid" />
+      <Strip deck={deck} />
       {children}
-    </>
-  );
-  if (onSelect)
-    return (
-      <button
-        type="button"
-        className={styles.tile}
-        data-seat={seat}
-        data-selected={selected ? '' : undefined}
-        disabled={disabled}
-        aria-pressed={selected}
-        onClick={onSelect}
-      >
-        {body}
-      </button>
-    );
-  return (
-    <div className={styles.tile} data-seat={seat} data-static="">
-      {body}
     </div>
   );
 }
 
-function CardBack() {
+function CardBack({ busy }: { busy: boolean }) {
   return (
-    <div className={styles.cardBack} aria-label="The AI coach has chosen its deck">
+    <div className={styles.cardBack} aria-label="The AI coach's deck, face down">
       <img src={`${ART}badge-red.webp`} alt="" />
-      <span>AI coach has chosen</span>
+      <span>{busy ? 'The AI coach is choosing…' : 'Face down until you lock in'}</span>
     </div>
   );
 }
 
 /* ── the screen ────────────────────────────────────────────────────────── */
 
-interface Slot {
+interface Played {
+  deck: string[];
+  ans: CoachDuelTurn;
+  draw: number;
+  result: 'w' | 'l';
+}
+
+interface Pasted {
   cards: string[];
   name?: string;
   art?: CoachDuelDeck['art'];
@@ -305,25 +259,24 @@ export function CoachDuel() {
   const [aiText, setAiText] = useState(start.ai ?? '');
   const [days, setDays] = useState<number>(start.days ?? 30);
   const [kind, setKind] = useState<DuelKind>(start.kind ?? null);
+  const [games, setGames] = useState<Format>(start.games ?? 3);
+  const [playAll, setPlayAll] = useState<boolean>(start.playAll ?? false);
   const [youInput, setYouInput] = useState<HTMLInputElement | null>(null);
   const [aiInput, setAiInput] = useState<HTMLInputElement | null>(null);
 
   const [players, setPlayers] = useState<Players | null>(null);
   const [prep, setPrep] = useState<CoachDuelPrep | null>(null);
-  const [slots, setSlots] = useState<(Slot | null)[]>([null, null, null, null]);
-  const [paste, setPaste] = useState('');
-  const [pasteNote, setPasteNote] = useState<string | null>(null);
-  const [duel, setDuel] = useState<CoachDuelHuman | null>(null);
   const [round, setRound] = useState(0);
   const [seen, setSeen] = useState<string[][]>([]);
-  const [loading, setLoading] = useState<'prep' | 'duel' | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const [picks, setPicks] = useState<number[]>([]);
-  const [draws, setDraws] = useState<number[]>([]);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [played, setPlayed] = useState<Played[]>([]);
+  const [pasted, setPasted] = useState<Pasted | null>(null);
+  const [paste, setPaste] = useState('');
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ deck: string[]; ans: CoachDuelTurn | null } | null>(null);
   const [needle, setNeedle] = useState<number | null>(null);
   const [showLast, setShowLast] = useState(false);
+  const [loading, setLoading] = useState<'prep' | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
   const timer = useRef<number | null>(null);
 
@@ -337,10 +290,12 @@ export function CoachDuel() {
     };
   }, []);
 
-  const resetBattle = () => {
-    setPicks([]);
-    setDraws([]);
-    setSelected(null);
+  const resetDuel = () => {
+    setPlayed([]);
+    setPasted(null);
+    setPaste('');
+    setPasteNote(null);
+    setPending(null);
     setNeedle(null);
     setShowLast(false);
   };
@@ -349,11 +304,10 @@ export function CoachDuel() {
     const mine = ++seq.current;
     setPlayers(p);
     setPrep(null);
-    setDuel(null);
     setError(null);
     setRound(0);
     setSeen([]);
-    resetBattle();
+    resetDuel();
     setLoading('prep');
     writeHash(p);
     coachToken()
@@ -371,154 +325,140 @@ export function CoachDuel() {
 
   useEffect(() => {
     if (start.you && start.ai && start.you !== start.ai)
-      loadPrep({ you: start.you, ai: start.ai, days: start.days ?? 30, kind: start.kind ?? null });
+      loadPrep({
+        you: start.you, ai: start.ai, days: start.days ?? 30, kind: start.kind ?? null,
+        games: start.games ?? 3, playAll: start.playAll ?? false,
+      });
   }, [start, loadPrep]);
 
   const youTag = asTag(youText);
   const aiTag = asTag(aiText);
   const ready = !!youTag && !!aiTag && youTag !== aiTag;
 
-  const loadout = slots.filter((s): s is Slot => !!s);
-  const check = checkLoadout(slots.map((s) => s?.cards ?? null));
+  /* ── the duel so far ── */
+  const fmt: Format = players?.games ?? games;
+  const all = players?.playAll ?? playAll;
+  const path = played.map((p) => p.result).join('');
+  const [youWon, aiWon] = scoreOf(path);
+  const finished = played.length > 0 && isFinished(path, fmt, all);
+  const champ = finished ? winnerOf(path, fmt, all) : null;
+  const need = winsNeeded(fmt);
+  const lastAns = pending?.ans ?? (played.length ? played[played.length - 1].ans : null);
+  const earlier = played.map((p) => p.deck);
+  const clash = pasted ? clashWith(pasted.cards, earlier) : [];
+  const rolling = pending !== null;
+  const gameNo = played.length + 1;
+  const deadRubber = !finished && all && played.length > 0 && winnerOf(path, fmt, false) !== null;
 
-  const startDuel = (nextRound: number, nextSeen: string[][]) => {
-    if (!players || !check.ok) return;
-    const mine = ++seq.current;
-    setError(null);
-    setLoading('duel');
-    resetBattle();
-    coachToken()
-      .then((token) =>
-        fetchCoachDuelHuman(players.you, players.ai, loadout.map((s) => s.cards), nextRound, nextSeen,
-          { days: players.days }, players.kind, token),
-      )
-      .then((d) => {
-        if (mine !== seq.current) return;
-        if (d.error === 'bad_decks') setError('Those decks cannot be played together: three or four decks, no card twice.');
-        else if (d.error === 'short_set') setError(`${d.name ?? 'The AI player'} has fewer than three decks that fit together in this window. Try a longer history.`);
-        else if (d.error === 'no_brain') setError('The duel model is not available right now.');
-        else {
-          setDuel(d);
-          setRound(nextRound);
-          setSeen(nextSeen);
-        }
-      })
-      .catch((e) => {
-        if (mine === seq.current) setError(explain(e));
-      })
-      .finally(() => {
-        if (mine === seq.current) setLoading(null);
-      });
-  };
-
-  /* ── your loadout ── */
+  /* ── pasting this game's deck ── */
   const takePaste = (text: string) => {
     const links = findDeckLinks(text);
     if (!links.length) {
       setPasteNote(text.trim() ? 'No deck link found. Copy a deck in the game and paste its link.' : null);
       return;
     }
-    const decks = links.map((l) => parseClashRoyaleDeckLink(l)).filter((d): d is string[] => !!d);
-    const bad = links.length - decks.length;
-    setSlots((cur) => {
-      const next = [...cur];
-      for (const d of decks) {
-        const free = next.findIndex((s) => !s);
-        if (free === -1) break;
-        next[free] = { cards: d };
-      }
-      return next;
-    });
+    const cards = parseClashRoyaleDeckLink(links[0]);
+    if (!cards) {
+      setPasteNote('That link could not be read.');
+      return;
+    }
+    setPasted({ cards });
     setPaste('');
-    setPasteNote(bad ? `${bad} link${bad === 1 ? '' : 's'} could not be read.` : null);
+    setPasteNote(links.length > 1 ? 'One deck a game: the first link was taken.' : null);
   };
+  const suggested = prep?.you.set ?? [];
   const useSuggested = () => {
-    const sug = prep?.you.set ?? [];
-    setSlots(Array.from({ length: MAX_DECKS }, (_, i) => (sug[i] ? { cards: sug[i].cards, name: sug[i].deckName, art: sug[i].art } : null)));
+    const i = nextLegal(suggested.map((d) => d.cards), earlier, pasted?.cards ?? null);
+    if (i === null) {
+      setPasteNote("No Coach Assist deck is left that shares no card with the ones you've played.");
+      return;
+    }
+    const d = suggested[i];
+    setPasted({ cards: d.cards, name: d.deckName, art: d.art });
     setPasteNote(null);
   };
 
-  /* ── the battle ── */
-  const aiDeck = useCallback((key: string) => duel?.policy[key]?.deck ?? null, [duel]);
-  const pair = useCallback((y: number, a: number) => duel?.matrix[y]?.[a] ?? 50, [duel]);
-  const state = useMemo(
-    () => walk(picks, draws, aiDeck, pair, duel?.shift ?? {}),
-    [picks, draws, aiDeck, pair, duel],
-  );
-  const over = duel ? isOver(state.path) : false;
-  const champ = duel ? winnerOf(state.path) : null;
-  const [youWon, aiWon] = scoreOf(state.path);
-  const rolling = needle !== null && picks.length > draws.length;
-  const usedByYou = new Set(state.games.map((g) => g.you));
-  const usedByAi = new Set(state.games.map((g) => g.ai).filter((x): x is number => x !== null));
-  const pendingAi = rolling ? aiDeck(state.key) : null;
-  const lastGame: PlayedGame | null = state.games.length ? state.games[state.games.length - 1] : null;
-  const hints = duel?.hints[state.key];
-
-  const battle = () => {
-    if (!duel || selected === null || rolling || over) return;
-    const d = Math.random() * 100;
-    setPicks((p) => [...p, selected]);
-    setSelected(null);
+  /* ── playing a game ── */
+  const lockIn = () => {
+    if (!players || !pasted || clash.length || rolling || finished) return;
+    const mine = ++seq.current;
+    const deck = pasted.cards;
+    setPending({ deck, ans: null });
     setShowLast(false);
-    if (reducedMotion()) {
-      setDraws((x) => [...x, d]);
-      setShowLast(true);
-      return;
-    }
-    setNeedle(50);
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => setNeedle(d)));
-    timer.current = window.setTimeout(() => {
-      setDraws((x) => [...x, d]);
-      setNeedle(null);
-      setShowLast(true);
-    }, ROLL_MS);
+    setError(null);
+    coachToken()
+      .then((token) =>
+        fetchCoachDuelTurn(players.you, players.ai, [...earlier, deck], path, players.games, players.playAll,
+          round, seen, { days: players.days }, players.kind, token),
+      )
+      .then((ans) => {
+        if (mine !== seq.current) return;
+        if (ans.error) {
+          setPending(null);
+          setError(
+            ans.error === 'short_set'
+              ? `${ans.name ?? 'The AI player'} cannot field ${players.games} decks that share no card in this window. Try a longer history${players.games === 5 ? ' or a best of 3' : ''}.`
+              : ans.error === 'no_brain'
+                ? 'The duel model is not available right now.'
+                : 'That deck cannot be played in this duel.',
+          );
+          return;
+        }
+        const d = Math.random() * 100;
+        const result = roll(ans.chance, d / 100);
+        const finish = () => {
+          setPlayed((xs) => [...xs, { deck, ans, draw: d, result }]);
+          setPending(null);
+          setNeedle(null);
+          setPasted(null);
+          setShowLast(true);
+        };
+        setPending({ deck, ans });
+        if (reducedMotion()) {
+          finish();
+          return;
+        }
+        setNeedle(50);
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => setNeedle(d)));
+        timer.current = window.setTimeout(finish, ROLL_MS);
+      })
+      .catch((e) => {
+        if (mine !== seq.current) return;
+        setPending(null);
+        setError(explain(e));
+      });
   };
 
   const rematch = () => {
-    if (!duel) return;
-    const shown = state.games.map((g) => duel.you.set[g.you].cards);
-    startDuel(round + 1, addSeen(seen, shown));
-  };
-  const changeDecks = () => {
-    if (duel) {
-      const shown = state.games.map((g) => duel.you.set[g.you].cards);
-      setSeen((s) => addSeen(s, shown));
-      setRound((r) => r + 1);
-    }
-    setDuel(null);
-    resetBattle();
+    setSeen((s) => addSeen(s, earlier));
+    setRound((r) => r + 1);
+    resetDuel();
   };
   const newPlayers = () => {
     seq.current += 1;
     setPlayers(null);
     setPrep(null);
-    setDuel(null);
-    setSlots([null, null, null, null]);
     setError(null);
     setRound(0);
     setSeen([]);
-    resetBattle();
+    resetDuel();
   };
 
   /* ── what the Kings do ── */
-  const you = duel?.you ?? prep?.you ?? null;
-  const ai = duel?.ai ?? prep?.ai ?? null;
-  const lastAiPick = lastGame ? duel?.policy[`${state.path.slice(0, lastGame.game - 1)}:${picks.slice(0, lastGame.game - 1).join(',')}`] : null;
-  const aiRead = (pick: typeof lastAiPick, mineCards: string[] | undefined) =>
-    pick && mineCards && pick.expected.length ? overlap(pick.expected[0].cards, mineCards) >= 6 : null;
+  const you = lastAns?.you ?? prep?.you ?? null;
+  const ai = lastAns?.ai ?? prep?.ai ?? null;
+  const lastPlayed = played.length ? played[played.length - 1] : null;
+  const readTop = (a: CoachDuelTurn | null | undefined) => (a && a.expected.length ? a.expected[0].hit : null);
 
   let blue: { pose: Pose; emote: Emote | null; line?: string } = { pose: 'idle', emote: null };
   let red: { pose: Pose; emote: Emote | null; line?: string } = { pose: 'idle', emote: null };
   if (loading === 'prep') red = { pose: 'idle', emote: 'think', line: 'Scouting both players…' };
-  else if (loading === 'duel') red = { pose: 'idle', emote: 'think', line: round > 0 || duel ? 'Changing my decks…' : 'Loading my decks…' };
-  else if (prep && !duel) {
-    red = { pose: 'idle', emote: 'think', line: `I know ${prep.ai.name}. I'm reading ${prep.you.name}.` };
-  } else if (duel && rolling) {
+  else if (rolling && !pending?.ans) red = { pose: 'idle', emote: 'think', line: 'Choosing my deck…' };
+  else if (rolling) {
     blue = { pose: 'nervous', emote: 'sweat' };
     red = { pose: 'nervous', emote: 'sweat' };
-  } else if (duel && champ) {
-    const read = aiRead(lastAiPick, lastGame ? duel.you.set[lastGame.you].cards : undefined);
+  } else if (champ && lastPlayed) {
+    const read = readTop(lastPlayed.ans);
     if (champ === 'you') {
       blue = { pose: 'laugh', emote: 'yeah', line: `${youWon}–${aiWon}!` };
       red = { pose: 'nervous', emote: 'gg', line: read === false ? "Didn't see that coming." : 'GG. Rematch?' };
@@ -526,29 +466,36 @@ export function CoachDuel() {
       blue = { pose: 'nervous', emote: 'gg', line: `${youWon}–${aiWon}` };
       red = { pose: 'cheer', emote: 'yeah', line: read ? 'Read you right.' : 'GG!' };
     }
-  } else if (duel && lastGame && showLast) {
-    const read = aiRead(lastAiPick, duel.you.set[lastGame.you].cards);
-    if (lastGame.result === 'w') {
+  } else if (lastPlayed && showLast) {
+    const read = readTop(lastPlayed.ans);
+    if (lastPlayed.result === 'w') {
       blue = { pose: 'laugh', emote: 'laugh' };
       red = { pose: 'nervous', emote: 'grrr', line: read === false ? 'You surprised me.' : 'Saw it. Lost it.' };
     } else {
       blue = { pose: 'nervous', emote: 'cry' };
       red = { pose: 'laugh', emote: 'laugh', line: read ? 'Read you right.' : 'Lucky one.' };
     }
-  } else if (duel) {
-    const believed = duel.policy[state.key]?.believed;
-    red = { pose: 'idle', emote: 'think', line: believed ? `My pick is in. I give us ${pctLabel(believed.duel)}.` : 'My pick is in.' };
+  } else if (prep) {
+    red = {
+      pose: 'idle', emote: 'think',
+      line: played.length === 0
+        ? round > 0 ? 'New decks. I remember yours.' : `I know ${prep.ai.name}. Show me your first deck.`
+        : deadRubber ? 'The duel is decided. Still playing.' : 'Your move.',
+    };
   }
-  const beat = `${state.path}|${rolling}|${loading}|${!!prep}|${!!duel}|${showLast}|${round}`;
+  const beat = `${path}|${rolling}|${!!pending?.ans}|${loading}|${!!prep}|${showLast}|${round}`;
+
+  const shownGame = rolling ? pending : lastPlayed && showLast ? { deck: lastPlayed.deck, ans: lastPlayed.ans } : null;
+  const switchDeck = lastAns?.switch ? lastAns.ai.set[lastAns.switch.deck] : null;
 
   /* ── layout ── */
   return (
     <section className={styles.page}>
-      <div className={styles.arena} data-phase={duel ? (champ ? 'over' : 'battle') : prep ? 'loadout' : 'setup'}>
+      <div className={styles.arena} data-phase={played.length || rolling ? (champ ? 'over' : 'battle') : prep ? 'ready' : 'setup'}>
         <span className={styles.seam} aria-hidden="true" />
         <div className={styles.side} data-seat="blue">
           <King seat="blue" pose={blue.pose} emote={blue.emote} line={blue.line} beat={`b|${beat}`} label="The Blue King: your coach" />
-          <Plate seat="blue" side={you} role="You · Blue coach" crowns={youWon}>
+          <Plate seat="blue" side={you} role="You · Blue coach" crowns={youWon} need={need}>
             <label className={styles.seatField}>
               <span className="sr-only">Your player</span>
               <input
@@ -568,28 +515,44 @@ export function CoachDuel() {
         <div className={styles.mid}>
           <h1 className={styles.title}>Coach Duel</h1>
           <img src={`${ART}duel.webp`} alt="" className={styles.emblem} />
-          {duel ? (
+          {prep ? (
             <>
               <span className={styles.round}>
-                {champ ? (champ === 'you' ? 'Victory' : 'Defeat') : `Game ${Math.min(state.games.length + 1, GAMES)} · Best of ${GAMES}`}
+                {champ ? (champ === 'you' ? 'Victory' : 'Defeat') : `Game ${Math.min(gameNo, fmt)} · Best of ${fmt}`}
               </span>
               <div className={styles.score} aria-label={`Score ${youWon} to ${aiWon}`}>
                 <span data-seat="blue">{youWon}</span>
                 <span className={styles.scoreDash}>–</span>
                 <span data-seat="red">{aiWon}</span>
               </div>
-              {round > 0 && <span className={styles.roundNo}>Rematch {round}</span>}
+              <span className={styles.roundNo}>
+                {all ? 'Every game played' : 'Ends when someone wins'}
+                {round > 0 ? ` · Rematch ${round}` : ''}
+              </span>
             </>
-          ) : prep ? (
-            <span className={styles.round}>Load your decks</span>
           ) : (
             <form
               className={styles.setup}
               onSubmit={(e) => {
                 e.preventDefault();
-                if (ready) loadPrep({ you: youTag!, ai: aiTag!, days, kind });
+                if (ready) loadPrep({ you: youTag!, ai: aiTag!, days, kind, games, playAll });
               }}
             >
+              <div className={styles.chipRow} role="group" aria-label="Format">
+                {([3, 5] as Format[]).map((g) => (
+                  <button key={g} type="button" className={styles.bigChip} aria-pressed={games === g} onClick={() => setGames(g)}>
+                    Best of {g}
+                  </button>
+                ))}
+              </div>
+              <div className={styles.chipRow} role="group" aria-label="How many games">
+                <button type="button" className={styles.chip} aria-pressed={!playAll} onClick={() => setPlayAll(false)}>
+                  Stop when someone wins
+                </button>
+                <button type="button" className={styles.chip} aria-pressed={playAll} onClick={() => setPlayAll(true)}>
+                  Play all {games} games
+                </button>
+              </div>
               <div className={styles.chipRow} role="group" aria-label="History window">
                 {DAY_PRESETS.map((d) => (
                   <button key={d} type="button" className={styles.chip} aria-pressed={days === d} onClick={() => setDays(d)}>
@@ -614,7 +577,7 @@ export function CoachDuel() {
 
         <div className={styles.side} data-seat="red">
           <King seat="red" pose={red.pose} emote={red.emote} line={red.line} beat={`r|${beat}`} label="The Red King: the AI coach" />
-          <Plate seat="red" side={ai} role="AI coach · Red" crowns={aiWon}>
+          <Plate seat="red" side={ai} role="AI coach · Red" crowns={aiWon} need={need}>
             <label className={styles.seatField}>
               <span className="sr-only">Opponent player</span>
               <input
@@ -633,8 +596,8 @@ export function CoachDuel() {
       </div>
 
       <ol className={styles.steps} aria-label="Steps">
-        {['Pick both players', 'Load your decks', 'Battle the AI coach'].map((s, i) => {
-          const at = duel ? 2 : prep ? 1 : 0;
+        {['Players & format', 'Paste a deck', 'Play the game'].map((s, i) => {
+          const at = !prep ? 0 : rolling || (showLast && !finished) || finished ? 2 : 1;
           return (
             <li key={s} className={styles.step} data-on={i === at ? '' : undefined} data-done={i < at ? '' : undefined}>
               <span className={styles.stepNo}>{i < at ? '✓' : i + 1}</span>
@@ -649,96 +612,26 @@ export function CoachDuel() {
           <p>The AI coach is scouting both players…</p>
         </ReadingState>
       )}
-      {error && !loading && <p className={styles.error}>{error}</p>}
+      {error && <p className={styles.error}>{error}</p>}
 
-      {/* ── your loadout ── */}
-      {prep && !duel && loading !== 'prep' && (
-        <section className={styles.panel} aria-label="Your loadout">
-          <header className={styles.panelHead}>
-            <div>
-              <h2 className={styles.panelTitle}>Your loadout</h2>
-              <p className={styles.panelSub}>
-                The decks you want {prep.you.name} to bring: {MIN_DECKS} or {MAX_DECKS}, no card twice.
-              </p>
-            </div>
-            <button type="button" className={styles.ghost} onClick={useSuggested} disabled={!prep.you.set?.length}>
-              Use Coach Assist's set
-            </button>
-          </header>
-          <textarea
-            className={styles.paste}
-            value={paste}
-            placeholder="Paste deck links here — one at a time, or all four at once"
-            onChange={(e) => {
-              setPaste(e.target.value);
-              if (findDeckLinks(e.target.value).length) takePaste(e.target.value);
-            }}
-            onPaste={(e) => {
-              e.preventDefault();
-              takePaste(e.clipboardData.getData('text'));
-            }}
-            rows={2}
-          />
-          {pasteNote && <p className={styles.note}>{pasteNote}</p>}
-          <div className={styles.slots}>
-            {slots.map((s, i) => (
-              <div key={i} className={styles.slot} data-empty={s ? undefined : ''} data-clash={check.clashes.includes(i) ? '' : undefined}>
-                <span className={styles.slotNo}>Deck {i + 1}</span>
-                {s ? (
-                  <>
-                    {s.name && <span className={styles.slotName}>{s.name}</span>}
-                    <Strip deck={s} size="grid" />
-                    <button
-                      type="button"
-                      className={styles.slotClear}
-                      aria-label={`Remove deck ${i + 1}`}
-                      onClick={() => setSlots((cur) => cur.map((x, j) => (j === i ? null : x)))}
-                    >
-                      ×
-                    </button>
-                  </>
-                ) : (
-                  <span className={styles.slotEmpty}>{i < MIN_DECKS ? 'Paste a deck link' : 'Optional fourth deck'}</span>
-                )}
-              </div>
-            ))}
-          </div>
-          <footer className={styles.panelFoot}>
-            <span className={styles.status} data-ok={check.ok ? '' : undefined}>
-              {check.shared.length
-                ? `${check.shared.map(cardName).join(', ')} ${check.shared.length === 1 ? 'is' : 'are'} in two decks`
-                : `${check.count} of ${MAX_DECKS} decks${check.count < MIN_DECKS ? ` · ${MIN_DECKS - check.count} more to play` : ''}`}
-            </span>
-            <button type="button" className={styles.cta} disabled={!check.ok || loading !== null} onClick={() => startDuel(round, seen)}>
-              {round > 0 ? 'Back to the arena' : 'Start the duel'}
-            </button>
-          </footer>
-        </section>
-      )}
-
-      {loading === 'duel' && (
-        <ReadingState k="coach-duel-round" hue="violet">
-          <p>{round > 0 || duel ? 'The AI coach is changing its decks…' : 'The AI coach is loading its decks…'}</p>
-        </ReadingState>
-      )}
-
-      {/* ── the battle ── */}
-      {duel && loading !== 'duel' && (
-        <section className={styles.panel} aria-label="The battle">
-          <ol className={styles.track} aria-label="Games">
-            {Array.from({ length: GAMES }, (_, g) => {
-              const gm = state.games[g];
+      {prep && (
+        <section className={styles.panel} aria-label="The duel">
+          <ol className={styles.track} data-games={fmt} aria-label="Games">
+            {Array.from({ length: fmt }, (_, g) => {
+              const gm = played[g];
+              const ans = gm?.ans;
+              const aiDeck = ans && ans.aiDeck !== null ? ans.ai.set[ans.aiDeck] : null;
               return (
                 <li key={g} className={styles.trackGame} data-result={gm ? (gm.result === 'w' ? 'you' : 'ai') : undefined}>
                   <span className={styles.trackNo}>G{g + 1}</span>
                   {gm ? (
                     <span className={styles.trackDecks}>
-                      <span data-seat="blue">{duel.you.set[gm.you].deckName}</span>
+                      <span data-seat="blue">{ans?.you.deck.deckName}</span>
                       <span className={styles.trackVs}>vs</span>
-                      <span data-seat="red">{gm.ai !== null ? duel.ai.set[gm.ai].deckName : '—'}</span>
+                      <span data-seat="red">{aiDeck?.deckName ?? '—'}</span>
                     </span>
                   ) : (
-                    <span className={styles.trackDecks}>{g === state.games.length && !over ? 'Now' : over ? 'Not needed' : '—'}</span>
+                    <span className={styles.trackDecks}>{g === played.length && !finished ? 'Now' : finished ? 'Not played' : '—'}</span>
                   )}
                   {gm && <Crown on />}
                 </li>
@@ -746,7 +639,7 @@ export function CoachDuel() {
             })}
           </ol>
 
-          {over && (
+          {finished && (
             <div className={styles.result} data-winner={champ ?? undefined}>
               <p className={styles.resultWord}>{champ === 'you' ? 'Victory' : 'Defeat'}</p>
               <p className={styles.resultScore}>
@@ -756,9 +649,6 @@ export function CoachDuel() {
                 <button type="button" className={styles.cta} onClick={rematch}>
                   Rematch
                 </button>
-                <button type="button" className={styles.ghost} onClick={changeDecks}>
-                  Change my decks
-                </button>
                 <button type="button" className={styles.ghost} onClick={newPlayers}>
                   New players
                 </button>
@@ -767,153 +657,169 @@ export function CoachDuel() {
             </div>
           )}
 
-          {/* A game being played, or the one just finished. */}
-          {(rolling || (showLast && lastGame)) && (() => {
-            const yi = rolling ? picks[picks.length - 1] : lastGame!.you;
-            const ai_i = rolling ? pendingAi : lastGame!.ai;
-            const g = rolling ? state.games.length + 1 : lastGame!.game;
-            const lastPath = rolling ? state.path : state.path.slice(0, -1);
-            const base = ai_i === null ? 100 : pair(yi, ai_i);
-            const chance = rolling
-              ? walk([...picks], [...draws, 0], aiDeck, pair, duel.shift).games[draws.length]?.chance ?? base
-              : lastGame!.chance;
-            const pick = duel.policy[`${lastPath}:${picks.slice(0, g - 1).join(',')}`];
-            const read = pick && pick.expected.length ? overlap(pick.expected[0].cards, duel.you.set[yi].cards) >= 6 : null;
+          {/* The game being played, or the one just finished. */}
+          {shownGame && (() => {
+            const ans = shownGame.ans;
+            const g = rolling ? gameNo : lastPlayed!.ans.game;
+            const aiDeck = ans && ans.aiDeck !== null ? ans.ai.set[ans.aiDeck] : null;
+            const youDeck: DrawDeck = ans ? ans.you.deck : { cards: shownGame.deck, deckName: pasted?.name };
+            const exp = ans?.expected[0];
             return (
-              <div className={styles.faceoff} data-result={!rolling && lastGame ? lastGame.result : undefined}>
+              <div className={styles.faceoff} data-result={!rolling && lastPlayed ? lastPlayed.result : undefined}>
                 <h2 className={styles.gameTitle}>
                   Game {g}
-                  {!rolling && lastGame && (
-                    <span className={styles.gameWinner} data-seat={lastGame.result === 'w' ? 'blue' : 'red'}>
-                      {lastGame.result === 'w' ? 'You win' : 'AI wins'}
+                  {!rolling && lastPlayed && (
+                    <span className={styles.gameWinner} data-seat={lastPlayed.result === 'w' ? 'blue' : 'red'}>
+                      {lastPlayed.result === 'w' ? 'You win' : 'AI wins'}
                     </span>
                   )}
                 </h2>
-                <ChanceBar you={chance} needle={rolling ? needle : lastGame!.draw} rolling={rolling} />
-                <p className={styles.matchLine}>
-                  Matchup {pctLabel(base)}
-                  {Math.abs(chance - base) >= 0.05 && (
-                    <span data-up={chance > base ? '' : undefined}>
-                      {' '}
-                      · {chance > base ? '+' : '−'}
-                      {Math.abs(Math.round((chance - base) * 10) / 10)} momentum
-                    </span>
-                  )}
-                </p>
+                {ans && (
+                  <>
+                    <ChanceBar you={ans.chance} needle={rolling ? needle : lastPlayed!.draw} rolling={rolling} />
+                    <p className={styles.matchLine}>
+                      Matchup {pctLabel(ans.matchup)}
+                      {Math.abs(ans.chance - ans.matchup) >= 0.05 && (
+                        <span data-up={ans.chance > ans.matchup ? '' : undefined}>
+                          {' '}· {ans.chance > ans.matchup ? '+' : '−'}
+                          {Math.abs(Math.round((ans.chance - ans.matchup) * 10) / 10)} momentum
+                        </span>
+                      )}
+                      {ans.yourOdds && <span> · your coach rated your deck {pctLabel(ans.yourOdds.game)}</span>}
+                    </p>
+                  </>
+                )}
                 <div className={styles.faceRow}>
-                  <DeckTile deck={duel.you.set[yi]} seat="blue">
-                    <DeckActions cards={duel.you.set[yi].cards} name={duel.you.set[yi].deckName} />
+                  <DeckTile deck={youDeck} seat="blue">
+                    <DeckActions cards={youDeck.cards} name={youDeck.deckName} />
                   </DeckTile>
                   <span className={styles.vs} aria-hidden="true">
                     VS
                   </span>
-                  {ai_i !== null ? (
+                  {aiDeck ? (
                     <div className={styles.flip}>
                       <DeckTile
-                        deck={duel.ai.set[ai_i]}
+                        deck={aiDeck}
                         seat="red"
-                        badge={duel.ai.set[ai_i].switched ? <span className={styles.tag}>Switched</span> : duel.ai.set[ai_i].counter ? <span className={styles.tag}>Counter</span> : undefined}
+                        badge={aiDeck.switched ? <span className={styles.tag}>Switched</span> : aiDeck.counter ? <span className={styles.tag}>Counter</span> : undefined}
                       >
-                        {pick?.expected[0] && (
+                        {exp && (
                           <p className={styles.readLine}>
-                            Expected {pick.expected[0].name} · {pctLabel(pick.expected[0].p)}{' '}
-                            <span className={read ? styles.readHit : styles.readMiss}>{read ? 'Read you' : 'Surprised'}</span>
+                            Expected {exp.name} · {pctLabel(exp.p)}{' '}
+                            <span className={exp.hit ? styles.readHit : styles.readMiss}>{exp.hit ? 'Read you' : 'Surprised'}</span>
                           </p>
                         )}
                       </DeckTile>
                     </div>
-                  ) : (
+                  ) : ans ? (
                     <div className={styles.cardBack}>No legal deck left</div>
+                  ) : (
+                    <CardBack busy />
                   )}
                 </div>
-                {!rolling && !over && (
+                {!rolling && !finished && (
                   <button type="button" className={styles.cta} onClick={() => setShowLast(false)}>
-                    Next game
+                    {deadRubber ? `Game ${gameNo} — keep playing` : `Next: game ${gameNo}`}
                   </button>
                 )}
               </div>
             );
           })()}
 
-          {/* Your pick for the next game. */}
-          {!rolling && !showLast && !over && (
+          {/* Paste the deck for the next game. */}
+          {!shownGame && !finished && (
             <div className={styles.choose}>
-              <h2 className={styles.gameTitle}>Game {state.games.length + 1} · pick your deck</h2>
-              <div className={styles.chooseRow}>
-                <div className={styles.tiles}>
-                  {duel.you.set.map((d, i) => {
-                    const h = hints?.[String(i)];
-                    const used = usedByYou.has(i);
-                    const best =
-                      hints &&
-                      Object.entries(hints).sort((a, b) => b[1].duel - a[1].duel)[0]?.[0] === String(i);
-                    return (
-                      <DeckTile
-                        key={i}
-                        deck={d}
-                        seat="blue"
-                        selected={selected === i}
-                        disabled={used}
-                        onSelect={() => setSelected(i)}
-                        badge={used ? <span className={styles.tag}>Played G{state.games.find((g) => g.you === i)?.game}</span> : best ? <span className={styles.tagGold}>Coach pick</span> : undefined}
-                      >
-                        {h && !used && (
-                          <span className={styles.odds}>
-                            <span>This game {pctLabel(h.game)}</span>
-                            <span>Duel {pctLabel(h.duel)}</span>
-                          </span>
-                        )}
-                      </DeckTile>
-                    );
-                  })}
+              <h2 className={styles.gameTitle}>
+                Game {gameNo} · paste your deck
+                {deadRubber && <span className={styles.tag}>Duel decided — played for the record</span>}
+              </h2>
+              <div className={styles.pasteRow}>
+                <div className={styles.pasteCol}>
+                  <textarea
+                    className={styles.paste}
+                    value={paste}
+                    placeholder="Paste a deck link — copy it from the game's deck screen"
+                    onChange={(e) => {
+                      setPaste(e.target.value);
+                      if (findDeckLinks(e.target.value).length) takePaste(e.target.value);
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      takePaste(e.clipboardData.getData('text'));
+                    }}
+                    rows={2}
+                  />
+                  <div className={styles.pasteActions}>
+                    <button type="button" className={styles.ghost} onClick={useSuggested} disabled={!suggested.length}>
+                      {pasted?.name ? 'Another Coach Assist deck' : 'Use a Coach Assist deck'}
+                    </button>
+                    {earlier.length > 0 && <span className={styles.note}>{earlier.length * 8} cards already played this duel</span>}
+                  </div>
+                  {pasteNote && <p className={styles.note}>{pasteNote}</p>}
+                  {pasted ? (
+                    <DeckTile
+                      deck={pasted}
+                      seat="blue"
+                      badge={
+                        <button type="button" className={styles.slotClear} aria-label="Remove this deck" onClick={() => setPasted(null)}>
+                          ×
+                        </button>
+                      }
+                    >
+                      {clash.length > 0 && (
+                        <p className={styles.clash}>
+                          {clash.map(cardName).join(', ')} {clash.length === 1 ? 'was' : 'were'} already played this duel
+                        </p>
+                      )}
+                    </DeckTile>
+                  ) : (
+                    <div className={styles.emptyDeck}>Your deck for game {gameNo}</div>
+                  )}
                 </div>
-                <CardBack />
+                <span className={styles.vs} aria-hidden="true">
+                  VS
+                </span>
+                <CardBack busy={false} />
               </div>
-              <button type="button" className={styles.cta} disabled={selected === null} onClick={battle}>
-                Battle!
+              <button type="button" className={styles.cta} disabled={!pasted || clash.length > 0 || rolling} onClick={lockIn}>
+                Lock in &amp; battle
               </button>
             </div>
           )}
 
-          {over && (
+          {finished && lastAns && (
             <div className={styles.reveal}>
-              <h3 className={styles.revealTitle}>The AI coach's loadout</h3>
-              {duel.switch && (
+              <h3 className={styles.revealTitle}>The AI coach's decks this duel</h3>
+              {lastAns.switch && switchDeck && (
                 <p className={styles.switchLine}>
-                  Switched {cardName(duel.switch.out)} → {cardName(duel.switch.in)} in {duel.ai.set[duel.switch.deck]?.deckName}
-                  {duel.switch.games ? ` · a change seen in ${duel.switch.games.toLocaleString()} real duels` : ''}
+                  Switched {cardName(lastAns.switch.out)} → {cardName(lastAns.switch.in)} in {switchDeck.deckName}
+                  {lastAns.switch.games ? ` · a change seen in ${lastAns.switch.games.toLocaleString()} real duels` : ''}
                 </p>
               )}
               <div className={styles.revealGrid}>
-                {duel.ai.set.map((d, i) => (
-                  <DeckTile
-                    key={i}
-                    deck={d}
-                    seat="red"
-                    badge={
-                      usedByAi.has(i) ? (
-                        <span className={styles.tag}>G{state.games.find((g) => g.ai === i)?.game}</span>
-                      ) : d.switched ? (
-                        <span className={styles.tag}>Switched</span>
-                      ) : d.counter ? (
-                        <span className={styles.tag}>Counter</span>
-                      ) : undefined
-                    }
-                  />
-                ))}
+                {lastAns.ai.set.map((d, i) => {
+                  const g = lastAns.aiPicks.indexOf(i);
+                  return (
+                    <DeckTile
+                      key={i}
+                      deck={d}
+                      seat="red"
+                      badge={
+                        g >= 0 ? <span className={styles.tag}>G{g + 1}</span>
+                          : d.switched ? <span className={styles.tag}>Switched</span>
+                            : d.counter ? <span className={styles.tag}>Counter</span> : undefined
+                      }
+                    />
+                  );
+                })}
               </div>
             </div>
           )}
         </section>
       )}
 
-      {(prep || duel) && !loading && !over && (
+      {prep && !finished && (
         <div className={styles.footActions}>
-          {duel && (
-            <button type="button" className={styles.link} onClick={changeDecks}>
-              Change my decks
-            </button>
-          )}
           <button type="button" className={styles.link} onClick={newPlayers}>
             New players
           </button>

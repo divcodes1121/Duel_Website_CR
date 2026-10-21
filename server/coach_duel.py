@@ -191,6 +191,16 @@ def policy(decks: list, read, win, *, games: int = GAMES):
             try:
                 out = dp.plan(decks, read, win, my_played=my_played, opp_played=opp_played,
                               results=results, games=games)
+                if not out.get("options") and results:
+                    # THE DUEL IS DECIDED BUT THE GAMES GO ON ("play all games"):
+                    # nothing is left to win but this game, so the results are
+                    # not told and the deck with the best chance in it is the pick.
+                    out = dp.plan(decks, read, win, my_played=my_played, opp_played=opp_played,
+                                  results="", games=games)
+                    if out.get("options") and out.get("gamePick") is not None:
+                        o = next(o for o in out["options"] if o["deck"] == out["gamePick"])
+                        out = {**out, "options": [o] + [x for x in out["options"] if x is not o],
+                               "pick": out["gamePick"]}
                 if out.get("options"):
                     o = out["options"][0]
                     info = {"believed": {"game": round(100 * o["game"], 1),
@@ -388,41 +398,39 @@ def simulate(a_tag: str, b_tag: str, a_win: tuple, b_win: tuple, kind=None) -> d
     return result
 
 
-# ══ YOU AGAINST THE AI COACH (2026-10-21) ═══════════════════════════════════
+# ══ YOU AGAINST THE AI COACH, ONE GAME AT A TIME (2026-10-21) ═══════════════
 #
-# Asked for after the first build: "the blue coach is a human — after entering
-# the player tags he pastes the decks he wants his player to play — and red is
-# an AI coach; after a rematch the red coach's decks change, based on the
-# player's past trends, sometimes with a card switched, as the AI decides,
-# reading the opponent player".
+# Asked for after the first build: "the blue coach is a human ... red is an AI
+# coach; after a rematch the red coach's decks change, based on the player's
+# past trends, sometimes with a card switched, as the AI decides, reading the
+# opponent player"; then "one deck at a time — paste one deck, then the game
+# starts — and before that ask best of 3 / best of 5, and we proceed one by
+# one".
 #
-#   * YOUR SIDE is your decks and your choice each game. Your coach-assist
-#     figures (`hints`) are Coach Assist's look-ahead for YOUR player over YOUR
-#     pasted decks, against its read of the red player's history.
-#   * THE AI's SIDE is Coach Assist for the red player. Duel 1 it loads Coach
-#     Assist's own set; every rematch it draws a new one (`vary_set`): decks of
+#   * YOU bring one deck per game, pasted before that game. No card twice in a
+#     duel (the duel rule): a deck sharing a card with one you already played is
+#     refused.
+#   * THE AI is Coach Assist for the other player. Its set is fixed for the
+#     duel. Best of 3, duel 1: Coach Assist's own set. Every rematch, and every
+#     best of 5 (which needs five decks), a set drawn by `vary_set`: decks of
 #     its player's own duel rotation weighted by how much they play each — the
-#     player's trend — and the counters, kept only if the set is within
-#     `VARY_BAND` of the best the coach can see. Sometimes (`SWITCH_P`) one deck
-#     carries a one-card switch that real duel players made to that very list
-#     (`duel_index.near_variants`).
+#     player's trend — and the counters, within `VARY_BAND` of the best the
+#     coach can see. Sometimes (`SWITCH_P`) one deck carries a one-card switch
+#     real duel players made to that very list (`duel_index.near_variants`).
+#   * IT PICKS BEFORE IT SEES YOUR DECK. `turn` computes the AI's pick for this
+#     game from the decks you played in EARLIER games and the results only —
+#     the deck you just locked in is used for nothing but the game's chance,
+#     after the pick. That is the fairness of the game, and it lives here, not
+#     in the screen.
 #   * IT LEARNS FROM THE DUEL BEFORE. The decks you showed in earlier duels of
-#     the session are folded into its read of you (`blend_read`, `SEEN_WEIGHT`
-#     of the mass): it expects to see them again, as a real coach would.
-#   * IT NEVER SEES YOUR SET. It reads your player's history and what you have
-#     revealed in THIS duel, exactly as in a real duel.
-#
-# Everything is worked out in one request: the AI's pick for every way the
-# duel can go (`ai_policy`, keyed by who won each game and which of your decks
-# you brought), your figures for the same states, and the win chance of every
-# pairing. The screen then plays it with no further request.
+#     the session are folded into its read of you (`blend_read`).
 
 #: A rematch set must be within this much duel-win chance of the best set the
 #: AI coach could compose, or it is not one a coach would choose.
 VARY_BAND = 0.06
 
-#: How many candidate sets a rematch draws before choosing.
-VARY_DRAWS = 40
+#: How many candidate sets a draw tries before choosing.
+VARY_DRAWS = 60
 
 #: A counter from outside the player's own decks weighs this share of their
 #: median deck in the draw: the AI leans on what its player really plays.
@@ -438,11 +446,13 @@ SWITCH_CANDIDATES = 12
 #: in earlier duels of the session.
 SEEN_WEIGHT = 0.5
 
-#: The most decks a coach may load (a duel set is four).
+#: The formats a duel can be played in, and the decks the AI loads for each.
+FORMATS = {3: (4, 3), 5: (5, 5)}          # games -> (most decks, fewest)
 MAX_DECKS = 4
 
 _side_cache: dict = {}
 _side_lock = threading.Lock()
+_set_cache: dict = {}
 
 
 def blend_read(read, seen: list, weight: float = SEEN_WEIGHT):
@@ -475,11 +485,11 @@ def blend_read(read, seen: list, weight: float = SEEN_WEIGHT):
 
 def vary_set(entries: list, value, rng, *, size: int = MAX_DECKS, min_size: int = SET_MIN,
              draws: int = VARY_DRAWS, band: float = VARY_BAND, avoid=None) -> list | None:
-    """A set for a rematch: indices into `entries` (`{"cards", "weight"}`),
-    sharing no card, drawn in proportion to `weight`, and within `band` of the
-    best set drawn. `avoid` (a frozenset of entry indices) is the set it loaded
-    last time: never chosen again while another qualifies. None when no set
-    of `min_size` can be drawn."""
+    """A set: indices into `entries` (`{"cards", "weight"}`), sharing no card,
+    drawn in proportion to `weight`, and within `band` of the best set drawn
+    (`band=0` is the best). `avoid` (a frozenset of entry indices) is a set
+    never chosen while another qualifies. None when no set of `min_size` can
+    be drawn."""
     pool = [i for i, e in enumerate(entries) if len(set(e["cards"])) == 8 and e.get("weight", 0) > 0]
     sets: dict = {}
     for _ in range(draws):
@@ -540,43 +550,19 @@ def switch_card(decks: list, variants_for, rng, p: float = SWITCH_P):
     return decks, None
 
 
-def state_keys(n_mine: int, games: int = GAMES) -> list:
-    """Every decision state of a best of 3 for the side whose decks are
-    indexed: `(path, my deck indices so far)`, path = who won each game from
-    THIS side. Game 1, game 2 after each of my decks and each result, game 3
-    after each 1-1 and each ordered pair of my decks."""
-    out = [("", ())]
-    for i in range(n_mine):
-        for r in "wl":
-            out.append((r, (i,)))
-    if games >= 3:
-        for i in range(n_mine):
-            for j in range(n_mine):
-                if i != j:
-                    for path in ("wl", "lw"):
-                        out.append((path, (i, j)))
-    return out
-
-
-def key_of(path: str, mine: tuple) -> str:
-    return path + ":" + ",".join(str(i) for i in mine)
-
-
-def ai_policy(you: list, ai_pick, games: int = GAMES) -> dict:
-    """The AI coach's pick in every state, keyed by YOUR side: `key_of(path,
-    your deck indices so far)`, path = who won each game from your side.
-    `ai_pick(ai_played, your_played, ai_results) -> (index, info)`; the AI's
-    own earlier picks along the path are its picks in the earlier states."""
-    out: dict = {}
-    for path, mine in state_keys(len(you), games):
-        ai_played = []
-        for g in range(len(path)):
-            prev = out.get(key_of(path[:g], mine[:g]))
-            if prev is None or prev["deck"] is None:
-                break
-            ai_played.append(prev["deck"])
-        idx, info = ai_pick(list(ai_played), [you[i] for i in mine], _flip(path))
-        out[key_of(path, mine)] = {"deck": idx, **(info or {}), "_played": ai_played}
+def ai_picks(ai_cards: list, your_decks: list, results: str, pick, upto: int) -> list:
+    """The AI's deck (index into `ai_cards`) for games 1..`upto`, each chosen
+    from what it knew BEFORE that game: its own earlier picks, your decks of
+    the EARLIER games and their results (from its side). `pick(ai_played,
+    your_played, ai_results) -> (index, info)`. Out: `[(index, info), ...]`,
+    stopping at a game where it has no legal deck (index None)."""
+    out: list = []
+    for g in range(upto):
+        played = [ai_cards[i] for i, _info in out]
+        idx, info = pick(played, list(your_decks[:g]), _flip(results[:g]))
+        out.append((idx, info))
+        if idx is None:
+            break
     return out
 
 
@@ -596,12 +582,12 @@ def _side_cached(me: str, opp: str, me_win: tuple, opp_win: tuple, kind) -> dict
 
 
 def prep(you: str, ai: str, you_win: tuple, ai_win: tuple, kind=None) -> dict:
-    """Both players read once (and kept), before you paste your decks: your
-    player as the screen shows them, Coach Assist's set for your player (to
-    fill your loadout in one press), and the AI coach without its decks."""
+    """Both players read once (and kept), before the first game: your player as
+    the screen shows them, Coach Assist's set for your player (to fill a game's
+    deck in one press), and the AI coach without its decks."""
     y = _side_cached(you, ai, you_win, ai_win, kind)
     a = _side_cached(ai, you, ai_win, you_win, kind)
-    return {"brain": BRAIN, "mode": "prep", "games": GAMES,
+    return {"brain": BRAIN, "mode": "prep",
             "you": _public(y), "ai": _public(a, with_set=False)}
 
 
@@ -612,7 +598,7 @@ def _rng(*parts) -> "random.Random":
     return random.Random(int(h[:16], 16))
 
 
-def _deck_row(cards: list, opp_hist=None) -> dict:
+def _deck_row(cards: list) -> dict:
     import coach
     import duel_zone as dz
     a = coach._archetype(list(cards))
@@ -621,12 +607,13 @@ def _deck_row(cards: list, opp_hist=None) -> dict:
     return row
 
 
-def _ai_set(a: dict, read, round_: int, seed: str) -> tuple[list, dict | None, dict]:
-    """The AI coach's decks for duel number `round_` (0 = the first):
-    `(rows, switch, info)`."""
+def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES) -> tuple[list, dict | None, dict]:
+    """The AI coach's decks for duel number `round_` (0 = the first) of a best
+    of `games`: `(rows, switch, info)`."""
     import coach
+    most, fewest = FORMATS.get(games, FORMATS[GAMES])
     base = [dict(d) for d in a["decks"]]
-    if round_ <= 0 or a["win"] is None:
+    if a["win"] is None or (round_ <= 0 and len(base) >= fewest):
         return base, None, {"source": "coach-assist"}
     rng = _rng(seed, round_)
     own = coach._own_duel_decks((a.get("keep") or {}).get("mine_hist"), set())
@@ -635,129 +622,132 @@ def _ai_set(a: dict, read, round_: int, seed: str) -> tuple[list, dict | None, d
     median = counts[len(counts) // 2]
     counters = list(((a["answer"].get("counters") or {}).get("decks")) or [])
     entries, keys = [], set()
-    for r in own:
-        k = _key(r["cards"])
-        if k not in keys:
-            keys.add(k)
-            entries.append({"cards": list(r["cards"]), "weight": float(r.get("count") or 1), "row": r})
-    for r in counters:
-        k = _key(r["cards"])
-        if k not in keys:
-            keys.add(k)
-            entries.append({"cards": list(r["cards"]), "weight": COUNTER_WEIGHT * median,
-                            "row": r, "counter": True})
-    for r in base:
-        k = _key(r["cards"])
-        if k not in keys:
-            keys.add(k)
-            entries.append({"cards": list(r["cards"]), "weight": float(median), "row": r})
+    for rows, weight, counter in ((own, None, False), (counters, COUNTER_WEIGHT * median, True),
+                                  (base, float(median), False)):
+        for r in rows:
+            k = _key(r["cards"])
+            if k not in keys:
+                keys.add(k)
+                entries.append({"cards": list(r["cards"]), "row": r, "counter": counter or r.get("counter"),
+                                "weight": float(r.get("count") or 1) if weight is None else weight})
     base_keys = frozenset(i for i, e in enumerate(entries) if _key(e["cards"]) in {_key(d["cards"]) for d in base})
     memo: dict = {}
 
     def value(group):
         k = frozenset(_key(d) for d in group)
         if k not in memo:
-            out = dp.plan(group, read, a["win"])
+            out = dp.plan(group, read, a["win"], games=games)
             memo[k] = out["options"][0]["duel"] if out.get("options") else 0.0
         return memo[k]
 
-    pick = vary_set(entries, value, rng, avoid=base_keys if round_ == 1 else None)
+    pick = vary_set(entries, value, rng, size=most, min_size=fewest,
+                    band=0.0 if round_ <= 0 else VARY_BAND,
+                    avoid=base_keys if round_ == 1 else None)
     if not pick:
         return base, None, {"source": "coach-assist", "reason": "no_draw"}
-    rows = [dict(entries[i]["row"]) | ({"counter": True} if entries[i].get("counter") else {})
-            for i in pick]
+    rows = [dict(entries[i]["row"]) | ({"counter": True} if entries[i].get("counter") else {}) for i in pick]
     cards = [list(r["cards"]) for r in rows]
-
-    def variants(c):
-        try:
-            import duel_index as di
-            return di.near_variants(c)
-        except Exception:  # noqa: BLE001 - no index, no switch
-            return []
-
-    cards2, switch = switch_card(cards, variants, rng)
-    if switch:
-        k = switch["deck"]
-        rows[k] = _deck_row(cards2[k]) | ({"counter": True} if rows[k].get("counter") else {}) | {"switched": True}
+    switch = None
+    if round_ > 0:
+        def variants(c):
+            try:
+                import duel_index as di
+                return di.near_variants(c)
+            except Exception:  # noqa: BLE001 - no index, no switch
+                return []
+        cards2, switch = switch_card(cards, variants, rng)
+        if switch:
+            k = switch["deck"]
+            rows[k] = _deck_row(cards2[k]) | ({"counter": True} if rows[k].get("counter") else {}) | {"switched": True}
     info = {"source": "rotation", "candidates": len(entries),
             "value": round(100 * value([r["cards"] for r in rows]), 1)}
     return rows, switch, info
 
 
-def human(you: str, ai: str, your_decks: list, you_win: tuple, ai_win: tuple, kind=None,
-          round_: int = 0, seen: list | None = None) -> dict:
-    """You against the AI coach. See the section note above."""
+def turn(you: str, ai: str, your_decks: list, results: str, you_win: tuple, ai_win: tuple,
+         kind=None, round_: int = 0, seen: list | None = None, games: int = GAMES,
+         play_all: bool = False) -> dict:
+    """One game of you against the AI coach. See the section note above.
+
+    `your_decks` are your decks of every game so far, in order, THIS game's
+    last; `results` who won each earlier game from your side ('w' / 'l').
+    `play_all` plays every game of the format even once the duel is decided
+    (asked for: "play all games of the duel / stop as you win").
+    """
     import coach
-    base = {"brain": BRAIN, "mode": "human", "games": GAMES, "round": int(round_)}
+    base = {"brain": BRAIN, "mode": "game", "games": int(games), "round": int(round_),
+            "playAll": bool(play_all)}
+    if games not in FORMATS:
+        return {**base, "error": "bad_format"}
+    need = games // 2 + 1
     decks = [list(dict.fromkeys(d)) for d in your_decks if d]
+    res = "".join(c for c in str(results or "").lower() if c in "wl")
     known = set(coach.dx.card_keys()) if hasattr(coach, "dx") else None
     flat = [c for d in decks for c in d]
-    if (not SET_MIN <= len(decks) <= MAX_DECKS or any(len(d) != 8 for d in decks)
+    if (not 1 <= len(decks) <= games or any(len(d) != 8 for d in decks)
             or len(flat) != len(set(flat)) or (known and any(c not in known for c in flat))):
         return {**base, "error": "bad_decks"}
+    if len(res) != len(decks) - 1 or (not play_all and (res.count("w") >= need or res.count("l") >= need)):
+        return {**base, "error": "bad_results"}
     y = _side_cached(you, ai, you_win, ai_win, kind)
     a = _side_cached(ai, you, ai_win, you_win, kind)
     if a["win"] is None and y["win"] is None:
         return {**base, "error": "no_brain"}
-    seed = f"{you}|{ai}|{sorted(_key(d) for d in decks)}"
     ai_read = blend_read(a["read"], seen or [])
-    rows, switch, set_info = _ai_set(a, ai_read, int(round_), seed)
+    # THE AI'S SET BELONGS TO THE DUEL, not to the game: worked out once and
+    # kept, so a best of 5 (five decks composed, ~9 s on the VPS) pays it on
+    # game 1 only. Keyed on everything it depends on; `id(a)` changes when the
+    # side is read again.
+    sk = (id(a), you, ai, games, int(round_), tuple(sorted(_key(d) for d in seen or [])))
+    with _side_lock:
+        hit = _set_cache.get(sk)
+    if hit and time.time() - hit[0] < CACHE_TTL_S:
+        rows, switch, set_info = hit[1]
+    else:
+        rows, switch, set_info = _ai_set(a, ai_read, int(round_), f"{you}|{ai}|{games}", games)
+        with _side_lock:
+            if len(_set_cache) >= CACHE_MAX:
+                for k in sorted(_set_cache, key=lambda k: _set_cache[k][0])[: CACHE_MAX // 2]:
+                    _set_cache.pop(k, None)
+            _set_cache[sk] = (time.time(), (rows, switch, set_info))
     ai_cards = [list(r["cards"]) for r in rows]
-    if len(ai_cards) < SET_MIN:
-        return {**base, "error": "short_set", "side": "ai", "name": a["name"], "decks": len(ai_cards)}
-    for s, mine, theirs in ((a, ai_cards, decks), (y, decks, ai_cards)):
-        r = s.get("rates")
-        if r is not None and getattr(r, "on", False):
-            try:
-                r.prepare(mine, theirs)
-            except Exception:  # noqa: BLE001
-                traceback.print_exc()
+    if len(ai_cards) < FORMATS[games][1]:
+        return {**base, "error": "short_set", "name": a["name"], "decks": len(ai_cards)}
 
-    ai_pick = policy(ai_cards, ai_read, a["win"])
+    game = len(decks)
+    picks = ai_picks(ai_cards, decks, res, policy(ai_cards, ai_read, a["win"], games=games), game)
+    now, info = picks[-1] if len(picks) == game else (None, {})
+    exp = []
+    for e in (info or {}).get("expected") or []:
+        exp.append({"name": _label(e["cards"], a), "p": e["p"], "cards": e["cards"],
+                    "hit": len(set(e["cards"]) & set(decks[-1])) >= NEAR})
 
-    def pick_by_index(ai_played_idx, your_played, results):
-        return ai_pick([ai_cards[i] for i in ai_played_idx], your_played, results)
-
-    table = ai_policy(decks, pick_by_index)
-    names: dict = {}
-    ai_out: dict = {}
-    for k, v in table.items():
-        exp = []
-        for e in v.get("expected") or []:
-            ek = _key(e["cards"])
-            if ek not in names:
-                names[ek] = _label(e["cards"], a)
-            exp.append({"name": names[ek], "p": e["p"], "cards": e["cards"]})
-        ai_out[k] = {"deck": v["deck"], "believed": v.get("believed"), "expected": exp}
-
-    # Your coach-assist figures in every state: the look-ahead over YOUR decks,
-    # against its read of the red player's history and what the AI has shown.
-    hints: dict = {}
+    # The game's chance — your deck against the AI's, which was chosen without it.
+    if now is None:
+        matchup = chance = 1.0
+    else:
+        matchup = min(max(_referee(y["win"], a["win"])(decks[-1], ai_cards[now]), 1e-6), 1 - 1e-6)
+        chance = dp.shifted(matchup, res[-1] if res else None, game)
+    odds = None
     if y["win"] is not None:
-        for path, mine in state_keys(len(decks)):
-            k = key_of(path, mine)
-            ai_shown = [ai_cards[table[key_of(path[:g], mine[:g])]["deck"]] for g in range(len(path))
-                        if table.get(key_of(path[:g], mine[:g]), {}).get("deck") is not None]
-            try:
-                out = dp.plan(decks, y["read"], y["win"], my_played=[decks[i] for i in mine],
-                              opp_played=ai_shown, results=path)
-            except Exception:  # noqa: BLE001
-                traceback.print_exc()
-                continue
-            hints[k] = {str(o["deck"]): {"game": round(100 * o["game"], 1), "duel": round(100 * o["duel"], 1)}
-                        for o in out.get("options") or []}
-
-    ref = _referee(y["win"], a["win"])
-    matrix = [[round(100 * min(max(ref(d, r), 1e-6), 1 - 1e-6), 1) for r in ai_cards] for d in decks]
-    your_rows = [_deck_row(d) for d in decks]
+        try:
+            ai_shown = [ai_cards[i] for i, _ in picks[:game - 1] if i is not None]
+            out = dp.plan([decks[-1]], y["read"], y["win"], my_played=decks[:-1],
+                          opp_played=ai_shown, results=res, games=games)
+            if out.get("options"):
+                o = out["options"][0]
+                odds = {"game": round(100 * o["game"], 1), "duel": round(100 * o["duel"], 1)}
+        except Exception:  # noqa: BLE001 - the figure is extra
+            traceback.print_exc()
     return {
-        **base,
-        "you": _public(y, with_set=False) | {"set": [_brief(r) for r in your_rows],
-                                             "suggested": [_brief(d) for d in y["decks"]]},
+        **base, "game": game,
+        "you": _public(y, with_set=False) | {"deck": _brief(_deck_row(decks[-1]))},
         "ai": _public(a, with_set=False) | {"set": [_brief(r) for r in rows]},
         "aiSet": set_info, "switch": switch,
-        "policy": ai_out, "hints": hints, "matrix": matrix,
-        "shift": dict(dp.SHIFT), "seen": len(seen or []),
+        "aiDeck": now, "aiPicks": [i for i, _ in picks],
+        "believed": (info or {}).get("believed"), "expected": exp,
+        "matchup": round(100 * matchup, 1), "chance": round(100 * chance, 1),
+        "yourOdds": odds, "seen": len(seen or []),
     }
 
 

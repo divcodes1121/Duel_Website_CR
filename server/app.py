@@ -1035,11 +1035,13 @@ class Handler(BaseHTTPRequestHandler):
                 # and this asks Supabase whose token it is, as All Duels does
                 # — the key alone only says the request came through the edge.
                 #
-                # `sim=human` (2026-10-21): YOU coach `me` with the decks you
-                # paste (`y1`..`y4`), against the AI coach of `opp`; `r` is the
-                # rematch number and `s1`..`s8` the decks you showed in earlier
-                # duels, which the AI's read of you leans on. `sim=prep` reads
-                # both players once before you paste.
+                # `sim=game` (2026-10-21): ONE GAME of you coaching `me` against
+                # the AI coach of `opp`. `y1`..`y5` are your decks of every game
+                # so far, this game's last; `res` who won the earlier ones (from
+                # your side); `bo` 3 or 5; `r` the rematch number; `s1`..`s8`
+                # the decks you showed in earlier duels. The AI's pick is made
+                # without this game's deck (`coach_duel.turn`). `sim=prep` reads
+                # both players once before the first game.
                 sim = (q.get("sim") or [""])[0].strip().lower()
                 if sim:
                     verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
@@ -1054,12 +1056,16 @@ class Handler(BaseHTTPRequestHandler):
                     windows = ((my_since, my_until), (opp_since, opp_until))
                     if sim == "prep":
                         out = coach_duel.prep(me, opp, *windows, _duel_kind(q))
-                    elif sim == "human":
+                    elif sim == "game":
                         raw_r = (q.get("r") or [""])[0]
-                        out = coach_duel.human(
-                            me, opp, _decks(q, ("y1", "y2", "y3", "y4")), *windows,
+                        raw_bo = (q.get("bo") or [""])[0]
+                        res = "".join(c for c in (q.get("res") or [""])[0].lower() if c in "wl")[:4]
+                        out = coach_duel.turn(
+                            me, opp, _decks(q, ("y1", "y2", "y3", "y4", "y5")), res, *windows,
                             _duel_kind(q), round_=min(int(raw_r), 999) if raw_r.isdigit() else 0,
-                            seen=_decks(q, tuple("s%d" % i for i in range(1, 9))))
+                            seen=_decks(q, tuple("s%d" % i for i in range(1, 9))),
+                            games=int(raw_bo) if raw_bo in ("3", "5") else 3,
+                            play_all=(q.get("all") or [""])[0] in ("1", "true", "yes"))
                     else:
                         out = coach_duel.simulate(me, opp, *windows, _duel_kind(q))
                     return self._send({**out, "sources": _sources()})

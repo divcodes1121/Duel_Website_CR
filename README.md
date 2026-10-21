@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Coach Duel — you against an AI coach** | **LIVE (admin only)**; first build `475fe2b` (two AI coaches), rebuilt 2026-10-21 on feedback: Clash Royale's Blue and Red Kings, you coach Blue with pasted decks, the Red AI coach changes its set every rematch from its player's rotation (sometimes a real one-card switch) and remembers your decks. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) |
+| **Coach Duel — you against an AI coach** | **LIVE (admin only)**. You coach Blue one game at a time (paste a deck, lock in, the AI's deck flips), best of 3 or 5, stop on a win or play every game; the Red AI coach picks without seeing your deck, changes its set every rematch from its player's rotation (sometimes a real one-card switch) and remembers your decks; Clash Royale's Blue and Red Kings. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) |
 | **Find a player by name** | **LIVE 2026-10-19 as `6f6a1df`** (server by scp first, backups `*.bak-20261019-100059-prenamesearch`, only royalweb restarted; the site reported the commit 60 s after the push; 9/9 in a real browser on https://deckkies.com signed out, the dropdown filled 460 ms after the last key). Asked, with RoyaleAPI's search pasted: type a name, see the players who carry it, fast. Every search field (top bar, player screen, landing hero) now lists up to seven players as you type, with their tags, and "View all N results" opens `#/search?q=` with the top 100. The server reads its own trigram index of the bot's 5,898,255 stored names (`server/name_index.py`, refreshed after every poll), never the bot's table: a scan of that table measured 0.6 s warm / 4.6 s cold, the index answers in 13 ms median, 39 ms worst, and a request from India is ~0.35 s on an open connection. 643 MB on disk, bounded to names seen in the last 304 days. See [Find a player by name](#find-a-player-by-name-2026-10-19) |
 | **When something breaks: a 404 page with a three.js game, an outage page that reloads itself, and watchdogs** | **2026-10-19.** After the VPS was powered off for half an hour on 2026-10-18 and every search hung for 200+ s: a slow request now asks whether the server is alive and gives up in seconds; an outage page (with the game) re-checks on its own and reloads when the server is back; unknown routes and wrong URLs get a 404 page with the same game; a crashed screen gets the page instead of a blank site; a watchdog on the VPS restarts the API when it stops answering or loses sight of its database; a GitHub workflow emails when the site is down and can start a stopped VPS once Contabo API keys are added. See [When something breaks](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19) |
 | **Team Analysis suggests what the best duel players bring, and a list per teammate (`team-scout-5.0`)** | **LIVE SINCE 2026-10-14 as `b25d12e`.** Reported: *"the recommendation decks are so trash ... random decks, decks repetitive for more players"*. Measured on live answers: about 1 row in 7 was a list the CRL group brought to duels; a 4v4 plan's 160 rows held 67 decks and all four teammates got the same four against one opponent. Now the pool is the window's CRL duel lists (2+ games) and its 40 most played lists, nothing else; a scouting list is ten different win conditions, none under 50%, spread across the roster; a match plan builds each teammate's list from the win conditions they play, rated with their own record, one teammate a deck, and a lineup pairs every opponent with a teammate. Blind on 300 opponents: rows the CRL group brought 36.7% -> 96.7%, the #1 the same (+0.10), the rest of a list about half a point lower; match plans: distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15. See [What the best duel players bring](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14) |
@@ -2366,18 +2366,33 @@ make the UI better, take inspiration from websites"*.
 
 ### How it plays
 
-1. **Pick both players** — your player (Blue) and the opponent (Red). The AI
-   coach scouts both (`sim=prep`, 2.6–15.5 s on real CRL pairs, then cached).
-2. **Load your decks** — paste three or four deck links (one at a time or all
-   at once; any text holding `deck=` links works), or press *Use Coach Assist's
-   set* for your player. A card in two decks is named and blocks the start.
-3. **Battle** — each game you pick one of your decks; the AI's deck is face
-   down until you lock in. Then it flips, the win chance appears, the needle
-   lands where the game's draw fell, and the game is won or lost. Your decks
-   carry your coach's figures (this game / the duel) and one is marked *Coach
-   pick*. First to two takes the duel.
-4. **Rematch** — the AI loads a different set and remembers the decks you
-   showed. *Change my decks* keeps the session going; *New players* starts over.
+Asked for on 2026-10-21, after the first loadout version: *"one deck at a
+time — one deck pasted, then the duel starts — and before that ask best of 3 /
+best of 5 ... and one by one we will proceed"*, then *"also ask before
+starting: play all games of the duel / stop as you win"*.
+
+1. **Players and format** — your player (Blue), the opponent (Red), **Best of
+   3 or Best of 5**, and **Stop when someone wins** or **Play all games** (the
+   games after the decision still count for the record; the AI then picks the
+   deck with the best chance in that game alone, since the duel is no longer at
+   stake). The AI coach scouts both players (`sim=prep`, ~30 s on a cold
+   server, cached after).
+2. **One game at a time** — paste the deck for this game (or press *Use a
+   Coach Assist deck*, which steps through Coach Assist's set for your player,
+   skipping any that would repeat a card). **No card twice in a duel**: a deck
+   holding a card you already played is named and blocked.
+3. **Lock in & battle** — the AI's deck flips over. **It was chosen on the
+   server without your deck**: `turn` computes the AI's pick from your EARLIER
+   decks and the results only; the deck you just locked in is used for the
+   game's chance and nothing else (`ai_picks`, and a test that another deck in
+   the same game gets the same AI pick). The needle lands where the draw fell.
+4. **Next game**, until the duel ends (or every game is played). Then Victory or
+   Defeat, the AI's whole set revealed (with its switched card), and
+   **Rematch** — a new AI set, and it remembers your decks.
+
+Each game is one request (`sim=game`, 0.1–0.2 s on the VPS); the AI's set is
+composed once per duel and kept (a best of 5's five decks took ~9 s the first
+time).
 
 ### The AI coach
 
@@ -2388,7 +2403,9 @@ rated by the combined brain (fused rate, card model, both players' strength,
 levels when not friendly, each player's skill with each win condition), and
 the look-ahead over the three games (`duel_plan`).
 
-- **Duel 1** it loads Coach Assist's own set.
+- **Duel 1 of a best of 3** it loads Coach Assist's own set; a **best of 5**
+  needs five decks that share no card, so it draws the best five (`vary_set`,
+  band 0) from the pool below.
 - **Every rematch** it draws a new set (`vary_set`): decks of its player's own
   duel rotation weighted by how often they play each — the player's trend —
   plus the counters at half a median deck's weight, kept only within
@@ -2403,10 +2420,8 @@ the look-ahead over the three games (`duel_plan`).
 - **It never sees your set** — it reads your player's history and what you
   have revealed in this duel, as a real coach would.
 
-One request answers its pick for every state the duel can reach (19 states with
-three decks of yours, 33 with four, keyed `path:your deck indices`), your
-coach's figures for the same states, and the win chance of every pairing — the
-mean of both coaches' rulers, which were a median 1.0 point apart on 120 real
+Each game's chance is the referee for your deck against its deck — the mean of
+both coaches' rulers, which were a median 1.0 point apart on 120 real
 pairings. The game's chance is that pairing moved by the result before it
 (`duel_plan.SHIFT`), and a draw decides it. **Staged on 4 real CRL pairs, six
 duels each: every rematch a different AI set (6 of 6, no repeat), a real card
@@ -2462,23 +2477,24 @@ about 8 points high for the suggested deck where it could be checked
 
 ### Tests
 
-`server/test_coach_duel.py` 86 (the decision states and their keys; the AI told
-its own results and its own earlier picks; a seen deck taking its share of the
-read, dropped when it clashes with a reveal, merged within two cards; a rematch
-set disjoint, within the band, never the last one, different across rematches,
-seeded; a card switch only a real one-card variant whose new card no other deck
-holds; the whole human round-trip against a stand-in Coach Assist),
-`test_api_security` `CoachDuelAdminGate` 10 (every `sim` mode 401 / 403, an admin
-reaches each), `tests/coachDuel.test.ts` 18 (keys equal the server's, the
-momentum shift by hand, the walk, loadout clashes, every link in one paste, the
-seen list, no imports). Browser 152/152 in Chromium on real staged answers —
-dark 1440, light 1280, a 390 touch phone, reduced motion — through setup,
-loadout (fill, a clashing paste, a good paste), every game with both Kings'
-poses and emotes checked, Victory/Defeat, a rematch asking round 1 with your
-shown decks and a different AI loadout with its switch named, change decks,
-new players. Pictures looked at (`testing/kd-*.png`), which moved the win
-chance above the decks, sized the face-off, compacted the arena during play and
-stopped the seam running through the labels.
+`server/test_coach_duel.py` 87 — the AI's picks game by game (**each pick sees
+only your earlier decks**), the turn against a stand-in Coach Assist (a repeated
+card refused, results must cover the earlier games, no game after the decision
+unless every game is played, the same AI pick whatever deck you lock in, a best
+of 5 with five disjoint AI decks reaching game 5, play-all after 2-0, a rematch
+drawing a different seeded set, the set composed once a duel), the read that
+remembers your decks, the rematch draw and the card switch.
+`test_api_security` `CoachDuelAdminGate` 10. `tests/coachDuel.test.ts` 13 (best
+of 3 / 5, stop vs play-all, the winner, the card-repeat check, stepping through
+Coach Assist decks, links in a paste, no imports).
+
+**Browser 91/91 against the REAL AI** — a staged copy of the API on the VPS
+loopback through an SSH tunnel, with the dev site pointed at it: a best of 3
+stopping on a win with a rematch (different AI decks, round 1 sending your
+shown decks), a best of 5 playing all five games, a 390 phone playing all three,
+a best of 5 with reduced motion; a repeated card blocked in each, every AI set
+card-disjoint. Earlier rounds of the same screen: 152/152 on replayed answers.
+Pictures looked at (`testing/kg-*.png`, `testing/kd-*.png`).
 
 The first build's AI-vs-AI answer (`sim=1`, `simulate`) is still on the server
 and tested; nothing on screen calls it now.

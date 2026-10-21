@@ -1926,32 +1926,40 @@ decided duel, an exception — returns the rows untouched and `duelPlan: null`.
 only `w` and `l` are kept, two at most; anything else is "not told"). No new
 route. `want=` (`chosen`) does not take it.
 
-## The coach duel (`coach_duel.py`, 2026-10-20, you vs the AI 2026-10-21)
+## The coach duel (`coach_duel.py`, 2026-10-20; you vs the AI, one game at a time, 2026-10-21)
 
 You coach Blue against the AI coach of the other player. **Admin only**: any
 `sim=` on the suggest route is behind `admin_auth.verify`; route count stays.
 
     GET /api/analytics/coach/suggest?me=<you>&opp=<AI's player>&sim=prep
-    GET /api/analytics/coach/suggest?me=..&opp=..&sim=human&y1=<8 keys>..y4[&r=<rematch>][&s1..s8=<decks you showed>]
+    GET /api/analytics/coach/suggest?me=..&opp=..&sim=game&y1=<8 keys>[..y5]&res=<w/l per earlier game>
+        &bo=3|5[&all=1][&r=<rematch>][&s1..s8=<decks you showed in earlier duels>]
     GET /api/analytics/coach/suggest?me=..&opp=..&sim=1          (the first build: AI vs AI)
 
 - `prep` reads both players (`_side_cached`: `coach.suggest(keep=)` per side,
-  10 minutes) and returns your player with Coach Assist's set, and the AI's
-  player without its decks.
-- `human` checks your decks (3-4, eight known cards, none shared ->
-  `bad_decks`), builds the AI's set (`_ai_set`: round 0 Coach Assist's set;
-  later `vary_set` over its player's own duel decks weighted by plays + counters
-  at `COUNTER_WEIGHT` x the median, within `VARY_BAND`, then `switch_card` at
-  `SWITCH_P` from `duel_index.near_variants`), reads you through `blend_read`
-  (`SEEN_WEIGHT` to the decks you showed), and answers `policy` (the AI's pick
-  in every `state_keys` state, `ai_policy`), `hints` (your look-ahead in each),
-  `matrix` (the referee for every pairing), `shift`, `switch`, `aiSet`.
-  Seeded by the two tags, your decks and the round: the same rematch is the
-  same draw.
-- Pure parts (`play`, `policy`, `ai_policy`, `state_keys`, `blend_read`,
-  `vary_set`, `switch_card`) take functions; `test_coach_duel.py`.
-- Staging trap: a fresh process has no meta snapshot, so no counter pool —
-  call `deck_counter._load_snapshot(); meta._load_snapshot()` first.
+  10 minutes): your player with Coach Assist's set, the AI's player without
+  its decks.
+- `turn` = one game. `y1..yN` are your decks of every game so far, THIS game's
+  last. Checks: format 3 or 5 (`bad_format`), eight known cards each and no
+  card twice (`bad_decks`), `res` one result per earlier game and no game after
+  the decision unless `all=1` (`bad_results`). The AI's set (`_ai_set`, cached
+  per duel in `_set_cache`): best of 3 duel 1 = Coach Assist's set; best of 5 =
+  the best five disjoint decks; any rematch = `vary_set` within `VARY_BAND` +
+  `switch_card`. Its read of you = `blend_read` (`SEEN_WEIGHT` to `s1..s8`).
+  **The AI's pick for game N is made from your decks of games 1..N-1 and the
+  results only (`ai_picks`)**; game N's deck enters only the referee. A decided
+  duel played on (`all=1`) has the policy fall back to the best deck for that
+  game (`duel_plan`'s `gamePick`, results not told). Out: `aiDeck`, `aiPicks`,
+  `believed`, `expected` (with `hit`), `matchup`, `chance` (shifted by the game
+  before), `yourOdds`, the AI's whole set, `switch`, `aiSet`.
+- Pure parts (`play`, `policy`, `ai_picks`, `blend_read`, `vary_set`,
+  `switch_card`) take functions; `test_coach_duel.py`.
+- Staging: a fresh process has no meta snapshot, so no counter pool — call
+  `deck_counter._load_snapshot(); meta._load_snapshot()` first. A browser
+  check against the real AI = the changed `app.py` / `coach_duel.py` copied
+  beside the deployed modules under other names, served on 127.0.0.1:8799 with
+  the admin check stubbed in that process only, an SSH tunnel, and
+  `CLASH_API_URL=http://127.0.0.1:8799` for vite.
 
 ## The package table (`deck_packages.py`, 2026-10-07)
 
