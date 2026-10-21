@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   addFaced,
+  historyKey,
+  MAX_OFFERED,
+  newSessionId,
+  readHistory,
+  writeHistory,
   addSeen,
   decide,
   deckKey,
@@ -134,6 +139,27 @@ describe('the decks offered and faced across a session', () => {
   it('remembers the AI decks faced, newest first, each once', () => {
     const f = addFaced(addFaced([], [deck('a'), deck('b')]), [deck('b'), deck('c')]);
     expect(f.map((d) => d[0])).toEqual(['b0', 'c0', 'a0']);
+  });
+});
+
+describe('a new start is a new session, and a refresh remembers what was shown', () => {
+  it('a session id is twelve letters and digits, different each start', () => {
+    const r = seeded(3);
+    const a = newSessionId(r);
+    const b = newSessionId(r);
+    expect(a).toMatch(/^[a-z0-9]{12}$/);
+    expect(a).not.toBe(b);
+  });
+  it('the history survives a write and a read, per pair of players', () => {
+    const raw = writeHistory(new Set(['k1', 'k2']), [deck('a')]);
+    expect(readHistory(raw)).toEqual({ offered: ['k1', 'k2'], faced: [deck('a')] });
+    expect(historyKey('#A', '#B')).not.toBe(historyKey('#B', '#A'));
+  });
+  it('anything malformed reads as nothing remembered, and the lists are capped', () => {
+    expect(readHistory('not json')).toEqual({ offered: [], faced: [] });
+    expect(readHistory(JSON.stringify({ offered: [1, 'x'], faced: [['a'], deck('b')] }))).toEqual({ offered: ['x'], faced: [deck('b')] });
+    const many = Array.from({ length: MAX_OFFERED + 10 }, (_, i) => `k${i}`);
+    expect(readHistory(writeHistory(many, [])).offered).toHaveLength(MAX_OFFERED);
   });
 });
 

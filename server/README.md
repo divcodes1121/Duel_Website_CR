@@ -1967,6 +1967,12 @@ You coach Blue against the AI coach of the other player. **Admin only**: any
   (`ARCH_COUNTER_FAMILIES` 4 x `ARCH_PER_COUNTER` 5), drawn seeded on the
   pair (`duel_archetypes.pick`, `DRAW_WIDTH`, `FAMILY_SLACK`). Without the
   file it falls back to `_style_lists`. Your pool takes turns by family.
+  `ss` (both `prep` and `game`, `session_id`: letters and digits, 24 at
+  most) = the screen's seed for one start: it seeds the archetype draw,
+  your pool's order (`YOU_JITTER`) and the AI's set, composed from the pool
+  even in duel 1. Pools and sets are cached per session. Each `game` answer
+  carries `next`: up to `NEXT_SHOW` 6 decks sharing no card with your decks
+  so far (pool first, then the stored duel lists, `NEXT_SCAN` 400).
   **The AI's pick for game N is made from your decks of games 1..N-1 and the
   results only (`ai_picks`)**; game N's deck enters only the referee. A decided
   duel played on (`all=1`) has the policy fall back to the best deck for that

@@ -41,13 +41,17 @@ import {
   decide,
   deckKey,
   findDeckLinks,
+  historyKey,
   isFinished,
   MU_DECIDES,
+  newSessionId,
   nextFresh,
   pctLabel,
+  readHistory,
   scoreOf,
   winnerOf,
   winsNeeded,
+  writeHistory,
   type Format,
   type Luck,
 } from '../../../utils/coachDuel';
@@ -330,6 +334,10 @@ export function CoachDuel() {
      should". */
   const [faced, setFaced] = useState<string[][]>([]);
   const [offered, setOffered] = useState<Set<string>>(() => new Set());
+  /* A NEW START IS A NEW SESSION (reported 2026-10-21: "when refreshed and
+     started, both players get the same decks as before"): a random seed per
+     start, and what this pair was already shown kept in the browser. */
+  const [session, setSession] = useState('');
   const [played, setPlayed] = useState<Played[]>([]);
   const [pasted, setPasted] = useState<Pasted | null>(null);
   const [paste, setPaste] = useState('');
@@ -369,13 +377,22 @@ export function CoachDuel() {
     setError(null);
     setRound(0);
     setSeen([]);
-    setFaced([]);
-    setOffered(new Set());
+    let stored = null as string | null;
+    try {
+      stored = window.localStorage.getItem(historyKey(p.you, p.ai));
+    } catch {
+      /* no storage: nothing remembered */
+    }
+    const h = readHistory(stored);
+    setFaced(h.faced);
+    setOffered(new Set(h.offered));
+    const ss = newSessionId();
+    setSession(ss);
     resetDuel();
     setLoading('prep');
     writeHash(p);
     coachToken()
-      .then((token) => fetchCoachDuelPrep(p.you, p.ai, { days: p.days }, undefined, token))
+      .then((token) => fetchCoachDuelPrep(p.you, p.ai, { days: p.days }, undefined, token, ss))
       .then((d) => {
         if (mine === seq.current) setPrep(d);
       })
@@ -429,6 +446,21 @@ export function CoachDuel() {
   const gameNo = played.length + 1;
   const deadRubber = !finished && all && played.length > 0 && winnerOf(path, fmt, false) !== null;
 
+  // The AI's set is remembered the moment a duel ends (a refresh then still
+  // counts it), and what this pair was shown is kept across refreshes.
+  const finishedSet = finished && lastAns ? lastAns.ai.set : null;
+  useEffect(() => {
+    if (finishedSet) setFaced((f) => addFaced(f, finishedSet.map((d) => d.cards)));
+  }, [finishedSet]);
+  useEffect(() => {
+    if (!players) return;
+    try {
+      window.localStorage.setItem(historyKey(players.you, players.ai), writeHistory(offered, faced));
+    } catch {
+      /* no storage: the session still varies */
+    }
+  }, [players, offered, faced]);
+
   /* ── pasting this game's deck ── */
   const takePaste = (text: string) => {
     const links = findDeckLinks(text);
@@ -456,7 +488,14 @@ export function CoachDuel() {
       .then((text) => takePaste(text))
       .catch(() => setPasteNote('The browser did not allow reading the clipboard. Paste the link into the box below.'));
   };
-  const suggested = prep?.you.pool?.length ? prep.you.pool : prep?.you.set ?? [];
+  const suggestedBase = prep?.you.pool?.length ? prep.you.pool : prep?.you.set ?? [];
+  // After a game, the decks still legal for the next one join the list (a
+  // best of 5's game 5 can outrun the pool: 32 cards are spent).
+  const suggested = useMemo(() => {
+    const extra = (played.length ? played[played.length - 1].ans.next : null) ?? [];
+    const keys = new Set(suggestedBase.map((d) => deckKey(d.cards)));
+    return [...suggestedBase, ...extra.filter((d) => !keys.has(deckKey(d.cards)))];
+  }, [suggestedBase, played]);
   const useSuggested = () => {
     const n = nextFresh(suggested.map((d) => d.cards), earlier, offered, pasted?.cards ?? null);
     if (n === null) {
@@ -485,7 +524,7 @@ export function CoachDuel() {
     coachToken()
       .then((token) =>
         fetchCoachDuelTurn(players.you, players.ai, [...earlier, deck], path, players.games, players.playAll,
-          round, seen, { days: players.days }, undefined, token, faced),
+          round, seen, { days: players.days }, undefined, token, faced, session),
       )
       .then((ans) => {
         if (mine !== seq.current) return;

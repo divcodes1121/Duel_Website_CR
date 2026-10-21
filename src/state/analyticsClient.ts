@@ -2167,6 +2167,9 @@ export interface CoachDuelTurn {
   you: CoachDuelSide & { deck: CoachDuelDeck };
   /** The AI's whole set for this duel (the screen keeps it face down). */
   ai: CoachDuelSide & { set: CoachDuelDeck[] };
+  /** Decks sharing no card with any you played this duel, best first: what
+   *  "Coach Assist deck" can still offer for the next game. */
+  next?: CoachDuelDeck[];
   aiSet: { source: 'coach-assist' | 'rotation'; candidates?: number; value?: number; reason?: string };
   /** The AI's one-card switch this duel, if it made one. */
   switch: { deck: number; out: string; in: string; games: number } | null;
@@ -2198,9 +2201,12 @@ function duelQuery(you: string, ai: string, win?: DateWindow, kind?: DuelKind): 
  *  access token rides in `X-Coach-Token`, as for All Duels. */
 export function fetchCoachDuelPrep(
   you: string, ai: string, win: DateWindow | undefined, kind: DuelKind | undefined, token: string | null,
+  session = '',
 ): Promise<CoachDuelPrep> {
   const q = duelQuery(you, ai, win, kind);
   q.set('sim', 'prep');
+  // A new start's seed: new decks on both sides (`coach_duel` YOU_JITTER).
+  if (session) q.set('ss', session);
   return get<CoachDuelPrep>(`/api/analytics/coach/suggest?${q.toString()}`,
     token ? { 'X-Coach-Token': token } : undefined);
 }
@@ -2212,6 +2218,7 @@ export function fetchCoachDuelTurn(
   you: string, ai: string, decks: string[][], results: string, games: 3 | 5, playAll: boolean,
   round: number, seen: string[][], win: DateWindow | undefined, kind: DuelKind | undefined, token: string | null,
   faced: string[][] = [],
+  session = '',
 ): Promise<CoachDuelTurn> {
   const q = duelQuery(you, ai, win, kind);
   q.set('sim', 'game');
@@ -2223,6 +2230,7 @@ export function fetchCoachDuelTurn(
   seen.slice(0, 8).forEach((d, i) => q.set(`s${i + 1}`, d.join(',')));
   // The AI decks faced in earlier duels of the session: a rematch brings new ones.
   faced.slice(0, 30).forEach((d, i) => q.set(`x${i + 1}`, d.join(',')));
+  if (session) q.set('ss', session);
   return get<CoachDuelTurn>(`/api/analytics/coach/suggest?${q.toString()}`,
     token ? { 'X-Coach-Token': token } : undefined);
 }

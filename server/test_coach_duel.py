@@ -299,7 +299,7 @@ try:
     # archetype groups (a VPS has them) may join it. The groups have a test
     # of their own below.
     real_arch_lists = cdu._archetype_lists
-    cdu._archetype_lists = lambda s, own: []
+    cdu._archetype_lists = lambda s, own, session="": []
     try:
         cdu._side_cache.clear()
         check("a best of 4 is not a format", cdu.turn("#AAA", "#BBB", [A1], "", *W, games=4).get("error") == "bad_format")
@@ -412,6 +412,55 @@ try:
         check("no two decks of your pool are one card apart",
               all(len(set(p["cards"]) & set(q["cards"])) < cdu.REPEAT_NEAR
                   for i, p in enumerate(pool) for q in pool[i + 1:]))
+        # A NEW START IS A NEW SESSION (reported 2026-10-21: after a refresh
+        # both sides started on the same decks as before).
+        H2 = deck("h")
+        fake._own_duel_decks = lambda hist, used: real_own(hist, used) + [
+            {"cards": H2, "count": 3, "deckName": "Own h", "art": {}},
+            {"cards": deck("q"), "count": 3, "deckName": "Own q", "art": {}}]
+        cdu._side_cache.clear()
+        cdu._set_cache.clear()
+        sets = {}
+        for ss in ("s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"):
+            got = cdu.turn("#AAA", "#BBB", [A1], "", *W, session=ss)
+            sets[ss] = tuple(sorted(",".join(sorted(d["cards"])) for d in got["ai"]["set"]))
+        check("a new session composes the AI's first duel from the pool, not always Coach Assist's set",
+              got["aiSet"]["source"] == "rotation" and len(set(sets.values())) > 1, str(len(set(sets.values()))))
+        again = cdu.turn("#AAA", "#BBB", [A1], "", *W, session="s1")
+        check("one session keeps its set", tuple(sorted(",".join(sorted(d["cards"])) for d in again["ai"]["set"])) == sets["s1"])
+        plain = cdu.turn("#AAA", "#BBB", [A1], "", *W)
+        check("without a session duel 1 is still Coach Assist's own set", plain["aiSet"]["source"] == "coach-assist")
+        firsts = {",".join(sorted(cdu.prep("#AAA", "#BBB", *W, session=ss)["you"]["pool"][0]["cards"]))
+                  for ss in ("a", "b", "c", "d", "e", "f", "g", "h")}
+        check("your first offered deck changes with the session", len(firsts) > 1, str(len(firsts)))
+        check("one session offers the same list each time",
+              cdu.prep("#AAA", "#BBB", *W, session="a")["you"]["pool"] == cdu.prep("#AAA", "#BBB", *W, session="a")["you"]["pool"])
+        check("the session seed is letters and digits only, 24 at most",
+              cdu.session_id("ab-c 12;DROP" + "x" * 40) == ("abc12DROP" + "x" * 40)[:24])
+        fake._own_duel_decks = real_own
+        cdu._side_cache.clear()
+        cdu._set_cache.clear()
+        # DECKS STILL LEGAL FOR YOUR NEXT GAME (a best of 5's game 5).
+        import duel_archetypes as da0
+        real_f0 = da0.families
+        da0.families = lambda: {"golem": [dict(cards=deck("g"), tier="crl", games=9), dict(cards=deck("h"), tier="duel", games=30)]}
+        try:
+            cdu._side_cache.clear()
+            cdu._set_cache.clear()
+            played_y = [A1, B1, B2, B3]
+            nx = cdu.turn("#AAA", "#BBB", played_y, "wlw", *W, games=5)
+            used = {c for d in played_y for c in d}
+            check("every next-game option shares no card with a deck you played",
+                  nx.get("next") and all(not (set(d["cards"]) & used) for d in nx["next"]), str(nx.get("error")))
+            check("when your pool runs dry the stored duel lists top it up",
+                  any(set(d["cards"]) == set(deck("g")) for d in nx["next"]) and len(nx["next"]) == cdu.NEXT_SHOW,
+                  str([d["cards"][0] for d in nx["next"]]))
+            last = cdu.turn("#AAA", "#BBB", played_y + [deck("g")], "wlwl", *W, games=5)
+            check("no next options after the last game", last.get("next") == [], str(last.get("next")))
+        finally:
+            da0.families = real_f0
+        cdu._side_cache.clear()
+        cdu._set_cache.clear()
         # THE ARCHETYPE GROUPS (`duel_archetypes`): own family first, CRL lists
         # first, and two different players do not get the same lists.
         import duel_archetypes as da
@@ -449,7 +498,7 @@ try:
             pool_keys = [e["cards"] for e in cdu._pool(side)]
             check("the archetype lists join the pool", any(c[0].startswith("h") for c in pool_keys))
         finally:
-            cdu._archetype_lists = lambda s, own: []
+            cdu._archetype_lists = lambda s, own, session="": []
             da.families = real_fams
             for m, mod in saved.items():
                 if mod is not None:

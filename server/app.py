@@ -1047,7 +1047,8 @@ class Handler(BaseHTTPRequestHandler):
                 # so far, this game's last; `res` who won the earlier ones (from
                 # your side); `bo` 3 or 5; `r` the rematch number; `s1`..`s8`
                 # the decks you showed in earlier duels; `x1`..`x30` the AI's
-                # decks faced in earlier duels (a rematch brings new ones). The AI's pick is made
+                # decks faced in earlier duels (a rematch brings new ones); `ss`
+                # the screen's session seed (a new start = new decks). The AI's pick is made
                 # without this game's deck (`coach_duel.turn`). `sim=prep` reads
                 # both players once before the first game.
                 sim = (q.get("sim") or [""])[0].strip().lower()
@@ -1063,7 +1064,8 @@ class Handler(BaseHTTPRequestHandler):
                         return self._send({"error": "same_player"}, 400)
                     windows = ((my_since, my_until), (opp_since, opp_until))
                     if sim == "prep":
-                        out = coach_duel.prep(me, opp, *windows, _duel_kind(q))
+                        out = coach_duel.prep(me, opp, *windows, _duel_kind(q),
+                                              session=coach_duel.session_id((q.get("ss") or [""])[0]))
                     elif sim == "game":
                         raw_r = (q.get("r") or [""])[0]
                         raw_bo = (q.get("bo") or [""])[0]
@@ -1074,7 +1076,8 @@ class Handler(BaseHTTPRequestHandler):
                             seen=_decks(q, tuple("s%d" % i for i in range(1, 9))),
                             games=int(raw_bo) if raw_bo in ("3", "5") else 3,
                             play_all=(q.get("all") or [""])[0] in ("1", "true", "yes"),
-                            faced=_decks(q, tuple("x%d" % i for i in range(1, 31))))
+                            faced=_decks(q, tuple("x%d" % i for i in range(1, 31))),
+                            session=coach_duel.session_id((q.get("ss") or [""])[0]))
                     else:
                         out = coach_duel.simulate(me, opp, *windows, _duel_kind(q))
                     return self._send({**out, "sources": _sources()})

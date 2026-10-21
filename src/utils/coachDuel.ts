@@ -188,3 +188,44 @@ export function decide(luck: Luck, matchup: number, chance: number, r: number): 
   }
   return { result: roll(chance, r), rolled: true };
 }
+
+/** A new start's session seed (`ss`): twelve letters and digits from `rand`. */
+export function newSessionId(rand: () => number = Math.random): string {
+  const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let s = '';
+  for (let i = 0; i < 12; i += 1) s += abc[Math.floor(rand() * abc.length) % abc.length];
+  return s;
+}
+
+/** Decks offered to you that a later start still remembers, at most. */
+export const MAX_OFFERED = 120;
+
+/** What a pair of players has already been shown, kept across refreshes
+ *  (reported 2026-10-21: after a refresh both sides opened on the same decks
+ *  again). `offered` = your Coach Assist decks (keys), `faced` = the AI's. */
+export interface DuelHistory {
+  offered: string[];
+  faced: string[][];
+}
+
+export function historyKey(you: string, ai: string): string {
+  return `coach-duel-seen:${you}|${ai}`;
+}
+
+/** Read a stored history; anything malformed is an empty one. */
+export function readHistory(raw: string | null | undefined): DuelHistory {
+  try {
+    const v = raw ? JSON.parse(raw) : null;
+    const offered = Array.isArray(v?.offered) ? v.offered.filter((k: unknown) => typeof k === 'string') : [];
+    const faced = Array.isArray(v?.faced)
+      ? v.faced.filter((d: unknown) => Array.isArray(d) && d.length === 8 && d.every((c) => typeof c === 'string'))
+      : [];
+    return { offered: offered.slice(-MAX_OFFERED), faced: faced.slice(0, MAX_FACED) };
+  } catch {
+    return { offered: [], faced: [] };
+  }
+}
+
+export function writeHistory(offered: Iterable<string>, faced: readonly string[][]): string {
+  return JSON.stringify({ offered: [...offered].slice(-MAX_OFFERED), faced: faced.slice(0, MAX_FACED) });
+}

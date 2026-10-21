@@ -993,6 +993,13 @@ wins: 6,623 lists, 38 families, 521 CRL. Coach Duel draws both sides' outside
 lists from it (own families + families that counter the other side's mix),
 seeded per pair. Not yet used by Coach Assist's Suggestion itself.
 
+### 2026-10-21 (sixth round) — a new start is new decks
+
+Coach Duel sends a session seed with every start: your pool's order and the
+AI's set are drawn anew (the AI composes duel 1 from its whole pool too), and
+what a pair was shown is kept in the browser, so a refresh repeats neither
+side. Each game also returns the decks still legal for your next game.
+
 ## Next action
 
 Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.

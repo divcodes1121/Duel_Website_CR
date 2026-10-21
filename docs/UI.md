@@ -2317,6 +2317,13 @@ Neue for every game word, Clash-gold buttons with dark ink.
   same before and after Lock in.
 - A deck the CRL group plays carries a **CRL list** tag (the tag Coach
   Assist uses), beside the remove button on your deck.
+- **The game area is an arena floor** (`.panel`): navy ground, Blue's light
+  from the left and Red's from the right, a faint 34px diamond court, a gold
+  glow at the bottom middle, and the arena's blue-gold-red 3px edge on top.
+  Light mode: a pale floor with the arena's diagonal split, stronger team
+  light, cards on a white 86% fill with a soft shadow, a deep VS. Static.
+  A centre line down the court was tried and removed: it ran through the
+  game cards and the score.
 - **The arena compacts during the battle** so the Kings stay on screen.
 - **The middle has a dark pool behind it** so the seam fades behind the labels.
 - Nothing loops; reduced motion keeps every state, no movement.

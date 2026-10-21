@@ -485,6 +485,24 @@ YOU_POOL = 40
 #: Rows of the read a deck's figure for you is taken against.
 YOU_READ_ROWS = 6
 
+#: DECKS STILL LEGAL FOR YOUR NEXT GAME, sent with every game's answer
+#: (2026-10-21: in a best of 5, 32 cards spent by game 5 left the 40-deck
+#: pool with nothing that shares none of them). From the pool first, then
+#: from every stored duel list (`duel_archetypes`, CRL first), sense-checked
+#: and ranked against the other player as your coach reads them.
+NEXT_SHOW = 6
+NEXT_SCAN = 400
+
+#: A NEW START IS A NEW SESSION (reported 2026-10-21: "when refreshed and
+#: started, both players get the same decks as before"). The screen sends a
+#: random `ss` on every start; it seeds the archetype draw, the order your
+#: decks are offered in (each deck's figure moves by up to `YOU_JITTER`, so
+#: decks within a few points take turns at the top) and the AI's set, which
+#: is then composed from the whole pool even in duel 1 (within `VARY_BAND` of
+#: the best it can see) instead of always being Coach Assist's own set.
+#: Without a session everything is as before (seeded on the two players).
+YOU_JITTER = 0.03
+
 _side_cache: dict = {}
 _side_lock = threading.Lock()
 _set_cache: dict = {}
@@ -624,14 +642,14 @@ def _side_cached(me: str, opp: str, me_win: tuple, opp_win: tuple, kind) -> dict
     return side
 
 
-def prep(you: str, ai: str, you_win: tuple, ai_win: tuple, kind=None) -> dict:
+def prep(you: str, ai: str, you_win: tuple, ai_win: tuple, kind=None, session: str = "") -> dict:
     """Both players read once (and kept), before the first game: your player as
     the screen shows them, Coach Assist's set for your player (to fill a game's
     deck in one press), and the AI coach without its decks."""
     y = _side_cached(you, ai, you_win, ai_win, kind)
     a = _side_cached(ai, you, ai_win, you_win, kind)
     return {"brain": BRAIN, "mode": "prep",
-            "you": _public(y) | {"set": [_brief(_seat(d)) for d in y["decks"]], "pool": _you_pool(y)},
+            "you": _public(y) | {"set": [_brief(_seat(d)) for d in y["decks"]], "pool": _you_pool(y, session)},
             "ai": _public(a, with_set=False)}
 
 
@@ -733,7 +751,7 @@ def _family_key(cards) -> str:
         return "?"
 
 
-def _archetype_lists(s: dict, own_rows: list) -> list[dict] | None:
+def _archetype_lists(s: dict, own_rows: list, session: str = "") -> list[dict] | None:
     """Lists from EVERY duel deck grouped by archetype (`duel_archetypes`):
     up to `ARCH_PER_OWN` from each of the player's own families (where their
     duel decks are, most played first) and `ARCH_PER_COUNTER` from each of the
@@ -773,7 +791,7 @@ def _archetype_lists(s: dict, own_rows: list) -> list[dict] | None:
                 mix[a] = mix.get(a, 0.0) + float(p)
         except Exception:  # noqa: BLE001
             traceback.print_exc()
-    picks = da.pick(fams, own, mix, _rng(s["tag"], s.get("opp"), "archetypes"),
+    picks = da.pick(fams, own, mix, _rng(s["tag"], s.get("opp"), "archetypes", session),
                     per_own=ARCH_PER_OWN, counter_families=ARCH_COUNTER_FAMILIES, per_counter=ARCH_PER_COUNTER,
                     exclude={_key(r["cards"]) for r in own_rows})
     out = []
@@ -786,7 +804,7 @@ def _archetype_lists(s: dict, own_rows: list) -> list[dict] | None:
     return out
 
 
-def _pool(s: dict) -> list[dict]:
+def _pool(s: dict, session: str = "") -> list[dict]:
     """Every deck a coach may load for its player, kept on the side (it is
     read once): `[{"cards", "row", "weight", "counter", "sensible"}]`.
 
@@ -794,7 +812,8 @@ def _pool(s: dict) -> list[dict]:
     trend), Coach Assist's answer and the counters to the other player, and
     real duel lists on their own win conditions. Lists within one card of a
     deck already in are the same deck. Every row is seated (`_seat`)."""
-    got = s.get("_pool")
+    pools = s.setdefault("_pools", {})
+    got = pools.get(session)
     if got is not None:
         return got
     import coach
@@ -803,7 +822,7 @@ def _pool(s: dict) -> list[dict]:
     counts = sorted(int(r.get("count") or 1) for r in own) or [1]
     median = float(counts[len(counts) // 2])
     counters = list(((s["answer"].get("counters") or {}).get("decks")) or [])
-    arch = _archetype_lists(s, own)
+    arch = _archetype_lists(s, own, session)
     if arch is None:
         arch = _style_lists(s)
     entries: list[dict] = []
@@ -822,20 +841,24 @@ def _pool(s: dict) -> list[dict]:
                             "source": source, "family": _family_key(row["cards"]),
                             "weight": float(r.get("count") or 1) if weight is None else weight,
                             "sensible": _sensible(row["cards"])})
-    s["_pool"] = entries
+    if len(pools) >= CACHE_MAX:
+        pools.pop(next(iter(pools)), None)
+    pools[session] = entries
     return entries
 
 
-def _you_pool(y: dict) -> list[dict]:
+def _you_pool(y: dict, session: str = "") -> list[dict]:
     """The decks offered to YOU, best first against the AI player as your
     coach reads them; Coach Assist's own set leads. Reported 2026-10-21:
     "the Coach Assist pick is always the same, it needs to differ every
     time" — the screen cycles this list and never offers a deck twice until
     it has offered them all."""
-    got = y.get("_youPool")
+    cache = y.setdefault("_youPools", {})
+    got = cache.get(session)
     if got is not None:
         return got
-    entries = _pool(y)
+    entries = _pool(y, session)
+    rng = _rng(y["tag"], y.get("opp"), "you", session) if session else None
     good = [e for e in entries if e["sensible"]]
     if len(good) < 2 * SET_MAX:
         good = entries
@@ -857,42 +880,60 @@ def _you_pool(y: dict) -> list[dict]:
         except Exception:  # noqa: BLE001
             return None
 
-    lead = [_key(d["cards"]) for d in y["decks"]]
-    scored = [(e, value(e["cards"])) for e in good]
+    # With a session nothing is pinned first: Coach Assist's set takes its
+    # turn with the rest, so a new start does not open on the same decks.
+    lead = [] if session else [_key(d["cards"]) for d in y["decks"]]
+    scored = []
+    for e in good:
+        v = value(e["cards"])
+        if rng is not None:
+            v_order = (v if v is not None else 0.0) + rng.uniform(0.0, YOU_JITTER)
+        else:
+            v_order = v
+        scored.append((e, v, v_order))
+    def rank(x) -> float:
+        return x[2] if x[2] is not None else -1.0
+
     first = sorted((x for x in scored if _key(x[0]["cards"]) in lead), key=lambda x: lead.index(_key(x[0]["cards"])))
     # THE REST TAKE TURNS BY FAMILY (2026-10-21): ranked by the figure alone,
     # every player facing one opponent got that opponent's few counters on
     # top (measured: two players' pools 24% shared). The player's own
-    # families go first (by how much they play them), then the others by
-    # their best deck; each turn takes the best remaining deck of a family.
+    # families go first (by how much they play them; with a session that
+    # weight is shaken by half either way, so a new start can open on another
+    # of their families), then the others by their best deck; each turn takes
+    # the best remaining deck of a family.
     by_fam: dict = {}
     for x in scored:
         if _key(x[0]["cards"]) not in lead:
             by_fam.setdefault(x[0].get("family") or "?", []).append(x)
     for xs in by_fam.values():
-        xs.sort(key=lambda x: (-(x[1] if x[1] is not None else -1.0), _key(x[0]["cards"])))
+        xs.sort(key=lambda x: (-rank(x), _key(x[0]["cards"])))
     own_w: dict = {}
     for e in entries:
         if e.get("source") == "own":
             own_w[e.get("family") or "?"] = own_w.get(e.get("family") or "?", 0.0) + e["weight"]
-    order = sorted(by_fam, key=lambda f: (-own_w.get(f, 0.0), -(by_fam[f][0][1] if by_fam[f][0][1] is not None else -1.0), f))
+    if rng is not None:
+        own_w = {f: w * rng.uniform(0.5, 1.5) for f, w in sorted(own_w.items())}
+    order = sorted(by_fam, key=lambda f: (-own_w.get(f, 0.0), -rank(by_fam[f][0]), f))
     rest = []
     while any(by_fam.values()):
         for f in order:
             if by_fam[f]:
                 rest.append(by_fam[f].pop(0))
     out = []
-    for e, v in (first + rest)[:YOU_POOL]:
+    for e, v, _o in (first + rest)[:YOU_POOL]:
         row = _brief(e["row"]) | ({"counter": True} if e["counter"] else {})
         if v is not None:
             row["vsRead"] = round(100 * v, 1)
         out.append(row)
-    y["_youPool"] = out
+    if len(cache) >= CACHE_MAX:
+        cache.pop(next(iter(cache)), None)
+    cache[session] = out
     return out
 
 
 def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES,
-            faced: list | None = None) -> tuple[list, dict | None, dict]:
+            faced: list | None = None, session: str = "") -> tuple[list, dict | None, dict]:
     """The AI coach's decks for duel number `round_` (0 = the first) of a best
     of `games`: `(rows, switch, info)`.
 
@@ -910,10 +951,10 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES,
         return any(len(s & f) >= REPEAT_NEAR for f in faced_sets)
 
     base_ok = all(_sensible(d["cards"]) and not repeat(d["cards"]) for d in base)
-    if a["win"] is None or (round_ <= 0 and len(base) >= fewest and base_ok):
+    if a["win"] is None or (not session and round_ <= 0 and len(base) >= fewest and base_ok):
         return [_seat(d) for d in base], None, {"source": "coach-assist"}
-    rng = _rng(seed, round_)
-    every = [dict(e, repeat=repeat(e["cards"])) for e in _pool(a)]
+    rng = _rng(seed, session, round_) if session else _rng(seed, round_)
+    every = [dict(e, repeat=repeat(e["cards"])) for e in _pool(a, session)]
     dropped = sum(1 for e in every if not e["sensible"])
     memo: dict = {}
 
@@ -929,7 +970,7 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES,
         # Coach Assist loaded in duel 1.
         base_keys = frozenset(i for i, e in enumerate(pool) if _key(e["cards"]) in {_key(d["cards"]) for d in base})
         return vary_set(pool, score or value, rng, size=most, min_size=fewest,
-                        band=0.0 if round_ <= 0 else VARY_BAND,
+                        band=0.0 if round_ <= 0 and not session else VARY_BAND,
                         avoid=base_keys if round_ == 1 and not faced_sets else None, shrink=shrink)
 
     # Fresh decks that make sense; then fresh ones of any kind; then repeats.
@@ -957,7 +998,7 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES,
     rows = [dict(entries[i]["row"]) | ({"counter": True} if entries[i].get("counter") else {}) for i in pick]
     cards = [list(r["cards"]) for r in rows]
     switch = None
-    if round_ > 0:
+    if round_ > 0 or session:
         def variants(c):
             try:
                 import duel_index as di
@@ -971,7 +1012,7 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES,
         if switch:
             k = switch["deck"]
             rows[k] = _seat(_deck_row(cards2[k])) | ({"counter": True} if rows[k].get("counter") else {}) | {"switched": True}
-    info = {"source": "rotation" if round_ > 0 else "composed",
+    info = {"source": "rotation" if round_ > 0 or session else "composed",
             "candidates": len(entries), "dropped": dropped, "fallback": fallback,
             "unsensible": sum(1 for i in pick if not entries[i]["sensible"]),
             "repeats": sum(1 for i in pick if entries[i]["repeat"]), "faced": len(faced_sets),
@@ -979,9 +1020,67 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES,
     return rows, switch, info
 
 
+def _deck_value(y: dict):
+    """`value(cards) -> chance or None`: a deck of yours against the other
+    player's likely decks as your coach reads them (`YOU_READ_ROWS`)."""
+    rows = []
+    if y.get("read") is not None and y.get("win") is not None:
+        try:
+            rows = [(frozenset(c), float(p)) for c, p in (y["read"]((), None) or [])[:YOU_READ_ROWS]]
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+    tot = sum(p for _c, p in rows)
+
+    def value(cards):
+        if tot <= 0:
+            return None
+        try:
+            mine = frozenset(cards)
+            return sum(p * float(y["win"](mine, c)) for c, p in rows) / tot
+        except Exception:  # noqa: BLE001
+            return None
+    return value
+
+
+def _next_options(y: dict, a: dict, decks: list, session: str = "") -> list[dict]:
+    """Up to `NEXT_SHOW` decks that share no card with any deck you have
+    played this duel, best first (see `NEXT_SHOW`)."""
+    used = {c for d in decks for c in d}
+    rows = [e["row"] for e in _pool(y, session) if e["sensible"] and not (set(e["cards"]) & used)]
+    if len(rows) < NEXT_SHOW:
+        try:
+            import duel_archetypes as da
+            have = {_key(r["cards"]) for r in rows}
+            lists = [e for f in da.families().values() for e in f if not (set(e["cards"]) & used)]
+            lists.sort(key=lambda e: (e.get("tier") != "crl", -int(e.get("games") or 0)))
+            for e in lists[:NEXT_SCAN]:
+                k = _key(e["cards"])
+                if k in have or not _sensible(e["cards"]):
+                    continue
+                have.add(k)
+                rows.append(_seat(_deck_row(list(e["cards"]))) | {"origin": e.get("tier")})
+        except Exception:  # noqa: BLE001 - the pool is what there is
+            traceback.print_exc()
+    value = _deck_value(y)
+    scored = sorted(((r, value(r["cards"])) for r in rows),
+                    key=lambda x: (-(x[1] if x[1] is not None else -1.0), _key(x[0]["cards"])))
+    out = []
+    for r, v in scored[:NEXT_SHOW]:
+        b = _brief(r)
+        if v is not None:
+            b["vsRead"] = round(100 * v, 1)
+        out.append(b)
+    return out
+
+
+def session_id(raw) -> str:
+    """The screen's session seed: letters and digits only, at most 24."""
+    return "".join(c for c in str(raw or "") if c.isascii() and c.isalnum())[:24]
+
+
 def turn(you: str, ai: str, your_decks: list, results: str, you_win: tuple, ai_win: tuple,
          kind=None, round_: int = 0, seen: list | None = None, games: int = GAMES,
-         play_all: bool = False, faced: list | None = None) -> dict:
+         play_all: bool = False, faced: list | None = None, session: str = "") -> dict:
     """One game of you against the AI coach. See the section note above.
 
     `your_decks` are your decks of every game so far, in order, THIS game's
@@ -1014,13 +1113,13 @@ def turn(you: str, ai: str, your_decks: list, results: str, you_win: tuple, ai_w
     # game 1 only. Keyed on everything it depends on; `id(a)` changes when the
     # side is read again.
     sk = (id(a), you, ai, games, int(round_), tuple(sorted(_key(d) for d in seen or [])),
-          tuple(sorted(_key(d) for d in faced or [])))
+          tuple(sorted(_key(d) for d in faced or [])), session)
     with _side_lock:
         hit = _set_cache.get(sk)
     if hit and time.time() - hit[0] < CACHE_TTL_S:
         rows, switch, set_info = hit[1]
     else:
-        rows, switch, set_info = _ai_set(a, ai_read, int(round_), f"{you}|{ai}|{games}", games, faced)
+        rows, switch, set_info = _ai_set(a, ai_read, int(round_), f"{you}|{ai}|{games}", games, faced, session)
         with _side_lock:
             if len(_set_cache) >= CACHE_MAX:
                 for k in sorted(_set_cache, key=lambda k: _set_cache[k][0])[: CACHE_MAX // 2]:
@@ -1044,6 +1143,7 @@ def turn(you: str, ai: str, your_decks: list, results: str, you_win: tuple, ai_w
     else:
         matchup = min(max(_referee(y["win"], a["win"])(decks[-1], ai_cards[now]), 1e-6), 1 - 1e-6)
         chance = dp.shifted(matchup, res[-1] if res else None, game)
+    nxt = _next_options(y, a, decks, session) if game < games else []
     odds = None
     if y["win"] is not None:
         try:
@@ -1063,7 +1163,7 @@ def turn(you: str, ai: str, your_decks: list, results: str, you_win: tuple, ai_w
         "aiDeck": now, "aiPicks": [i for i, _ in picks],
         "believed": (info or {}).get("believed"), "expected": exp,
         "matchup": round(100 * matchup, 1), "chance": round(100 * chance, 1),
-        "yourOdds": odds, "seen": len(seen or []),
+        "yourOdds": odds, "seen": len(seen or []), "next": nxt,
     }
 
 
