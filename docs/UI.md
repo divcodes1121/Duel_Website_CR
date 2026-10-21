@@ -2303,6 +2303,14 @@ Neue for every game word, Clash-gold buttons with dark ink.
 - **The AI's deck is face down until you lock in**, then flips. The win chance
   sits directly under "Game N" (the moment you watch); the decks below it.
 - The game track has three or five slots; a five-game track uses smaller type.
+- **The format stays editable in the arena until game 1 is played** (the same
+  three chip rows under the score), then becomes one line.
+- **The paste step is a face-off**: "Game N" over "Your move", a dashed drop
+  zone (Paste deck link / Coach Assist deck / a field) facing the face-down
+  card, the gold Lock in & battle below. On a phone they stack and the
+  face-down card is a 5rem strip.
+- **Upset!** beside the result when it went against the chance, and one line
+  under the bar saying how the needle decides.
 - **The arena compacts during the battle** so the Kings stay on screen.
 - **The middle has a dark pool behind it** so the seam fades behind the labels.
 - Nothing loops; reduced motion keeps every state, no movement.

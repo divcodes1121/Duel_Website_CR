@@ -31,6 +31,9 @@
      the row is now sized to its longest real string rather than to the
      shortest. Measured, not guessed. */
   width: 292px;
+  /* The height is set inline from where the panel opens; past it, it scrolls. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.5rem;
   border-radius: 20px;
   border: 1px solid var(--glass-border);

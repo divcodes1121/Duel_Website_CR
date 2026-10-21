@@ -966,6 +966,16 @@ best of 3 or 5 and stop-on-a-win or play-all first. Each game is one request
 A decided duel played on picks by the game alone (`gamePick`). Verified in a
 browser against the real AI through a staged API: 91/91.
 
+### 2026-10-21 (third round) — every AI deck must make sense
+
+Coach Duel's AI loads only decks that pass `coach._constructed_ok` (the same
+gate built decks pass), Coach Assist's own set included; when too few do to
+field a best of 5, the rest enter at a twentieth of their weight and the set
+with the fewest of them wins. On 4 real CRL pairs: 4-21 candidates dropped a
+player, the fallback needed for two (2 and 1 decks). Games are still drawn
+from the chance; an upset is labelled, and a "favourite always wins" mode
+exists.
+
 ## Next action
 
 Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.

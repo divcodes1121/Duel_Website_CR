@@ -2394,6 +2394,47 @@ Each game is one request (`sim=game`, 0.1–0.2 s on the VPS); the AI's set is
 composed once per duel and kept (a best of 5's five decks took ~9 s the first
 time).
 
+### Upsets, deck sense, the format in the arena (2026-10-21, third round)
+
+Reported with four screenshots: *"why does it say AI wins when I have more
+matchup? + the 4th deck doesn't make sense, check the synergy ... I cannot see
+the option to switch all games / till you win, best of 3 / best of 5 ... fix
+the UI and format it nicely ... the profile button has no scroll, I cannot
+scroll down to log out"*.
+
+- **"AI wins" at a higher matchup is an UPSET, not a bug.** Each game is DRAWN
+  from its chance — at 53% you still lose 47 games in 100. The result now says
+  **Upset!** when it went against the chance, with one line under the bar
+  saying why ("at 53% the favourite still loses 47% of the time"). A new
+  choice, **Favourite always wins**, decides each game by the higher chance
+  instead of the draw (no needle; kept in the URL as `o=fav`). **Roll the
+  chance** stays the default.
+- **Every AI deck must make sense** (`_sensible` = `coach._constructed_ok`: the
+  deck's spell set, buildings and least-run card against what duel players
+  field with its win condition, and the duel card-pairing gate, which a deck
+  proven in 30+ real duels passes). It applies to Coach Assist's own set too —
+  if one of its decks fails, the AI composes a set instead — and to the card
+  switch (a switch that breaks the deck is not taken). On 4 real CRL pairs 4 to
+  21 of the candidate decks were dropped. **When the decks that make sense
+  cannot field the format** (a best of 5 needs five that share no card), the
+  others come in at a twentieth of their weight and the set with the FEWEST of
+  them is chosen first (`UNSENSIBLE_WEIGHT`, `aiSet.fallback`,
+  `aiSet.unsensible`): one player of the four needed 2, another 1, the others
+  none. Before the fallback, the gate left two of them unable to play a best of
+  5 at all.
+- **The format can be changed in the arena** until game 1 is played: Best of 3
+  / 5, Stop when someone wins / Play all, Roll the chance / Favourite always
+  wins sit under the score. After game 1 they become one line ("Ends when
+  someone wins · favourite wins").
+- **The paste step was redrawn as a face-off**: "Game N · Your move", your
+  deck's slot (a dashed drop zone with **Paste deck link** — reads the
+  clipboard — **Coach Assist deck**, and a field to paste into) facing the AI's
+  face-down card, then **Lock in & battle**. A pasted deck shows its name,
+  its cards and "Ready", or the cards already played in red.
+- **The profile menu scrolls.** It was a fixed panel taller than a short
+  window, so Log out was off the bottom with no way to reach it. It is now
+  bounded by the window (`max-height` from where it opens) and scrolls inside.
+
 ### The AI coach
 
 **Coach Assist for its player** (`coach.suggest`, stage 0): its read of your
@@ -2419,6 +2460,8 @@ the look-ahead over the three games (`duel_plan`).
   session take half of its read of your next deck (`blend_read`).
 - **It never sees your set** — it reads your player's history and what you
   have revealed in this duel, as a real coach would.
+- **Every deck it loads makes sense** (`_sensible`, see above), and a card
+  switch must leave the deck making sense.
 
 Each game's chance is the referee for your deck against its deck — the mean of
 both coaches' rulers, which were a median 1.0 point apart on 120 real
@@ -2477,13 +2520,15 @@ about 8 points high for the suggested deck where it could be checked
 
 ### Tests
 
-`server/test_coach_duel.py` 87 — the AI's picks game by game (**each pick sees
+`server/test_coach_duel.py` 91 — the AI's picks game by game (**each pick sees
 only your earlier decks**), the turn against a stand-in Coach Assist (a repeated
 card refused, results must cover the earlier games, no game after the decision
 unless every game is played, the same AI pick whatever deck you lock in, a best
 of 5 with five disjoint AI decks reaching game 5, play-all after 2-0, a rematch
-drawing a different seeded set, the set composed once a duel), the read that
-remembers your decks, the rematch draw and the card switch.
+drawing a different seeded set, the set composed once a duel, no deck that makes no sense in a set or
+left by a switch, a best of 5 the sensible decks cannot fill taking as few
+others as it can), the read that remembers your decks, the rematch draw and the
+card switch.
 `test_api_security` `CoachDuelAdminGate` 10. `tests/coachDuel.test.ts` 13 (best
 of 3 / 5, stop vs play-all, the winner, the card-repeat check, stepping through
 Coach Assist decks, links in a paste, no imports).
@@ -2495,6 +2540,14 @@ shown decks), a best of 5 playing all five games, a 390 phone playing all three,
 a best of 5 with reduced motion; a repeated card blocked in each, every AI set
 card-disjoint. Earlier rounds of the same screen: 152/152 on replayed answers.
 Pictures looked at (`testing/kg-*.png`, `testing/kd-*.png`).
+
+**Third round: browser 147/147** on the same staged path, plus a fifth run in
+Favourite-always-wins: the format switched in the arena before game 1 redraws
+the track (3 <-> 5); in favourite mode the higher chance won every game;
+**Upset!** shown exactly when the result went against the chance (5 real
+upsets came up); the profile menu at 1280x520 fits the window and scrolls
+to Log out. Pictures of the new paste step in both themes and at 390
+(`testing/kh-turn-*.png`).
 
 The first build's AI-vs-AI answer (`sim=1`, `simulate`) is still on the server
 and tested; nothing on screen calls it now.

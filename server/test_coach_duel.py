@@ -345,6 +345,35 @@ try:
         finally:
             cdu.vary_set = real_vary
         check("the AI's set is composed once a duel, not once a game", calls_before[0] == 0, str(calls_before))
+        # THE AI ONLY LOADS DECKS THAT MAKE SENSE (`coach._constructed_ok`).
+        fake._constructed_ok = lambda cards, seed=None: set(cards) != set(B2)
+        cdu._side_cache.clear()
+        cdu._set_cache.clear()
+        s0 = cdu.turn("#AAA", "#BBB", [A1], "", *W)
+        names0 = [tuple(d["cards"]) for d in s0["ai"]["set"]]
+        check("a deck that makes no sense is never in the AI's set, even Coach Assist's own",
+              tuple(B2) not in names0 and s0["aiSet"]["source"] == "composed" and len(names0) >= 3, str(names0))
+        s1 = cdu.turn("#AAA", "#BBB", [A1], "", *W, round_=2)
+        check("nor in a rematch set", tuple(B2) not in [tuple(d["cards"]) for d in s1["ai"]["set"]])
+        # A best of 5 the sensible decks cannot fill alone (B1x overlaps B1, E
+        # makes no sense): the set still fields five, taking ONE that fails.
+        B1x = B1[:4] + deck("h")[:4]
+        real_own = fake._own_duel_decks
+        fake._own_duel_decks = lambda hist, used: real_own(hist, used) + [
+            {"cards": B1x, "count": 6, "deckName": "Own b1x", "art": {}}]
+        fake._constructed_ok = lambda cards, seed=None: set(cards) != set(E_)
+        cdu._side_cache.clear()
+        cdu._set_cache.clear()
+        f5 = cdu.turn("#AAA", "#BBB", [A1], "", *W, games=5)
+        flatf = [c for d in f5.get("ai", {}).get("set", []) for c in d["cards"]]
+        check("a best of 5 the sensible decks cannot fill takes as few others as it can",
+              "error" not in f5 and len(f5["ai"]["set"]) == 5 and len(flatf) == len(set(flatf))
+              and f5["aiSet"].get("fallback") is True and f5["aiSet"].get("unsensible") == 1,
+              str(f5.get("error") or f5.get("aiSet")))
+        fake._own_duel_decks = real_own
+        del fake._constructed_ok
+        cdu._side_cache.clear()
+        cdu._set_cache.clear()
         r1b = cdu.turn("#AAA", "#BBB", [A2, A3], "l", *W, round_=1, seen=[A1])
         check("the AI's set is the same in every game of one duel (seeded on the duel, not your decks)",
               r1b["ai"]["set"] == r1["ai"]["set"])
@@ -445,6 +474,8 @@ check("a real one-card variant is switched in", sw == {"deck": 0, "out": S[0][7]
 check("never a card another deck of the set holds", S[1][0] not in got_s[0])
 check("the other decks are untouched", got_s[1:] == S[1:])
 check("no switch when the dice say no", cdu.switch_card(S, variants, random.Random(0), p=0.0) == (S, None))
+check("no switch that leaves a deck making no sense",
+      cdu.switch_card(S, variants, random.Random(0), p=1.0, ok=lambda new, old: "poison" not in new)[1] is None)
 check("no switch with no real variant", cdu.switch_card([S[1], S[2]], variants, random.Random(0), p=1.0)[1] is None)
 
 print("the parts that decide a game read no file, database or network")

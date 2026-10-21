@@ -490,8 +490,11 @@
   transform: translateY(4px);
   box-shadow: 0 1px 0 var(--gold-deep), 0 4px 10px rgba(0, 0, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.6);
 }
+/* Disabled: the gold fades out rather than turning muddy (a grayscale filter
+   on gold read as a brown, broken button). */
 .cta:disabled {
-  filter: grayscale(0.7) brightness(0.8);
+  opacity: 0.38;
+  box-shadow: 0 3px 0 var(--gold-deep);
   cursor: default;
 }
 .ghost {
@@ -540,25 +543,6 @@
   }
 }
 
-.paste {
-  width: 100%;
-  box-sizing: border-box;
-  resize: vertical;
-  min-height: 3.2rem;
-  padding: 0.7rem 0.85rem;
-  border-radius: 12px;
-  border: 2px dashed var(--border);
-  background: var(--surface-sunken);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.92rem;
-}
-.paste:focus {
-  border-style: solid;
-  border-color: var(--hue-blue);
-  outline: none;
-}
-.note,
 .error {
   margin: 0;
   font-size: 0.88rem;
@@ -694,15 +678,13 @@
   background: var(--solid-red);
 }
 
-.faceoff,
-.choose {
+.faceoff {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0.8rem;
 }
-.faceoff > .cta,
-.choose > .cta {
+.faceoff > .cta {
   align-self: center;
   min-width: 12rem;
 }
@@ -1100,39 +1082,7 @@ button.tile:hover:not(:disabled) {
   border-color: var(--gold-deep);
   color: #2b1600;
 }
-.pasteRow {
-  display: grid;
-  grid-template-columns: minmax(0, 24rem) auto minmax(0, 13rem);
-  justify-content: center;
-  align-items: start;
-  gap: 0.8rem 1.4rem;
-}
-.pasteCol {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  min-width: 0;
-}
-.pasteActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem 0.8rem;
-}
-.pasteRow .vs {
-  align-self: center;
-}
-.emptyDeck {
-  display: grid;
-  place-items: center;
-  min-height: 10rem;
-  border-radius: 16px;
-  border: 2px dashed color-mix(in srgb, var(--blue) 45%, var(--border));
-  font-family: var(--display);
-  font-size: 1.2rem;
-  letter-spacing: 0.06em;
-  color: var(--text);
-}
+
 .clash {
   margin: 0;
   font-size: 0.8rem;
@@ -1143,11 +1093,175 @@ button.tile:hover:not(:disabled) {
   position: static;
   flex: none;
 }
+
+/* ── your move: the deck for the next game, facing the AI's card ───────── */
+.turn {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.9rem;
+  padding: 0.4rem 0 0.2rem;
+}
+.turnTitle {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  text-align: center;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 2.2rem;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: var(--text);
+}
+.turnSub {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+.turn .faceRow > :not(.vs),
+.turn .faceRow > .cardBack {
+  min-height: 17rem;
+}
+.turn .cardBack {
+  align-self: stretch;
+}
+/* Stacked on a phone: the two halves only need their own height, and the
+   face-down card is a strip (the same 5rem the stacked result uses). */
 @media (max-width: 52rem) {
-  .pasteRow {
-    grid-template-columns: minmax(0, 1fr);
+  .turn .faceRow > :not(.vs) {
+    min-height: 0;
   }
-  .pasteRow .vs {
-    justify-self: center;
+  .turn .faceRow > .cardBack {
+    min-height: 5rem;
   }
 }
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 1.1rem 1rem;
+  border-radius: 16px;
+  border: 2px dashed color-mix(in srgb, var(--blue) 60%, var(--border));
+  background:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--blue) 12%, transparent), transparent 70%),
+    var(--bg-2);
+  text-align: center;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.drop:focus-within {
+  border-style: solid;
+  border-color: var(--blue);
+}
+.dropIcon {
+  width: 2.6rem;
+  height: 2.6rem;
+  fill: color-mix(in srgb, var(--blue) 70%, var(--text));
+}
+.dropTitle {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+.dropActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+}
+.dropBtn {
+  font: inherit;
+  font-weight: 800;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 10px;
+  border: none;
+  color: #fff;
+  background: linear-gradient(180deg, #4f8ff7, #2563eb);
+  box-shadow: 0 3px 0 #1e40af;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.dropBtn + .dropBtn {
+  color: var(--text);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--border);
+}
+.dropBtn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #1e40af;
+}
+.dropBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.dropInput {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: center;
+}
+.dropInput::placeholder {
+  color: var(--text);
+}
+.readyLine {
+  margin: 0;
+  font-weight: 800;
+  font-size: 0.82rem;
+  color: var(--hue-green);
+}
+.readyLine::before {
+  content: '✓ ';
+}
+.turnActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.8rem;
+}
+.turnActions .cta {
+  min-width: 14rem;
+}
+.turnNote {
+  margin: 0;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+/* ── an upset, and what the needle does ──────────────────────────────── */
+.upset {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  padding: 0.22rem 0.65rem 0.12rem;
+  border-radius: 8px;
+  color: #2b1600;
+  background: var(--gold);
+  transform: rotate(-4deg);
+  box-shadow: 0 2px 0 var(--gold-deep);
+  animation: pop 420ms cubic-bezier(0.3, 1.6, 0.4, 1) both;
+}
+.howLine {
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+

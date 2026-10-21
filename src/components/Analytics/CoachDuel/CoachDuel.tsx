@@ -50,6 +50,8 @@ import {
 import styles from './CoachDuel.module.css';
 
 type Seat = 'blue' | 'red';
+/** How a game is decided: drawn from its chance, or the favourite always wins. */
+type Luck = 'roll' | 'fav';
 type Pose = 'idle' | 'laugh' | 'nervous' | 'cheer';
 type Emote = 'laugh' | 'cry' | 'grrr' | 'think' | 'sweat' | 'gg' | 'yeah' | 'thumbsdown';
 
@@ -87,6 +89,7 @@ interface Players {
   kind: DuelKind;
   games: Format;
   playAll: boolean;
+  luck: Luck;
 }
 
 function readHash(): Partial<Players> {
@@ -103,6 +106,7 @@ function readHash(): Partial<Players> {
     kind: k === 'friendly' || k === 'war' ? k : undefined,
     games: p.get('bo') === '5' ? 5 : p.get('bo') === '3' ? 3 : undefined,
     playAll: p.has('all') ? p.get('all') === '1' : undefined,
+    luck: p.get('o') === 'fav' ? 'fav' : p.has('o') ? 'roll' : undefined,
   };
 }
 
@@ -110,6 +114,7 @@ function writeHash(s: Players) {
   const p = new URLSearchParams({ a: s.you, b: s.ai, d: String(s.days), bo: String(s.games) });
   if (s.kind) p.set('k', s.kind);
   if (s.playAll) p.set('all', '1');
+  if (s.luck === 'fav') p.set('o', 'fav');
   const next = `#/coach-duel?${p.toString()}`;
   if (window.location.hash !== next) window.history.replaceState(null, '', next);
 }
@@ -238,6 +243,51 @@ function CardBack({ busy }: { busy: boolean }) {
   );
 }
 
+function FormatControls({ games, playAll, luck, onChange }: {
+  games: Format; playAll: boolean; luck: Luck;
+  onChange: (p: Partial<{ games: Format; playAll: boolean; luck: Luck }>) => void;
+}) {
+  return (
+    <>
+      <div className={styles.chipRow} role="group" aria-label="Format">
+        {([3, 5] as Format[]).map((g) => (
+          <button key={g} type="button" className={styles.bigChip} aria-pressed={games === g} onClick={() => onChange({ games: g })}>
+            Best of {g}
+          </button>
+        ))}
+      </div>
+      <div className={styles.chipRow} role="group" aria-label="How many games">
+        <button type="button" className={styles.chip} aria-pressed={!playAll} onClick={() => onChange({ playAll: false })}>
+          Stop when someone wins
+        </button>
+        <button type="button" className={styles.chip} aria-pressed={playAll} onClick={() => onChange({ playAll: true })}>
+          Play all {games} games
+        </button>
+      </div>
+      <div className={styles.chipRow} role="group" aria-label="How a game is decided">
+        <button
+          type="button"
+          className={styles.chip}
+          aria-pressed={luck === 'roll'}
+          title="Each game is drawn from its win chance: at 60% you win 60 of 100 such games"
+          onClick={() => onChange({ luck: 'roll' })}
+        >
+          Roll the chance
+        </button>
+        <button
+          type="button"
+          className={styles.chip}
+          aria-pressed={luck === 'fav'}
+          title="The side with the higher win chance always wins the game"
+          onClick={() => onChange({ luck: 'fav' })}
+        >
+          Favourite always wins
+        </button>
+      </div>
+    </>
+  );
+}
+
 /* ── the screen ────────────────────────────────────────────────────────── */
 
 interface Played {
@@ -261,6 +311,7 @@ export function CoachDuel() {
   const [kind, setKind] = useState<DuelKind>(start.kind ?? null);
   const [games, setGames] = useState<Format>(start.games ?? 3);
   const [playAll, setPlayAll] = useState<boolean>(start.playAll ?? false);
+  const [luck, setLuck] = useState<Luck>(start.luck ?? 'roll');
   const [youInput, setYouInput] = useState<HTMLInputElement | null>(null);
   const [aiInput, setAiInput] = useState<HTMLInputElement | null>(null);
 
@@ -327,7 +378,7 @@ export function CoachDuel() {
     if (start.you && start.ai && start.you !== start.ai)
       loadPrep({
         you: start.you, ai: start.ai, days: start.days ?? 30, kind: start.kind ?? null,
-        games: start.games ?? 3, playAll: start.playAll ?? false,
+        games: start.games ?? 3, playAll: start.playAll ?? false, luck: start.luck ?? 'roll',
       });
   }, [start, loadPrep]);
 
@@ -338,6 +389,21 @@ export function CoachDuel() {
   /* ── the duel so far ── */
   const fmt: Format = players?.games ?? games;
   const all = players?.playAll ?? playAll;
+  const luckNow: Luck = players?.luck ?? luck;
+  /* THE FORMAT STAYS EDITABLE UNTIL GAME 1 IS LOCKED IN (2026-10-21, reported:
+     "I cannot see the option to switch best of 3 / 5, all games / till you
+     win"). A duel link opens straight into the arena and skipped the setup
+     where these lived; they are on the arena now until the first game. */
+  const setFormat = (patch: Partial<Pick<Players, 'games' | 'playAll' | 'luck'>>) => {
+    if (patch.games !== undefined) setGames(patch.games);
+    if (patch.playAll !== undefined) setPlayAll(patch.playAll);
+    if (patch.luck !== undefined) setLuck(patch.luck);
+    if (players) {
+      const next = { ...players, ...patch };
+      setPlayers(next);
+      writeHash(next);
+    }
+  };
   const path = played.map((p) => p.result).join('');
   const [youWon, aiWon] = scoreOf(path);
   const finished = played.length > 0 && isFinished(path, fmt, all);
@@ -365,6 +431,16 @@ export function CoachDuel() {
     setPasted({ cards });
     setPaste('');
     setPasteNote(links.length > 1 ? 'One deck a game: the first link was taken.' : null);
+  };
+  const pasteFromClipboard = () => {
+    if (!navigator.clipboard?.readText) {
+      setPasteNote('Paste the link into the box below.');
+      return;
+    }
+    navigator.clipboard
+      .readText()
+      .then((text) => takePaste(text))
+      .catch(() => setPasteNote('The browser did not allow reading the clipboard. Paste the link into the box below.'));
   };
   const suggested = prep?.you.set ?? [];
   const useSuggested = () => {
@@ -405,7 +481,8 @@ export function CoachDuel() {
           return;
         }
         const d = Math.random() * 100;
-        const result = roll(ans.chance, d / 100);
+        const fav = players.luck === 'fav';
+        const result = fav ? (ans.chance >= 50 ? 'w' : 'l') : roll(ans.chance, d / 100);
         const finish = () => {
           setPlayed((xs) => [...xs, { deck, ans, draw: d, result }]);
           setPending(null);
@@ -416,6 +493,10 @@ export function CoachDuel() {
         setPending({ deck, ans });
         if (reducedMotion()) {
           finish();
+          return;
+        }
+        if (fav) {
+          timer.current = window.setTimeout(finish, 700);
           return;
         }
         setNeedle(50);
@@ -525,34 +606,28 @@ export function CoachDuel() {
                 <span className={styles.scoreDash}>–</span>
                 <span data-seat="red">{aiWon}</span>
               </div>
-              <span className={styles.roundNo}>
-                {all ? 'Every game played' : 'Ends when someone wins'}
-                {round > 0 ? ` · Rematch ${round}` : ''}
-              </span>
+              {played.length === 0 && !rolling ? (
+                <div className={styles.setup}>
+                  <FormatControls games={fmt} playAll={all} luck={luckNow} onChange={setFormat} />
+                  {round > 0 && <span className={styles.roundNo}>Rematch {round}</span>}
+                </div>
+              ) : (
+                <span className={styles.roundNo}>
+                  {all ? 'Every game played' : 'Ends when someone wins'}
+                  {luckNow === 'fav' ? ' · favourite wins' : ''}
+                  {round > 0 ? ` · Rematch ${round}` : ''}
+                </span>
+              )}
             </>
           ) : (
             <form
               className={styles.setup}
               onSubmit={(e) => {
                 e.preventDefault();
-                if (ready) loadPrep({ you: youTag!, ai: aiTag!, days, kind, games, playAll });
+                if (ready) loadPrep({ you: youTag!, ai: aiTag!, days, kind, games, playAll, luck });
               }}
             >
-              <div className={styles.chipRow} role="group" aria-label="Format">
-                {([3, 5] as Format[]).map((g) => (
-                  <button key={g} type="button" className={styles.bigChip} aria-pressed={games === g} onClick={() => setGames(g)}>
-                    Best of {g}
-                  </button>
-                ))}
-              </div>
-              <div className={styles.chipRow} role="group" aria-label="How many games">
-                <button type="button" className={styles.chip} aria-pressed={!playAll} onClick={() => setPlayAll(false)}>
-                  Stop when someone wins
-                </button>
-                <button type="button" className={styles.chip} aria-pressed={playAll} onClick={() => setPlayAll(true)}>
-                  Play all {games} games
-                </button>
-              </div>
+              <FormatControls games={games} playAll={playAll} luck={luck} onChange={setFormat} />
               <div className={styles.chipRow} role="group" aria-label="History window">
                 {DAY_PRESETS.map((d) => (
                   <button key={d} type="button" className={styles.chip} aria-pressed={days === d} onClick={() => setDays(d)}>
@@ -664,6 +739,11 @@ export function CoachDuel() {
             const aiDeck = ans && ans.aiDeck !== null ? ans.ai.set[ans.aiDeck] : null;
             const youDeck: DrawDeck = ans ? ans.you.deck : { cards: shownGame.deck, deckName: pasted?.name };
             const exp = ans?.expected[0];
+            /* AN UPSET IS A RESULT AGAINST THE CHANCE (reported: "why does it say
+               AI wins when I have more matchup?"). The game is DRAWN from its
+               chance, so a 53% favourite loses 47 times in 100 — said where it
+               happens, not left to look like a bug. */
+            const upset = !rolling && lastPlayed && ans ? (lastPlayed.result === 'w') !== (ans.chance >= 50) : false;
             return (
               <div className={styles.faceoff} data-result={!rolling && lastPlayed ? lastPlayed.result : undefined}>
                 <h2 className={styles.gameTitle}>
@@ -673,10 +753,22 @@ export function CoachDuel() {
                       {lastPlayed.result === 'w' ? 'You win' : 'AI wins'}
                     </span>
                   )}
+                  {upset && <span className={styles.upset}>Upset!</span>}
                 </h2>
                 {ans && (
                   <>
-                    <ChanceBar you={ans.chance} needle={rolling ? needle : lastPlayed!.draw} rolling={rolling} />
+                    <ChanceBar
+                      you={ans.chance}
+                      needle={luckNow === 'fav' ? null : rolling ? needle : lastPlayed!.draw}
+                      rolling={rolling}
+                    />
+                    <p className={styles.howLine}>
+                      {luckNow === 'fav'
+                        ? 'Favourite always wins: the side with the higher chance takes the game.'
+                        : upset
+                          ? `The needle lands at random: at ${pctLabel(Math.max(ans.chance, 100 - ans.chance))} the favourite still loses ${pctLabel(Math.min(ans.chance, 100 - ans.chance))} of the time.`
+                          : 'The needle lands at random — inside your blue, you win.'}
+                    </p>
                     <p className={styles.matchLine}>
                       Matchup {pctLabel(ans.matchup)}
                       {Math.abs(ans.chance - ans.matchup) >= 0.05 && (
@@ -685,7 +777,11 @@ export function CoachDuel() {
                           {Math.abs(Math.round((ans.chance - ans.matchup) * 10) / 10)} momentum
                         </span>
                       )}
-                      {ans.yourOdds && <span> · your coach rated your deck {pctLabel(ans.yourOdds.game)}</span>}
+                      {ans.yourOdds && (
+                        <span title="Your coach's figure for your deck against the decks it expected them to bring, before the AI's deck was shown">
+                          {' '}· your coach expected {pctLabel(ans.yourOdds.game)} against their likely decks
+                        </span>
+                      )}
                     </p>
                   </>
                 )}
@@ -726,64 +822,85 @@ export function CoachDuel() {
             );
           })()}
 
-          {/* Paste the deck for the next game. */}
+          {/* Your move: the deck for the next game, facing the AI's face-down
+              card, the way the result faces off below. */}
           {!shownGame && !finished && (
-            <div className={styles.choose}>
-              <h2 className={styles.gameTitle}>
-                Game {gameNo} · paste your deck
-                {deadRubber && <span className={styles.tag}>Duel decided — played for the record</span>}
+            <div className={styles.turn}>
+              <h2 className={styles.turnTitle}>
+                <span>Game {gameNo}</span>
+                <span className={styles.turnSub}>{deadRubber ? 'The duel is decided — played for the record' : 'Your move'}</span>
               </h2>
-              <div className={styles.pasteRow}>
-                <div className={styles.pasteCol}>
-                  <textarea
-                    className={styles.paste}
-                    value={paste}
-                    placeholder="Paste a deck link — copy it from the game's deck screen"
-                    onChange={(e) => {
-                      setPaste(e.target.value);
-                      if (findDeckLinks(e.target.value).length) takePaste(e.target.value);
-                    }}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      takePaste(e.clipboardData.getData('text'));
-                    }}
-                    rows={2}
-                  />
-                  <div className={styles.pasteActions}>
-                    <button type="button" className={styles.ghost} onClick={useSuggested} disabled={!suggested.length}>
-                      {pasted?.name ? 'Another Coach Assist deck' : 'Use a Coach Assist deck'}
-                    </button>
-                    {earlier.length > 0 && <span className={styles.note}>{earlier.length * 8} cards already played this duel</span>}
+              <div className={styles.faceRow}>
+                {pasted ? (
+                  <DeckTile
+                    deck={{ ...pasted, deckName: pasted.name }}
+                    seat="blue"
+                    badge={
+                      <button type="button" className={styles.slotClear} aria-label="Remove this deck" onClick={() => setPasted(null)}>
+                        ×
+                      </button>
+                    }
+                  >
+                    {clash.length > 0 ? (
+                      <p className={styles.clash}>
+                        {clash.map(cardName).join(', ')} {clash.length === 1 ? 'was' : 'were'} already played this duel
+                      </p>
+                    ) : (
+                      <p className={styles.readyLine}>Ready</p>
+                    )}
+                  </DeckTile>
+                ) : (
+                  <div className={styles.drop}>
+                    <svg viewBox="0 0 24 24" className={styles.dropIcon} aria-hidden="true">
+                      <path d="M9 4h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1V6a2 2 0 0 1 2-2Zm0 2v3h6V6H9Z" />
+                    </svg>
+                    <p className={styles.dropTitle}>Your deck for game {gameNo}</p>
+                    <div className={styles.dropActions}>
+                      <button type="button" className={styles.dropBtn} onClick={pasteFromClipboard}>
+                        Paste deck link
+                      </button>
+                      <button type="button" className={styles.dropBtn} onClick={useSuggested} disabled={!suggested.length}>
+                        Coach Assist deck
+                      </button>
+                    </div>
+                    <textarea
+                      className={styles.dropInput}
+                      value={paste}
+                      aria-label="Deck link"
+                      placeholder="…or paste the link here"
+                      onChange={(e) => {
+                        setPaste(e.target.value);
+                        if (findDeckLinks(e.target.value).length) takePaste(e.target.value);
+                      }}
+                      onPaste={(e) => {
+                        e.preventDefault();
+                        takePaste(e.clipboardData.getData('text'));
+                      }}
+                      rows={1}
+                    />
                   </div>
-                  {pasteNote && <p className={styles.note}>{pasteNote}</p>}
-                  {pasted ? (
-                    <DeckTile
-                      deck={pasted}
-                      seat="blue"
-                      badge={
-                        <button type="button" className={styles.slotClear} aria-label="Remove this deck" onClick={() => setPasted(null)}>
-                          ×
-                        </button>
-                      }
-                    >
-                      {clash.length > 0 && (
-                        <p className={styles.clash}>
-                          {clash.map(cardName).join(', ')} {clash.length === 1 ? 'was' : 'were'} already played this duel
-                        </p>
-                      )}
-                    </DeckTile>
-                  ) : (
-                    <div className={styles.emptyDeck}>Your deck for game {gameNo}</div>
-                  )}
-                </div>
+                )}
                 <span className={styles.vs} aria-hidden="true">
                   VS
                 </span>
                 <CardBack busy={false} />
               </div>
-              <button type="button" className={styles.cta} disabled={!pasted || clash.length > 0 || rolling} onClick={lockIn}>
-                Lock in &amp; battle
-              </button>
+              {pasteNote && <p className={styles.turnNote}>{pasteNote}</p>}
+              <div className={styles.turnActions}>
+                {pasted && (
+                  <button type="button" className={styles.ghost} onClick={useSuggested} disabled={!suggested.length}>
+                    Another Coach Assist deck
+                  </button>
+                )}
+                <button type="button" className={styles.cta} disabled={!pasted || clash.length > 0 || rolling} onClick={lockIn}>
+                  Lock in &amp; battle
+                </button>
+              </div>
+              {earlier.length > 0 && (
+                <p className={styles.turnNote}>
+                  {earlier.length * 8} cards already played this duel — none of them can come back.
+                </p>
+              )}
             </div>
           )}
 

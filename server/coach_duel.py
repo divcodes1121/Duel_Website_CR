@@ -519,10 +519,12 @@ def vary_set(entries: list, value, rng, *, size: int = MAX_DECKS, min_size: int 
     return sorted(rng.choice(fresh))
 
 
-def switch_card(decks: list, variants_for, rng, p: float = SWITCH_P):
+def switch_card(decks: list, variants_for, rng, p: float = SWITCH_P, ok=None):
     """Maybe one real one-card switch in one deck: `(decks, switch or None)`.
     `variants_for(cards) -> [{"cards", "games"}]` are real lists one card away;
-    a variant whose new card another deck of the set already holds is skipped.
+    a variant whose new card another deck of the set already holds is skipped,
+    and so is one `ok(new cards, old cards)` refuses (the deck must still make
+    sense after the switch).
     `switch` = `{"deck": index, "out": card, "in": card, "games": n}`."""
     if not decks or rng.random() >= p:
         return decks, None
@@ -535,7 +537,7 @@ def switch_card(decks: list, variants_for, rng, p: float = SWITCH_P):
         for v in (variants_for(decks[k]) or [])[:SWITCH_CANDIDATES]:
             new = set(v["cards"])
             add, drop = new - mine, mine - new
-            if len(add) == 1 and len(drop) == 1 and not (add & others):
+            if len(add) == 1 and len(drop) == 1 and not (add & others) and (ok is None or ok(list(v["cards"]), list(decks[k]))):
                 opts.append((v, next(iter(drop)), next(iter(add))))
         if not opts:
             continue
@@ -607,13 +609,34 @@ def _deck_row(cards: list) -> dict:
     return row
 
 
+# A deck that fails `_sensible` still counts this much (of its weight) when the
+# sensible ones cannot fill the format on their own.
+UNSENSIBLE_WEIGHT = 0.05
+
+
+def _sensible(cards, seed=None) -> bool:
+    """Does the deck make sense (`coach._constructed_ok`: its spell set, its
+    buildings and its least-run card against what duel players field with its
+    win condition, and the duel card-pairing gate, which a deck proven in 30+
+    real duels passes)? Asked for (2026-10-21) after the AI brought a Golem
+    list with a Goblin Hut and a Tornado: "check the synergy, it must make
+    sense". A missing table is no gate."""
+    try:
+        import coach
+        return bool(coach._constructed_ok(list(cards), seed=list(seed) if seed else None))
+    except Exception:  # noqa: BLE001 - no tables, no gate
+        return True
+
+
 def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES) -> tuple[list, dict | None, dict]:
     """The AI coach's decks for duel number `round_` (0 = the first) of a best
-    of `games`: `(rows, switch, info)`."""
+    of `games`: `(rows, switch, info)`. Every deck must make sense
+    (`_sensible`); a set that cannot be made of such decks keeps the others."""
     import coach
     most, fewest = FORMATS.get(games, FORMATS[GAMES])
     base = [dict(d) for d in a["decks"]]
-    if a["win"] is None or (round_ <= 0 and len(base) >= fewest):
+    base_ok = all(_sensible(d["cards"]) for d in base)
+    if a["win"] is None or (round_ <= 0 and len(base) >= fewest and base_ok):
         return base, None, {"source": "coach-assist"}
     rng = _rng(seed, round_)
     own = coach._own_duel_decks((a.get("keep") or {}).get("mine_hist"), set())
@@ -630,7 +653,15 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES) -> tuple[
                 keys.add(k)
                 entries.append({"cards": list(r["cards"]), "row": r, "counter": counter or r.get("counter"),
                                 "weight": float(r.get("count") or 1) if weight is None else weight})
-    base_keys = frozenset(i for i, e in enumerate(entries) if _key(e["cards"]) in {_key(d["cards"]) for d in base})
+    # DECKS THAT MAKE SENSE ONLY. When those cannot field the format (a best
+    # of 5 needs five decks sharing no card), the rest come in at a small
+    # weight, so a set takes as few of them as it can.
+    for e in entries:
+        e["sensible"] = _sensible(e["cards"])
+    good = [e for e in entries if e["sensible"]]
+    dropped = len(entries) - len(good)
+    every = entries
+    entries = good if len(good) >= fewest else every
     memo: dict = {}
 
     def value(group):
@@ -640,9 +671,21 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES) -> tuple[
             memo[k] = out["options"][0]["duel"] if out.get("options") else 0.0
         return memo[k]
 
-    pick = vary_set(entries, value, rng, size=most, min_size=fewest,
-                    band=0.0 if round_ <= 0 else VARY_BAND,
-                    avoid=base_keys if round_ == 1 else None)
+    def draw(pool, score=None):
+        base_keys = frozenset(i for i, e in enumerate(pool) if _key(e["cards"]) in {_key(d["cards"]) for d in base})
+        return vary_set(pool, score or value, rng, size=most, min_size=fewest,
+                        band=0.0 if round_ <= 0 else VARY_BAND,
+                        avoid=base_keys if round_ == 1 else None)
+
+    pick = draw(entries)
+    fallback = False
+    if not pick and entries is not every:
+        entries = [dict(e, weight=e["weight"] * (1.0 if e["sensible"] else UNSENSIBLE_WEIGHT)) for e in every]
+        bad = {_key(e["cards"]) for e in entries if not e["sensible"]}
+        # Fewest decks that make no sense first, then the duel's value (a
+        # value is a chance, under 1, so one more such deck always costs more).
+        pick = draw(entries, lambda g: value(g) - sum(1 for d in g if _key(d) in bad))
+        fallback = True
     if not pick:
         return base, None, {"source": "coach-assist", "reason": "no_draw"}
     rows = [dict(entries[i]["row"]) | ({"counter": True} if entries[i].get("counter") else {}) for i in pick]
@@ -655,11 +698,13 @@ def _ai_set(a: dict, read, round_: int, seed: str, games: int = GAMES) -> tuple[
                 return di.near_variants(c)
             except Exception:  # noqa: BLE001 - no index, no switch
                 return []
-        cards2, switch = switch_card(cards, variants, rng)
+        cards2, switch = switch_card(cards, variants, rng, ok=lambda new, old: _sensible(new, seed=old))
         if switch:
             k = switch["deck"]
             rows[k] = _deck_row(cards2[k]) | ({"counter": True} if rows[k].get("counter") else {}) | {"switched": True}
-    info = {"source": "rotation", "candidates": len(entries),
+    info = {"source": "rotation" if round_ > 0 else "composed",
+            "candidates": len(entries), "dropped": dropped, "fallback": fallback,
+            "unsensible": sum(1 for i in pick if not entries[i]["sensible"]),
             "value": round(100 * value([r["cards"] for r in rows]), 1)}
     return rows, switch, info
 

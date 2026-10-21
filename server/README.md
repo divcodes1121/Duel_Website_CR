@@ -1945,7 +1945,11 @@ You coach Blue against the AI coach of the other player. **Admin only**: any
   the decision unless `all=1` (`bad_results`). The AI's set (`_ai_set`, cached
   per duel in `_set_cache`): best of 3 duel 1 = Coach Assist's set; best of 5 =
   the best five disjoint decks; any rematch = `vary_set` within `VARY_BAND` +
-  `switch_card`. Its read of you = `blend_read` (`SEEN_WEIGHT` to `s1..s8`).
+  `switch_card`. Every deck must pass `_sensible` (`coach._constructed_ok`),
+  Coach Assist's own included; when the decks that do cannot field the
+  format, the others enter at `UNSENSIBLE_WEIGHT` and the set with the
+  fewest of them wins (`aiSet.fallback`, `aiSet.unsensible`). A switch must
+  pass it too. Its read of you = `blend_read` (`SEEN_WEIGHT` to `s1..s8`).
   **The AI's pick for game N is made from your decks of games 1..N-1 and the
   results only (`ai_picks`)**; game N's deck enters only the referee. A decided
   duel played on (`all=1`) has the policy fall back to the best deck for that

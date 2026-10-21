@@ -216,7 +216,15 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
 
       {createPortal(
         open && pos ? (
-          <div className={styles.menu} style={{ top: pos.top, right: pos.right }} role="menu">
+          /* BOUNDED BY THE WINDOW AND SCROLLS (2026-10-21, reported: "there is
+             no scroll there and I cannot scroll down to log out"). A fixed panel
+             taller than the space under the button put its last rows — Log out
+             among them — below the screen with no way to reach them. */
+          <div
+            className={styles.menu}
+            style={{ top: pos.top, right: pos.right, maxHeight: `calc(100dvh - ${Math.round(pos.top)}px - 12px)` }}
+            role="menu"
+          >
             <div ref={menuRef}>
               {/* ── IDENTITY ────────────────────────────────────────────
                   Name over email. The email is back: this slot used to hold
