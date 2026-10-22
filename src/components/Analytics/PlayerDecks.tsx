@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useRemembered } from '../../hooks/useRemembered';
+import { isCount } from '../../state/listMemory';
 import { useScreenExport } from '../Export/ExportButton';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
@@ -181,7 +183,9 @@ export function PlayerDecks({ tag }: { tag: string }) {
   const [report, setReport] = useState<PlayerDecksReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
-  const [shown, setShown] = useState(PAGE);
+  /* How far "Show more" was taken, remembered per player and window
+     (2026-10-22), so coming back does not fold the list up again. */
+  const [shown, setShown] = useRemembered(`decks:${tag}:${days}:shown`, PAGE, isCount);
   /* Held only on the first read. Changing the window dims the list in place
      rather than swapping the whole screen for a loader, so the three chips
      stay under the pointer that pressed one. */
@@ -203,7 +207,6 @@ export function PlayerDecks({ tag }: { tag: string }) {
         if (!live) return;
         setReport(r);
         setError(null);
-        setShown(PAGE);
         // Only with games to show for it — an empty window proves no player.
         if (r.total > 0) rememberPlayer(tag, r.player?.name ?? null);
       })

@@ -2372,6 +2372,50 @@ change definitely shrinks. `.vercelignore` is cheap either way.
 
 ---
 
+## Lists keep your place (2026-10-22)
+
+Asked: *"in Royal Duels I load the set, then go back to Saved and it starts
+from page 1 again — it should be from that moment; check everywhere for this
+and fix it"*.
+
+**What was wrong.** Every paged or "Show more" list held its place in the
+screen's own state, so the place was thrown away the moment the list left the
+screen and came back at page 1. On the Saved tab it was worse: a rule meant
+for "a new filter starts at page 1" also fired every time the tab OPENED, and
+Saved closes whenever you go to Build.
+
+**What it does now.** One small memory, `src/state/listMemory.ts` (no imports)
++ `src/hooks/useRemembered.ts`, kept in `sessionStorage` for the life of the
+browser tab (a reload keeps it, a new tab starts clean; bounded to 200
+entries; every stored value is checked before it is used, and blocked storage
+only means it lasts until the page closes). Each list has its own key:
+
+| List | Remembered | Key carries |
+|---|---|---|
+| Royal Duels, Saved tab | the page; and the group you last loaded is scrolled into view when you come back | mode (Solo / Versus) + card filter |
+| Royal Duels | which tab (Build / Saved) and the card filter | mode |
+| Recent Battles | the page | player + date window |
+| 2v2 Decks | page, sort, page size, picked cards | — |
+| All Duels (admin) | page, window, page size, picked cards | — |
+| Decks (a player's) | how far "Show more" was taken | player + window |
+| Cards (a player's) | how far "Show more" was taken | player + every filter |
+| Deck Counter's three lists | how far "Show more" was taken | player + window + list |
+
+Another mode, filter, player or window is ANOTHER list, so it starts at page 1
+(or where it was last left) — "page 5 of a different question" never happens.
+Changing a control on the same list still goes back to page 1, as before.
+
+**Checked in a browser**: 45 saved Versus sets — page 3, load a set, Build,
+Saved: still page 3 with the loaded group in view; another screen and back,
+and a reload: still page 3 on the Saved tab; Solo has its own list (10/10).
+On live data: 2v2 Decks page 3 and Recent Battles page 2 survive leaving and
+coming back (4/4). Not tried in a browser: the "Show more" lists (the same
+memory, unit-tested). `tests/listMemory.test.ts` 9.
+
+**Not changed**: the date-window chips (7d / 30d / ...) on the analytics
+screens still start at their default on each visit, and so do the Cards
+screen's filters themselves.
+
 ## Coach Duel — you against an AI coach, best of 3 (2026-10-20, rebuilt 2026-10-21)
 
 Asked for (2026-10-20): *"an AI coach for duels which will be like a game ... it

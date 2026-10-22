@@ -2139,7 +2139,11 @@ refusal) are in `utils/duelFeed.ts`, which has no imports.
   sets; it takes 0.4 s. The card filter searches the WHOLE library and pages
   what is left; the pill beside the title counts every set, whatever page is
   drawn. Turning a page brings the top of the list back if the reader was past
-  it. Page 1 again when the mode or the filter changes.
+  it. **The page is remembered** (2026-10-22) per mode and card filter for the
+  browser tab — Build and back, another screen and back, or a reload, and you
+  are on the page you left, with the group you last loaded scrolled into view.
+  Another mode or filter is another list. Every paged and "Show more" list on
+  the site does the same (README "Lists keep your place").
 - **`225 of 1,000 saved`** at the far end of the title, for a reader who has a
   limit — Solo and Versus together, because they share it. Red once it is
   reached. An admin has no limit and sees no figure.

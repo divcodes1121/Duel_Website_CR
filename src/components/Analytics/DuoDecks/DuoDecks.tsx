@@ -1,5 +1,7 @@
 import { useScreenExport } from '../../Export/ExportButton';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRemembered } from '../../../hooks/useRemembered';
+import { isPage, isStringList, oneOf } from '../../../state/listMemory';
 
 import { CardArt } from '../CardArt';
 import {
@@ -55,6 +57,8 @@ const SORTS = [
 ] as const;
 
 const PER_PAGE = [25, 50, 100] as const;
+const NO_CARDS: string[] = [];
+const isShortText = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 24;
 
 /* ONE DECK IS ONE LINE: a head carrying the label, the elixir and the two
    actions, then the eight cards in a single row. It was a 4x2 block with the
@@ -127,16 +131,18 @@ export function DuoDecks() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<string>('played');
-  const [per, setPer] = useState<number>(25);
+  /* The sort, page size, cards and page are REMEMBERED for the browser tab
+     (2026-10-22): leaving the board and coming back opens it where you were. */
+  const [sort, setSort] = useRemembered<string>('duo:sort', 'played', isShortText);
+  const [per, setPer] = useRemembered<number>('duo:per', 25, oneOf(...PER_PAGE));
   /* The cards the reader has picked. The SERVER decides which of them it
      accepted — an unknown key is dropped rather than refused — so what the
      board says it filtered by is read from the response, never from this. */
-  const [picked, setPicked] = useState<string[]>([]);
+  const [picked, setPicked] = useRemembered<string[]>('duo:cards', NO_CARDS, isStringList);
   /* The page ASKED FOR, set on the click, so the pager's slab moves at once
      rather than a round trip later. The server clamps a page past the end,
      so the answer's own page replaces it when it lands. */
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useRemembered('duo:page', 1, isPage);
   const listRef = useRef<HTMLDivElement>(null);
   /* Only the newest request may write. Clicking through pages faster than
      they arrive used to be impossible — the loader covered the pager — and
@@ -162,11 +168,13 @@ export function DuoDecks() {
         if (id === seq.current) setLoading(false);
       }
     },
-    [],
+    [setPage],
   );
 
   useEffect(() => {
-    void load(1, [], 'played', 25);
+    // Opens where it was left (the remembered page, cards, sort and size).
+    void load(page, picked, sort, per);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   function toggle(key: string) {

@@ -331,8 +331,9 @@ describe('the screen', () => {
 
   it('every control goes back to page 1', () => {
     const calls = [...page.matchAll(/void load\(([^,]+),/g)].map((m) => m[1].trim());
-    // Only the pager's own call carries a page other than 1.
-    expect(calls.filter((c) => c !== '1')).toEqual(['p']);
+    // Only the pager's own call carries a page other than 1 — and the opening
+    // read, which resumes the REMEMBERED page (2026-10-22).
+    expect(calls.filter((c) => c !== '1')).toEqual(['page', 'p']);
   });
 
   it('picks cards rather than typing them', () => {

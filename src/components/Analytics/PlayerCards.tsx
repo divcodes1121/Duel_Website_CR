@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useRemembered } from '../../hooks/useRemembered';
+import { isCount } from '../../state/listMemory';
 import { CardArt, type ArtVariant } from './CardArt';
 import { useScreenExport } from '../Export/ExportButton';
 import { CARDS_BY_KEY } from '../../data/cards';
@@ -342,7 +344,6 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const [query, setQuery] = useState('');
   const [hideUnplayed, setHideUnplayed] = useState(true);
-  const [shown, setShown] = useState(PAGE);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const { win, preset, setPreset, custom, setCustom } = useDateWindow(
@@ -383,9 +384,14 @@ export function PlayerCards({ tag, season = 'Current Season' }: { tag: string; s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tag, mode, preset, win.from, win.to]);
 
-  // Any change to what is being asked resets the page back to the top of the
-  // list — "show more" from a previous filter is not more of this one.
-  useEffect(() => setShown(PAGE), [tab, rarity, elixir, sort, query, hideUnplayed, mode]);
+  // How far "Show more" was taken, remembered per player AND per filter
+  // (2026-10-22): another filter is another list ("show more" from a previous
+  // filter is not more of this one), and coming back keeps the place.
+  const [shown, setShown] = useRemembered(
+    `cards:${tag}:${mode}:${tab}:${rarity}:${elixir}:${sort}:${hideUnplayed}:${query}:shown`,
+    PAGE,
+    isCount,
+  );
 
   useEffect(() => {
     if (!pickerOpen) return;

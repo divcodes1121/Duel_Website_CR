@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useBuilderStore, type DuelOwner } from '../../state/store';
 import { DUEL_DECK_COUNT, type BuilderMode, type Deck, type PlayerId } from '../../types/deck';
 import { countActiveDecks, getTotalCardsUsed } from '../../state/deckUtils';
@@ -11,7 +11,12 @@ import { DeckWorkspace } from '../DeckWorkspace/DeckWorkspace';
 import { WinConFilter, deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { PlusIcon } from './icons';
 import { Tabs } from '../ui/tabs';
+import { useRemembered } from '../../hooks/useRemembered';
+import { isStringList, oneOf } from '../../state/listMemory';
 import styles from './DuelDeckBuilder.module.css';
+
+const NO_FILTER: string[] = [];
+const isView = oneOf('build', 'saved');
 
 const MODES: { id: BuilderMode; label: string }[] = [
   { id: 'solo', label: 'Solo' },
@@ -58,14 +63,16 @@ export function DuelDeckBuilder() {
   const clearSelection = useBuilderStore((s) => s.clearSelection);
   const setDeckCrowns = useBuilderStore((s) => s.setDeckCrowns);
   const removeDeckSlot = useBuilderStore((s) => s.removeDeckSlot);
-  const [winFilter, setWinFilter] = useState<string[]>([]);
+  /* Remembered for the browser tab (2026-10-22), like the Saved page: leaving
+     the builder and coming back keeps the filter and the tab you were on. */
+  const [winFilter, setWinFilter] = useRemembered<string[]>(`royal-duels:filter:${mode}`, NO_FILTER, isStringList);
   /**
    * Which of the two things this screen is: the board, or the library of saved
    * sets. They are the same SHAPE — a duel collection — so they share the deck
    * column rather than the saved sets trailing off the bottom of it, where
    * reaching them meant scrolling past every deck on the board.
    */
-  const [view, setView] = useState<'build' | 'saved'>('build');
+  const [view, setView] = useRemembered<'build' | 'saved'>('royal-duels:view', 'build', isView);
   const savedCount = useBuilderStore(
     (s) => s.library.filter((e) => e.mode === s.mode).length,
   );

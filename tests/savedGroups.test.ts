@@ -32,8 +32,12 @@ describe('the Saved tab', () => {
     expect(page).toBeGreaterThan(filter);
   });
 
-  it('goes back to page 1 when the mode or the filter changes, and never past the end', () => {
-    expect(src).toContain('useEffect(() => setPage(1), [mode, filterKey]);');
+  /* Since 2026-10-22 the page is REMEMBERED per mode and filter (another mode
+     or filter is another list, starting at page 1), instead of being reset to
+     page 1 every time the list opened. */
+  it('keeps its page per mode and filter, and never goes past the end', () => {
+    expect(src).toContain('useRemembered(`saved-groups:${mode}:${filterKey}`, 1, isPage)');
+    expect(src).not.toContain('useEffect(() => setPage(1)');
     expect(src).toContain('const current = Math.min(page, pages);');
   });
 

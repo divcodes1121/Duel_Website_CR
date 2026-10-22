@@ -1,5 +1,7 @@
 import { useScreenExport } from '../Export/ExportButton';
 import { useEffect, useRef, useState } from 'react';
+import { useRemembered } from '../../hooks/useRemembered';
+import { isPage } from '../../state/listMemory';
 import { CardArt } from './CardArt';
 import { ContinuousPagination } from '../ui/continuous-pagination';
 import { revealListTop } from '../../utils/revealListTop';
@@ -296,7 +298,6 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
   const [report, setReport] = useState<RecentBattlesReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
   const [pickerOpen, setPickerOpen] = useState(false);
   const listRef = useRef<HTMLElement>(null);
   /* The form strip's own read: the newest FORM_SIZE battles in the window,
@@ -322,6 +323,14 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
   const { win, preset, setPreset, custom, setCustom } = useDateWindow(
     season,
     report?.coverage.end ?? null,
+  );
+  /* THE PAGE IS REMEMBERED per player and window (2026-10-22): leaving the
+     log and coming back opens the page you were on. A new window is a new
+     key, so it starts at page 1 — the old reset effect is no longer needed. */
+  const [page, setPage] = useRemembered(
+    `battles:${tag}:${preset}:${win.from ?? ''}:${win.to ?? ''}`,
+    1,
+    isPage,
   );
 
   /* The export is not the page on screen (ten rows) but the fifty most recent
@@ -365,13 +374,6 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tag, preset, win.from, win.to, page]);
-
-  // A new window is a new pool, so it starts at the top rather than at
-  // whatever page number happened to be showing.
-  useEffect(() => {
-    setPage(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tag, preset, win.from, win.to]);
 
   useEffect(() => {
     let live = true;

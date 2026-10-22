@@ -1,5 +1,7 @@
 import { useScreenExport } from '../Export/ExportButton';
 import { useEffect, useMemo, useState } from 'react';
+import { useRemembered } from '../../hooks/useRemembered';
+import { isCount } from '../../state/listMemory';
 import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { parseClashRoyaleDeckLink } from '../../utils/deckLink';
@@ -237,13 +239,17 @@ function MatchupList({
   rows,
   showYours,
   empty,
+  memory,
 }: {
   rows: PlayerMatchup[];
   showYours?: boolean;
   empty: string;
+  /** Where this list's "Show more" is remembered (player, window, tab). */
+  memory: string;
 }) {
-  const [shown, setShown] = useState(PAGE);
-  useEffect(() => setShown(PAGE), [rows]);
+  /* Remembered (2026-10-22), so coming back keeps the list as long as it was
+     left; another player or window is another key. */
+  const [shown, setShown] = useRemembered(memory, PAGE, isCount);
 
   if (rows.length === 0) return <p className={styles.empty}>{empty}</p>;
   const left = rows.length - shown;
@@ -797,7 +803,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
                   <span className={styles.blockCount}>{report.worst.length}</span>
                 </h2>
                 <p className={styles.blockNote}>Below this player&rsquo;s own average.</p>
-                <MatchupList rows={report.worst} empty={thinReason} />
+                <MatchupList rows={report.worst} empty={thinReason} memory={`counter:${tag}:${preset}:worst`} />
               </section>
 
               <section className={styles.block}>
@@ -806,7 +812,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
                   <span className={styles.blockCount}>{report.best.length}</span>
                 </h2>
                 <p className={styles.blockNote}>At or above their own average.</p>
-                <MatchupList rows={report.best} empty={thinReason} />
+                <MatchupList rows={report.best} empty={thinReason} memory={`counter:${tag}:${preset}:best`} />
               </section>
             </div>
 
@@ -826,7 +832,7 @@ export function DeckCounter({ tag, season = 'Current Season' }: { tag: string; s
               {report.bring ? (
                 <BringAgainst bring={report.bring} />
               ) : (
-                <MatchupList rows={report.recommended} showYours empty={thinReason} />
+                <MatchupList rows={report.recommended} showYours empty={thinReason} memory={`counter:${tag}:${preset}:bring`} />
               )}
             </section>
           </>

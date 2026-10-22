@@ -7,6 +7,8 @@ import { previewIconFor } from '../../utils/deckPreview';
 import { deckMatchesFilter } from '../WinConFilter/WinConFilter';
 import { ContinuousPagination } from '../ui/continuous-pagination';
 import { revealListTop } from '../../utils/revealListTop';
+import { useRemembered } from '../../hooks/useRemembered';
+import { isPage } from '../../state/listMemory';
 import type { BuilderMode, Deck, PlayerId, SavedDeckSet } from '../../types/deck';
 import styles from './SavedGroups.module.css';
 
@@ -138,7 +140,7 @@ function GroupCard({
   }
 
   return (
-    <article className={styles.group}>
+    <article className={styles.group} data-saved-id={entry.id}>
       <header className={styles.groupHeader}>
         <div className={styles.groupTitleWrap}>
           {isRenaming ? (
@@ -249,12 +251,24 @@ export function SavedGroups({ mode, winFilter = [] }: { mode: BuilderMode; winFi
     ? all.filter((e) => groupDecks(e).some((d) => deckMatchesFilter(d.slots, winFilter)))
     : all;
 
-  /* Page 1 again whenever what is listed changes kind — another tab's mode, or
-     a different filter. Clamped as well, so deleting the last group of the
-     last page lands on the page before it rather than on an empty one. */
-  const [page, setPage] = useState(1);
+  /* THE PAGE IS REMEMBERED (2026-10-22: "I load a set, go back to Saved, and
+     it starts from page 1 again"). It used to live in this component, so
+     switching to Build and back threw it away. Kept per mode and per filter
+     for the browser tab (`useRemembered`): another mode or filter is another
+     list, with its own page. Clamped, so deleting the last group of the last
+     page lands on the page before it rather than on an empty one. */
   const filterKey = winFilter.join(',');
-  useEffect(() => setPage(1), [mode, filterKey]);
+  const [page, setPage] = useRemembered(`saved-groups:${mode}:${filterKey}`, 1, isPage);
+  /* And the group you loaded is brought back into view when you return, so
+     the list opens where you left it, not at its top. */
+  const activeSavedId = useBuilderStore((s) => s.activeSavedId);
+  useEffect(() => {
+    if (!activeSavedId) return;
+    const el = top.current?.querySelector(`[data-saved-id="${CSS.escape(activeSavedId)}"]`);
+    el?.scrollIntoView({ block: 'center' });
+    // Once, when the list opens; not on every page turn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const pages = Math.max(1, Math.ceil(entries.length / SAVED_GROUPS_PER_PAGE));
   const current = Math.min(page, pages);
   const shown = entries.slice((current - 1) * SAVED_GROUPS_PER_PAGE, current * SAVED_GROUPS_PER_PAGE);

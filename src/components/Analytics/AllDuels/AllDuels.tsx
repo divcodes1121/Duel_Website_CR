@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRemembered } from '../../../hooks/useRemembered';
+import { isPage, isStringList, oneOf } from '../../../state/listMemory';
 
 import { CardArt } from '../CardArt';
 import { ReadingState } from '../ReadingState';
@@ -45,6 +47,8 @@ import {
 import { initialsOf } from '../../../utils/initials';
 import { revealListTop } from '../../../utils/revealListTop';
 import styles from './AllDuels.module.css';
+
+const NO_CARDS: string[] = [];
 
 /**
  * All Duels — friendly duels that went to three games, newest first. ADMIN
@@ -296,14 +300,16 @@ export function AllDuels() {
   const [report, setReport] = useState<DuelFeedReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [days, setDays] = useState<number>(DUEL_FEED_DEFAULT_DAYS);
-  const [per, setPer] = useState<number>(DUEL_FEED_DEFAULT_PER_PAGE);
+  /* Remembered for the browser tab (2026-10-22): the window, page size, cards
+     and page, so the list opens where you left it. */
+  const [days, setDays] = useRemembered<number>('all-duels:days', DUEL_FEED_DEFAULT_DAYS, isPage);
+  const [per, setPer] = useRemembered<number>('all-duels:per', DUEL_FEED_DEFAULT_PER_PAGE, oneOf(...DUEL_FEED_PER_PAGE));
   /* What the reader picked. The server decides which of them it accepted, so
      the count line and the deck marks read `report.cards`, never this. */
-  const [picked, setPicked] = useState<string[]>([]);
+  const [picked, setPicked] = useRemembered<string[]>('all-duels:cards', NO_CARDS, isStringList);
   /* The page ASKED FOR, set on the click so the pager's slab moves at once.
      The server clamps a page past the end, and its answer replaces this. */
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useRemembered('all-duels:page', 1, isPage);
   const listRef = useRef<HTMLDivElement>(null);
   /* Only the newest request may write: pages can be clicked faster than they
      arrive, and an older answer must not land on top of a newer one. */
@@ -327,10 +333,12 @@ export function AllDuels() {
     } finally {
       if (id === seq.current) setLoading(false);
     }
-  }, []);
+  }, [setPage]);
 
   useEffect(() => {
-    void load(1, [], DUEL_FEED_DEFAULT_DAYS, DUEL_FEED_DEFAULT_PER_PAGE);
+    // Opens where it was left (the remembered page, cards, window and size).
+    void load(page, picked, days, per);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   /* Every control asks a new question about the whole window, so each one
