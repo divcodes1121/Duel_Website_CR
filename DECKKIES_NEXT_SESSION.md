@@ -159,6 +159,7 @@ yet. Coach Duel was RELEASED on 2026-10-22 to Pro and the three-day trial (READM
 |---|---|
 | Coach Duel rooms: two coaches online. Settings (Bo3/5, stop/all, matchup/roll, deck clock 2-5 min or no limit), a room link, the other coach joins with their own player, blind lock-in, the server decides and rolls, out of time loses that game, rematch, leave (`server/coach_room.py`, route `/api/analytics/coach/room`, `admin_auth.identify`) | README "Two coaches online: rooms", `server/README.md` "Coach Duel rooms" |
 | Coach Duel RELEASED: Pro, the three-day trial and admins open it (`tiers.ts`, `admin_auth.paid` on both server routes); free/signed-out see the gate card; palette + profile-menu rows for everyone; What's new note | README "Who can open it" |
+| No grey anywhere: dark mode black + violet, light mode violet mist (solid cards on a lavender page); soft fills mix from `--wash-ink`. Chosen from screenshots | README "Dark mode is black + violet", "Light mode is violet mist"; `testing/palette/`, `testing/light/` |
 | Lists keep your place: the Saved page (and the loaded set in view), Recent Battles, 2v2 Decks, All Duels, and "Show more" lists remember where you were for the browser tab (`state/listMemory.ts`, `hooks/useRemembered.ts`) | README "Lists keep your place" |
 | Coach Duel's landing panel: same size as the other four, cropped on her face; desktop/tablet art 3:1, phone art 2:3; drawn only for accounts that can open Coach Duel | README "The Coach Duel panel on the landing page" |
 
