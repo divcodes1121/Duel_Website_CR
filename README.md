@@ -5685,6 +5685,41 @@ rank chip, a bar; large surfaces stop at the 8% wash.
 
 ## Colour: how it was chosen
 
+### Dark mode is black + violet, no grey (2026-10-22)
+
+Asked: *"the whole website has a grey background on every tab, I don't like
+that — minimal and good looking, matching the website; search online, try it
+in testing and keep images"*, then, shown two neutral options, *"I don't want
+grey"*, then *"black + violet is amazing, go with that; light mode next"*.
+
+**What was grey.** Every dark panel was `rgba(44,44,44,.9)` (about `#282828`)
+on the black page — 40 points of lightness above it — with `#3a3a3a` edges;
+and a dozen soft fills mixed WHITE into black (`--neutral-wash` and friends),
+which is grey by definition.
+
+**Researched first** (Linear, Vercel's Geist, Raycast and dark-dashboard style
+references): minimal dark interfaces keep panels within a few points of the
+page (Linear: `#0f1011` panels on `#08090a`) and draw edges with hairlines,
+not with a grey fill. Three palettes were rendered on nine screens in both
+themes (`testing/palette/`): A neutral near-black, B navy, C black + violet.
+
+**Shipped: C, dark mode only.** Every dark step carries a hint of the site's
+violet instead of grey: page `#000`, panels `rgba(3,2,7,.92)`, raised
+`#0d0b15`, sunken `#05040a`, `--bg-2/3` `#07060b` / `#15121f`; violet
+hairlines `--border #231d33`, `--glass-stroke #211b30`, `--border-strong
+#6b5f8f` (3.6:1 on a panel, over the 3:1 floor for a control's outline);
+lilac sheen and page wash; `--mix-ground #030207`. Soft fills mix from a new
+`--wash-ink` (lilac `#c4b5fd` on dark, the text colour on light, so light is
+unchanged) instead of `--text`. The dashboard kit (`--dash-*`) follows; every
+chart series colour GAINED contrast on the new card (4.8-8.3:1, was 4.3-7.4).
+Accents, card art, the top bar and all text colours are untouched.
+
+**Checked**: a scan of every visible element on twelve screens for a grey
+fill or edge finds one — the silver #2 medal on the Top 10 decks, which is
+grey on purpose. Screens, an open command palette and a phone looked at
+(`testing/palette/applied-*.png`). **Light mode is not changed yet** — next.
+
+
 All colour lives in `src/index.css` as tokens — it is the single source of
 truth, and no component defines a colour of its own.
 

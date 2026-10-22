@@ -326,7 +326,7 @@
    pale surface grey used as a text colour, which is the same idea but is a
    different token in each theme there. This is one declaration for both. */
 .footer-5 .f5-watermark-row {
-  --f5-ghost: color-mix(in srgb, var(--text) 8%, transparent);
+  --f5-ghost: color-mix(in srgb, var(--wash-ink) 8%, transparent);
   display: flex;
   align-items: flex-end;
   justify-content: center;

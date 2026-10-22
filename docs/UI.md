@@ -181,6 +181,17 @@ the pixels for a flourish nobody is looking closely at.
 
 ---
 
+## Dark mode: black + violet, no grey (2026-10-22)
+
+The dark theme has NO grey surface or edge: panels sit at the page's black
+with a violet hint (`rgba(3,2,7,.92)`, raised `#0d0b15`, sunken `#05040a`),
+edges are violet hairlines (`#231d33`), and soft fills mix from `--wash-ink`
+(lilac on dark) instead of white. **Do not add a neutral grey to a dark
+rule**: tint it toward violet, or mix from `--wash-ink`. The silver #2 medal
+is the one deliberate grey. A grey-scan probe (every visible element's fill
+and border, R≈G≈B between 10 and 225) found nothing else on twelve screens.
+Light mode is unchanged for now. README "Dark mode is black + violet".
+
 ## Fireflies
 
 Ninety to two hundred and forty points on three depth bands, drifting upward and

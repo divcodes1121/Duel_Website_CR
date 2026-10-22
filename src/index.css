@@ -46,6 +46,8 @@
 }
 
 :root {
+  /* What soft fills mix from; dark overrides it with a lilac. */
+  --wash-ink: var(--text);
   /* The fallback is a CONDENSED stack: the swap from fallback to Impacted
      moves the least when the two are the same shape. */
   --font-display: 'Bebas Neue', 'Haettenschweiler', 'Arial Narrow Bold',
@@ -146,6 +148,10 @@
    floor for body copy and 3:1 for UI. */
 
 :root[data-theme='dark'] {
+  /* THE INK THAT SOFT FILLS ARE MIXED FROM (2026-10-22). A low-alpha white
+     on black is grey; a low-alpha lilac is the site's violet, faintly. Light
+     keeps its text colour (see the :root default). */
+  --wash-ink: #c4b5fd;
   /* 1–2 backgrounds.
      THE PAGE IS TRUE BLACK, by request. The note above argues for #111 — a
      near-black ground rather than #000, because maximum contrast against light
@@ -165,8 +171,14 @@
      "nesting goes down": a well always sits inside a panel and is stepped
      against that panel, never against the page. */
   --bg-1: #000000;
-  --bg-2: #161616;
-  --bg-3: #282828;
+  /* BLACK + VIOLET (2026-10-22, chosen from screenshots: "I don't want grey").
+     Every dark step below carries a hint of the site's violet instead of being
+     a neutral grey, and the panels sit right at the page's black: a panel is
+     told apart by its violet hairline, not by a grey fill. The ladder notes
+     further down describe the grey ladder this replaced (#2c2c2c panels on
+     #000) and are kept as the record of why it was grey. */
+  --bg-2: #07060b;
+  --bg-3: #15121f;
 
   /* 3–5 component backgrounds. Elevation on dark is carried by lightness, not
      shadow — a shadow against a near-black page is invisible. Each step up is
@@ -215,10 +227,10 @@
      --surface-strong had to move too. It was #262626 (38), which was above the
      old #202020 panel and would have been BELOW the new one — the raised rung
      would have read as a dent. */
-  --surface: rgba(44, 44, 44, 0.9);
-  --surface-strong: #2e2e2e;
-  --surface-nested: rgba(33, 33, 33, 0.9);
-  --surface-sunken: #1c1c1c;
+  --surface: rgba(3, 2, 7, 0.92);
+  --surface-strong: #0d0b15;
+  --surface-nested: rgba(8, 6, 14, 0.92);
+  --surface-sunken: #05040a;
 
   /* 6–8 borders. Two jobs, two contrast bars: --border is a decorative
      separator (WCAG exempts those), --border-strong outlines interactive
@@ -228,9 +240,11 @@
      thing it borders, so it moves whenever the surface under it does. */
   /* Lifted with the surfaces. #2E2E2E is now exactly --surface-strong, so a
      border drawn on a raised surface would have disappeared entirely. */
-  --border: #3a3a3a;
-  --border-strong: #6e6e6e;
-  --highlight: rgba(255, 255, 255, 0.045);
+  /* Violet hairlines. --border-strong is 3.6:1 against a panel (the 3:1
+     floor for a control's outline). */
+  --border: #231d33;
+  --border-strong: #6b5f8f;
+  --highlight: rgba(196, 181, 253, 0.04);
 
   /* Elevation. Nothing on dark: a cast shadow against #0b0b0b cannot be seen,
      so raising a surface is done with --surface above and its border. Floating
@@ -255,12 +269,12 @@
      the stacking context that portalled menus are already positioned against. */
   /* Translucent for the same reason as --surface above, and lifted with it.
      `-strong` stays opaque: it backs the portal menus. */
-  --glass-fill: rgba(44, 44, 44, 0.9);
-  --glass-fill-strong: #2e2e2e;
-  --glass-stroke: #383838;
+  --glass-fill: rgba(3, 2, 7, 0.92);
+  --glass-fill-strong: #0d0b15;
+  --glass-stroke: #211b30;
   /* The lit top edge is the one part of the glass worth keeping: on a dark
      solid panel it is what stops the border reading as a flat outline. */
-  --glass-sheen: rgba(255, 255, 255, 0.05);
+  --glass-sheen: rgba(196, 181, 253, 0.06);
 
   /* ── Real glass ────────────────────────────────────────────────────────
      The `--glass-*` tokens above are FLAT despite their names — the frosted
@@ -276,15 +290,15 @@
      Composited over pure white, this dark panel resolves to #484848 and
      `--text` still reads 6.3:1 on it; over anything darker it only improves.
      Dropping to 0.6 to make the blur more obvious is what would break it. */
-  --glass-panel: rgba(26, 26, 26, 0.8);
-  --glass-panel-stroke: rgba(255, 255, 255, 0.13);
+  --glass-panel: rgba(10, 8, 18, 0.85);
+  --glass-panel-stroke: rgba(196, 181, 253, 0.16);
 
   /* The wash the panes refract. Static; blurring a flat colour would cost the
      compositing pass and show nothing. */
   --page-wash:
-    radial-gradient(62% 52% at 16% 10%, rgba(255, 255, 255, 0.055), transparent 70%),
-    radial-gradient(54% 46% at 84% 80%, rgba(255, 255, 255, 0.045), transparent 70%),
-    radial-gradient(46% 42% at 66% 26%, rgba(255, 255, 255, 0.03), transparent 70%);
+    radial-gradient(62% 52% at 16% 10%, rgba(167, 139, 250, 0.06), transparent 70%),
+    radial-gradient(54% 46% at 84% 80%, rgba(167, 139, 250, 0.045), transparent 70%),
+    radial-gradient(46% 42% at 66% 26%, rgba(167, 139, 250, 0.03), transparent 70%);
 
   /* TEXT IS PURE WHITE ON DARK, AND MUTED IS THE SAME WHITE.
      Asked for directly: every grey font goes to full contrast so nothing is
@@ -321,9 +335,9 @@
   --accent-gold-bright: #ffffff;
 
   /* Alternating page bands for the landing. */
-  --band-deep: #0b0b0b;
-  --band-lift: #141414;
-  --band-mid: #1c1c1c;
+  --band-deep: #000000;
+  --band-lift: #07060b;
+  --band-mid: #0c0a13;
 
   /* No hue available, so the duel sides separate by lightness. Blue is the
      bright side, red the recessed one. */
@@ -430,7 +444,7 @@
   /* The card surface the level-1 and level-2 tints are mixed against —
      moved with `--surface`, or every wash would be computed against a
      panel colour that no longer exists. */
-  --mix-ground: #202020;
+  --mix-ground: #030207;
   --edge-strength: 45%;
 
   /* ── Glow ──────────────────────────────────────────────────────────────
@@ -736,8 +750,10 @@
      the answer is white in both themes rather than flipping per theme. */
   --on-solid: #ffffff;
 
-  /* Neutral hover, for surfaces that carry no semantic hue. */
-  --neutral-wash: color-mix(in srgb, var(--text) 6%, var(--mix-ground));
+  /* Neutral hover, for surfaces that carry no semantic hue. Mixed from
+     `--wash-ink`, not `--text`: on dark the text is white, and white mixed
+     into black is GREY (2026-10-22, "I don't want grey"). */
+  --neutral-wash: color-mix(in srgb, var(--wash-ink) 6%, var(--mix-ground));
 
   /* ── The same ladder, mixed against a SUNKEN surface ───────────────────
      A tint has to be mixed against the ground it will actually sit on. The
@@ -757,7 +773,7 @@
      ladder above. */
   --violet-wash-sunken: color-mix(in srgb, var(--hue-violet) 8%, var(--surface-sunken));
   --violet-fill-sunken: color-mix(in srgb, var(--hue-violet) 14%, var(--surface-sunken));
-  --neutral-wash-sunken: color-mix(in srgb, var(--text) 6%, var(--surface-sunken));
+  --neutral-wash-sunken: color-mix(in srgb, var(--wash-ink) 6%, var(--surface-sunken));
   /* The action hue on the same ground — the deck-action chips rest on
      `--surface-sunken`, so their hover tint has to be mixed against it for the
      same reason the selected states are. */

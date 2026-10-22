@@ -314,7 +314,7 @@
   display: block;
   height: 5px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--text) 12%, transparent);
+  background: color-mix(in srgb, var(--wash-ink) 12%, transparent);
   overflow: hidden;
 }
 

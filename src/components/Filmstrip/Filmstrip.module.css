@@ -223,7 +223,7 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--text) 26%, transparent);
+  background: color-mix(in srgb, var(--wash-ink) 26%, transparent);
   cursor: pointer;
   transition: background-color var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
 }
@@ -336,7 +336,7 @@
   color: var(--text);
   background:
     linear-gradient(180deg, var(--highlight), transparent 55%),
-    color-mix(in srgb, var(--text) 10%, var(--surface-strong));
+    color-mix(in srgb, var(--wash-ink) 10%, var(--surface-strong));
   box-shadow:
     0 4px 12px color-mix(in srgb, #000 26%, transparent),
     inset 0 1px 0 var(--highlight);
@@ -358,10 +358,10 @@
   padding: 1px;
   background: linear-gradient(
     145deg,
-    color-mix(in srgb, var(--text) 46%, transparent),
-    color-mix(in srgb, var(--text) 8%, transparent) 45%,
+    color-mix(in srgb, var(--wash-ink) 46%, transparent),
+    color-mix(in srgb, var(--wash-ink) 8%, transparent) 45%,
     transparent 62%,
-    color-mix(in srgb, var(--text) 28%, transparent)
+    color-mix(in srgb, var(--wash-ink) 28%, transparent)
   );
   mask:
     linear-gradient(#000 0 0) content-box,
@@ -390,7 +390,7 @@
 .arrow:hover:not(:disabled) {
   background:
     linear-gradient(180deg, var(--highlight), transparent 55%),
-    color-mix(in srgb, var(--text) 16%, var(--surface-strong));
+    color-mix(in srgb, var(--wash-ink) 16%, var(--surface-strong));
   transform: scale(1.06);
 }
 

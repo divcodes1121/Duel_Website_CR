@@ -42,14 +42,15 @@
  * icon beside it, never alone.
  */
 :root[data-theme='dark'] {
+  /* Black + violet (2026-10-22), like index.css: no grey surfaces. */
   --dash-page: #000000;
-  --dash-side: #0b0b0d;
-  --dash-card: #141417;
-  --dash-sunken: #1c1c21;
-  --dash-line: #27272c;
-  --dash-grid: #222227;
-  --dash-axis: #3f3f46;
-  --dash-hover: rgba(255, 255, 255, 0.05);
+  --dash-side: #030207;
+  --dash-card: #05040a;
+  --dash-sunken: #0d0b15;
+  --dash-line: #211b30;
+  --dash-grid: #1a1526;
+  --dash-axis: #4a4163;
+  --dash-hover: rgba(196, 181, 253, 0.06);
   --dash-accent: #a78bfa;
   --dash-accent-wash: rgba(139, 92, 246, 0.16);
   --dash-card-shadow: 0 0 0 0 transparent;

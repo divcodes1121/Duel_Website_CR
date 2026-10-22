@@ -62,7 +62,7 @@
     repeating-linear-gradient(
       90deg,
       transparent 0 2px,
-      color-mix(in srgb, var(--text) 3%, transparent) 2px 4px
+      color-mix(in srgb, var(--wash-ink) 3%, transparent) 2px 4px
     ),
     var(--surface-sunken);
   box-shadow:

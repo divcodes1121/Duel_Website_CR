@@ -842,7 +842,7 @@
   border-radius: 50%;
   background: radial-gradient(
     ellipse at center,
-    color-mix(in srgb, var(--text) 15%, transparent) 0%,
+    color-mix(in srgb, var(--wash-ink) 15%, transparent) 0%,
     transparent 70%
   );
 }

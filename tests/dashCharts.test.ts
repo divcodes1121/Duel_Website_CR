@@ -94,8 +94,12 @@ describe('the dashboard palette is the validated one', () => {
     expect(series('dark')).toEqual(['#8b5cf6', '#0f9e8f', '#c47a08', '#3b82f6', '#e0508f', '#5f9e12']);
   });
 
+  /* The dark card went from #141417 to the black + violet #05040a on
+     2026-10-22. Every series colour gained contrast on it (4.8-8.3:1 against
+     4.3-7.4) and the series themselves did not change, so their CVD spacing
+     is untouched. Re-check both if the card moves again. */
   it('draws the dark card on the surface the palette was validated against', () => {
-    expect(block('dark')).toMatch(/--dash-card:\s*#141417/);
+    expect(block('dark')).toMatch(/--dash-card:\s*#05040a/);
     expect(block('light')).toMatch(/--dash-card:\s*#ffffff/);
   });
 });
