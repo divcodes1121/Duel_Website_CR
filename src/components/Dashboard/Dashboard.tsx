@@ -410,9 +410,9 @@ const FEATURES = [
     banner: 'team-analysis',
   },
   /* COACH DUEL (2026-10-22, PREVIEW — the screen is still admin only). Its
-     banner is SHOWN WHOLE, never cropped: asked for by name ("you cannot trim
-     or crop"), so it is scaled to fit and the rest of the panel is the art's
-     own dark magenta (see `[data-banner='coach-duel']` in the stylesheet). */
+     banner is the same size as the other four and cropped like them (it was
+     shown whole first and stood taller than the rest; see
+     `[data-banner='coach-duel']` in the stylesheet). One picture per screen. */
   {
     hue: 'violet',
     icon: CoachIcon,
@@ -425,12 +425,8 @@ const FEATURES = [
     hash: '#/coach-duel',
     art: ['archer-queen', 'pekka', 'hog-rider'],
     banner: 'coach-duel',
-    /* A PORTRAIT ART FOR PHONES (1024x1536): under 560px the card takes its
-       2:3 shape, the copy on its calm top half, the character below. */
+    /* A PORTRAIT ART FOR PHONES (1024x1536), under 560px. */
     bannerMobile: 'coach-duel-mobile',
-    /* A 3:2 ART FOR TABLETS (1536x1024, 560-900px): the copy on its calm left,
-       the character on the right. */
-    bannerTablet: 'coach-duel-tablet',
   },
 ] as const;
 
@@ -1686,12 +1682,6 @@ export function Dashboard({
                               media="(max-width: 559px)"
                               srcSet={`${import.meta.env.BASE_URL}assets/panels/${f.bannerMobile}.webp`}
                             />
-                            {'bannerTablet' in f && (
-                              <source
-                                media="(min-width: 560px) and (max-width: 900px)"
-                                srcSet={`${import.meta.env.BASE_URL}assets/panels/${f.bannerTablet}.webp`}
-                              />
-                            )}
                             <img
                               src={`${import.meta.env.BASE_URL}assets/panels/${f.banner}.webp`}
                               alt=""

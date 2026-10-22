@@ -2417,38 +2417,31 @@ Each game is one request (`sim=game`, 0.1–0.2 s on the VPS); the AI's set is
 composed once per duel and kept (a best of 5's five decks took ~9 s the first
 time).
 
-### The Coach Duel panel on the landing page: three pictures, each shown whole (2026-10-22)
+### The Coach Duel panel on the landing page (2026-10-22)
 
 A fifth tool panel under the other four, **shown only to accounts that can
 open Coach Duel** (admins, until it is released; a panel that leads to
 "Admins only" is an advert for a locked door).
 
-Asked: *"no trimming is taking away elements, you need to resize, you cannot
-trim or crop"*. So unlike the other four banners (which fill a fixed 22rem
-panel and are cropped to it) this one is **never cropped**: the card takes the
-picture's own shape and the picture fills it whole. One shape cannot fit
-every screen, so there are three pictures, each drawn for its screen:
+**It is the same size as the other four and cropped like them.** It shipped
+first shown whole (asked: *"you cannot trim or crop"*), the card taking each
+picture's shape, and then stood 469px tall beside the others' 352 at 1440 and
+537 beside 337 on a phone (*"the new banner is bigger than the rest"*). One
+picture cannot match a fixed height and stay whole, because the panel's shape
+moves with the window (4:1 at 1440, 5.4:1 at 1920, about square on a phone);
+asked which, the answer was the same size, cropped like the others.
 
-| Screen | Picture | Card | Copy |
-|---|---|---|---|
-| Desktop (over 900 px) | `coach-duel` 2172 x 724 (3:1) | 3:1 | left, character right |
-| Tablet (560-900 px) | `coach-duel-tablet` 1536 x 1024 (3:2) | 3:2 | left 55%, character right |
-| Phone (under 560 px) | `coach-duel-mobile` 1024 x 1536 (2:3) | 2:3 | top half, character below |
+- Desktop and tablet: `coach-duel` 2172 x 724 (3:1), framed `right 75%` so her
+  eyes, the arrow and her mouth stay in (the frosting drips are what the crop
+  spends); pushes in on scroll about that line like the others.
+- Phone (under 560 px): `coach-duel-mobile` 1024 x 1536 (2:3), framed `center 88%`.
+- A 3:2 tablet picture (`assets/panels/coach-duel-tablet.png`, 1536 x 1024) was
+  made for the shown-whole layout; cropped to the tablet cards (2:1 to 3.6:1) it
+  showed only her eyes, so tablets take the desktop picture, which is their
+  shape. The master is kept; it is not served.
 
-`<picture>` with two `<source>`s picks the file; the masters are in
-`assets/panels/`, the served WebP copies (same size) in `public/assets/panels/`.
-The push-in on scroll is off for this panel (a 7% scale is a crop).
-
-Tried and rejected on the way: a mirrored tile of the art's left edge to
-fill a wider panel (*"looks mirrored, half of it repeated"*), and the wide
-picture on top of a phone card with the copy under it (a visible seam). On a
-phone the other four banner cards keep their own equal height; only Coach
-Duel's card takes its picture's shape.
-
-Measured: desktop 1408 x 469 at 1440 (picture fills 99%); tablet 568 x 379 /
-736 x 491 / 868 x 579 at 600 / 768 / 900; phone 358 x 537 at 390, the copy
-ending above the character at 360, 390 and 430. Screenshots
-`testing/banner-coach-duel-*.png`.
+Measured: all five banners 1408x352 at 1440, 1888x352 at 1920, 736x240 at
+768, 358x337 at 390. Screenshots `testing/banner-coach-duel-samesize-*.png`.
 
 ### Two coaches online: rooms (2026-10-22)
 

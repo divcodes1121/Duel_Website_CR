@@ -145,7 +145,7 @@ describe('the landing art moves only where it may', () => {
 
   it('every banner scales about its own framing line', () => {
     const c = css();
-    for (const name of ['team-analysis', 'royal-duels', 'counter-palette', 'decks-home']) {
+    for (const name of ['team-analysis', 'royal-duels', 'counter-palette', 'decks-home', 'coach-duel']) {
       const pos = c.match(new RegExp(`data-banner='${name}'\\] \\.toolBanner \\{\\s*object-position: right (\\d+)%`));
       const origin = c.match(new RegExp(`data-banner='${name}'\\] \\.toolBanner \\{\\s*transform-origin: 50% (\\d+)%`));
       expect(pos?.[1], name).toBeDefined();
