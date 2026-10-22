@@ -96,7 +96,9 @@ function writeHash(s: Players) {
 function explain(e: unknown): string {
   if (e instanceof AnalyticsError && e.kind === 'offline') return 'The analytics service is not answering.';
   if (e instanceof AnalyticsError && e.kind === 'invalid_tag') return 'One of those is not a player tag.';
-  if (e instanceof Error && /unauthorized|forbidden/.test(e.message)) return 'Coach Duel is for admins only.';
+  if (e instanceof Error && /unauthorized/.test(e.message)) return 'Sign in to play Coach Duel.';
+  if (e instanceof Error && /forbidden/.test(e.message))
+    return 'Coach Duel is for Pro accounts and members on their three-day trial.';
   return 'Something went wrong. Try again.';
 }
 

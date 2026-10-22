@@ -438,7 +438,7 @@ happily against a server that never called it.
 | `GET /api/analytics/admin/tracking?days=` | **The console's Tracking view, ADMIN ONLY** (`tracking.activity`). Every tag requested in the window — from the queue AND `tag_history`, the rows a prune used to delete — with its source, state (`waiting` / `collecting`), when the bot added it (`tracked_players.added_at`) and the wait; the bot's additions per day by the source that queued them (`direct` when no queue row exists); counts by source; the median wait; `botRead` false when the bot's table could not be read. Whole UTC days, 1-120, the list capped at 300 with `truncated`. The same second gate as the intel route, because it lists tags people looked up. Route count 25 |
 | `GET /api/analytics/admin/retention?days=` | **The console's Data lifecycle view, ADMIN ONLY** (`data_ledger.report`). Every battle-day `retention.py` deleted, the daily snapshots of the database (size, freelist, intake, oldest battle, battles by month, the next 30 days due to expire, raw rows and an estimated size), the last 30 job runs (retention, ladder raw window, backup) and every backup with when an off-box copy was confirmed, plus `settings` (the window, the per-run cap, and what the bot's own env says). Drawn entirely from `server/.data_ledger.db` — it never reads the bot's database. Same second gate as tracking (`admin_auth.verify`); `RetentionAdminGate` pins it. Route **26** |
 | `GET /api/analytics/admin/duels?days=&cards=&page=&per=` | **All Duels, ADMIN ONLY** (`duel_feed.report`). The FRIENDLY duels that went to THREE games (`duel_feed.MODE` / `GAMES`; no war duels, no 2-0s, and no parameter widens it), newest first: both players (`a` / `b`, tag and name, games won, crowns), the duel's `winner`, and each game's two decks — seated, with the forms they were fielded in — and its crowns. `days` is 30, 60 or 90 (anything else is 30) and counts back from the newest duel stored; `cards` is comma-separated card keys that ONE deck must all hold (unknown keys dropped, the accepted list echoed); `per` defaults to 10 and is capped at 50; a page past the end is clamped. Answers `available: false` with no usable index. Reads the index's own file plus one indexed `battles` lookup a duel for the forms; 11-15 ms a page. Same second gate as tracking (`admin_auth.verify`; `DuelFeedAdminGate` pins it), and the one tag-bearing route that enrols nobody. Route **28** |
-| `GET /api/analytics/coach/room?act=&id=&seat=&…` | **Coach Duel rooms, ADMIN ONLY** (`coach_room.py`, 2026-10-22). `act=create` (`tag`, `bo`, `all`, `o`, `clock` 2-5 or 0 = no limit, `d`), `join` (`id`, `tag`), `lock` (`g` = the game, `deck`, `art`), `rematch`, `leave`; no `act` reads the room (the screens poll every 2-3 s). `seat` is the browser's seat token (only its hash is stored). The other coach's deck for the game in play is never sent. `admin_auth.identify` (verify + the account id from the token). 409 `{error, room}` for a refused act, 404 unknown room. Route **30**; `CoachRoomAdminGate` pins it. See "Coach Duel rooms" below |
+| `GET /api/analytics/coach/room?act=&id=&seat=&…` | **Coach Duel rooms, PAID ACCOUNTS** (trial, Pro, admin since 2026-10-22; `coach_room.py`). `act=create` (`tag`, `bo`, `all`, `o`, `clock` 2-5 or 0 = no limit, `d`), `join` (`id`, `tag`), `lock` (`g` = the game, `deck`, `art`), `rematch`, `leave`; no `act` reads the room (the screens poll every 2-3 s). `seat` is the browser's seat token (only its hash is stored). The other coach's deck for the game in play is never sent. `admin_auth.identify(need="paid")` (the tier check + the account id from the token). 409 `{error, room}` for a refused act, 404 unknown room. Route **30**; `CoachRoomAdminGate` pins it. See "Coach Duel rooms" below |
 | `GET /api/analytics/admin/coach/intel/<tag>?days=` | **Coach Roster's player intelligence, ADMIN ONLY** (`coach_intel.py`). One pass over the Recent Battles reader (`recent_battles._read_rows`), so only OWN-DECK 1v1 is counted and 2v2/drafts/events are reported as `hidden` / `hiddenByMode` exactly as the battle log reports them: a zero-filled daily timeline, the last ten results, modes, the player's archetypes and the ones they face, their decks (8 distinct cards, sorted-key identity, top 25 of `decksTotal`) and their opponents (top 50 by meetings of `opponentsTotal`, `opponentsRepeat` met twice or more). **This is the one route with a SECOND gate**: Caddy injects `X-Analytics-Key` on every path, so the key makes every route public; `admin_auth.verify` takes the caller's Supabase access token from `X-Coach-Token` and asks Supabase's own `coach_is_admin()` (migration 004) whether it belongs to an admin — 401 unauthorized, 403 forbidden, 503 not_configured / unavailable, and every failure closes. Verdicts are cached 60 s by token hash, 256 entries. Needs `SUPABASE_URL` + `SUPABASE_ANON_KEY` in the service's environment |
 
 Both `player` and `duels` take the same window: `?days=N`, or `?from=&to=` as
@@ -1929,8 +1929,17 @@ route. `want=` (`chosen`) does not take it.
 
 ## The coach duel (`coach_duel.py`, 2026-10-20; you vs the AI, one game at a time, 2026-10-21)
 
-You coach Blue against the AI coach of the other player. **Admin only**: any
-`sim=` on the suggest route is behind `admin_auth.verify`; route count stays.
+You coach Blue against the AI coach of the other player. **Paid accounts
+(trial, Pro, admin) since 2026-10-22**, admin only before: any `sim=` on the
+suggest route is behind `admin_auth.paid`; route count stays.
+
+**`admin_auth.paid(token)`** (2026-10-22) is `verify`'s twin for paid areas:
+it posts to `rpc/effective_tier` with the caller's token and `{"uid": <the
+token's own sub>}` — PostgREST checks the signature before the function runs,
+so the account asked about is the caller's — and answers 'ok' for `trial`,
+`pro` or `admin` (`PAID_TIERS`), 'forbidden' for anything else (a lapsed trial
+reads `free`). Cached a minute apart from the admin verdict; same 401/403/503
+codes; fails closed.
 
     GET /api/analytics/coach/suggest?me=<you>&opp=<AI's player>&sim=prep
     GET /api/analytics/coach/suggest?me=..&opp=..&sim=game&y1=<8 keys>[..y5]&res=<w/l per earlier game>
@@ -1997,8 +2006,10 @@ You coach Blue against the AI coach of the other player. **Admin only**: any
     GET /api/analytics/coach/room?act=rematch|leave&id=..&seat=..
     GET /api/analytics/coach/room?id=..&seat=..            (read the room; the screens poll every 2-3 s)
 
-- **Route count 30.** Admin only (`admin_auth.identify` = `verify` + the
-  account id from the token's `sub`, read only after Supabase accepted it).
+- **Route count 30.** Paid accounts only since 2026-10-22: trial, Pro, admin
+  (`admin_auth.identify(token, need="paid")` = `admin_auth.paid` + the account
+  id from the token's `sub`, read only after Supabase accepted the token).
+  Admin only before that.
   A refusal is 409 `{error, room}`; an unknown room 404.
 - Rooms live in their own SQLite file, `server/.coach_rooms.db` (gitignored,
   env `CLASH_ROOM_DB`): one JSON row per room, a lock per room. Never the

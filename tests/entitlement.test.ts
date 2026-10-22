@@ -65,8 +65,8 @@ const ALL_SECTIONS = [
      players' names and tags. The first section to sit on the admin shelf for
      good rather than while it is being verified. */
   'All Duels',
-  /* ADMIN ONLY, added 20 Oct 2026 (on the shelf until it is released, then
-     Pro-only): two AI coaches play a best of 3, one for each player. */
+  /* Added 20 Oct 2026 on the admin shelf; RELEASED 22 Oct 2026 to the trial,
+     Pro and admin (an ordinary gated area, like Team Analysis). */
   'Coach Duel',
 ] as const;
 
@@ -197,7 +197,14 @@ describe('the admin shelf holds All Duels, and closes it to everyone else', () =
      admin's page, not a paid one. Anything else added here must be a
      deliberate act. */
   it('exactly these sections are admin-only', () => {
-    expect([...ADMIN_ONLY_SECTIONS]).toEqual(['All Duels', 'Coach Duel']);
+    expect([...ADMIN_ONLY_SECTIONS]).toEqual(['All Duels']);
+  });
+
+  /* COACH DUEL WAS RELEASED ON 22 OCT 2026: the three-day trial, Pro and admin
+     open it; signed-out and free accounts get the gate. */
+  it('Coach Duel opens from the trial up, like Team Analysis', () => {
+    for (const a of PAID) expect(sectionAllowed(a, 'Coach Duel'), a).toBe(true);
+    for (const a of UNPAID) expect(sectionAllowed(a, 'Coach Duel'), a).toBe(false);
   });
 
   /* THE BRANCH IS REACHABLE AGAIN, so it is tested. While the list was empty

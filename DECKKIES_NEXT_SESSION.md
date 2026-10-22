@@ -150,14 +150,15 @@ war duels in the replay; whether the manual itself should be committed.
 | Every duel deck grouped by archetype, CRL lists first (`server/duel_archetypes.py`, an after-poll step, `duelArchetypes` on `/status`) | README, `server/README.md` "The coach duel" |
 
 Open from it: Coach Assist's own Suggestion does not read the archetype groups
-yet; Coach Duel is admin only until the account holder releases it (README
+yet. Coach Duel was RELEASED on 2026-10-22 to Pro and the three-day trial (README
 "Who can open it").
 
-## Shipped 2026-10-22 (all live, admin only)
+## Shipped 2026-10-22 (all live; Coach Duel released to Pro and the three-day trial the same day)
 
 | What | Where |
 |---|---|
 | Coach Duel rooms: two coaches online. Settings (Bo3/5, stop/all, matchup/roll, deck clock 2-5 min or no limit), a room link, the other coach joins with their own player, blind lock-in, the server decides and rolls, out of time loses that game, rematch, leave (`server/coach_room.py`, route `/api/analytics/coach/room`, `admin_auth.identify`) | README "Two coaches online: rooms", `server/README.md` "Coach Duel rooms" |
+| Coach Duel RELEASED: Pro, the three-day trial and admins open it (`tiers.ts`, `admin_auth.paid` on both server routes); free/signed-out see the gate card; palette + profile-menu rows for everyone; What's new note | README "Who can open it" |
 | Coach Duel's landing panel: same size as the other four, cropped on her face; desktop/tablet art 3:1, phone art 2:3; drawn only for accounts that can open Coach Duel | README "The Coach Duel panel on the landing page" |
 
 Verified live: the room route refuses no token and a bad token (401); a real

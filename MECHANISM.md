@@ -87,12 +87,12 @@ end, at the level of individual functions and constants.
 >   stage; each player's record with each win condition against expectation
 >   in every figure; the field board built the way each player builds.
 > * **`server/coach_duel.py` + `server/duel_archetypes.py`** (2026-10-20/21,
->   admin only) — Coach Duel: you against an AI coach that is Coach Assist
+>   paid accounts since 2026-10-22) — Coach Duel: you against an AI coach that is Coach Assist
 >   for the other player, one game at a time. Its decks on both sides are
 >   drawn from every stored duel deck grouped by archetype (CRL lists first,
 >   each with its record against every opponent archetype over its pilots'
 >   expected wins). README "Coach Duel — you against an AI coach".
-> * **`server/coach_room.py`** (2026-10-22, admin only) — two coaches online
+> * **`server/coach_room.py`** (2026-10-22, paid accounts) — two coaches online
 >   in one room. Nothing new is predicted: each game is decided with Coach
 >   Duel's own referee (both coaches' rulers, moved by the game before), and
 >   the roll is drawn on the server. README "Two coaches online: rooms".

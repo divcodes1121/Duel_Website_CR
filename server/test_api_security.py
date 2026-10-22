@@ -794,15 +794,19 @@ class RoutingUnchanged(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class _FakeSupabase(BaseHTTPRequestHandler):
-    """PostgREST's `rpc/coach_is_admin`, answering by token."""
+    """PostgREST's `rpc/coach_is_admin` and `rpc/effective_tier`, answering by
+    token. `a.b.member` is a free account; `a.b.trial` / `a.b.pro` are paid."""
+
+    ADMIN = {"a.b.admin": b"true", "a.c.admin": b"true", "a.b.member": b"false",
+             "a.b.trial": b"false", "a.b.pro": b"false", "a.c.pro": b"false"}
+    TIER = {"a.b.admin": b'"admin"', "a.c.admin": b'"admin"', "a.b.member": b'"free"',
+            "a.b.trial": b'"trial"', "a.b.pro": b'"pro"', "a.c.pro": b'"pro"'}
 
     def do_POST(self):  # noqa: N802
         token = (self.headers.get("Authorization") or "")[7:]
-        status, body = {
-            "a.b.admin": (200, b"true"),
-            "a.c.admin": (200, b"true"),
-            "a.b.member": (200, b"false"),
-        }.get(token, (401, b'{"message":"JWT expired"}'))
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        table = self.TIER if self.path.endswith("/effective_tier") else self.ADMIN
+        status, body = (200, table[token]) if token in table else (401, b'{"message":"JWT expired"}')
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -945,9 +949,24 @@ class CoachDuelAdminGate(CoachRosterAdminGate):
                 self.assertEqual(status, 200)
                 self.assertIn("plain", body)
 
+    def test_trial_and_pro_open_coach_duel(self):
+        """Released 2026-10-22: a paid account (the three-day trial, Pro)
+        reaches Coach Duel; a free one is 403."""
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                mod.coach_duel.prep = lambda a, b, aw, bw, kind=None, **k: {"mode": "prep"}
+                path = self.PATH.replace("sim=1", "sim=prep")
+                for token in ("a.b.trial", "a.b.pro", "a.b.admin"):
+                    status, _, body = fetch(base, path, headers={**keyed(), "X-Coach-Token": token})
+                    self.assertEqual((status, json.loads(body)["mode"]), (200, "prep"), token)
+                status, _, _ = fetch(base, path, headers={**keyed(), "X-Coach-Token": "a.b.member"})
+                self.assertEqual(status, 403)
+
     def test_every_coach_duel_mode_needs_an_admin(self):
         """`sim=prep` and `sim=game` (you against the AI coach) sit behind the
-        same check as `sim=1`; an admin reaches each mode's own answer."""
+        same check as `sim=1` (a paid account since 2026-10-22: a free one is
+        403); an admin reaches each mode's own answer."""
         with fake_supabase() as sb:
             os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
             with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
@@ -1054,6 +1073,22 @@ class CoachRoomAdminGate(CoachRosterAdminGate):
                 self.assertEqual(status, 409)
                 self.assertEqual(json.loads(body)["error"], "card_played")
                 self.assertEqual(json.loads(body)["room"]["id"], rid)
+
+    def test_trial_and_pro_coaches_play_a_room(self):
+        """Released 2026-10-22: a Pro coach makes a room and a trial coach
+        joins it; a free account is refused every action."""
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, body = fetch(base, self.PATH, headers={**keyed(), "X-Coach-Token": "a.b.pro"})
+                self.assertEqual(status, 200)
+                rid = json.loads(body)["id"]
+                q = "/api/analytics/coach/room?id=%s&seat=%s" % (rid, self.SEAT_B)
+                status, _, body = fetch(base, q + "&act=join&tag=%232PPQ0LY",
+                                        headers={**keyed(), "X-Coach-Token": "a.b.trial"})
+                self.assertEqual((status, json.loads(body)["phase"]), (200, "playing"))
+                status, _, _ = fetch(base, q, headers={**keyed(), "X-Coach-Token": "a.b.member"})
+                self.assertEqual(status, 403)
 
     def test_an_unknown_room_is_404(self):
         with fake_supabase() as sb:

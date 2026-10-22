@@ -237,13 +237,12 @@ export const PRO_ONLY_SECTIONS = [
  */
 export const ADMIN_ONLY_SECTIONS = [
   'All Duels',
-  /* ADMIN ONLY FOR NOW (2026-10-20, asked for: "just give this access to admin
-     and no one else"). Two AI coaches play a best of 3 — Coach Assist's whole
-     answer played out for both players. On the shelf while the account holder
-     looks at it; when it is released it is a Pro-only area like Coach Assist
-     (move it to `PRO_ONLY_SECTIONS`, give it a landing-strip card and a row in
-     the palette's general Tools, and add a release note). */
-  'Coach Duel',
+  /* COACH DUEL LEFT THIS SHELF ON 2026-10-22 ("make Coach Duel for the paid
+     Pro too, and the players who newly join and have 3 days of Pro access").
+     It is an ordinary gated area now, like Team Analysis: in neither list, so
+     the trial, Pro and admin open it and anon/free see a GateCard. The server
+     agrees (`admin_auth.paid`). It sat here 2026-10-20..22 while it was built
+     and tried. */
 ] as const;
 
 function adminOnly(section: string): boolean {

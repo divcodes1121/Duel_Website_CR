@@ -643,12 +643,10 @@ export function Dashboard({
   const topNavItems: readonly (typeof TOP_NAV)[number][] = isLinkedPlayer
     ? TOP_NAV
     : TOP_NAV.filter((n) => !('linkedOnly' in n && n.linkedOnly));
-  /* COACH DUEL'S PANEL SHOWS ONLY TO WHO CAN OPEN IT (2026-10-22): the screen
-     is admin only until it is released, and a panel that leads to "Admins
-     only" is an advert for a locked door. On release this filter goes. */
-  const featureItems = FEATURES.filter(
-    (f) => f.kicker !== 'Coach Duel' || sectionAllowed(access, 'Coach Duel'),
-  );
+  /* Every panel is shown to everyone (Coach Duel's too since its release on
+     2026-10-22): an area somebody could subscribe to and cannot see does not
+     exist to the person paying. The route draws the gate. */
+  const featureItems = FEATURES;
 
   /* THE BACKDROP WEARS THE OPEN AREA'S HUE — the same one the sidebar row and
    * the area's block already carry, so the whole page agrees about where you
@@ -833,12 +831,11 @@ export function Dashboard({
     ...(isLinkedPlayer
       ? [{ id: 'tool-my', group: 'Tools', label: 'My coaching', sub: 'Your own dashboard from your coach', icon: <BadgeIcon size={15} />, run: () => go('#/my') }]
       : []),
+    /* Coach Duel, for everyone since its release (2026-10-22); the route gates. */
+    { id: 'tool-coach-duel', group: 'Tools', label: 'Coach Duel', sub: 'Coach a best of 3 or 5 against the AI coach or another coach', icon: <CoachIcon size={15} />, hue: 'violet', keywords: 'ai coach duel bo3 bo5 versus room friend multiplayer', run: () => go('#/coach-duel') },
     { id: 'tool-guide', group: 'Tools', label: 'The field book', sub: 'What the site is, and what each account gets', icon: <InfoIcon size={15} />, keys: keysFor('guide'), run: () => goTo('guide') },
     ...(access === 'admin'
       ? [
-          /* ADMIN ONLY FOR NOW (2026-10-20): not in the landing strip, the dock
-             or the rail — here, in the profile menu and at its URL. */
-          { id: 'tool-coach-duel', group: 'Tools', label: 'Coach Duel', sub: 'Two AI coaches play a best of 3', icon: <CoachIcon size={15} />, hue: 'violet', keywords: 'ai coach simulate duel bo3 versus admin', run: () => go('#/coach-duel') },
           { id: 'tool-all-duels', group: 'Tools', label: 'All Duels', sub: 'Friendly duels that went to three games, newest first', icon: <SwordsIcon size={15} />, hue: 'blue', keywords: 'duel feed log war battles admin', run: () => go(ALL_DUELS_HASH) },
           { id: 'tool-admin', group: 'Tools', label: 'Admin console', sub: 'Accounts, storage, collection', icon: <ShieldIcon size={15} />, run: () => go('#/admin') },
         ]
@@ -1356,9 +1353,8 @@ export function Dashboard({
                 ) : (
                   <GateCard access={access} section="2v2 Decks" />
                 ))}
-              {/* THE COACH DUEL (2026-10-20): ADMIN ONLY FOR NOW, and refused
-                  rather than gated, like All Duels below — nobody can buy
-                  their way to it yet, so a card offering to would be a lie. */}
+              {/* THE COACH DUEL: released 2026-10-22 to the trial, Pro and
+                  admin; anon/free get the gate card like every paid area. */}
               {view === 'coachduel' &&
                 (!accountResolved ? (
                   <p className={styles.adminOnly}>Checking your account…</p>
@@ -1373,11 +1369,7 @@ export function Dashboard({
                     <CoachDuel />
                   </Suspense>
                 ) : (
-                  <div className={styles.adminOnly}>
-                    <h2>Admins only</h2>
-                    <p>Coach Duel is not open yet.</p>
-                    <a href={HOME}>Back to Deckkies</a>
-                  </div>
+                  <GateCard access={access} section="Coach Duel" />
                 ))}
               {/* ALL DUELS — ADMIN ONLY, AND REFUSED RATHER THAN GATED. Every
                   other closed area draws a `GateCard`, because there is

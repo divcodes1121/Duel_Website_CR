@@ -237,8 +237,9 @@ export function roomErrorText(code: string): string {
     case 'read_failed':
       return 'The players could not be read. Make a new room and try again.';
     case 'unauthorized':
+      return 'Sign in to play Coach Duel.';
     case 'forbidden':
-      return 'Coach Duel is for admins only.';
+      return 'Coach Duel is for Pro accounts and members on their three-day trial.';
     default:
       return 'Something went wrong. Try again.';
   }

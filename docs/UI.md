@@ -893,8 +893,8 @@ Framing `right 75%` (desktop and tablet, the 3:1 art) and `center 88%` (phone,
 the 2:3 art), with `transform-origin` repeating the y so the push-in scales
 about her face (`tests/batchD.test.ts` holds the two equal for all five).
 Desktop scrim left-to-right; at 900px and under the shared bottom-up scrim.
-Accent is the character's hot pink (`#fd3bc6` ink, `#b8178f` fill). Shown only
-to accounts that can open Coach Duel.
+Accent is the character's hot pink (`#fd3bc6` ink, `#b8178f` fill). Shown to
+everyone since Coach Duel's release (2026-10-22); the route gates free accounts.
 
 ### `1fr` is `minmax(auto, 1fr)`, and it blows a grid out sideways
 

@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-22-coach-duel',
+    date: '2026-10-22',
+    kind: 'new',
+    title: 'Coach Duel: coach a player against the AI coach, or against a friend',
+    body: [
+      'Pick your player and an opponent, choose a best of 3 or 5, and coach game by game: paste a deck or take a Coach Assist pick, lock it in, and see the AI coach’s deck flip. It never sees your deck before it picks.',
+      'Or make a room, set a deck clock, and send the link to another coach. You both lock in blind each game, and whoever runs out of time loses that game.',
+    ],
+    href: '#/coach-duel',
+    hrefLabel: 'Open Coach Duel',
+    needs: 'trial',
+  },
+  {
     id: '2026-10-19-name-search',
     date: '2026-10-19',
     kind: 'new',

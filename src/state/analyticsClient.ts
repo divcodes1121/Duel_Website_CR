@@ -2238,7 +2238,8 @@ export function fetchCoachDuelTurn(
 
 /** Coach Duel rooms (2026-10-22, `server/coach_room.py`): two coaches online.
  *  `act` = create | join | lock | rematch | leave, or none to read the room.
- *  ADMIN ONLY like the rest of Coach Duel; the token says WHICH admin asks.
+ *  For paid accounts (trial, Pro, admin) like the rest of Coach Duel since
+ *  2026-10-22; the token says WHICH account asks.
  *  A refusal throws an `AnalyticsError` whose message is the code
  *  (`utils/coachRoom.roomErrorText` words it); a missing room is
  *  `not_found`. */

@@ -1026,9 +1026,10 @@ class Handler(BaseHTTPRequestHandler):
                 # game both lock in blind; the server decides it and rolls.
                 # `act` = create | join | lock | rematch | leave, or none to
                 # read the room (the screens poll it every two seconds).
-                # Admin only, like the rest of Coach Duel — and it needs to
-                # know WHICH account asks (`admin_auth.identify`).
-                verdict, uid = admin_auth.identify(self.headers.get(admin_auth.HEADER))
+                # Paid accounts (trial, Pro, admin) since Coach Duel's release
+                # on 2026-10-22 — and it needs to know WHICH account asks
+                # (`admin_auth.identify(..., need="paid")`).
+                verdict, uid = admin_auth.identify(self.headers.get(admin_auth.HEADER), need="paid")
                 if verdict != "ok":
                     self._outcome = "auth_failed"
                     return self._send({"error": verdict}, admin_auth.STATUS[verdict])
@@ -1135,7 +1136,9 @@ class Handler(BaseHTTPRequestHandler):
                 # both players once before the first game.
                 sim = (q.get("sim") or [""])[0].strip().lower()
                 if sim:
-                    verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
+                    # Coach Duel: paid accounts (trial, Pro, admin) since its
+                    # release on 2026-10-22; admin only before that.
+                    verdict = admin_auth.paid(self.headers.get(admin_auth.HEADER))
                     if verdict != "ok":
                         self._outcome = "auth_failed"
                         return self._send({"error": verdict}, admin_auth.STATUS[verdict])

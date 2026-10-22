@@ -53,7 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Coach Duel — you against an AI coach** | **LIVE (admin only)**. You coach Blue one game at a time (paste a deck, lock in, the AI's deck flips), best of 3 or 5, stop on a win or play every game; a matchup over 55% wins the game, a close one is rolled. The Red AI coach picks without seeing your deck. Both sides draw from every duel deck grouped by archetype (`duel_archetypes`, CRL lists first), no deck comes back on a rematch or a refresh, and every new start is a new draw; decks are checked to make sense. Clash Royale's Blue and Red Kings over an arena floor. **Since 2026-10-22 (`ff016d3`, `382647d`) two coaches can play each other online**: the host sets the format and a deck clock (2-5 min or no limit), shares a room link, the other coach joins with their own player, both lock in blind and the server decides each game; out of time loses that game. Its landing panel (admins only, like the screen) is the same size as the other four. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) and [Two coaches online: rooms](#two-coaches-online-rooms-2026-10-22) |
+| **Coach Duel — you against an AI coach** | **LIVE, OPEN TO PRO AND THE THREE-DAY TRIAL since 2026-10-22** (admin only 2026-10-20..22; signed-out and free accounts see the sign-up gate). You coach Blue one game at a time (paste a deck, lock in, the AI's deck flips), best of 3 or 5, stop on a win or play every game; a matchup over 55% wins the game, a close one is rolled. The Red AI coach picks without seeing your deck. Both sides draw from every duel deck grouped by archetype (`duel_archetypes`, CRL lists first), no deck comes back on a rematch or a refresh, and every new start is a new draw; decks are checked to make sense. Clash Royale's Blue and Red Kings over an arena floor. **Since 2026-10-22 (`ff016d3`, `382647d`) two coaches can play each other online**: the host sets the format and a deck clock (2-5 min or no limit), shares a room link, the other coach joins with their own player, both lock in blind and the server decides each game; out of time loses that game. Its landing panel is the same size as the other four. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) and [Two coaches online: rooms](#two-coaches-online-rooms-2026-10-22) |
 | **Find a player by name** | **LIVE 2026-10-19 as `6f6a1df`** (server by scp first, backups `*.bak-20261019-100059-prenamesearch`, only royalweb restarted; the site reported the commit 60 s after the push; 9/9 in a real browser on https://deckkies.com signed out, the dropdown filled 460 ms after the last key). Asked, with RoyaleAPI's search pasted: type a name, see the players who carry it, fast. Every search field (top bar, player screen, landing hero) now lists up to seven players as you type, with their tags, and "View all N results" opens `#/search?q=` with the top 100. The server reads its own trigram index of the bot's 5,898,255 stored names (`server/name_index.py`, refreshed after every poll), never the bot's table: a scan of that table measured 0.6 s warm / 4.6 s cold, the index answers in 13 ms median, 39 ms worst, and a request from India is ~0.35 s on an open connection. 643 MB on disk, bounded to names seen in the last 304 days. See [Find a player by name](#find-a-player-by-name-2026-10-19) |
 | **When something breaks: a 404 page with a three.js game, an outage page that reloads itself, and watchdogs** | **2026-10-19.** After the VPS was powered off for half an hour on 2026-10-18 and every search hung for 200+ s: a slow request now asks whether the server is alive and gives up in seconds; an outage page (with the game) re-checks on its own and reloads when the server is back; unknown routes and wrong URLs get a 404 page with the same game; a crashed screen gets the page instead of a blank site; a watchdog on the VPS restarts the API when it stops answering or loses sight of its database; a GitHub workflow emails when the site is down and can start a stopped VPS once Contabo API keys are added. See [When something breaks](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19) |
 | **Team Analysis suggests what the best duel players bring, and a list per teammate (`team-scout-5.0`)** | **LIVE SINCE 2026-10-14 as `b25d12e`.** Reported: *"the recommendation decks are so trash ... random decks, decks repetitive for more players"*. Measured on live answers: about 1 row in 7 was a list the CRL group brought to duels; a 4v4 plan's 160 rows held 67 decks and all four teammates got the same four against one opponent. Now the pool is the window's CRL duel lists (2+ games) and its 40 most played lists, nothing else; a scouting list is ten different win conditions, none under 50%, spread across the roster; a match plan builds each teammate's list from the win conditions they play, rated with their own record, one teammate a deck, and a lineup pairs every opponent with a teammate. Blind on 300 opponents: rows the CRL group brought 36.7% -> 96.7%, the #1 the same (+0.10), the rest of a list about half a point lower; match plans: distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15. See [What the best duel players bring](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14) |
@@ -2419,9 +2419,9 @@ time).
 
 ### The Coach Duel panel on the landing page (2026-10-22)
 
-A fifth tool panel under the other four, **shown only to accounts that can
-open Coach Duel** (admins, until it is released; a panel that leads to
-"Admins only" is an advert for a locked door).
+A fifth tool panel under the other four, **shown to everyone** since Coach
+Duel's release the same day (for a few hours before it, only to admins); a
+free or signed-out reader who opens it gets the gate card.
 
 **It is the same size as the other four and cropped like them.** It shipped
 first shown whole (asked: *"you cannot trim or crop"*), the card taking each
@@ -2485,9 +2485,10 @@ A room nobody joins closes after 30 minutes; a room is deleted two days after
 it last changed. A reload keeps your seat (a seat token per room in the
 browser); a third coach on a full room's link is told so.
 
-**Who can open it: admins only, like the rest of Coach Duel**, so both coaches
-must be admin accounts until it is released. The server needs to know WHICH
-account asks, not only that it is an admin (`admin_auth.identify`).
+**Who can open it: every paid account, like the rest of Coach Duel** — Pro,
+a new member on their three-day trial, and admins (since 2026-10-22; admins
+only before that). Both coaches need such an account. The server needs to know
+WHICH account asks, not only that it may (`admin_auth.identify(..., need="paid")`).
 
 **How it is checked**: `server/test_coach_room.py` 114 (hidden decks, the
 clock, a late lock refused rather than moved to the next game, timeouts,
@@ -2723,18 +2724,24 @@ the score.
 
 ### Who can open it
 
-**Admins only** — `ADMIN_ONLY_SECTIONS`. Not in the dock or rail; in the
-profile menu and the command palette for an admin, and since 2026-10-22 a
-landing panel that is drawn only for accounts that can open it; a non-admin on
-the URL is told "Admins only". **The server refuses too**: any `sim=` on
-`/api/analytics/coach/suggest` and every `/api/analytics/coach/room` call ask
-Supabase whether the `X-Coach-Token` is an admin's (401 / 403 otherwise). The
-plain Coach Assist suggestion on that path is untouched. To release it as a Pro
-area: move it to `PRO_ONLY_SECTIONS`, drop the `featureItems` filter in
-`Dashboard.tsx` (the landing panel), make the server checks "a signed-in Pro
-account" instead of "an admin" (rooms still need `identify` to know who is
-seated, so a token stays required), add a general palette row and a release
-note.
+**Released 2026-10-22 to Pro and the three-day trial** (asked: *"make Coach
+Duel for the paid Pro too, and the players who newly join and have 3 days of
+Pro access"*). It was admin only from 2026-10-20 while it was built.
+
+- **The app**: Coach Duel left `ADMIN_ONLY_SECTIONS` and is in neither list in
+  `tiers.ts`, exactly like Team Analysis: the trial, Pro and admin open it;
+  signed-out and free accounts see the gate card ("Create a free account to
+  open Coach Duel — and every other area — for three days"). Its landing panel
+  is shown to everyone, it has a row in the command palette's Tools and in the
+  profile menu for every account, and a What's new note (`needs: 'trial'`).
+- **The server refuses too**: any `sim=` on `/api/analytics/coach/suggest` and
+  every `/api/analytics/coach/room` call ask Supabase for the caller's tier
+  (`admin_auth.paid`: `rpc/effective_tier` with the caller's own token, for the
+  token's own account) and open only for `trial`, `pro` or `admin`; a lapsed
+  trial reads `free` and is refused. 401 without a valid login, 403 for a free
+  account. The plain Coach Assist suggestion on that path is untouched.
+- To make it Pro only later (no trial): add it to `PRO_ONLY_SECTIONS` and make
+  the server's `PAID_TIERS` check exclude `trial` for these two routes.
 
 **What is NOT claimed**: a duel here is the model playing it out. The win
 chances are the figures Coach Assist prints, which the 2026-10-17 check found

@@ -145,13 +145,71 @@ def _subject(token: str) -> str | None:
     return sub if isinstance(sub, str) and 0 < len(sub) <= 128 else None
 
 
-def identify(token: str | None) -> tuple[str, str | None]:
-    """(verdict, account id) — `verify`'s verdict, and on 'ok' who it is.
+#: The tiers that open a paid area (2026-10-22, Coach Duel released): the
+#: three-day trial, Pro and admin. `effective_tier` answers 'free' once a
+#: trial has run out, so a lapsed trial is refused here without a date check.
+PAID_TIERS = ("trial", "pro", "admin")
 
-    Coach Duel rooms need to know WHICH admin is asking, not only that one is
-    (2026-10-22). A token whose payload carries no readable `sub` (only a test
-    stand-in) is named by a hash of the token, so it is still one caller."""
-    verdict = verify(token)
+
+def paid(token: str | None) -> str:
+    """Like `verify`, but 'ok' for any PAID account: trial, pro or admin.
+
+    Posts to `rpc/effective_tier` — migration 001's one definition of a tier,
+    the same function the site's gate reads — WITH THE CALLER'S TOKEN, asking
+    for the token's own `sub`. PostgREST checks the token's signature before
+    the function runs (a bad or expired one is 401), so the account asked
+    about is the caller's own. One of 'ok', 'forbidden', 'unauthorized',
+    'not_configured', 'unavailable'; cached like `verify`, apart from it."""
+    url, key = _config()
+    if not (url and key):
+        return "not_configured"
+    token = (token or "").strip()
+    if not token or token.count(".") != 2 or len(token) > 4096:
+        return "unauthorized"
+
+    digest = "paid:" + hashlib.sha256(token.encode("utf-8")).hexdigest()
+    hit = _cached(digest)
+    if hit:
+        return hit
+
+    req = urllib.request.Request(
+        url + "/rest/v1/rpc/effective_tier",
+        data=json.dumps({"uid": _subject(token)}).encode("utf-8"),
+        method="POST",
+        headers={
+            "apikey": key,
+            "Authorization": "Bearer " + token,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as r:
+            body = r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return "unauthorized" if e.code in (401, 403) else "unavailable"
+    except Exception:  # noqa: BLE001 — timeout, DNS, refused: all fail closed
+        return "unavailable"
+
+    try:
+        tier = json.loads(body)
+    except ValueError:
+        return "unavailable"
+
+    verdict = "ok" if tier in PAID_TIERS else "forbidden"
+    _remember(digest, verdict)
+    return verdict
+
+
+def identify(token: str | None, need: str = "admin") -> tuple[str, str | None]:
+    """(verdict, account id) — the gate's verdict, and on 'ok' who it is.
+
+    Coach Duel rooms need to know WHICH account is asking, not only that it may
+    (2026-10-22). `need` is "admin" (`verify`) or "paid" (`paid`: trial, pro or
+    admin — Coach Duel since its release the same day). A token whose payload
+    carries no readable `sub` (only a test stand-in) is named by a hash of the
+    token, so it is still one caller."""
+    verdict = paid(token) if need == "paid" else verify(token)
     if verdict != "ok":
         return verdict, None
     token = (token or "").strip()
