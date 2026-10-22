@@ -98,11 +98,12 @@ const AIR = {
     band: [0.02, 0.05, 0.1] as RGB,
     plate: '#050b11',
   },
+  /* Lavender, not grey (2026-10-22): the light theme's page is violet mist. */
   light: {
-    air0: [0.97, 0.97, 0.98] as RGB,
-    air1: [0.9, 0.91, 0.93] as RGB,
+    air0: [0.97, 0.96, 1.0] as RGB,
+    air1: [0.91, 0.88, 0.98] as RGB,
     band: [0.01, 0.01, 0.01] as RGB,
-    plate: '#f4f4f6',
+    plate: '#f0ecfd',
   },
 };
 

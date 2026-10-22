@@ -190,7 +190,10 @@ edges are violet hairlines (`#231d33`), and soft fills mix from `--wash-ink`
 rule**: tint it toward violet, or mix from `--wash-ink`. The silver #2 medal
 is the one deliberate grey. A grey-scan probe (every visible element's fill
 and border, R≈G≈B between 10 and 225) found nothing else on twelve screens.
-Light mode is unchanged for now. README "Dark mode is black + violet".
+**Light mode is violet mist** (same day): a lavender page (`#f0ecfd`),
+SOLID near-white cards (they were 85% see-through), violet hairlines, violet
+shadows and `--wash-ink #6d28d9`. No grey in either theme; the grey scan finds
+nothing on twelve screens. README "Light mode is violet mist".
 
 ## Fireflies
 

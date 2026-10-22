@@ -510,9 +510,14 @@
      The two themes are now matched — 9 points of 8-bit lightness between page
      and panel on dark (#000000 → #202020, deliberately a big step since the
      page went true black), 11 on light (#F4F4F6 → #FFFFFF). */
-  --bg-1: #f4f4f6;
+  /* VIOLET MIST (2026-10-22, chosen from screenshots after dark went black +
+     violet). The page is a soft lavender and the cards are SOLID near-white
+     (they were 85% see-through white on a grey page, which read as
+     transparent); edges are violet hairlines and every soft fill mixes
+     violet (`--wash-ink`), so no surface, edge or tint is grey. */
+  --bg-1: #f0ecfd;
   --bg-2: #ffffff;
-  --bg-3: #ececed;
+  --bg-3: #e7e0fb;
 
   /* 3–5 component backgrounds. Light mode is designed, not inverted: the page
      is the faint grey step, cards are pure white, and sunken wells (meters,
@@ -526,21 +531,23 @@
      was not enough to see.
      `-strong` and `-sunken` stay opaque -- menus and dialogs float over
      arbitrary content and must not be see-through. */
-  --surface: rgba(255, 255, 255, 0.85);
+  --surface: #fdfcff;
   --surface-strong: #ffffff;
-  --surface-nested: rgba(248, 248, 250, 0.85);
-  --surface-sunken: #f1f1f4;
+  --surface-nested: #f8f5ff;
+  --surface-sunken: #f2edff;
 
   /* 6–8 borders — see the dark block for why these two differ. */
-  --border: #e2e2e7;
-  --border-strong: #8f8f94;
+  /* --border-strong is 4.4:1 on a card (3:1 is the floor for a control's
+     outline). */
+  --border: #ddd3f6;
+  --border-strong: #7d72a3;
   --highlight: rgba(255, 255, 255, 0.9);
 
   /* Elevation. On light a shadow does read, so it does the lifting together
      with the white fill. Kept to two tight layers — a contact shadow and a
      short ambient one. Anything larger stops looking minimal. */
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow: 0 1px 2px rgba(76, 29, 149, 0.07), 0 6px 18px rgba(76, 29, 149, 0.07);
+  --shadow-float: 0 8px 24px rgba(76, 29, 149, 0.12), 0 2px 6px rgba(76, 29, 149, 0.08);
 
   /* Panels, solid — see the dark block. The frosted version is what made the
      two themes diverge most: at 66% white over a near-white page a light panel
@@ -549,9 +556,9 @@
      white with a real grey stroke gives light the same box the dark theme has
      always had. */
   /* Translucent with --surface above; `-strong` stays opaque for the menus. */
-  --glass-fill: rgba(255, 255, 255, 0.85);
+  --glass-fill: #fdfcff;
   --glass-fill-strong: #ffffff;
-  --glass-stroke: #dedee4;
+  --glass-stroke: #ddd3f6;
   /* No inner sheen on light: a white highlight inside a white panel is
      invisible, and any darker value would read as a seam. Light gets its
      depth from --shadow instead, which is the direction that actually works
@@ -563,8 +570,8 @@
      (#1a1a1a) still reads 11:1; over the page it is indistinguishable from
      white. The stroke is a real grey rather than white-on-white, which is the
      mistake the app-wide frosted pass actually made. */
-  --glass-panel: rgba(255, 255, 255, 0.8);
-  --glass-panel-stroke: rgba(0, 0, 0, 0.1);
+  --glass-panel: rgba(255, 255, 255, 0.92);
+  --glass-panel-stroke: #ddd3f6;
 
   /* Halved. These alphas were set against the old #FBFBFC ground, where a 5.5%
      black radial was barely a tint; on the darker #F4F4F6 the same gradient
@@ -595,8 +602,8 @@
   --accent-gold-bright: #000000;
 
   --band-deep: #0b0b0b;
-  --band-lift: #f7f7f7;
-  --band-mid: #efefef;
+  --band-lift: #f8f5ff;
+  --band-mid: #f2edff;
 
   --player-blue: #1a1a1a;
   --player-red: #8a8a8a;
@@ -643,7 +650,9 @@
   --c-use: #2a78d6;
   --c-win: #169b6b;
 
-  --mix-ground: #ffffff;
+  --mix-ground: #fdfcff;
+  /* Soft fills mix violet, not black: black into white is grey. */
+  --wash-ink: #6d28d9;
   --edge-strength: 32%;
 
   /* Off. Light mode has a real shadow for elevation and a hue glow on white
@@ -653,7 +662,9 @@
   --glow-halo: 0%;
 
   --success: #047857;
-  --warning: #b45309;
+  /* Darkened a step for the violet-mist page (2026-10-22): #b45309 measured
+     4.3:1 on the lavender page; this is 5.0:1 there and 4.6:1 on --bg-3. */
+  --warning: #a54b07;
   --error: #c02618;
   --error-soft: #c02618;
 

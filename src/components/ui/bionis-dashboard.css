@@ -64,17 +64,18 @@
 }
 
 :root[data-theme='light'] {
-  --dash-page: #f4f4f6;
+  /* Violet mist (2026-10-22), like index.css: no grey surfaces. */
+  --dash-page: #f0ecfd;
   --dash-side: #ffffff;
   --dash-card: #ffffff;
-  --dash-sunken: #f4f4f5;
-  --dash-line: #e4e4e7;
-  --dash-grid: #ededf0;
-  --dash-axis: #d4d4d8;
-  --dash-hover: rgba(24, 24, 27, 0.045);
+  --dash-sunken: #f2edff;
+  --dash-line: #ddd3f6;
+  --dash-grid: #ece6fb;
+  --dash-axis: #c9bdf0;
+  --dash-hover: rgba(109, 40, 217, 0.05);
   --dash-accent: #6d28d9;
   --dash-accent-wash: rgba(124, 58, 237, 0.09);
-  --dash-card-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --dash-card-shadow: 0 1px 2px rgba(76, 29, 149, 0.07), 0 6px 18px rgba(76, 29, 149, 0.07);
   --chart-1: #7c3aed;
   --chart-2: #0d9488;
   --chart-3: #d97706;

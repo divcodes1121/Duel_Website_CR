@@ -5685,6 +5685,34 @@ rank chip, a bar; large surfaces stop at the 8% wash.
 
 ## Colour: how it was chosen
 
+### Light mode is violet mist (2026-10-22)
+
+Asked, after the dark theme went black + violet: *"let's work on light mode —
+it's looking transparent; show me the current one, see what you can pull from
+the web, compare in testing"*. Then: *"violet mist it is"*.
+
+**Why it looked transparent.** Cards were `rgba(255,255,255,.85)` — 85%
+see-through white — on a grey page (`#f4f4f6`), with grey edges, and soft
+fills mixed BLACK into white. A grey scan of nine screens found 59 kinds of
+grey element.
+
+**Researched**: good light dashboards use SOLID white cards; Stripe and Linear
+put them on a faintly tinted page with hairline edges and a soft shadow, and
+"tinted neutrals" (a few percent of the brand hue in every neutral) is the
+usual advice against grey. Three options were rendered (`testing/light/`):
+pure white, lavender page, violet mist.
+
+**Shipped: violet mist.** Page `#f0ecfd`, solid cards `#fdfcff` (raised
+`#fff`, nested `#f8f5ff`, sunken `#f2edff`, `--bg-3 #e7e0fb`), violet hairlines
+`#ddd3f6`, `--border-strong #7d72a3` (4.3:1 on a card), violet-tinted shadows,
+`--wash-ink #6d28d9` so soft fills tint violet. The dashboard kit follows (the
+card stays `#fff`, which `dashCharts.test.ts` pins). The tier badge's light
+"air" went from `#f4f4f6` to lavender. **`--warning` moved `#b45309` →
+`#a54b07`**: the old amber measured 4.3:1 on the lavender page, under the
+4.5:1 text floor; every other light ink clears 4.5:1 on page, card and
+sunken. **Checked**: the grey scan finds nothing on twelve screens; a phone
+and the command palette looked at (`testing/light/applied-*.png`).
+
 ### Dark mode is black + violet, no grey (2026-10-22)
 
 Asked: *"the whole website has a grey background on every tab, I don't like
