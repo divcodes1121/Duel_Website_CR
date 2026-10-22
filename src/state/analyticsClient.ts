@@ -9,6 +9,7 @@
  */
 
 import { apiHealth } from './apiHealth';
+import type { CoachRoom } from '../utils/coachRoom';
 
 const BASE = import.meta.env.VITE_ANALYTICS_BASE ?? '';
 
@@ -2232,6 +2233,18 @@ export function fetchCoachDuelTurn(
   faced.slice(0, 30).forEach((d, i) => q.set(`x${i + 1}`, d.join(',')));
   if (session) q.set('ss', session);
   return get<CoachDuelTurn>(`/api/analytics/coach/suggest?${q.toString()}`,
+    token ? { 'X-Coach-Token': token } : undefined);
+}
+
+/** Coach Duel rooms (2026-10-22, `server/coach_room.py`): two coaches online.
+ *  `act` = create | join | lock | rematch | leave, or none to read the room.
+ *  ADMIN ONLY like the rest of Coach Duel; the token says WHICH admin asks.
+ *  A refusal throws an `AnalyticsError` whose message is the code
+ *  (`utils/coachRoom.roomErrorText` words it); a missing room is
+ *  `not_found`. */
+export function fetchCoachRoom(params: Record<string, string>, token: string | null): Promise<CoachRoom> {
+  const q = new URLSearchParams(params);
+  return get<CoachRoom>(`/api/analytics/coach/room?${q.toString()}`,
     token ? { 'X-Coach-Token': token } : undefined);
 }
 

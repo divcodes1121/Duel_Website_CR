@@ -1988,6 +1988,46 @@ You coach Blue against the AI coach of the other player. **Admin only**: any
   the admin check stubbed in that process only, an SSH tunnel, and
   `CLASH_API_URL=http://127.0.0.1:8799` for vite.
 
+## Coach Duel rooms (`coach_room.py`, 2026-10-22; two coaches online)
+
+    GET /api/analytics/coach/room?act=create&tag=<host's player>&seat=<token>&bo=3|5&all=1&o=mu|roll&clock=2|3|4|5|0&d=<days>
+    GET /api/analytics/coach/room?act=join&id=<room>&seat=<token>&tag=<guest's player>
+    GET /api/analytics/coach/room?act=lock&id=..&seat=..&g=<game no>&deck=<8 keys>[&art=card:form,..]
+    GET /api/analytics/coach/room?act=rematch|leave&id=..&seat=..
+    GET /api/analytics/coach/room?id=..&seat=..            (read the room; the screens poll every 2-3 s)
+
+- **Route count 30.** Admin only (`admin_auth.identify` = `verify` + the
+  account id from the token's `sub`, read only after Supabase accepted it).
+  A refusal is 409 `{error, room}`; an unknown room 404.
+- Rooms live in their own SQLite file, `server/.coach_rooms.db` (gitignored,
+  env `CLASH_ROOM_DB`): one JSON row per room, a lock per room. Never the
+  bot's database.
+- `clock` seconds `CLOCKS` (120/180/240/300) or `NO_LIMIT` 0 (no deadline).
+  The clock is applied whenever the room is read (`advance`): past a deadline
+  the coach without a deck loses that game; neither = abandoned. `REVEAL_S` 12
+  between games, `JOIN_TTL_S` 30 min to be joined, `KEEP_S` 2 days.
+- Seats: host = blue, guest = red; a request is seated by its browser's seat
+  token (only its hash is kept), else by account when only one seat is theirs.
+- `view` never sends the other seat's deck for the game being played (only
+  `{locked: true}`), nor its Coach Assist pool; no account ids or seat hashes.
+- **The brain is passed in** (`Brain`; the real one `LiveBrain`): `read`
+  (both sides via `coach_duel._side_cached`, kept per room for its life, and
+  each side's `_you_pool`) in a background thread after the join; `referee`
+  (`coach_duel._referee`) and `next_options` (`_next_options`) run OUTSIDE the
+  room's lock (a cold referee took 17.8 s once in staging and held the other
+  coach's polls), and the game is decided under the lock with that figure
+  (`_Rated`). A poll never decides a game both coaches locked in; the lock
+  request does (past the deadline a poll does). `shift` = `duel_plan.shifted`.
+  The roll is `random.SystemRandom` on the server.
+- A lock names its game (`g`): a lock that arrives after that game's clock ran
+  out is `too_late`, never counted for the next game.
+- Tests: `test_coach_room.py` (stand-in brain, fake clock, temp file),
+  `test_api_security` `CoachRoomAdminGate`.
+- Staging: the staged server needs `/etc/royalweb.env` sourced and the admin
+  check stubbed in its own process; a dev build sends `dev-<id>` as the token
+  when there is no Supabase (production never does, and the real server
+  refuses it).
+
 ## The package table (`deck_packages.py`, 2026-10-07)
 
 `deck_packages.build` (after every poll, 42 s on production;

@@ -48,7 +48,7 @@ const DuoDecks = lazy(() =>
 );
 /* Lazy: Pro-only, and nobody else's page load should carry it. */
 const CoachDuel = lazy(() =>
-  import('../Analytics/CoachDuel/CoachDuel').then((m) => ({ default: m.CoachDuel })),
+  import('../Analytics/CoachDuel/CoachDuelPage').then((m) => ({ default: m.CoachDuelPage })),
 );
 /* Lazy, and for the strongest version of that reason: it is ADMIN ONLY, so
    nobody else's page load should carry a line of it. */
@@ -409,6 +409,29 @@ const FEATURES = [
        line each. */
     banner: 'team-analysis',
   },
+  /* COACH DUEL (2026-10-22, PREVIEW — the screen is still admin only). Its
+     banner is SHOWN WHOLE, never cropped: asked for by name ("you cannot trim
+     or crop"), so it is scaled to fit and the rest of the panel is the art's
+     own dark magenta (see `[data-banner='coach-duel']` in the stylesheet). */
+  {
+    hue: 'violet',
+    icon: CoachIcon,
+    kicker: 'Coach Duel',
+    title: 'Coach',
+    titleAccent: 'Duel',
+    body: 'Coach a player through a best of 3 or 5 against the AI coach, or send a room link and battle another coach live.',
+    chips: ['Vs AI or a coach', 'Blind lock-in', 'Best of 3 or 5'],
+    cta: 'Open Coach Duel',
+    hash: '#/coach-duel',
+    art: ['archer-queen', 'pekka', 'hog-rider'],
+    banner: 'coach-duel',
+    /* A PORTRAIT ART FOR PHONES (1024x1536): under 560px the card takes its
+       2:3 shape, the copy on its calm top half, the character below. */
+    bannerMobile: 'coach-duel-mobile',
+    /* A 3:2 ART FOR TABLETS (1536x1024, 560-900px): the copy on its calm left,
+       the character on the right. */
+    bannerTablet: 'coach-duel-tablet',
+  },
 ] as const;
 
 function go(hash: string) {
@@ -624,7 +647,12 @@ export function Dashboard({
   const topNavItems: readonly (typeof TOP_NAV)[number][] = isLinkedPlayer
     ? TOP_NAV
     : TOP_NAV.filter((n) => !('linkedOnly' in n && n.linkedOnly));
-  const featureItems = FEATURES;
+  /* COACH DUEL'S PANEL SHOWS ONLY TO WHO CAN OPEN IT (2026-10-22): the screen
+     is admin only until it is released, and a panel that leads to "Admins
+     only" is an advert for a locked door. On release this filter goes. */
+  const featureItems = FEATURES.filter(
+    (f) => f.kicker !== 'Coach Duel' || sectionAllowed(access, 'Coach Duel'),
+  );
 
   /* THE BACKDROP WEARS THE OPEN AREA'S HUE — the same one the sidebar row and
    * the area's block already carry, so the whole page agrees about where you
@@ -1652,7 +1680,28 @@ export function Dashboard({
                         painted ground. */}
                     {'banner' in f && !bannerFailed[f.kicker] && (
                       <span className={styles.toolBannerLayer} aria-hidden="true">
-                        <img
+                        {'bannerMobile' in f && (
+                          <picture className={styles.toolBannerPicture}>
+                            <source
+                              media="(max-width: 559px)"
+                              srcSet={`${import.meta.env.BASE_URL}assets/panels/${f.bannerMobile}.webp`}
+                            />
+                            {'bannerTablet' in f && (
+                              <source
+                                media="(min-width: 560px) and (max-width: 900px)"
+                                srcSet={`${import.meta.env.BASE_URL}assets/panels/${f.bannerTablet}.webp`}
+                              />
+                            )}
+                            <img
+                              src={`${import.meta.env.BASE_URL}assets/panels/${f.banner}.webp`}
+                              alt=""
+                              draggable={false}
+                              className={styles.toolBanner}
+                              onError={() => setBannerFailed((m) => ({ ...m, [f.kicker]: true }))}
+                            />
+                          </picture>
+                        )}
+                        {!('bannerMobile' in f) && <img
                           src={`${import.meta.env.BASE_URL}assets/panels/${f.banner}.webp`}
                           alt=""
                           draggable={false}
@@ -1664,7 +1713,7 @@ export function Dashboard({
                              version hid nodes by hand and left the panel in a
                              half-converted state React did not know about. */
                           onError={() => setBannerFailed((m) => ({ ...m, [f.kicker]: true }))}
-                        />
+                        />}
                         <span className={styles.toolBannerScrim} />
                       </span>
                     )}

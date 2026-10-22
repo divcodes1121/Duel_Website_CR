@@ -131,5 +131,32 @@ def verify(token: str | None) -> str:
     return verdict
 
 
+def _subject(token: str) -> str | None:
+    """The account id (`sub`) in a JWT's payload. Read ONLY after `verify`
+    said 'ok': Supabase checked the signature, so the payload is what it
+    issued. Nothing here checks a signature."""
+    import base64
+    try:
+        part = token.split(".")[1]
+        part += "=" * (-len(part) % 4)
+        sub = json.loads(base64.urlsafe_b64decode(part.encode("ascii"))).get("sub")
+    except Exception:  # noqa: BLE001 - not a JWT payload we can read
+        return None
+    return sub if isinstance(sub, str) and 0 < len(sub) <= 128 else None
+
+
+def identify(token: str | None) -> tuple[str, str | None]:
+    """(verdict, account id) — `verify`'s verdict, and on 'ok' who it is.
+
+    Coach Duel rooms need to know WHICH admin is asking, not only that one is
+    (2026-10-22). A token whose payload carries no readable `sub` (only a test
+    stand-in) is named by a hash of the token, so it is still one caller."""
+    verdict = verify(token)
+    if verdict != "ok":
+        return verdict, None
+    token = (token or "").strip()
+    return "ok", _subject(token) or "tok:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:24]
+
+
 #: HTTP status for each verdict that refuses.
 STATUS = {"unauthorized": 401, "forbidden": 403, "not_configured": 503, "unavailable": 503}

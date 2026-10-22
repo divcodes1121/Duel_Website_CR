@@ -211,3 +211,9 @@ server/.player_skill.json.tmp
 # Coach Duel King art masters: Supercell art, downloaded and SHA-pinned by
 # scripts/build-king-art.py (~25 MB). The served WebPs are in public/.
 /assets/kings/
+# Coach Duel rooms (`coach_room.py`): two coaches online. Holds account ids
+# and player tags — server only.
+server/.coach_rooms.db
+server/.coach_rooms.db-journal
+server/.coach_rooms.db-wal
+server/.coach_rooms.db-shm

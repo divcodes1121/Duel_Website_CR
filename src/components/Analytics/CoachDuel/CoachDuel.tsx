@@ -15,11 +15,9 @@
  * The rules are `utils/coachDuel.ts`; this file only draws.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { ReadingState } from '../ReadingState';
 import { NameSuggest } from '../../NameSuggest/NameSuggest';
-import { CARDS_BY_KEY } from '../../../data/cards';
 import { parseClashRoyaleDeckLink } from '../../../utils/deckLink';
 import {
   AnalyticsError,
@@ -27,7 +25,6 @@ import {
   fetchCoachDuelTurn,
   type CoachDuelDeck,
   type CoachDuelPrep,
-  type CoachDuelSide,
   type CoachDuelTurn,
 } from '../../../state/analyticsClient';
 import { positionalArt } from '../../../utils/deckSeating';
@@ -56,30 +53,10 @@ import {
   type Luck,
 } from '../../../utils/coachDuel';
 import styles from './CoachDuel.module.css';
-
-type Seat = 'blue' | 'red';
-type Pose = 'idle' | 'laugh' | 'nervous' | 'cheer';
-type Emote = 'laugh' | 'cry' | 'grrr' | 'think' | 'sweat' | 'gg' | 'yeah' | 'thumbsdown';
-
-/** How long the needle takes to land, unless motion is reduced. */
-const ROLL_MS = 1400;
-
-const ART = `${import.meta.env.BASE_URL}assets/kings/`;
-/** The Blue King has no fists-up pose (see the art script): he laughs. */
-const kingArt = (seat: Seat, pose: Pose) =>
-  `${ART}${seat}-${seat === 'blue' && pose === 'cheer' ? 'laugh' : pose}.webp`;
-const emoteArt = (e: Emote) => `${ART}emote-${e}.webp`;
-const PRELOAD = [
-  ...(['blue', 'red'] as Seat[]).flatMap((s) => (['idle', 'laugh', 'nervous', 'cheer'] as Pose[]).map((p) => kingArt(s, p))),
-  ...(['laugh', 'cry', 'grrr', 'think', 'sweat', 'gg', 'yeah'] as Emote[]).map(emoteArt),
-  `${ART}duel.webp`,
-];
-
-function reducedMotion(): boolean {
-  return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-}
-
-const cardName = (k: string) => CARDS_BY_KEY.get(k)?.name ?? k;
+import {
+  CardBack, ChanceBar, Crown, DeckTile, FormatControls, King, ModeNav, Plate, PRELOAD, ROLL_MS, ART, cardName, reducedMotion,
+  type DrawDeck, type Emote, type Pose,
+} from './CoachDuelParts';
 
 /* ── the address bar ───────────────────────────────────────────────────── */
 
@@ -121,168 +98,6 @@ function explain(e: unknown): string {
   if (e instanceof AnalyticsError && e.kind === 'invalid_tag') return 'One of those is not a player tag.';
   if (e instanceof Error && /unauthorized|forbidden/.test(e.message)) return 'Coach Duel is for admins only.';
   return 'Something went wrong. Try again.';
-}
-
-/* ── pieces ────────────────────────────────────────────────────────────── */
-
-type DrawDeck = { cards: string[]; art?: CoachDuelDeck['art']; artFilled?: string[]; deckName?: string };
-
-function Strip({ deck }: { deck: DrawDeck }) {
-  return (
-    <span className={styles.stripGrid}>
-      {deck.cards.map((c, i) => (
-        <CardArt key={`${c}-${i}`} card={c} variant={deck.art?.[c]} inferred={!!deck.artFilled?.includes(c)} />
-      ))}
-    </span>
-  );
-}
-
-function Crown({ on }: { on: boolean }) {
-  return (
-    <svg viewBox="0 0 24 20" className={styles.crown} data-on={on ? '' : undefined} aria-hidden="true">
-      <path d="M2 17 L4 5 L9 10 L12 2 L15 10 L20 5 L22 17 Z" />
-    </svg>
-  );
-}
-
-function King({ seat, pose, emote, line, beat, label }: {
-  seat: Seat; pose: Pose; emote: Emote | null; line?: string; beat: string; label: string;
-}) {
-  return (
-    <div className={styles.king} data-seat={seat}>
-      <div className={styles.emoteSlot} aria-live="polite">
-        {emote && (
-          <div key={beat} className={styles.emote} data-seat={seat}>
-            <img src={emoteArt(emote)} alt="" className={styles.emoteImg} />
-            {line && <p className={styles.emoteLine}>{line}</p>}
-          </div>
-        )}
-      </div>
-      <div className={styles.kingStage}>
-        <span className={styles.platform} aria-hidden="true" />
-        <div className={styles.kingMirror}>
-          <img key={pose} src={kingArt(seat, pose)} alt={label} className={styles.kingImg} data-pose={pose} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Plate({ seat, side, role, children, crowns, need }: {
-  seat: Seat; side: CoachDuelSide | null; role: string; children?: React.ReactNode; crowns: number; need: number;
-}) {
-  return (
-    <div className={styles.plate} data-seat={seat}>
-      <img src={`${ART}badge-${seat}.webp`} alt="" className={styles.plateBadge} />
-      <div className={styles.plateBody}>
-        <span className={styles.plateRole}>{role}</span>
-        {side ? (
-          <>
-            <span className={styles.plateName}>{side.name}</span>
-            <span className={styles.plateTag}>{side.tag}</span>
-          </>
-        ) : (
-          children
-        )}
-      </div>
-      <span className={styles.plateCrowns} aria-label={`${crowns} won`}>
-        {Array.from({ length: Math.max(need, crowns) }, (_, i) => (
-          <Crown key={i} on={i < crowns} />
-        ))}
-      </span>
-    </div>
-  );
-}
-
-function ChanceBar({ you, needle, rolling }: { you: number; needle: number | null; rolling: boolean }) {
-  return (
-    <div className={styles.chance}>
-      <div className={styles.chanceLegend}>
-        <span data-seat="blue">{pctLabel(you)}</span>
-        <span className={styles.chanceWord}>Win chance</span>
-        <span data-seat="red">{pctLabel(100 - you)}</span>
-      </div>
-      <div className={styles.bar} role="img" aria-label={`Win chance: you ${pctLabel(you)}, AI ${pctLabel(100 - you)}`}>
-        <span className={styles.barBlue} style={{ width: `${you}%` }} />
-        <span className={styles.barRed} style={{ width: `${100 - you}%` }} />
-        {needle !== null && (
-          <span className={styles.needle} data-rolling={rolling ? '' : undefined} style={{ left: `${needle}%` }} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DeckTile({ deck, seat, badge, children }: {
-  deck: DrawDeck; seat: Seat; badge?: React.ReactNode; children?: React.ReactNode;
-}) {
-  const name = deck.deckName || 'Your deck';
-  return (
-    <div className={styles.tile} data-seat={seat}>
-      <span className={styles.tileHead}>
-        <span className={styles.tileName} title={name}>
-          {name}
-        </span>
-        {badge}
-      </span>
-      <Strip deck={deck} />
-      {children}
-    </div>
-  );
-}
-
-function CardBack({ busy }: { busy: boolean }) {
-  return (
-    <div className={styles.cardBack} aria-label="The AI coach's deck, face down">
-      <img src={`${ART}badge-red.webp`} alt="" />
-      <span>{busy ? 'The AI coach is choosing…' : 'Face down until you lock in'}</span>
-    </div>
-  );
-}
-
-function FormatControls({ games, playAll, luck, onChange }: {
-  games: Format; playAll: boolean; luck: Luck;
-  onChange: (p: Partial<{ games: Format; playAll: boolean; luck: Luck }>) => void;
-}) {
-  return (
-    <>
-      <div className={styles.chipRow} role="group" aria-label="Format">
-        {([3, 5] as Format[]).map((g) => (
-          <button key={g} type="button" className={styles.bigChip} aria-pressed={games === g} onClick={() => onChange({ games: g })}>
-            Best of {g}
-          </button>
-        ))}
-      </div>
-      <div className={styles.chipRow} role="group" aria-label="How many games">
-        <button type="button" className={styles.chip} aria-pressed={!playAll} onClick={() => onChange({ playAll: false })}>
-          Stop when someone wins
-        </button>
-        <button type="button" className={styles.chip} aria-pressed={playAll} onClick={() => onChange({ playAll: true })}>
-          Play all {games} games
-        </button>
-      </div>
-      <div className={styles.chipRow} role="group" aria-label="How a game is decided">
-        <button
-          type="button"
-          className={styles.chip}
-          aria-pressed={luck === 'mu'}
-          title={`A matchup over ${MU_DECIDES}% wins the game; a close one (${100 - MU_DECIDES}–${MU_DECIDES}%) is rolled`}
-          onClick={() => onChange({ luck: 'mu' })}
-        >
-          Matchup over {MU_DECIDES}% wins
-        </button>
-        <button
-          type="button"
-          className={styles.chip}
-          aria-pressed={luck === 'roll'}
-          title="Every game is drawn from its win chance: at 60% you win 60 of 100 such games"
-          onClick={() => onChange({ luck: 'roll' })}
-        >
-          Roll every game
-        </button>
-      </div>
-    </>
-  );
 }
 
 /* ── the screen ────────────────────────────────────────────────────────── */
@@ -637,6 +452,7 @@ export function CoachDuel() {
   /* ── layout ── */
   return (
     <section className={styles.page}>
+      <ModeNav mode="ai" />
       <div className={styles.arena} data-phase={played.length || rolling ? (champ ? 'over' : 'battle') : prep ? 'ready' : 'setup'}>
         <span className={styles.seam} aria-hidden="true" />
         <div className={styles.side} data-seat="blue">

@@ -3016,3 +3016,173 @@
     transform: none;
   }
 }
+
+/* COACH DUEL'S BANNER IS SHOWN WHOLE (2026-10-22). Asked: "trimming is taking
+   away elements — you need to resize, you cannot trim or crop". Every other
+   banner FILLS its panel and is cropped to it; this one is SCALED TO FIT (the
+   picture is 2.34:1, the panel 3-5:1 on a desktop) and pinned right, and the
+   space it leaves is the art's own left-edge colour, measured per band
+   (#5d024e under the frosting, #3a0134 middle, #360131 at the foot). The
+   picture's left edge fades into that ground so there is no seam. The push-in
+   on scroll is off here too: a 7% scale is a crop. */
+.toolPanel[data-banner='coach-duel'] .toolBannerLayer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  /* A MIRRORED TILE OF THE ART'S LEFT STRIP WAS TRIED HERE AND REJECTED
+     (2026-10-22: "looks mirrored, half of it repeated"). The ground stays the
+     art's own left-edge colour until a wider version of the art exists. */
+  background: linear-gradient(180deg, #5d024e 0%, #3c0236 26%, #3a0134 55%, #360131 100%);
+}
+/* THE WIDER ART (2172x724, 3:1, the same day: the left extended with its own
+   drips and crowns, nothing repeated) FILLS THE PANEL BECAUSE THE PANEL TAKES
+   ITS SHAPE: the other four are 4-5:1 and crop their art; this one is 3:1 and
+   shows every pixel. `contain` stays as the guarantee — if the copy ever makes
+   the panel taller than 3:1, the art is still whole on the magenta ground. */
+.toolPanel[data-banner='coach-duel'] {
+  min-height: 0;
+  aspect-ratio: 2172 / 724;
+}
+.toolPanel[data-banner='coach-duel'] .toolBanner {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: right center;
+  animation: none !important;
+  scale: 1 !important;
+  transform: none;
+}
+.toolPanel[data-banner='coach-duel'] .toolBannerScrim {
+  background: linear-gradient(
+    to right,
+    rgb(8 6 10 / 0.42) 0%,
+    rgb(8 6 10 / 0.3) 32%,
+    rgb(8 6 10 / 0.04) 56%,
+    rgb(8 6 10 / 0) 100%
+  );
+}
+/* The accent is the character's own hot pink (hue 317, sampled from the lit
+   hair); the fill is the same hue taken down until white holds on it. */
+.toolPanel[data-banner='coach-duel'][data-hue='violet'] {
+  --tool-solid: #b8178f;
+  --tool-accent: #fd3bc6;
+  --tool-hue: #ff8fdc;
+  --tool-edge: rgb(253 59 198 / 0.55);
+  --tool-wash: rgb(253 59 198 / 0.18);
+}
+/* A phone: the picture sits at the TOP of the card, whole and full width, so
+   its frosting drips are the card's own top edge; the copy follows under it on
+   the magenta its foot fades into. (Under the copy, the picture's drips met
+   the ground above in a visible line.) */
+@media (max-width: 900px) {
+  .toolPanel[data-banner='coach-duel'] .toolBannerLayer {
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+  }
+  .toolPanel[data-banner='coach-duel'] .toolBanner {
+    width: 100%;
+    height: auto;
+    max-height: none;
+    -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 82%, transparent 100%);
+  }
+}
+@media (max-width: 900px) {
+  /* Room above the copy for the whole picture (its height is the panel's
+     width / 2.34), so the copy starts below the character. */
+  .toolPanel[data-banner='coach-duel'] {
+    aspect-ratio: auto;
+    padding-top: calc(31vw + 0.5rem);
+  }
+}
+
+/* The <picture> around Coach Duel's art is invisible to layout: the image is
+   still the flex child of the banner layer. */
+.toolBannerPicture {
+  display: contents;
+}
+
+/* PHONES (under 560px): THE PORTRAIT ART (1024x1536) AND A CARD OF ITS SHAPE.
+   Asked: "mobile still not good, give me a size for mobile" -> 2:3. The card
+   is exactly the art's shape, the art fills it whole (contain on an equal
+   ratio), the copy sits on its calm top half and the character fills the
+   bottom. No fade, no gap, no crop. */
+@media (max-width: 559px) {
+  .toolPanel[data-banner='coach-duel'] {
+    aspect-ratio: 1024 / 1536;
+    padding-top: 1.6rem;
+    align-content: start;
+    align-items: start;
+  }
+  .toolPanel[data-banner='coach-duel'] .toolBannerLayer {
+    flex-direction: row;
+    justify-content: center;
+    align-items: stretch;
+  }
+  .toolPanel[data-banner='coach-duel'] .toolBanner {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: contain;
+    object-position: center top;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .toolPanel[data-banner='coach-duel'] .toolBannerScrim {
+    background: linear-gradient(180deg, rgb(8 6 10 / 0.25) 0%, rgb(8 6 10 / 0.18) 45%, rgb(8 6 10 / 0) 55%);
+  }
+}
+
+/* TABLETS (560-900px): THE 3:2 ART (1536x1024) AND A CARD OF ITS SHAPE.
+   Asked: "for tablet it's wrong, give me dimensions". The wide art on top with
+   the copy under it left a tall card with a small picture; now the card is the
+   art's shape, the art fills it whole, the copy sits on the calm left 55% and
+   the character fills the right. No fade, no gap, no crop. */
+@media (min-width: 560px) and (max-width: 900px) {
+  .toolPanel[data-banner='coach-duel'] {
+    aspect-ratio: 1536 / 1024;
+    padding-top: 1.8rem;
+    align-content: center;
+  }
+  .toolPanel[data-banner='coach-duel'] .toolText {
+    max-width: 55%;
+    justify-self: start;
+  }
+  .toolPanel[data-banner='coach-duel'] .toolBannerLayer {
+    flex-direction: row;
+    justify-content: center;
+    align-items: stretch;
+  }
+  .toolPanel[data-banner='coach-duel'] .toolBanner {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: contain;
+    object-position: center;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .toolPanel[data-banner='coach-duel'] .toolBannerScrim {
+    background: linear-gradient(
+      to right,
+      rgb(8 6 10 / 0.4) 0%,
+      rgb(8 6 10 / 0.28) 40%,
+      rgb(8 6 10 / 0.04) 58%,
+      rgb(8 6 10 / 0) 100%
+    );
+  }
+}
+
+/* THE FOUR BANNERS STAY EQUAL WITHOUT COACH DUEL (2026-10-22). `grid-auto-rows:
+   1fr` above made every row the height of the TALLEST card — and Coach Duel's
+   card takes its art's shape (2:3 on a phone), which stretched the other four
+   to it. The first four rows share one height (the tallest of THOSE four); the
+   fifth, Coach Duel's, is its own. It is the last panel in FEATURES; a sixth
+   banner panel would need this to say 5. */
+@media (max-width: 900px) {
+  .band.toolBand {
+    grid-template-rows: repeat(4, 1fr);
+    grid-auto-rows: auto;
+  }
+}

@@ -73,6 +73,30 @@ import data_ledger  # noqa: E402
 import retention  # noqa: E402
 import duel_feed  # noqa: E402
 import coach_duel  # noqa: E402
+import coach_room  # noqa: E402
+
+_ROOMS = None
+_ROOMS_LOCK = threading.Lock()
+
+
+def _coach_rooms() -> "coach_room.Rooms":
+    """The Coach Duel rooms, made on first use. The brain reads each player's
+    window the way the suggest route does (`days` back from their last
+    stored battle)."""
+    global _ROOMS
+    with _ROOMS_LOCK:
+        if _ROOMS is None:
+            def window_for(tag: str, days: int) -> tuple:
+                return _window({"days": [str(days)]}, cd.coverage(tag))
+
+            def known():
+                try:
+                    return set(coach.dx.card_keys())
+                except Exception:  # noqa: BLE001 - no catalogue: the server cannot check
+                    return None
+
+            _ROOMS = coach_room.Rooms(coach_room.Store(), coach_room.LiveBrain(window_for), known=known)
+        return _ROOMS
 
 HOST = os.getenv("CLASH_API_HOST", "127.0.0.1")
 PORT = int(os.getenv("CLASH_API_PORT", "8787"))
@@ -992,6 +1016,64 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send({"error": "invalid_tag", "input": raw}, 400)
                 _note_tag(tag, "coach")
                 return self._send(coach.opponent_read(tag))
+
+            if path == "/api/analytics/coach/room":
+                # COACH DUEL ROOMS (2026-10-22, `coach_room.py`): two coaches
+                # online against each other. The host makes a room with the
+                # settings (best of 3/5, stop on a win / play all, how a game
+                # is decided, a 2-5 minute deck clock) and shares its link;
+                # the other coach opens it and joins with their player. Each
+                # game both lock in blind; the server decides it and rolls.
+                # `act` = create | join | lock | rematch | leave, or none to
+                # read the room (the screens poll it every two seconds).
+                # Admin only, like the rest of Coach Duel — and it needs to
+                # know WHICH account asks (`admin_auth.identify`).
+                verdict, uid = admin_auth.identify(self.headers.get(admin_auth.HEADER))
+                if verdict != "ok":
+                    self._outcome = "auth_failed"
+                    return self._send({"error": verdict}, admin_auth.STATUS[verdict])
+                q = parse_qs(parsed.query)
+                one = lambda k: (q.get(k) or [""])[0]  # noqa: E731
+                act = one("act").strip().lower()
+                rooms = _coach_rooms()
+                try:
+                    if act == "create":
+                        tag = cd.normalize_tag(one("tag"))
+                        if not tag:
+                            return self._send({"error": "invalid_tag", "input": one("tag")}, 400)
+                        _note_tag(tag, "coach")
+                        out = rooms.create(uid, one("seat"), tag, coach_room.settings_from(
+                            one("bo"), one("all") in ("1", "true", "yes"), one("o") or None,
+                            one("clock"), one("d")))
+                    elif act == "join":
+                        tag = cd.normalize_tag(one("tag"))
+                        if not tag:
+                            return self._send({"error": "invalid_tag", "input": one("tag")}, 400)
+                        _note_tag(tag, "coach")
+                        out = rooms.join(one("id"), uid, one("seat"), tag)
+                    elif act == "lock":
+                        out = rooms.lock(one("id"), uid, one("seat"),
+                                         [c for c in one("deck").split(",") if c][:8], one("art"),
+                                         int(one("g")) if one("g").isdigit() else None)
+                    elif act == "rematch":
+                        out = rooms.rematch(one("id"), uid, one("seat"))
+                    elif act == "leave":
+                        out = rooms.leave(one("id"), uid, one("seat"))
+                    else:
+                        out = rooms.get(one("id"), uid, one("seat"))
+                except coach_room.RoomError as e:
+                    # A room that does not exist is a 404; every other refusal
+                    # is the screen's to word, with the room as it now stands.
+                    if e.code == "no_room":
+                        return self._send({"error": "no_room"}, 404)
+                    body = {"error": e.code}
+                    try:
+                        if one("id"):
+                            body["room"] = rooms.get(one("id"), uid, one("seat"))
+                    except coach_room.RoomError:
+                        pass
+                    return self._send(body, 409)
+                return self._send(out)
 
             if path == "/api/analytics/coach/suggest":
                 q = parse_qs(parsed.query)

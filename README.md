@@ -301,6 +301,7 @@ python server/test_duel_read.py   # 103 checks over the duel read: legal candida
 python server/test_duel_plan.py   # 54 checks over the look-ahead for the whole duel, every figure worked by hand
 python server/test_duel_set.py    # 49 checks over the set composer: no shared card, the largest set, pinned decks, swaps, the cap on sets valued
 python server/test_coach_duel.py  # 109 checks over Coach Duel: the AI picks without your deck, no repeats, sense, sessions, legal next decks
+python server/test_coach_room.py  # 114 checks over Coach Duel rooms: two coaches online, blind lock-in, the deck clock, timeouts, rematch
 python server/test_duel_archetypes.py # 15 checks over every duel deck grouped by archetype: CRL first, counter score, the seeded draw
 python server/test_duel_brain.py  # 83 checks over the duel brain's figures and picks
 python server/test_suggested_seating.py # 49 checks: a suggested deck fields every slot its cards can fill
@@ -334,7 +335,7 @@ python server/test_recent_battles.py # 40 checks over the battle log and its mod
 python server/test_player_decks.py # 55 checks over the Decks list: one row a deck, duel games counted once, both records, the lean reader
 python server/test_duel_feed.py   # 94 checks over All Duels: friendly three-game duels only, newest first, the card filter, the fielded forms, paging
 python server/test_player_trends.py # 14 checks: the daily series carries games per day
-python server/test_api_security.py # 112 checks over auth, CORS, the rate limit, the admin gates (Coach Duel's too) and the route count (29)
+python server/test_api_security.py # 123 checks over auth, CORS, the rate limit, the admin gates (Coach Duel's and its rooms' too) and the route count (30)
 python server/test_data_lifecycle.py # 42 checks (46 on the VPS, with dbstream) over retention, the ledger and backups
 python server/test_ladder_raw_purge.py # 15 checks: only old ladder raw goes; duel, NULL-mode and 2v2 never
 python server/test_duo_retention.py # 76 checks: the 2v2 collection keeps the top pairs per win condition
@@ -2415,6 +2416,96 @@ starting: play all games of the duel / stop as you win"*.
 Each game is one request (`sim=game`, 0.1–0.2 s on the VPS); the AI's set is
 composed once per duel and kept (a best of 5's five decks took ~9 s the first
 time).
+
+### The Coach Duel panel on the landing page: three pictures, each shown whole (2026-10-22)
+
+A fifth tool panel under the other four, **shown only to accounts that can
+open Coach Duel** (admins, until it is released; a panel that leads to
+"Admins only" is an advert for a locked door).
+
+Asked: *"no trimming is taking away elements, you need to resize, you cannot
+trim or crop"*. So unlike the other four banners (which fill a fixed 22rem
+panel and are cropped to it) this one is **never cropped**: the card takes the
+picture's own shape and the picture fills it whole. One shape cannot fit
+every screen, so there are three pictures, each drawn for its screen:
+
+| Screen | Picture | Card | Copy |
+|---|---|---|---|
+| Desktop (over 900 px) | `coach-duel` 2172 x 724 (3:1) | 3:1 | left, character right |
+| Tablet (560-900 px) | `coach-duel-tablet` 1536 x 1024 (3:2) | 3:2 | left 55%, character right |
+| Phone (under 560 px) | `coach-duel-mobile` 1024 x 1536 (2:3) | 2:3 | top half, character below |
+
+`<picture>` with two `<source>`s picks the file; the masters are in
+`assets/panels/`, the served WebP copies (same size) in `public/assets/panels/`.
+The push-in on scroll is off for this panel (a 7% scale is a crop).
+
+Tried and rejected on the way: a mirrored tile of the art's left edge to
+fill a wider panel (*"looks mirrored, half of it repeated"*), and the wide
+picture on top of a phone card with the copy under it (a visible seam). On a
+phone the other four banner cards keep their own equal height; only Coach
+Duel's card takes its picture's shape.
+
+Measured: desktop 1408 x 469 at 1440 (picture fills 99%); tablet 568 x 379 /
+736 x 491 / 868 x 579 at 600 / 768 / 900; phone 358 x 537 at 390, the copy
+ending above the character at 360, 390 and 430. Screenshots
+`testing/banner-coach-duel-*.png`.
+
+### Two coaches online: rooms (2026-10-22)
+
+Asked: *"a multiplayer mode where 2 coaches can be online at the same time ...
+sending a request and they can battle each other selecting the players"*, then
+*"options before, like 2 / 3 / 4 / 5 mins for selecting a deck, and after
+selecting all the settings we make a room and share the link, then the other
+coach opens it"*, then *"the one who doesn't submit the deck gets a loss and
+the other gets the point; vs the AI coach there is no timing, as it is; add a
+no time option for the human coach too"*.
+
+`#/coach-duel` now opens on two links: **Against the AI coach** (unchanged, no
+clock) and **Against another coach** (`#/coach-duel/room`).
+
+1. **Settings, then a room.** The host picks their player, Best of 3 / 5, Stop
+   when someone wins / Play all, Matchup over 55% wins / Roll every game, the
+   **deck clock: 2, 3, 4 or 5 minutes, or No time limit**, and the history
+   window, then **Create room**. The room's link appears with **Copy link**
+   (and **Share** on a phone).
+2. **The other coach opens the link**, sees the host's player and the
+   settings, picks their own player (not the same one) and presses **Join the
+   duel**. The host is the Blue King, whoever joined the Red King, on both
+   screens. Both players are read once (~20-60 s cold).
+3. **Each game both coaches lock in blind.** Paste a deck link or take a Coach
+   Assist deck (each coach gets only their own, ranked against the other
+   player); the other coach's card stays face down ("choosing..." or "locked
+   in") and their deck is never sent to your browser until both are in. No
+   card twice per coach in a duel (the two coaches may bring the same cards).
+4. **The server decides the game**, not a browser: the referee is Coach Duel's
+   (the mean of both coaches' rulers, moved by the game before), and the roll
+   is drawn on the server, so both screens show the same needle and result.
+5. **Out of time loses that game** and the other coach gets the point; the
+   coach who ran out spends no cards. If neither locks in, the duel is
+   abandoned. With No time limit a game waits until both are in.
+6. A result stays on screen 12 s before the next game opens (or press **Pick
+   my game N deck**). At the end: Victory / Defeat, every game's two decks,
+   **Rematch** (both must ask; same settings and players), **New room**.
+   **Leave the duel** gives it to the other coach.
+
+A room nobody joins closes after 30 minutes; a room is deleted two days after
+it last changed. A reload keeps your seat (a seat token per room in the
+browser); a third coach on a full room's link is told so.
+
+**Who can open it: admins only, like the rest of Coach Duel**, so both coaches
+must be admin accounts until it is released. The server needs to know WHICH
+account asks, not only that it is an admin (`admin_auth.identify`).
+
+**How it is checked**: `server/test_coach_room.py` 114 (hidden decks, the
+clock, a late lock refused rather than moved to the next game, timeouts,
+abandoned, stop vs play-all, rematch, leaving, expiry, no limit, the matchup
+rated while the room's lock is free), `tests/coachRoom.test.ts` 19,
+`test_api_security` `CoachRoomAdminGate`. In a browser, two coaches in two
+separate browsers against a staged copy of the API with the real brain (VPS
+loopback, SSH tunnel): 40/40 and 38/38 timed runs (setup, link, join, refusal
+of the same player, a third coach, the clock counting down alike on both,
+blind games with one result on both screens, rematch, a real timeout,
+leaving, phone) and 6/6 with No time limit. `testing/room-*.png`.
 
 ### Upsets, deck sense, the format in the arena (2026-10-21, third round)
 

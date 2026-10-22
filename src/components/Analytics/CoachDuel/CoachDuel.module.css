@@ -1347,3 +1347,145 @@ button.tile:hover:not(:disabled) {
   color: var(--text);
 }
 
+
+/* ── two coaches online (2026-10-22, `CoachRoom.tsx`) ──────────────────── */
+
+/* Against the AI / against another coach: two links over the arena. They
+   are navigation (each is a route), not tabs. */
+.modeNav {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  margin: 0 auto;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.modeLink {
+  padding: 0.4rem 0.95rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+.modeLink:hover {
+  background: var(--bg-3);
+}
+.modeLink[aria-current='page'] {
+  background: var(--gold);
+  color: #2b1600;
+}
+
+/* The red plate before anybody joined. */
+.plateWait {
+  font-size: 0.85rem;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+/* The room's link, under the score on the arena (dark ground in both themes). */
+.linkBox {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+}
+.linkInput {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: #141a33;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+/* The deck clock. */
+.clock {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.clock[data-low] {
+  color: var(--hue-red);
+}
+.waitLine {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+/* The face-down card on the blue side (the guest sees the host's), and the
+   guest's own drop zone in red. */
+.cardBack[data-seat='blue'] {
+  border-color: #1e3a8a;
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 8px, transparent 8px 16px),
+    radial-gradient(circle at 50% 40%, #2563eb, #1e3a8a 75%);
+}
+.drop[data-seat='red'] {
+  border-color: color-mix(in srgb, var(--red) 60%, var(--border));
+  background:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--red) 12%, transparent), transparent 70%),
+    var(--bg-2);
+}
+
+/* A room that cannot be played: gone, full, closed. */
+.roomNotice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text);
+}
+.roomNotice p {
+  margin: 0;
+  font-weight: 600;
+}
+a.cta,
+a.ghost {
+  text-decoration: none;
+  display: inline-block;
+}
+
+/* Every game's two decks at the end of a duel. */
+.roomGameRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 0.6rem;
+}
+.roomGameRow + .roomGameRow {
+  margin-top: 0.6rem;
+}
+.roomGameRow .cardBack {
+  min-height: 5rem;
+}
+@media (max-width: 52rem) {
+  .roomGameRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* A phone: both labels on one line each. */
+@media (max-width: 30rem) {
+  .modeNav {
+    gap: 0.15rem;
+  }
+  .modeLink {
+    padding: 0.4rem 0.65rem;
+    font-size: 0.76rem;
+    white-space: nowrap;
+  }
+}

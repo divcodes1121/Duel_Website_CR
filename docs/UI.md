@@ -885,6 +885,20 @@ Three matters because two nested scrollers is its own bug: on touch, every flick
 over the inner one is a coin toss about which box moves. "At least one" passes
 in that state.
 
+### Coach Duel's landing panel: the card takes the picture's shape (2026-10-22)
+
+The one banner that is never cropped. Three pictures, one per screen
+(desktop 3:1 over 900 px, tablet 3:2 at 560-900 px, phone 2:3 under 560 px),
+picked by `<picture>`; the card's `aspect-ratio` is the picture's, and the
+image is `object-fit: contain` so it is whole even if the copy ever makes the
+card taller. Copy on the picture's calm side (left on desktop and tablet, top
+on a phone) over a light scrim; accent is the character's hot pink
+(`#fd3bc6` ink, `#b8178f` fill). On a phone the equal-height rule for the
+banner cards covers the first four rows only (`grid-template-rows:
+repeat(4, 1fr)`), or this card's 2:3 stretches the other four; a sixth banner
+panel would need that to say 5. Shown only to accounts that can open Coach
+Duel.
+
 ### `1fr` is `minmax(auto, 1fr)`, and it blows a grid out sideways
 
 Same screen, found at 1024 after a later change. `.entry` is `1fr auto 1fr` —
@@ -2327,6 +2341,16 @@ Neue for every game word, Clash-gold buttons with dark ink.
 - **The arena compacts during the battle** so the Kings stay on screen.
 - **The middle has a dark pool behind it** so the seam fades behind the labels.
 - Nothing loops; reduced motion keeps every state, no movement.
+- **Two links over the arena** (2026-10-22): Against the AI coach / Against
+  another coach. Navigation, not tabs (each is a route).
+- **A room** (`CoachRoom.tsx`): the same arena; the setup adds a clock row
+  (2 / 3 / 4 / 5 min a deck, No time limit). Waiting: the link in a field with
+  Copy link (Share on a phone) under the score. The guest types their player
+  on the red plate. In a game: "Your move · 1:56" (red under 30 s; no clock
+  with No time limit), the other coach's face-down card in their colour saying
+  "choosing..." or "Locked in · face down". A result stays 12 s with "Game N
+  opens in 0:10" and Pick my game N deck. Names on the plates before the read.
+  Both screens draw the server's needle.
 - The steps (Pick both players · Load your decks · Battle the AI coach) sit
   under the arena and follow the phase.
 

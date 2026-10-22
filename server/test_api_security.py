@@ -762,7 +762,13 @@ class RoutingUnchanged(unittest.TestCase):
         # by name"). What made it worth a route this time: it reads its own
         # trigram index (`name_index.py`), so a keystroke costs milliseconds
         # instead of a 0.6-4.6 s scan of the bot's 5.9M-row `player_names`.
-        self.assertEqual(len(routes), 29)
+        #
+        # 30 on 22 Oct 2026: `/api/analytics/coach/room` (Coach Duel rooms —
+        # two coaches online against each other: create a room with the
+        # settings and a deck clock, share its link, join, lock in blind).
+        # Admin-gated like the rest of Coach Duel, and it needs to know WHICH
+        # admin asks; `CoachRoomAdminGate` pins both.
+        self.assertEqual(len(routes), 30)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]
@@ -794,6 +800,7 @@ class _FakeSupabase(BaseHTTPRequestHandler):
         token = (self.headers.get("Authorization") or "")[7:]
         status, body = {
             "a.b.admin": (200, b"true"),
+            "a.c.admin": (200, b"true"),
             "a.b.member": (200, b"false"),
         }.get(token, (401, b'{"message":"JWT expired"}'))
         self.send_response(status)
@@ -944,8 +951,8 @@ class CoachDuelAdminGate(CoachRosterAdminGate):
         with fake_supabase() as sb:
             os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
             with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
-                mod.coach_duel.prep = lambda a, b, aw, bw, kind=None: {"mode": "prep"}
-                mod.coach_duel.turn = lambda a, b, decks, res, aw, bw, kind=None, round_=0, seen=None, games=3, play_all=False, faced=None: {
+                mod.coach_duel.prep = lambda a, b, aw, bw, kind=None, **k: {"mode": "prep"}
+                mod.coach_duel.turn = lambda a, b, decks, res, aw, bw, kind=None, round_=0, seen=None, games=3, play_all=False, faced=None, **k: {
                     "mode": "game", "decks": len(decks), "res": res, "round": round_,
                     "seen": len(seen or []), "games": games, "all": play_all, "faced": len(faced or [])}
                 for mode in ("prep", "game", "anything"):
@@ -982,6 +989,87 @@ class CoachDuelAdminGate(CoachRosterAdminGate):
                     headers={**keyed(), "X-Coach-Token": "a.b.admin"})
                 self.assertEqual(status, 400)
                 self.assertIn("same_player", body)
+
+
+class CoachRoomAdminGate(CoachRosterAdminGate):
+    """Coach Duel rooms (two coaches online) sit behind the same admin check,
+    and every action knows which admin asked (`admin_auth.identify`)."""
+
+    SEAT_A = "seat-aaaaaaaaaaaaaaaa"
+    SEAT_B = "seat-bbbbbbbbbbbbbbbb"
+    PATH = "/api/analytics/coach/room?act=create&tag=%23Y022GRCJQ&seat=" + SEAT_A + "&clock=2&bo=5"
+
+    def _serve(self, mod):
+        import tempfile
+        import coach_room
+
+        class Brain(coach_room.Brain):
+            def read(self, room):
+                return {"blue": {"name": "B", "pool": []}, "red": {"name": "R", "pool": []}}
+
+            def referee(self, room, blue, red):
+                return 0.9
+
+        tmp = tempfile.mkdtemp()
+        mod._ROOMS = coach_room.Rooms(coach_room.Store(os.path.join(tmp, "rooms.db")), Brain(),
+                                      spawn=lambda fn: fn())
+        mod._note_tag = lambda *a, **k: None
+        return serving(mod)
+
+    def test_every_room_action_needs_an_admin(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                for act in ("create", "join", "lock", "rematch", "leave", ""):
+                    path = "/api/analytics/coach/room?act=%s&id=abcdefgh23" % act
+                    self.assertEqual(fetch(base, path, headers=keyed())[0], 401, act)
+                    status, _, _ = fetch(base, path, headers={**keyed(), "X-Coach-Token": "a.b.member"})
+                    self.assertEqual(status, 403, act)
+
+    def test_two_admins_play_a_game(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                one = {**keyed(), "X-Coach-Token": "a.b.admin"}
+                two = {**keyed(), "X-Coach-Token": "a.c.admin"}
+                status, _, body = fetch(base, self.PATH, headers=one)
+                self.assertEqual(status, 200)
+                room = json.loads(body)
+                self.assertEqual((room["phase"], room["you"]), ("waiting", "blue"))
+                self.assertEqual((room["settings"]["clock"], room["settings"]["bo"]), (120, 5))
+                rid = room["id"]
+                q = "/api/analytics/coach/room?id=%s&seat=%s" % (rid, self.SEAT_B)
+                self.assertTrue(json.loads(fetch(base, q, headers=two)[2])["joinable"])
+                status, _, body = fetch(base, q + "&act=join&tag=%232PPQ0LY", headers=two)
+                self.assertEqual(json.loads(body)["phase"], "playing")
+                deck = "knight,archers,fireball,zap,hog-rider,musketeer,cannon,skeletons"
+                fetch(base, "/api/analytics/coach/room?act=lock&g=1&id=%s&seat=%s&deck=%s" % (rid, self.SEAT_A, deck),
+                      headers=one)
+                seen = json.loads(fetch(base, q, headers=two)[2])
+                self.assertEqual(seen["games"][0]["blue"], {"locked": True}, "the other deck stays hidden")
+                body = json.loads(fetch(base, q + "&act=lock&g=1&deck=" + deck, headers=two)[2])
+                self.assertEqual(body["games"][0]["result"]["winner"], "blue")
+                # a refusal is a 409 carrying the room as it stands
+                status, _, body = fetch(base, q + "&act=lock&g=2&deck=" + deck, headers=two)
+                self.assertEqual(status, 409)
+                self.assertEqual(json.loads(body)["error"], "card_played")
+                self.assertEqual(json.loads(body)["room"]["id"], rid)
+
+    def test_an_unknown_room_is_404(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, _ = fetch(base, "/api/analytics/coach/room?id=abcdefgh23",
+                                     headers={**keyed(), "X-Coach-Token": "a.b.admin"})
+                self.assertEqual(status, 404)
+
+    def test_a_bad_tag_is_400(self):
+        with fake_supabase() as sb:
+            os.environ.update(SUPABASE_URL=sb, SUPABASE_ANON_KEY="anon")
+            with configured(CLASH_API_KEY=KEY) as mod, self._serve(mod) as base:
+                status, _, _ = fetch(base, "/api/analytics/coach/room?act=create&tag=nope&seat=" + self.SEAT_A,
+                                     headers={**keyed(), "X-Coach-Token": "a.b.admin"})
+                self.assertEqual(status, 400)
 
 
 class DuelFeedAdminGate(CoachRosterAdminGate):
