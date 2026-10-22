@@ -92,6 +92,10 @@ end, at the level of individual functions and constants.
 >   drawn from every stored duel deck grouped by archetype (CRL lists first,
 >   each with its record against every opponent archetype over its pilots'
 >   expected wins). README "Coach Duel — you against an AI coach".
+> * **`server/coach_room.py`** (2026-10-22, admin only) — two coaches online
+>   in one room. Nothing new is predicted: each game is decided with Coach
+>   Duel's own referee (both coaches' rulers, moved by the game before), and
+>   the roll is drawn on the server. README "Two coaches online: rooms".
 >
 > **"None of them trains or calls a model" stopped being true on 2026-09-30.**
 > The duel brain's shrinkage and the fused rate's five weights are still
@@ -1277,7 +1281,7 @@ Other constraints:
 * The Python API **does not ship with the frontend.** Vercel builds from GitHub;
   `server/` runs on the VPS at `/opt/royalweb/`. A new screen needs both, and the
   API must land **first** or the area appears and every request 404s.
-* `server/test_api_security.py` pins the route count at **21** (29 as of 2026-10-21). A new endpoint
+* `server/test_api_security.py` pins the route count at **21** (30 as of 2026-10-22). A new endpoint
   means bumping it in the same commit, plus the matching auth line.
 * `tests/entitlement.test.ts` pins exactly which sections are free.
 * Coach Assist is Pro-only and `/api/analytics` needs the VPS key, so **it cannot
