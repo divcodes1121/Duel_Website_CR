@@ -856,6 +856,68 @@ plans fell back to shared lists), and a function `spread` in `_folder` that
 overwrote the folder's archetype bars (a scouting report would not serialise).
 Both have tests that fail on the old code.
 
+## 4q. Today's meta, for every win condition (2026-10-23, brain 6.0)
+
+Reported on the live scouting report and match plan: *"the decks suggestion are
+very old and not according to the meta and the decks which I can see ... very
+similar for all players, just up, down and one difference ... if possible we can
+show for all win cons"*. Measured on the live answer for a real four-player
+roster (30 days) before anything changed:
+
+- **473 of the pool's 513 lists were CRL duel lists, and 378 of those were
+  brought by ONE player** — 145 of them twice. The deck each win condition was
+  answered with was the luckiest of them: the Hog pick was a list one player used
+  twice, Giant four games, Three Musketeers one player's 9-1 run. A short run
+  inflates a list's rate, and the best of hundreds of short runs is what "the
+  strongest of each win condition" finds. Only **5 of the 40 suggested rows had
+  been played at all in the window** outside that one player's games.
+- **The meta half was the 40 most played lists overall**, so 15 of 22 win
+  conditions had no meta list in the pool — while the duel index held 500 vetted
+  lists played in the window, 25-35 per win condition, most with thousands of
+  games. The meta board's top lists (Hog Musketeer Cannon, Log Bait Rocket
+  Inferno, X-Bow Tesla, E-Giant Lightning ...) were never offered.
+- **Ten win conditions a list**: against CRL-level opponents, who all play the
+  CRL meta, the ten strongest are nearly the same ten for everyone, so four
+  folders shared 2-5 of ten decks and only the order moved.
+
+What 6.0 does (`team_analysis.py`, `team_scout.py`):
+
+- **The meta of every win condition**: the window's `META_PER_FAMILY` (8) most
+  played vetted lists of EACH win condition with `META_MIN_GAMES` (50)+ games in
+  the window (`_meta_keys`), not the 40 most played overall.
+- **CRL lists that are staples**: brought by `CRL_MIN_PILOTS` (2)+ of the group,
+  or `CRL_SOLO_GAMES` (10)+ times by one (`_crl_proven`). The 30-day pool went
+  from 513 lists (506 CRL) to 253 (171 CRL, 147 meta; some are both).
+- **Every win condition**: `ALL_WINCONS` (40) rows on a scouting list, a match
+  plan's folder and each teammate's list — one deck of each win condition that
+  clears 50%. The Deck Counter keeps ten (`BRING_TOP_N`).
+- **The opponent decides between near-equals** (`counters(band=SCOUT_BAND)`,
+  1.0 point): inside one win condition, the lists within a point of the best are
+  ranked by `lift` (how much more they gain against THIS opponent than the typical
+  list). The card model's per-card terms are the same against everyone, so
+  without it one list answered a win condition for every opponent.
+
+Same four opponents, old live answer vs 6.0 (staged, then live):
+
+| | 5.1 | **6.0** |
+|---|---|---|
+| Rows per opponent | 10 | **17-19** (every win condition over 50%) |
+| Suggested rows played in the window | 12% | **68%** |
+| Rows that are meta lists | 0% | **38%** |
+| Top ten, mean figure | 58.5 | **59.4** |
+| #1, mean figure | 63.0 | **63.7** |
+| Win conditions answered with a different list for different opponents | 8 of 11 | **14 of 20** |
+| Rows under 50% | 0 | 0 |
+| Scouting report, 4 players | 10-11 s | 4.6-14 s |
+
+**A trade, said**: 5.1 measured a staple rule (two of the group, or one of them
+five times) blind and found every figure 0.5 points worse. 6.0 accepts that risk
+for lists people actually play now; its own figures did not drop on this roster
+because real meta lists are now in the pool. Not re-replayed blind.
+
+Undo without a deploy: restore `team_{analysis,scout}.py.bak-20261023-181706-prets6`
+on the VPS and restart royalweb.
+
 ## 4p. Twenty a side (2026-10-17)
 
 **`MAX_SQUAD` is 20 on both halves** (`src/utils/squadParse.ts`,

@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-23-team-scout-6',
+    date: '2026-10-23',
+    kind: 'improved',
+    title: 'Team Analysis suggests today’s meta, for every win condition',
+    body: [
+      'The scouting report and the match plan now show one deck for every win condition that is expected to win, not ten, and each is the list of that win condition that does best against that opponent — on the same roster, 14 of 20 win conditions were answered with a different list for different opponents.',
+      'The decks come from what is being played in the days you picked: the most played lists of every win condition, and CRL players’ duel decks that more than one of them brought, or one of them brought ten times or more. One player’s short run of a deck is no longer suggested. On a real four-player roster, the share of suggested decks played in the last 30 days went from 12% to 68%.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-22-coach-duel',
     date: '2026-10-22',
     kind: 'new',

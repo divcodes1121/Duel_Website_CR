@@ -543,9 +543,12 @@ check("a scout folder recommends up to the list size",
 # TEN ON EVERY LIST (2026-10-10, "we can suggest 10 decks max to the players";
 # seven before, five per teammate before that). `team_scout`'s own default
 # stays seven: `coach_daily` builds its field plan with it.
-check("every Team Analysis list is ten rows at most, and the field plan's seven is untouched",
-      ta.PER_PLAYER_TOP_N == ta.TOP_N == ta.SCOUT_TOP_N == 10 and ts.MAX_RECOMMENDATIONS == 7,
-      f"{ta.PER_PLAYER_TOP_N} / {ta.TOP_N} / {ta.SCOUT_TOP_N} / {ts.MAX_RECOMMENDATIONS}")
+# EVERY WIN CONDITION (6.0, 2026-10-23: "show for all win cons"): more rows
+# than there are win conditions, one each; the Deck Counter keeps its ten.
+check("every Team Analysis list holds every win condition; the Deck Counter ten; the field plan seven",
+      ta.PER_PLAYER_TOP_N == ta.TOP_N == ta.SCOUT_TOP_N == ta.ALL_WINCONS >= 30
+      and ta.BRING_TOP_N == 10 and ts.MAX_RECOMMENDATIONS == 7,
+      f"{ta.PER_PLAYER_TOP_N} / {ta.TOP_N} / {ta.SCOUT_TOP_N} / {ta.BRING_TOP_N} / {ts.MAX_RECOMMENDATIONS}")
 # A TEAMMATE WITH A SHORT LIST IS TOPPED UP, NOT LEFT WITH A REASON.
 #
 # `coach._fills` has answered this since Coach Assist was written: when a
@@ -1025,7 +1028,7 @@ finally:
 
 print(NL + "counters to what they play")
 
-check("the brain is 5.1", ts.BRAIN_VERSION == "team-scout-5.1" and folder["brain"] == ts.BRAIN_VERSION)
+check("the brain is 6.0", ts.BRAIN_VERSION == "team-scout-6.0" and folder["brain"] == ts.BRAIN_VERSION)
 
 # DUEL LISTS COME FROM THE NAMED GROUP ONLY, and every pool list knows its own
 # rate against the field.
@@ -1802,8 +1805,10 @@ print(NL + "5.0: the pool is what the CRL group brings, and the window's meta")
 import datetime as _dt5  # noqa: E402
 
 CR1, CR2, CR3 = cards("cra"), cards("crb"), cards("crc")     # lists the group brought
-CR4, CR5 = cards("crd"), cards("cre")                         # one player's experiment / staple
+CR4, CR5 = cards("crd"), cards("cre")                         # one player's short runs
+CR6 = cards("crf")                                            # one player's staple
 ME1, ME2, ME3 = cards("mea"), cards("meb"), cards("mec")     # vetted lists
+ME4 = cards("med")                                           # a less played Hog list
 SH5 = list(SHORT)                                            # cannot fill three slots
 _gw_calls = []
 
@@ -1811,14 +1816,14 @@ _gw_calls = []
 def _gw5(tags, since, until):
     _gw_calls.append((tuple(sorted(tags)), since, until))
     return {_k(CR1): [5, 3, 2], _k(CR2): [2, 1, 2], _k(CR3): [1, 1, 1],
-            _k(CR4): [3, 2, 1], _k(CR5): [5, 4, 1],
+            _k(CR4): [3, 2, 1], _k(CR5): [5, 4, 1], _k(CR6): [10, 6, 1],
             _k(ME1): [4, 3, 2], _k(SH5): [9, 5, 3]}
 
 
 # Play by day, ages counted back from 14 October. ME1 and ME2 are played now,
 # ME3 was heavy before the window and is nearly gone (fading).
 _ACT5 = {_k(ME1): {0: 60, 3: 60, 20: 300}, _k(ME2): {1: 40, 5: 40, 20: 400},
-         _k(ME3): {2: 3, 4: 3, 20: 3000}}
+         _k(ME3): {2: 3, 4: 3, 20: 3000}, _k(ME4): {0: 30, 2: 30}}
 _fake5 = types.SimpleNamespace(
     group_window=_gw5,
     activity=lambda: {"day": "20261014", "games": _ACT5},
@@ -1828,10 +1833,12 @@ _fake5 = types.SimpleNamespace(
 _seeds5 = {"golem": [{"cards": list(ME1), "games": 400, "archetypes": {"xbow": {
                "wins": 60, "losses": 40, "games": 100, "winRate": 60.0}}}],
            "hog": [{"cards": list(ME2), "games": 300, "archetypes": {}},
-                   {"cards": list(ME3), "games": 300, "archetypes": {}}]}
+                   {"cards": list(ME3), "games": 300, "archetypes": {}},
+                   {"cards": list(ME4), "games": 300, "archetypes": {}}]}
 _saved5 = (ta._duel_index, ta._load_cohorts, ta.DUEL_POOL_COHORT, ta.dcx.seeds,
            ta._set_field_rates, ta._today, ta.META_LISTS, ta.CRL_MIN_GAMES,
-           ta._COMP_CACHE["by"], ta._COMP_CACHE["building"])
+           ta._COMP_CACHE["by"], ta._COMP_CACHE["building"],
+           ta.META_PER_FAMILY, ta.META_MIN_GAMES)
 ta._duel_index = _fake5
 ta._load_cohorts = lambda: {"crl": {"#TOP1", "#TOP2"}}
 ta.DUEL_POOL_COHORT = "crl"
@@ -1851,9 +1858,17 @@ try:
     check("a list the group brought twice or more is in the pool, once is not",
           _k(CR1) in keys7 and _k(CR2) in keys7 and _k(CR3) not in keys7
           and ta.CRL_MIN_GAMES == 2, str(sorted(keys7)))
-    check("ONE player's list is in from two games (a staple rule was measured and made "
-          "every figure worse)", _k(CR5) in keys7 and _k(CR4) in keys7
-          and not hasattr(ta, "CRL_STAPLE_GAMES"), str(sorted(keys7)))
+    # 6.0: ONE PLAYER'S SHORT RUN IS NOT A LIST TO SUGGEST. 378 of 506 CRL
+    # lists in the live pool were one player's, 145 of them twice, and the
+    # best of each win condition was the luckiest of them (2026-10-23).
+    check("one player's list from a short run is not in (6.0)",
+          _k(CR5) not in keys7 and _k(CR4) not in keys7, str(sorted(keys7)))
+    check("...two of the group's from two games is, and one player's staple is",
+          _k(CR2) in keys7 and _k(CR6) in keys7
+          and ta.CRL_MIN_PILOTS == 2 and ta.CRL_SOLO_GAMES == 10, str(sorted(keys7)))
+    check("the rule is a staple: pilots, else games",
+          ta._crl_proven([2, 1, 2]) and ta._crl_proven([10, 3, 1])
+          and not ta._crl_proven([9, 9, 1]) and not ta._crl_proven([3, 3]))
     check("a list that cannot fill all three special slots is not, and is counted",
           _k(SH5) not in keys7 and i7["slotGaps"] == 1, str(i7.get("slotGaps")))
     check("the window's played vetted lists are in it; one fading out of it is not",
@@ -1869,21 +1884,34 @@ try:
           isinstance(keys7[_k(ME1)].profile, ta._SeedProfile)
           and isinstance(keys7[_k(CR1)].profile, ta._ListProfile))
     check("the group's lists lead the pool, most brought first",
-          [c.key for c in p7][:3] == [_k(CR1), _k(CR5), _k(ME1)], str([c.key for c in p7]))
+          [c.key for c in p7][:3] == [_k(CR6), _k(CR1), _k(ME1)], str([c.key for c in p7]))
     check("the pool says what it holds, and over which days",
           i7["days"] == 7 and i7["from"] == "2026-10-08" and i7["to"] == "2026-10-14"
-          and i7["group"] == "crl" and i7["crlLists"] == 5 and i7["metaLists"] == 2
-          and i7["crlGames"] == 19 and i7["pool"] == 6, str(ta._pool_public(i7)))
+          and i7["group"] == "crl" and i7["crlLists"] == 4 and i7["metaLists"] == 3
+          and i7["crlGames"] == 21 and i7["pool"] == 6 and i7["crlSkipped"] == 3,
+          str(ta._pool_public(i7)))
     check("...and a meta list's play in the window rides on its row (`states`)",
           i7["states"].get(_k(ME1))[1] == 120 and "states" not in ta._pool_public(i7),
           str(i7["states"].get(_k(ME1))))
-    check("the meta half is capped at META_LISTS", ta.META_LISTS == 40)
-    ta.META_LISTS = 1
+    # 6.0: THE META OF EVERY WIN CONDITION, not the most played overall.
+    check("the meta half is capped per win condition", ta.META_PER_FAMILY == 8
+          and ta.META_MIN_GAMES == 50)
+    check("...so a less played Hog list is in beside the most played", _k(ME4) in keys7
+          and keys7[_k(ME4)].origin == "meta", str(sorted(keys7)))
+    ta.META_PER_FAMILY = 1
     ta._COMP_CACHE["by"] = {}
     p1, _i1 = ta._competitive_pool(7)
-    check("...the most played first",
-          {c.key for c in p1 if c.meta_rank} == {_k(ME1)}, str([(c.key, c.meta_rank) for c in p1]))
-    ta.META_LISTS = _saved5[6]
+    check("...the most played of each first",
+          {c.key for c in p1 if c.meta_rank} == {_k(ME1), _k(ME2)},
+          str([(c.key, c.meta_rank) for c in p1]))
+    ta.META_PER_FAMILY = _saved5[10]
+    ta.META_MIN_GAMES = 100
+    ta._COMP_CACHE["by"] = {}
+    p1, _i1 = ta._competitive_pool(7)
+    check("...and a list played under META_MIN_GAMES in the window is not",
+          {c.key for c in p1 if c.meta_rank} == {_k(ME1)},
+          str([(c.key, c.meta_rank) for c in p1]))
+    ta.META_MIN_GAMES = _saved5[11]
     ta._COMP_CACHE["by"] = {}
 
     # A REPLAY reads no game after the day it stands on.
@@ -1976,7 +2004,8 @@ try:
 finally:
     (ta._duel_index, ta._load_cohorts, ta.DUEL_POOL_COHORT, ta.dcx.seeds,
      ta._set_field_rates, ta._today, ta.META_LISTS, ta.CRL_MIN_GAMES,
-     ta._COMP_CACHE["by"], ta._COMP_CACHE["building"]) = _saved5
+     ta._COMP_CACHE["by"], ta._COMP_CACHE["building"],
+     ta.META_PER_FAMILY, ta.META_MIN_GAMES) = _saved5
     ta._COMP_CACHE["by"], ta._COMP_CACHE["building"] = {}, set()
 
 

@@ -1045,6 +1045,30 @@ def _ref_fills(existing, pool, need, *, min_overlap=ts.SAME_DECK_OVERLAP):
     return out
 
 
+def property_band_reads_the_opponent():
+    print("")
+    print("property — 6.0: between near-equal lists of a win condition, the opponent decides")
+    plays = [{"family": "hog", "share": 0.6}, {"family": "giant", "share": 0.4}]
+    # Two Hog Rider lists 0.6 points apart; the weaker one gains far more
+    # against THIS opponent than it does in general (lift).
+    a = p_row("A", {"hog": 62, "giant": 62}, "hog-rider")
+    a["lift"] = 0.5
+    b = p_row("B", {"hog": 61.4, "giant": 61.4}, "hog-rider")
+    b["lift"] = 6.0
+    far = p_row("C", {"hog": 59, "giant": 59}, "hog-rider")
+    far["lift"] = 20.0
+    gol = p_row("D", {"hog": 58, "giant": 58}, "golem")
+    kw = dict(limit=5, by_wincon=True, per_family=1, floor_only=True, specific=False)
+    plain = [r["name"] for r in ts.counters([a, b, far, gol], plays, **kw)]
+    check("without a band the strongest list of a win condition stands", plain == ["A", "D"], str(plain))
+    banded = [r["name"] for r in ts.counters([a, b, far, gol], plays, band=1.0, **kw)]
+    check("within the band the list that answers this opponent stands", banded == ["B", "D"], str(banded))
+    check("...a list outside the band is never preferred, whatever its lift", "C" not in banded)
+    snap = (dict(a), dict(b))
+    ts.counters([a, b, far, gol], plays, band=1.0, **kw)
+    check("...and the caller's rows are not written", (a, b) == snap)
+
+
 def property_speedups_are_exact():
     import random
     print("\nThe speed-ups return exactly what the originals did")
@@ -1430,6 +1454,7 @@ def main() -> int:
     property_counters_not_specific()
     property_wincon_variety_and_floor()
     property_family_cap_and_familiar_first()
+    property_band_reads_the_opponent()
     property_speedups_are_exact()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0

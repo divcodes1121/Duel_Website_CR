@@ -275,7 +275,12 @@ COMFORT_WEIGHT = 1.5
 #: not shown. `scout.diversify` decides the actual count between
 #: `MIN_RECOMMENDATIONS` and this; it is allowed to come back short rather than
 #: pad the list with decks nobody should prepare.
-TOP_N = 10
+#: EVERY WIN CONDITION (6.0, asked for 2026-10-23: "if possible we can show
+#: for all win cons"). More rows than there are win conditions, so a list is
+#: one deck of each win condition that clears the floor, whatever the count.
+ALL_WINCONS = 40
+
+TOP_N = ALL_WINCONS
 
 #: WHOSE DUEL LISTS MAY BE SUGGESTED (2026-10-10, asked for by name: "whatever
 #: duel deck you suggest, make sure it's from the top CRL player and not from
@@ -312,7 +317,7 @@ FIELD_MIN_SHARE = 0.01
 #: the account holder's request (2026-09-21). The board stays readable at ten
 #: teammates because every row is COLLAPSED until opened — the seven decks are
 #: behind one row per player, not seven rows each on screen at once.
-PER_PLAYER_TOP_N = 10
+PER_PLAYER_TOP_N = ALL_WINCONS
 
 #: How many decks a SCOUT folder recommends.
 #:
@@ -327,12 +332,20 @@ PER_PLAYER_TOP_N = 10
 #:
 #: The per-teammate board keeps its own, smaller number — see
 #: `PER_PLAYER_TOP_N`, whose argument was about the board and not the model.
-SCOUT_TOP_N = 10
+SCOUT_TOP_N = ALL_WINCONS
+
+#: The Deck Counter's "bring this against them" list keeps its ten.
+BRING_TOP_N = 10
 
 #: Whether a SCOUTING list (and the Deck Counter's) keeps 4.1's rules for a
 #: counter specific to the opponent (`team_scout.counters(specific=...)`).
 #: Decided by the 5.0 replay; a teammate's list never uses them.
 SCOUT_SPECIFIC = False
+
+#: Points within which the lists of one win condition are told apart by how
+#: specifically they answer THIS opponent (`team_scout.counters(band=...)`,
+#: 6.0): a scouting list, a match plan's folder face and the Deck Counter.
+SCOUT_BAND = 1.0
 
 #: Lists of one WIN CONDITION (the card) on a scouting list, and on a
 #: teammate's list (5.0). Asked for: "versatility, different win conditions,
@@ -1955,8 +1968,52 @@ CRL_MIN_GAMES = 2
 #: rosters where one deck is on 5-6 of six lists (11 -> 27 of 45). One
 #: player's lists carry real answers.
 
-#: The window's most played vetted lists that join the pool.
+#: The window's most played vetted lists that join the pool — the cap on the
+#: whole meta half (kept for the record; 6.0 caps per win condition instead).
 META_LISTS = 40
+
+# ── 6.0: the meta of every win condition, and CRL lists that are proven ────
+#
+# Reported 2026-10-23 on the live scouting report and match plan: "the decks
+# are very old, not according to the meta and the decks I can see ... similar
+# for all players, just up, down and one difference ... show for all win
+# cons". Measured on that board the same hour (four real opponents, 30 days):
+#
+#   * 473 of the pool's 513 lists were CRL duel lists and 378 of those were
+#     brought by ONE player, 145 of them twice. The list each win condition
+#     was answered with was the luckiest of them: Hog a list one player used
+#     twice, Giant four games, Three Musketeers one player's 9-1 run. A short
+#     run inflates a list's rate, and the most extreme of hundreds of short
+#     runs is what a "best of each win condition" rule finds.
+#   * The meta half was the 40 most played lists overall, so 15 of 22 win
+#     conditions had no meta list in the pool at all — while the duel index
+#     held 500 vetted lists played in the window, 25-35 a win condition, most
+#     with thousands of games. The meta board's top lists (Hog Musketeer
+#     Cannon, Log Bait Rocket Inferno, X-Bow Tesla ...) were never offered.
+#   * Ten win conditions a list, the ten strongest against CRL-level
+#     opponents — who all play the CRL meta — are nearly the same ten for
+#     everyone; four folders shared 2-5 of ten decks and only the order moved.
+#
+# THE POOL IS NOW the window's `META_PER_FAMILY` most played vetted lists of
+# EVERY win condition (`META_MIN_GAMES` games or more in the window), and the
+# CRL group's lists that more than one of them brought (`CRL_MIN_PILOTS`) or
+# that one of them brought `CRL_SOLO_GAMES` times — a staple, not a run.
+# Every win condition is then offered (`ALL_WINCONS`), each with its best
+# list against THIS opponent.
+
+#: Most played lists of each win condition that join the pool.
+META_PER_FAMILY = 8
+
+#: Games a meta list must have been played in the window.
+META_MIN_GAMES = 50
+
+#: A CRL list joins when this many of the group brought it ...
+CRL_MIN_PILOTS = 2
+
+#: ... or one of them brought it this many times.
+CRL_SOLO_GAMES = 10
+
+#: Rows a list may hold: `ALL_WINCONS` (top of the file).
 
 _COMP_LOCK = threading.Lock()
 _COMP_BUILD = threading.Lock()
@@ -2060,7 +2117,26 @@ def _meta_keys(days: int, last: datetime.date) -> tuple[list[tuple[str, str, int
             continue
         rows.append((key, vetted[key], n, state))
     rows.sort(key=lambda r: (-r[2], r[0]))
-    return rows[:META_LISTS], counts
+    # EVERY WIN CONDITION'S MOST PLAYED LISTS (6.0), not the most played
+    # overall: forty of those left most win conditions with no meta list.
+    kept, per = [], {}
+    for r in rows:
+        if r[2] < META_MIN_GAMES:
+            continue
+        fam = _family(r[1], r[0].split(","))[0]
+        if per.get(fam, 0) >= META_PER_FAMILY:
+            continue
+        per[fam] = per.get(fam, 0) + 1
+        kept.append(r)
+    return kept, counts
+
+
+def _crl_proven(v) -> bool:
+    """Whether a CRL list `[games, wins, pilots]` is a staple (6.0): more than
+    one of the group brought it, or one of them brought it often."""
+    games = int(v[0] or 0)
+    pilots = int(v[2] or 0) if len(v) > 2 else 1
+    return pilots >= CRL_MIN_PILOTS or games >= CRL_SOLO_GAMES
 
 
 def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]:
@@ -2082,8 +2158,11 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
         except Exception:  # noqa: BLE001 - the meta half still stands
             traceback.print_exc()
             crl = {}
+    raw_crl = len(crl)
     crl = {k: v for k, v in crl.items()
-           if v[0] >= CRL_MIN_GAMES and len(set(k.split(","))) == 8}
+           if v[0] >= CRL_MIN_GAMES and len(set(k.split(","))) == 8
+           and _crl_proven(v)}
+    info["crlSkipped"] = raw_crl - len(crl)
     meta_rows, counts = _meta_keys(days, last)
 
     seeds: dict[str, tuple[str, dict]] = {}
@@ -3386,7 +3465,7 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             traceback.print_exc()
             extra = []
         return scout.counters(list(own) + extra, plays, limit=limit,
-                              specific=SCOUT_SPECIFIC,
+                              specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True)
 
     per_player = []
@@ -3428,7 +3507,7 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     elif blue:
         recommended = suggested(_distinct(scored), top_n)
     else:
-        recommended = scout.counters(scored, plays, limit=top_n, specific=SCOUT_SPECIFIC,
+        recommended = scout.counters(scored, plays, limit=top_n, specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True)
     recommended = finish(recommended)
     for r in recommended:
@@ -3554,7 +3633,7 @@ def _combined(red: list[dict], cards: list[_Candidate],
     scout.pool_lift(scored)
     scored.sort(key=lambda r: (-r["score"], r["key"]))
     recommended = scout.counters(_distinct(scored), plays, limit=SCOUT_TOP_N,
-                                 specific=SCOUT_SPECIFIC,
+                                 specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True)
 
     # THE DUELS, ROSTER-WIDE: every opponent's own duel games pooled, for the
@@ -3631,7 +3710,7 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
             ctx.prefetch([c.cards for c in cards])
         except Exception:  # noqa: BLE001
             traceback.print_exc()
-    folder = _folder(opp, [], cards, snap, SCOUT_TOP_N, None, ctx, views=True)
+    folder = _folder(opp, [], cards, snap, BRING_TOP_N, None, ctx, views=True)
     return {
         "basis": opp["basis"],
         "battles": opp["battles"],

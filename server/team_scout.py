@@ -359,7 +359,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-5.1"
+BRAIN_VERSION = "team-scout-6.0"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -1738,7 +1738,7 @@ def worst_case(vs, plays, *, share=WORST_SHARE):
 def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
              score_key="recommendationScore", first=None, adjust=None,
              specific=True, per_family=PER_ARCHETYPE, by_wincon=False,
-             floor_only=False):
+             floor_only=False, band=0.0):
     """The decks to bring: the strongest counters to what they play.
 
     `rows` are scored candidates (`score()`'s rows — each is copied, nothing
@@ -1774,6 +1774,13 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     clears it: on Team Analysis no deck expected to lose is shown (asked for
     by name, 2026-10-14).
 
+    `band` (6.0): within one win condition, the lists within `band` points
+    of its strongest are ranked by `lift` instead — how much more they gain
+    against THIS opponent than the typical list does. The card model's terms
+    for a card alone are the same against everybody, so without it the same
+    list of a win condition answered every opponent whose figures were a
+    tenth of a point apart.
+
     `first` is a row (matched by `key`) that leads whatever its figure — the
     #1 a squad assigned this teammate. Each row comes back with `vs` (its rate
     against each family) and `answers` (the families it is the list's best
@@ -1799,6 +1806,22 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         pool.append(c)
     if not pool:
         return []
+    if band > 0:
+        # THE OPPONENT DECIDES BETWEEN NEAR-EQUALS (see `band`): the in-band
+        # lists of a win condition tie at its best value and their lift
+        # breaks the tie, by less than a tenth of a point.
+        def _group(r) -> str:
+            if by_wincon:
+                return str(r.get("winFamily") or r.get("winCon") or "")
+            return r.get("archetype") or ""
+        best: dict[str, float] = {}
+        for c in pool:
+            g = _group(c)
+            best[g] = max(best.get(g, c["_v"]), c["_v"])
+        for c in pool:
+            top = best[_group(c)]
+            if c["_v"] >= top - band and c.get("lift") is not None:
+                c["_v"] = top + 0.001 * max(-50.0, min(50.0, float(c["lift"])))
     pool.sort(key=lambda r: (-r["_v"], r["key"]))
 
     chosen: list[dict] = []

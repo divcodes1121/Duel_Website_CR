@@ -2374,6 +2374,49 @@ twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
 
 
+## Today's meta, for every win condition (`_meta_keys`, `_crl_proven`, `counters(band=)`, 2026-10-23)
+
+Reported on the live scouting report and match plan: *"the decks suggestion are
+very old and not according to the meta and the decks which I can see ... very
+similar for all players, just up, down and one difference ... if possible we can
+show for all win cons"*. Measured on the live answer for a real four-player
+roster (30 days) before anything changed:
+
+- **473 of the pool's 513 lists were CRL duel lists, and 378 of those were
+  brought by ONE player** — 145 of them twice. The deck each win condition was
+  answered with was the luckiest of them: the Hog pick was a list one player used
+  twice, Giant four games, Three Musketeers one player's 9-1 run. A short run
+  inflates a list's rate, and the best of hundreds of short runs is what "the
+  strongest of each win condition" finds. Only **5 of the 40 suggested rows had
+  been played at all in the window** outside that one player's games.
+- **The meta half was the 40 most played lists overall**, so 15 of 22 win
+  conditions had no meta list in the pool — while the duel index held 500 vetted
+  lists played in the window, 25-35 per win condition, most with thousands of
+  games. The meta board's top lists (Hog Musketeer Cannon, Log Bait Rocket
+  Inferno, X-Bow Tesla, E-Giant Lightning ...) were never offered.
+- **Ten win conditions a list**: against CRL-level opponents, who all play the
+  CRL meta, the ten strongest are nearly the same ten for everyone, so four
+  folders shared 2-5 of ten decks and only the order moved.
+
+What 6.0 does (`team_analysis.py`, `team_scout.py`):
+
+- **The meta of every win condition**: the window's `META_PER_FAMILY` (8) most
+  played vetted lists of EACH win condition with `META_MIN_GAMES` (50)+ games in
+  the window (`_meta_keys`), not the 40 most played overall.
+- **CRL lists that are staples**: brought by `CRL_MIN_PILOTS` (2)+ of the group,
+  or `CRL_SOLO_GAMES` (10)+ times by one (`_crl_proven`). The 30-day pool went
+  from 513 lists (506 CRL) to 253 (171 CRL, 147 meta; some are both).
+- **Every win condition**: `ALL_WINCONS` (40) rows on a scouting list, a match
+  plan's folder and each teammate's list — one deck of each win condition that
+  clears 50%. The Deck Counter keeps ten (`BRING_TOP_N`).
+- **The opponent decides between near-equals** (`counters(band=SCOUT_BAND)`,
+  1.0 point): inside one win condition, the lists within a point of the best are
+  ranked by `lift` (how much more they gain against THIS opponent than the typical
+  list). The card model's per-card terms are the same against everyone, so
+  without it one list answered a win condition for every opponent.
+
+Measured and the trade: README "Today's meta, for every win condition".
+
 ## What the best duel players bring (`team_analysis._competitive_pool`, `team_scout.personal_plan`, 2026-10-14)
 
 **Brain `team-scout-5.0`, LIVE since 2026-10-14 (`b25d12e`).** The README's

@@ -59,6 +59,7 @@ bot's SQLite files read-only.
 | **Coach Duel — you against an AI coach** | **LIVE, OPEN TO PRO AND THE THREE-DAY TRIAL since 2026-10-22** (admin only 2026-10-20..22; signed-out and free accounts see the sign-up gate). You coach Blue one game at a time (paste a deck, lock in, the AI's deck flips), best of 3 or 5, stop on a win or play every game; a matchup over 55% wins the game, a close one is rolled. The Red AI coach picks without seeing your deck. Both sides draw from every duel deck grouped by archetype (`duel_archetypes`, CRL lists first), no deck comes back on a rematch or a refresh, and every new start is a new draw; decks are checked to make sense. Clash Royale's Blue and Red Kings over an arena floor. **Since 2026-10-22 (`ff016d3`, `382647d`) two coaches can play each other online**: the host sets the format and a deck clock (2-5 min or no limit), shares a room link, the other coach joins with their own player, both lock in blind and the server decides each game; out of time loses that game. Its landing panel is the same size as the other four. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) and [Two coaches online: rooms](#two-coaches-online-rooms-2026-10-22) |
 | **Find a player by name** | **LIVE 2026-10-19 as `6f6a1df`** (server by scp first, backups `*.bak-20261019-100059-prenamesearch`, only royalweb restarted; the site reported the commit 60 s after the push; 9/9 in a real browser on https://deckkies.com signed out, the dropdown filled 460 ms after the last key). Asked, with RoyaleAPI's search pasted: type a name, see the players who carry it, fast. Every search field (top bar, player screen, landing hero) now lists up to seven players as you type, with their tags, and "View all N results" opens `#/search?q=` with the top 100. The server reads its own trigram index of the bot's 5,898,255 stored names (`server/name_index.py`, refreshed after every poll), never the bot's table: a scan of that table measured 0.6 s warm / 4.6 s cold, the index answers in 13 ms median, 39 ms worst, and a request from India is ~0.35 s on an open connection. 643 MB on disk, bounded to names seen in the last 304 days. See [Find a player by name](#find-a-player-by-name-2026-10-19) |
 | **When something breaks: a 404 page with a three.js game, an outage page that reloads itself, and watchdogs** | **2026-10-19.** After the VPS was powered off for half an hour on 2026-10-18 and every search hung for 200+ s: a slow request now asks whether the server is alive and gives up in seconds; an outage page (with the game) re-checks on its own and reloads when the server is back; unknown routes and wrong URLs get a 404 page with the same game; a crashed screen gets the page instead of a blank site; a watchdog on the VPS restarts the API when it stops answering or loses sight of its database; a GitHub workflow emails when the site is down and can start a stopped VPS once Contabo API keys are added. See [When something breaks](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19) |
+| **Team Analysis suggests today's meta, for every win condition (`team-scout-6.0`)** | **LIVE SINCE 2026-10-23 (server).** Reported: *"decks very old, not according to the meta ... similar for all players, just up and down"*. Measured on the live answer: 378 of the pool's 506 CRL lists were one player's, and each win condition was answered by the luckiest short run; only 40 meta lists were in the pool, so 15 of 22 win conditions had none. Now the pool is the 8 most played lists of every win condition in the window plus CRL lists two of the group brought (or one of them 10+ times), every win condition over 50% is shown, and inside a win condition the opponent decides between near-equal lists. Same roster: rows played in the window 12% -> 68%, top-ten figure 58.5 -> 59.4. See [Today's meta, for every win condition](#todays-meta-for-every-win-condition-team-scout-60-2026-10-23) |
 | **Team Analysis suggests what the best duel players bring, and a list per teammate (`team-scout-5.0`)** | **LIVE SINCE 2026-10-14 as `b25d12e`.** Reported: *"the recommendation decks are so trash ... random decks, decks repetitive for more players"*. Measured on live answers: about 1 row in 7 was a list the CRL group brought to duels; a 4v4 plan's 160 rows held 67 decks and all four teammates got the same four against one opponent. Now the pool is the window's CRL duel lists (2+ games) and its 40 most played lists, nothing else; a scouting list is ten different win conditions, none under 50%, spread across the roster; a match plan builds each teammate's list from the win conditions they play, rated with their own record, one teammate a deck, and a lineup pairs every opponent with a teammate. Blind on 300 opponents: rows the CRL group brought 36.7% -> 96.7%, the #1 the same (+0.10), the rest of a list about half a point lower; match plans: distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15. See [What the best duel players bring](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14) |
 | **Coach Assist reads how each player plays: win-condition tags and a recommendation of their own** | **2026-10-12.** Asked: rate players by the decks they play, how much, and their win rate across every win condition in the 7D / 14D / 30D window, and make the recommendation each player's own. Measured: how much a win condition is played predicts nothing, the win rate against a player's own average does not help; their duel record with it against what each game should have gone does (lowest fifth -4.9 points, highest +8.1; CRL games 0.5924 -> 0.5875 log loss). A skill table for 13,494 duel players, rebuilt after every poll, is in every Coach Assist figure; a profile per player and per window is on the screen. See [How each player plays](#how-each-player-plays-win-condition-tags-and-a-recommendation-of-their-own-2026-10-12) |
 | **Coach Assist finds counters to what the opponent brings** | **2026-10-12.** Asked: the Suggestion opens with the player's own recent duel decks; it should analyse what the opponent opens with, find counters among the meta decks and the CRL players' duel decks, and do the same after each game. Measured blind first (323 real duel openings, an independent judge): the old pick rated 50.4% against the deck opponents really opened with, the first counter 60.7%, the answer as built 58.4% (+8.0 [+6.5, +9.5]). A block of five counters under "Play this" at every stage, counters in the set and the options, the card model in every Coach Assist rate, a correction to the win chance between two known players, and no card-level term in a friendly duel (it is played at a cap). Also measured: a deck new to the pilot costs nothing we could find, and opponents do not counter-pick inside a duel. LIVE as `9f436cc` + `715be7e`, 45 of 45 signed in on production. See [Counters to what they bring](#counters-to-what-they-bring-2026-10-12) |
@@ -243,6 +244,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27e. [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10)
 27f. [Counters read the cards](#counters-read-the-cards-2026-10-11)
 27g. [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11)
+27g2. [Today's meta, for every win condition](#todays-meta-for-every-win-condition-team-scout-60-2026-10-23)
 27h. [What the best duel players bring, and a list per teammate](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14)
 28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
 29. [The layout engine — measure, then commit](#the-layout-engine--measure-then-commit)
@@ -13451,6 +13453,68 @@ the `.js` and the `.css`) and then never committed. See
 import is eager until that is fixed, and the reason is written at the import.
 
 ---
+
+## Today's meta, for every win condition (team-scout-6.0, 2026-10-23)
+
+Reported on the live scouting report and match plan: *"the decks suggestion are
+very old and not according to the meta and the decks which I can see ... very
+similar for all players, just up, down and one difference ... if possible we can
+show for all win cons"*. Measured on the live answer for a real four-player
+roster (30 days) before anything changed:
+
+- **473 of the pool's 513 lists were CRL duel lists, and 378 of those were
+  brought by ONE player** — 145 of them twice. The deck each win condition was
+  answered with was the luckiest of them: the Hog pick was a list one player used
+  twice, Giant four games, Three Musketeers one player's 9-1 run. A short run
+  inflates a list's rate, and the best of hundreds of short runs is what "the
+  strongest of each win condition" finds. Only **5 of the 40 suggested rows had
+  been played at all in the window** outside that one player's games.
+- **The meta half was the 40 most played lists overall**, so 15 of 22 win
+  conditions had no meta list in the pool — while the duel index held 500 vetted
+  lists played in the window, 25-35 per win condition, most with thousands of
+  games. The meta board's top lists (Hog Musketeer Cannon, Log Bait Rocket
+  Inferno, X-Bow Tesla, E-Giant Lightning ...) were never offered.
+- **Ten win conditions a list**: against CRL-level opponents, who all play the
+  CRL meta, the ten strongest are nearly the same ten for everyone, so four
+  folders shared 2-5 of ten decks and only the order moved.
+
+What 6.0 does (`team_analysis.py`, `team_scout.py`):
+
+- **The meta of every win condition**: the window's `META_PER_FAMILY` (8) most
+  played vetted lists of EACH win condition with `META_MIN_GAMES` (50)+ games in
+  the window (`_meta_keys`), not the 40 most played overall.
+- **CRL lists that are staples**: brought by `CRL_MIN_PILOTS` (2)+ of the group,
+  or `CRL_SOLO_GAMES` (10)+ times by one (`_crl_proven`). The 30-day pool went
+  from 513 lists (506 CRL) to 253 (171 CRL, 147 meta; some are both).
+- **Every win condition**: `ALL_WINCONS` (40) rows on a scouting list, a match
+  plan's folder and each teammate's list — one deck of each win condition that
+  clears 50%. The Deck Counter keeps ten (`BRING_TOP_N`).
+- **The opponent decides between near-equals** (`counters(band=SCOUT_BAND)`,
+  1.0 point): inside one win condition, the lists within a point of the best are
+  ranked by `lift` (how much more they gain against THIS opponent than the typical
+  list). The card model's per-card terms are the same against everyone, so
+  without it one list answered a win condition for every opponent.
+
+Same four opponents, old live answer vs 6.0 (staged, then live):
+
+| | 5.1 | **6.0** |
+|---|---|---|
+| Rows per opponent | 10 | **17-19** (every win condition over 50%) |
+| Suggested rows played in the window | 12% | **68%** |
+| Rows that are meta lists | 0% | **38%** |
+| Top ten, mean figure | 58.5 | **59.4** |
+| #1, mean figure | 63.0 | **63.7** |
+| Win conditions answered with a different list for different opponents | 8 of 11 | **14 of 20** |
+| Rows under 50% | 0 | 0 |
+| Scouting report, 4 players | 10-11 s | 4.6-14 s |
+
+**A trade, said**: 5.1 measured a staple rule (two of the group, or one of them
+five times) blind and found every figure 0.5 points worse. 6.0 accepts that risk
+for lists people actually play now; its own figures did not drop on this roster
+because real meta lists are now in the pool. Not re-replayed blind.
+
+Undo without a deploy: restore `team_{analysis,scout}.py.bak-20261023-181706-prets6`
+on the VPS and restart royalweb.
 
 ## What the best duel players bring, and a list per teammate (team-scout-5.0, 2026-10-14)
 
