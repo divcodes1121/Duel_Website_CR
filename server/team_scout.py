@@ -359,7 +359,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-6.0"
+BRAIN_VERSION = "team-scout-6.1"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -1793,6 +1793,9 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         if "vs" not in c:
             c["vs"] = vs_archetypes(c)
         c["_v"] = float(c.get(score_key) or 0.0) + (float(adjust(c)) if adjust else 0.0)
+        # HOW MANY TOP PLAYERS USE IT (6.1, `useBonus`, stamped by the caller):
+        # points in the choosing only, never in the figure.
+        c["_v"] += float(c.get("useBonus") or 0.0)
         c["worst"] = worst_case(c["vs"], plays)
         if c["worst"] is not None and c["worst"]["rate"] < WORST_FLOOR:
             c["_v"] -= HOLE_COST
@@ -2436,7 +2439,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
         for r in rows:
             if r.get("owner") or _rate(r) < FLOOR_RATE:
                 continue
-            claim = r["personalScore"] + CLAIM_WEIGHT * float(r.get("winConShare") or 0.0)
+            claim = (r["personalScore"] + CLAIM_WEIGHT * float(r.get("winConShare") or 0.0)
+                     + float(r.get("useBonus") or 0.0))
             claims.append((-claim, order[tag], r["key"], tag, r))
     claims.sort(key=lambda c: c[:3])
     taken: dict[str, int] = {}

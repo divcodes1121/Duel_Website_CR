@@ -59,6 +59,7 @@ bot's SQLite files read-only.
 | **Coach Duel — you against an AI coach** | **LIVE, OPEN TO PRO AND THE THREE-DAY TRIAL since 2026-10-22** (admin only 2026-10-20..22; signed-out and free accounts see the sign-up gate). You coach Blue one game at a time (paste a deck, lock in, the AI's deck flips), best of 3 or 5, stop on a win or play every game; a matchup over 55% wins the game, a close one is rolled. The Red AI coach picks without seeing your deck. Both sides draw from every duel deck grouped by archetype (`duel_archetypes`, CRL lists first), no deck comes back on a rematch or a refresh, and every new start is a new draw; decks are checked to make sense. Clash Royale's Blue and Red Kings over an arena floor. **Since 2026-10-22 (`ff016d3`, `382647d`) two coaches can play each other online**: the host sets the format and a deck clock (2-5 min or no limit), shares a room link, the other coach joins with their own player, both lock in blind and the server decides each game; out of time loses that game. Its landing panel is the same size as the other four. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) and [Two coaches online: rooms](#two-coaches-online-rooms-2026-10-22) |
 | **Find a player by name** | **LIVE 2026-10-19 as `6f6a1df`** (server by scp first, backups `*.bak-20261019-100059-prenamesearch`, only royalweb restarted; the site reported the commit 60 s after the push; 9/9 in a real browser on https://deckkies.com signed out, the dropdown filled 460 ms after the last key). Asked, with RoyaleAPI's search pasted: type a name, see the players who carry it, fast. Every search field (top bar, player screen, landing hero) now lists up to seven players as you type, with their tags, and "View all N results" opens `#/search?q=` with the top 100. The server reads its own trigram index of the bot's 5,898,255 stored names (`server/name_index.py`, refreshed after every poll), never the bot's table: a scan of that table measured 0.6 s warm / 4.6 s cold, the index answers in 13 ms median, 39 ms worst, and a request from India is ~0.35 s on an open connection. 643 MB on disk, bounded to names seen in the last 304 days. See [Find a player by name](#find-a-player-by-name-2026-10-19) |
 | **When something breaks: a 404 page with a three.js game, an outage page that reloads itself, and watchdogs** | **2026-10-19.** After the VPS was powered off for half an hour on 2026-10-18 and every search hung for 200+ s: a slow request now asks whether the server is alive and gives up in seconds; an outage page (with the game) re-checks on its own and reloads when the server is back; unknown routes and wrong URLs get a 404 page with the same game; a crashed screen gets the page instead of a blank site; a watchdog on the VPS restarts the API when it stops answering or loses sight of its database; a GitHub workflow emails when the site is down and can start a stopped VPS once Contabo API keys are added. See [When something breaks](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19) |
+| **Team Analysis suggests what the top 1,000 players use, re-read every poll (`team-scout-6.1`)** | **LIVE SINCE 2026-10-24 (server + client).** Reported: *"decks not used by top players — target the top 1k and the CRL duel list, set the frequency like that ... the top 1000 changes every poll"*. `top_decks.py` reads the LIVE ranked board's top 1,000 after every poll and counts their ranked lists (no tags stored); the pool is lists 3+ of them used for 30+ games plus CRL staples; a list's choosing gains half a point per doubling of its users. Same roster: 82% of rows are top-1000 lists, median 13 top players behind a row, #1 63.0 -> 64.8. See [What the top 1,000 players use](#what-the-top-1000-players-use-re-read-every-poll-team-scout-61-2026-10-24) |
 | **Team Analysis suggests today's meta, for every win condition (`team-scout-6.0`)** | **LIVE SINCE 2026-10-23 (server).** Reported: *"decks very old, not according to the meta ... similar for all players, just up and down"*. Measured on the live answer: 378 of the pool's 506 CRL lists were one player's, and each win condition was answered by the luckiest short run; only 40 meta lists were in the pool, so 15 of 22 win conditions had none. Now the pool is the 8 most played lists of every win condition in the window plus CRL lists two of the group brought (or one of them 10+ times), every win condition over 50% is shown, and inside a win condition the opponent decides between near-equal lists. Same roster: rows played in the window 12% -> 68%, top-ten figure 58.5 -> 59.4. See [Today's meta, for every win condition](#todays-meta-for-every-win-condition-team-scout-60-2026-10-23) |
 | **Team Analysis suggests what the best duel players bring, and a list per teammate (`team-scout-5.0`)** | **LIVE SINCE 2026-10-14 as `b25d12e`.** Reported: *"the recommendation decks are so trash ... random decks, decks repetitive for more players"*. Measured on live answers: about 1 row in 7 was a list the CRL group brought to duels; a 4v4 plan's 160 rows held 67 decks and all four teammates got the same four against one opponent. Now the pool is the window's CRL duel lists (2+ games) and its 40 most played lists, nothing else; a scouting list is ten different win conditions, none under 50%, spread across the roster; a match plan builds each teammate's list from the win conditions they play, rated with their own record, one teammate a deck, and a lineup pairs every opponent with a teammate. Blind on 300 opponents: rows the CRL group brought 36.7% -> 96.7%, the #1 the same (+0.10), the rest of a list about half a point lower; match plans: distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15. See [What the best duel players bring](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14) |
 | **Coach Assist reads how each player plays: win-condition tags and a recommendation of their own** | **2026-10-12.** Asked: rate players by the decks they play, how much, and their win rate across every win condition in the 7D / 14D / 30D window, and make the recommendation each player's own. Measured: how much a win condition is played predicts nothing, the win rate against a player's own average does not help; their duel record with it against what each game should have gone does (lowest fifth -4.9 points, highest +8.1; CRL games 0.5924 -> 0.5875 log loss). A skill table for 13,494 duel players, rebuilt after every poll, is in every Coach Assist figure; a profile per player and per window is on the screen. See [How each player plays](#how-each-player-plays-win-condition-tags-and-a-recommendation-of-their-own-2026-10-12) |
@@ -244,6 +245,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27e. [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10)
 27f. [Counters read the cards](#counters-read-the-cards-2026-10-11)
 27g. [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11)
+27g1. [What the top 1,000 players use, re-read every poll](#what-the-top-1000-players-use-re-read-every-poll-team-scout-61-2026-10-24)
 27g2. [Today's meta, for every win condition](#todays-meta-for-every-win-condition-team-scout-60-2026-10-23)
 27h. [What the best duel players bring, and a list per teammate](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14)
 28. [Every deck can be copied and opened in the game](#every-deck-can-be-copied-and-opened-in-the-game)
@@ -13453,6 +13455,61 @@ the `.js` and the `.css`) and then never committed. See
 import is eager until that is fixed, and the reason is written at the import.
 
 ---
+
+## What the top 1,000 players use, re-read every poll (team-scout-6.1, 2026-10-24)
+
+Asked hours after 6.0: *"still the decks suggested are very bad and those decks
+are not used by top players — target the top 1k players as a deck suggestion,
+and the CRL duel list, and set the frequency like that"*, then *"the top 1000
+changes every time the bot polls ... so that we get fresh decks every time"*.
+6.0's meta half was the most played vetted lists of the WHOLE ladder, which is
+mostly not the top of it.
+
+- **`server/top_decks.py`** (`top-decks-1.0`) reads the top 1,000 of the LIVE
+  ranked board (`/locations/global/pathoflegend/players` — the season being
+  played; the season-numbered board the recruiter reads is last month's and does
+  not move) and counts every ranked game (Path of Legends + trophy road) each
+  of them played in 90 days, by exact list and day. `.top_decks.json`
+  (gitignored, mode 600) holds NO TAGS — a player is their place in the board.
+  A step of `after_poll.py`, so it is rebuilt after every poll (~100-200 s);
+  untracked climbers are queued (`recruit.enqueue`, source `top-live`) so their
+  games are collected from the next poll on. The live board answers 500 now and
+  then: a page is tried four times, and if it still fails the LAST FILE IS KEPT
+  (the first deploy's build fell back to a finished season and read June's
+  board). Measured 2026-10-24: 1,000 players,
+  936 with stored ranked games, 30,154 lists. `topDecks` on `/status`.
+- **The pool's meta half is now those lists**: `TOP_MIN_PLAYERS` (3) of the top
+  1,000 used it with `TOP_MIN_GAMES` (30) games between them in the window, the
+  `TOP_PER_FAMILY` (10) most used of each win condition (`_top_keys`). 6.0's
+  ladder meta is read only when the file is missing. CRL staples need two of the
+  group or one of them `CRL_SOLO_GAMES` (now 20) times.
+- **Frequency in the choosing** (`use_bonus`, `useBonus` on a row):
+  `TOP_USE_WEIGHT` 0.5 points per doubling of the players who use a list, at
+  most 3 — a list three of them use must rate about two points better than one
+  eighty use. Never in the printed figure.
+- Screen: pill `Top 1k list` (blue) with the tooltip `Used by 32 of the top 1,000
+  players · 1,222 ranked games · 52% won` (plus the CRL line when both); the
+  pool line `206 top 1k lists + 132 CRL duel lists · last 30 days`.
+
+Staged first with "two of them, or one of them 20 times": whole win conditions
+were one person's deck (an Elite Barbarians list two top players used for three
+games; a Mega Knight list one of them played 1,047 times) — hence three players
+and thirty games, and no one-player route.
+
+Same four opponents, 30 days:
+
+| | 5.1 (morning) | 6.0 | **6.1** |
+|---|---|---|---|
+| Pool | 513 (506 CRL) | 253 | **271**: 206 top-1000 + 132 CRL (some both) |
+| Rows that are lists the top 1,000 use | — | — | **82%** (rest CRL staples) |
+| Median top-1000 players behind a row | — | — | **13** (3 before the frequency rule) |
+| Top ten, mean figure | 58.5 | 59.4 | **59.2** |
+| #1, mean figure | 63.0 | 63.7 | **64.8** |
+| Rows under 50% | 0 | 0 | 0 |
+
+Undo without a deploy: `mv .top_decks.json{,.off}` on the VPS (6.0's ladder
+meta returns at the next pool build); or restore
+`*.bak-<stamp>-prets61` and restart royalweb.
 
 ## Today's meta, for every win condition (team-scout-6.0, 2026-10-23)
 

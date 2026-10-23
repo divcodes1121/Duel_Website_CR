@@ -653,6 +653,14 @@ class Handler(BaseHTTPRequestHandler):
                     out["playerSkill"] = player_skill.status()
                 except Exception:  # noqa: BLE001
                     out["playerSkill"] = None
+                # WHAT THE LIVE TOP 1,000 RANKED PLAYERS PLAY (Team Analysis's
+                # pool since 6.1), rebuilt every poll. Counts only, never a
+                # tag; `builtAt` going stale is a stopped updater.
+                try:
+                    import top_decks
+                    out["topDecks"] = top_decks.status()
+                except Exception:  # noqa: BLE001
+                    out["topDecks"] = None
                 # THE CARD MANUAL the brain is reading: how many cards have an
                 # entry, and the newest patch in its balance log. It is pushed
                 # as data, without a deploy, so this is the only place that

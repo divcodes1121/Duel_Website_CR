@@ -12,7 +12,7 @@ import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
 import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import { VsMark } from '../../VsMark/VsMark';
-import { crlTitle, duelChip, duelDeckLabel, duelTitle } from '../../../utils/duelFigures';
+import { duelChip, duelDeckLabel, duelTitle, originTitle } from '../../../utils/duelFigures';
 import { balanceChips, chipLabels, recentTitle } from '../../../utils/bringAgainst';
 import { CARDS_BY_KEY } from '../../../data/cards';
 import styles from './TeamAnalysis.module.css';
@@ -306,7 +306,7 @@ function Recommendation({ rec, rank, labels }: {
               teammate's own first — and the label is what says why a deck the
               ladder ranks lower sits this high. */}
           {duelDeckLabel(rec) && (
-            <span className={styles.recDuel} data-origin={rec.origin} title={crlTitle(rec)}>
+            <span className={styles.recDuel} data-origin={rec.origin} title={originTitle(rec)}>
               {duelDeckLabel(rec)}
             </span>
           )}

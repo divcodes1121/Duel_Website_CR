@@ -1474,6 +1474,11 @@
   background: var(--solid-maroon);
 }
 
+/* 6.1: a list the live top 1,000 ranked players use (blue). */
+.recDuel[data-origin='top'] {
+  background: var(--solid-blue);
+}
+
 /* A win condition this teammate does not play. Ink, not a pill: it is a fact
    about the teammate, said after who plays the deck. */
 .recNew {

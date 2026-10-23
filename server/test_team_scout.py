@@ -1068,6 +1068,17 @@ def property_band_reads_the_opponent():
     ts.counters([a, b, far, gol], plays, band=1.0, **kw)
     check("...and the caller's rows are not written", (a, b) == snap)
 
+    # 6.1: HOW MANY TOP PLAYERS USE A LIST weighs in the choosing, not the figure.
+    rare = p_row("A", {"hog": 63, "giant": 63}, "hog-rider")
+    used = p_row("B", {"hog": 61.5, "giant": 61.5}, "hog-rider")
+    used["useBonus"] = 2.5
+    got = ts.counters([rare, used], plays, **kw)
+    check("a list many top players use is chosen over a rarer one a little stronger",
+          [r["name"] for r in got] == ["B"], str([r["name"] for r in got]))
+    check("...and its figure is printed as rated", got[0]["expectedWinRate"] == 61.5)
+    used["useBonus"] = 0.5
+    check("...but not over one clearly stronger", [r["name"] for r in ts.counters([rare, used], plays, **kw)] == ["A"])
+
 
 def property_speedups_are_exact():
     import random

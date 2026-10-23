@@ -274,7 +274,7 @@ function optionLine(r: TeamRecommendation, rank: number, labels: [string, string
     name: r.name,
     badge: r.squadPick
       ? { text: 'Squad pick', hue: 'green' }
-      : duelDeckLabel(r) ? { text: duelDeckLabel(r) as string, hue: r.origin === 'crl' ? 'green' : 'pink' }
+      : duelDeckLabel(r) ? { text: duelDeckLabel(r) as string, hue: r.origin === 'crl' ? 'green' : r.origin === 'top' ? 'blue' : 'pink' }
         : deckkies ? { text: 'Deckkies pick', hue: 'violet' } : undefined,
     meta: meta.join(' · '),
     value: pct(r.expectedWinRate),

@@ -139,6 +139,13 @@ export function recentTitle(recent: TeamRecommendation['recent']): string | unde
 /** `543 of 786 decks in play · last 7 days` — what the day window kept of the
  *  pool. Undefined when the window was not applied (the whole pool was used). */
 export function windowLabel(w: PoolWindow | null | undefined): string | undefined {
+  // 6.1: what the live top 1,000 used in the window, and the CRL group's lists.
+  if (w && w.topLists && w.days) {
+    return (
+      `${w.topLists.toLocaleString('en-US')} top 1k lists + ` +
+      `${(w.crlLists ?? 0).toLocaleString('en-US')} CRL duel lists · last ${w.days} days`
+    );
+  }
   // Brain 5.0: the pool IS the window's — the CRL group's duel lists in it and
   // its most played lists.
   if (w && w.crlLists !== undefined && w.days) {
@@ -156,6 +163,13 @@ export function windowLabel(w: PoolWindow | null | undefined): string | undefine
 
 /** The tooltip of that count: which lists were left out, in figures. */
 export function windowTitle(w: PoolWindow | null | undefined): string | undefined {
+  if (w && w.topLists && w.days) {
+    return (
+      `Suggestions come from the decks the top 1,000 ranked players used from ${w.from} to ${w.to} ` +
+      `(three or more of them), and the decks CRL players brought to duels in those days. ` +
+      `No deck expected to lose is listed.`
+    );
+  }
   if (w && w.crlLists !== undefined && w.days) {
     return (
       `Suggestions come from the decks CRL players brought to duels from ${w.from} to ${w.to} ` +

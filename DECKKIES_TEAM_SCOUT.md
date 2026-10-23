@@ -856,6 +856,61 @@ plans fell back to shared lists), and a function `spread` in `_folder` that
 overwrote the folder's archetype bars (a scouting report would not serialise).
 Both have tests that fail on the old code.
 
+## 4r. What the top 1,000 players use, re-read every poll (2026-10-24, brain 6.1)
+
+Asked hours after 6.0: *"still the decks suggested are very bad and those decks
+are not used by top players — target the top 1k players as a deck suggestion,
+and the CRL duel list, and set the frequency like that"*, then *"the top 1000
+changes every time the bot polls ... so that we get fresh decks every time"*.
+6.0's meta half was the most played vetted lists of the WHOLE ladder, which is
+mostly not the top of it.
+
+- **`server/top_decks.py`** (`top-decks-1.0`) reads the top 1,000 of the LIVE
+  ranked board (`/locations/global/pathoflegend/players` — the season being
+  played; the season-numbered board the recruiter reads is last month's and does
+  not move) and counts every ranked game (Path of Legends + trophy road) each
+  of them played in 90 days, by exact list and day. `.top_decks.json`
+  (gitignored, mode 600) holds NO TAGS — a player is their place in the board.
+  A step of `after_poll.py`, so it is rebuilt after every poll (~100-200 s);
+  untracked climbers are queued (`recruit.enqueue`, source `top-live`) so their
+  games are collected from the next poll on. The live board answers 500 now and
+  then: a page is tried four times, and if it still fails the LAST FILE IS KEPT
+  (the first deploy's build fell back to a finished season and read June's
+  board). Measured 2026-10-24: 1,000 players,
+  936 with stored ranked games, 30,154 lists. `topDecks` on `/status`.
+- **The pool's meta half is now those lists**: `TOP_MIN_PLAYERS` (3) of the top
+  1,000 used it with `TOP_MIN_GAMES` (30) games between them in the window, the
+  `TOP_PER_FAMILY` (10) most used of each win condition (`_top_keys`). 6.0's
+  ladder meta is read only when the file is missing. CRL staples need two of the
+  group or one of them `CRL_SOLO_GAMES` (now 20) times.
+- **Frequency in the choosing** (`use_bonus`, `useBonus` on a row):
+  `TOP_USE_WEIGHT` 0.5 points per doubling of the players who use a list, at
+  most 3 — a list three of them use must rate about two points better than one
+  eighty use. Never in the printed figure.
+- Screen: pill `Top 1k list` (blue) with the tooltip `Used by 32 of the top 1,000
+  players · 1,222 ranked games · 52% won` (plus the CRL line when both); the
+  pool line `206 top 1k lists + 132 CRL duel lists · last 30 days`.
+
+Staged first with "two of them, or one of them 20 times": whole win conditions
+were one person's deck (an Elite Barbarians list two top players used for three
+games; a Mega Knight list one of them played 1,047 times) — hence three players
+and thirty games, and no one-player route.
+
+Same four opponents, 30 days:
+
+| | 5.1 (morning) | 6.0 | **6.1** |
+|---|---|---|---|
+| Pool | 513 (506 CRL) | 253 | **271**: 206 top-1000 + 132 CRL (some both) |
+| Rows that are lists the top 1,000 use | — | — | **82%** (rest CRL staples) |
+| Median top-1000 players behind a row | — | — | **13** (3 before the frequency rule) |
+| Top ten, mean figure | 58.5 | 59.4 | **59.2** |
+| #1, mean figure | 63.0 | 63.7 | **64.8** |
+| Rows under 50% | 0 | 0 | 0 |
+
+Undo without a deploy: `mv .top_decks.json{,.off}` on the VPS (6.0's ladder
+meta returns at the next pool build); or restore
+`*.bak-<stamp>-prets61` and restart royalweb.
+
 ## 4q. Today's meta, for every win condition (2026-10-23, brain 6.0)
 
 Reported on the live scouting report and match plan: *"the decks suggestion are

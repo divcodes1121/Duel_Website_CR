@@ -11,7 +11,7 @@ import { CardArt } from './CardArt';
 import { DeckActions } from '../DeckActions/DeckActions';
 import { Tabs } from '../ui/tabs';
 import { drawnDeck, formInferred } from '../../utils/deckSeating';
-import { crlTitle, duelChip, duelDeckLabel, duelTitle } from '../../utils/duelFigures';
+import { duelChip, duelDeckLabel, duelTitle, originTitle } from '../../utils/duelFigures';
 import {
   BRING_VIEWS,
   balanceChips,
@@ -110,7 +110,7 @@ function BringDeck({
         {rank !== undefined && <span className={styles.rank}>{rank}</span>}
         <span className={styles.deckName}>{deck.name}</span>
         {duelDeckLabel(deck) && (
-          <span className={styles.duelPill} data-origin={deck.origin} title={crlTitle(deck)}>
+          <span className={styles.duelPill} data-origin={deck.origin} title={originTitle(deck)}>
             {duelDeckLabel(deck)}
           </span>
         )}

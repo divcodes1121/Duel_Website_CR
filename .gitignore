@@ -217,3 +217,8 @@ server/.coach_rooms.db
 server/.coach_rooms.db-journal
 server/.coach_rooms.db-wal
 server/.coach_rooms.db-shm
+
+# What the live top 1,000 ranked players play (`top_decks.py`), rebuilt after
+# every poll: Team Analysis's pool. No tags inside, kept private anyway.
+server/.top_decks.json
+server/.top_decks.json.tmp

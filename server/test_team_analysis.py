@@ -1028,7 +1028,7 @@ finally:
 
 print(NL + "counters to what they play")
 
-check("the brain is 6.0", ts.BRAIN_VERSION == "team-scout-6.0" and folder["brain"] == ts.BRAIN_VERSION)
+check("the brain is 6.1", ts.BRAIN_VERSION == "team-scout-6.1" and folder["brain"] == ts.BRAIN_VERSION)
 
 # DUEL LISTS COME FROM THE NAMED GROUP ONLY, and every pool list knows its own
 # rate against the field.
@@ -1816,7 +1816,7 @@ _gw_calls = []
 def _gw5(tags, since, until):
     _gw_calls.append((tuple(sorted(tags)), since, until))
     return {_k(CR1): [5, 3, 2], _k(CR2): [2, 1, 2], _k(CR3): [1, 1, 1],
-            _k(CR4): [3, 2, 1], _k(CR5): [5, 4, 1], _k(CR6): [10, 6, 1],
+            _k(CR4): [3, 2, 1], _k(CR5): [5, 4, 1], _k(CR6): [20, 12, 1],
             _k(ME1): [4, 3, 2], _k(SH5): [9, 5, 3]}
 
 
@@ -1835,6 +1835,8 @@ _seeds5 = {"golem": [{"cards": list(ME1), "games": 400, "archetypes": {"xbow": {
            "hog": [{"cards": list(ME2), "games": 300, "archetypes": {}},
                    {"cards": list(ME3), "games": 300, "archetypes": {}},
                    {"cards": list(ME4), "games": 300, "archetypes": {}}]}
+_saved_top = ta._top
+ta._top = None   # the 6.0 meta half; the top-1000 half is tested on its own below
 _saved5 = (ta._duel_index, ta._load_cohorts, ta.DUEL_POOL_COHORT, ta.dcx.seeds,
            ta._set_field_rates, ta._today, ta.META_LISTS, ta.CRL_MIN_GAMES,
            ta._COMP_CACHE["by"], ta._COMP_CACHE["building"],
@@ -1865,10 +1867,10 @@ try:
           _k(CR5) not in keys7 and _k(CR4) not in keys7, str(sorted(keys7)))
     check("...two of the group's from two games is, and one player's staple is",
           _k(CR2) in keys7 and _k(CR6) in keys7
-          and ta.CRL_MIN_PILOTS == 2 and ta.CRL_SOLO_GAMES == 10, str(sorted(keys7)))
+          and ta.CRL_MIN_PILOTS == 2 and ta.CRL_SOLO_GAMES == 20, str(sorted(keys7)))
     check("the rule is a staple: pilots, else games",
-          ta._crl_proven([2, 1, 2]) and ta._crl_proven([10, 3, 1])
-          and not ta._crl_proven([9, 9, 1]) and not ta._crl_proven([3, 3]))
+          ta._crl_proven([2, 1, 2]) and ta._crl_proven([20, 3, 1])
+          and not ta._crl_proven([19, 9, 1]) and not ta._crl_proven([3, 3]))
     check("a list that cannot fill all three special slots is not, and is counted",
           _k(SH5) not in keys7 and i7["slotGaps"] == 1, str(i7.get("slotGaps")))
     check("the window's played vetted lists are in it; one fading out of it is not",
@@ -1888,7 +1890,8 @@ try:
     check("the pool says what it holds, and over which days",
           i7["days"] == 7 and i7["from"] == "2026-10-08" and i7["to"] == "2026-10-14"
           and i7["group"] == "crl" and i7["crlLists"] == 4 and i7["metaLists"] == 3
-          and i7["crlGames"] == 21 and i7["pool"] == 6 and i7["crlSkipped"] == 3,
+          and i7["crlGames"] == 31 and i7["pool"] == 6 and i7["crlSkipped"] == 3
+          and i7["topLists"] == 0 and i7["top"]["reason"] in ("no_file", "no_module"),
           str(ta._pool_public(i7)))
     check("...and a meta list's play in the window rides on its row (`states`)",
           i7["states"].get(_k(ME1))[1] == 120 and "states" not in ta._pool_public(i7),
@@ -1989,6 +1992,41 @@ try:
     finally:
         ta._ps = _real_ps
 
+    # 6.1: THE TOP 1,000 PLAYERS' LISTS ARE THE META HALF when there is a file.
+    TP1, TP2, TP3 = cards("tpa"), cards("tpb"), cards("tpc")
+    _topwin = {_k(TP1): [40, 900, 480, "hog"], _k(TP2): [2, 300, 150, "hog"],
+               _k(TP3): [3, 20, 10, "golem"], _k(ME1): [5, 60, 33, "golem"],
+               _k(CR1): [4, 50, 30, ""]}
+    _top_calls = []
+    ta._top = types.SimpleNamespace(
+        PATH="/nonexistent-top-decks",
+        load=lambda: {"season": "live", "players": 1000},
+        window=lambda data, days, last: (_top_calls.append((days, last)), _topwin)[1])
+    ta._COMP_CACHE["by"] = {}
+    pt, it = ta._competitive_pool(7)
+    kt = {c.key: c for c in pt}
+    check("with the top-1000 file, its lists are the meta half (6.0's meta lists are not read)",
+          _k(TP1) in kt and _k(ME2) not in kt and _k(ME4) not in kt and it["metaLists"] == 0,
+          str(sorted(kt)))
+    check("...read over the window asked for, ending on its last day",
+          _top_calls[-1] == (7, _dt5.date(2026, 10, 14)), str(_top_calls[-1:]))
+    check("a list fewer than three top players used is not in, however much one played it",
+          _k(TP2) not in kt and ta.TOP_MIN_PLAYERS == 3)
+    check("...nor one three used for fewer than thirty games", _k(TP3) not in kt and ta.TOP_MIN_GAMES == 30)
+    check("a top list is labelled top and carries its use; one the CRL group brought too keeps both",
+          kt[_k(TP1)].origin == "top" and kt[_k(TP1)].top == [40, 900, 480]
+          and kt[_k(CR1)].origin == "top" and kt[_k(CR1)].crl == [5, 3, 2], str(kt[_k(CR1)].origin))
+    check("the most used lead the pool", pt[0].key == _k(TP1), pt[0].key)
+    check("the pool says how many top lists it holds", it["topLists"] == 3 and it["top"]["season"] == "live",
+          str(ta._pool_public(it)))
+    check("the frequency bonus: half a point a doubling of its users, at most three",
+          ta.use_bonus(kt[_k(TP1)]) == round(0.5 * __import__("math").log2(41), 2)
+          and ta.use_bonus(types.SimpleNamespace(top=[100000, 1, 1], crl=None)) == ta.TOP_USE_CAP == 3.0
+          and ta.use_bonus(types.SimpleNamespace(top=None, crl=[5, 3, 2])) == round(0.5 * __import__("math").log2(3), 2)
+          and ta.use_bonus(types.SimpleNamespace(top=None, crl=None)) == 0.0)
+    ta._top = None
+    ta._COMP_CACHE["by"] = {}
+
     # NO GROUP: the meta half alone, said.
     ta._COMP_CACHE["by"] = {}
     ta._load_cohorts = lambda: {}
@@ -2006,6 +2044,7 @@ finally:
      ta._set_field_rates, ta._today, ta.META_LISTS, ta.CRL_MIN_GAMES,
      ta._COMP_CACHE["by"], ta._COMP_CACHE["building"],
      ta.META_PER_FAMILY, ta.META_MIN_GAMES) = _saved5
+    ta._top = _saved_top
     ta._COMP_CACHE["by"], ta._COMP_CACHE["building"] = {}, set()
 
 

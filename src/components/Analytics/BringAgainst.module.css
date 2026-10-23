@@ -374,3 +374,8 @@
 .duelPill[data-origin='meta'] {
   background: var(--solid-maroon);
 }
+
+/* 6.1: a list the live top 1,000 ranked players use (blue). */
+.duelPill[data-origin='top'] {
+  background: var(--solid-blue);
+}

@@ -887,6 +887,8 @@ export interface PoolWindow {
   crlLists?: number;
   crlGames?: number;
   metaLists?: number;
+  /** 6.1: lists the live top 1,000 ranked players used in the window. */
+  topLists?: number;
 }
 
 /** Which way a list's share of the pool's play moved, window against the days
@@ -2745,10 +2747,13 @@ export interface TeamRecommendation {
    *  of the window's most played lists. `ladder` / `duel` are 4.1's (the duel
    *  catalogue, the vetted ladder seeds), still sent by the Deck Counter of an
    *  older server. Absent on a teammate's own deck. */
-  origin?: 'ladder' | 'duel' | 'crl' | 'meta';
+  origin?: 'ladder' | 'duel' | 'crl' | 'meta' | 'top';
   /** The CRL group's duel games with this list in the window, how many they
    *  won and how many of them brought it (5.0). */
   crl?: { games: number; wins: number; pilots: number };
+  /** 6.1: how many of the live top 1,000 ranked players used this list in the
+   *  window, their ranked games with it and how many they won. */
+  top?: { players: number; games: number; wins: number };
   /** Its rank among the window's most played lists (5.0), 1 = most played. */
   metaRank?: number;
   /** Its win condition, as `player_skill` names one (a card key). */

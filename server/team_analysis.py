@@ -214,6 +214,14 @@ try:
 except Exception:  # noqa: BLE001 - deployment shape
     _ps = None
 
+#: WHAT THE TOP 1,000 RANKED PLAYERS PLAY (`top_decks`, 2026-10-23): every
+#: ranked list they used, by day, counted without naming anyone. Since 6.1 it
+#: IS the pool's meta half. Soft: without the file the 6.0 meta half stands.
+try:
+    import top_decks as _top
+except Exception:  # noqa: BLE001 - deployment shape
+    _top = None
+
 # ── Floors ──────────────────────────────────────────────────────────────────
 
 #: Squad size cap per side. Mirrors `MAX_SQUAD` in `src/utils/squadParse.ts`,
@@ -1131,7 +1139,7 @@ class _Candidate:
 
     __slots__ = ("cards", "key", "archetype", "name", "art", "inferred", "owner",
                  "games", "wins", "win_rate", "use_rate", "profile", "origin", "memo",
-                 "field", "act", "crl", "meta_rank", "wincon", "family")
+                 "field", "act", "crl", "meta_rank", "wincon", "family", "top")
 
     def __init__(self, deck: dict, owner: dict | None, profile: "_DeckProfile"):
         # WHEN THE LIST WAS PLAYED, for a pool candidate: `{age in days:
@@ -1168,6 +1176,9 @@ class _Candidate:
         # lists. None for a list that is neither (a teammate's own).
         self.crl = None
         self.meta_rank = None
+        # 6.1: `[players, games, wins]` of the top 1,000 ranked players with
+        # this list in the window (`top_decks`). None when they did not play it.
+        self.top = None
         # Its win condition as `player_skill` names one: the key a player's
         # record with it is kept under.
         self.wincon = _wincon(self.cards)
@@ -2010,10 +2021,57 @@ META_MIN_GAMES = 50
 #: A CRL list joins when this many of the group brought it ...
 CRL_MIN_PILOTS = 2
 
-#: ... or one of them brought it this many times.
-CRL_SOLO_GAMES = 10
+#: ... or one of them brought it this many times (10 in 6.0; 20 since 6.1 —
+#: one CRL player's ten duel games still put a Balloon list on every folder).
+CRL_SOLO_GAMES = 20
 
 #: Rows a list may hold: `ALL_WINCONS` (top of the file).
+
+# ── 6.1: the top 1,000 players, and the CRL group ──────────────────────────
+#
+# Asked the same day 6.0 went live: "still the decks suggested are very bad
+# and those decks are not used by top players — target the top 1k players as a
+# deck suggestion, and the CRL duel list, and set the frequency like that".
+# 6.0's meta half was the most played vetted lists of the whole ladder, which
+# is mostly not the top of it.
+#
+# THE META HALF IS NOW what the top 1,000 of the ranked board played in the
+# window (`top_decks`, the LIVE board, rebuilt every poll), by HOW MANY of
+# them used a list: `TOP_MIN_PLAYERS` of them, `TOP_MIN_GAMES` games between
+# them, the `TOP_PER_FAMILY` most used of each win condition. The CRL half is
+# 6.0's staples. Nothing else. Without the file, 6.0's meta half stands.
+#
+# STAGED FIRST WITH TWO OF THEM, OR ONE OF THEM 20 TIMES: whole "win
+# conditions" were one player's deck — an Elite Barbarians list two top players
+# used for three games, a Mega Knight list one of them played 1,047 times. A
+# list one person spams is their taste, not the top of the game.
+
+#: Top players who used a list in the window before it joins the pool ...
+TOP_MIN_PLAYERS = 3
+#: ... and the games they played it between them.
+TOP_MIN_GAMES = 30
+#: The most used lists of each win condition that join.
+TOP_PER_FAMILY = 10
+
+#: HOW OFTEN THE TOP PLAYERS USE A LIST, in the choosing ("set the frequency
+#: like that"): `TOP_USE_WEIGHT` points per doubling of the top players (or
+#: CRL players) who used it in the window, at most `TOP_USE_CAP`. A list three
+#: of them used must rate about two points better than one eighty use to be
+#: chosen over it. Never in the figure printed.
+TOP_USE_WEIGHT = 0.5
+TOP_USE_CAP = 3.0
+
+
+def use_bonus(card) -> float:
+    """`TOP_USE_WEIGHT * log2(1 + users)`, capped: users = the top players
+    with the list in the window, else the CRL players. 0 for anything else."""
+    import math
+    top = getattr(card, "top", None)
+    crl = getattr(card, "crl", None)
+    users = (top[0] if top else 0) or (crl[2] if crl and len(crl) > 2 else 0)
+    if not users:
+        return 0.0
+    return round(min(TOP_USE_CAP, TOP_USE_WEIGHT * math.log2(1 + users)), 2)
 
 _COMP_LOCK = threading.Lock()
 _COMP_BUILD = threading.Lock()
@@ -2131,6 +2189,46 @@ def _meta_keys(days: int, last: datetime.date) -> tuple[list[tuple[str, str, int
     return kept, counts
 
 
+def _top_stamp():
+    try:
+        return os.path.getmtime(_top.PATH) if _top is not None else None
+    except OSError:
+        return None
+
+
+def _top_keys(days: int, last: datetime.date) -> tuple[list[tuple], dict]:
+    """`([(list key, archetype, [players, games, wins])], info)` — the lists the
+    top 1,000 players used in the window ending on `last`, most players first,
+    `TOP_PER_FAMILY` of each win condition (6.1). Empty without the file."""
+    if _top is None:
+        return [], {"reason": "no_module"}
+    try:
+        data = _top.load()
+        got = _top.window(data, days, last) if data else {}
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        return [], {"reason": "failed"}
+    if not got:
+        return [], {"reason": "no_file" if not data else "no_games"}
+    rows = []
+    for key, (players, games, wins, arch) in got.items():
+        if len(set(key.split(","))) != 8:
+            continue
+        if players < TOP_MIN_PLAYERS or games < TOP_MIN_GAMES:
+            continue
+        rows.append((key, arch or "other", [players, games, wins]))
+    rows.sort(key=lambda r: (-r[2][0], -r[2][1], r[0]))
+    kept, per = [], {}
+    for r in rows:
+        fam = _family(r[1], r[0].split(","))[0]
+        if per.get(fam, 0) >= TOP_PER_FAMILY:
+            continue
+        per[fam] = per.get(fam, 0) + 1
+        kept.append(r)
+    return kept, {"season": (data or {}).get("season"), "players": (data or {}).get("players"),
+                  "used": len(got), "eligible": len(rows)}
+
+
 def _crl_proven(v) -> bool:
     """Whether a CRL list `[games, wins, pilots]` is a staple (6.0): more than
     one of the group brought it, or one of them brought it often."""
@@ -2163,7 +2261,13 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
            if v[0] >= CRL_MIN_GAMES and len(set(k.split(","))) == 8
            and _crl_proven(v)}
     info["crlSkipped"] = raw_crl - len(crl)
-    meta_rows, counts = _meta_keys(days, last)
+    top_rows, top_info = _top_keys(days, last)
+    if top_rows:
+        meta_rows, counts = [], {}
+    else:
+        meta_rows, counts = _meta_keys(days, last)
+    info["top"] = top_info
+    info["topLists"] = len(top_rows)
 
     seeds: dict[str, tuple[str, dict]] = {}
     for arch, decks in (dcx.seeds() or {}).items():
@@ -2175,6 +2279,8 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
     wanted: dict[str, dict] = {}
     for rank, (key, arch, n, state) in enumerate(meta_rows, start=1):
         wanted[key] = {"arch": arch, "meta": rank, "state": (state, n)}
+    for rank, (key, arch, rec) in enumerate(top_rows, start=1):
+        wanted[key] = {"arch": arch, "meta": None, "state": None, "top": rec}
     for key, (n, w, pilots) in crl.items():
         e = wanted.setdefault(key, {"arch": None, "meta": None, "state": None})
         e["crl"] = [n, w, pilots]
@@ -2209,16 +2315,20 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
             "cards": cards, "art": art, "inferredArt": inferred,
             "winCondition": arch, "name": cd.deck_title(arch, cards),
             "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
-            "origin": "crl" if e.get("crl") else "meta"}, None, prof)
+            "origin": "top" if e.get("top") else "crl" if e.get("crl") else "meta"},
+            None, prof)
         c.crl = e.get("crl")
         c.meta_rank = e.get("meta")
+        c.top = e.get("top")
         out.append(c)
         if e.get("state"):
             info["states"][c.key] = e["state"]
-    out.sort(key=lambda c: (c.origin != "crl", -(c.crl or [0])[0], c.meta_rank or 0, c.key))
+    out.sort(key=lambda c: (-(c.top or [0])[0], c.origin != "crl", -(c.crl or [0])[0],
+                            c.meta_rank or 0, c.key))
     info["crlLists"] = sum(1 for c in out if c.crl)
     info["crlGames"] = sum((c.crl or [0])[0] for c in out)
     info["metaLists"] = sum(1 for c in out if c.meta_rank)
+    info["topLists"] = sum(1 for c in out if c.top)
     info["pool"] = len(out)
     info["metaStates"] = counts
     _set_field_rates(out)
@@ -2235,7 +2345,7 @@ def _competitive_pool(days: int | None, until: datetime.date | None = None) -> t
     """
     d = pool_days(days)
     last = until or _today()
-    key = _counter_key()
+    key = (_counter_key(), _top_stamp())
     want = (d, last.isoformat())
     with _COMP_LOCK:
         hit = _COMP_CACHE["by"].get(want)
@@ -3127,6 +3237,9 @@ def _finish(rows: list[dict], by_key: dict, threats: list[dict],
         rank = getattr(cand, "meta_rank", None) if cand is not None else None
         if rank:
             r["metaRank"] = rank
+        top = getattr(cand, "top", None) if cand is not None else None
+        if top:
+            r["top"] = {"players": top[0], "games": top[1], "wins": top[2]}
         if ctx is not None and ctx.on and projection:
             try:
                 r["duel"] = ctx.figures(r.get("cards"), projection)
@@ -3336,6 +3449,9 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         for card in pool:
             row = _score(card, threats, snap, ctx, dress=False, table=table)
             if row:
+                bonus = use_bonus(card)
+                if bonus:
+                    row["useBonus"] = bonus
                 rows.append(row)
                 by_key.setdefault(card.key, card)
         # HOW MUCH MORE each list gains against THIS opponent than the typical

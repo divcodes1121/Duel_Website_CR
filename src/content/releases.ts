@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-24-team-scout-top-1000',
+    date: '2026-10-24',
+    kind: 'improved',
+    title: 'Team Analysis suggests what the top 1,000 players use',
+    body: [
+      'Suggested decks now come from what the top 1,000 players of the ranked board are playing right now, and from decks CRL players bring to duels. The board is read again after every update, so as players climb and drop the decks follow.',
+      'A deck counts once at least three of the top 1,000 used it, and the more of them use a deck, the more it is preferred. Each row marked “Top 1k list” says, when you point at it, how many of them use it and how often it won.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-23-team-scout-6',
     date: '2026-10-23',
     kind: 'improved',

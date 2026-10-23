@@ -115,6 +115,10 @@ def main(argv: list[str]) -> int:
         # list's record against every opponent archetype (`duel_archetypes`):
         # what Coach Duel draws both sides' decks from.
         ("duel archetypes", [sys.executable, "-u", os.path.join(HERE, "duel_archetypes.py"), "--build"]),
+        # What the top 1,000 of the LIVE ranked board play (`top_decks`), read
+        # again every poll so the players and their decks move with the board:
+        # Team Analysis's pool. Untracked climbers are queued for the next poll.
+        ("top decks", [sys.executable, "-u", os.path.join(HERE, "top_decks.py"), "--build"]),
         # The deck builder's move set: which cards humans interchange.
         ("swap graph", [sys.executable, "-u", os.path.join(HERE, "swap_graph.py"), "--build"]),
         # The player search's name index (`name_index`): names the bot stored

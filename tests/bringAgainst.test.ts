@@ -292,6 +292,15 @@ describe('the day window reaches the suggestions (2026-10-11)', () => {
     );
   });
 
+  it('6.1: the pool line names the top 1,000 lists beside the CRL ones', () => {
+    const POOL = {
+      days: 30, from: '2026-09-24', to: '2026-10-23', group: 'crl',
+      crlLists: 132, crlGames: 1398, metaLists: 0, topLists: 206,
+    } as unknown as Parameters<typeof windowLabel>[0];
+    expect(windowLabel(POOL)).toBe('206 top 1k lists + 132 CRL duel lists · last 30 days');
+    expect(windowTitle(POOL)).toContain('top 1,000 ranked players used from 2026-09-24 to 2026-10-23');
+  });
+
   it('says nothing when the window was not applied: the whole pool was used', () => {
     expect(windowLabel({ ...WINDOW, applied: false, reason: 'stale' })).toBeUndefined();
     expect(windowLabel({ ...WINDOW, days: null })).toBeUndefined();

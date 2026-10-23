@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { TeamDuelFigures } from '../src/state/analyticsClient';
-import { crlTitle, duelChip, duelDeckLabel, duelPickLabel, duelShort, duelTitle } from '../src/utils/duelFigures';
+import {
+  crlTitle, duelChip, duelDeckLabel, duelPickLabel, duelShort, duelTitle, originTitle, topTitle,
+} from '../src/utils/duelFigures';
 
 /**
  * How the duel brain's figures print, on the screen and in the PDF. One helper
@@ -35,6 +37,18 @@ describe('duelFigures', () => {
       'Brought to 1 duel game by 1 CRL player · 0 won',
     );
     expect(crlTitle({})).toBeUndefined();
+  });
+
+  it('6.1: names a list the top 1,000 use, and says how many of them', () => {
+    expect(duelDeckLabel({ origin: 'top' })).toBe('Top 1k list');
+    expect(topTitle({ top: { players: 32, games: 1222, wins: 640 } })).toBe(
+      'Used by 32 of the top 1,000 players · 1,222 ranked games · 52% won',
+    );
+    expect(topTitle({})).toBeUndefined();
+    expect(originTitle({ top: { players: 3, games: 40, wins: 20 }, crl: { games: 5, wins: 3, pilots: 2 } })).toBe(
+      'Used by 3 of the top 1,000 players · 40 ranked games · 50% won\nBrought to 5 duel games by 2 CRL players · 3 won',
+    );
+    expect(originTitle({})).toBeUndefined();
   });
 
   it('prints the rate to one decimal and the games behind it', () => {
