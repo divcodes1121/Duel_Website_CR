@@ -59,6 +59,23 @@ export type SaveOutcome = { ok: true } | { ok: false; reason: 'full'; limit: num
  */
 const localDecks = browserDeckStorage<PersistedSlice>('royal-duels-builder');
 
+/**
+ * TRUE WHILE THIS TAB TAKES OVER WHAT ANOTHER TAB STORED (see the `storage`
+ * listener at the end of this file). Nothing is written back and nothing is
+ * pushed: the other tab already did both, and writing would only start the
+ * two tabs answering each other.
+ */
+let adoptingOtherTab = false;
+
+/** `localDecks`, except that taking over another tab's decks writes nothing. */
+const persistStorage = localDecks && {
+  ...localDecks,
+  setItem: (name: string, value: Parameters<NonNullable<typeof localDecks>['setItem']>[1]) => {
+    if (adoptingOtherTab) return;
+    return localDecks.setItem(name, value);
+  },
+};
+
 /** Decks 1-3 are always shown; 4 and 5 unlock via the "Add deck slot" button. */
 export const MIN_DECK_SLOTS = 3;
 
@@ -1032,7 +1049,7 @@ export const useBuilderStore = create<BuilderState>()(
          set included, as one value on every change. `deckStorage.ts` keeps the
          library in compressed parts and writes one only when it changes. It
          hands zustand the same slice, so `version` did not move. */
-      storage: localDecks,
+      storage: persistStorage,
       partialize: (state) => ({
         sets: state.sets,
         mode: state.mode,
@@ -1503,6 +1520,8 @@ const stopWaitingForSession = useAccountStore.subscribe((state) => {
 
 // Push whenever the synced slices change while signed in.
 useBuilderStore.subscribe((state, prevState) => {
+  // Decks taken over from another tab were pushed by that tab.
+  if (adoptingOtherTab) return;
   if (
     state.sets !== prevState.sets ||
     state.library !== prevState.library ||
@@ -1512,3 +1531,94 @@ useBuilderStore.subscribe((state, prevState) => {
     schedulePush();
   }
 });
+
+/* ============================================================ two tabs, one set of decks
+ * TWO TABS OF THE SITE USED TO OVERWRITE EACH OTHER (2026-10-23). Each tab
+ * holds the decks in memory and writes ALL of them on every change, so a tab
+ * opened before you added 20 decks in another one still held the old list —
+ * and the next change in it wrote that old list over the new one, here and in
+ * the account. The 20 were gone on the next refresh. Reported exactly so:
+ * "when one refreshes, another goes back to the old one".
+ *
+ * Now a tab takes over what another tab stores the moment it is stored (the
+ * browser's `storage` event fires in every OTHER tab of the site). Only the
+ * decks travel: which mode, folder and slot this tab has open stay its own.
+ */
+
+const STORE_KEY = 'royal-duels-builder';
+
+/** The stored value without `mode`, which is this tab's view and not data. */
+function sharedPart(raw: string | null): string | null {
+  if (raw === null) return null;
+  try {
+    const value = JSON.parse(raw) as { state?: Record<string, unknown> } | null;
+    if (!value?.state) return raw;
+    const rest = { ...value.state };
+    delete rest.mode;
+    return JSON.stringify(rest);
+  } catch {
+    return raw;
+  }
+}
+
+/** Replace this tab's decks with the ones another tab just stored. */
+export function adoptOtherTab(): boolean {
+  const value = localDecks?.getItem(STORE_KEY) as { state?: Partial<PersistedSlice> } | null | undefined;
+  const p = value?.state;
+  if (!p || typeof p !== 'object') return false;
+  const s = useBuilderStore.getState();
+  const paletteFolders = p.paletteFolders ?? [];
+  const activeId = s.activePaletteFolderId;
+  const folder = activeId ? paletteFolders.find((f) => f.id === activeId) : undefined;
+  /* The open folder is rebuilt from the folders, NOT taken from the other
+     tab's `sets.palette`: that is whichever folder THAT tab has open, and an
+     edit here would write it into this tab's folder. */
+  const sets = {
+    ...createDefaultSets(),
+    ...(p.sets ?? {}),
+    palette: folder ?? createPaletteWorkshop(),
+  };
+  const library = p.library ?? [];
+  const sel = s.selectedSlot;
+  const selOk = !!sel && !!sets[sel.owner]?.decks[sel.deckIndex];
+  adoptingOtherTab = true;
+  try {
+    useBuilderStore.setState({
+      sets,
+      library,
+      deckSlotCount: p.deckSlotCount ?? deriveDeckSlotCounts(sets),
+      paletteFolders,
+      activePaletteFolderId: folder ? activeId : null,
+      activeSavedId: library.some((e) => e.id === s.activeSavedId) ? s.activeSavedId : null,
+      selectedSlot: selOk ? sel : null,
+      selectionPinned: selOk ? s.selectionPinned : false,
+      /* Every step on record describes decks this tab no longer shows;
+         undoing one would write the old decks back over the new. */
+      history: emptyHistory(),
+    });
+  } finally {
+    adoptingOtherTab = false;
+  }
+  return true;
+}
+
+try {
+  if (typeof window !== 'undefined' && localDecks) {
+    const area = (() => {
+      try {
+        return localStorage;
+      } catch {
+        return null;
+      }
+    })();
+    window.addEventListener('storage', (e: StorageEvent) => {
+      if (area && e.storageArea !== area) return;
+      if (e.key !== STORE_KEY || e.newValue === null) return;
+      // Only the other tab's mode moved: nothing to take over.
+      if (sharedPart(e.oldValue) === sharedPart(e.newValue)) return;
+      adoptOtherTab();
+    });
+  }
+} catch {
+  /* No window: no other tabs. */
+}

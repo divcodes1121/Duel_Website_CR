@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Two tabs no longer overwrite each other's decks** | **2026-10-23.** Reported: Deck's Home decks saved while two Deckkies tabs were open (copying decks from one into the other) were all gone after a refresh; and "when one refreshes, another goes back to the old one". Each tab held the decks in memory and wrote ALL of them on every change, so the tab opened earlier wrote its older list over the new one, in this browser and in the account. Now a tab takes over what another tab stores the moment it is stored (the browser's `storage` event), keeping only its own mode, open folder and selection; and the account keeps a 30-day copy when Deck's Home or a Counter Palette folder LOSES decks (before, only a shrinking saved library did, which is why the lost decks had no copy). Reproduced in Chrome on the old code (20 added, 0 after refresh) and fixed on the new (20 kept, 9/9). **1,831 vitest.** See [Two tabs open at once](#two-tabs-open-at-once-2026-10-23) |
 | **No grey: black + violet (dark) and violet mist (light)** | **LIVE 2026-10-22 as `e8de10a` (dark) and `17372d8` (light), client only.** Reported: "the whole website has a grey background on every tab"; light "looks transparent". Researched (Linear, Vercel, Stripe, tinted neutrals), rendered options in `testing/palette/` and `testing/light/`, chosen from the screenshots. Dark: panels at the page's black with a violet hint, violet hairlines. Light: lavender page, SOLID near-white cards (were 85% see-through), violet hairlines and shadows. Soft fills in both mix from `--wash-ink` (lilac / violet) instead of white or black. A grey scan of every visible element finds nothing on twelve screens in either theme (the silver #2 medal excepted on dark). See [Light mode is violet mist](#light-mode-is-violet-mist-2026-10-22) and [Dark mode is black + violet](#dark-mode-is-black--violet-no-grey-2026-10-22) |
 | **Lists keep your place** | **LIVE 2026-10-22 as `ba4d907`, client only.** Reported: load a set from Royal Duels' Saved tab, go back, and it was on page 1 again. Every paged and "Show more" list now remembers where you were for the browser tab (a reload keeps it): the Saved page per mode and filter (with the set you loaded scrolled into view), the builder's tab and filter, Recent Battles' page per player and window, 2v2 Decks and All Duels' page and controls, and "Show more" on Decks, Cards and Deck Counter. See [Lists keep your place](#lists-keep-your-place-2026-10-22) |
 | **Coach Duel — you against an AI coach** | **LIVE, OPEN TO PRO AND THE THREE-DAY TRIAL since 2026-10-22** (admin only 2026-10-20..22; signed-out and free accounts see the sign-up gate). You coach Blue one game at a time (paste a deck, lock in, the AI's deck flips), best of 3 or 5, stop on a win or play every game; a matchup over 55% wins the game, a close one is rolled. The Red AI coach picks without seeing your deck. Both sides draw from every duel deck grouped by archetype (`duel_archetypes`, CRL lists first), no deck comes back on a rematch or a refresh, and every new start is a new draw; decks are checked to make sense. Clash Royale's Blue and Red Kings over an arena floor. **Since 2026-10-22 (`ff016d3`, `382647d`) two coaches can play each other online**: the host sets the format and a deck clock (2-5 min or no limit), shares a room link, the other coach joins with their own player, both lock in blind and the server decides each game; out of time loses that game. Its landing panel is the same size as the other four. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) and [Two coaches online: rooms](#two-coaches-online-rooms-2026-10-22) |
@@ -266,6 +267,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 40d. [All Duels — friendly duels that went to three games](#all-duels--friendly-duels-that-went-to-three-games-2026-10-05)
 41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
 41a. [The saved library, in parts](#the-saved-library-in-parts-2026-10-09)
+41a1. [Two tabs open at once](#two-tabs-open-at-once-2026-10-23)
 41b. [The deck report: first N or last N](#the-deck-report-first-n-or-last-n-2026-10-09)
 42. [Two filters and a heading](#two-filters-and-a-heading)
 42a. [One pager, everywhere](#one-pager-everywhere)
@@ -17612,6 +17614,49 @@ without knowing that.
   the new modules), CSS 57.41 -> 57.55.
 
 ---
+
+## Two tabs open at once (2026-10-23)
+
+**Reported:** Deck's Home decks were being saved with two Deckkies tabs open,
+copying from one into the other. After a refresh all 20 new ones were gone;
+and "when one refreshes, another goes back to the old one".
+
+**What happened.** Every tab holds the decks in memory and, on ANY change,
+writes all of them — to this browser (`royal-duels-builder`) and, 1.5 s later,
+to the account. Nothing told a tab that another tab had changed them. So the
+tab that was opened first still held the older list, and its next change (a
+rename, a card moved, anything) wrote that list over the new one in both
+places. The refresh then read the older list. Sync is last-write-wins, and a
+stale tab is exactly a late writer.
+
+**What changed.**
+
+- **A tab takes over what another tab stores, the moment it is stored**
+  (`adoptOtherTab` at the end of `src/state/store.ts`, driven by the browser's
+  `storage` event, which fires in every OTHER tab of the site). Only the decks
+  travel — Deck's Home, the duel boards, saved sets, palette folders. Which mode,
+  folder and slot a tab has open stay that tab's own, and the open folder is
+  rebuilt from the folders rather than taken from the other tab (an edit would
+  otherwise write the other tab's folder into this one). Taking over writes
+  nothing and pushes nothing (the other tab already did both), and clears that
+  tab's undo steps, which describe decks it no longer shows.
+- **The account keeps a copy when built decks shrink**, not only the saved
+  library (`builtDeckCount` in `api/decks.ts`: decks with a card in Deck's Home
+  and in every Counter Palette folder). The previous head goes to
+  `deck-data:user:<id>:v2:prev` for 30 days. Before this, a Deck's Home loss
+  left NOTHING behind, which is why the 20 decks in this report could not be
+  restored from the account.
+
+**What it does not cover.** A tab left open on ANOTHER device, or a page still
+running the code from before this change, can still write an older copy —
+sync is last-write-wins. The second change is the net for that: the copy it
+replaced is kept for a month. A reload of an old tab picks up this fix.
+
+**Checked.** `tests/deckStoreSync.test.ts` gained four tests (two tabs over one
+storage and one account; three go red with the fix switched off). In Chrome,
+two tabs of the local site: tab B adds 20 decks, tab A (opened first) edits,
+both refresh — **old code: 0 decks left; new code: 20, 9/9 checks**. 1,831
+vitest / 80 files, build clean.
 
 ## Two filters and a heading
 

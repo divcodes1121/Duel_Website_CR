@@ -115,9 +115,18 @@ const settle = () => vi.advanceTimersByTimeAsync(0);
 const afterDebounce = () => vi.advanceTimersByTimeAsync(1700);
 
 /** One page load: the store imported fresh over this browser's storage. */
-async function load(storage: FakeStorage, kv: MemoryKV, net: Net, signedInAs: string | null) {
+async function load(
+  storage: FakeStorage,
+  kv: MemoryKV,
+  net: Net,
+  signedInAs: string | null,
+  /** This tab's window, for tests of two tabs. Without one there is none. */
+  win?: FakeWindow,
+) {
   vi.resetModules();
   (globalThis as { localStorage?: unknown }).localStorage = storage;
+  if (win) (globalThis as { window?: unknown }).window = win;
+  else delete (globalThis as { window?: unknown }).window;
 
   type Account = { userId: string | null; ready: boolean };
   let state: Account = { userId: null, ready: false };
@@ -190,6 +199,23 @@ async function load(storage: FakeStorage, kv: MemoryKV, net: Net, signedInAs: st
     },
   };
 }
+
+/** A tab's `window`: just enough for the browser's `storage` event. */
+function fakeWindow() {
+  const listeners: ((e: unknown) => void)[] = [];
+  return {
+    addEventListener(type: string, fn: (e: unknown) => void) {
+      if (type === 'storage') listeners.push(fn);
+    },
+    removeEventListener() {},
+    /** What the browser does in every OTHER tab when one tab stores a value. */
+    storage(storage: FakeStorage, key: string, oldValue: string | null) {
+      const event = { key, oldValue, newValue: storage.data.get(key) ?? null, storageArea: storage };
+      for (const fn of [...listeners]) fn(event);
+    },
+  };
+}
+type FakeWindow = ReturnType<typeof fakeWindow>;
 
 /** A played duel, in the shape the Save duel button hands over. */
 function duel(n: number): PlayedGame[] {
@@ -273,6 +299,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.doUnmock('../src/state/accountStore');
   vi.doUnmock('../src/state/syncClient');
+  delete (globalThis as { window?: unknown }).window;
   if (realLocalStorage) Object.defineProperty(globalThis, 'localStorage', realLocalStorage);
   else delete (globalThis as { localStorage?: unknown }).localStorage;
 });
@@ -715,5 +742,102 @@ describe('whose decks are in this browser', () => {
     await afterDebounce();
     expect((kv.data.get(`deck-data:user:${OTHER}:v2`) as { library: { count: number } }).library.count).toBe(1);
     expect(accountCount(kv)).toBe(450);
+  });
+});
+
+describe('two tabs of the site open at once (2026-10-23)', () => {
+  /* What lost 20 Deck's Home decks: tab A opened, tab B used to add decks,
+     then A — still holding the older list — saved, and wrote it over B's. */
+  const homeKeys = (n: number) => savedSet(n).blue!.decks[0].slots as string[];
+  const built = (decks: { slots: (string | null)[] }[]) => decks.filter((d) => d.slots.some((k) => k)).length;
+
+  async function twoTabs() {
+    const storage = fakeLocalStorage();
+    const kv = memoryKV();
+    const winA = fakeWindow();
+    const winB = fakeWindow();
+    const netA = net();
+    const netB = net();
+    const a = await load(storage, kv, netA, USER, winA);
+    await afterDebounce();
+    const b = await load(storage, kv, netB, USER, winB);
+    await afterDebounce();
+    /** Run `act` in tab B, and tell tab A, as the browser would. */
+    const inB = (act: () => void) => {
+      const old = storage.data.get(NAME) ?? null;
+      act();
+      winA.storage(storage, NAME, old);
+    };
+    return { storage, kv, a, b, netA, netB, inB };
+  }
+
+  it("a tab takes over the decks another tab adds, and its next edit keeps them", async () => {
+    const t = await twoTabs();
+    t.inB(() => {
+      for (let i = 0; i < 20; i += 1) {
+        t.b.S().addHomeDeck();
+        const index = t.b.S().sets.home.decks.length - 1;
+        expect(t.b.S().importDeck('home', index, homeKeys(i + 1))).toBeNull();
+      }
+    });
+    await afterDebounce();
+    const twenty = built(t.b.S().sets.home.decks);
+    expect(twenty).toBe(20);
+    // Tab A shows them without a reload.
+    expect(built(t.a.S().sets.home.decks)).toBe(20);
+
+    // The old tab edits something: the 20 survive, here and in the account.
+    t.a.S().addHomeDeck();
+    t.a.S().importDeck('home', t.a.S().sets.home.decks.length - 1, homeKeys(99));
+    await afterDebounce();
+    const stored = JSON.parse(t.storage.data.get(NAME)!).state.sets.home.decks;
+    expect(built(stored)).toBe(21);
+    expect(built((t.kv.data.get(HEAD) as { sets: { home: { decks: never[] } } }).sets.home.decks)).toBe(21);
+
+    // And a reload of either tab reads all 21.
+    const again = await load(t.storage, t.kv, net(), USER, fakeWindow());
+    expect(built(again.S().sets.home.decks)).toBe(21);
+  });
+
+  it('taking over pushes nothing and writes nothing, and forgets undo steps for decks it no longer shows', async () => {
+    const t = await twoTabs();
+    t.a.S().addHomeDeck();
+    expect(t.a.S().history.home.past.length).toBeGreaterThan(0);
+    await afterDebounce();
+    const putsBefore = t.netA.log.filter((l) => l.startsWith('PUT')).length;
+    t.inB(() => {
+      t.b.S().addHomeDeck();
+      t.b.S().importDeck('home', t.b.S().sets.home.decks.length - 1, homeKeys(7));
+    });
+    const written = t.storage.data.get(NAME);
+    await afterDebounce();
+    expect(t.netA.log.filter((l) => l.startsWith('PUT')).length).toBe(putsBefore);
+    expect(t.storage.data.get(NAME)).toBe(written);
+    expect(t.a.S().history.home.past).toEqual([]);
+  });
+
+  it("only the decks travel: the other tab's mode is not this tab's", async () => {
+    const t = await twoTabs();
+    t.a.S().setMode('solo');
+    t.inB(() => t.b.S().setMode('versus'));
+    expect(t.a.S().mode).toBe('solo');
+  });
+
+  it("an older copy pushed over Deck's Home leaves the account a copy to restore", async () => {
+    /* The safety net, for a tab the fix cannot reach (one left open on another
+       device, or a page from before this change): A never hears about B. */
+    const t = await twoTabs();
+    const old = built(t.a.S().sets.home.decks);
+    for (let i = 0; i < 5; i += 1) {
+      t.b.S().addHomeDeck();
+      t.b.S().importDeck('home', t.b.S().sets.home.decks.length - 1, homeKeys(i + 1));
+    }
+    await afterDebounce();
+    expect(built((t.kv.data.get(HEAD) as { sets: { home: { decks: never[] } } }).sets.home.decks)).toBe(old + 5);
+
+    t.a.S().renameDeck('home', 0, 'Stale');
+    await afterDebounce();
+    const prev = t.kv.data.get(`${HEAD}:prev`) as { sets: { home: { decks: never[] } } } | undefined;
+    expect(prev && built(prev.sets.home.decks)).toBe(old + 5);
   });
 });

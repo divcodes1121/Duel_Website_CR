@@ -146,7 +146,34 @@ export function libraryCount(blob: unknown): number {
  */
 export function shouldKeepShadow(existing: unknown, incoming: unknown): boolean {
   if (existing == null) return false;
-  return libraryCount(existing) > libraryCount(incoming);
+  return libraryCount(existing) > libraryCount(incoming) || builtDeckCount(existing) > builtDeckCount(incoming);
+}
+
+/**
+ * Decks with at least one card in Deck's Home and in every Counter Palette
+ * folder — the decks that live OUTSIDE the saved library.
+ *
+ * ADDED 2026-10-23, after 20 Deck's Home decks were lost to a tab that still
+ * held the older list and saved it. The shadow copy only ever looked at the
+ * library, so that loss left nothing behind to restore. A shrink here keeps
+ * the previous copy for a month, the same as a shrinking library.
+ */
+export function builtDeckCount(doc: unknown): number {
+  const d = (doc ?? {}) as { sets?: { home?: { decks?: unknown } }; paletteFolders?: unknown };
+  const built = (decks: unknown) =>
+    Array.isArray(decks)
+      ? decks.filter(
+          (k) =>
+            !!k &&
+            Array.isArray((k as { slots?: unknown }).slots) &&
+            (k as { slots: unknown[] }).slots.some((c) => c != null),
+        ).length
+      : 0;
+  let n = built(d.sets?.home?.decks);
+  if (Array.isArray(d.paletteFolders)) {
+    for (const f of d.paletteFolders) n += built((f as { decks?: unknown } | null)?.decks);
+  }
+  return n;
 }
 
 /**
@@ -723,7 +750,7 @@ export async function deckRoute(
          best-effort, as the old PUT below: only a commit that SHRINKS the
          library, and a failure here never fails the save. */
       try {
-        if (before && before.library.count > count) {
+        if (before && (before.library.count > count || builtDeckCount(before) > builtDeckCount(b))) {
           await kv.set(headShadowKey(userId), before, { ex: SHADOW_SECONDS });
         } else if (beforeV1 != null && libraryCount(beforeV1) > count) {
           await kv.set(shadowKeyFor(userId), beforeV1, { ex: SHADOW_SECONDS });
@@ -802,7 +829,7 @@ export async function deckRoute(
     try {
       head = asHead(await kv.get(headKey(userId)));
       if (head) {
-        if (head.library.count > libraryCount(payload)) {
+        if (head.library.count > libraryCount(payload) || builtDeckCount(head) > builtDeckCount(payload)) {
           await kv.set(headShadowKey(userId), head, { ex: SHADOW_SECONDS });
         }
       } else {
