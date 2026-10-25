@@ -1401,8 +1401,11 @@ class Handler(BaseHTTPRequestHandler):
                     per=int(raw_per) if raw_per.isdigit() else duel_feed.PER_PAGE,
                 ))
 
+            # Since 2026-10-25 (migration 008) this asks `admin_auth.coach`:
+            # an admin, or a Pro account with Coach = Yes — the same test the
+            # roster tables' RLS asks. The console routes above stay admin.
             if path.startswith("/api/analytics/admin/coach/intel/"):
-                verdict = admin_auth.verify(self.headers.get(admin_auth.HEADER))
+                verdict = admin_auth.coach(self.headers.get(admin_auth.HEADER))
                 if verdict != "ok":
                     self._outcome = "auth_failed"
                     return self._send({"error": verdict}, admin_auth.STATUS[verdict])

@@ -12,7 +12,7 @@ import { Settings } from './Settings';
 import { WhatsNewDialog } from '../WhatsNew/WhatsNew';
 import { useReleaseFeed } from '../../state/whatsNew';
 import { useMyCoach } from '../../state/myCoach';
-import { useAccess } from '../../state/gate';
+import { sectionAllowed, useAccess, useIsCoach } from '../../state/gate';
 import styles from './ProfileMenu.module.css';
 
 function UserIcon({ size = 16 }: { size?: number }) {
@@ -151,6 +151,13 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
      them, so the row never appears for an account it would take to an empty
      screen. */
   const mySeats = useMyCoach((s) => s.seats);
+  /* COACH ROSTER, for an account that may actually use it: an admin, or a
+     Pro account the console has marked Coach = Yes (2026-10-25). The same
+     two tests the screen and the database ask (`sectionAllowed` for Pro,
+     `useIsCoach` for the flag; migration 008's `coach_may_coach`), so this
+     row never leads to a refusal. */
+  const isCoach = useIsCoach();
+  const mayCoach = isCoach && sectionAllowed(tier, 'Coach Roster');
   const loadSeats = useMyCoach((s) => s.load);
   const userId = useAccountStore((s) => s.userId);
   useEffect(() => {
@@ -452,6 +459,12 @@ export function ProfileMenu({ triggerClassName }: { triggerClassName: string }) 
                     them, so an unlinked account never sees a row it would
                     click into an empty screen. The read is one RPC, fired
                     once the session is known. */}
+                {mayCoach && (
+                  <a className={styles.item} role="menuitem" href="#/admin/coach" onClick={() => setPos(null)}>
+                    <Glyph d="console" />
+                    Coach Roster
+                  </a>
+                )}
                 {mySeats && mySeats.length > 0 && (
                   <a className={styles.item} role="menuitem" href="#/my" onClick={() => setPos(null)}>
                     <Glyph d="console" />

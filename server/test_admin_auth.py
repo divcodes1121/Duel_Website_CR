@@ -41,9 +41,26 @@ class Fake(BaseHTTPRequestHandler):
         CALLS["last_apikey"] = self.headers.get("apikey")
         CALLS["last_path"] = self.path
         token = (self.headers.get("Authorization") or "")[7:]
+        # COACH ROSTER ACCESS (008). `a.b.coach` is a Pro account with Coach =
+        # Yes: an admin test says no, the coach test says yes. With OLD_DB set
+        # the coach function does not exist yet (PostgREST 404).
+        if self.path.endswith("/coach_may_coach"):
+            if CALLS.get("old_db"):
+                status, body = 404, b'{"message":"function not found"}'
+            elif token == "a.b.coach":
+                status, body = 200, b"true"
+            else:
+                status, body = None, None
+            if status is not None:
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
         status, body = {
             "a.b.admin": (200, b"true"),
             "a.b.member": (200, b"false"),
+            "a.b.coach": (200, b"false"),
             "a.b.boom": (500, b'{"message":"boom"}'),
             "a.b.junk": (200, b"not json"),
         }.get(token, (401, b'{"message":"JWT expired"}'))
@@ -122,6 +139,26 @@ for i in range(aa.CACHE_MAX + 50):
 check("the cache is bounded", len(aa._cache) <= aa.CACHE_MAX, str(len(aa._cache)))
 
 check("every refusing verdict has a status", set(aa.STATUS) == {"unauthorized", "forbidden", "not_configured", "unavailable"})
+
+# --- coach access (migration 008) ---------------------------------------------
+
+env()
+check("a Pro coach passes the coach gate", aa.coach("a.b.coach") == "ok")
+check("it asked 008's coach_may_coach", CALLS["last_path"] == "/rest/v1/rpc/coach_may_coach", CALLS["last_path"])
+check("the same Pro coach is NOT an admin (console stays shut)", aa.verify("a.b.coach") == "forbidden")
+check("an admin passes the coach gate", aa.coach("a.b.admin") == "ok")
+check("a member fails the coach gate", aa.coach("a.b.member") == "forbidden")
+check("an expired token fails the coach gate", aa.coach("a.b.stale") == "unauthorized")
+check("a Supabase error on the coach gate is unavailable", aa.coach("a.b.boom") == "unavailable")
+env()
+aa.verify("a.b.coach")
+check("an admin verdict is not reused as a coach verdict", aa.coach("a.b.coach") == "ok")
+env()
+CALLS["old_db"] = True
+check("database on 007: an admin still passes (falls back to the admin test)", aa.coach("a.b.admin") == "ok")
+check("database on 007: a coach is refused, as before", aa.coach("a.b.coach") == "forbidden")
+check("database on 007: a missing admin function is still unavailable for verify", aa.verify("a.b.boom") == "unavailable")
+CALLS["old_db"] = False
 
 srv.shutdown()
 print(f"\n{PASS} passed, {FAIL} failed")

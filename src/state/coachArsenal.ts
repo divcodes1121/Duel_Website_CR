@@ -274,7 +274,7 @@ export function explainArsenalError(code: string | undefined, message: string): 
     case '42501':
       return new ArsenalError(
         'not_authorised',
-        'The database refused this: Coach Roster is for administrators only.',
+        'The database refused this: Coach Roster needs a Pro account marked as a coach in the console.',
         message,
       );
     case '42703':

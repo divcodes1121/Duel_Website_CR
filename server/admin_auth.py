@@ -87,6 +87,23 @@ def clear_cache() -> None:
 
 def verify(token: str | None) -> str:
     """One of 'ok', 'forbidden', 'unauthorized', 'not_configured', 'unavailable'."""
+    return _ask(token, "coach_is_admin", "")
+
+
+def coach(token: str | None) -> str:
+    """Like `verify`, but 'ok' for anyone who may use Coach Roster: an admin,
+    or a Pro account with Coach = Yes (migration 008's `coach_may_coach`, the
+    same test the roster tables' Row Level Security asks). For the coach intel
+    route only — the console's routes stay on `verify`.
+
+    A database still on 007 has no `coach_may_coach` (PostgREST answers 404);
+    that falls back to the admin test, so deploying this before the migration
+    keeps today's behaviour instead of shutting admins out."""
+    verdict = _ask(token, "coach_may_coach", "coach:")
+    return verify(token) if verdict == "missing" else verdict
+
+
+def _ask(token: str | None, fn: str, prefix: str) -> str:
     url, key = _config()
     if not (url and key):
         return "not_configured"
@@ -95,13 +112,13 @@ def verify(token: str | None) -> str:
     if not token or token.count(".") != 2 or len(token) > 4096:
         return "unauthorized"
 
-    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    digest = prefix + hashlib.sha256(token.encode("utf-8")).hexdigest()
     hit = _cached(digest)
     if hit:
         return hit
 
     req = urllib.request.Request(
-        url + "/rest/v1/rpc/coach_is_admin",
+        url + "/rest/v1/rpc/" + fn,
         data=b"{}",
         method="POST",
         headers={
@@ -116,8 +133,11 @@ def verify(token: str | None) -> str:
             body = r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         # PostgREST answers a bad or expired JWT with 401 (and some setups
-        # 403). Either way the caller is not who they claim to be.
-        return "unauthorized" if e.code in (401, 403) else "unavailable"
+        # 403). Either way the caller is not who they claim to be. 404 = the
+        # function is not in this database yet (only `coach` acts on it).
+        if e.code in (401, 403):
+            return "unauthorized"
+        return "missing" if e.code == 404 and prefix else "unavailable"
     except Exception:  # noqa: BLE001 — timeout, DNS, refused: all fail closed
         return "unavailable"
 

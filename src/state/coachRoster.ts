@@ -118,7 +118,7 @@ export function explainDbError(code: string | undefined, message: string): Roste
     case '42501':
       return new RosterError(
         'not_authorised',
-        'The database refused this: Coach Roster is for administrators only.',
+        'The database refused this: Coach Roster needs a Pro account marked as a coach in the console.',
         message,
       );
     default:
