@@ -1599,3 +1599,141 @@
     padding-top: 0;
   }
 }
+
+/* ── Decks played: every game so far, both decks (2026-10-25) ──────────── */
+.played {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--violet-edge);
+  background: var(--violet-wash);
+}
+.playedTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.playedCount {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+.playedList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.playedRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  background: var(--surface-raised, var(--bg-2));
+}
+.playedRow[data-result='w'] {
+  border-left-color: var(--hue-green);
+}
+.playedRow[data-result='l'] {
+  border-left-color: var(--hue-pink);
+}
+.playedHead {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+.playedNo {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.playedWinner {
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--on-solid, #fff);
+}
+.playedWinner[data-result='w'] {
+  background: var(--solid-green);
+}
+.playedWinner[data-result='l'] {
+  background: var(--solid-maroon);
+}
+.playedDecks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem 0.9rem;
+  align-items: center;
+}
+.playedDecks[data-both] {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.playedSide {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.playedWho {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.playedName {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.playedSide[data-hue='blue'] .playedName {
+  color: var(--hue-blue);
+}
+.playedSide[data-hue='pink'] .playedName {
+  color: var(--hue-pink);
+}
+.playedDeck {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.playedVs {
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+@media (max-width: 760px) {
+  .playedDecks[data-both] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .playedVs {
+    justify-self: center;
+  }
+}

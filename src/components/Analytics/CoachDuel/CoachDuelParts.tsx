@@ -153,6 +153,63 @@ export function CardBack({ busy, seat = 'red', label = "The AI coach's deck, fac
   );
 }
 
+/** One finished game for `GameLog`. A side with no deck (out of time) is null. */
+export interface LogGame {
+  no: number;
+  blue: DrawDeck | null;
+  red: DrawDeck | null;
+  winner: Seat | null;
+  /** "You win", "Wallace wins", ... */
+  winnerLabel?: string;
+  /** Shown instead of a deck when a side has none. */
+  missing?: { blue?: string; red?: string };
+}
+
+/* EVERY GAME'S TWO DECKS, GAME BY GAME (asked 2026-10-25: "after each game
+   show the decks both sides played ... make it prominent, easy to see").
+   The face-off above shows only the game just played; this keeps all of
+   them on screen for the rest of the duel, newest first. */
+export function GameLog({ games, of, names }: { games: LogGame[]; of: number; names: [string, string] }) {
+  if (!games.length) return null;
+  return (
+    <section className={styles.log} aria-label="Decks played">
+      <h3 className={styles.logTitle}>
+        Decks played
+        <span className={styles.logCount}>
+          {games.length} of {of} {games.length === 1 ? 'game' : 'games'}
+        </span>
+      </h3>
+      <ol className={styles.logList}>
+        {[...games].reverse().map((g) => (
+          <li key={g.no} className={styles.logRow} data-winner={g.winner ?? undefined}>
+            <span className={styles.logHead}>
+              <span className={styles.logNo}>Game {g.no}</span>
+              {g.winner && (
+                <span className={styles.gameWinner} data-seat={g.winner}>
+                  {g.winnerLabel ?? `${names[g.winner === 'blue' ? 0 : 1]} wins`}
+                </span>
+              )}
+            </span>
+            <div className={styles.logDecks}>
+              {g.blue ? (
+                <DeckTile deck={g.blue} seat="blue" badge={<span className={styles.logSide}>{names[0]}</span>} />
+              ) : (
+                <CardBack busy={false} seat="blue" label="No deck" text={g.missing?.blue ?? 'No deck'} />
+              )}
+              <span className={styles.logVs} aria-hidden="true">VS</span>
+              {g.red ? (
+                <DeckTile deck={g.red} seat="red" badge={<span className={styles.logSide}>{names[1]}</span>} />
+              ) : (
+                <CardBack busy={false} seat="red" label="No deck" text={g.missing?.red ?? 'No deck'} />
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export function FormatControls({ games, playAll, luck, onChange }: {
   games: Format; playAll: boolean; luck: Luck;
   onChange: (p: Partial<{ games: Format; playAll: boolean; luck: Luck }>) => void;

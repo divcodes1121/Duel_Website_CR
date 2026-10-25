@@ -68,6 +68,7 @@ import {
   type DrawDeck,
   type Emote,
   type Pose,
+  GameLog,
 } from './CoachDuelParts';
 import styles from './CoachDuel.module.css';
 
@@ -890,20 +891,27 @@ function RoomScreen({ id }: { id: string }) {
             </div>
           )}
 
-          {room.phase === 'done' && (
-            <div className={styles.reveal}>
-              <h3 className={styles.revealTitle}>The decks this duel</h3>
-              {room.games
-                .filter((g) => g.result)
-                .map((g) => (
-                  <div key={g.no} className={styles.roomGameRow}>
-                    <span className={styles.trackNo}>G{g.no}</span>
-                    {hasCards(g.blue) ? <DeckTile deck={asDraw(g.blue)} seat="blue" /> : <CardBack busy={false} seat="blue" label="No deck" text="Out of time" />}
-                    {hasCards(g.red) ? <DeckTile deck={asDraw(g.red)} seat="red" /> : <CardBack busy={false} seat="red" label="No deck" text="Out of time" />}
-                  </div>
-                ))}
-            </div>
-          )}
+          {/* Every finished game's two decks, for the whole duel — not only at
+              the end (asked 2026-10-25). */}
+          <GameLog
+            of={room.settings.bo}
+            names={[nameOf('blue'), nameOf('red')]}
+            games={room.games
+              .filter((g) => g.result)
+              .map((g) => ({
+                no: g.no,
+                blue: hasCards(g.blue) ? asDraw(g.blue) : null,
+                red: hasCards(g.red) ? asDraw(g.red) : null,
+                winner: g.result?.winner ?? null,
+                winnerLabel: g.result?.winner
+                  ? g.result.winner === you ? 'You win' : `${nameOf(g.result.winner)} wins`
+                  : undefined,
+                missing: {
+                  blue: g.result?.timeout === 'blue' ? 'Out of time' : 'No deck',
+                  red: g.result?.timeout === 'red' ? 'Out of time' : 'No deck',
+                },
+              }))}
+          />
         </section>
       )}
 

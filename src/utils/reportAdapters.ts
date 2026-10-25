@@ -110,6 +110,10 @@ export function playerReportDoc(r: StoredPlayerReport, tag: string): ReportDoc {
     hue: 'violet',
     meta: [
       { label: 'Window', value: windowLabel(r.window) },
+      // Which battles the board counts (the screen's switch, 2026-10-25).
+      ...(r.mode
+        ? [{ label: 'Battles from', value: r.mode === 'friendly' ? 'Friendly' : 'Ladder & Ranked' }]
+        : []),
       { label: 'Stored history', value: `${DAY(r.coverage.start)} – ${DAY(r.coverage.end)}` },
       { label: 'Battles', value: int(r.player.battles) },
       // Mirrors the header tile, including its fallback order — a PDF that

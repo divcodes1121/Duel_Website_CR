@@ -142,5 +142,47 @@ check("deckless battles still count in the player's battles",
       r2["player"]["battles"] == r["player"]["battles"] + 3,
       str((r2["player"].get("battles"), r["player"].get("battles"))))
 
+# THE TOP 10 DECKS SWITCH (2026-10-25): ladder = Path of Legends + trophy road,
+# friendly = plain Friendly (clan and invite). Special modes are in neither.
+DB3 = os.path.join(TMP, "battles3.db")
+con = sqlite3.connect(DB3)
+con.execute(
+    "CREATE TABLE battles (player_tag TEXT, battle_time TEXT, result TEXT,"
+    " player_crowns INT, opponent_crowns INT, player_deck_hash TEXT, game_mode TEXT)"
+)
+con.execute("CREATE TABLE decks (deck_hash TEXT, archetype TEXT, avg_elixir REAL,"
+            " win_condition TEXT, cards TEXT)")
+con.execute("CREATE TABLE player_names (tag TEXT, name TEXT)")
+con.execute("CREATE TABLE tracked_players (tag TEXT)")
+MODE_ROWS = {
+    "Ranked1v1_NewArena": "ladder", "Ranked1v1_NewArena2": "ladder",
+    "Ranked1v1_NewArena3": "ladder", "Ladder": "ladder",
+    "Friendly": "friendly",
+    "Rage_Ladder": None, "Showdown_Friendly": None, "Overtime_Friendly": None,
+    "Rage_Friendly": None, "ClassicDecks_Friendly": None, "MirrorDeck_Friendly": None,
+    "Duel_1v1_Friendly": None, "Friendly_FixedDeckOrder": None, "TeamVsTeam": None,
+    "CW_Battle_1v1": None, "Tournament": None, "PickMode": None,
+    "Challenge_AllCards_EventDeck_NoSet": None, "Crazy_Arena": None,
+}
+rows3 = []
+for i, (m, _kind) in enumerate(MODE_ROWS.items()):
+    rows3.append((TAG, "202609%02dT1200%02d.000Z" % (1 + i % 3, i), "win", 1, 0, m, m))
+con.executemany("INSERT INTO battles VALUES (?,?,?,?,?,?,?)", rows3)
+con.commit()
+con.close()
+cd._tier_paths = lambda: [DB3]
+for want in ("ladder", "friendly"):
+    rep = cd.player_report(TAG, None, None, want)
+    got = sorted(d["deckHash"] for d in (rep or {}).get("decks", []))
+    exp = sorted(m for m, k in MODE_ROWS.items() if k == want)
+    check(f"mode={want} counts exactly its modes", got == exp, str(got))
+    check(f"mode={want}: battles follow the switch", (rep or {}).get("player", {}).get("battles") == len(exp))
+allrep = cd.player_report(TAG)
+check("no mode = every battle, as every other caller expects",
+      allrep["player"]["battles"] == len(MODE_ROWS), str(allrep["player"]["battles"]))
+check("an unknown mode key is refused", cd.valid_player_mode("1; DROP TABLE battles") is None)
+check("mode keys are read case-blind", cd.valid_player_mode(" Friendly ") == "friendly")
+check("an unknown key filters nothing", cd.player_report(TAG, None, None, "nope")["player"]["battles"] == len(MODE_ROWS))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

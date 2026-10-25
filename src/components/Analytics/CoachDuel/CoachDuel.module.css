@@ -1489,3 +1489,113 @@ a.ghost {
     white-space: nowrap;
   }
 }
+
+/* ── Decks played: every game's two decks (2026-10-25) ─────────────────── */
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem 1rem 1.1rem;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-1) 70%, transparent);
+}
+.logTitle {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-family: var(--display);
+  font-size: 1.5rem;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  color: var(--text);
+}
+.logCount {
+  font-family: inherit;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  opacity: 1;
+}
+.logList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.logRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  background: var(--bg-2);
+}
+.logRow[data-winner='blue'] {
+  border-left-color: var(--blue);
+}
+.logRow[data-winner='red'] {
+  border-left-color: var(--red);
+}
+.logHead {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.logNo {
+  font-family: var(--display);
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--text);
+}
+.logHead .gameWinner {
+  font-size: 0.9rem;
+  animation: none;
+}
+.logDecks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0.6rem 1rem;
+}
+.logVs {
+  align-self: center;
+  font-family: var(--display);
+  font-size: 1.6rem;
+  line-height: 1;
+  background: linear-gradient(100deg, #60a5fa, #fde68a 50%, #f87171);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.logSide {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+.logDecks .cardBack {
+  min-height: 5rem;
+}
+@media (max-width: 52rem) {
+  .logDecks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .logVs {
+    justify-self: center;
+    font-size: 1.3rem;
+  }
+}

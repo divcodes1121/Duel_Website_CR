@@ -173,11 +173,19 @@ export interface StoredPlayerReport {
   /** How much history exists for this player, whatever window is shown. */
   coverage: ApiCoverage;
   window: { from: string | null; to: string | null };
+  /** Which battles were counted (the Top 10 Decks switch). Null / absent =
+   *  every mode (an older server, or a caller that did not ask). */
+  mode?: PlayerMode | null;
   /** Live CR API fields the databases do not carry. Null when unavailable. */
   profile: ApiProfile | null;
   tracking: TrackingState;
   sources: ApiSources;
 }
+
+/** The Top 10 Decks switch (2026-10-25). `ladder` = Path of Legends +
+ *  trophy road; `friendly` = plain Friendly battles (clan and invite).
+ *  Special modes are in neither — `server/clash_data.py` PLAYER_MODES. */
+export type PlayerMode = 'ladder' | 'friendly';
 
 /** The player endpoint answers with one of two shapes, discriminated on
  *  `basis`. A caller that does not care can narrow with `isLive` below. */
@@ -1019,10 +1027,13 @@ function windowQuery(win: DateWindow): string {
  * there is no stored history yet. So this can come back as either shape — see
  * `PlayerReport` — and callers narrow on `basis`. A 404 now means the tag is
  * real but BOTH sources are empty, which is a much rarer thing than it was. */
-export function fetchPlayerReport(tag: string, win: DateWindow = {}): Promise<PlayerReport> {
-  return get<PlayerReport>(
-    `/api/analytics/player/${encodeURIComponent(tag)}?${windowQuery(win)}`,
-  );
+export function fetchPlayerReport(
+  tag: string,
+  win: DateWindow = {},
+  mode?: PlayerMode,
+): Promise<PlayerReport> {
+  const q = windowQuery(win) + (mode ? `&mode=${mode}` : '');
+  return get<PlayerReport>(`/api/analytics/player/${encodeURIComponent(tag)}?${q}`);
 }
 
 /** The live battlelog on its own, for a screen that wants "right now" even

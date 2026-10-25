@@ -1425,7 +1425,22 @@ class Handler(BaseHTTPRequestHandler):
 
                 cov = cd.coverage(tag)
                 since, until = _window(parse_qs(parsed.query), cov)
-                report = cd.player_report(tag, since, until)
+                # THE TOP 10 DECKS SWITCH (2026-10-25): `mode=ladder` (Path of
+                # Legends + trophy road) or `mode=friendly`; absent = every mode.
+                mode = cd.valid_player_mode((parse_qs(parsed.query).get("mode") or [""])[0])
+                report = cd.player_report(tag, since, until, mode)
+                if report is None and mode and cov.get("days"):
+                    # A STORED PLAYER WITH NO BATTLES OF THIS KIND in the window
+                    # is an empty board, not an unknown tag — falling through to
+                    # the live battlelog would swap the whole screen.
+                    report = {
+                        "player": {"name": cd.player_name(tag) or tag, "tag": tag,
+                                   "verified": True, "battles": 0, "wins": 0,
+                                   "losses": 0, "draws": 0, "crownsFor": 0,
+                                   "crownsAgainst": 0},
+                        "decks": [],
+                        "trends": {"days": [], "series": [], "archiveUsed": False},
+                    }
 
                 # SEARCHING A TAG IS WHAT ENROLS IT. Idempotent, and it queues
                 # into a file this project owns rather than writing to the bot's
@@ -1459,6 +1474,7 @@ class Handler(BaseHTTPRequestHandler):
                         "trends": report["trends"],
                         "coverage": cov,
                         "window": {"from": since, "to": until},
+                        "mode": mode,
                         "profile": cd.cr_profile(tag),
                         "tracking": enrolment,
                         "sources": _sources(),

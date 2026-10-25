@@ -9,9 +9,12 @@ import {
   AnalyticsError,
   fetchPlayerReport,
   isLiveReport,
+  type PlayerMode,
   type PlayerReport,
   type StoredPlayerReport,
 } from '../../state/analyticsClient';
+import { Tabs } from '../ui/tabs';
+import { useRemembered } from '../../hooks/useRemembered';
 import {
   DECK_SORTS,
   RANGE_PRESETS,
@@ -183,7 +186,23 @@ function shortDay(iso: string): string {
     : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
+/* THE TOP 10 DECKS SWITCH (2026-10-25). Two kinds of battle, each its own
+   board: ladder + ranked (Path of Legends and trophy road), and friendly
+   (clan friendlies and invite friendlies, which share one mode). Special modes
+   — events, 2v2, draft, Rage/Showdown variants — are in neither. The server
+   owns which mode strings each one means (`clash_data.PLAYER_MODES`). */
+const PLAYER_MODES = [
+  { id: 'ladder', label: 'Ladder & Ranked', title: 'Path of Legends and trophy road battles' },
+  { id: 'friendly', label: 'Friendly', title: 'Clan friendlies and friendly battles by invite' },
+] as const;
+const MODE_EMPTY: Record<PlayerMode, string> = {
+  ladder: 'No ladder or ranked battles in this window.',
+  friendly: 'No friendly battles in this window.',
+};
+const isPlayerMode = (v: unknown): v is PlayerMode => v === 'ladder' || v === 'friendly';
+
 export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string; season?: Season }) {
+  const [mode, setMode] = useRemembered<PlayerMode>('player-mode', 'ladder', isPlayerMode);
   const [sort, setSort] = useState<DeckSort>('top');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [report, setReport] = useState<PlayerReport | null>(null);
@@ -212,7 +231,7 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
     let live = true;
     setLoading(true);
     setError(null);
-    fetchPlayerReport(tag, win)
+    fetchPlayerReport(tag, win, mode)
       .then((r) => {
         if (!live) return;
         setReport(r);
@@ -236,11 +255,20 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
     return () => {
       live = false;
     };
-  }, [tag, preset, custom.from, custom.to]);
+  }, [tag, preset, custom.from, custom.to, mode]);
+
+  /* Drawn while a read is under way too, so switching does not take the
+     control away under the pointer that pressed it. */
+  const modeTabs = (
+    <div className={styles.modeTabs}>
+      <Tabs label="Which battles" items={PLAYER_MODES} value={mode} onChange={setMode} />
+    </div>
+  );
 
   if (reading) {
     return (
       <div className={styles.page}>
+        {modeTabs}
         <ReadingState k="player" hue="violet">
           Reading the battle database…
         </ReadingState>
@@ -334,6 +362,7 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
 
   return (
     <div className={styles.page}>
+      {modeTabs}
       <section className={styles.summary}>
         <div className={styles.identity}>
           <span className={styles.badge}>
@@ -520,7 +549,7 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
             <span className={styles.decksTitleIcon}>
               <CrownIcon size={17} />
             </span>
-            Top {decks.length} Decks
+            {decks.length ? `Top ${decks.length} Decks` : 'Top Decks'}
           </h2>
           {/* This was a button with no handler at all — the same decoration the
               sidebar's Upgrade Now was caught being, and the reason this project
@@ -529,7 +558,9 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
           {exportButton}
         </header>
 
-        <div className={styles.sortTabs}>
+        {decks.length === 0 && <p className={styles.modeEmpty}>{MODE_EMPTY[mode]}</p>}
+
+        <div className={styles.sortTabs} hidden={decks.length === 0}>
           {DECK_SORTS.map((s) => (
             <button
               key={s.id}
@@ -542,7 +573,7 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
           ))}
         </div>
 
-        <div className={styles.tableScroll}>
+        <div className={styles.tableScroll} hidden={decks.length === 0}>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -650,7 +681,7 @@ export function PlayerAnalysis({ tag, season = 'Current Season' }: { tag: string
       </section>
 
       {/* Two charts, not one with two y-scales. */}
-      <div className={styles.charts}>
+      <div className={styles.charts} hidden={decks.length === 0}>
         <TrendPanel title="Use Rate Trend" data={toTrendData('use')} yTicks={[0, 25, 50, 75, 100]} rangeLabel={rangeLabel} labels={dayLabels} />
         <TrendPanel title="Win Rate Trend" data={toTrendData('win')} yTicks={[0, 25, 50, 75, 100]} rangeLabel={rangeLabel} labels={dayLabels} gapLabel="not played" />
       </div>

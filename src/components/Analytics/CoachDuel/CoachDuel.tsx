@@ -56,6 +56,7 @@ import styles from './CoachDuel.module.css';
 import {
   CardBack, ChanceBar, Crown, DeckTile, FormatControls, King, ModeNav, Plate, PRELOAD, ROLL_MS, ART, cardName, reducedMotion,
   type DrawDeck, type Emote, type Pose,
+  GameLog,
 } from './CoachDuelParts';
 
 /* ── the address bar ───────────────────────────────────────────────────── */
@@ -804,6 +805,22 @@ export function CoachDuel() {
               )}
             </div>
           )}
+
+          <GameLog
+            of={fmt}
+            names={['You', 'AI coach']}
+            games={played.map((gm, i) => {
+              const aiPick = gm.ans.aiDeck !== null ? gm.ans.ai.set[gm.ans.aiDeck] : null;
+              return {
+                no: gm.ans.game ?? i + 1,
+                blue: { cards: gm.deck, art: gm.art ?? positionalArt(gm.deck), deckName: gm.ans.you.deck.deckName },
+                red: aiPick,
+                winner: gm.result === 'w' ? 'blue' : 'red',
+                winnerLabel: gm.result === 'w' ? 'You win' : 'AI wins',
+                missing: { red: 'No legal deck left' },
+              };
+            })}
+          />
 
           {finished && lastAns && (
             <div className={styles.reveal}>

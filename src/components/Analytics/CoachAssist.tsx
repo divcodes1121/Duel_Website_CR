@@ -169,6 +169,69 @@ function Strip({
   );
 }
 
+/* EVERY GAME PLAYED SO FAR, BOTH DECKS SIDE BY SIDE (asked 2026-10-25: "for
+   every game, make it a bit prominent, easy to see"). It replaces two separate
+   lists at the foot of the answer ("You have played" / "They have played"),
+   which split one game across two places. Game 1's winner is the one result
+   the interview asks; after two games a duel still running is 1-1, so game
+   2's follows. A side that was not pasted (the prediction window asks only
+   for theirs) is left out of the row. */
+export function GamesPlayed({ mine, theirs, results, names }: {
+  mine: CoachDeck[];
+  theirs: CoachDeck[];
+  /** `duelResults`' string: 'w', 'l', 'wl', 'lw' (coached player's side). */
+  results: string;
+  names: [string, string];
+}) {
+  const n = Math.max(mine.length, theirs.length);
+  if (!n) return null;
+  const rows = Array.from({ length: n }, (_, i) => i).reverse();
+  return (
+    <section className={styles.played} aria-label="Decks played so far" data-games-played={n}>
+      <h4 className={styles.playedTitle}>
+        Decks played
+        <span className={styles.playedCount}>
+          {n} {n === 1 ? 'game' : 'games'}
+        </span>
+      </h4>
+      <ol className={styles.playedList}>
+        {rows.map((i) => {
+          const r = results[i] as 'w' | 'l' | undefined;
+          const side = (d: CoachDeck | undefined, who: string, hue: 'blue' | 'pink') =>
+            d ? (
+              <div className={styles.playedSide} data-hue={hue}>
+                <span className={styles.playedWho}>
+                  <span className={styles.playedName}>{who}</span>
+                  <span className={styles.playedDeck}>{d.deckName || d.archetype}</span>
+                </span>
+                <Strip cards={d.cards} art={d.art} inferred={d.inferredArt} filled={d.artFilled} name={d.deckName} size="sm" />
+              </div>
+            ) : null;
+          return (
+            <li key={i} className={styles.playedRow} data-result={r}>
+              <span className={styles.playedHead}>
+                <span className={styles.playedNo}>Game {i + 1}</span>
+                {r && (
+                  <span className={styles.playedWinner} data-result={r}>
+                    {r === 'w' ? `${names[0]} won` : `${names[1]} won`}
+                  </span>
+                )}
+              </span>
+              <div className={styles.playedDecks} data-both={mine[i] && theirs[i] ? '' : undefined}>
+                {side(mine[i], names[0], 'blue')}
+                {mine[i] && theirs[i] && (
+                  <span className={styles.playedVs} aria-hidden="true">VS</span>
+                )}
+                {side(theirs[i], names[1], 'pink')}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 /** One question, with its answer buttons. The interview's only shape. */
 function Ask({
   step,
@@ -936,6 +999,8 @@ function DuelPrediction({ tag, days, kind }: { tag: string; days: number; kind: 
         </button>
       </div>
 
+      <GamesPlayed mine={[]} theirs={data.revealed ?? []} results="" names={['You', data.name]} />
+
       {/* The one caveat that survives the stats line being removed, because it
           changes what the list MEANS rather than how strong it is: ranked by
           overall play rate, this is not a read on their opening at all. */}
@@ -1048,17 +1113,6 @@ function DuelPrediction({ tag, days, kind }: { tag: string; days: number; kind: 
 
           {/* Their real log, below the ranking rather than instead of it. */}
           {stage > 0 && data.history && <DuelLog history={data.history} />}
-
-          {!!data.revealed?.length && (
-            <section className={styles.block} data-hue="blue">
-              <h4 className={styles.blockTitle}>Already shown</h4>
-              <ul className={styles.deckList}>
-                {data.revealed.map((d, i) => (
-                  <DeckRow key={i} deck={d} rank={i + 1} hue="blue" showProb={false} />
-                ))}
-              </ul>
-            </section>
-          )}
 
           {/* Appended LAST on purpose. Everything above is already on screen
               and settled before this asks for anything, so a slow read cannot
@@ -2188,6 +2242,13 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
         </button>
       </div>
 
+      <GamesPlayed
+        mine={data.myPlayed}
+        theirs={data.oppPlayed}
+        results={duelResults(won1, data.myPlayed.length)}
+        names={[data.myName, data.oppName]}
+      />
+
       {best && (
         <section className={styles.verdict} data-hue="green">
           <span className={styles.verdictLabel}>Play this</span>
@@ -2337,34 +2398,6 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
       {/* The same question, the same answer, in the window that also has to
           decide what YOU do about it. */}
       {!!data.oppPlayed.length && data.history && <DuelLog history={data.history} />}
-
-      {(!!data.myPlayed.length || !!data.oppPlayed.length) && (
-        <div className={styles.two}>
-          {!!data.myPlayed.length && (
-            <section className={styles.block} data-hue="blue">
-              <h4 className={styles.blockTitle}>
-                You have played
-                <span className={styles.blockNote}>those cards are spent</span>
-              </h4>
-              <ul className={styles.deckList}>
-                {data.myPlayed.map((d, i) => (
-                  <DeckRow key={i} deck={d} rank={i + 1} hue="blue" showProb={false} />
-                ))}
-              </ul>
-            </section>
-          )}
-          {!!data.oppPlayed.length && (
-            <section className={styles.block} data-hue="pink">
-              <h4 className={styles.blockTitle}>They have played</h4>
-              <ul className={styles.deckList}>
-                {data.oppPlayed.map((d, i) => (
-                  <DeckRow key={i} deck={d} rank={i + 1} hue="pink" showProb={false} />
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
-      )}
 
       {/* PRO AND ADMIN, AND OPT-IN AT THE REQUEST. Absent for everyone else —
           the server was never asked, so there is nothing to hide here. */}

@@ -806,8 +806,41 @@ def _compact(day: str | None) -> str | None:
     return d[:8] if len(d) >= 8 else None
 
 
-def player_report(tag: str, since: str | None = None, until: str | None = None) -> dict | None:
+#: WHICH BATTLES THE TOP 10 DECKS SCREEN COUNTS (2026-10-25, asked for as a
+#: switch: "ladder / ranked trophy road" and "clan friendly or normal
+#: friendly", "only normal 1v1 modes, no special modes").
+#:
+#:   ladder    Path of Legends (`Ranked1v1_NewArena`, `_NewArena2`, and the
+#:             next one Supercell adds) + trophy road (`Ladder`). NOT
+#:             `Rage_Ladder` — a special variant.
+#:   friendly  `Friendly` exactly. A clan friendly and a friendly by invite
+#:             link both arrive as that mode. NOT Showdown_/Overtime_/Rage_/
+#:             ClassicDecks_/MirrorDeck_Friendly (special rules or decks the
+#:             player did not build) and NOT `Duel_1v1_Friendly`, whose rows
+#:             hold a 16/24-card loadout rather than one deck.
+#:
+#: A CLOSED MAP: the key arrives from a query string and only ever selects one
+#: of these fixed SQL fragments; nothing from the request reaches the SQL.
+#: `None` (no key) is every mode, which is what every other caller of
+#: `player_report` (Coach Assist, Team Analysis) still gets.
+PLAYER_MODES = {
+    "ladder": "(game_mode LIKE 'Ranked1v1%' OR game_mode = 'Ladder' COLLATE NOCASE)",
+    "friendly": "(game_mode = 'Friendly' COLLATE NOCASE)",
+}
+
+
+def valid_player_mode(raw) -> str | None:
+    """A query-string value -> a `PLAYER_MODES` key, or None for anything else."""
+    m = (raw or "").strip().lower()
+    return m if m in PLAYER_MODES else None
+
+
+def player_report(tag: str, since: str | None = None, until: str | None = None,
+                  mode: str | None = None) -> dict | None:
     """Everything the analysis screen needs, for an explicit date window.
+
+    `mode` is a `PLAYER_MODES` key (only those battles are counted, totals and
+    trends included) or None for every mode.
 
     Deck rows are aggregated from `battles` inside the window rather than read
     from `player_deck_agg`, which is lifetime-only. That is what makes the date
@@ -876,7 +909,8 @@ def player_report(tag: str, since: str | None = None, until: str | None = None) 
                 "       SUM(COALESCE(opponent_crowns,0)) ca, "
                 "       MAX(battle_time) last "
                 "FROM battles WHERE player_tag = ? AND battle_time >= ? AND battle_time <= ? "
-                "GROUP BY h, d",
+                + ("AND " + PLAYER_MODES[mode] + " " if mode in PLAYER_MODES else "")
+                + "GROUP BY h, d",
                 (tag, w_lo, w_hi),
             ).fetchall()
         except Exception:

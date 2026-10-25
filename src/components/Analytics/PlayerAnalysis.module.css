@@ -1139,3 +1139,25 @@
     width: 100%;
   }
 }
+
+/* The Top 10 Decks switch: Ladder & Ranked | Friendly (2026-10-25). */
+.modeTabs {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.modeEmpty {
+  margin: 0;
+  padding: 1.5rem 0.25rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sortTabs[hidden],
+.tableScroll[hidden] {
+  display: none;
+}
+
+.charts[hidden] {
+  display: none;
+}
