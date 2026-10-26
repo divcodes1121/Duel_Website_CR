@@ -176,7 +176,7 @@ def _record(wins: int, losses: int, draws: int) -> dict:
     }
 
 
-def _own_rows(tag: str, since: str | None, until: str | None
+def _own_rows(tag: str, since: str | None, until: str | None, keep=None
               ) -> tuple[list[dict], bool, dict[str, int]]:
     """`recent_battles._read_rows`, for a caller that only COUNTS DECKS.
 
@@ -191,6 +191,11 @@ def _own_rows(tag: str, since: str | None, until: str | None
 
     It matters since Team Analysis reads this for every player on both sides:
     twenty-four players at 0.2 s each was most of a board's wait.
+
+    `keep(game_mode) -> bool`, when given, is a second filter after the
+    router: a row it refuses is counted in `hidden` under its mode, like any
+    other row this screen leaves out (Team Analysis: ranked and 1v1 friendly
+    games only, `battle_modes.is_ranked_or_friendly`).
     """
     windows = cd.tier_windows(tag, since, until)
     if not windows:
@@ -227,7 +232,8 @@ def _own_rows(tag: str, since: str | None, until: str | None
             mode = mode or ""
             own = routed.get(mode)
             if own is None:
-                own = routed[mode] = bm.classify(mode) == bm.OWN_DECK_1V1
+                own = routed[mode] = (bm.classify(mode) == bm.OWN_DECK_1V1
+                                      and (keep is None or bool(keep(mode))))
             if not own:
                 hidden[mode or "(unrecorded)"] = hidden.get(mode or "(unrecorded)", 0) + 1
                 continue
@@ -254,7 +260,15 @@ def _own_rows(tag: str, since: str | None, until: str | None
     return out, archive_used, hidden
 
 
-def played(tag: str, since: str | None = None, until: str | None = None) -> dict:
+#: `played(..., modes=RANKED_FRIENDLY)`: ranked and 1v1 friendly games only.
+RANKED_FRIENDLY = "ranked_friendly"
+
+#: The duel index's modes a ranked-and-friendly read keeps (lower case).
+_FRIENDLY_DUELS = ("duel_1v1_friendly",)
+
+
+def played(tag: str, since: str | None = None, until: str | None = None,
+           modes: str | None = None) -> dict:
     """The COUNTING half of `report`: every deck this player fielded in the
     window, with their record on it, and nothing drawn or looked up.
 
@@ -270,8 +284,15 @@ def played(tag: str, since: str | None = None, until: str | None = None) -> dict
     Returns `per` — `{deck key: [wins, losses, draws, last seen, stored-order
     cards, archetype]}` — the forms each deck was last seen fielded with
     (`marks`), and the counts `report` publishes in its summary.
+
+    `modes=RANKED_FRIENDLY` reads ranked games and 1v1 friendly games only —
+    plain friendlies and friendly duels; clan-war duels, tournaments and the
+    special friendlies are counted in `hidden` (Team Analysis, 2026-10-27).
+    None is every own-deck mode, the Decks screen's count.
     """
-    rows, archive_used, hidden = _own_rows(tag, since, until)
+    keep = bm.is_ranked_or_friendly if modes == RANKED_FRIENDLY else None
+    duel_modes = _FRIENDLY_DUELS if modes == RANKED_FRIENDLY else None
+    rows, archive_used, hidden = _own_rows(tag, since, until, keep)
 
     # key -> [wins, losses, draws, last seen, stored-order cards, archetype]
     per: dict[str, list] = {}
@@ -317,8 +338,11 @@ def played(tag: str, since: str | None = None, until: str | None = None) -> dict
     if di is not None:
         try:
             duel_ok = di.available()
-            duel = di.player_decks(tag, di.iso_to_stamp(since),
-                                   di.iso_to_stamp(until, end=True)) if duel_ok else []
+            duel = (di.player_decks(tag, di.iso_to_stamp(since),
+                                    di.iso_to_stamp(until, end=True), modes=duel_modes)
+                    if duel_modes else
+                    di.player_decks(tag, di.iso_to_stamp(since),
+                                    di.iso_to_stamp(until, end=True))) if duel_ok else []
         except Exception:  # noqa: BLE001
             duel_ok, duel = False, []
         for d in duel:

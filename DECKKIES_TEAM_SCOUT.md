@@ -856,6 +856,79 @@ plans fell back to shared lists), and a function `spread` in `_folder` that
 overwrote the folder's archetype bars (a scouting report would not serialise).
 Both have tests that fail on the old code.
 
+## 4s. Decks that win every archetype they play (2026-10-27, brain 7.0)
+
+Asked 2026-10-27, about the scouting report and the match plan: *"the decks it
+shows are poor and not reliable ... need decks > 50% at least in all opp
+archetypes, and read ranked + 1v1 friendly battles of the opponent to suggest
+decks against him ... top decks, good synergy, high usage, counter".*
+
+**Measured first** (30 real opponents, 6.1 as deployed): **82% of the decks
+shown lost (under 50%) to at least one archetype the opponent plays**, and the
+median shown deck's worst matchup was 42.6%. The 50% floor was on the WEIGHTED
+figure only, so a deck that crushed their main list and lost 40-60 to the one
+they bring a fifth of the time passed it. And the opponent read counted every
+own-deck mode, clan-war duels most of all: 186,535 clan-war duel games against
+9,265 friendly-duel games stored since 1 October, each duel game counted 30
+times.
+
+What changed:
+
+- **A deck is listed only if it wins every archetype they play.**
+  `team_scout.counters(each_floor=EACH_FLOOR)`: its rate against EACH family at
+  `EACH_SHARE` (5%, the families the screen names) must be 50%+, and a family it
+  has no rate against fails it. Rows that pass are `allArchetypes: true`; when
+  fewer than `EACH_MIN` (3) pass, the decks whose worst matchup is highest fill
+  the list, `allArchetypes: false`, after the ones that pass. Every row carries
+  `eachWorst {family, rate}`. The answer-swap path takes only passing decks.
+  Same rule for each teammate's list in a match plan
+  (`personal_plan(each_floor=, plays=)`, their record with the win condition
+  applied, the folder's own shares), for the folder face, the roster-wide read
+  and the Deck Counter's bring list. A match plan's shortlist keeps every deck
+  that beats every family whatever its overall figure.
+- **The opponent is read from ranked and 1v1 friendly games only**:
+  `player_decks.played(modes="ranked_friendly")` =
+  `battle_modes.is_ranked_or_friendly` (`Ranked1v1_*`, `Ladder`, `Friendly`,
+  `Duel_1v1_Friendly`); `duel_index.player_decks(modes=)` keeps friendly duels
+  only, for the window and for the older-duel read. Clan-war duels,
+  tournaments, Showdown / Overtime / Rage friendlies and events are counted in
+  `hidden`. The Decks screen still reads every mode.
+- **Good synergy**: a pool list must pass the card-pairing gate
+  (`deck_synergy.passes`, the one Coach Assist's built decks pass) — 29 of the
+  271 lists in the 30-day pool were left out (`pool.window.synergySkipped`).
+  The duel-based spell-package check (`deck_packages`) was measured too and NOT
+  applied: it fails about half of the top-1,000 lists, mostly for newer cards
+  duel players have barely fielded.
+- **Pool size measured, not changed**: 10 / 20 / 40 top-1,000 lists per win
+  condition = pool 271 / 402 / 582, 8.0 / 9.3 / 18.6 s for 20 opponents, a
+  median 4 / 4 / 5 decks beating every archetype. Twice the wait for one deck.
+- **Screen**: every archetype chip is drawn under a deck (`MAX_CHIPS` 6 -> 10;
+  opponents play up to nine at 5%+), and a "closest" row carries an outlined
+  **Closest** pill whose tooltip names the matchup it loses. Rows that win every
+  matchup carry nothing extra — their chips are all green.
+
+**Staged on the server, same inputs, 6.1 vs 7.0:**
+
+| | 6.1 | 7.0 |
+|---|---|---|
+| 30 opponents: shown decks losing to an archetype they play | 82% | 4% (marked fills only) |
+| 30 opponents: median shown deck's worst matchup | 42.6% | 53.5% |
+| the account holder's 9 saved boards (88 opponents): folder decks losing one | 1,430 / 1,806 | 59 / 463 (all marked Closest) |
+| ...each teammate's #1 losing an archetype | 176 / 340 | 40 / 340 (marked) |
+| ...teammate #1 figure / worst matchup (median) | 61.9% / 50.8% | 62.9% / 52.5% |
+| ...folder #1 figure (median) | 64.0% | 62.7% |
+| ...most repeated deck in folders' top three | 18 | 19 |
+| ...time, all 9 boards | 52.6 s | 40.4 s |
+
+The cost: lists are shorter (a folder face 1,806 -> 463 rows over 88
+opponents; a teammate's list median 4), because on most opponents only a
+handful of decks beat everything they play; 10 of 88 opponents have no deck
+that does, and get the three closest, marked. Brain `team-scout-7.0`.
+Tests: `test_team_scout` 236, `test_team_analysis` 366, `test_player_decks`
+60, `test_duel_index` 99, `test_battle_modes` 188, vitest 1,837. Browser
+28/28 on the staged payloads (both themes, 1440 and 390).
+
+
 ## 4r. What the top 1,000 players use, re-read every poll (2026-10-24, brain 6.1)
 
 Asked hours after 6.0: *"still the decks suggested are very bad and those decks

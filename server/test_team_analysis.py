@@ -876,7 +876,7 @@ _fake_index = types.SimpleNamespace(
                     "windowGames": 1000, "catalogue": len(_CATALOGUE)},
     records=_fake_records,
     iso_to_stamp=dix.iso_to_stamp,
-    player_decks=lambda tag, since=None, until=None: _PLAYER_DECKS.get(tag, []),
+    player_decks=lambda tag, since=None, until=None, modes=None: _PLAYER_DECKS.get(tag, []),
 )
 _saved_index, _saved_brain = ta._duel_index, ta._duel
 ta._duel_index, ta._duel = _fake_index, dbr
@@ -1028,7 +1028,35 @@ finally:
 
 print(NL + "counters to what they play")
 
-check("the brain is 6.1", ts.BRAIN_VERSION == "team-scout-6.1" and folder["brain"] == ts.BRAIN_VERSION)
+check("the brain is 7.0", ts.BRAIN_VERSION == "team-scout-7.0" and folder["brain"] == ts.BRAIN_VERSION)
+
+# 7.0: EVERY ROW SAYS WHETHER IT BEATS EVERY FAMILY THEY PLAY — and the mark
+# survives the full re-rating of a chosen row (`_CHOSEN_KEYS`).
+_fams = [p["family"] for p in folder["plays"] if p["share"] >= ts.EACH_SHARE]
+_rows = folder["recommended"]
+check("every suggested row carries allArchetypes and its worst matchup",
+      _rows and all("allArchetypes" in r and "eachWorst" in r for r in _rows),
+      str([(r.get("name"), r.get("allArchetypes")) for r in _rows]))
+check("...and a row marked so really is 50%+ against every family on the screen",
+      all(all((r["vs"].get(f) or 0) >= ts.EACH_FLOOR for f in _fams)
+          for r in _rows if r.get("allArchetypes")), str(_fams))
+check("...the rows that beat every family lead the list",
+      [r["allArchetypes"] for r in _rows] == sorted((r["allArchetypes"] for r in _rows), reverse=True))
+# A SCOUTING folder's rows are only RATED in the pool and rated again in full
+# once chosen (`_finish`): the mark has to survive that.
+_srows = scout_folder["recommended"]
+check("a scouting row keeps its mark through the full re-rating",
+      _srows and all(isinstance(r.get("allArchetypes"), bool) and "art" in r for r in _srows),
+      str([(r.get("name"), r.get("allArchetypes"), "art" in r) for r in _srows]))
+_saved_syn = ta._synergy
+ta._synergy = types.SimpleNamespace(passes=lambda cards: "odd" not in cards)
+check("the card-pairing gate keeps a list duel players pair like a real deck",
+      ta._pairs_ok(["hog", "log"]) and not ta._pairs_ok(["hog", "odd"]))
+ta._synergy = types.SimpleNamespace(passes=lambda cards: (_ for _ in ()).throw(RuntimeError("x")))
+check("...a failing gate costs no list", ta._pairs_ok(["hog", "odd"]))
+ta._synergy = None
+check("...and no table is no gate", ta._pairs_ok(["hog", "odd"]))
+ta._synergy = _saved_syn
 
 # DUEL LISTS COME FROM THE NAMED GROUP ONLY, and every pool list knows its own
 # rate against the field.
@@ -1374,7 +1402,8 @@ ta.cd.player_report = lambda tag, since=None, until=None: ({
               deck("Golem", GOLEM, matches=90, wc="golem"),
               deck("Xbow", XBOW, matches=10, wc="xbow")],
 } if tag == "#R1" else None)
-ta._pdecks.played = lambda tag, since=None, until=None: {
+_ASKED_MODES = []
+ta._pdecks.played = lambda tag, since=None, until=None, modes=None: _ASKED_MODES.append(modes) or {
     "per": ({_k(GOLEM): [50, 38, 2, "20260820T120000.000Z", list(GOLEM), "golem"],
              _k(XBOW): [6, 4, 0, "20260819T120000.000Z", list(XBOW), "xbow"]}
             if tag == "#R1" else {}),
@@ -1383,6 +1412,9 @@ ta._pdecks.played = lambda tag, since=None, until=None: {
     "archiveUsed": False, "hidden": {"Challenge_AllCards_EventDeck_NoSet": 300},
 }
 _me = ta._resolve("#R1", 30)
+check("an opponent is read from ranked and 1v1 friendly games only (7.0)",
+      _ASKED_MODES and set(_ASKED_MODES) == {"ranked_friendly"}
+      and ta.OPPONENT_MODES == ta._pdecks.RANKED_FRIENDLY, str(_ASKED_MODES))
 check("each deck says how many of its games were duel games, never more than it has",
       [d["duelMatches"] for d in _me["decks"]] == [12, 10], str([d.get("duelMatches") for d in _me["decks"]]))
 check("with no duel index there are no older duel decks, and the read still answers",
@@ -1397,8 +1429,9 @@ class _OlderIndex:
         return (day or "") + ("T235959" if end else "T000000")
 
     @classmethod
-    def player_decks(cls, tag, since=None, until=None):
+    def player_decks(cls, tag, since=None, until=None, modes=None):
         cls.asked = (tag, since, until)
+        cls.modes = modes
         return [{"cards": list(LAVA), "games": 5, "wins": 3, "archetype": "lava",
                  "lastSeen": "20260701T120000.000Z"},
                 {"cards": list(LAVA)[:7], "games": 9, "wins": 1, "archetype": "lava"},
@@ -1415,6 +1448,8 @@ try:
     check("...asked of the days just before it, no further back than the constant",
           _OlderIndex.asked == ("#R1", "2026-06-02T000000", "2026-07-31T235959")
           and ta.OLDER_DUEL_DAYS == 60, str(_OlderIndex.asked))
+    check("...friendly duels only, never clan-war duels (7.0)",
+          tuple(_OlderIndex.modes or ()) == ("duel_1v1_friendly",), str(_OlderIndex.modes))
     check("...and of nothing when there is no window", ta._older_duel_decks("#R1", None) == [])
     _me2 = ta._resolve("#R1", 30)
     check("a resolved player carries them, apart from the decks they play",

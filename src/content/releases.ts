@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-27-every-archetype',
+    date: '2026-10-27',
+    kind: 'improved',
+    title: 'Team Analysis suggests decks that beat everything your opponent plays',
+    body: [
+      'A deck is suggested only when it wins (50% or more) against every deck type the opponent plays, not just on average. The rate against each of their deck types is shown under every suggestion.',
+      'Opponents are read from their ranked and 1v1 friendly games only, and every suggested deck uses cards that real players pair together. When no deck beats everything they play, the closest ones are shown and marked “Closest”.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-24-team-scout-top-1000',
     date: '2026-10-24',
     kind: 'improved',

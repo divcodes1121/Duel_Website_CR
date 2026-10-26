@@ -1555,3 +1555,18 @@
     grid-row: 2;
   }
 }
+
+/* Brain 7.0: a "closest" row — it does not win every archetype they play.
+   An outline in the warning ink, not a fill: it qualifies the row, it is not
+   a source label like the pills beside it. */
+.recClosest {
+  align-self: flex-start;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--warning);
+  border: 1px solid var(--warning);
+}

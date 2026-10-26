@@ -81,8 +81,11 @@ check("Coach Assist's suggestion queues the opponent", "_note_tag(opp" in sugges
 # The admin intel route checks the admin gate BEFORE it queues anything, so an
 # unauthenticated request cannot write to the queue through it.
 intel = next(block for route, block in blocks if route == "/api/analytics/admin/coach/intel/")
-check("the roster intel route queues only after its admin check",
-      intel.index("admin_auth.verify") < intel.index("_note_tag("))
+# Since 2026-10-25 the gate is `admin_auth.coach` (admin, or Pro + the coach
+# flag); `verify` is its fallback inside admin_auth.
+_gate = "admin_auth.coach(" if "admin_auth.coach(" in intel else "admin_auth.verify"
+check("the roster intel route queues only after its coach/admin check",
+      intel.index(_gate) < intel.index("_note_tag("))
 
 
 # ------------------------------------------------------------ functional check

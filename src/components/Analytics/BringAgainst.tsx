@@ -15,6 +15,7 @@ import { duelChip, duelDeckLabel, duelTitle, originTitle } from '../../utils/due
 import {
   BRING_VIEWS,
   balanceChips,
+  closestPill,
   familyChips,
   playsTitle,
   recentTitle,
@@ -104,6 +105,7 @@ function BringDeck({
   const d = drawnDeck(deck.cards, deck.art, deck.artInferred, deck.artFilled);
   const chips = familyChips(deck, plays, skip);
   const changed = balanceChips(deck, cardName);
+  const closest = closestPill(deck, (k) => plays.find((p) => p.family === k)?.name);
   return (
     <li className={styles.deck}>
       <div className={styles.deckHead}>
@@ -112,6 +114,11 @@ function BringDeck({
         {duelDeckLabel(deck) && (
           <span className={styles.duelPill} data-origin={deck.origin} title={originTitle(deck)}>
             {duelDeckLabel(deck)}
+          </span>
+        )}
+        {closest && (
+          <span className={styles.closestPill} title={closest.title} data-closest>
+            {closest.label}
           </span>
         )}
         {/* THE DUELS' OWN FIGURE, ONLY WHEN IT AGREES. The percentage on this

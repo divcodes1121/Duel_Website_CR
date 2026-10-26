@@ -1439,6 +1439,95 @@ def property_family_cap_and_familiar_first():
           str({t: [r["name"] for r in two[t]] for t in two}))
 
 
+def property_each_archetype_floor():
+    print("")
+    print("property — 7.0: a deck is listed only when it beats EVERY family they play")
+    plays = [{"family": "hog", "share": 0.45}, {"family": "giant", "share": 0.30},
+             {"family": "graveyard", "share": 0.25}]
+    kw = dict(limit=5, by_wincon=True, per_family=1, floor_only=True, specific=False,
+              each_floor=ts.EACH_FLOOR)
+    # A is the strongest by the weighted figure and LOSES to Graveyard; F wins
+    # all three; D is level with two and crushes Graveyard; C loses one by four.
+    a = p_row("A", {"hog": 70, "giant": 68, "graveyard": 40}, "hog-rider")
+    c = p_row("C", {"hog": 60, "giant": 58, "graveyard": 46}, "golem")
+    d = p_row("D", {"hog": 50, "giant": 50, "graveyard": 70}, "graveyard")
+    f = p_row("F", {"hog": 62, "giant": 58, "graveyard": 55}, "mortar")
+    # G has no rate against Graveyard at all: it cannot be said to beat it.
+    g = p_row("G", {"hog": 75, "giant": 75}, "sparky")
+    got = ts.counters([a, c, d, f, g], plays, **kw)
+    names = [r["name"] for r in got]
+    check("only the decks over 50% against hog, giant AND graveyard are listed",
+          names == ["F", "D"], str(names))
+    check("...each marked as winning every matchup",
+          all(r["allArchetypes"] is True for r in got), str([r.get("allArchetypes") for r in got]))
+    check("...with its worst matchup named",
+          got[0]["eachWorst"] == {"family": "graveyard", "rate": 55.0}
+          and got[1]["eachWorst"]["rate"] == 50.0, str([r["eachWorst"] for r in got]))
+    check("a family it has no rate against fails it (G)", "G" not in names)
+    check("50.0 exactly clears the floor (D)", "D" in names)
+
+    short = ts.counters([a, c, d, f, g], plays, each_min=3, **kw)
+    sn = [r["name"] for r in short]
+    check("short of `each_min`: the deck whose worst matchup is highest fills it, after "
+          "the ones that win every matchup", sn == ["F", "D", "C"], str(sn))
+    check("...marked as not winning every matchup",
+          [r["allArchetypes"] for r in short] == [True, True, False], str(short))
+    # The fill obeys the list's own rules: a second Mortar list (E, worst 48)
+    # is closer than C (worst 46) and still gives way, one list a win condition.
+    e2 = p_row("E", {"hog": 60, "giant": 60, "graveyard": 48}, "mortar")
+    capped = [r["name"] for r in ts.counters([a, c, d, f, e2], plays, each_min=3, **kw)]
+    check("...and keeps to one list of a win condition", capped == ["F", "D", "C"], str(capped))
+
+    rare = [{"family": "hog", "share": 0.60}, {"family": "giant", "share": 0.37},
+            {"family": "graveyard", "share": 0.03}]
+    loose = [r["name"] for r in ts.counters([a, c, d, f], rare, **kw)]
+    check("a family under `EACH_SHARE` of their play is not required (A is back)",
+          "A" in loose and ts.EACH_SHARE == ts.PLAYS_MIN_SHARE, str(loose))
+
+    # The answer-swap path: H is the best deck there is against Graveyard and
+    # loses to Hog. It must never be swapped in for a deck that wins them all.
+    # F2 wins every family but none of them at `GOOD_RATE`, so the repair path
+    # looks for an answer to each and H is the best one to Graveyard by far.
+    h = p_row("H", {"hog": 45, "giant": 58, "graveyard": 90}, "x-bow")
+    f2 = p_row("F", {"hog": 54, "giant": 53, "graveyard": 52}, "mortar")
+    swap = [r["name"] for r in ts.counters([f2, h], plays, **kw)]
+    check("the answer for a family is never a deck that loses to another family",
+          swap == ["F"], str(swap))
+
+    off = ts.counters([a, c, d, f], plays, limit=5, by_wincon=True, per_family=1,
+                      floor_only=True, specific=False)
+    check("without `each_floor` nothing changes: no marks, A leads",
+          off[0]["name"] == "A" and all("allArchetypes" not in r for r in off),
+          str([r["name"] for r in off]))
+
+    # The match plan: each teammate's list follows the same rule, with their
+    # record applied.
+    pool = [a, c, d, f]
+    players = [{"tag": "#H1", "own": [], "cards": set(), "wincons": {"hog-rider": 0.9}, "shift": {}}]
+    lists, _ = ts.personal_plan(players, pool, SQ_THREATS, limit=5, new_slots=5,
+                                each_floor=ts.EACH_FLOOR)
+    pn = [r["name"] for r in lists["#H1"]]
+    check("a teammate is offered only decks that win every matchup — not their own "
+          "win condition when it loses one", pn and "A" not in pn and set(pn) <= {"F", "D"}, str(pn))
+    lists3, _ = ts.personal_plan(players, pool, SQ_THREATS, limit=5, new_slots=5,
+                                 each_floor=ts.EACH_FLOOR, each_min=3)
+    p3 = lists3["#H1"]
+    check("...and a short list is filled with the closest, marked",
+          len(p3) == 3 and [r["allArchetypes"] for r in p3] == [True, True, False],
+          str([(r["name"], r.get("allArchetypes")) for r in p3]))
+    shown, _ = ts.personal_plan(players, pool, SQ_THREATS, limit=5, new_slots=5,
+                                each_floor=ts.EACH_FLOOR, plays=rare)
+    check("given the shares the screen shows, a teammate must beat only the families on it "
+          "(Graveyard at 3% is not one: A is back)",
+          "A" in [r["name"] for r in shown["#H1"]], str([r["name"] for r in shown["#H1"]]))
+    skilled = [dict(players[0], shift={"hog-rider": 0.9})]
+    sk, _ = ts.personal_plan(skilled, pool, SQ_THREATS, limit=5, new_slots=5,
+                             each_floor=ts.EACH_FLOOR)
+    skn = [r["name"] for r in sk["#H1"]]
+    check("their record with a win condition counts: a strong Hog player's A clears "
+          "every family once it is applied", "A" in skn, str(skn))
+
+
 def main() -> int:
     print("team_scout — the coaching brain")
     case_1_many_known_decks()
@@ -1467,6 +1556,7 @@ def main() -> int:
     property_family_cap_and_familiar_first()
     property_band_reads_the_opponent()
     property_speedups_are_exact()
+    property_each_archetype_floor()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 

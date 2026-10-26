@@ -1331,33 +1331,42 @@ def activity() -> dict | None:
     return out or None
 
 
-def _player_rows(tag: str, since: str | None, until: str | None) -> list[tuple]:
+def _player_rows(tag: str, since: str | None, until: str | None,
+                 modes=None) -> list[tuple]:
     lo, hi = since or "", until or "~"
+    only, args = "", []
+    if modes:
+        ms = sorted({str(m).lower() for m in modes})
+        only = " AND lower(mode) IN (" + ",".join("?" for _ in ms) + ")"
+        args = ms
     con = _ro(PATH)
     try:
         return con.execute(
-            """
+            f"""
             SELECT a_deck, CASE winner WHEN 1 THEN 1 ELSE 0 END, battle_time
-              FROM games WHERE a_tag = ? AND battle_time >= ? AND battle_time <= ?
+              FROM games WHERE a_tag = ? AND battle_time >= ? AND battle_time <= ?{only}
             UNION ALL
             SELECT b_deck, CASE winner WHEN 2 THEN 1 ELSE 0 END, battle_time
-              FROM games WHERE b_tag = ? AND battle_time >= ? AND battle_time <= ?
-            """, (tag, lo, hi, tag, lo, hi)).fetchall()
+              FROM games WHERE b_tag = ? AND battle_time >= ? AND battle_time <= ?{only}
+            """, (tag, lo, hi, *args, tag, lo, hi, *args)).fetchall()
     finally:
         con.close()
 
 
-def player_decks(tag: str, since: str | None = None, until: str | None = None) -> list[dict]:
+def player_decks(tag: str, since: str | None = None, until: str | None = None,
+                 modes=None) -> list[dict]:
     """The decks one player duelled with in a window, most-played first.
 
     `since`/`until` are stored-format stamps (`iso_to_stamp`). Every game of
     theirs the index holds counts — the evidence window bounds the records, not
-    what somebody has played.
+    what somebody has played. `modes` (lower-case mode strings) keeps only
+    games of those duel modes: Team Analysis reads friendly duels alone
+    (`battle_modes.is_ranked_or_friendly`). None is every mode.
     """
     if not tag or _current() is None:
         return []
     try:
-        rows = _player_rows(tag, since, until)
+        rows = _player_rows(tag, since, until, modes)
     except sqlite3.Error:
         return []
     per: dict[str, list] = {}

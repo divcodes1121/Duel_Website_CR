@@ -157,3 +157,21 @@ def classify(game_mode: str) -> str:
     if is_own_deck_1v1(game_mode):
         return OWN_DECK_1V1
     return OTHER
+
+
+#: THE GAMES AN OPPONENT IS READ FROM ON TEAM ANALYSIS (2026-10-27): ranked
+#: (Path of Legends, every season's `Ranked1v1_*`, and the old `Ladder`) and
+#: 1v1 friendly battles — a plain friendly and a friendly duel. Asked for by
+#: name ("read ranked + 1v1 friendly battles deck of opp"). Clan-war duels,
+#: tournaments, Showdown / Overtime / Rage friendlies and every event stay
+#: out: their rules or their stakes are not what the opponent brings to a
+#: match. `clash_data.PLAYER_MODES` draws the same line for the Top 10 Decks
+#: switch.
+RANKED_FRIENDLY_EXACT = ("ladder", "friendly", "duel_1v1_friendly")
+RANKED_FRIENDLY_PREFIXES = ("ranked1v1",)
+
+
+def is_ranked_or_friendly(game_mode: str) -> bool:
+    """True for a ranked game or a 1v1 friendly (plain or a friendly duel)."""
+    m = (game_mode or "").strip().lower()
+    return m in RANKED_FRIENDLY_EXACT or m.startswith(RANKED_FRIENDLY_PREFIXES)

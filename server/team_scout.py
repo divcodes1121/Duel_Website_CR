@@ -359,7 +359,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-6.1"
+BRAIN_VERSION = "team-scout-7.0"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -1669,8 +1669,45 @@ ALL_ROUND = 1
 GENERIC_WEIGHT = 0.5
 
 
+#: 7.0 (2026-10-27): A DECK IS LISTED ONLY IF IT WINS EVERY MATCHUP. Its rate
+#: against EACH family the opponent plays at `EACH_SHARE` or more — the
+#: families the screen names under "Likely to bring" — must be at least
+#: `EACH_FLOOR`, and a family it could not be rated against fails it.
+#: Asked for by name: "need decks > 50% at least in all opp archetypes".
+#: Measured before it (30 real opponents, 6.1's live lists): 82% of the rows
+#: shown were under 50% against at least one family the opponent plays, the
+#: median row's worst matchup 42.6% — the 50% floor was on the WEIGHTED
+#: figure only, so a deck that crushed their main list and lost 40-60 to the
+#: one they bring a fifth of the time passed it.
+EACH_FLOOR = 50.0
+EACH_SHARE = PLAYS_MIN_SHARE
+
+#: When fewer than this many decks clear `EACH_FLOOR`, the list is topped up
+#: with the decks whose WORST matchup is highest (still over `FLOOR_RATE`
+#: overall), each marked `allArchetypes: false`, so the reader sees how close
+#: the closest decks come rather than an empty board.
+EACH_MIN = 3
+
+
 def _rate(row) -> float:
     return float(row.get("expectedWinRate") or 0.0)
+
+
+def each_worst(vs, plays, *, share=EACH_SHARE):
+    """`(lowest rate, family)` over every family the opponent plays at `share`
+    or more; `(None, family)` when a deck has no rate against one of them
+    (it cannot be said to beat it); `(None, None)` when there is no such
+    family at all."""
+    low, fam = None, None
+    for p in plays or []:
+        if float(p.get("share") or 0.0) < share:
+            continue
+        v = (vs or {}).get(p["family"])
+        if v is None:
+            return None, p["family"]
+        if low is None or v < low:
+            low, fam = float(v), p["family"]
+    return low, fam
 
 
 def lift_of(row) -> float | None:
@@ -1738,7 +1775,7 @@ def worst_case(vs, plays, *, share=WORST_SHARE):
 def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
              score_key="recommendationScore", first=None, adjust=None,
              specific=True, per_family=PER_ARCHETYPE, by_wincon=False,
-             floor_only=False, band=0.0):
+             floor_only=False, band=0.0, each_floor=None, each_min=0):
     """The decks to bring: the strongest counters to what they play.
 
     `rows` are scored candidates (`score()`'s rows — each is copied, nothing
@@ -1781,6 +1818,14 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     list of a win condition answered every opponent whose figures were a
     tenth of a point apart.
 
+    `each_floor` (7.0): only rows rated at least that against EVERY family
+    in `plays` at `EACH_SHARE` or more are listed (`each_worst`), and the
+    answer-swap below takes only such rows. When fewer than `each_min` clear
+    it, the rows whose worst matchup is highest top the list up to
+    `each_min`, marked `allArchetypes: False`; every row that cleared it is
+    marked `allArchetypes: True`. Each row carries `eachWorst` — its lowest
+    rate over those families and which family — either way.
+
     `first` is a row (matched by `key`) that leads whatever its figure — the
     #1 a squad assigned this teammate. Each row comes back with `vs` (its rate
     against each family) and `answers` (the families it is the list's best
@@ -1799,6 +1844,13 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         c["worst"] = worst_case(c["vs"], plays)
         if c["worst"] is not None and c["worst"]["rate"] < WORST_FLOOR:
             c["_v"] -= HOLE_COST
+        if each_floor is not None:
+            low, fam = each_worst(c["vs"], plays)
+            c["eachWorst"] = {"family": fam, "rate": low}
+            c["_each"] = low is not None or fam is None
+            c["_each"] = c["_each"] and (low is None or low >= each_floor)
+        else:
+            c["_each"] = True
         lift = lift_of(c)
         if lift is not None:
             c["lift"] = round(lift, 1)
@@ -1877,13 +1929,15 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         lead = next((r for r in pool if r["key"] == first["key"]), None)
         if lead is not None and floor_only and _rate(lead) < FLOOR_RATE:
             lead = None
+        if lead is not None and not lead["_each"]:
+            lead = None
         if lead is not None:
             take(lead)
 
     for r in pool:
         if len(chosen) >= limit:
             break
-        if r is lead or _rate(r) < FLOOR_RATE or not fits(r):
+        if r is lead or _rate(r) < FLOOR_RATE or not r["_each"] or not fits(r):
             continue
         take(r)
     if len(chosen) < limit:
@@ -1895,9 +1949,23 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         for r in pool:
             if len(chosen) >= limit:
                 break
-            if id(r) in listed or r is lead or _rate(r) < FLOOR_RATE or not fits(r):
+            if (id(r) in listed or r is lead or _rate(r) < FLOOR_RATE
+                    or not r["_each"] or not fits(r)):
                 continue
             take(r)
+    if each_floor is not None and len(chosen) < min(each_min, limit):
+        # FEWER DECKS WIN EVERY MATCHUP THAN THE LIST NEEDS. The closest —
+        # the highest worst matchup — fill it, marked, rather than leaving
+        # the reader nothing to bring.
+        listed = {id(c) for c in chosen}
+        near = [r for r in pool if id(r) not in listed and r is not lead
+                and _rate(r) >= FLOOR_RATE and r["eachWorst"]["rate"] is not None]
+        near.sort(key=lambda r: (-r["eachWorst"]["rate"], -r["_v"], r["key"]))
+        for r in near:
+            if len(chosen) >= min(each_min, limit):
+                break
+            if fits(r):
+                take(r)
     if not chosen and not floor_only:
         # Nothing clears the floor. One row, at its own figure, says so better
         # than an empty board that reads as "no data".
@@ -1919,7 +1987,8 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         listed = {c["key"] for c in chosen}
         cands = [r for r in pool
                  if r["key"] not in listed and r["vs"].get(fam) is not None
-                 and r["vs"][fam] >= GOOD_RATE and _rate(r) >= FLOOR_RATE]
+                 and r["vs"][fam] >= GOOD_RATE and _rate(r) >= FLOOR_RATE
+                 and r["_each"]]
         cands.sort(key=lambda r: (-r["vs"][fam], -r["_v"], r["key"]))
         for cand in cands:
             if len(chosen) < limit:
@@ -1950,10 +2019,16 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     tail = [c for c in chosen if c is not lead]
     tail.sort(key=lambda r: (-_rate(r), -r["_v"], r["key"]))
     out = head + tail
+    if each_floor is not None:
+        # The decks that win every matchup lead; the closest after them.
+        out = [c for c in out if c["_each"]] + [c for c in out if not c["_each"]]
     for c in out:
         del c["_v"]
         if c.pop("_round"):
             c["allRound"] = True
+        ok = c.pop("_each")
+        if each_floor is not None:
+            c["allArchetypes"] = bool(ok)
     return out
 
 
@@ -2400,7 +2475,9 @@ def _family_key(r) -> str:
 
 def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                   new_slots: int = NEW_SLOTS, share_max: int = SHARE_MAX,
-                  min_list: int = MIN_LIST, per_wincon: int = PER_ARCHETYPE):
+                  min_list: int = MIN_LIST, per_wincon: int = PER_ARCHETYPE,
+                  each_floor: float | None = None, each_min: int = 0,
+                  plays=None):
     """Every teammate's list against ONE opponent, each built out of that
     teammate (5.0; see the section note).
 
@@ -2422,10 +2499,24 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
     from their own decks and what they were granted (`counters`). A list
     shorter than `min_list` is topped up — first from decks nobody holds, then
     from decks a teammate already has — keeping every row it already had.
+
+    `each_floor` (7.0) is `counters`'s: a deck is granted, listed and topped
+    up only when it rates at least that for THIS teammate (their record with
+    its win condition applied) against every family the opponent plays at
+    `EACH_SHARE` or more; `each_min` closest decks fill a list that comes up
+    short, marked.
+
+    `plays` is the opponent's family shares as the caller SHOWS them
+    (`played_space()["plays"]`); given, the families a deck must beat are the
+    ones on the screen. Without it they are read off `threats`, whose kept
+    lists are renormalised and can put a 4.9% family over 5%.
     """
     weight = archetype_weights(threats)
-    plays = [{"family": a, "share": w}
-             for a, w in sorted(weight.items(), key=lambda kv: (-kv[1], kv[0]))]
+    if plays is None:
+        plays = [{"family": a, "share": w}
+                 for a, w in sorted(weight.items(), key=lambda kv: (-kv[1], kv[0]))]
+    else:
+        plays = [{"family": p["family"], "share": float(p.get("share") or 0.0)} for p in plays]
     order = {p["tag"]: i for i, p in enumerate(players)}
 
     cand: dict[str, list[dict]] = {}
@@ -2434,10 +2525,16 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
         cand[p["tag"]] = [_personal_row(r, p)
                           for r in own + fills(own, pool or [], need=len(pool or []))]
 
+    def beats_all(r) -> bool:
+        if each_floor is None:
+            return True
+        low, fam = each_worst(r.get("vs"), plays)
+        return (low is not None and low >= each_floor) or (low is None and fam is None)
+
     claims = []
     for tag, rows in cand.items():
         for r in rows:
-            if r.get("owner") or _rate(r) < FLOOR_RATE:
+            if r.get("owner") or _rate(r) < FLOOR_RATE or not beats_all(r):
                 continue
             claim = (r["personalScore"] + CLAIM_WEIGHT * float(r.get("winConShare") or 0.0)
                      + float(r.get("useBonus") or 0.0))
@@ -2478,7 +2575,7 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
         mine = [r for r in rows if r.get("owner")] + held[tag]
         picked = counters(mine, plays, limit=limit, score_key="personalScore", specific=False,
                                   by_wincon=True, per_family=per_wincon, floor_only=True,
-                                  adjust=_familiar_first)
+                                  adjust=_familiar_first, each_floor=each_floor)
         want = min(min_list, limit)
         if len(picked) < want:
             # Topped up, never replaced: what the list holds is kept.
@@ -2489,9 +2586,19 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                                   score_key="personalScore", specific=False,
                                   by_wincon=True, per_family=per_wincon, floor_only=True,
                                   adjust=lambda c, _k=keep: (1000.0 if c["key"] in _k else 0.0)
-                                  + _familiar_first(c))
+                                  + _familiar_first(c), each_floor=each_floor)
                 if len(picked) >= want:
                     break
+            if each_floor is not None and len(picked) < min(each_min, limit):
+                # Nothing more wins every matchup for them: the closest decks
+                # (highest worst matchup) fill the list to `each_min`, marked.
+                keep = {r["key"] for r in picked}
+                picked = counters(rows, plays, limit=max(min(each_min, limit), len(picked)),
+                                  score_key="personalScore", specific=False,
+                                  by_wincon=True, per_family=per_wincon, floor_only=True,
+                                  adjust=lambda c, _k=keep: (1000.0 if c["key"] in _k else 0.0)
+                                  + _familiar_first(c),
+                                  each_floor=each_floor, each_min=each_min)
             for r in picked:
                 if not r.get("owner") and r["key"] not in {h["key"] for h in held[tag]}:
                     taken[r["key"]] = taken.get(r["key"], 0) + 1

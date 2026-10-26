@@ -264,6 +264,18 @@ def test_royale_shuffle_is_never_an_own_deck() -> None:
         check(f"{m} is still own-deck", bm.is_own_deck_1v1(m))
 
 
+def test_team_analysis_reads_ranked_and_1v1_friendly_only():
+    print("")
+    print("is_ranked_or_friendly: what Team Analysis reads an opponent from (7.0)")
+    for m in ("Ranked1v1_NewArena2", "Ranked1v1_NewArena", "Ranked1v1_NewArena3",
+              "Ladder", "Friendly", "Duel_1v1_Friendly", "FRIENDLY", "ranked1v1_x"):
+        check(f"{m} is read", bm.is_ranked_or_friendly(m))
+    for m in ("CW_Duel_1v1", "CW_Battle_1v1", "Overtime_Friendly", "Showdown_Friendly",
+              "Rage_Friendly", "Rage_Ladder", "Tournament", "Overtime_Tournament",
+              "TeamVsTeam", "PickMode", "ClassicDecks_Friendly", "RR_Overtime_Friendly", "", None):
+        check(f"{m!r} is not", not bm.is_ranked_or_friendly(m))
+
+
 if __name__ == "__main__":
     test_every_live_mode_routes_as_intended()
     test_the_four_families_the_user_asked_for()
@@ -277,5 +289,6 @@ if __name__ == "__main__":
     test_the_guard_refuses_exactly_what_recent_battles_refuses()
     test_royale_shuffle_is_never_an_own_deck()
     test_the_share_this_change_was_made_for()
+    test_team_analysis_reads_ranked_and_1v1_friendly_only()
     print(f"\n{PASS} passed, {FAIL} failed")
     sys.exit(1 if FAIL else 0)

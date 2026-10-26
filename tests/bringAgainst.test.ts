@@ -8,6 +8,7 @@ import {
   MAX_CHIPS,
   balanceChips,
   chipLabels,
+  closestPill,
   familyChips,
   patchDay,
   playsTitle,
@@ -158,12 +159,13 @@ describe('the chips under a deck', () => {
     expect(chips.map((c) => c.family)).toEqual(['bridge-spam']);
   });
 
-  it('are at most six, their six most played', () => {
-    const many = Array.from({ length: 9 }, (_, i) => ({ family: `f${i}`, name: `F${i}` }));
+  it('are at most MAX_CHIPS, the most played first (ten since brain 7.0)', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ family: `f${i}`, name: `F${i}` }));
     const vs = Object.fromEntries(many.map((p) => [p.family, 60]));
     const chips = familyChips({ vs }, many);
+    expect(MAX_CHIPS).toBe(10);
     expect(chips).toHaveLength(MAX_CHIPS);
-    expect(chips.map((c) => c.family)).toEqual(['f0', 'f1', 'f2', 'f3', 'f4', 'f5']);
+    expect(chips.map((c) => c.family)).toEqual(many.slice(0, 10).map((p) => p.family));
   });
 });
 
@@ -352,5 +354,38 @@ describe('the day window reaches the suggestions (2026-10-11)', () => {
     // Not from the chip the reader has pressed: a board on screen was made
     // with ITS days, and the chip may have moved since.
     expect(screen).not.toMatch(/windowLabel\([^)]*days/);
+  });
+});
+
+describe('brain 7.0: every archetype they play', () => {
+  const names = (k: string) => ({ bait: 'Log Bait', hog: 'Hog' } as Record<string, string>)[k];
+
+  it('draws a chip for every archetype a real opponent plays (nine seen)', () => {
+    const plays = Array.from({ length: 9 }, (_, i) => ({ family: `f${i}`, name: `F${i}` }));
+    const vs = Object.fromEntries(plays.map((p) => [p.family, 55]));
+    expect(MAX_CHIPS).toBeGreaterThanOrEqual(9);
+    expect(familyChips({ vs }, plays)).toHaveLength(9);
+  });
+
+  it('marks only a row that does NOT win every matchup', () => {
+    expect(closestPill({ allArchetypes: true }, names)).toBeNull();
+    expect(closestPill({}, names)).toBeNull();
+    const p = closestPill({ allArchetypes: false, eachWorst: { family: 'bait', rate: 47.4 } }, names);
+    expect(p?.label).toBe('Closest');
+    expect(p?.title).toContain('Worst: Log Bait 47%');
+  });
+
+  it('says when the worst is a matchup it has no rate for', () => {
+    const p = closestPill({ allArchetypes: false, eachWorst: { family: 'hog', rate: null } }, names);
+    expect(p?.title).toContain('No rate against Hog');
+  });
+
+  it('both screens draw the pill', () => {
+    for (const f of [
+      'src/components/Analytics/TeamAnalysis/TeamFolders.tsx',
+      'src/components/Analytics/BringAgainst.tsx',
+    ]) {
+      expect(readFileSync(resolve(__dirname, '..', f), 'utf8')).toMatch(/closestPill\(/);
+    }
   });
 });

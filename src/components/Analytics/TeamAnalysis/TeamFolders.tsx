@@ -13,7 +13,7 @@ import { DeckActions } from '../../DeckActions/DeckActions';
 import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import { VsMark } from '../../VsMark/VsMark';
 import { duelChip, duelDeckLabel, duelTitle, originTitle } from '../../../utils/duelFigures';
-import { balanceChips, chipLabels, recentTitle } from '../../../utils/bringAgainst';
+import { balanceChips, chipLabels, closestPill, recentTitle } from '../../../utils/bringAgainst';
 import { CARDS_BY_KEY } from '../../../data/cards';
 import styles from './TeamAnalysis.module.css';
 import { Threats } from './Threats';
@@ -294,6 +294,9 @@ function Recommendation({ rec, rank, labels }: {
     rec.overallWinRate === null || rec.overallWinRate === undefined
       ? null
       : rec.expectedWinRate - rec.overallWinRate;
+  /* A deck that does not win every archetype they play (brain 7.0) — listed
+     only because fewer than three decks do — says so in one word. */
+  const closest = closestPill(rec, (k) => labels?.find(([f]) => f === k)?.[1]);
 
   return (
     <li className={styles.rec}>
@@ -308,6 +311,11 @@ function Recommendation({ rec, rank, labels }: {
           {duelDeckLabel(rec) && (
             <span className={styles.recDuel} data-origin={rec.origin} title={originTitle(rec)}>
               {duelDeckLabel(rec)}
+            </span>
+          )}
+          {closest && (
+            <span className={styles.recClosest} title={closest.title} data-closest>
+              {closest.label}
             </span>
           )}
           <span className={styles.recDeck}>{rec.name}</span>

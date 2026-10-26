@@ -247,9 +247,12 @@ class FakeDuel:
     def classify(k):
         return "bait" if "goblin-barrel" in k else "hog"
 
+    modes = "unset"
+
     @staticmethod
-    def player_decks(tag, since, until):
+    def player_decks(tag, since, until, modes=None):
         FakeDuel.calls.append((tag, since, until))
+        FakeDuel.modes = modes
         return [
             {"key": key(BAIT), "cards": sorted(BAIT), "archetype": "bait",
              "games": 4, "wins": 3, "lastSeen": "20260912T180000.000Z"},
@@ -284,6 +287,11 @@ _pd = pd.played(TAG)
 check("played() says which of a deck's games were DUEL games (the projection's weight)",
       _pd["duel"] == {key(BAIT): 4, key(HOG): 1} and sum(_pd["duel"].values()) == _pd["duelGames"],
       str(_pd.get("duel")))
+check("...and with no mode asked, the duel index is asked for every duel mode",
+      FakeDuel.modes is None, str(FakeDuel.modes))
+_pr = pd.played(TAG, modes=pd.RANKED_FRIENDLY)
+check("ranked + friendly (7.0): the duel index is asked for friendly duels only",
+      FakeDuel.modes == ("duel_1v1_friendly",), str(FakeDuel.modes))
 
 
 class BrokenDuel(FakeDuel):
@@ -363,6 +371,14 @@ check("...with a record on each", _p["per"][key(HOG)][:3] == [5, 1, 2] or sum(_p
       str(_p["per"][key(HOG)][:3]))
 check("...and the event deck and the 2v2 games are not their decks",
       sum(_p["hidden"].values()) >= 3)
+_pr = pd.played(TAG, modes=pd.RANKED_FRIENDLY)
+_kept_modes = {r["mode"] for r in pd._own_rows(TAG, None, None, pd.bm.is_ranked_or_friendly)[0]}
+check("ranked + friendly (7.0): only ranked, Ladder and Friendly rows are read",
+      _kept_modes and all(pd.bm.is_ranked_or_friendly(m) for m in _kept_modes), str(_kept_modes))
+check("...every other own-deck row is counted as hidden, under its mode",
+      sum(_pr["hidden"].values()) > sum(_p["hidden"].values()), str(_pr["hidden"]))
+check("...and nothing is read that the every-mode count did not read",
+      set(_pr["per"]) <= set(_p["per"]))
 
 
 # --- an empty window -----------------------------------------------------------

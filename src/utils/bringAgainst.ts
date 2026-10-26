@@ -28,9 +28,11 @@ export const BRING_VIEWS: { id: BringView; label: string }[] = [
   { id: 'card', label: 'By card' },
 ];
 
-/** Chips drawn under one deck, at most. Their six most played archetypes: a
- *  seventh is under one game in twenty and would wrap the row on a phone. */
-export const MAX_CHIPS = 6;
+/** Chips drawn under one deck, at most. Every archetype they play at 5% or
+ *  more (the server's `plays`): since brain 7.0 a listed deck wins EVERY one
+ *  of them, and a chip that is not drawn is a claim the reader cannot check.
+ *  Ten covers the widest real opponent seen (nine). */
+export const MAX_CHIPS = 10;
 
 /** A rate at or above this is drawn as a matchup they lose. The server's own
  *  `team_scout.ANSWERED`. */
@@ -245,4 +247,30 @@ export function chipLabels(folder: {
   if (folder.plays?.length) return folder.plays.slice(0, MAX_CHIPS).map((p) => [p.family, p.name]);
   if (folder.squadCover?.length) return folder.squadCover.map((c) => [c.archetype, c.name]);
   return undefined;
+}
+
+/**
+ * The pill on a "closest" row (brain 7.0): a deck that does NOT win every
+ * archetype the opponent plays, listed only because fewer decks than three do.
+ * Null on every other row — a deck that wins them all says so with its chips.
+ * `names` maps a family key to its display name (the folder's `plays`).
+ */
+export function closestPill(
+  deck: Pick<TeamRecommendation, 'allArchetypes' | 'eachWorst'>,
+  names: (family: string) => string | undefined,
+): { label: string; title: string } | null {
+  if (deck.allArchetypes !== false) return null;
+  const w = deck.eachWorst;
+  const worst =
+    w && w.family
+      ? w.rate === null || w.rate === undefined
+        ? `No rate against ${names(w.family) ?? w.family}`
+        : `Worst: ${names(w.family) ?? w.family} ${w.rate.toFixed(0)}%`
+      : undefined;
+  return {
+    label: 'Closest',
+    title: ['No deck in the pool wins every matchup against them.', worst]
+      .filter(Boolean)
+      .join(' '),
+  };
 }

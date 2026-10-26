@@ -222,6 +222,17 @@ try:
 except Exception:  # noqa: BLE001 - deployment shape
     _top = None
 
+#: THE CARD-PAIRING GATE (`deck_synergy`, the one "Or bring one of these"
+#: and every deck Coach Assist builds already pass): since 7.0 a pool list
+#: whose cards duel players pair less often than 90% of the decks they really
+#: field — and that is not itself proven in 30+ duel games — is not offered.
+#: Asked for (2026-10-27): "good decks ... good synergy". Soft: no table, no
+#: gate.
+try:
+    import deck_synergy as _synergy
+except Exception:  # noqa: BLE001 - deployment shape
+    _synergy = None
+
 # ── Floors ──────────────────────────────────────────────────────────────────
 
 #: Squad size cap per side. Mirrors `MAX_SQUAD` in `src/utils/squadParse.ts`,
@@ -567,7 +578,8 @@ def _own_decks(tag: str, since: str | None, until: str | None) -> dict | None:
     if _pdecks is None:
         return None
     try:
-        got = _pdecks.played(tag, since, until)
+        # RANKED AND 1v1 FRIENDLY GAMES ONLY (7.0, `OPPONENT_MODES`).
+        got = _pdecks.played(tag, since, until, modes=OPPONENT_MODES)
     except Exception:  # noqa: BLE001 - the old list is the fallback
         traceback.print_exc()
         return None
@@ -625,7 +637,8 @@ def _older_duel_decks(tag: str, since: str | None) -> list[dict]:
         lo = (day - datetime.timedelta(days=OLDER_DUEL_DAYS)).isoformat()
         hi = (day - datetime.timedelta(days=1)).isoformat()
         got = _duel_index.player_decks(tag, _duel_index.iso_to_stamp(lo),
-                                       _duel_index.iso_to_stamp(hi, end=True))
+                                       _duel_index.iso_to_stamp(hi, end=True),
+                                       modes=OLDER_DUEL_MODES)
     except Exception:  # noqa: BLE001 - the window's own decks are the projection
         traceback.print_exc()
         return []
@@ -2015,6 +2028,17 @@ META_LISTS = 40
 #: Most played lists of each win condition that join the pool.
 META_PER_FAMILY = 8
 
+#: 7.0 (2026-10-27): WHICH OF AN OPPONENT'S GAMES ARE READ — ranked and 1v1
+#: friendly (`player_decks.RANKED_FRIENDLY`, see
+#: `battle_modes.is_ranked_or_friendly`). Asked for by name: "read ranked +
+#: 1v1 friendly battles deck of opp". Before it every own-deck mode counted,
+#: and clan-war duels most of all: 186,535 clan-war duel games against 9,265
+#: friendly-duel games stored since 1 October, each duel game counted 30
+#: times (`team_scout.DUEL_WEIGHT`).
+OPPONENT_MODES = "ranked_friendly"
+#: The duel modes the older-duel read keeps (`_older_duel_decks`).
+OLDER_DUEL_MODES = ("duel_1v1_friendly",)
+
 #: Games a meta list must have been played in the window.
 META_MIN_GAMES = 50
 
@@ -2051,6 +2075,12 @@ TOP_MIN_PLAYERS = 3
 #: ... and the games they played it between them.
 TOP_MIN_GAMES = 30
 #: The most used lists of each win condition that join.
+#:
+#: MEASURED AND KEPT AT 10 (7.0, 2026-10-27): widening it so more lists can
+#: win every matchup an opponent plays (`team_scout.EACH_FLOOR`). On 20 real
+#: opponents, warm: 10 -> pool 271, 8.0 s, a median of 4 listed decks beating
+#: every family, 5 opponents with fewer than 3; 20 -> 402, 9.3 s, the same 4
+#: and 5; 40 -> 582, 18.6 s, 5 and 4. Twice the wait for one deck more.
 TOP_PER_FAMILY = 10
 
 #: HOW OFTEN THE TOP PLAYERS USE A LIST, in the choosing ("set the frequency
@@ -2229,6 +2259,17 @@ def _top_keys(days: int, last: datetime.date) -> tuple[list[tuple], dict]:
                   "used": len(got), "eligible": len(rows)}
 
 
+def _pairs_ok(cards) -> bool:
+    """`deck_synergy.passes`, and True whenever the gate cannot answer."""
+    if _synergy is None:
+        return True
+    try:
+        return bool(_synergy.passes(list(cards)))
+    except Exception:  # noqa: BLE001 - the gate never costs a pool
+        traceback.print_exc()
+        return True
+
+
 def _crl_proven(v) -> bool:
     """Whether a CRL list `[games, wins, pilots]` is a staple (6.0): more than
     one of the group brought it, or one of them brought it often."""
@@ -2286,10 +2327,14 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
         e["crl"] = [n, w, pilots]
 
     todo = []
+    info["synergySkipped"] = 0
     for key, e in wanted.items():
         cards = key.split(",")
         if cd.fillable_slots(cards) < cd.SPECIAL_SLOTS:
             info["slotGaps"] += 1
+            continue
+        if not _pairs_ok(cards):
+            info["synergySkipped"] += 1
             continue
         todo.append((key, e))
 
@@ -3193,7 +3238,9 @@ def _own_duel_rows(mate: dict, ctx: _DuelContext | None, projection: dict,
 #: full for the screen.
 _CHOSEN_KEYS = ("answers", "fill", "squadPick", "covers", "known", "personalScore", "rate",
                 "worst", "lift", "allRound", "familiar", "winConShare", "skillShift",
-                "baseRate", "expectedWinRate", "matchupValue", "vs", "recommendationScore")
+                "baseRate", "expectedWinRate", "matchupValue", "vs", "recommendationScore",
+                # 7.0: whether it beats every family they play, and its worst.
+                "allArchetypes", "eachWorst")
 
 
 def _finish(rows: list[dict], by_key: dict, threats: list[dict],
@@ -3508,6 +3555,15 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         if len(rows) <= SQUAD_POOL:
             return rows
         keep = {r["key"]: r for r in rows[:SQUAD_POOL]}
+        # 7.0: EVERY LIST THAT BEATS EVERY FAMILY THEY PLAY stays, whatever
+        # its overall figure — those are the lists a list may be made of
+        # (`scout.EACH_FLOOR`). Seen on a staged board: a Royal Hogs list that
+        # won all eight of one opponent's families sat under the 80 strongest
+        # and the folder face showed three decks that lose one instead.
+        for r in rows:
+            low, fam = scout.each_worst(r.get("vs"), plays)
+            if low is not None and low >= scout.EACH_FLOOR:
+                keep.setdefault(r["key"], r)
         for p in plays:
             if p["share"] < scout.ANSWER_SHARE:
                 continue
@@ -3563,7 +3619,10 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             plan_lists, cover = scout.personal_plan(squad, pool_rows(), threats,
                                                     limit=PER_PLAYER_TOP_N,
                                                     per_wincon=MATE_PER_WINCON,
-                                                    new_slots=PER_PLAYER_TOP_N)
+                                                    new_slots=PER_PLAYER_TOP_N,
+                                                    each_floor=scout.EACH_FLOOR,
+                                                    each_min=scout.EACH_MIN,
+                                                    plays=plays)
             who = {m["tag"]: m["name"] for m in blue}
             for c in cover:
                 c["name"] = names.get(c["archetype"]) or dcx._label(c["archetype"] or "other")
@@ -3582,7 +3641,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             extra = []
         return scout.counters(list(own) + extra, plays, limit=limit,
                               specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
-                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True)
+                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
+                              each_floor=scout.EACH_FLOOR, each_min=scout.EACH_MIN)
 
     per_player = []
     for mate in blue:
@@ -3624,7 +3684,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         recommended = suggested(_distinct(scored), top_n)
     else:
         recommended = scout.counters(scored, plays, limit=top_n, specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
-                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True)
+                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
+                              each_floor=scout.EACH_FLOOR, each_min=scout.EACH_MIN)
     recommended = finish(recommended)
     for r in recommended:
         if blue and not r.get("owner"):
@@ -3750,7 +3811,8 @@ def _combined(red: list[dict], cards: list[_Candidate],
     scored.sort(key=lambda r: (-r["score"], r["key"]))
     recommended = scout.counters(_distinct(scored), plays, limit=SCOUT_TOP_N,
                                  specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
-                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True)
+                              by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
+                              each_floor=scout.EACH_FLOOR, each_min=scout.EACH_MIN)
 
     # THE DUELS, ROSTER-WIDE: every opponent's own duel games pooled, for the
     # duel figures on each row.

@@ -59,6 +59,7 @@ bot's SQLite files read-only.
 | **Coach Duel — you against an AI coach** | **LIVE, OPEN TO PRO AND THE THREE-DAY TRIAL since 2026-10-22** (admin only 2026-10-20..22; signed-out and free accounts see the sign-up gate). You coach Blue one game at a time (paste a deck, lock in, the AI's deck flips), best of 3 or 5, stop on a win or play every game; a matchup over 55% wins the game, a close one is rolled. The Red AI coach picks without seeing your deck. Both sides draw from every duel deck grouped by archetype (`duel_archetypes`, CRL lists first), no deck comes back on a rematch or a refresh, and every new start is a new draw; decks are checked to make sense. Clash Royale's Blue and Red Kings over an arena floor. **Since 2026-10-22 (`ff016d3`, `382647d`) two coaches can play each other online**: the host sets the format and a deck clock (2-5 min or no limit), shares a room link, the other coach joins with their own player, both lock in blind and the server decides each game; out of time loses that game. Its landing panel is the same size as the other four. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) and [Two coaches online: rooms](#two-coaches-online-rooms-2026-10-22) |
 | **Find a player by name** | **LIVE 2026-10-19 as `6f6a1df`** (server by scp first, backups `*.bak-20261019-100059-prenamesearch`, only royalweb restarted; the site reported the commit 60 s after the push; 9/9 in a real browser on https://deckkies.com signed out, the dropdown filled 460 ms after the last key). Asked, with RoyaleAPI's search pasted: type a name, see the players who carry it, fast. Every search field (top bar, player screen, landing hero) now lists up to seven players as you type, with their tags, and "View all N results" opens `#/search?q=` with the top 100. The server reads its own trigram index of the bot's 5,898,255 stored names (`server/name_index.py`, refreshed after every poll), never the bot's table: a scan of that table measured 0.6 s warm / 4.6 s cold, the index answers in 13 ms median, 39 ms worst, and a request from India is ~0.35 s on an open connection. 643 MB on disk, bounded to names seen in the last 304 days. See [Find a player by name](#find-a-player-by-name-2026-10-19) |
 | **When something breaks: a 404 page with a three.js game, an outage page that reloads itself, and watchdogs** | **2026-10-19.** After the VPS was powered off for half an hour on 2026-10-18 and every search hung for 200+ s: a slow request now asks whether the server is alive and gives up in seconds; an outage page (with the game) re-checks on its own and reloads when the server is back; unknown routes and wrong URLs get a 404 page with the same game; a crashed screen gets the page instead of a blank site; a watchdog on the VPS restarts the API when it stops answering or loses sight of its database; a GitHub workflow emails when the site is down and can start a stopped VPS once Contabo API keys are added. See [When something breaks](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19) |
+| **Team Analysis lists only decks that win every archetype the opponent plays (`team-scout-7.0`)** | **LIVE 2026-10-26 20:38 UTC (server by scp first, backups `*.bak-20261026-203806-prets7`, royalweb only, bot PID unchanged), then the site.** Reported: decks "poor and not reliable"; asked for decks over 50% against ALL the opponent's archetypes, read from ranked + 1v1 friendly games, top decks with good synergy. Measured: 82% of 6.1's shown decks lost to at least one archetype the opponent plays. Now every listed deck wins all of them (or is marked Closest when fewer than three do), the opponent read drops clan-war duels and special modes, and pool lists must pass the card-pairing gate. On the account holder's 9 saved boards: folder decks losing one 1,430/1,806 -> 59/463 (marked), teammate #1 losing one 176/340 -> 40/340. See [Decks that win every archetype they play](#decks-that-win-every-archetype-they-play-team-scout-70-2026-10-27) |
 | **Team Analysis suggests what the top 1,000 players use, re-read every poll (`team-scout-6.1`)** | **LIVE SINCE 2026-10-24 (server + client).** Reported: *"decks not used by top players — target the top 1k and the CRL duel list, set the frequency like that ... the top 1000 changes every poll"*. `top_decks.py` reads the LIVE ranked board's top 1,000 after every poll and counts their ranked lists (no tags stored); the pool is lists 3+ of them used for 30+ games plus CRL staples; a list's choosing gains half a point per doubling of its users. Same roster: 82% of rows are top-1000 lists, median 13 top players behind a row, #1 63.0 -> 64.8. See [What the top 1,000 players use](#what-the-top-1000-players-use-re-read-every-poll-team-scout-61-2026-10-24) |
 | **Team Analysis suggests today's meta, for every win condition (`team-scout-6.0`)** | **LIVE SINCE 2026-10-23 (server).** Reported: *"decks very old, not according to the meta ... similar for all players, just up and down"*. Measured on the live answer: 378 of the pool's 506 CRL lists were one player's, and each win condition was answered by the luckiest short run; only 40 meta lists were in the pool, so 15 of 22 win conditions had none. Now the pool is the 8 most played lists of every win condition in the window plus CRL lists two of the group brought (or one of them 10+ times), every win condition over 50% is shown, and inside a win condition the opponent decides between near-equal lists. Same roster: rows played in the window 12% -> 68%, top-ten figure 58.5 -> 59.4. See [Today's meta, for every win condition](#todays-meta-for-every-win-condition-team-scout-60-2026-10-23) |
 | **Team Analysis suggests what the best duel players bring, and a list per teammate (`team-scout-5.0`)** | **LIVE SINCE 2026-10-14 as `b25d12e`.** Reported: *"the recommendation decks are so trash ... random decks, decks repetitive for more players"*. Measured on live answers: about 1 row in 7 was a list the CRL group brought to duels; a 4v4 plan's 160 rows held 67 decks and all four teammates got the same four against one opponent. Now the pool is the window's CRL duel lists (2+ games) and its 40 most played lists, nothing else; a scouting list is ten different win conditions, none under 50%, spread across the roster; a match plan builds each teammate's list from the win conditions they play, rated with their own record, one teammate a deck, and a lineup pairs every opponent with a teammate. Blind on 300 opponents: rows the CRL group brought 36.7% -> 96.7%, the #1 the same (+0.10), the rest of a list about half a point lower; match plans: distinct rows 53% -> 97.5%, decks two teammates share 5.0 -> 0.15. See [What the best duel players bring](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14) |
@@ -245,6 +246,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27e. [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10)
 27f. [Counters read the cards](#counters-read-the-cards-2026-10-11)
 27g. [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11)
+27g0. [Decks that win every archetype they play](#decks-that-win-every-archetype-they-play-team-scout-70-2026-10-27)
 27g1. [What the top 1,000 players use, re-read every poll](#what-the-top-1000-players-use-re-read-every-poll-team-scout-61-2026-10-24)
 27g2. [Today's meta, for every win condition](#todays-meta-for-every-win-condition-team-scout-60-2026-10-23)
 27h. [What the best duel players bring, and a list per teammate](#what-the-best-duel-players-bring-and-a-list-per-teammate-team-scout-50-2026-10-14)
@@ -13455,6 +13457,79 @@ the `.js` and the `.css`) and then never committed. See
 import is eager until that is fixed, and the reason is written at the import.
 
 ---
+
+## Decks that win every archetype they play (team-scout-7.0, 2026-10-27)
+
+Asked 2026-10-27, about the scouting report and the match plan: *"the decks it
+shows are poor and not reliable ... need decks > 50% at least in all opp
+archetypes, and read ranked + 1v1 friendly battles of the opponent to suggest
+decks against him ... top decks, good synergy, high usage, counter".*
+
+**Measured first** (30 real opponents, 6.1 as deployed): **82% of the decks
+shown lost (under 50%) to at least one archetype the opponent plays**, and the
+median shown deck's worst matchup was 42.6%. The 50% floor was on the WEIGHTED
+figure only, so a deck that crushed their main list and lost 40-60 to the one
+they bring a fifth of the time passed it. And the opponent read counted every
+own-deck mode, clan-war duels most of all: 186,535 clan-war duel games against
+9,265 friendly-duel games stored since 1 October, each duel game counted 30
+times.
+
+What changed:
+
+- **A deck is listed only if it wins every archetype they play.**
+  `team_scout.counters(each_floor=EACH_FLOOR)`: its rate against EACH family at
+  `EACH_SHARE` (5%, the families the screen names) must be 50%+, and a family it
+  has no rate against fails it. Rows that pass are `allArchetypes: true`; when
+  fewer than `EACH_MIN` (3) pass, the decks whose worst matchup is highest fill
+  the list, `allArchetypes: false`, after the ones that pass. Every row carries
+  `eachWorst {family, rate}`. The answer-swap path takes only passing decks.
+  Same rule for each teammate's list in a match plan
+  (`personal_plan(each_floor=, plays=)`, their record with the win condition
+  applied, the folder's own shares), for the folder face, the roster-wide read
+  and the Deck Counter's bring list. A match plan's shortlist keeps every deck
+  that beats every family whatever its overall figure.
+- **The opponent is read from ranked and 1v1 friendly games only**:
+  `player_decks.played(modes="ranked_friendly")` =
+  `battle_modes.is_ranked_or_friendly` (`Ranked1v1_*`, `Ladder`, `Friendly`,
+  `Duel_1v1_Friendly`); `duel_index.player_decks(modes=)` keeps friendly duels
+  only, for the window and for the older-duel read. Clan-war duels,
+  tournaments, Showdown / Overtime / Rage friendlies and events are counted in
+  `hidden`. The Decks screen still reads every mode.
+- **Good synergy**: a pool list must pass the card-pairing gate
+  (`deck_synergy.passes`, the one Coach Assist's built decks pass) — 29 of the
+  271 lists in the 30-day pool were left out (`pool.window.synergySkipped`).
+  The duel-based spell-package check (`deck_packages`) was measured too and NOT
+  applied: it fails about half of the top-1,000 lists, mostly for newer cards
+  duel players have barely fielded.
+- **Pool size measured, not changed**: 10 / 20 / 40 top-1,000 lists per win
+  condition = pool 271 / 402 / 582, 8.0 / 9.3 / 18.6 s for 20 opponents, a
+  median 4 / 4 / 5 decks beating every archetype. Twice the wait for one deck.
+- **Screen**: every archetype chip is drawn under a deck (`MAX_CHIPS` 6 -> 10;
+  opponents play up to nine at 5%+), and a "closest" row carries an outlined
+  **Closest** pill whose tooltip names the matchup it loses. Rows that win every
+  matchup carry nothing extra — their chips are all green.
+
+**Staged on the server, same inputs, 6.1 vs 7.0:**
+
+| | 6.1 | 7.0 |
+|---|---|---|
+| 30 opponents: shown decks losing to an archetype they play | 82% | 4% (marked fills only) |
+| 30 opponents: median shown deck's worst matchup | 42.6% | 53.5% |
+| the account holder's 9 saved boards (88 opponents): folder decks losing one | 1,430 / 1,806 | 59 / 463 (all marked Closest) |
+| ...each teammate's #1 losing an archetype | 176 / 340 | 40 / 340 (marked) |
+| ...teammate #1 figure / worst matchup (median) | 61.9% / 50.8% | 62.9% / 52.5% |
+| ...folder #1 figure (median) | 64.0% | 62.7% |
+| ...most repeated deck in folders' top three | 18 | 19 |
+| ...time, all 9 boards | 52.6 s | 40.4 s |
+
+The cost: lists are shorter (a folder face 1,806 -> 463 rows over 88
+opponents; a teammate's list median 4), because on most opponents only a
+handful of decks beat everything they play; 10 of 88 opponents have no deck
+that does, and get the three closest, marked. Brain `team-scout-7.0`.
+Tests: `test_team_scout` 236, `test_team_analysis` 366, `test_player_decks`
+60, `test_duel_index` 99, `test_battle_modes` 188, vitest 1,837. Browser
+28/28 on the staged payloads (both themes, 1440 and 390).
+
 
 ## What the top 1,000 players use, re-read every poll (team-scout-6.1, 2026-10-24)
 

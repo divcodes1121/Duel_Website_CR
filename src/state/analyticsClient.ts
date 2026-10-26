@@ -2781,6 +2781,14 @@ export interface TeamRecommendation {
   /** The family they are likely to bring that this deck does WORST against
    *  (brain 4.0). */
   worst?: { family: string; name?: string; rate: number } | null;
+  /** Brain 7.0: true when this deck rates 50%+ against EVERY archetype the
+   *  opponent plays at 5% or more; false on the few "closest" rows a list is
+   *  topped up with when fewer decks than that win every matchup. Absent from
+   *  an older server. */
+  allArchetypes?: boolean;
+  /** Its lowest rate over those archetypes, and which (`rate` null = one it
+   *  could not be rated against). */
+  eachWorst?: { family: string | null; rate: number | null };
   /** Cards of this deck the game changed in the last month. */
   balance?: BalanceMark[];
   /** How much this list was played in the day window asked for, and which way

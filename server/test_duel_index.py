@@ -225,6 +225,16 @@ try:
     check("their win conditions", di.player_wcs("#O00") == {"bait": 1, "golem": 1},
           str(di.player_wcs("#O00")))
     check("a stranger has none", di.player_decks("#NOBODY") == [])
+    # 7.0: Team Analysis reads friendly duels only — #P9's one game is a
+    # friendly duel, #P0's are clan-war duels.
+    fr = ("duel_1v1_friendly",)
+    check("modes= keeps only the duel modes asked for (friendly duels)",
+          [d["key"] for d in di.player_decks("#P9", modes=fr)] == [di.deck_key(HOG_N)]
+          and di.player_decks("#P0", modes=fr) == [],
+          str(di.player_decks("#P0", modes=fr)))
+    check("...in any case, and None is every mode",
+          [d["key"] for d in di.player_decks("#P9", modes=("Duel_1v1_Friendly",))] == [di.deck_key(HOG_N)]
+          and {d["key"] for d in di.player_decks("#P0", modes=None)} == set(decks))
 
     # THE LISTS A NAMED GROUP FIELDED, and the field one mode plays.
     grp = di.lists_of(["#P0", " #p9 ", "#NOBODY"])
